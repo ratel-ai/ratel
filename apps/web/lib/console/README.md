@@ -5,7 +5,7 @@ search, projects, settings, and development seeds.
 
 | Path | Holds |
 |---|---|
-| `navigation.ts` | the rail model: project URLs, the destinations this build has (inside a project its pages; outside one the organization's Projects, Integrations and Settings) plus `composition.nav`, the active item, project switching, the ⌘K entries, where the legacy `/dashboard` lands |
+| `navigation.ts` | the rail model: project URLs, the destinations this build has (inside a project its pages; outside one the organization's Projects, Integrations and Settings) plus `composition.nav`, the active item, project switching, the ⌘K entries, where `/dashboard` lands |
 | `scope/command-search.ts` | the ⌘K ranking |
 | `project-settings.ts` | renaming a project of the session organization |
 | `create-project.ts` | creating a project: the session organization, the plan's cap, a slug unique in the organization |

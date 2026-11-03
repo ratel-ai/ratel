@@ -226,7 +226,7 @@ test("the entry goes to the first project, else to onboarding, else nowhere", ()
   assert.equal(entryHref([], undefined), null);
 });
 
-test("the legacy /dashboard opens the first project's dashboards, else the console entry", () => {
+test("/dashboard opens the first project's dashboards, else the console entry", () => {
   assert.equal(dashboardHref(PROJECTS), `/project/${P1}/dashboards`);
   assert.equal(dashboardHref([]), "/");
 });

@@ -17,7 +17,7 @@ intelligence that reads them. One Next.js app, two editions
 ## Layout
 
 ```
-app/              routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the legacy /dashboard redirect, the printable Agent health and Quality reports under (report)/, the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
+app/              routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the /dashboard redirect, the printable Agent health and Quality reports under (report)/, the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
 components/       React components; the design system lives in packages/design-system
 lib/              the core, in layers (see lib/README.md)
 Dockerfile        targets `oss` and `cloud`; build context is the repository root
