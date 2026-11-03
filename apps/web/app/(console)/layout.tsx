@@ -16,6 +16,8 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
     composition.ui?.(),
   ]);
   const AccountMenuItems = ui?.AccountMenuItems;
+  const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
+  const projects = scope?.projects ?? [];
   return (
     <div className="min-h-dvh bg-app">
       <a
@@ -28,9 +30,16 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
         data={{
           organizationName: scope?.organizationName ?? null,
           organizationSlug: scope?.organizationSlug ?? null,
-          projects: scope?.projects ?? [],
+          projects,
           account: scope?.account ?? null,
           editionNav: composition.nav,
+          organizationNav: composition.organizationNav,
+          scopeSwitcher: ScopeSwitcher
+            ? {
+                expanded: <ScopeSwitcher projects={projects} collapsed={false} />,
+                collapsed: <ScopeSwitcher projects={projects} collapsed />,
+              }
+            : null,
           accountMenuItems: AccountMenuItems ? <AccountMenuItems /> : null,
           initiallyCollapsed: parseSidebarCollapsedCookie(
             cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value,

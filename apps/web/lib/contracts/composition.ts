@@ -12,12 +12,34 @@ import type { TelemetryPort } from "@/lib/contracts/telemetry";
  * resolves to a single candidate so the open-source build excludes the private modules, which
  * means this shared type is what keeps the two shapes from drifting.
  */
-/** What an edition adds to the console's UI. Loaded by the layouts, never at boot. */
+/** A project as the shell lists it: the session organization's, from the core. */
+export type EditionProject = {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  isDemo: boolean;
+};
+
+/**
+ * What an edition adds to the console's UI. Loaded by the layouts, never at boot. Each optional
+ * component replaces what the open-source console shows in its place, which is the default.
+ */
 export type EditionUi = {
   /** Wraps the whole app, in the root layout. */
   RootProvider: ComponentType<{ children: ReactNode }>;
   /** Menu items above the docs in the account menu. */
   AccountMenuItems: ComponentType;
+  /** The top of the rail, in place of the project switcher: organizations and projects. */
+  ScopeSwitcher?: ComponentType<{ projects: readonly EditionProject[]; collapsed: boolean }>;
+  /** `/organizations`, which otherwise redirects to the console's entry. */
+  OrganizationsPage?: ComponentType;
+  /** `/org/<slug>/team`, a 404 otherwise. */
+  MembersPage?: ComponentType<{ slug: string }>;
+  /** Organization settings > General, read-only otherwise. */
+  OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
+  /** Organization settings > Danger zone, absent otherwise. */
+  OrganizationDangerSettings?: ComponentType<{ slug: string }>;
 };
 
 export type CompositionPorts = {

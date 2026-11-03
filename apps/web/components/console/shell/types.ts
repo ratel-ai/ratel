@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
+import type { NavItem as EditionNavItem, OrganizationNavItem } from "@/lib/composition/ports";
 import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
 
 /** Everything the client frame needs, resolved once per request on the server. */
@@ -11,6 +11,10 @@ export type ShellData = {
   account: ConsoleAccount | null;
   /** Destinations the edition adds (`composition.nav`). */
   editionNav: EditionNavItem[];
+  /** Organization pages the edition adds (`composition.organizationNav`). */
+  organizationNav: OrganizationNavItem[];
+  /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
+  scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
   accountMenuItems: ReactNode;
   initiallyCollapsed: boolean;

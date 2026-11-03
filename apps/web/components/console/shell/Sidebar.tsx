@@ -22,6 +22,8 @@ export type SidebarProps = {
   project: ConsoleProject | undefined;
   account: ConsoleAccount | null;
   accountMenuItems?: ReactNode;
+  /** The edition's switcher, one rendering per rail width; the project switcher otherwise. */
+  scopeSwitcher?: { expanded: ReactNode; collapsed: ReactNode } | null;
   collapsed: boolean;
   /** Absent in the mobile drawer, which is always expanded. */
   onToggleCollapsed?: () => void;
@@ -44,6 +46,7 @@ export function SidebarContent({
   project,
   account,
   accountMenuItems,
+  scopeSwitcher,
   collapsed,
   onToggleCollapsed,
   onSearch,
@@ -55,13 +58,21 @@ export function SidebarContent({
       <div
         className={cn("flex h-13 shrink-0 items-center gap-1 px-2", collapsed && "justify-center")}
       >
-        <ProjectSwitcher
-          organizationName={organizationName}
-          organizationSlug={organizationSlug}
-          projects={projects}
-          project={project}
-          collapsed={collapsed}
-        />
+        {scopeSwitcher ? (
+          collapsed ? (
+            scopeSwitcher.collapsed
+          ) : (
+            scopeSwitcher.expanded
+          )
+        ) : (
+          <ProjectSwitcher
+            organizationName={organizationName}
+            organizationSlug={organizationSlug}
+            projects={projects}
+            project={project}
+            collapsed={collapsed}
+          />
+        )}
         {onToggleCollapsed && !collapsed ? (
           <IconButton
             label="Collapse sidebar"

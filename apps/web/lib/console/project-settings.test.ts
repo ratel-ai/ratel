@@ -4,7 +4,15 @@ import { renameProject } from "./project-settings";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
 
-function deps(projects: { id: string; name: string }[] | null = [{ id: P1, name: "One" }]) {
+const project = (id: string, name: string) => ({
+  id,
+  name,
+  organizationId: "o1",
+  slug: name,
+  isDemo: false,
+});
+
+function deps(projects: ReturnType<typeof project>[] | null = [project(P1, "One")]) {
   const updates: [string, string][] = [];
   return {
     updates,

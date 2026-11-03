@@ -1,5 +1,6 @@
 import { OrgGeneralSettings } from "@/components/console/org/OrgGeneralSettings";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
 
 export const metadata = { title: "Organization settings" };
@@ -16,6 +17,8 @@ export default async function OrganizationSettingsPage({
       </DatabaseUnavailable>
     );
   }
-  const { orgSlug } = await params;
-  return <OrgGeneralSettings slug={orgSlug} />;
+  const [{ orgSlug }, ui] = await Promise.all([params, composition.ui?.()]);
+  // The edition's own (rename for admins), or the read-only one.
+  const General = ui?.OrganizationGeneralSettings ?? OrgGeneralSettings;
+  return <General slug={orgSlug} />;
 }

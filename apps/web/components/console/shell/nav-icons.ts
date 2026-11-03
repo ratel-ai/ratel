@@ -10,6 +10,7 @@ import {
   Orbit,
   Settings,
   Sparkles,
+  Users,
 } from "lucide-react";
 import type { NavIconName } from "@/lib/console/navigation";
 
@@ -24,5 +25,6 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   settings: Settings,
   projects: FolderKanban,
   integrations: Cable,
+  members: Users,
   edition: Blocks,
 };
