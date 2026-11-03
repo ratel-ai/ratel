@@ -780,6 +780,7 @@
         "apps/web/components/console/home/**",
         "!apps/web/components/console/home/OverviewPage.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/dashboards/page.tsx",
         "apps/web/lib/views/fixes/fixes-view.test.ts",
         "apps/web/lib/synthesis/match-quality/**",
         "!apps/web/lib/synthesis/match-quality/queries.integration.test.ts",
