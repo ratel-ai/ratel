@@ -3,6 +3,7 @@ import type {
   EventQuotaResult,
   FeatureAccess,
   MeteredFeatureKey,
+  OrganizationDeletionResult,
   OrgLimitView,
   PlanLimits,
   QuotaKey,
@@ -18,6 +19,7 @@ export type {
   EventQuotaResult,
   FeatureAccess,
   MeteredFeatureKey,
+  OrganizationDeletionResult,
   OrgLimitView,
   PlanLimits,
   QuotaKey,
@@ -105,6 +107,14 @@ export function checkMeteredFeature(
   noun: string,
 ): FeatureAccess {
   return composition.entitlements.checkMeteredFeature(org, key, used, noun);
+}
+
+/**
+ * Whether the organization may be deleted now. Replaces upstream's paid-access and live
+ * subscription checks: the edition with billing answers behind the port, with the refusal to show.
+ */
+export function checkOrganizationDeletion(org: OrgLimitView): OrganizationDeletionResult {
+  return composition.entitlements.checkOrganizationDeletion(org);
 }
 
 /**

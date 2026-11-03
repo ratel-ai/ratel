@@ -63,6 +63,12 @@ describe("oss entitlements", () => {
       "no counter exists to compare an override against",
     );
   });
+
+  it("never holds an organization's deletion: there is no subscription to cancel first", () => {
+    assert.deepEqual(ossEntitlements.checkOrganizationDeletion(org), { ok: true });
+    const capped = { id: "org_2", limitOverrides: { maxProjects: 0 } };
+    assert.deepEqual(ossEntitlements.checkOrganizationDeletion(capped), { ok: true });
+  });
 });
 
 describe("oss telemetry", () => {

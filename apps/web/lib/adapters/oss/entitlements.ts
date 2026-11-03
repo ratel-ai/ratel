@@ -67,6 +67,10 @@ export const ossEntitlements: EntitlementsPort = {
       remaining: limit === Number.POSITIVE_INFINITY ? Number.POSITIVE_INFINITY : limit - used,
     };
   },
+  // Nothing to cancel first in the open-source edition: there is no subscription.
+  checkOrganizationDeletion() {
+    return { ok: true };
+  },
   // No event cap in the open-source edition, and no counter: an operator's `monthlyEventLimit`
   // override has nothing to compare against, so it is accepted and ignored.
   async checkEventQuota() {

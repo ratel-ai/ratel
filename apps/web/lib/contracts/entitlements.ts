@@ -51,6 +51,9 @@ export type EventQuotaResult =
   | { ok: true }
   | { ok: false; plan: string; limit: number; used: number; message: string };
 
+/** Whether the organization may be deleted right now; `message` is shown as the refusal. */
+export type OrganizationDeletionResult = { ok: true } | { ok: false; message: string };
+
 export type EntitlementsPort = {
   /** A short plan identifier for display and analytics (`"oss"`, `"free"`, `"pro"`, ...). */
   planId(org: OrgLimitView): string;
@@ -64,6 +67,12 @@ export type EntitlementsPort = {
     used: number,
     noun: string,
   ): FeatureAccess;
+  /**
+   * Whether the organization may be deleted now. Pure and synchronous like the quota checks: the
+   * caller holds the organization row. An edition with billing refuses while a paid subscription
+   * is live, so billing stops cleanly first; the open-source edition never refuses.
+   */
+  checkOrganizationDeletion(org: OrgLimitView): OrganizationDeletionResult;
   /**
    * Before an ingest write: whether the organization may accept more events in the current
    * period. Async, unlike the operations above, because an edition that counts keeps the counter

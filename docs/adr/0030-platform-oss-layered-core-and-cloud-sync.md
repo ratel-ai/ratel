@@ -31,8 +31,8 @@ plain copy unworkable:
 ## Decision
 
 **Five ports, in `apps/web/lib/contracts`.** `session` (principal, organization, role, projects,
-`accessGranted`, `actingAs`), `entitlements` (limits, quotas, metered features, `planId`),
-`telemetry` (events, identify, exceptions), `embedding-provider`, and `registry` (job handlers and
+`accessGranted`, `actingAs`), `entitlements` (limits, quotas, metered features, `planId`, whether
+an organization may be deleted), `telemetry` (events, identify, exceptions), `embedding-provider`, and `registry` (job handlers and
 drain steps a module contributes). They replace the spike's `identity` and `workspace`. Email is
 not a port (no open-source caller); admin is not a port (support sessions become `actingAs` on
 the session principal). The OSS adapters are a single local operator with one organization,

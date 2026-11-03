@@ -17,7 +17,7 @@ npm packages.
 | `projects/names.ts` | project name limits and normalization, safe for client components |
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
 | `session.ts` | the principal-to-rows bridge: `getSessionContext()` with user, organization, role, memberships |
-| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
+| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `checkOrganizationDeletion`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
 | `deployment-config.ts` | `RATEL_ORG_NAME`, and the warnings at boot for a public `BASE_URL` on public defaults |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |

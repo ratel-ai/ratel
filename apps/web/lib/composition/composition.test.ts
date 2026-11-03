@@ -43,6 +43,10 @@ const cloudPorts: CompositionPorts = {
     }),
     checkQuota: () => ({ ok: true }),
     checkMeteredFeature: () => ({ ok: true, limit: 4, used: 0, remaining: 4 }),
+    checkOrganizationDeletion: () => ({
+      ok: false,
+      message: "Cancel the organization's subscription before deleting it.",
+    }),
     async checkEventQuota() {
       return {
         ok: false,
