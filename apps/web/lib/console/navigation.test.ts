@@ -7,6 +7,7 @@ import {
   consoleNav,
   entryHref,
   findProject,
+  legacyDashboardHref,
   ONBOARDING_ROUTE,
   organizationRoot,
   organizationSlugFromPath,
@@ -223,6 +224,11 @@ test("the entry goes to the first project, else to onboarding, else nowhere", ()
   assert.equal(entryHref([], "acme"), ONBOARDING_ROUTE);
   assert.equal(ONBOARDING_ROUTE, "/onboarding");
   assert.equal(entryHref([], undefined), null);
+});
+
+test("the legacy /dashboard opens the first project's dashboards, else the console entry", () => {
+  assert.equal(legacyDashboardHref(PROJECTS), `/project/${P1}/dashboards`);
+  assert.equal(legacyDashboardHref([]), "/");
 });
 
 test("the command menu lists the rail's destinations, then every project", () => {

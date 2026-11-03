@@ -349,3 +349,8 @@ export function entryHref(
   if (projects[0]) return projectRoot(projects[0].id);
   return organizationSlug ? ONBOARDING_ROUTE : null;
 }
+
+/** Where the legacy `/dashboard` lands: the first project's dashboards, else the console entry. */
+export function legacyDashboardHref(projects: readonly { id: string }[]): string {
+  return projects[0] ? `${projectRoot(projects[0].id)}/dashboards` : "/";
+}
