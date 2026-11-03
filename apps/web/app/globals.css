@@ -1,2 +1,4 @@
 @import "tailwindcss";
 @import "@ratel/design-system/styles.css";
+/* Git ignores ee/src, so Tailwind skips it unless named. Absent in OSS: nothing to scan. */
+@source "../../../ee/src";

@@ -217,13 +217,7 @@ function KeyReveal({
             </div>
           )}
 
-          {/* Key beside quickstart from `md` up rather than stacked: the two together
-          were what pushed the dashboard button past the fold. The key keeps a full
-          column so all 36 characters are visible without scrubbing sideways. */}
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
-            {/* The key is short and the quickstart is tall, so the environment note
-            drops to the bottom of its column — the two columns then close on the
-            same line instead of leaving a ragged hole under the key. */}
+          <div className="mt-6 flex flex-col gap-5">
             <div className="flex flex-col gap-2">
               <div className="font-mono text-xs uppercase tracking-wide text-warm-muted">
                 Secret API key
@@ -246,7 +240,7 @@ function KeyReveal({
                   </span>
                 </button>
               </div>
-              <p className="font-mono text-[11px] leading-relaxed text-warm-muted md:mt-auto md:pt-2">
+              <p className="font-mono text-[11px] leading-relaxed text-warm-muted">
                 Export this key as <code>RATEL_API_KEY</code> — the SDK reads it from the
                 environment so it never lands in your source.
               </p>
