@@ -6,7 +6,7 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 
 | Path | Holds |
 |---|---|
-| `schema.ts`, `queries.ts` | the `jobs` table with its coalescing indexes; enqueue, claim (`FOR UPDATE SKIP LOCKED`), mark, reap, poll |
+| `schema.ts`, `queries.ts` | the `jobs` table with its coalescing indexes; enqueue, claim (`FOR UPDATE SKIP LOCKED`), mark, reap, poll (`getJobForProject` answers `GET /api/v1/jobs/[id]` for a project key) |
 | `runner.ts` | `drainJobs`: claim, run the kind's handler, record the outcome; one poisoned job never stalls the queue |
 | `store.ts` | `drainProjectJobs`: the runner wired to the database and the registered handlers, after reaping zombies |
 | `observability.ts` | typed background events and exception reports through the telemetry shim |

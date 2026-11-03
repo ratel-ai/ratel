@@ -1,5 +1,6 @@
-import { and, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
-import type { CategorySplits } from "@/lib/ingest/categorize";
+import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
+import type { CategorySplits, ToolsByName } from "@/lib/ingest/categorize";
 import type { ContextSource } from "@/lib/ingest/context";
 import {
   eventMetrics,
@@ -18,7 +19,10 @@ import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { NON_ROUND_TRIP_OPERATIONS } from "./constants";
 
-/** The event, span and log writes (owned fragment of the upstream queries hub, ADR-0030). */
+/**
+ * The event, span and log writes, and the derived-metric reads the overview and the MCP cost
+ * tools take (owned fragment of the upstream queries hub, ADR-0030).
+ */
 
 /** A raw event paired with the metrics derived from it: the unit of ingest. */
 export type EventWithMetric = {
@@ -84,6 +88,113 @@ export async function insertEventsWithMetrics(
   if (metricRows.length > 0) await db.insert(eventMetrics).values(metricRows);
 
   return inserted.length;
+}
+
+export type EventPresenceDb = Pick<ReturnType<typeof getDb>, "select">;
+
+/** Whether the project has stored at least one event: the first question a reader asks of it. */
+export async function hasProjectIngestedEvents(
+  projectId: string,
+  db: EventPresenceDb = getDb(),
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: events.id })
+    .from(events)
+    .where(eq(events.projectId, projectId))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
+ * Per-day token/cost/latency aggregates for a project since `since`, grouped by
+ * UTC day. Reads the derived `event_metrics` table (not raw events): the day is
+ * the run's *event* time — occurred_at, falling back to received_at — denormalized
+ * into `event_time`, so buffered flushes and backfills land on the day they
+ * happened. Per-source sums are pulled from the two JSONB maps
+ * (tokens_by_category / splits) and cast to float8 so they round-trip as JS
+ * numbers. Uses event_metrics_project_time_idx. An optional `until` (exclusive)
+ * caps the window's top end for past ranges.
+ */
+export async function getDailyAggregates(
+  projectId: string,
+  since: Date,
+  until?: Date,
+  db: EventPresenceDb = getDb(),
+): Promise<DailyAggregateRow[]> {
+  const eventTime = eventMetrics.eventTime;
+  const day = sql<string>`to_char(date_trunc('day', ${eventTime}), 'YYYY-MM-DD')`;
+  const sumSrc = (col: AnyPgColumn, k: string) =>
+    sql<number>`coalesce(sum((${col} ->> ${k})::numeric), 0)::float8`;
+
+  const rows = await db
+    .select({
+      day,
+      spend_skills: sumSrc(eventMetrics.tokensByCategory, "skills"),
+      spend_tools: sumSrc(eventMetrics.tokensByCategory, "tools"),
+      spend_history: sumSrc(eventMetrics.tokensByCategory, "history"),
+      spend_memory: sumSrc(eventMetrics.tokensByCategory, "memory"),
+      spend_user_input: sumSrc(eventMetrics.tokensByCategory, "user_input"),
+      history_cached: sumSrc(eventMetrics.splits, "history_cached"),
+      history_uncached: sumSrc(eventMetrics.splits, "history_uncached"),
+      tools_used: sumSrc(eventMetrics.splits, "tools_used"),
+      tools_unused: sumSrc(eventMetrics.splits, "tools_unused"),
+      outputTokens: sql<number>`coalesce(sum(${eventMetrics.outputTokens}), 0)::float8`,
+      latencyMs: sql<number>`coalesce(sum(${eventMetrics.latencyMs}), 0)::float8`,
+      costUsd: sql<number>`coalesce(sum(${eventMetrics.costUsd}), 0)::float8`,
+      runs: sql<number>`count(*)::int`,
+    })
+    .from(eventMetrics)
+    .where(
+      and(
+        eq(eventMetrics.projectId, projectId),
+        gte(eventTime, since),
+        until ? lt(eventTime, until) : undefined,
+      ),
+    )
+    .groupBy(day)
+    .orderBy(day);
+
+  return rows.map((r) => ({
+    day: r.day,
+    spend: {
+      skills: r.spend_skills,
+      tools: r.spend_tools,
+      history: r.spend_history,
+      memory: r.spend_memory,
+      user_input: r.spend_user_input,
+    },
+    splits: {
+      history_cached: r.history_cached,
+      history_uncached: r.history_uncached,
+      tools_used: r.tools_used,
+      tools_unused: r.tools_unused,
+    },
+    outputTokens: r.outputTokens,
+    latencyMs: r.latencyMs,
+    costUsd: r.costUsd,
+    runs: r.runs,
+  }));
+}
+
+/** Every run's per-tool footprint in the window, one map per `event_metrics` row (the Tools tab folds them). */
+export async function getToolMetrics(
+  projectId: string,
+  since: Date,
+  until?: Date,
+  db: EventPresenceDb = getDb(),
+): Promise<ToolsByName[]> {
+  const eventTime = eventMetrics.eventTime;
+  const rows = await db
+    .select({ toolsByName: eventMetrics.toolsByName })
+    .from(eventMetrics)
+    .where(
+      and(
+        eq(eventMetrics.projectId, projectId),
+        gte(eventTime, since),
+        until ? lt(eventTime, until) : undefined,
+      ),
+    );
+  return rows.map((r) => r.toolsByName);
 }
 
 export type OtelSpansDb = Pick<ReturnType<typeof getDb>, "insert" | "transaction">;
