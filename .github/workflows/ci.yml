@@ -629,14 +629,16 @@ jobs:
             .env
           docker compose up --detach --wait --wait-timeout 60
           curl --fail --silent --show-error --location http://127.0.0.1:3000/ | grep --quiet 'CI &amp; Co'
+          # The operator and the organization are constants: a visit writes no identity row, and
+          # the open-source schema has no identity table.
           counts() {
             docker compose exec -T db psql -U ratel -d ratel -Atc \
-              "select (select count(*) from organizations), (select count(*) from users), (select count(*) from projects)"
+              "select (select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('organizations', 'users', 'memberships')), (select count(*) from projects)"
           }
-          test "$(counts)" = "1|1|0"
+          test "$(counts)" = "0|0"
           docker compose up --detach --wait --wait-timeout 60
           curl --fail --silent --show-error --location --output /dev/null http://127.0.0.1:3000/
-          test "$(counts)" = "1|1|0"
+          test "$(counts)" = "0|0"
       - name: Demo data
         run: |
           docker compose --profile demo run --rm demo
