@@ -32,7 +32,8 @@ scheduler, which has no upstream counterpart. One deliberate exception to the na
 `platform/entitlements.ts` exports `checkEventQuota`, which replaces upstream's
 `resetEventUsageIfElapsed` plus the `monthlyEventLimit` comparison in the ingest route, because
 the counting edition now does both behind the entitlements port. `incrementEventUsage` keeps its
-upstream name and signature.
+upstream name and signature. Likewise `checkOrganizationDeletion` replaces upstream's paid-access
+and live-subscription checks before an organization is deleted.
 
 In `ledger/` the owned files are `constants.ts` (`TURN_EVENT_TYPES` has one source, the
 ingest kick; imported sources are recognised by suffix, not an enumerated vendor list),
