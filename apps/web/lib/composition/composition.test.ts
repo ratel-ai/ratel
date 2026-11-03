@@ -129,11 +129,9 @@ describe("createComposition", () => {
     );
   });
 
-  it("supplies nav for Cloud and an empty nav for OSS", () => {
+  it("adds no rail destination in either edition: Cloud's admin console is in the account menu", () => {
     assert.deepEqual(createComposition("oss").nav, []);
-    const cloud = createComposition("cloud", { eeComposition: cloudPorts });
-    assert.equal(cloud.nav.length, 1);
-    assert.equal(cloud.nav[0].href, "/admin");
+    assert.deepEqual(createComposition("cloud", { eeComposition: cloudPorts }).nav, []);
   });
 
   it("throws when cloud is requested but the seam is null", () => {
