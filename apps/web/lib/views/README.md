@@ -80,4 +80,12 @@ Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream
 `adaptive-ranking/` holds the Adaptive ranking page's read models and the Boost reads.
 
 `quality/` holds the Quality pages' read models. `quality/fix-rewrites.ts` fills
-`fixSeams.loadRewrites` when `fixes/load.ts` loads it.
+`fixSeams.loadRewrites` when `fixes/load.ts` loads it. `quality/report-href.ts` (owned, new) is
+the link to the printable Quality report, the sibling of `health/report-href.ts`; the
+calibration detail offers it, where upstream reaches the report from its admin console.
+
+`calibration/` holds the render tests of the calibration pages' components (the comparison
+browser, rows, census tiles, ranking diff, arm mix, and the generic experiment detail's
+conversion and lifecycle panels); the components live in `components/console/calibration` and
+the read models are `synthesis/experiments` and `synthesis/traces`. Owned: `ranking-ui.test.ts`
+(the trace calibration card case is left out; the Traces pages here do not carry that card).

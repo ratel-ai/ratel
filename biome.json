@@ -788,6 +788,8 @@
         "apps/web/lib/console/seed/site-copilot-quality.test.ts",
         "apps/web/lib/console/seed/site-copilot-quality-fixture.ts",
         "apps/web/components/console/quality/**",
+        "!apps/web/components/console/quality/report/panels.tsx",
+        "!apps/web/components/console/quality/report/format.ts",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/page.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/descriptions/page.tsx",
@@ -937,7 +939,35 @@
         "apps/web/lib/mcp/connect/**",
         "!apps/web/lib/mcp/connect/snippets.ts",
         "!apps/web/lib/mcp/connect/snippets.test.ts",
-        "apps/web/components/console/org/McpExample.tsx"
+        "apps/web/components/console/org/McpExample.tsx",
+        "apps/web/lib/synthesis/experiments/comparison-cache.ts",
+        "apps/web/lib/synthesis/experiments/comparison-cache.test.ts",
+        "apps/web/lib/synthesis/experiments/surface-loaders.ts",
+        "apps/web/lib/synthesis/experiments/surface-loaders.test.ts",
+        "apps/web/lib/console/popover-position.ts",
+        "apps/web/lib/console/popover-position.test.ts",
+        "apps/web/lib/views/calibration/conversion-panel.test.ts",
+        "apps/web/lib/views/calibration/conversion-view.test.ts",
+        "apps/web/lib/views/calibration/lifecycle-view.test.ts",
+        "apps/web/components/console/calibration/**",
+        "apps/web/components/console/calibration/DateRangeControl.tsx",
+        "apps/web/components/console/calibration/ProjectRouteSkeleton.tsx",
+        "apps/web/components/console/calibration/DeltaChip.tsx",
+        "apps/web/components/console/calibration/ExperimentBadge.tsx",
+        "apps/web/components/console/calibration/ArmComparisonGrid.tsx",
+        "apps/web/components/console/calibration/CapabilityRankDiffTable.tsx",
+        "apps/web/components/console/calibration/ExperimentIssuesPanel.tsx",
+        "apps/web/components/console/calibration/ExperimentLifecyclePanels.tsx",
+        "apps/web/components/console/calibration/ExperimentConversionPanel.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/calibration/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/calibration/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/selection/\\[selectionId\\]/loading.tsx",
+        "apps/web/components/console/quality/report/ReportDocument.tsx",
+        "apps/web/components/console/quality/report/PrintButton.tsx",
+        "apps/web/components/console/quality/report/charts.tsx",
+        "apps/web/components/console/quality/report/theme.ts",
+        "apps/web/components/console/quality/report/quality.css"
       ],
       "linter": {
         "rules": {
@@ -959,7 +989,8 @@
         "apps/web/components/console/fixes/**",
         "apps/web/lib/views/**/*-ui.test.ts",
         "apps/web/components/console/intents/**",
-        "apps/web/components/console/intent-map/**"
+        "apps/web/components/console/intent-map/**",
+        "apps/web/components/console/calibration/**"
       ],
       "linter": {
         "rules": {
@@ -976,7 +1007,8 @@
             "noNoninteractiveTabindex": "off",
             "useKeyWithClickEvents": "off",
             "useAriaPropsSupportedByRole": "off",
-            "noStaticElementInteractions": "off"
+            "noStaticElementInteractions": "off",
+            "useValidAriaRole": "off"
           },
           "security": {
             "noDangerouslySetInnerHtml": "off"
