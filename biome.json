@@ -971,7 +971,8 @@
         "apps/web/components/console/onboarding/CaptureConsentPanel.tsx",
         "apps/web/lib/console/onboarding/capture-consent.ts",
         "apps/web/lib/console/onboarding/capture-consent-ui.test.ts",
-        "apps/web/lib/console/onboarding/transition.ts"
+        "apps/web/lib/console/onboarding/transition.ts",
+        "apps/web/components/console/org/DeleteOrganization.tsx"
       ],
       "linter": {
         "rules": {

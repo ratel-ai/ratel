@@ -1074,7 +1074,7 @@
     { "from": "apps/web/app/(app)/org/[orgSlug]/layout.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/layout.tsx", "mode": "owned", "$why": "one organization: any slug but the session's is a 404" },
     { "from": "apps/web/app/(app)/org/[orgSlug]/page.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/page.tsx", "mode": "owned", "$why": "no skeleton; New project opens from ?new=1" },
     { "from": "apps/web/app/(app)/org/[orgSlug]/actions.ts", "to": "apps/web/app/(console)/org/[orgSlug]/actions.ts", "mode": "owned", "$why": "creates the project directly from the dialog; no organization switch or redirect to /onboarding" },
-    { "from": "apps/web/app/(app)/org/[orgSlug]/settings/layout.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/settings/layout.tsx", "mode": "owned", "$why": "General is the only tab this build has" },
+    { "from": "apps/web/app/(app)/org/[orgSlug]/settings/layout.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/settings/layout.tsx", "mode": "owned", "$why": "the reader's role comes from the console scope, not an org-scope helper" },
     { "from": "apps/web/app/(app)/org/[orgSlug]/settings/page.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/settings/page.tsx", "mode": "owned", "$why": "no skeleton" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/layout.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/layout.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/page.tsx", "mode": "owned", "$why": "the general settings take the project id from the guarded route" },
@@ -1339,6 +1339,10 @@
     { "$slice": "onboarding", "from": "apps/web/lib/onboarding/tour-geometry.test.ts", "mode": "excluded", "$why": "the guided tour; lands with its rail anchors as a follow-up" },
     { "$slice": "onboarding", "from": "apps/web/app/(app)/tour-actions.ts", "mode": "excluded", "$why": "the guided tour; lands with its rail anchors as a follow-up" },
     { "$slice": "onboarding", "from": "apps/web/components/onboarding/WelcomeBackdrop.tsx", "mode": "excluded", "$why": "pairs with the excluded welcome flow" },
-    { "$slice": "onboarding", "from": "apps/web/scripts/reset-onboarding.mts", "mode": "excluded", "$why": "resets the Cloud demo seed and tour status; nothing here to reset" }
+    { "$slice": "onboarding", "from": "apps/web/scripts/reset-onboarding.mts", "mode": "excluded", "$why": "resets the Cloud demo seed and tour status; nothing here to reset" },
+    { "$slice": "org-danger-zone", "from": "apps/web/app/(app)/org/[orgSlug]/settings/danger/page.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/settings/danger/page.tsx", "mode": "owned", "$why": "no skeleton: OrgSkeleton is excluded; the redirect to General without a database is upstream's" },
+    { "$slice": "org-danger-zone", "from": "apps/web/app/(app)/organizations/actions.ts", "to": "apps/web/app/(console)/org/[orgSlug]/settings/danger/actions.ts", "mode": "owned", "$why": "only the delete action, over the session and entitlements ports; the switch, create, leave and membership actions have no page in this edition; the checks live in lib/console/delete-organization.ts so they can be tested" },
+    { "$slice": "org-danger-zone", "from": "apps/web/components/org/v2/OrgDangerSettings.tsx", "to": "apps/web/components/console/org/OrgDangerSettings.tsx", "mode": "owned", "$why": "the reader and organization come from the session; the support-session and subscription refusals are the session port's actingAs and the entitlements port's checkOrganizationDeletion; one sentence says the console starts over" },
+    { "$slice": "org-danger-zone", "from": "apps/web/components/org/v2/DeleteOrganization.tsx", "to": "apps/web/components/console/org/DeleteOrganization.tsx", "mode": "copy" }
   ]
 }

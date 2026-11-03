@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { SettingsFrame } from "@/components/console/settings/SettingsFrame";
-import { organizationRoot } from "@/lib/console/navigation";
+import { organizationSettingsTabs } from "@/lib/console/settings/tabs";
+import { getConsoleScope } from "@/lib/console/shell-data";
 import { isDbConfigured } from "@/lib/platform/db/client";
 
 /**
- * Organization settings share one header and its URL tabs. Only the tabs this build has are
- * listed. Without a database the page says so on its own.
+ * Organization settings share one header and its URL tabs: General for
+ * everyone, Danger zone for the admins who can use it. Without a database the
+ * page says so on its own.
  */
 export default async function OrganizationSettingsLayout({
   children,
@@ -15,12 +17,11 @@ export default async function OrganizationSettingsLayout({
   params: Promise<{ orgSlug: string }>;
 }) {
   if (!isDbConfigured()) return children;
-  const { orgSlug } = await params;
-  const root = `${organizationRoot(orgSlug)}/settings`;
+  const [{ orgSlug }, scope] = await Promise.all([params, getConsoleScope()]);
   return (
     <SettingsFrame
       label="Organization settings"
-      tabs={[{ href: root, label: "General", exact: true }]}
+      tabs={organizationSettingsTabs(orgSlug, { danger: scope?.role === "admin" })}
     >
       {children}
     </SettingsFrame>
