@@ -65,6 +65,7 @@ export default async function ScopedCalibrationDetailPage({
       calibration={calibration}
       experimentName={name}
       basePath={`/project/${project.id}/calibration`}
+      projectId={project.id}
       projectSlug={project.slug}
       view={view}
     />

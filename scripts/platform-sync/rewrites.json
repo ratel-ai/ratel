@@ -78,7 +78,13 @@
     { "from": "@/components/traces/ExperimentLifecyclePanels", "to": "@/components/console/calibration/ExperimentLifecyclePanels", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/calibration/[name]/actions", "to": "@/app/(console)/project/[projectId]/calibration/[name]/actions", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/calibration/[name]/ranking-content", "to": "@/app/(console)/project/[projectId]/calibration/[name]/ranking-content", "exact": true },
-    { "from": "@/app/(app)/experiments/[name]/content", "to": "@/app/(console)/project/[projectId]/calibration/[name]/content", "exact": true }
+    { "from": "@/app/(app)/experiments/[name]/content", "to": "@/app/(console)/project/[projectId]/calibration/[name]/content", "exact": true },
+    { "from": "@/components/quality/report/", "to": "@/components/console/quality/report/" },
+    { "from": "@/components/quality/PrintButton", "to": "@/components/console/quality/report/PrintButton", "exact": true },
+    { "from": "@/components/quality/charts", "to": "@/components/console/quality/report/charts", "exact": true },
+    { "from": "@/components/quality/panels", "to": "@/components/console/quality/report/panels", "exact": true },
+    { "from": "@/components/quality/theme", "to": "@/components/console/quality/report/theme", "exact": true },
+    { "from": "@/components/admin/format", "to": "@/components/console/quality/report/format", "exact": true }
   ],
   "partitions": {
     "@/lib/db/schema": {
@@ -407,7 +413,13 @@
         "QualityScore": "@/lib/synthesis/quality/metrics",
         "hitCredit": "@/lib/synthesis/quality/metrics",
         "scoreObservations": "@/lib/synthesis/quality/metrics",
-        "CONFIDENT_SCORE_RATIO": "@/lib/readings/stats"
+        "CONFIDENT_SCORE_RATIO": "@/lib/readings/stats",
+        "explainQualityGap": "@/lib/synthesis/quality/metrics",
+        "ABSENT": "@/lib/synthesis/quality/metrics",
+        "RankHistogram": "@/lib/synthesis/quality/metrics",
+        "CoverageScore": "@/lib/synthesis/quality/metrics",
+        "ListCost": "@/lib/synthesis/quality/metrics",
+        "UnifiedScore": "@/lib/synthesis/quality/metrics"
       }
     },
     "@/lib/match-quality/types": {
@@ -457,7 +469,8 @@
       "symbols": {
         "FingerprintSourceRow": "@/lib/synthesis/quality/fingerprint",
         "FingerprintDb": "@/lib/synthesis/quality/fingerprint",
-        "recordCatalogFingerprint": "@/lib/synthesis/quality/fingerprint"
+        "recordCatalogFingerprint": "@/lib/synthesis/quality/fingerprint",
+        "CatalogInventory": "@/lib/ingest/runtime-catalog/inventory"
       }
     },
     "@/lib/dotmatrix-hooks": {

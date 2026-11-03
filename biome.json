@@ -788,6 +788,8 @@
         "apps/web/lib/console/seed/site-copilot-quality.test.ts",
         "apps/web/lib/console/seed/site-copilot-quality-fixture.ts",
         "apps/web/components/console/quality/**",
+        "!apps/web/components/console/quality/report/panels.tsx",
+        "!apps/web/components/console/quality/report/format.ts",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/page.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/quality/descriptions/page.tsx",
@@ -959,9 +961,13 @@
         "apps/web/components/console/calibration/ExperimentConversionPanel.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/calibration/page.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/calibration/loading.tsx",
-        "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/ranking-content.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/loading.tsx",
-        "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/selection/\\[selectionId\\]/loading.tsx"
+        "apps/web/app/(console)/project/\\[projectId\\]/calibration/\\[name\\]/selection/\\[selectionId\\]/loading.tsx",
+        "apps/web/components/console/quality/report/ReportDocument.tsx",
+        "apps/web/components/console/quality/report/PrintButton.tsx",
+        "apps/web/components/console/quality/report/charts.tsx",
+        "apps/web/components/console/quality/report/theme.ts",
+        "apps/web/components/console/quality/report/quality.css"
       ],
       "linter": {
         "rules": {

@@ -829,7 +829,6 @@
     {"from":"apps/web/app/(report)/layout.tsx","to":"apps/web/app/(report)/layout.tsx","mode":"owned","$why":"the comment names the console route group"},
     {"from":"apps/web/app/(report)/report.css","to":"apps/web/app/(report)/report.css","mode":"copy"},
     {"from":"apps/web/app/(report)/report/health/[projectId]/page.tsx","to":"apps/web/app/(report)/report/health/[projectId]/page.tsx","mode":"owned","$why":"the project comes from the console scope; no feature flag or support session; the redacted model comes from views/health/public-model"},
-    {"from":"apps/web/app/(report)/report/quality/[projectId]/page.tsx","mode":"excluded","$why":"the quality report; lands with quality"},
     {"from":"apps/web/app/api/projects/[projectId]/health/examples/route.ts","to":"apps/web/app/api/projects/[projectId]/health/examples/route.ts","mode":"owned","$why":"the project comes from the console scope"},
     {"from":"apps/web/app/api/projects/[projectId]/self-corrections/[correctionId]/example/route.ts","to":"apps/web/app/api/projects/[projectId]/self-corrections/[correctionId]/example/route.ts","mode":"owned","$why":"the project comes from the console scope"},
     {"from":"apps/web/lib/trace-signals/share/public-model.ts","to":"apps/web/lib/views/health/public-model.ts","mode":"copy"},
@@ -1295,7 +1294,7 @@
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/page.tsx", "mode": "copy" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/loading.tsx", "mode": "copy" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route" },
-    { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/ranking-content.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/ranking-content.tsx", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/ranking-content.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/ranking-content.tsx", "mode": "owned", "$why": "adds the member's link to the printable Quality report, which upstream offers only from its admin console" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/loading.tsx", "mode": "copy" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/actions.ts", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/actions.ts", "mode": "owned", "$why": "the project comes from the guarded route" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/project/[projectId]/calibration/[name]/mismatches/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/calibration/[name]/mismatches/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route" },
@@ -1305,6 +1304,16 @@
     { "$slice": "calibration", "from": "apps/web/app/(app)/experiments/page.tsx", "mode": "excluded", "$why": "the organization-wide Experiments pages; Quality > Experiments is the list in this edition" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/experiments/content.tsx", "mode": "excluded", "$why": "the organization-wide Experiments pages; Quality > Experiments is the list in this edition" },
     { "$slice": "calibration", "from": "apps/web/app/(app)/experiments/[name]/page.tsx", "mode": "excluded", "$why": "the organization-wide Experiments pages; Quality > Experiments is the list in this edition" },
-    { "$slice": "calibration", "from": "apps/web/app/(app)/experiments/[name]/loading.tsx", "mode": "excluded", "$why": "the organization-wide Experiments pages; Quality > Experiments is the list in this edition" }
+    { "$slice": "calibration", "from": "apps/web/app/(app)/experiments/[name]/loading.tsx", "mode": "excluded", "$why": "the organization-wide Experiments pages; Quality > Experiments is the list in this edition" },
+    { "$slice": "quality-report", "from": "apps/web/app/(report)/report/quality/[projectId]/page.tsx", "to": "apps/web/app/(report)/report/quality/[projectId]/page.tsx", "mode": "owned", "$why": "the project comes from the console scope in place of the platform-admin gate, a 404 outside the organization; loads the quality stylesheet, which upstream imports globally" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/report/ReportDocument.tsx", "to": "apps/web/components/console/quality/report/ReportDocument.tsx", "mode": "copy" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/PrintButton.tsx", "to": "apps/web/components/console/quality/report/PrintButton.tsx", "mode": "copy" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/charts.tsx", "to": "apps/web/components/console/quality/report/charts.tsx", "mode": "copy" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/theme.ts", "to": "apps/web/components/console/quality/report/theme.ts", "mode": "copy" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/quality.css", "to": "apps/web/components/console/quality/report/quality.css", "mode": "copy" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/panels.tsx", "to": "apps/web/components/console/quality/report/panels.tsx", "mode": "owned", "$why": "a private or confidential word in a comment or fixture, replaced" },
+    { "$slice": "quality-report", "from": "apps/web/components/admin/format.ts", "to": "apps/web/components/console/quality/report/format.ts", "mode": "owned", "$why": "the admin console is excluded as a folder; the three formatters the report and its panels use are kept here as upstream has them" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/Disclosure.tsx", "mode": "excluded", "$why": "used only by the admin Quality page" },
+    { "$slice": "quality-report", "from": "apps/web/components/quality/SegmentedControl.tsx", "mode": "excluded", "$why": "used only by the admin Quality page" }
   ]
 }

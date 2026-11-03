@@ -9,23 +9,29 @@ import type { RankingCalibrationView } from "@/lib/synthesis/experiments/calibra
 import type { ExperimentLifecycleArmMetrics } from "@/lib/synthesis/experiments/types";
 import { calibrationMismatchesPath } from "@/lib/synthesis/traces/calibration-view";
 import type { TraceListView } from "@/lib/synthesis/traces/view";
+import { qualityReportHref, reportWindowDays } from "@/lib/views/quality/report-href";
 
 /**
  * Ranking-shadow calibration detail: census agreement KPIs, served-vs-shadow
  * latency/outcome split, and a link to the dedicated mismatch browser. Rendered
  * when the experiment exports `ratel.experiment.comparison` records
  * (auto-detected; `?view=generic` falls back to the span-aggregate view).
+ *
+ * Owned (ADR-0030): adds the member's link to the printable Quality report for
+ * this calibration and window, which upstream offers only from its admin console.
  */
 export function RankingCalibrationContent({
   calibration,
   experimentName,
   basePath,
+  projectId,
   projectSlug,
   view,
 }: {
   calibration: RankingCalibrationView;
   experimentName: string;
   basePath: string;
+  projectId: string;
   projectSlug: string;
   view: TraceListView;
 }) {
@@ -35,6 +41,11 @@ export function RankingCalibrationContent({
     basePath,
     experimentName,
   )}?${rangeSearch.toString()}`;
+  const reportHref = qualityReportHref(
+    projectId,
+    experimentName,
+    reportWindowDays({ since: view.range.since, until: view.range.until }),
+  );
 
   return (
     <div className="flex flex-col gap-7">
@@ -69,6 +80,14 @@ export function RankingCalibrationContent({
               {calibration.mismatchCount.toLocaleString("en-US")}
             </span>
             <span aria-hidden>→</span>
+          </Link>
+          <Link
+            href={reportHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-8 items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-coral transition-colors hover:bg-coral/20"
+          >
+            Partner report (PDF)
           </Link>
           <DateRangeControl
             preset={view.range.preset}
