@@ -4,7 +4,13 @@ import type { OrgRole } from "@/lib/platform/organization";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
-export type ConsoleProject = { id: string; name: string };
+export type ConsoleProject = {
+  id: string;
+  name: string;
+  organizationId: string;
+  slug: string;
+  isDemo: boolean;
+};
 
 export type ConsoleAccount = { name: string; email: string | null };
 
@@ -34,6 +40,12 @@ export const getConsoleScope = cache(async (): Promise<ConsoleScope | null> => {
       name: context.user.name ?? context.user.username ?? context.user.email ?? "Operator",
       email: context.user.email,
     },
-    projects: projects.map(({ id, name }) => ({ id, name })),
+    projects: projects.map(({ id, name, organizationId, slug, isDemo }) => ({
+      id,
+      name,
+      organizationId,
+      slug,
+      isDemo,
+    })),
   };
 });

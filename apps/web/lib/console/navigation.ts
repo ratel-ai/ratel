@@ -1,4 +1,4 @@
-import type { NavItem as EditionNavItem } from "@/lib/composition/ports";
+import type { NavItem as EditionNavItem, OrganizationNavItem } from "@/lib/composition/ports";
 
 /**
  * The console navigation (DESIGN.md, Information architecture). Pure functions of the URL and the
@@ -16,6 +16,7 @@ export type NavIconName =
   | "settings"
   | "projects"
   | "integrations"
+  | "members"
   | "edition";
 
 export interface NavItem {
@@ -76,10 +77,13 @@ export function consoleNav({
   projectId,
   organizationSlug,
   additions,
+  organizationAdditions = [],
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
   additions: readonly EditionNavItem[];
+  /** Organization pages the edition adds (`composition.organizationNav`), before the settings. */
+  organizationAdditions?: readonly OrganizationNavItem[];
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const organization: NavItem[] = organizationSlug
@@ -98,6 +102,14 @@ export function consoleNav({
           href: `${organizationRoot(organizationSlug)}/mcp`,
           icon: "integrations",
         },
+        ...organizationAdditions.map(
+          (item): NavItem => ({
+            id: `org-${item.path}`,
+            label: item.label,
+            href: `${organizationRoot(organizationSlug)}/${item.path}`,
+            icon: "members",
+          }),
+        ),
         {
           id: "org-settings",
           label: "Settings",

@@ -76,6 +76,7 @@ describe("createComposition", () => {
   it("assembles the OSS edition with the five ports", async () => {
     const composition = createComposition("oss");
     assert.equal(composition.edition, "Ratel OSS");
+    assert.deepEqual(composition.organizationNav, []);
     const session = await composition.session.resolveSession();
     assert.equal(session?.user.name, "Local operator");
     assert.equal(await composition.session.actingAs(), null);
@@ -88,6 +89,7 @@ describe("createComposition", () => {
   it("assembles the Cloud edition from the seam", async () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
+    assert.deepEqual(composition.organizationNav, [{ path: "team", label: "Members" }]);
     assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
     const quota = await composition.entitlements.checkEventQuota({ id: "org" });
     assert.equal(quota.ok, false);

@@ -17,9 +17,16 @@ export type NavItem = {
   label: string;
 };
 
+/** An organization page an edition adds: `/org/<slug>/<path>`. */
+export type OrganizationNavItem = {
+  path: string;
+  label: string;
+};
+
 export type Composition = CompositionPorts & {
   edition: string;
   nav: NavItem[];
+  organizationNav: OrganizationNavItem[];
 };
 
 const VALID_EDITIONS = "oss, cloud";
@@ -47,6 +54,7 @@ export function createComposition(
   let base: CompositionPorts;
   let edition: string;
   let nav: NavItem[];
+  let organizationNav: OrganizationNavItem[] = [];
 
   if (editionKey === "oss") {
     base = OSS_PORTS;
@@ -61,6 +69,7 @@ export function createComposition(
     base = ee;
     edition = "Ratel Cloud";
     nav = [{ href: "/admin", label: "Admin" }];
+    organizationNav = [{ path: "team", label: "Members" }];
   } else {
     throw new Error(
       `RATEL_COMPOSITION has unknown value ${JSON.stringify(editionKey)}; valid values: ${VALID_EDITIONS}`,
@@ -73,7 +82,7 @@ export function createComposition(
     if (ports[port] == null) throw new Error(`Composition is missing required port: ${port}`);
   }
 
-  return { edition, nav, ...(ports as CompositionPorts) };
+  return { edition, nav, organizationNav, ...(ports as CompositionPorts) };
 }
 
 export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");

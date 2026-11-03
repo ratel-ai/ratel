@@ -110,6 +110,23 @@ test("outside a project, the organization rail lists its projects page", () => {
   assert.equal(activeNavItemId("/org/acme", items), "projects");
   assert.equal(activeNavItemId("/org/acme/mcp", items), "integrations");
   assert.equal(activeNavItemId("/org/acme/settings", items), "org-settings");
+  // An edition's organization pages sit before the settings.
+  const cloud = consoleNav({
+    projectId: undefined,
+    organizationSlug: "acme",
+    additions: [],
+    organizationAdditions: [{ path: "team", label: "Members" }],
+  });
+  assert.deepEqual(
+    cloud.map(({ id, href }) => ({ id, href })),
+    [
+      { id: "projects", href: "/org/acme" },
+      { id: "integrations", href: "/org/acme/mcp" },
+      { id: "org-team", href: "/org/acme/team" },
+      { id: "org-settings", href: "/org/acme/settings" },
+    ],
+  );
+  assert.equal(activeNavItemId("/org/acme/team", cloud), "org-team");
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
     consoleNav({ projectId: P1, organizationSlug: "acme", additions: [] }).map(({ id }) => id),

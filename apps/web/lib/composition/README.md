@@ -5,8 +5,11 @@ port implementations is mounted; a missing port stops the process at startup
 (`instrumentation.node.ts`), never on the first request.
 
 - `index.ts` — `createComposition` and the `composition` singleton the core reads.
-- `ui`, optional on a composition: what an edition adds to the root layout and the account menu. A
-  loader, so the boot path never imports it. Absent in the open-source edition.
+- `ui`, optional on a composition: what an edition adds to the root layout and the account menu, and
+  the pages it puts in place of the open-source defaults (the rail switcher, `/organizations`,
+  `/org/<slug>/team`, the organization's General and Danger zone settings). A loader, so the boot
+  path never imports it. Absent in the open-source edition.
+- `organizationNav`: the organization pages an edition adds to the rail (Cloud: Members).
 - `ee-absent.ts` — what the `#ee-composition` alias resolves to when `ee/src` is absent: `null`.
 
 With ADR-0030 the root splits in two: `ports.ts` (the ports; imports no module) and

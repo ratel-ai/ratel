@@ -53,8 +53,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         projectId: project?.id,
         organizationSlug: data.organizationSlug ?? undefined,
         additions: data.editionNav,
+        organizationAdditions: data.organizationNav,
       }),
-    [project, data.organizationSlug, data.editionNav],
+    [project, data.organizationSlug, data.editionNav, data.organizationNav],
   );
   const activeId = activeNavItemId(pathname, items);
   const entries = useMemo(
@@ -130,6 +131,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     project,
     account: data.account,
     accountMenuItems: data.accountMenuItems,
+    scopeSwitcher: data.scopeSwitcher,
     onSearch: () => setCommandOpen(true),
     onShortcuts: () => setShortcutsOpen(true),
   };
