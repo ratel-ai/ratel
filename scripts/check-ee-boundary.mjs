@@ -3,9 +3,9 @@
 // Usage (from repo root): node scripts/check-ee-boundary.mjs
 //
 // Two rules, one directory name:
-//   inward  — nothing outside ee/ imports from ee/, except the enumerated route stubs,
-//             which exist only because Next.js defines routes by file position.
-//   outward — ee/ reaches the application tree only through lib/contracts/.
+//   inward:  nothing outside ee/ imports from ee/, except the route stubs under app/(ee)/
+//            and proxy.ts, which exist only because Next.js defines routes by file position.
+//   outward: ee/ reaches the application tree only through lib/contracts/.
 //
 // It reads import specifiers, so it cannot see a build alias that points into ee/.
 // The seam (#ee-composition) is exactly such an alias: a companion check on the alias
@@ -20,11 +20,12 @@ const REPO_ROOT = resolve(SCRIPT_DIR, "..");
 const EE_ROOT = join(REPO_ROOT, "ee");
 const SCAN_ROOTS = [join(REPO_ROOT, "apps", "web"), EE_ROOT];
 
-// Exact paths, not a pattern: each exception is a deliberate, reviewable entry.
-const ALLOWED_INWARD = new Set([
-  join(REPO_ROOT, "apps", "web", "app", "(ee)", "admin", "page.tsx"),
-  join(REPO_ROOT, "apps", "web", "proxy.ts"),
-]);
+// app/(ee)/ is gitignored and holds only the stubs link-ee.mjs copies from ee/src/routes,
+// so the whole folder is the exception. The proxy stub sits at a fixed path beside core files.
+const EE_ROUTES = join(REPO_ROOT, "apps", "web", "app", "(ee)") + sep;
+const EE_PROXY = join(REPO_ROOT, "apps", "web", "proxy.ts");
+
+export const allowsInward = (file) => file === EE_PROXY || file.startsWith(EE_ROUTES);
 
 // Static imports, re-exports, `require()` and dynamic `import()`: the specifier is group 1, 2 or 3.
 // Shared with check-layers.mjs and the platform-sync codemod, so one regex decides what an import is.
@@ -76,7 +77,7 @@ export function scanEeBoundary() {
         const at = { path: rel, line };
 
         if (!insideEe) {
-          if (pointsIntoEe(file, specifier) && !ALLOWED_INWARD.has(file)) {
+          if (pointsIntoEe(file, specifier) && !allowsInward(file)) {
             violations.push({ ...at, reason: `inward import of ee/ via ${JSON.stringify(specifier)}` });
           }
           continue;

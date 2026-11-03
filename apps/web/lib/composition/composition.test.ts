@@ -5,7 +5,7 @@ import type { CompositionPorts } from "@/lib/contracts/composition";
 process.env.RATEL_COMPOSITION = "oss";
 const { createComposition } = await import("@/lib/composition");
 const { drainSteps, jobHandlers } = await import("@/lib/composition/registry");
-const { scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
+const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
 const cloudPorts: CompositionPorts = {
@@ -149,6 +149,15 @@ describe("createComposition", () => {
 
   it("reports zero ee boundary violations on the real tree", () => {
     assert.deepEqual(scanEeBoundary(), []);
+  });
+
+  it("lets every ee route stub and the proxy stub import ee, and nothing else", () => {
+    const web = new URL("../../", import.meta.url).pathname;
+    assert.ok(allowsInward(`${web}app/(ee)/admin/page.tsx`));
+    assert.ok(allowsInward(`${web}app/(ee)/admin/organizations/[id]/page.tsx`));
+    assert.ok(allowsInward(`${web}proxy.ts`));
+    assert.ok(!allowsInward(`${web}app/(app)/page.tsx`));
+    assert.ok(!allowsInward(`${web}app/(ee)-other/page.tsx`));
   });
 });
 
