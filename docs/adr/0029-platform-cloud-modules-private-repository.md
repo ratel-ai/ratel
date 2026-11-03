@@ -43,7 +43,8 @@ change and publish private commit hashes.
 to `apps/web/app/(ee)/` (ignored by git) when `ee/src` exists, and removes them when it does not.
 Copied rather than symlinked, because Turbopack rejects symlinks leaving the project root and
 `next dev` does not discover routes behind a symlink. With the checkout absent, every command
-builds Ratel OSS; nobody runs a step to get the right tree.
+builds Ratel OSS; nobody runs a step to get the right tree. The proxy is the same case: Next.js reads it only from
+`apps/web/proxy.ts`, so the script copies a stub there, and the open-source edition has none.
 
 **One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
 suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`

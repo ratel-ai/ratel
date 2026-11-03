@@ -103,6 +103,15 @@ describe("createComposition", () => {
     assert.equal(actingAs?.kind, "organization");
   });
 
+  it("hands the edition's UI loader over, and the open-source edition has none", async () => {
+    const ui = { RootProvider: () => null, AccountMenuItems: () => null };
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...cloudPorts, ui: async () => ui },
+    });
+    assert.equal(await cloud.ui?.(), ui);
+    assert.equal(createComposition("oss", { eeComposition: null }).ui, undefined);
+  });
+
   it("throws when a port is missing or the edition key is unknown", () => {
     assert.throws(
       () => createComposition("oss", { ports: { telemetry: undefined } }),

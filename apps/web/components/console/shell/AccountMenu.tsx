@@ -3,6 +3,7 @@
 import { cn } from "@ratel/design-system/cn";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@ratel/design-system/menu";
 import { BookOpen, Keyboard } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ConsoleAccount } from "@/lib/console/shell-data";
 
 const DOCS_URL = "https://docs.ratel.sh";
@@ -11,10 +12,13 @@ const DOCS_URL = "https://docs.ratel.sh";
 export function AccountMenu({
   account,
   collapsed,
+  editionItems,
   onShortcuts,
 }: {
   account: ConsoleAccount;
   collapsed: boolean;
+  /** What the edition adds, such as profile and sign-out. */
+  editionItems?: ReactNode;
   onShortcuts: () => void;
 }) {
   return (
@@ -39,6 +43,7 @@ export function AccountMenu({
           ) : null}
         </div>
         <MenuSeparator />
+        {editionItems}
         <MenuItem
           icon={<BookOpen />}
           onClick={() => window.open(DOCS_URL, "_blank", "noopener,noreferrer")}

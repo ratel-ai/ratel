@@ -21,7 +21,10 @@ const EE_ROOT = join(REPO_ROOT, "ee");
 const SCAN_ROOTS = [join(REPO_ROOT, "apps", "web"), EE_ROOT];
 
 // Exact paths, not a pattern: each exception is a deliberate, reviewable entry.
-const ALLOWED_INWARD = new Set([join(REPO_ROOT, "apps", "web", "app", "(ee)", "admin", "page.tsx")]);
+const ALLOWED_INWARD = new Set([
+  join(REPO_ROOT, "apps", "web", "app", "(ee)", "admin", "page.tsx"),
+  join(REPO_ROOT, "apps", "web", "proxy.ts"),
+]);
 
 // Static imports, re-exports, `require()` and dynamic `import()`: the specifier is group 1, 2 or 3.
 // Shared with check-layers.mjs and the platform-sync codemod, so one regex decides what an import is.

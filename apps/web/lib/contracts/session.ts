@@ -30,4 +30,6 @@ export type SessionPort = {
   /** Whether this principal may use the console at all (Cloud: the launch allowlist). */
   accessGranted(principal: Principal): Promise<boolean>;
   actingAs(): Promise<ActingAs>;
+  /** Throws when the deployment cannot authenticate anyone. Called once, at boot. */
+  assertConfigured?(): void;
 };

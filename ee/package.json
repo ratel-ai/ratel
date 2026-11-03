@@ -5,8 +5,12 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@clerk/nextjs": "^7.5.17",
+    "@clerk/themes": "^2.4.57",
     "@ratel/design-system": "workspace:*",
     "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.22.0",
+    "next": "16.2.4",
     "pg": "^8.13.1",
     "react": "19.2.4"
   },

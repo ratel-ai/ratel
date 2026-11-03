@@ -6,7 +6,7 @@ import { Kbd } from "@ratel/design-system/kbd";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { NavItem } from "@/lib/console/navigation";
 import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
 import { AccountMenu } from "./AccountMenu";
@@ -21,6 +21,7 @@ export type SidebarProps = {
   projects: readonly ConsoleProject[];
   project: ConsoleProject | undefined;
   account: ConsoleAccount | null;
+  accountMenuItems?: ReactNode;
   collapsed: boolean;
   /** Absent in the mobile drawer, which is always expanded. */
   onToggleCollapsed?: () => void;
@@ -42,6 +43,7 @@ export function SidebarContent({
   projects,
   project,
   account,
+  accountMenuItems,
   collapsed,
   onToggleCollapsed,
   onSearch,
@@ -133,7 +135,12 @@ export function SidebarContent({
 
       {account ? (
         <div className="shrink-0 border-t border-line p-2">
-          <AccountMenu account={account} collapsed={collapsed} onShortcuts={onShortcuts} />
+          <AccountMenu
+            account={account}
+            collapsed={collapsed}
+            editionItems={accountMenuItems}
+            onShortcuts={onShortcuts}
+          />
         </div>
       ) : null}
     </div>
