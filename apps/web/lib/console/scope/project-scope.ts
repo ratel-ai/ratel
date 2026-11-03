@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import type { Organization, User } from "@/lib/platform/identity/schema";
+import type { SessionUser } from "@/lib/contracts/session";
+import type { Organization } from "@/lib/platform/organizations";
 import { getProjectById, parseProjectUuid } from "@/lib/platform/projects/queries";
 import type { Project } from "@/lib/platform/projects/schema";
 import { getSessionContext } from "@/lib/platform/session";
@@ -24,7 +25,7 @@ export interface ProjectScope {
   project: Project;
   organization: Organization;
   role: OrgRole;
-  user: User;
+  user: SessionUser;
 }
 
 /** Null when nobody is signed in, the id is not a project id, or the project is another organization's. */

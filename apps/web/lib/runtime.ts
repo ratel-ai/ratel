@@ -1,10 +1,8 @@
 import type { NavItem } from "@/lib/composition";
 import { composition } from "@/lib/composition";
-import type { Principal } from "@/lib/contracts/session";
 
 export type Runtime = {
   edition: string;
-  principal: Principal | null;
   nav: NavItem[];
 };
 
@@ -14,6 +12,5 @@ export type Runtime = {
  * here: a plan belongs to an organization, and this seam resolves none.
  */
 export async function getRuntime(): Promise<Runtime> {
-  const principal = await composition.session.resolvePrincipal();
-  return { edition: composition.edition, principal, nav: composition.nav };
+  return { edition: composition.edition, nav: composition.nav };
 }

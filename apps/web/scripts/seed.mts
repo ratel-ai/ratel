@@ -8,7 +8,7 @@
  * `lib/console/seed/site-copilot-plan.ts` and `site-copilot-turns.ts`.
  *
  *   pnpm --filter @ratel/platform seed              # into the operator's organization, on $DATABASE_URL
- *   DATABASE_URL=postgres://... pnpm --filter @ratel/platform seed [org-slug] [flags]
+ *   DATABASE_URL=postgres://... pnpm --filter @ratel/platform seed [organization-id] [flags]
  *
  *   --slug <slug>      project slug (default site-copilot)
  *   --anchor <iso>     the end of the window (default: now, to the minute)
@@ -53,8 +53,7 @@ import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
-import { organizations } from "@/lib/platform/identity/schema";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getLogger } from "@/lib/platform/logger";
 import { createApiKey, findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 
@@ -197,9 +196,8 @@ async function seed() {
   assertLocalDatabase("seed Site Copilot");
   const args = parseSeedArgs(process.argv.slice(2));
   const db = getDb();
-  const org = await resolveSeedOrganization(db, args.org);
-  const [organization] = await db.select().from(organizations).where(eq(organizations.id, org.id)).limit(1);
-  const windowDays = organization ? getAgentHealthLimits(organization).agentHealthWindowDays : 0;
+  const org = await resolveSeedOrganization(args.org);
+  const windowDays = getAgentHealthLimits(org).agentHealthWindowDays;
   const project = await replaceProject(db, {
     organizationId: org.id,
     slug: args.slug,

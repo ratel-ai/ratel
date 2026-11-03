@@ -3,8 +3,8 @@ import {
   createBackgroundObservability,
 } from "@/lib/jobs/observability";
 import { type BoundReadDb, withStatementTimeout } from "@/lib/platform/db/statement-timeout";
-import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {

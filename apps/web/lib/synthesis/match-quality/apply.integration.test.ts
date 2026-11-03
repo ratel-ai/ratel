@@ -7,8 +7,7 @@ import { setRuntimeCatalogOverride } from "@/lib/ingest/runtime-catalog/override
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
-import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { organizations } from "@/lib/platform/identity/schema";
+import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { projects } from "@/lib/platform/projects/schema";
 import { type ApplyDeps, applyProposal, applyProposals, revertProposal } from "./apply";
 import type { ProposalInsert } from "./queries";

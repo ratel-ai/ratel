@@ -12,19 +12,21 @@ const ACTIVE_ORG = "22222222-2222-4222-8222-222222222222";
 
 const skill = { id: SKILL_ID, name: "review-pull-request" } as Skill;
 
+function session(memberOf: string[]) {
+  return (async () => ({
+    user: { id: USER_ID, externalId: "user_abc" },
+    organization: { id: ACTIVE_ORG },
+    memberships: memberOf.map((id) => ({ organization: { id }, role: "member" })),
+  })) as unknown as ResolveSkillDeps["getSessionContext"];
+}
+
 function deps(over: Partial<ResolveSkillDeps> = {}): ResolveSkillDeps {
   return {
-    getSessionContext: (async () => ({
-      user: { id: USER_ID, externalId: "user_abc" },
-      organization: { id: ACTIVE_ORG },
-    })) as unknown as ResolveSkillDeps["getSessionContext"],
+    getSessionContext: session([ACTIVE_ORG, OWNER_ORG]),
     getSkillWithOrganizationId: (async () => ({
       skill,
       organizationId: OWNER_ORG,
     })) as unknown as ResolveSkillDeps["getSkillWithOrganizationId"],
-    getMembership: (async () => ({
-      role: "admin",
-    })) as unknown as ResolveSkillDeps["getMembership"],
     ...over,
   };
 }
@@ -42,17 +44,11 @@ test("a skill resolves from an organization the caller belongs to but is not act
 });
 
 test("membership is checked against the skill's own organization", async () => {
-  const seen: Array<[string, string]> = [];
-  await resolveSkill(
+  const activeOnly = await resolveSkill(
     SKILL_ID,
-    deps({
-      getMembership: (async (userId: string, organizationId: string) => {
-        seen.push([userId, organizationId]);
-        return { role: "member" };
-      }) as unknown as ResolveSkillDeps["getMembership"],
-    }),
+    deps({ getSessionContext: session([ACTIVE_ORG]) }),
   );
-  assert.deepEqual(seen, [[USER_ID, OWNER_ORG]]);
+  assert.equal(activeOnly.ok, false);
 });
 
 test("a non-member gets the same 404 as a missing skill", async () => {
@@ -61,7 +57,7 @@ test("a non-member gets the same 404 as a missing skill", async () => {
   const nonMember = await resolveSkill(
     SKILL_ID,
     deps({
-      getMembership: (async () => null) as unknown as ResolveSkillDeps["getMembership"],
+      getSessionContext: session([]),
     }),
   );
   const missing = await resolveSkill(
@@ -80,23 +76,6 @@ test("a non-member gets the same 404 as a missing skill", async () => {
     nonMember.ok === false && (await nonMember.response.json()),
     missing.ok === false && (await missing.response.json()),
   );
-});
-
-test("a missing skill is never membership-checked", async () => {
-  let checked = false;
-  const resolved = await resolveSkill(
-    SKILL_ID,
-    deps({
-      getSkillWithOrganizationId: (async () =>
-        null) as unknown as ResolveSkillDeps["getSkillWithOrganizationId"],
-      getMembership: (async () => {
-        checked = true;
-        return { role: "admin" };
-      }) as unknown as ResolveSkillDeps["getMembership"],
-    }),
-  );
-  assert.equal(resolved.ok, false);
-  assert.equal(checked, false);
 });
 
 test("no session is a 401, not a 404", async () => {

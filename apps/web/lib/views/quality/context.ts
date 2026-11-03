@@ -5,7 +5,7 @@ import {
   checkMeteredFeature,
   type FeatureAccess,
 } from "@/lib/platform/entitlements";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import type { ResolvedRange } from "@/lib/synthesis/dashboard";
 import { countRunsSince } from "@/lib/synthesis/match-quality/queries";

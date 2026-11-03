@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
+import { LOCAL_ORGANIZATION_ID } from "@/lib/adapters/oss/session";
+import { composition } from "@/lib/composition/ports";
 import type { getDb } from "@/lib/platform/db/client";
-import { memberships, organizations } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { projects } from "@/lib/platform/projects/schema";
-import { resolveSessionContext } from "@/lib/platform/session";
 
 /**
  * Helpers the local data scripts share (`scripts/seed.mts`): find the
@@ -13,53 +14,18 @@ import { resolveSessionContext } from "@/lib/platform/session";
 
 type Db = ReturnType<typeof getDb>;
 
-/** The personal organization of the OSS operator (`lib/adapters/oss/session.ts`), made on the first console visit. */
-export const LOCAL_ORG_SLUG = "local-operator";
-
-export interface SeedOrganization {
-  id: string;
-  slug: string;
-}
-
-/** What a first console visit does: provision the session's user and personal organization. */
-async function openConsole(): Promise<SeedOrganization | null> {
-  return (await resolveSessionContext())?.organization ?? null;
-}
-
 /**
- * The organization named by `slug`; else the operator's; else the only
- * organization with a member; else, when none has one, the one a first
- * console visit provisions. Throws when none of those settles it.
+ * The organization named by id, through the session port; by default the open-source
+ * operator's. Throws when the edition does not know it (in Cloud, pass one).
  */
 export async function resolveSeedOrganization(
-  db: Db,
-  slug?: string,
-  provision: () => Promise<SeedOrganization | null> = openConsole,
-): Promise<SeedOrganization> {
-  const columns = { id: organizations.id, slug: organizations.slug };
-  const bySlug = async (value: string) =>
-    (await db.select(columns).from(organizations).where(eq(organizations.slug, value)).limit(1))[0];
-  if (slug) {
-    const named = await bySlug(slug);
-    if (!named) throw new Error(`no organization with slug "${slug}"`);
-    return named;
-  }
-  const local = await bySlug(LOCAL_ORG_SLUG);
-  if (local) return local;
-  const withMembers = await db
-    .selectDistinct(columns)
-    .from(organizations)
-    .innerJoin(memberships, eq(memberships.organizationId, organizations.id));
-  const only = withMembers.length === 1 ? withMembers[0] : undefined;
-  if (only) return only;
-  if (withMembers.length === 0) {
-    const provisioned = await provision();
-    if (provisioned) return { id: provisioned.id, slug: provisioned.slug };
-    throw new Error("No organization has a member yet. Open the console once, then rerun.");
-  }
-  throw new Error(
-    `Several organizations have members and none is ${LOCAL_ORG_SLUG}; pass one: ${withMembers.map((o) => o.slug).join(", ")}`,
-  );
+  id: string = LOCAL_ORGANIZATION_ID,
+  getOrganization: (id: string) => Promise<Organization | null> = (orgId) =>
+    composition.session.getOrganization(orgId),
+): Promise<Organization> {
+  const organization = await getOrganization(id);
+  if (!organization) throw new Error(`no organization "${id}"; pass an organization id`);
+  return organization;
 }
 
 /** A project id that is the same on every run for one organization and slug (UUID layout, version 8). */

@@ -3,8 +3,8 @@ import {
   createBackgroundObservability,
 } from "@/lib/jobs/observability";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {
   computeToolExplorer as computeToolExplorerFn,

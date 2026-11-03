@@ -15,7 +15,7 @@ import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { detailSkill } from "@/lib/mcp/serialize";
 import { checkQuota } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 
 /**
  * Writes, at strict parity with the Bearer-authed `/api/v1` surface.

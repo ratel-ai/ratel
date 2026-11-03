@@ -1,5 +1,4 @@
 import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { organizations } from "@/lib/platform/identity/schema";
 
 /**
  * A project is one agent: the unit telemetry is ingested under, catalogs are published for,
@@ -11,9 +10,9 @@ export const projects = pgTable(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    // The edition's organization (session port); no foreign key, the identity module owns the
+    // table and deletes an organization's projects itself.
+    organizationId: uuid("organization_id").notNull(),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
     // Content hash of this project's published skills catalog: the sync endpoint's ETag

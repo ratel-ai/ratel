@@ -9,8 +9,8 @@ import type {
   touchRuntimeCatalogOverridesPull,
 } from "@/lib/ingest/runtime-catalog/override-queries";
 import type { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
-import type { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
 import { getLogger } from "@/lib/platform/logger";
+import type { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import type { setRequestLogContext } from "@/lib/platform/request-log";
 import type { trackServerEvent } from "@/lib/platform/telemetry";
 

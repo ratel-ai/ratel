@@ -3,7 +3,7 @@ import { importSkills } from "@/lib/catalog/import";
 import { createSkillInput } from "@/lib/catalog/manage";
 import { countSkills, createSkill, getActiveSkillByName, updateSkill } from "@/lib/catalog/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { v1MutationErrorResponse, v1QuotaExceededResponse } from "@/lib/platform/v1-errors";
 

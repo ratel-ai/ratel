@@ -11,7 +11,7 @@ import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { checkEventQuota, incrementEventUsage } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { trackServerEvent } from "@/lib/platform/telemetry";

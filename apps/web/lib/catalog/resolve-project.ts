@@ -1,5 +1,4 @@
-import { getMembership, getOrganizationById } from "@/lib/platform/identity/queries";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import type { Project } from "@/lib/platform/projects/schema";
 import { getSessionContext } from "@/lib/platform/session";
@@ -33,14 +32,9 @@ export async function resolveProjectById(projectId: string | null): Promise<Reso
   if (!project) {
     return { ok: false, response: Response.json({ error: "Project not found." }, { status: 404 }) };
   }
-  const membership = await getMembership(ctx.user.id, project.organizationId);
-  if (!membership) {
-    return { ok: false, response: Response.json({ error: "Project not found." }, { status: 404 }) };
-  }
-  const organization =
-    project.organizationId === ctx.organization.id
-      ? ctx.organization
-      : await getOrganizationById(project.organizationId);
+  const organization = ctx.memberships.find(
+    (m) => m.organization.id === project.organizationId,
+  )?.organization;
   if (!organization) {
     return { ok: false, response: Response.json({ error: "Project not found." }, { status: 404 }) };
   }

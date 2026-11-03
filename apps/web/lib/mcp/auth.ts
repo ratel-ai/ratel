@@ -2,8 +2,8 @@ import { McpOperationError } from "@/lib/mcp/errors";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { resolvePlanId } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 
 /**

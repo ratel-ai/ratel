@@ -1,7 +1,7 @@
 import { ifNoneMatchMatches } from "@/lib/catalog/wire";
 import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/lib/platform/api-key-bearer";
-import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger, type LogError } from "@/lib/platform/logger";
+import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type { TokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/telemetry";

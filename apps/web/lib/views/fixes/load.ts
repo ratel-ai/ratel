@@ -8,7 +8,7 @@ import {
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
 import { getAgentHealthLimits, getLimits } from "@/lib/platform/entitlements";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadTopicPatterns } from "@/lib/readings/topics/queries";
 import { TOPIC_WINDOW_DAYS } from "@/lib/readings/topics/types";

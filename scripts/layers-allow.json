@@ -1,4 +1,3 @@
 [
-  "runtime.ts:@/lib/composition",
-  "runtime.ts:@/lib/contracts/session"
+  "runtime.ts:@/lib/composition"
 ]

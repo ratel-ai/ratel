@@ -3,7 +3,7 @@ import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-hand
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
-import { getOrganizationByProjectId } from "@/lib/platform/identity/queries";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { trackServerEvent } from "@/lib/platform/telemetry";

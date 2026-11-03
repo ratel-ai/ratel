@@ -13,13 +13,14 @@ npm packages.
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |
-| `identity/`, `projects/` | `schema.ts` and `queries.ts` for users, organizations, memberships, projects, API keys |
+| `projects/` | `schema.ts` and `queries.ts` for projects and API keys |
+| `organizations.ts` | organizations by id or by project, through the session port: the edition owns the table |
 | `projects/names.ts` | project name limits and normalization, safe for client components |
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
-| `session.ts` | the principal-to-rows bridge: `getSessionContext()` with user, organization, role, memberships |
+| `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
-| `deployment-config.ts` | `RATEL_ORG_NAME`, and the warnings at boot for a public `BASE_URL` on public defaults |
+| `deployment-config.ts` | `RATEL_ORG_NAME` validated at boot, and the warnings at boot for a public `BASE_URL` on public defaults |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging, token buckets, body caps, self-telemetry |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions |

@@ -7,7 +7,7 @@ import {
   listSyncedTools,
   listToolDefinitions,
 } from "@/lib/ingest/catalogs/queries";
-import type { Organization } from "@/lib/platform/identity/schema";
+import type { Organization } from "@/lib/platform/organizations";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   getRuntimeCatalogOverrideAdoption,

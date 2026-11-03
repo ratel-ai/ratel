@@ -2,8 +2,8 @@ import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queri
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
-import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/identity/queries";
 import { getLogger, type LogError } from "@/lib/platform/logger";
+import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type {
   findActiveApiKeyByHash as findActiveApiKeyByHashFn,
   touchApiKey as touchApiKeyFn,

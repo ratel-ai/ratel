@@ -40,7 +40,7 @@ cd ratel
 docker compose up -d --build --wait
 ```
 
-Open `http://localhost:3000`. The first build takes a few minutes, and no configuration is needed. To name your organization, set `RATEL_ORG_NAME` in `.env` before the first start, or rename it later in Settings.
+Open `http://localhost:3000`. The first build takes a few minutes, and no configuration is needed. To name your organization, set `RATEL_ORG_NAME` in `.env`; a restart applies a new name.
 
 ### Explore with demo data (optional)
 

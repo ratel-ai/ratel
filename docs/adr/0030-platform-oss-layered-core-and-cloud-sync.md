@@ -30,12 +30,14 @@ plain copy unworkable:
 
 ## Decision
 
-**Five ports, in `apps/web/lib/contracts`.** `session` (principal, organization, role, projects,
-`accessGranted`, `actingAs`), `entitlements` (limits, quotas, metered features, `planId`),
+**Five ports, in `apps/web/lib/contracts`.** `session` (the user, the active organization, the
+role and the memberships; organizations by id for paths with no session; the member count;
+`actingAs`), `entitlements` (limits, quotas, metered features, `planId`),
 `telemetry` (events, identify, exceptions), `embedding-provider`, and `registry` (job handlers and
 drain steps a module contributes). They replace the spike's `identity` and `workspace`. Email is
 not a port (no open-source caller); admin is not a port (support sessions become `actingAs` on
-the session principal). The OSS adapters are a single local operator with one organization,
+the session principal). The OSS adapters are a single local operator with one organization, both constants with no
+table behind them,
 unlimited entitlements, log-line telemetry, an OpenAI or local-hash embedder, and an empty
 registry. The composition root is split: `lib/composition/ports.ts` assembles the ports and
 imports no module; `lib/composition/registry.ts` imports every module's `register.ts`.
@@ -68,7 +70,7 @@ migrator, the statement-timeout helper and a schema composer; it holds no table.
 of them only through the registry. The open-source edition starts from a fresh migration set
 generated from the composed schema: one baseline file per schema fragment, holding only the final
 tables, with no upstream history. Every later change is its own file; an existing file is never
-edited. `db:check` in CI fails when the schema has changes no file covers. The Cloud database is not migrated by this work.
+edited. `db:check` in CI fails when the schema has changes no file covers. The Cloud database is not migrated by this work; its cutover marks the core files applied, `0020` included, since the identity tables stay there as the private module's.
 
 **A repeatable sync from `ratel-cloud` main**, in `scripts/platform-sync/`. `map.json` lists what
 moves where in three modes: `copy` (mirrored on every sync, import specifiers rewritten to the
@@ -83,8 +85,9 @@ synced. Owned files keep the upstream export names (`getSessionContext`, `trackS
 owned set stays small.
 
 **What stays private**, handled in `ratel-platform` (out of this repository's scope): billing
-(Stripe, wallets, pricing), identity (Clerk, memberships, invitations, platform invites, MCP
-OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
+(Stripe, wallets, pricing), identity (Clerk; the organizations, users and memberships tables, which the core
+never reads and migration `0020` drops from the open-source schema; invitations, platform
+invites, MCP OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
 one remaining feature flag, PostHog, the admin console and support sessions, the "held for us"
 review path of Agent health imports and the importer itself, the public share links of Agent
 health, the private decision-engine clients, the customer replay seed, and all infrastructure

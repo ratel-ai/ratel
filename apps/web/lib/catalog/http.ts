@@ -1,7 +1,6 @@
 import { getSkillWithOrganizationId } from "@/lib/catalog/queries";
 import type { ResolvedProject } from "@/lib/catalog/resolve-project";
 import type { Skill } from "@/lib/catalog/schema";
-import { getMembership } from "@/lib/platform/identity/queries";
 import { getProjectBySlug } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
@@ -42,13 +41,11 @@ export type ResolvedSkill =
 export interface ResolveSkillDeps {
   getSessionContext: typeof getSessionContext;
   getSkillWithOrganizationId: typeof getSkillWithOrganizationId;
-  getMembership(userId: string, organizationId: string): Promise<{ role: string } | null>;
 }
 
 const DEFAULT_RESOLVE_SKILL_DEPS: ResolveSkillDeps = {
   getSessionContext,
   getSkillWithOrganizationId,
-  getMembership,
 };
 
 /**
@@ -65,8 +62,8 @@ export async function resolveSkill(
     return { ok: false, response: Response.json({ error: "Not authenticated." }, { status: 401 }) };
   }
   const found = await deps.getSkillWithOrganizationId(id);
-  const membership = found ? await deps.getMembership(ctx.user.id, found.organizationId) : null;
-  if (!found || !membership) {
+  const member = found && ctx.memberships.some((m) => m.organization.id === found.organizationId);
+  if (!found || !member) {
     return { ok: false, response: Response.json({ error: "Skill not found." }, { status: 404 }) };
   }
   return {

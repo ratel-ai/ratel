@@ -5,8 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
-import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { organizations, users } from "@/lib/platform/identity/schema";
+import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { projects } from "@/lib/platform/projects/schema";
 import {
   matchQualityEvalItems,
@@ -32,7 +31,6 @@ import type { EvalItem, ProposalPreview, RunCensus } from "./types";
 
 const ORG = "11111111-1111-4111-8111-111111111111";
 const PROJECT = "22222222-2222-4222-8222-222222222222";
-const USER = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-09-14T12:00:00Z");
 
 async function seeded() {
@@ -43,7 +41,6 @@ async function seeded() {
   // would bury that fact in noise.
   const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
   await db.insert(organizations).values({ id: ORG, name: "Org", slug: "org" });
-  await db.insert(users).values({ id: USER, externalId: "user_1", email: "a@b.c" });
   await db.insert(projects).values({ id: PROJECT, organizationId: ORG, name: "P", slug: "p" });
   return { client, db };
 }

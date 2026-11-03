@@ -4,7 +4,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { eq } from "drizzle-orm";
 import { listClosedTurnsPage } from "@/lib/ledger/closed-turns";
 import { fixtureRows, type TurnFixture, turn } from "@/lib/ledger/test-support";
-import { organizations } from "@/lib/platform/identity/schema";
+import { organizations } from "@/lib/platform/db/test-support";
 import { computeToolExplorer } from "@/lib/readings/tool-explorer/compute";
 import {
   type ExploreJobDeps,

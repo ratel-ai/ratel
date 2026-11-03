@@ -6,5 +6,4 @@
  * (`drizzle.config.ts`), so this file is for code, not for migrations.
  */
 export * from "@/lib/jobs/schema";
-export * from "@/lib/platform/identity/schema";
 export * from "@/lib/platform/projects/schema";
