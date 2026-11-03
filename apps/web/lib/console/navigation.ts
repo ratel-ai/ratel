@@ -323,11 +323,17 @@ export function newProjectHref(organizationHref: string): string {
   return `${organizationHref}?new=1`;
 }
 
-/** Where the console opens: the first project, else the organization's projects page. */
+/** The first-project flow, outside the console shell. */
+export const ONBOARDING_ROUTE = "/onboarding";
+
+/**
+ * Where the console opens: the first project, else onboarding, so a fresh install sets up its
+ * first project before it meets an empty projects page. Null without an organization.
+ */
 export function entryHref(
   projects: readonly { id: string }[],
   organizationSlug: string | undefined,
 ): string | null {
   if (projects[0]) return projectRoot(projects[0].id);
-  return organizationSlug ? organizationRoot(organizationSlug) : null;
+  return organizationSlug ? ONBOARDING_ROUTE : null;
 }
