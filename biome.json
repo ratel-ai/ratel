@@ -776,6 +776,10 @@
         "apps/web/lib/views/home/glance-queries.integration.test.ts",
         "apps/web/lib/views/home/load.test.ts",
         "apps/web/lib/views/home/load.integration.test.ts",
+        "apps/web/lib/views/home/overview-view.test.ts",
+        "apps/web/components/console/home/**",
+        "!apps/web/components/console/home/OverviewPage.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/loading.tsx",
         "apps/web/lib/views/fixes/fixes-view.test.ts",
         "apps/web/lib/synthesis/match-quality/**",
         "!apps/web/lib/synthesis/match-quality/queries.integration.test.ts",
@@ -1046,7 +1050,10 @@
       }
     },
     {
-      "includes": ["apps/web/components/console/org/McpExample.tsx"],
+      "includes": [
+        "apps/web/components/console/org/McpExample.tsx",
+        "apps/web/components/console/home/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
