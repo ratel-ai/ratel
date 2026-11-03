@@ -937,7 +937,13 @@
         "apps/web/lib/mcp/connect/**",
         "!apps/web/lib/mcp/connect/snippets.ts",
         "!apps/web/lib/mcp/connect/snippets.test.ts",
-        "apps/web/components/console/org/McpExample.tsx"
+        "apps/web/components/console/org/McpExample.tsx",
+        "apps/web/lib/synthesis/experiments/comparison-cache.ts",
+        "apps/web/lib/synthesis/experiments/comparison-cache.test.ts",
+        "apps/web/lib/synthesis/experiments/surface-loaders.ts",
+        "apps/web/lib/synthesis/experiments/surface-loaders.test.ts",
+        "apps/web/lib/console/popover-position.ts",
+        "apps/web/lib/console/popover-position.test.ts"
       ],
       "linter": {
         "rules": {

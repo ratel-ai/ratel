@@ -1154,10 +1154,6 @@
     { "from": "apps/web/lib/experiments/conversion-view.test.ts", "mode": "excluded", "$why": "imports Calibration or Experiments UI this tree does not have" },
     { "from": "apps/web/lib/experiments/ranking-ui.test.ts", "mode": "excluded", "$why": "imports Calibration or Experiments UI this tree does not have" },
     { "from": "apps/web/lib/experiments/lifecycle-view.test.ts", "mode": "excluded", "$why": "imports Calibration or Experiments UI this tree does not have" },
-    { "from": "apps/web/lib/experiments/comparison-cache.ts", "mode": "excluded", "$why": "no caller until the Calibration pages land" },
-    { "from": "apps/web/lib/experiments/comparison-cache.test.ts", "mode": "excluded", "$why": "no caller until the Calibration pages land" },
-    { "from": "apps/web/lib/experiments/surface-loaders.ts", "mode": "excluded", "$why": "no caller until the Calibration pages land" },
-    { "from": "apps/web/lib/experiments/surface-loaders.test.ts", "mode": "excluded", "$why": "no caller until the Calibration pages land" },
     { "from": "apps/web/lib/explore", "to": "apps/web/lib/console/explore", "mode": "copy" },
     { "from": "apps/web/components/catalog/v2", "to": "apps/web/components/console/catalog", "mode": "copy" },
     { "from": "apps/web/components/catalog/v2/CatalogItemDetail.tsx", "to": "apps/web/components/console/catalog/CatalogItemDetail.tsx", "mode": "owned", "$why": "a comment names a confidential tool prefix; renamed" },
@@ -1279,6 +1275,12 @@
     { "from": "apps/web/components/org/v2/McpConnect.tsx", "to": "apps/web/components/console/org/McpConnect.tsx", "mode": "owned", "$why": "the Desktop snippet is a config file, not a URL, so its caption says so" },
     { "from": "apps/web/components/org/v2/McpExample.tsx", "to": "apps/web/components/console/org/McpExample.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/org/[orgSlug]/mcp/page.tsx", "to": "apps/web/app/(console)/org/[orgSlug]/mcp/page.tsx", "mode": "owned", "$why": "no suspense skeleton; the organization comes from the guarded route" },
-    { "from": "apps/web/app/(app)/org/[orgSlug]/mcp/loading.tsx", "mode": "excluded", "$why": "renders the excluded skeleton" }
+    { "from": "apps/web/app/(app)/org/[orgSlug]/mcp/loading.tsx", "mode": "excluded", "$why": "renders the excluded skeleton" },
+    { "$slice": "calibration", "from": "apps/web/lib/experiments/comparison-cache.ts", "to": "apps/web/lib/synthesis/experiments/comparison-cache.ts", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/lib/experiments/comparison-cache.test.ts", "to": "apps/web/lib/synthesis/experiments/comparison-cache.test.ts", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/lib/experiments/surface-loaders.ts", "to": "apps/web/lib/synthesis/experiments/surface-loaders.ts", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/lib/experiments/surface-loaders.test.ts", "to": "apps/web/lib/synthesis/experiments/surface-loaders.test.ts", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/lib/popover-position.ts", "to": "apps/web/lib/console/popover-position.ts", "mode": "copy" },
+    { "$slice": "calibration", "from": "apps/web/lib/popover-position.test.ts", "to": "apps/web/lib/console/popover-position.test.ts", "mode": "copy" }
   ]
 }
