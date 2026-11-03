@@ -68,7 +68,8 @@ export function createComposition(
     }
     base = ee;
     edition = "Ratel Cloud";
-    nav = [{ href: "/admin", label: "Admin" }];
+    // The admin console is reached from the account menu, for allowlisted admins only.
+    nav = [];
     organizationNav = [{ path: "team", label: "Members" }];
   } else {
     throw new Error(
