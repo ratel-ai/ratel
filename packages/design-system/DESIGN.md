@@ -147,7 +147,7 @@ Enter with `ease-enter`, exit faster with `ease-exit`.
 | Where | Use | Primitive |
 |---|---|---|
 | Empty and first-run states | The 5×5 mark at rest, in `fg-faint` | `EmptyState`, `DotEmblem` |
-| A Micro screen's wait | The 5×5 mark, a band of light crossing it | `DotLoader` |
+| A Micro screen's wait | The 5×5 mark, a band of light crossing it; `size="sm"` beside a sentence that waits | `DotLoader` |
 | A share next to its number | A row of square pixels beside the number | `DotMeter` |
 | A trend under a stat | Columns of pixels per bucket, the latest coral | `DotSpark` |
 | Canvases, maps, empty areas | A dot grid at 8 px pitch | `dot-grid`, `dot-grid-fade` |

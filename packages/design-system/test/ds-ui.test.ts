@@ -9,7 +9,7 @@ import { Badge, StatusDot } from "../src/components/badge";
 import { Button } from "../src/components/button";
 import { Checkbox } from "../src/components/checkbox";
 import { type Column, DataTable } from "../src/components/data-table";
-import { DotEmblem, DotMeter, DotSpark } from "../src/components/dot-matrix";
+import { DotEmblem, DotLoader, DotMeter, DotSpark } from "../src/components/dot-matrix";
 import { maskSecret } from "../src/components/mask";
 import { PageHeader } from "../src/components/page-header";
 import { eventFromInside, isTypingTarget, stepIndex, withPeek } from "../src/components/peek";
@@ -308,4 +308,22 @@ test("the brand marks carry their meaning for assistive tech, not just their dot
   assert.match(spark, /role="img"[^>]*aria-label="Runs per day"/);
   assert.match(spark, /bg-accent-mark/, "the latest bucket is the coral one");
   assert.match(renderToStaticMarkup(createElement(DotEmblem, {})), /aria-hidden="true"/);
+});
+
+test("the loader is a status with its label, and shrinks to sit beside a sentence", () => {
+  const loader = renderToStaticMarkup(
+    createElement(DotLoader, { label: "Waiting for your first event" }),
+  );
+  assert.match(loader, /role="status"[^>]*aria-label="Waiting for your first event"/);
+  assert.equal(loader.match(/\bsize-1(?=[" ])/g)?.length, 25, "25 dots at the full size");
+  const small = renderToStaticMarkup(
+    createElement(DotLoader, { label: "Waiting for your first event", size: "sm" }),
+  );
+  assert.equal(small.match(/\bsize-0\.5(?=[" ])/g)?.length, 25, "the same 25 dots, half the size");
+  assert.doesNotMatch(small, /\bsize-1(?=[" ])/);
+  assert.match(
+    renderToStaticMarkup(createElement(DotLoader, {})),
+    /aria-hidden="true"/,
+    "without a label it is decoration",
+  );
 });

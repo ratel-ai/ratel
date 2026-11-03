@@ -39,22 +39,39 @@ export function DotEmblem({ className }: { className?: string }) {
   );
 }
 
+/** The loader's dot and gap at each size: `md` for a page or section, `sm` beside a sentence. */
+const LOADER_SIZE = {
+  sm: { dot: "size-0.5", gap: "gap-px" },
+  md: { dot: "size-1", gap: "gap-[1.5px]" },
+} as const;
+
 /**
  * The 5×5 mark in motion, for a wait: a band of light crossing its diagonals. With a `label` it
  * is a status a screen reader announces ("Loading intents"); without one it is decoration.
+ * `size="sm"` is the mark at half scale, for a line of text that waits ("Waiting for your first
+ * event").
  */
-export function DotLoader({ className, label }: { className?: string; label?: string }) {
+export function DotLoader({
+  className,
+  label,
+  size = "md",
+}: {
+  className?: string;
+  label?: string;
+  size?: keyof typeof LOADER_SIZE;
+}) {
+  const scale = LOADER_SIZE[size];
   const dots = Array.from({ length: 25 }, (_, index) => {
     const diagonal = Math.floor(index / 5) + (index % 5);
     return (
       <span
         key={index}
-        className="dot-loader-dot size-1 rounded-full bg-current"
+        className={cn("dot-loader-dot rounded-full bg-current", scale.dot)}
         style={{ animationDelay: `${diagonal * 90}ms` }}
       />
     );
   });
-  const grid = cn("inline-grid grid-cols-5 gap-[1.5px] text-fg", className);
+  const grid = cn("inline-grid grid-cols-5 text-fg", scale.gap, className);
   if (label) {
     return (
       <span role="status" aria-label={label} className={grid}>
