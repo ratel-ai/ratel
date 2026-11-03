@@ -17,7 +17,7 @@ identical.
 | `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href` |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
-| `home/` | the Overview: `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the recap and the MCP project overview open with) |
+| `home/` | the Overview: `load` (every read in one round, each degrading on its own, assembled into `OverviewData`), `glance` and `glance-queries` (intents, tasks, self-corrections and fixes, one tile each), `attention` (what needs a look now, from the issues, fixes, intents and context), `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the MCP project overview opens with) |
 | `traces/` | the turn page of Traces, where an Agent health example's "Open in Traces" lands: `turn-detail` (one turn's calls in ledger order, the live query and error text read by event id, a trace link only where Traces holds the trace, the session's neighbouring turns), `turn-detail-linked` (an SDK run's linked OpenTelemetry model calls), `turn-linked` (the linked text, pure) |
 
 ## Seams
@@ -62,7 +62,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   `capabilityCatalogHref` on its own (the rest of upstream's file is the adaptive-ranking page
   view).
 - `home/queries.ts`: the home-recap partition of upstream's queries hub (`getProjectHomeEntityCounts`),
-  with its PGlite test `home/queries.integration.test.ts`.
+  with its PGlite test `home/queries.integration.test.ts`; `home/load.ts`: no feature-flag gate
+  (Agent health is always on, so its read runs with the rest), and the issue anchor spelled
+  inline, since `lib/` never imports the UI.
 - Tests whose fixtures named a confidential word, copied with a neutral tenant:
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.
