@@ -195,3 +195,55 @@
     animation: dot-loader-pulse 1.4s ease-in-out infinite;
   }
 }
+
+/* Onboarding / first-run backdrop (components/console/onboarding/OnboardingBackground.tsx).
+ * A fine dot-matrix texture under the first-run screen, masked to a top-heavy ellipse so it
+ * fades into the canvas toward the edges rather than tiling to a hard rectangle. */
+.dot-field {
+  background-image: radial-gradient(
+    circle at center,
+    var(--color-forest-300) 1px,
+    transparent 1.5px
+  );
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(125% 85% at 50% 0%, #000 8%, transparent 68%);
+  mask-image: radial-gradient(125% 85% at 50% 0%, #000 8%, transparent 68%);
+}
+
+/* Onboarding → console handoff. Leaving the first-run screen, the panel settles up and blurs
+ * away while a base-coloured veil dissolves the whole scene into the canvas — then navigation
+ * fires, handing off to the page's own card-enter rise-in so the two read as one motion.
+ * Reduced-motion users skip straight to the route change (see CreateProjectForm). */
+@keyframes onboarding-settle {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.985);
+    filter: blur(3px);
+  }
+}
+
+@keyframes onboarding-dissolve {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The panel lifts away as the scene starts to leave. */
+  .onboarding-settle {
+    animation: onboarding-settle 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Then this base veil fades in over the dot-field — the scene fades out to reveal the
+   * console behind. */
+  .onboarding-dissolve {
+    animation: onboarding-dissolve 0.34s cubic-bezier(0.4, 0, 0.2, 1) 0.72s both;
+  }
+}
