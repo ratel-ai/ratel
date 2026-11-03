@@ -9,6 +9,7 @@ search, projects, settings, and development seeds.
 | `scope/command-search.ts` | the ⌘K ranking |
 | `project-settings.ts` | renaming a project of the session organization |
 | `create-project.ts` | creating a project: the session organization, the plan's cap, a slug unique in the organization |
+| `onboarding/` | the first-project flow at `/onboarding`: `create-first-project.ts` (new here: the project and its Default key in one step, refused in a support session or at the plan's cap), `quickstart.ts` (owned: the send-your-first-trace snippets on a stock OpenTelemetry exporter), `capture-consent.ts` (the "What Ratel will read" copy, a promise about users' data) and `transition.ts` (the exit timings) |
 | `organization-settings.ts` | renaming the session organization and its address, admins only |
 | `settings/` | the settings tabs, the API key rows, the SDK events views and payload read, the redirect settle helper, the projects list model and UTC date formats |
 | `delete-project.ts` | deleting a project of the session organization once its name is typed back |

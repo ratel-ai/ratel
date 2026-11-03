@@ -967,7 +967,11 @@
         "apps/web/components/console/quality/report/PrintButton.tsx",
         "apps/web/components/console/quality/report/charts.tsx",
         "apps/web/components/console/quality/report/theme.ts",
-        "apps/web/components/console/quality/report/quality.css"
+        "apps/web/components/console/quality/report/quality.css",
+        "apps/web/components/console/onboarding/CaptureConsentPanel.tsx",
+        "apps/web/lib/console/onboarding/capture-consent.ts",
+        "apps/web/lib/console/onboarding/capture-consent-ui.test.ts",
+        "apps/web/lib/console/onboarding/transition.ts"
       ],
       "linter": {
         "rules": {

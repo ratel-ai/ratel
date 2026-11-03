@@ -84,7 +84,9 @@
     { "from": "@/components/quality/charts", "to": "@/components/console/quality/report/charts", "exact": true },
     { "from": "@/components/quality/panels", "to": "@/components/console/quality/report/panels", "exact": true },
     { "from": "@/components/quality/theme", "to": "@/components/console/quality/report/theme", "exact": true },
-    { "from": "@/components/admin/format", "to": "@/components/console/quality/report/format", "exact": true }
+    { "from": "@/components/admin/format", "to": "@/components/console/quality/report/format", "exact": true },
+    { "from": "@/components/onboarding/", "to": "@/components/console/onboarding/" },
+    { "from": "@/components/dashboard/SdkQuickstart", "to": "@/components/console/onboarding/SdkQuickstart", "exact": true }
   ],
   "partitions": {
     "@/lib/db/schema": {

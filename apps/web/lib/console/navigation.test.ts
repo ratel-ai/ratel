@@ -7,6 +7,7 @@ import {
   consoleNav,
   entryHref,
   findProject,
+  ONBOARDING_ROUTE,
   organizationRoot,
   organizationSlugFromPath,
   projectIdFromPath,
@@ -200,9 +201,10 @@ test("a project outside the organization's list is not found", () => {
   assert.equal(findProject([], P1), undefined);
 });
 
-test("the entry goes to the first project, else the organization's projects page", () => {
+test("the entry goes to the first project, else to onboarding, else nowhere", () => {
   assert.equal(entryHref(PROJECTS, "acme"), `/project/${P1}`);
-  assert.equal(entryHref([], "acme"), "/org/acme");
+  assert.equal(entryHref([], "acme"), ONBOARDING_ROUTE);
+  assert.equal(ONBOARDING_ROUTE, "/onboarding");
   assert.equal(entryHref([], undefined), null);
 });
 
