@@ -2,6 +2,7 @@ import { CodeBlock } from "@ratel/design-system/code";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { notFound } from "next/navigation";
+import { composition } from "@/lib/composition/ports";
 import { assembleOperations } from "@/lib/mcp/operations";
 import { mcpOriginFromHeaders } from "@/lib/mcp/public-origin";
 import {
@@ -16,15 +17,16 @@ import { McpCapabilities, McpExample } from "./McpExample";
  * Integrations: the MCP server, at organization scope like the
  * v1 page. One endpoint per deployment; a client reaches the project its key
  * belongs to. The organization is the session's (any other slug is a 404), and
- * there is no support session here, so minting a key is never restricted.
+ * no key is minted inside an admin support session.
  */
 export async function IntegrationsPage({ slug }: { slug: string }) {
   const context = await getSessionContext();
   if (!context || context.organization.slug !== slug) notFound();
   const { organization } = context;
-  const [origin, projects] = await Promise.all([
+  const [origin, projects, actingAs] = await Promise.all([
     mcpOriginFromHeaders(),
     listProjectsForOrganization(organization.id),
+    composition.session.actingAs(),
   ]);
   const endpoint = `${origin}/api/mcp`;
   // Prefixes only, per project: enough to say whether the CI path has a key.
@@ -61,7 +63,7 @@ export async function IntegrationsPage({ slug }: { slug: string }) {
               slug: project.slug,
             }))}
             keyPrefixesByProject={keyPrefixesByProject}
-            restricted={false}
+            restricted={actingAs !== null}
           />
         </Section>
         <Section title="Then ask it something">

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { ActingAs } from "@/lib/contracts/session";
+import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/api-key-actions";
 import { deleteConsoleProject } from "./delete-project";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
@@ -10,12 +12,14 @@ function deps(
     { id: P1, name: "One" },
     { id: P2, name: "Two" },
   ],
+  actingAs: ActingAs = null,
 ) {
   const deleted: string[] = [];
   return {
     deleted,
     deps: {
       session: async () => ({ organizationSlug: "acme", projects }),
+      actingAs: async () => actingAs,
       deleteProject: async (id: string) => {
         deleted.push(id);
       },
@@ -44,5 +48,18 @@ test("a wrong name or another organization's project deletes nothing", async () 
     (await deleteConsoleProject("33333333-3333-4333-8333-333333333333", "One", d)).ok,
     false,
   );
+  assert.deepEqual(deleted, []);
+});
+
+test("no project is deleted in any support session, editable included", async () => {
+  const { deleted, deps: d } = deps(undefined, {
+    kind: "organization",
+    targetId: "org",
+    readOnly: false,
+  });
+  assert.deepEqual(await deleteConsoleProject(P1, "One", d), {
+    ok: false,
+    error: SUPPORT_SESSION_RESTRICTED_MESSAGE,
+  });
   assert.deepEqual(deleted, []);
 });

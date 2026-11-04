@@ -138,12 +138,12 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-dvh bg-app text-fg">
+      <div className="flex min-h-[calc(100dvh-var(--support-bar,0px))] bg-app text-fg">
         <aside
           aria-label="Sidebar"
           data-collapsed={collapsed || undefined}
           className={cn(
-            "sticky top-0 z-rail hidden h-dvh shrink-0 border-r border-line bg-rail transition-[width] duration-200 ease-enter motion-reduce:transition-none md:block",
+            "sticky top-[var(--support-bar,0px)] z-rail hidden h-[calc(100dvh-var(--support-bar,0px))] shrink-0 border-r border-line bg-rail transition-[width] duration-200 ease-enter motion-reduce:transition-none md:block",
             collapsed ? "w-12" : "w-60",
           )}
         >
@@ -155,7 +155,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className="sticky top-0 z-sticky flex h-12 items-center gap-2 border-b border-line bg-rail px-2 md:hidden">
+          <div className="sticky top-[var(--support-bar,0px)] z-sticky flex h-12 items-center gap-2 border-b border-line bg-rail px-2 md:hidden">
             <IconButton label="Open menu" icon={<Menu />} onClick={() => setMobileOpen(true)} />
             <span className="min-w-0 flex-1 truncate text-ui font-semibold">
               {project?.name ?? data.organizationName ?? "Ratel"}

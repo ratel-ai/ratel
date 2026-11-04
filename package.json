@@ -12,7 +12,7 @@
     "check:boundary": "node scripts/check-ee-boundary.mjs",
     "check:layers": "node scripts/check-layers.mjs",
     "check:private": "node scripts/platform-sync/private-strings.mjs",
-    "platform:sync": "node scripts/platform-sync/sync.mjs --source ../ratel-cloud"
+    "platform:sync": "node scripts/platform-sync/sync.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.13"
