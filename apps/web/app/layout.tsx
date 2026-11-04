@@ -26,3 +26,4 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   );
 }
 
+// ci-scope-proof
