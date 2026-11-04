@@ -593,17 +593,3 @@ test("a task the reading no longer finds is said in place, with the way back; lo
     /role="status"[^>]*>Loading the task…[^]*data-task-skeleton=""/,
   );
 });
-
-test("run conversion controls require eval data and identify existing cases", () => {
-  const { detail, examples } = release();
-  const props = { projectId: PROJECT_ID, task: detail, examples, now: NOW };
-  const off = render(createElement(TaskView, props));
-  assert.doesNotMatch(off, /Turn into a test|In the eval set/);
-  const enabled = render(createElement(TaskView, { ...props, testRuns: [] }));
-  assert.match(enabled, /Turn into a test/);
-  const existing = render(
-    createElement(TaskView, { ...props, testRuns: detail.examples.map((row) => row.turnId) }),
-  );
-  assert.match(existing, /In the eval set/);
-  assert.doesNotMatch(existing, /Turn into a test/);
-});

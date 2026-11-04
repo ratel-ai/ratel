@@ -853,7 +853,7 @@
     {"from":"apps/web/lib/health-summary/summary-ui.test.ts","to":"apps/web/lib/views/health/summary/summary-ui.test.ts","mode":"owned","$why":"no importer, share link or plan link on the Summary"},
     {"from":"apps/web/lib/health-summary/task-chains.test.ts","to":"apps/web/lib/views/health/summary/task-chains.test.ts","mode":"copy"},
     {"from":"apps/web/lib/tasks/flow-layout.test.ts","to":"apps/web/lib/views/tasks/flow-layout.test.ts","mode":"copy"},
-    {"from":"apps/web/lib/tasks/tasks-ui.test.ts","to":"apps/web/lib/views/tasks/tasks-ui.test.ts","mode":"copy"},
+    {"from":"apps/web/lib/tasks/tasks-ui.test.ts","to":"apps/web/lib/views/tasks/tasks-ui.test.ts","mode":"owned","$why":"no run-to-test controls: the task loop lands in its own slice"},
     {"from":"apps/web/lib/self-corrections-ui.test.ts","to":"apps/web/lib/views/health/self-corrections/self-corrections-ui.test.ts","mode":"copy"},
     {"from":"apps/web/lib/kind-icons-consistency.test.ts","to":"apps/web/lib/views/health/kind-icons-consistency.test.ts","mode":"copy"},
 
@@ -1058,7 +1058,7 @@
     { "from": "apps/web/lib/settings/v2/tabs.ts", "to": "apps/web/lib/console/settings/tabs.ts", "mode": "copy" },
     { "from": "apps/web/lib/settings/v2/tabs.test.ts", "to": "apps/web/lib/console/settings/tabs.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/api-keys/action-handlers.ts", "to": "apps/web/lib/platform/api-key-actions.ts", "mode": "owned", "$why": "keys are stored as hash and prefix only; the actor is the session user" },
-    { "from": "apps/web/lib/api-keys/action-handlers.test.ts", "to": "apps/web/lib/platform/api-key-actions.test.ts", "mode": "copy" },
+    { "from": "apps/web/lib/api-keys/action-handlers.test.ts", "to": "apps/web/lib/platform/api-key-actions.test.ts", "mode": "owned", "$why": "pins the support-session refusal the owned handlers add" },
     { "from": "apps/web/lib/settings/v2/api-keys.ts", "to": "apps/web/lib/console/settings/api-keys.ts", "mode": "copy" },
     { "from": "apps/web/lib/settings/v2/api-keys.test.ts", "to": "apps/web/lib/console/settings/api-keys.test.ts", "mode": "copy" },
     { "from": "apps/web/app/(app)/settings/api-key-actions.ts", "to": "apps/web/app/(console)/project/[projectId]/settings/api-keys/actions.ts", "mode": "owned", "$why": "no support-session guard; the organization is the session's" },
