@@ -18,9 +18,10 @@ const logger = getLogger("freshness/route");
 
 /**
  * GET /api/projects/:projectId/freshness: when the project's analysis last
- * updated and whether more is on the way (RC-39), polled by the sidebar every
- * 30 seconds while the tab is visible. A read; no product event. A slow read
- * answers 204 and the sidebar keeps what it showed.
+ * updated and whether more is on the way, polled by a page's header
+ * (`?section=`) while the tab is visible. A read; no product event. A slow
+ * read answers 204 and the page keeps what it showed. Owned (ADR-0030): the
+ * project comes from the console scope.
  */
 export const GET = withRequestLog(handleGet);
 
@@ -32,7 +33,7 @@ async function handleGet(
   const session = await getSessionContext();
   if (!session) return Response.json({ ok: false }, { status: 401 });
   const { projectId } = await context.params;
-  const scope = await findProjectScope(projectId, session.user.id);
+  const scope = await findProjectScope(projectId);
   if (!scope) return Response.json({ ok: false }, { status: 404 });
   setRequestLogContext(request, { project_id: scope.project.id, org_id: scope.organization.id });
   // ?section=intents answers for one page's jobs instead (RC-210).

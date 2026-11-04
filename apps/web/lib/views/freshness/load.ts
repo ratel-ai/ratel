@@ -14,10 +14,10 @@ const LOOKBACK = "30 days";
 export const PENDING_WINDOW = "6 hours";
 
 /**
- * A project's analysis freshness: its latest finished job, whether any are
- * queued or running (and not stuck), and an import in progress. Three small
- * reads, each on the project's slice of an index (jobs_project_status_idx;
- * health_imports by project).
+ * A project's analysis freshness: its latest finished job, and whether any are
+ * queued or running (and not stuck). Two small reads on the project's slice of
+ * jobs_project_status_idx. Owned (ADR-0030): this edition has no health
+ * imports, so `importing` is always null.
  */
 export async function loadAnalysisFreshness(
   db: BoundReadDb,
@@ -31,21 +31,17 @@ export async function loadAnalysisFreshness(
             and finished_at > now() - ${LOOKBACK}::interval) as updated_at,
         exists (select 1 from jobs
           where project_id = ${projectId} and status in ('queued', 'running')
-            and created_at > now() - ${PENDING_WINDOW}::interval) as working,
-        (select runs_imported from health_imports
-          where project_id = ${projectId} and status = 'running'
-          order by started_at desc limit 1) as importing_runs
+            and created_at > now() - ${PENDING_WINDOW}::interval) as working
     `)
   ).rows as Array<{
     updated_at: string | Date | null;
     working: boolean;
-    importing_runs: number | null;
   }>;
   const updatedAt = jobs?.updated_at ? new Date(jobs.updated_at).toISOString() : null;
   return {
     updatedAt,
     working: Boolean(jobs?.working),
-    importing: jobs?.importing_runs == null ? null : { runsImported: Number(jobs.importing_runs) },
+    importing: null,
   };
 }
 

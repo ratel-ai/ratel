@@ -3,10 +3,12 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import Link from "next/link";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { readingSinceText } from "@/components/console/health/section-preview-model";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { TasksTable } from "@/components/console/tasks/TasksTable";
 import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/types";
+import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
 import { absoluteTime, timeAgo } from "@/lib/views/intents/map/labels";
 import { compactNumber } from "@/lib/views/intents/map/map-model";
 import { formatPer100, formatShare } from "@/lib/views/tasks/format";
@@ -19,7 +21,7 @@ export function tasksCrumbs(projectId: string) {
   return [{ label: "Agent health", href: agentHealthHref(projectId) }];
 }
 
-const FRAME = "rounded-lg border border-line dot-grid-fade";
+const FRAME = "rounded-lg border border-line dot-grid-backdrop";
 
 /**
  * Agent health › Tasks: what does my agent do for an ask, and how well? Four
@@ -33,15 +35,22 @@ export function TasksView({
   projectId,
   model,
   now,
+  progress = null,
 }: {
   projectId: string;
   model: TaskListModel;
   now: Date;
+  /** Where the jobs behind tasks stand; null reads as idle. */
+  progress?: SectionProgress | null;
 }) {
   return (
     <Page>
-      <PageHeader title={TASKS_TITLE} crumbs={tasksCrumbs(projectId)} />
-      <PageBody wide>
+      <PageHeader
+        title={TASKS_TITLE}
+        crumbs={tasksCrumbs(projectId)}
+        actions={<AnalysisStatus projectId={projectId} section="tasks" initial={progress} />}
+      />
+      <PageBody wide className={model.state === "ready" ? undefined : "flex-1"}>
         {model.state === "ready" ? (
           <>
             <TasksStats projectId={projectId} model={model} now={now} />
@@ -51,7 +60,7 @@ export function TasksView({
             <TasksTable projectId={projectId} rows={model.rows} unserved={model.unserved} />
           </>
         ) : (
-          <TasksState projectId={projectId} model={model} />
+          <TasksState projectId={projectId} model={model} working={analysisPending(progress)} />
         )}
       </PageBody>
     </Page>
@@ -111,14 +120,28 @@ function TasksStats({
   );
 }
 
-function TasksState({ projectId, model }: { projectId: string; model: TaskListModel }) {
+function TasksState({
+  projectId,
+  model,
+  working,
+}: {
+  projectId: string;
+  model: TaskListModel;
+  working: boolean;
+}) {
   const health = (
     <Link href={agentHealthHref(projectId)} className={buttonVariants({ variant: "secondary" })}>
       Open Agent health
     </Link>
   );
-  const [title, description] =
-    model.state === "blocked" && model.blocked === "mixed_runs"
+  // A blocked list waits on the agent's own data, not on our work.
+  const reading = working && model.state !== "blocked";
+  const [title, description] = reading
+    ? [
+        "Working out your tasks",
+        "Agent health is reading your latest runs. Tasks fill in here when it finishes, and this page updates on its own.",
+      ]
+    : model.state === "blocked" && model.blocked === "mixed_runs"
       ? [
           "Runs mix several asks",
           "Your agent's calls arrive without a turn id, so one run holds several people's asks. Send a turn id with each ask and tasks appear after the next reading.",
@@ -132,8 +155,18 @@ function TasksState({ projectId, model }: { projectId: string; model: TaskListMo
             ]
           : ["No tasks yet", "Tasks appear after Agent health reads your agent's runs."];
   return (
-    <section aria-label={title} className={FRAME} data-tasks-state={model.state}>
-      <EmptyState emblem title={title} description={description} action={health} />
+    <section
+      aria-label={title}
+      className={`${FRAME} flex flex-1 flex-col justify-center`}
+      data-tasks-state={model.state}
+    >
+      <EmptyState
+        emblem
+        working={reading}
+        title={title}
+        description={description}
+        action={reading ? undefined : health}
+      />
     </section>
   );
 }

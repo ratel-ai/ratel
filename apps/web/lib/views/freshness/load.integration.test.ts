@@ -20,7 +20,7 @@ async function setup(sqlText: string): Promise<BoundReadDb> {
   return drizzle(client, { schema }) as unknown as BoundReadDb;
 }
 
-test("a project with nothing analyzed reads as no update, idle, not importing", async () => {
+test("a project with nothing analyzed reads as no update and idle", async () => {
   const db = await setup("");
   assert.deepEqual(await loadAnalysisFreshness(db, PROJ), {
     updatedAt: null,
@@ -29,15 +29,13 @@ test("a project with nothing analyzed reads as no update, idle, not importing", 
   });
 });
 
-test("the latest finished job of this project, its queued work and its running import", async () => {
+test("the latest finished job of this project and its queued work", async () => {
   const db = await setup(`
     insert into jobs (project_id, kind, status, created_at, finished_at) values
       ('${PROJ}', 'match_quality_run', 'done', now() - interval '20 minutes', now() - interval '10 minutes'),
       ('${PROJ}', 'match_quality_run', 'done', now() - interval '9 minutes', now() - interval '3 minutes'),
       ('${PROJ}', 'craft_tools', 'queued', now(), null),
       ('${OTHER}', 'match_quality_run', 'done', now(), now());
-    insert into health_imports (project_id, source, status, window_days, label, created_by, runs_imported)
-      values ('${PROJ}', 'langfuse', 'running', 90, 'Langfuse', 'user_1', 1240);
   `);
   const freshness = await loadAnalysisFreshness(db, PROJ);
   const age = Date.now() - Date.parse(freshness.updatedAt!);
@@ -46,19 +44,15 @@ test("the latest finished job of this project, its queued work and its running i
     "the newest of this project's jobs, not another project's",
   );
   assert.equal(freshness.working, true);
-  assert.deepEqual(freshness.importing, { runsImported: 1240 });
 });
 
-test("a finished import and only finished jobs read as idle", async () => {
+test("only finished jobs read as idle", async () => {
   const db = await setup(`
     insert into jobs (project_id, kind, status, created_at, finished_at) values
       ('${PROJ}', 'match_quality_run', 'done', now() - interval '2 minutes', now() - interval '1 minute');
-    insert into health_imports (project_id, source, status, window_days, label, created_by, runs_imported)
-      values ('${PROJ}', 'langfuse', 'completed', 90, 'Langfuse', 'user_1', 50);
   `);
   const freshness = await loadAnalysisFreshness(db, PROJ);
   assert.equal(freshness.working, false);
-  assert.equal(freshness.importing, null);
 });
 
 test("a page's progress counts only its own kinds and this project's jobs", async () => {
