@@ -21,10 +21,10 @@ test("the environment overrides both; a blank value is the default; no trailing 
 });
 
 test("a value that still ends in /api/v1 is stripped to the origin", () => {
-  assert.deepEqual(
-    resolveAppConfig({ BASE_URL: "https://ratel.example.com/api/v1/" }),
-    { name: "Ratel", baseUrl: "https://ratel.example.com" },
-  );
+  assert.deepEqual(resolveAppConfig({ BASE_URL: "https://ratel.example.com/api/v1/" }), {
+    name: "Ratel",
+    baseUrl: "https://ratel.example.com",
+  });
   assert.deepEqual(resolveAppConfig({ BASE_URL: "http://localhost:3000/api/v1" }), {
     name: "Ratel",
     baseUrl: "http://localhost:3000",
