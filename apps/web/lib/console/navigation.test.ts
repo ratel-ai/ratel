@@ -15,6 +15,7 @@ import {
   projectRoot,
   shortcutHref,
   switchProjectHref,
+  visibleOrganizationNav,
 } from "./navigation";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
@@ -296,4 +297,14 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
   });
   assert.equal(shortcutHref(organization, "o"), "/org/acme");
   assert.equal(shortcutHref(organization, "s"), "/org/acme/settings");
+});
+
+test("visibleOrganizationNav hides only the paths given", () => {
+  const nav = [
+    { path: "team", label: "Members" },
+    { path: "billing", label: "Billing" },
+  ];
+  assert.deepEqual(visibleOrganizationNav(nav, []), nav);
+  assert.deepEqual(visibleOrganizationNav(nav, ["billing"]), [nav[0]]);
+  assert.deepEqual(visibleOrganizationNav(nav, ["other"]), nav);
 });

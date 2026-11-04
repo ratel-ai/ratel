@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/console/shell/AppFrame";
 import { composition } from "@/lib/composition";
+import { visibleOrganizationNav } from "@/lib/console/navigation";
 import { getConsoleScope } from "@/lib/console/shell-data";
 import {
   parseSidebarCollapsedCookie,
@@ -16,6 +17,10 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   const ConsoleBoundary = ui?.ConsoleBoundary;
   const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
   const projects = scope?.projects ?? [];
+  const hidden =
+    scope?.organizationSlug && ui?.hiddenOrganizationNav
+      ? await ui.hiddenOrganizationNav(scope.organizationSlug)
+      : [];
   return (
     <>
       <a
@@ -31,7 +36,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           projects,
           account: scope?.account ?? null,
           editionNav: composition.nav,
-          organizationNav: composition.organizationNav,
+          organizationNav: visibleOrganizationNav(composition.organizationNav, hidden),
           scopeSwitcher: ScopeSwitcher
             ? {
                 expanded: <ScopeSwitcher projects={projects} collapsed={false} />,

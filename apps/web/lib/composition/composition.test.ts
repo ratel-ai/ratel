@@ -89,7 +89,10 @@ describe("createComposition", () => {
   it("assembles the Cloud edition from the seam", async () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
-    assert.deepEqual(composition.organizationNav, [{ path: "team", label: "Members" }]);
+    assert.deepEqual(composition.organizationNav, [
+      { path: "team", label: "Members" },
+      { path: "billing", label: "Billing" },
+    ]);
     assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
     const quota = await composition.entitlements.checkEventQuota({ id: "org" });
     assert.equal(quota.ok, false);
@@ -100,11 +103,17 @@ describe("createComposition", () => {
   });
 
   it("hands the edition's UI loader over, and the open-source edition has none", async () => {
-    const ui = { RootProvider: () => null, AccountMenuItems: () => null };
+    const ui = {
+      RootProvider: () => null,
+      AccountMenuItems: () => null,
+      OrganizationBillingPage: () => null,
+      hiddenOrganizationNav: async () => ["billing"],
+    };
     const cloud = createComposition("cloud", {
       eeComposition: { ...cloudPorts, ui: async () => ui },
     });
     assert.equal(await cloud.ui?.(), ui);
+    assert.deepEqual(await (await cloud.ui?.())?.hiddenOrganizationNav?.("acme"), ["billing"]);
     assert.equal(createComposition("oss", { eeComposition: null }).ui, undefined);
   });
 
