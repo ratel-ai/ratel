@@ -1,4 +1,5 @@
 "use client";
+
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { EmptyState } from "@ratel/design-system/states";
 import { CircleCheck } from "lucide-react";

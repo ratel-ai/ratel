@@ -1,11 +1,11 @@
 import { projectRoot } from "@/lib/console/navigation";
+import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { createCalibrationQueries } from "@/lib/synthesis/experiments/calibration-queries";
 import { createCalibrationService } from "@/lib/synthesis/experiments/calibration-service";
 import type { RankingCalibrationView } from "@/lib/synthesis/experiments/calibration-types";
 import { createExperimentService } from "@/lib/synthesis/experiments/service";
-import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import { calibrationDetailPath } from "@/lib/synthesis/traces/calibration-view";
 import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
 import {

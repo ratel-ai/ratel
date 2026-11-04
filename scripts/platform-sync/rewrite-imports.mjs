@@ -230,8 +230,13 @@ export function brandStrings(code, brand, sourcePath) {
   });
   if (!branded) return lines.join("\n");
   const statement = `import { ${brand.name} } from "${brand.import}";`;
-  let at = 0;
-  while (/^\s*("use [a-z]+"|'use [a-z]+');?\s*$/.test(lines[at] ?? "")) at++;
+  // The import joins the file's own imports, so a doc comment above them stays above them once
+  // biome sorts the block; a file with no imports takes it after its directives.
+  let at = lines.findIndex((line) => /^import\b/.test(line));
+  if (at < 0) {
+    at = 0;
+    while (/^\s*("use [a-z]+"|'use [a-z]+');?\s*$/.test(lines[at] ?? "")) at++;
+  }
   lines.splice(at, 0, statement);
   return lines.join("\n");
 }

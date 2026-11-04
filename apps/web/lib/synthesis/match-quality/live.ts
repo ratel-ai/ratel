@@ -1,10 +1,10 @@
+import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { getLogger } from "@/lib/platform/logger";
 import type { ExperimentWindow } from "@/lib/synthesis/experiments/service";
 import type {
   MatchQualityProposalRow,
   MatchQualityRunRow,
 } from "@/lib/synthesis/match-quality/schema";
-import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import {
   byArm,
   type EvaluableSelection,

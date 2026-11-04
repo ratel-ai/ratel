@@ -155,6 +155,13 @@
       "when": 1793790615926,
       "tag": "0021_jobs_project_kind_done_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793819094647,
+      "tag": "0022_sample-project-seeds",
+      "breakpoints": true
     }
   ]
 }

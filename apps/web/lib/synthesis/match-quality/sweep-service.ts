@@ -63,7 +63,7 @@ export async function sweepMatchQuality(deps: SweepDeps = {}): Promise<SweepResu
   const db = deps.db ?? getDb();
   const now = deps.now ?? new Date();
   // A project is due at most once a week, so looking every minute only cost
-  // reads (RC-28). Forced runs and injected clocks (tests) always look.
+  // reads. Forced runs and injected clocks (tests) always look.
   if (!deps.force && !deps.now && now.getTime() - lastSweepAt < SWEEP_EVERY_MS)
     return IDLE_MATCH_QUALITY_SWEEP;
   if (!deps.force && !deps.now) lastSweepAt = now.getTime();

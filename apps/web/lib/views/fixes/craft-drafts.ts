@@ -1,7 +1,7 @@
 import { craftKey } from "@/lib/synthesis/tool-crafter/craft-key";
 import { toPythonStub, toToolJson, toTypeScriptStub } from "@/lib/synthesis/tool-crafter/export";
 import { promptFor } from "@/lib/synthesis/tool-crafter/prompt";
-import { dismissCraftProposal, listCraftProposals } from "@/lib/synthesis/tool-crafter/queries";
+import { listCraftProposals } from "@/lib/synthesis/tool-crafter/queries";
 import {
   NO_PRICE,
   type RoundTripPrice,
@@ -26,8 +26,8 @@ import { tasksSeams } from "@/lib/views/tasks/seams";
 /**
  * The tool crafter's drafted changes as Fixes and the task pages read them. Loading this module
  * fills the seams `loadFixes` and `loadTasksInputs` read: the pending proposals told as fixes
- * (`fixSeams.loadDrafts`), each task's drafted fixes (`tasksSeams.loadDrafts`), what one model
- * round trip costs the project (`fixSeams.priceOf`) and the dismissal (`fixSeams.dismissDraft`).
+ * (`fixSeams.loadDrafts`), each task's drafted fixes (`tasksSeams.loadDrafts`) and what one model
+ * round trip costs the project (`fixSeams.priceOf`).
  * The telling is upstream's `craftSeed` and `craftEffect` (`lib/fixes/build.ts`), moved here so
  * the fixes build reads a `DraftFixInput` and never the crafter.
  */
@@ -217,9 +217,6 @@ fixSeams.loadDrafts = async (projectId, db, { names, price }) => {
 };
 
 fixSeams.priceOf = priceOf;
-
-fixSeams.dismissDraft = (projectId, proposalId, now) =>
-  dismissCraftProposal(projectId, proposalId, now);
 
 tasksSeams.loadDrafts = async (projectId, db, names) =>
   fixSources(

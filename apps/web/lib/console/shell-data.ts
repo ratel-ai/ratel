@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { ensureSampleProject } from "@/lib/console/onboarding/provision-sample";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import type { OrgRole } from "@/lib/platform/organization";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
@@ -31,7 +32,16 @@ export const getConsoleScope = cache(async (): Promise<ConsoleScope | null> => {
   if (!isDbConfigured()) return null;
   const context = await getSessionContext();
   if (!context) return null;
-  const projects = await listProjectsForOrganization(context.organization.id);
+  let projects = await listProjectsForOrganization(context.organization.id);
+  // An empty organization gets the sample project here, so its very first render already has
+  // something to read; the provisioner seeds once per organization and never blocks the visit.
+  if (projects.length === 0) {
+    const seeded = await ensureSampleProject({
+      organization: context.organization,
+      externalId: context.user.externalId,
+    });
+    if (seeded) projects = await listProjectsForOrganization(context.organization.id);
+  }
   return {
     organizationName: context.organization.name,
     organizationSlug: context.organization.slug,
