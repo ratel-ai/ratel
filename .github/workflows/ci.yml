@@ -211,11 +211,17 @@ jobs:
           scripts/platform-sync/sync.test.mjs
           scripts/quick-start.test.mjs
 
-  # @ratel/platform tests (PGlite). Single job for now; sharding lands in the next commit.
+  # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
+  # then hits one shard. Shard names stay off the ruleset; ci-gate needs this job id.
   platform-test:
+    name: platform-test (${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -226,6 +232,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
       - name: Test
+        env:
+          TEST_SHARD: ${{ matrix.shard }}/4
         run: pnpm --filter @ratel/platform test
 
   # AI SDK compatibility matrix — @ratel-ai/vercel-ai-sdk claims `ai@^5 || ^6 || ^7`,
