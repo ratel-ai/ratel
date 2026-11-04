@@ -187,6 +187,14 @@ jobs:
         with:
           node-version: '24'
           cache: pnpm
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**', 'packages/brand/**', 'packages/design-system/**', 'ee/**') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-${{ runner.os }}-
       - name: Install
         run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
       - name: Build
