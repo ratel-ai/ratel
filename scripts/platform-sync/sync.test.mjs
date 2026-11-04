@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -382,5 +383,25 @@ describe("biome copy override", () => {
     const biome = JSON.parse(readFileSync(join(root, "biome.json"), "utf8"));
     const override = biome.overrides.find((o) => o.linter?.rules?.suspicious?.useIterableCallbackReturn === "off");
     assert.deepEqual(override.includes, copyIncludes(map, root));
+  });
+});
+
+describe("source", () => {
+  const run = (args, env = {}) =>
+    spawnSync(process.execPath, [fileURLToPath(new URL("./sync.mjs", import.meta.url)), ...args, "--check"], {
+      env: { ...process.env, RATEL_CLOUD_DIR: "", ...env },
+      encoding: "utf8",
+    });
+
+  it("fails before planning when --source or RATEL_CLOUD_DIR is not a ratel-cloud checkout", () => {
+    const empty = mkdtempSync(join(tmpdir(), "ratel-sync-empty-"));
+    const missing = join(empty, "missing");
+    for (const r of [run(["--source", empty]), run([], { RATEL_CLOUD_DIR: missing })]) {
+      assert.equal(r.status, 1);
+      assert.match(r.stderr, /is not a ratel-cloud checkout/);
+      assert.doesNotMatch(r.stdout, /deleted/);
+    }
+    assert.match(run([], { RATEL_CLOUD_DIR: missing }).stderr, new RegExp(missing));
+    rmSync(empty, { recursive: true, force: true });
   });
 });

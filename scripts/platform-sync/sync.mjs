@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copies the open-source parts of ratel-cloud into this tree (ADR-0030), repeatably.
 //
-//   node scripts/platform-sync/sync.mjs --source ../ratel-cloud [--only apps/web/lib/ingest] [--check] [--no-format]
+//   node scripts/platform-sync/sync.mjs [--source ../ratel-cloud] [--only apps/web/lib/ingest] [--check] [--no-format]
 //
 // `map.json` lists what moves where: `copy` entries are mirrored from the source (added, updated,
 // deleted) with every import specifier rewritten through `rewrites.json`; `owned` entries are
@@ -214,7 +214,12 @@ function arg(name, fallback) {
 }
 
 if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const sourceRoot = resolve(REPO_ROOT, arg("--source", "../ratel-cloud"));
+  const sourceRoot = resolve(REPO_ROOT, arg("--source", process.env.RATEL_CLOUD_DIR || "../ratel-cloud"));
+  // An empty or missing source would plan every copied file as a deletion.
+  if (!existsSync(join(sourceRoot, "apps/web/package.json"))) {
+    console.error(`${sourceRoot} is not a ratel-cloud checkout; pass --source <path> or set RATEL_CLOUD_DIR`);
+    process.exit(1);
+  }
   const only = arg("--only", null);
   const check = process.argv.includes("--check");
   const format = !process.argv.includes("--no-format");
