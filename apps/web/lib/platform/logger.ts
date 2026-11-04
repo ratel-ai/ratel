@@ -11,7 +11,12 @@ export type LogContext = {
   requestId?: string;
   project_id?: string;
   org_id?: string;
+  /** The organization's slug and `<org slug>/<project slug>`, set by `withProjectLogContext`. */
+  org_slug?: string;
+  project_path?: string;
   distinctId?: string;
+  /** The MCP tools a request called, comma-separated, so `api_request` lines for /api/mcp tell them apart. */
+  mcp_operation?: string;
 };
 
 export type CreateLoggerOptions = {
@@ -61,6 +66,11 @@ export function getLogger(module: string): Logger {
 
 export function runWithLogContext<T>(context: LogContext, callback: () => T): T {
   return logContexts.run(context, callback);
+}
+
+/** A copy of the active log context (request or job), empty outside one. */
+export function currentLogContext(): LogContext {
+  return { ...logContexts.getStore() };
 }
 
 export function setLogContext(context: LogContext): void {

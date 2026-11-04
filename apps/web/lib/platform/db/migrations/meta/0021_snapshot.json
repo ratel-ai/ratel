@@ -1,5 +1,5 @@
 {
-  "id": "9de30ce9-b884-4ec8-9b4e-93d00a096ba8",
+  "id": "8bcf4924-706c-4b6b-ae14-670633f16082",
   "prevId": "739e9921-5402-4a8e-bb7d-c8be85a60a1a",
   "version": "7",
   "dialect": "postgresql",
@@ -277,38 +277,6 @@
           "onUpdate": "no action"
         }
       },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.sample_project_seeds": {
-      "name": "sample_project_seeds",
-      "schema": "",
-      "columns": {
-        "organization_id": {
-          "name": "organization_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "seeded_at": {
-          "name": "seeded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -3208,6 +3176,34 @@
           ],
           "isUnique": false,
           "where": "\"jobs\".\"kind\" = 'cluster_intents'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jobs_project_kind_done_idx": {
+          "name": "jobs_project_kind_done_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "finished_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"jobs\".\"status\" = 'done'",
           "concurrently": false,
           "method": "btree",
           "with": {}

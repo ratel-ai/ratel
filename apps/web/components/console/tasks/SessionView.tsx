@@ -98,7 +98,7 @@ export function SessionTimeline({
     >
       <div data-task-session={sessionId}>
         {turns.length === 0 ? (
-          <div className="rounded-lg border border-line dot-grid-fade">
+          <div className="rounded-lg border border-line dot-grid-backdrop">
             <EmptyState
               emblem
               title="No closed turns"

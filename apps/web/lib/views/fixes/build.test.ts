@@ -234,7 +234,14 @@ test("the expected effect comes from the source's own measurement", () => {
   assert.deepEqual([merge.effect?.figure, merge.effect?.unit], ["2 → 1", "calls"]);
   assert.equal(merge.effect?.detail, "−40 model calls in all, over the window · 40 times together");
   assert.equal(merge.effect?.basis, "runs");
-  assert.deepEqual(merge.gain, { roundTrips: 40, calls: 40, ms: 0 });
+  assert.deepEqual(merge.gain, {
+    windowDays: null,
+    roundTrips: 40,
+    calls: 40,
+    tokens: null,
+    usd: null,
+    ms: 0,
+  });
   assert.equal(byTitle("Retire legacy_export").effect?.value, "−1 tool per list");
   assert.equal(byTitle("Tighten flaky_api's input schema").effect?.value, "−1 failed call");
   // An issue states what it costs, not what fixing it would save.
@@ -269,7 +276,9 @@ test("applied rewrites stay listed apart, ready to revert", () => {
 });
 
 test("the numbers over the list, summed only where it is honest", () => {
-  assert.deepEqual(model.stats, {
+  // The savings land with fixes savings: this edition's sources measure no tokens or cost.
+  const { savings: _savings, ...stats } = model.stats;
+  assert.deepEqual(stats, {
     open: 8,
     ready: 1,
     fromIssues: 8,
@@ -285,7 +294,7 @@ test("the numbers over the list, summed only where it is honest", () => {
       drafts: [
         ...CRAFTS,
         craft("c-fold", "fold_prerequisite", ["find_task", "assign_task"], {
-          gain: { roundTrips: 25, calls: 25, ms: 0 },
+          gain: { windowDays: null, roundTrips: 25, calls: 25, tokens: null, usd: null, ms: 0 },
           measured: true,
           score: 25,
         }),

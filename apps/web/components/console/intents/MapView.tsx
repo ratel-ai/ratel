@@ -1,4 +1,5 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { LENS_DESCRIPTIONS } from "@/components/console/intent-map/lens-descriptions";
 import { MapLensDescription } from "@/components/console/intent-map/MapLensDescription";
 import {
@@ -45,7 +46,11 @@ export function MapView({
         crumbs={intentsCrumbs(projectId)}
         title="Map"
         description={<MapLensDescription />}
-        actions={<ReadingAge reading={reading} />}
+        actions={
+          <AnalysisStatus projectId={projectId} section="intents">
+            <ReadingAge reading={reading} />
+          </AnalysisStatus>
+        }
       />
       <PageBody wide>
         {reading.status === "failed" ? (

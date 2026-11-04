@@ -1,6 +1,8 @@
 import type { FixFilters } from "@/lib/views/fixes/href";
 import type { FixKind } from "@/lib/views/fixes/kinds";
-import type { Fix, FixStats } from "@/lib/views/fixes/types";
+import type { Fix, FixSavings, FixSavingsEntry, FixStats, FixUsage } from "@/lib/views/fixes/types";
+
+const SAVINGS_METRICS = ["tokens", "usd", "ms"] as const;
 
 /**
  * Reading a list of fixes: find one by any of its ids, filter by the URL's
@@ -76,7 +78,10 @@ export function compareFixes(
  * honest: fixes that touch a common tool can save the same round trip, so
  * each group of overlapping fixes counts its biggest saving once.
  */
-export function fixStats(open: readonly Fix[]): FixStats {
+export function fixStats(
+  open: readonly Fix[],
+  taskUsage: ReadonlyMap<string, FixUsage> = new Map(),
+): FixStats {
   const issues = new Set(open.flatMap((fix) => fix.issues.map((issue) => issue.id)));
   const tools = new Set(open.flatMap((fix) => fix.subject.tools.map((tool) => tool.id)));
   const evidence: FixStats["evidence"] = { strong: 0, solid: 0, early: 0, none: 0 };
@@ -88,8 +93,75 @@ export function fixStats(open: readonly Fix[]): FixStats {
     issues: issues.size,
     tools: tools.size,
     roundTripsSaved: roundTripsSaved(open),
+    savings: savingsSummary(open, taskUsage),
     evidence,
   };
+}
+
+function savingsSummary(
+  open: readonly Fix[],
+  taskUsage: ReadonlyMap<string, FixUsage>,
+): FixStats["savings"] {
+  const tasks = new Map(
+    open.flatMap((fix) => fix.subject.tasks.map((task) => [task.id, task] as const)),
+  );
+  const totalUsage: FixSavings = { tokens: null, usd: null, ms: null };
+  const usage = [...new Set([...taskUsage.keys(), ...tasks.keys()])].map((id) => taskUsage.get(id));
+  for (const metric of SAVINGS_METRICS) {
+    if (usage.length > 0 && usage.every((entry) => entry?.[metric] != null)) {
+      totalUsage[metric] = usage.reduce(
+        (sum, entry) => sum + entry![metric]! / (entry!.windowDays ?? 30),
+        0,
+      );
+    }
+  }
+  return {
+    total: savingsEntry(open, { ...totalUsage, windowDays: 1 }),
+    tasks: [...tasks.values()].map((task) => ({
+      task,
+      ...savingsEntry(fixesForSubject(open, { task: task.id }), taskUsage.get(task.id)),
+    })),
+  };
+}
+
+function savingsEntry(open: readonly Fix[], usage?: FixUsage): FixSavingsEntry {
+  const absolute: FixSavings = { tokens: null, usd: null, ms: null };
+  for (const group of overlapGroups(open)) {
+    for (const metric of SAVINGS_METRICS) {
+      const values = group.flatMap((fix) =>
+        fix.gain?.[metric] == null || !fix.gain.windowDays || fix.gain.windowDays <= 0
+          ? []
+          : [fix.gain[metric] / fix.gain.windowDays],
+      );
+      if (values.length > 0) absolute[metric] = (absolute[metric] ?? 0) + Math.max(...values);
+    }
+  }
+  const relative: FixSavings = { tokens: null, usd: null, ms: null };
+  for (const metric of SAVINGS_METRICS) {
+    const baseline = usage?.[metric] == null ? null : usage[metric] / (usage.windowDays ?? 30);
+    if (absolute[metric] !== null && baseline != null && baseline > 0)
+      relative[metric] = absolute[metric] / baseline;
+  }
+  return { windowDays: 1, absolute, relative };
+}
+
+function overlapGroups(fixes: readonly Fix[]): Fix[][] {
+  const parent = fixes.map((_, index) => index);
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i]!)));
+  const owner = new Map<string, number>();
+  fixes.forEach((fix, index) => {
+    for (const tool of fix.subject.tools) {
+      const seen = owner.get(tool.id);
+      if (seen === undefined) owner.set(tool.id, index);
+      else parent[root(index)] = root(seen);
+    }
+  });
+  const groups = new Map<number, Fix[]>();
+  fixes.forEach((fix, index) => {
+    const group = root(index);
+    groups.set(group, [...(groups.get(group) ?? []), fix]);
+  });
+  return [...groups.values()];
 }
 
 function roundTripsSaved(open: readonly Fix[]): number | null {

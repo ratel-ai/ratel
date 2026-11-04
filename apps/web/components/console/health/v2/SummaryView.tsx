@@ -1,5 +1,6 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout } from "@ratel/design-system/states";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { pageGap, signalsForGap, tilesForGap } from "@/components/console/health/data-gaps-model";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
@@ -88,6 +89,7 @@ export function SummaryView(props: SummaryViewProps) {
         })}
         actions={
           <>
+            {ready ? <AnalysisStatus projectId={projectId} section="health" /> : null}
             <WindowSwitch
               projectId={projectId}
               windowDays={model.windowDays}

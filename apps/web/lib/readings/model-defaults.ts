@@ -5,4 +5,4 @@
  * keeps its own environment order (`INTENT_ENGINE_NAME_MODEL`, `TOPICS_LABEL_MODEL`,
  * `TRACE_WORKFLOW_LABEL_MODEL`) as upstream does.
  */
-export const DEFAULT_LABEL_MODEL = "claude-sonnet-5";
+export const DEFAULT_LABEL_MODEL = "claude-sonnet-5-5";
