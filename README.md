@@ -48,7 +48,7 @@ Open `http://localhost:3000`. The first build takes a few minutes, and no config
 docker compose --profile demo run --rm demo
 ```
 
-This adds a sample project, Site Copilot, with 30 days of agent activity. Some pages fill in over the next couple of minutes. Run it again to replace the project with a fresh copy.
+A fresh install seeds this sample project, Site Copilot, by itself the first time the console opens with no project: 30 days of agent activity, marked as sample data, seeded once per organization (deleting it does not bring it back). Some pages fill in over the next couple of minutes. This command replaces it with a fresh copy, or restores it after a delete.
 
 ### On a server
 
@@ -138,6 +138,7 @@ Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [AGENTS.md](AGENTS.md): for coding agents working in this repo
+- [SECURITY.md](SECURITY.md): how to report a vulnerability, and which versions get fixes
 
 ## License
 
