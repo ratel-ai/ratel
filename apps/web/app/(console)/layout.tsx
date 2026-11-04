@@ -16,6 +16,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
     composition.ui?.(),
   ]);
   const AccountMenuItems = ui?.AccountMenuItems;
+  const ConsoleBanner = ui?.ConsoleBanner;
   const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
   const projects = scope?.projects ?? [];
   return (
@@ -26,6 +27,7 @@ export default async function ConsoleLayout({ children }: { children: ReactNode 
       >
         Skip to content
       </a>
+      {ConsoleBanner ? <ConsoleBanner /> : null}
       <AppFrame
         data={{
           organizationName: scope?.organizationName ?? null,

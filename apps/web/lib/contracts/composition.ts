@@ -40,6 +40,11 @@ export type EditionUi = {
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */
   OrganizationDangerSettings?: ComponentType<{ slug: string }>;
+  /**
+   * A bar above the whole console, absent otherwise (Cloud's admin support session). It may set
+   * `--support-bar` on `:root` to its height; the shell's sticky parts sit below it.
+   */
+  ConsoleBanner?: ComponentType;
 };
 
 export type CompositionPorts = {
