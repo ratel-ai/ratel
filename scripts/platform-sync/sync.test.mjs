@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { findPrivateStrings, hashToken, scanDir } from "./private-strings.mjs";
 import { absolutizeRelative, brandStrings, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
-import { applySync, copyIncludes, planSync } from "./sync.mjs";
+import { applySync, copyIncludes, formatAllWithBiome, planSync } from "./sync.mjs";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const MAP = {
   entries: [
@@ -200,6 +202,18 @@ describe("brand strings", () => {
     );
   });
 
+  it("puts the import with the file's own imports, below a leading doc comment", () => {
+    const out = brandStrings(
+      '/**\n * Doc.\n */\nimport { z } from "zod";\nconst a = "Cloud";\n',
+      brand,
+      "a.ts",
+    );
+    assert.equal(
+      out,
+      '/**\n * Doc.\n */\nimport { APP_NAME } from "@/lib/platform/app-config";\nimport { z } from "zod";\nconst a = `${APP_NAME}`;\n',
+    );
+  });
+
   it("takes 'Ratel Cloud' whole, and keeps a template's own expressions", () => {
     const out = brandStrings("const a = `Ratel Cloud refused ${n} on Cloud`;\n", brand, "a.ts");
     assert.match(out, /`\$\{APP_NAME\} refused \$\{n\} on \$\{APP_NAME\}`/);
@@ -349,6 +363,41 @@ describe("sync", () => {
     assert.equal(report.privatePathsSkipped, 1);
     assert.deepEqual(report.privateHits, []);
     assert.ok(!JSON.stringify(actions).includes("acmecorp"));
+  });
+
+  it("formats every planned code file in one run, then guards what would land", () => {
+    put(source, "apps/web/lib/otlp/c.ts", "export const stripeLike = 'stripe';\n");
+    let runs = 0;
+    const formatter = (_root, files) => {
+      runs++;
+      return new Map([...files].map(([to, content]) => [to, Buffer.from(`${content}// formatted\n`)]));
+    };
+    const { actions, report } = planSync({
+      sourceRoot: source,
+      repoRoot: repo,
+      map: MAP,
+      rewrites: REWRITES,
+      patterns: [/\bstripe\b/i],
+      format: true,
+      formatter,
+    });
+    assert.equal(runs, 1);
+    const a = actions.find((x) => x.to === "apps/web/lib/ingest/otlp/a.ts");
+    assert.match(a.content.toString(), /\/\/ formatted\n$/);
+    assert.deepEqual(
+      report.privateHits.map((h) => [h.path, h.line]),
+      [["apps/web/lib/ingest/otlp/c.ts", 1]],
+    );
+  });
+
+  it("the batch formatter runs the repository's biome over a staged mirror, overrides included", () => {
+    const files = new Map([
+      ["apps/web/lib/platform/x.ts", Buffer.from('import {b} from "./b";\nimport {a} from "./a";\nexport const x = a+b\n')],
+      ["apps/web/lib/platform/y.ts", Buffer.from("export const y = [1,2,3]\n")],
+    ]);
+    const out = formatAllWithBiome(REPO_ROOT, files);
+    assert.equal(out.get("apps/web/lib/platform/x.ts").toString(), 'import { a } from "./a";\nimport { b } from "./b";\nexport const x = a + b;\n');
+    assert.equal(out.get("apps/web/lib/platform/y.ts").toString(), "export const y = [1, 2, 3];\n");
   });
 
   it("limits a run to one destination prefix with `only`", () => {

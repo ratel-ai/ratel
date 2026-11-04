@@ -1,10 +1,3 @@
-import { APP_NAME } from "@/lib/platform/app-config";
-import {
-  type IntentGraphProducer,
-  MAX_INTENT_GRAPH_BYTES,
-  MAX_INTENT_GRAPH_CLUSTERS,
-} from "@/lib/readings/intent-types/wire";
-import { type ConfidenceInterval, wilsonInterval } from "@/lib/readings/stats";
 /**
  * Adaptive ranking in one reading (DESIGN.md, One question per page: "Does
  * adaptive ranking help?"): whether a graph is served, one headline from the
@@ -12,6 +5,13 @@ import { type ConfidenceInterval, wilsonInterval } from "@/lib/readings/stats";
  * learned. Pure, over the Boost view the v1 panel already computes, so both
  * versions tell the same numbers. Recall@k, nDCG and MRR stay behind Details.
  */
+import { APP_NAME } from "@/lib/platform/app-config";
+import {
+  type IntentGraphProducer,
+  MAX_INTENT_GRAPH_BYTES,
+  MAX_INTENT_GRAPH_CLUSTERS,
+} from "@/lib/readings/intent-types/wire";
+import { type ConfidenceInterval, wilsonInterval } from "@/lib/readings/stats";
 import { separated } from "@/lib/synthesis/quality/metrics";
 import {
   BOOST_METRICS,

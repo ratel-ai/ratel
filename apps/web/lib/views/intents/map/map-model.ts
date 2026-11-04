@@ -1,8 +1,3 @@
-import { APP_NAME } from "@/lib/platform/app-config";
-import type {
-  CapabilityInfo,
-  IntentGraphClusterSummaryRow,
-} from "@/lib/readings/intent-graph/queries";
 /**
  * The intent map's model: ask groups, the tools and skills that answered them,
  * and the links between the two, in plain terms. Built on the server from the
@@ -14,6 +9,11 @@ import type {
  * shortest member, which the v1 page already shows; the example asks are read
  * one group at a time when its panel opens.
  */
+import { APP_NAME } from "@/lib/platform/app-config";
+import type {
+  CapabilityInfo,
+  IntentGraphClusterSummaryRow,
+} from "@/lib/readings/intent-graph/queries";
 import type { IntentGraphEdgeRow } from "@/lib/readings/intent-graph/schema";
 import type { IntentGraphEdgeKind } from "@/lib/readings/intent-types/wire";
 import { askGroupLabel } from "@/lib/views/intents/map/labels";
