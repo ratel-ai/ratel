@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { CelebrationBadger } from "@/components/console/badgers/honeybadgers";
 import { OnboardingBackground } from "@/components/console/onboarding/OnboardingBackground";
+import { composition } from "@/lib/composition";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { billableProjectCount, checkQuota } from "@/lib/platform/entitlements";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
 /**
  * The first-run screen: outside the console shell on purpose (no rail, a full-bleed backdrop),
  * so it sits at `app/onboarding` as upstream does. The root layout gives it fonts and the app
- * config; access is the session port's business, so there is no gate around it.
+ * config. An edition's access gate wraps it, as it wraps the console.
  */
 export default async function OnboardingPage({
   searchParams,
@@ -79,7 +80,8 @@ export default async function OnboardingPage({
     }
   }
 
-  return (
+  const ConsoleAccessGate = (await composition.ui?.())?.ConsoleAccessGate;
+  const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
       <OnboardingBackground />
       {/* The naming step keeps itself to `max-w-lg` (see Card); the key reveal
@@ -95,4 +97,5 @@ export default async function OnboardingPage({
       </div>
     </main>
   );
+  return ConsoleAccessGate ? <ConsoleAccessGate>{page}</ConsoleAccessGate> : page;
 }
