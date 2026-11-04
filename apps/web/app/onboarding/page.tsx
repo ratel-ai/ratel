@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { CelebrationBadger } from "@/components/console/badgers/honeybadgers";
 import { OnboardingBackground } from "@/components/console/onboarding/OnboardingBackground";
 import { composition } from "@/lib/composition";
-import { BASE_URL } from "@/lib/platform/app-config";
+import { apiUrl } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { billableProjectCount, checkQuota } from "@/lib/platform/entitlements";
 import { PROJECT_LIMIT_PARAM, PROJECT_LIMIT_VALUE } from "@/lib/platform/projects/capacity";
@@ -28,9 +28,9 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ organization?: string | string[] }>;
 }) {
-  // Where this edition's SDK snippets point (`BASE_URL` ends in /api/v1), so a self-hosted
-  // deployment's reveal names its own ingest endpoint.
-  const ingestUrl = `${BASE_URL}/traces`;
+  // Where this edition's SDK snippets point, so a self-hosted deployment's reveal
+  // names its own ingest endpoint.
+  const ingestUrl = apiUrl("/traces");
   const requestedOrganization = (await searchParams).organization;
   let formOrganization:
     | { id: string; name: string; slug: string; isFirstProject: boolean }

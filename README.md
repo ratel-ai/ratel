@@ -64,7 +64,7 @@ Set these in `.env` **before the first start**. Generate each secret with `opens
 
 ```sh
 RATEL_ORG_NAME=Acme
-BASE_URL=https://ratel.example.com/api/v1
+BASE_URL=https://ratel.example.com
 POSTGRES_PASSWORD=<generated>
 TRACE_SIGNALS_HASH_SALT=<generated>
 ```
