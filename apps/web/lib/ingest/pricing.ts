@@ -36,6 +36,13 @@ export type ModelPrice = {
 export const MODEL_PRICES: Record<string, ModelPrice> = {
   // Anthropic — cache reads at ~1/10 of input.
   "claude-opus-4-8": { input: 5, output: 25, cachedInput: 0.5, cacheWrite: 6.25 },
+  // https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-10-31).
+  "claude-opus-5-5": { input: 4, output: 20, cachedInput: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cachedInput: 0.2 },
+  // https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-01).
+  // cacheWrite is the 5-minute write rate (1.25x input).
+  "claude-opus-5": { input: 5, output: 25, cachedInput: 0.5, cacheWrite: 6.25 },
+  "claude-sonnet-5": { input: 2, output: 10, cachedInput: 0.2, cacheWrite: 2.5 },
   "claude-sonnet-4-6": { input: 3, output: 15, cachedInput: 0.3 },
   "claude-sonnet-4-5": { input: 3, output: 15, cachedInput: 0.3 },
   "claude-haiku-4-5": { input: 1, output: 5, cachedInput: 0.1 },
