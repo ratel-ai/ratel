@@ -10,6 +10,9 @@ const eeCompositionTarget =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Telemetry paths end in a slash (/ingest/flags/); without this Next answers them with a 308
+  // before the Cloud proxy sees them.
+  skipTrailingSlashRedirect: true,
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // A self-contained server bundle for the image: `node apps/web/server.js`, no pnpm at runtime.
   // The tracing root is the monorepo root so the workspace packages and the native
