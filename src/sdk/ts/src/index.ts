@@ -183,3 +183,4 @@ export { ContentCapture, clearContentCapture, setContentCapture } from "./teleme
 export type { ExternalToolCall, TurnOptions } from "./turn.js";
 export { currentTurnId, TURN_USER_MESSAGE_MAX_BYTES } from "./turn.js";
 
+// ci-scope-proof
