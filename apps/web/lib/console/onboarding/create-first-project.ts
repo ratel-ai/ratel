@@ -1,4 +1,5 @@
 import type { ActingAs } from "@/lib/contracts/session";
+import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/api-key-actions";
 import type { GeneratedApiKey } from "@/lib/platform/api-keys";
 import {
   billableProjectCount,
@@ -28,9 +29,7 @@ export type CreateProjectState =
       showCaptureConsent: boolean;
     };
 
-/** Upstream's refusal text for a support session: a time-boxed session must not mint credentials. */
-export const SUPPORT_SESSION_RESTRICTED_MESSAGE =
-  "Not available during an admin support session. End the session first.";
+export { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/api-key-actions";
 
 export type FirstProjectSession = {
   user: { externalId: string };

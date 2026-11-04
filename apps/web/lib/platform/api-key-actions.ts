@@ -1,3 +1,4 @@
+import type { ActingAs } from "@/lib/contracts/session";
 import {
   type ApiKeyExpiryPreset,
   type ApiKeyStatus,
@@ -40,6 +41,10 @@ export type ApiKeyRecord = {
   expiresAt: Date | null;
 };
 
+/** Upstream's refusal text: a time-boxed support session must not mint or revoke credentials. */
+export const SUPPORT_SESSION_RESTRICTED_MESSAGE =
+  "Not available during an admin support session. End the session first.";
+
 export type CreateApiKeyState =
   | { ok: true; plaintext: string; key: ApiKeySummary }
   | { ok: false; error: string };
@@ -56,6 +61,8 @@ export type ApiKeyActionContextResult =
 export type ApiKeyActionDeps = {
   isDbConfigured(): boolean;
   getContext(organizationId?: string): Promise<ApiKeyActionContextResult>;
+  /** The session port's support session; any value refuses the write. */
+  actingAs(): Promise<ActingAs>;
   getProjectBySlug(organizationId: string, projectSlug: string): Promise<{ id: string } | null>;
   listApiKeysForProject(projectId: string): Promise<ApiKeyRecord[]>;
   findApiKeyForProject(projectId: string, keyId: string): Promise<ApiKeyRecord | null>;
@@ -120,6 +127,7 @@ export async function createApiKeyHandler(
   if (!deps.isDbConfigured()) {
     return { ok: false, error: "Database not connected." };
   }
+  if (await deps.actingAs()) return { ok: false, error: SUPPORT_SESSION_RESTRICTED_MESSAGE };
 
   const result = await deps.getContext(organizationId);
   if (!result.ok) return result;
@@ -183,6 +191,7 @@ export async function revokeApiKeyHandler(
   if (!deps.isDbConfigured()) {
     return { ok: false, error: "Database not connected." };
   }
+  if (await deps.actingAs()) return { ok: false, error: SUPPORT_SESSION_RESTRICTED_MESSAGE };
 
   const result = await deps.getContext(organizationId);
   if (!result.ok) return result;
