@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { composition } from "@/lib/composition/ports";
 import { deleteConsoleProject } from "@/lib/console/delete-project";
 import { deleteProject, listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
@@ -20,6 +21,7 @@ export async function deleteProjectAction(
         projects: await listProjectsForOrganization(session.organization.id),
       };
     },
+    actingAs: () => composition.session.actingAs(),
     deleteProject: (id) => deleteProject(id),
   });
   if (!result.ok) return result;

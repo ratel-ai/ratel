@@ -1,4 +1,6 @@
 import { findProject, organizationRoot, projectRoot } from "@/lib/console/navigation";
+import type { ActingAs } from "@/lib/contracts/session";
+import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/api-key-actions";
 
 export type DeleteProjectResult = { ok: true; next: string } | { ok: false; error: string };
 
@@ -8,6 +10,8 @@ export type DeleteProjectDeps = {
     organizationSlug: string;
     projects: { id: string; name: string }[];
   } | null>;
+  /** The session port's support session; any value refuses the delete, as upstream. */
+  actingAs: () => Promise<ActingAs>;
   deleteProject: (projectId: string) => Promise<void>;
 };
 
@@ -20,6 +24,7 @@ export async function deleteConsoleProject(
   confirmName: string,
   deps: DeleteProjectDeps,
 ): Promise<DeleteProjectResult> {
+  if (await deps.actingAs()) return { ok: false, error: SUPPORT_SESSION_RESTRICTED_MESSAGE };
   const session = await deps.session();
   const project = findProject(session?.projects ?? [], projectId);
   if (!session || !project) return { ok: false, error: "Project not found." };

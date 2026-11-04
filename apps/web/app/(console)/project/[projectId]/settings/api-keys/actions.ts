@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { composition } from "@/lib/composition/ports";
 import {
   type ApiKeyActionContextResult,
   type ApiKeyActionDeps,
@@ -34,6 +35,7 @@ const logger = getLogger("settings/api-keys");
 const apiKeyActionDeps: ApiKeyActionDeps = {
   isDbConfigured,
   getContext: getApiKeyActionContext,
+  actingAs: () => composition.session.actingAs(),
   getProjectBySlug,
   listApiKeysForProject,
   findApiKeyForProject,
