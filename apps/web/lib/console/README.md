@@ -11,7 +11,7 @@ search, projects, settings, and development seeds.
 | `create-project.ts` | creating a project: the session organization, the plan's cap, a slug unique in the organization |
 | `onboarding/` | the first-project flow at `/onboarding`: `create-first-project.ts` (new here: the project and its Default key in one step, refused in a support session or at the plan's cap), `quickstart.ts` (owned: the send-your-first-trace snippets on a stock OpenTelemetry exporter), `capture-consent.ts` (the "What Ratel will read" copy, a promise about users' data) and `transition.ts` (the exit timings) |
 | `settings/` | the settings tabs, the API key rows, the SDK events views and payload read, the redirect settle helper, the projects list model and UTC date formats |
-| `delete-project.ts` | deleting a project of the session organization once its name is typed back |
+| `delete-project.ts` | deleting a project of the session organization once its name is typed back, refused in a support session |
 | `catalog/` | the Catalog pages' models: the tool and skill rows, the tree, search, paging, the loaders |
 | `explore/` | the browser client for the skills API, its form payloads and error copy |
 | `shell-data.ts` | the session organization and its projects, once per request, for the shell and the pages |

@@ -7,6 +7,7 @@ import {
   createApiKeyHandler,
   MAX_API_KEYS_PER_PROJECT,
   revokeApiKeyHandler,
+  SUPPORT_SESSION_RESTRICTED_MESSAGE,
   toApiKeySummary,
 } from "@/lib/platform/api-key-actions";
 
@@ -36,6 +37,7 @@ function deps(overrides: Partial<ApiKeyActionDeps> = {}): ApiKeyActionDeps {
   return {
     isDbConfigured: () => true,
     getContext: async () => ({ ok: true, context }),
+    actingAs: async () => null,
     getProjectBySlug: async () => ({ id: PROJECT_ID }),
     listApiKeysForProject: async () => [],
     findApiKeyForProject: async () => record(),
@@ -71,6 +73,27 @@ test("a project from another organization is not reachable", async () => {
   assert.deepEqual(
     await revokeApiKeyHandler({ projectSlug: "theirs", keyId: "key-1" }, undefined, unreachable),
     { ok: false, error: "Project not found." },
+  );
+});
+
+test("no key is created or revoked in any support session, editable included", async () => {
+  const inSession = deps({
+    actingAs: async () => ({
+      kind: "organization",
+      targetId: context.organization.id,
+      readOnly: false,
+    }),
+    createApiKey: async () => assert.fail("must not create"),
+    revokeApiKey: async () => assert.fail("must not revoke"),
+  });
+  const refused = { ok: false, error: SUPPORT_SESSION_RESTRICTED_MESSAGE };
+  assert.deepEqual(
+    await createApiKeyHandler({ projectSlug: "acme" }, undefined, inSession),
+    refused,
+  );
+  assert.deepEqual(
+    await revokeApiKeyHandler({ projectSlug: "acme", keyId: "key-1" }, undefined, inSession),
+    refused,
   );
 });
 
