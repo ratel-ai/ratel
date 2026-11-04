@@ -1,4 +1,4 @@
-import { APP_NAME, BASE_URL } from "@/lib/platform/app-config";
+import { APP_NAME, apiUrl } from "@/lib/platform/app-config";
 import {
   CLOUD_INTENT_GRAPH_KEY,
   cloudGraphSource,
@@ -85,7 +85,7 @@ export function connectSnippet(
   return `import { attach, attachIntentGraphSync } from "@ratel-ai/cloud-sdk/runtime";
 
 // 1. Send this runtime's searches and tool calls to ${APP_NAME}. Attach first.
-attach(runtime, { baseUrl: "${BASE_URL}", apiKey: process.env.RATEL_API_KEY, sourceId: "${sourceId}" });
+attach(runtime, { baseUrl: "${apiUrl()}", apiKey: process.env.RATEL_API_KEY, sourceId: "${sourceId}" });
 
 // 2. Rank from the graph ${APP_NAME} builds, without learning locally.
 const catalog = runtime.tools.catalog;
@@ -97,7 +97,7 @@ const use = (graph) => {
 // 3. Pull it, and adopt every newer revision. Without onReplaced the runtime
 //    keeps the first graph it loaded for as long as it runs.
 const sync = await attachIntentGraphSync(runtime, {
-  endpoint: "${BASE_URL}/intent-graph",
+  endpoint: "${apiUrl("/intent-graph")}",
   mode: "consume",
   graphKey: "${graphKey}",
   onReplaced: use,
