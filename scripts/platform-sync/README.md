@@ -22,6 +22,7 @@ The repeatable copy of the open-source parts of `ratel-cloud` into `apps/web`
 pnpm platform:sync                                  # from ../ratel-cloud, everything in map.json
 pnpm platform:sync -- --only apps/web/lib/ingest    # one destination prefix
 pnpm platform:sync -- --check                       # write nothing; exit 1 if a sync would change the tree
+RATEL_CLOUD_DIR=~/Developer/Ratel/ratel-cloud pnpm platform:sync  # another source (or --source); fails if it is not a ratel-cloud checkout
 ```
 
 A sync lands as its own pull request, `chore(platform): sync ratel-cloud <sha>`, with the
