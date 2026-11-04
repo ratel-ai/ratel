@@ -200,6 +200,18 @@ describe("brand strings", () => {
     );
   });
 
+  it("puts the import with the file's own imports, below a leading doc comment", () => {
+    const out = brandStrings(
+      '/**\n * Doc.\n */\nimport { z } from "zod";\nconst a = "Cloud";\n',
+      brand,
+      "a.ts",
+    );
+    assert.equal(
+      out,
+      '/**\n * Doc.\n */\nimport { APP_NAME } from "@/lib/platform/app-config";\nimport { z } from "zod";\nconst a = `${APP_NAME}`;\n',
+    );
+  });
+
   it("takes 'Ratel Cloud' whole, and keeps a template's own expressions", () => {
     const out = brandStrings("const a = `Ratel Cloud refused ${n} on Cloud`;\n", brand, "a.ts");
     assert.match(out, /`\$\{APP_NAME\} refused \$\{n\} on \$\{APP_NAME\}`/);

@@ -41,6 +41,7 @@ import {
 } from "@/lib/readings/trace-signals/signals/queries";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import type { DetectedSignal } from "@/lib/readings/trace-signals/signals/types";
+import { loadHealthPageModel } from "@/lib/views/health/page-model";
 
 const NOW = new Date("2026-09-02T00:00:00Z");
 
@@ -502,6 +503,16 @@ test("a run that starts while turn events wait to be built says how many, so the
   }
   await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
   assert.equal(await unbuiltAtStart(), 33);
+  const model = await loadHealthPageModel({ projectId: PROJECT_ID, windowDays: 7 }, "production", {
+    db,
+    getLimits: async () => ({
+      agentHealthSignalsShown: Infinity,
+      agentHealthEvidenceTurns: 3,
+      agentHealthWindowDays: 30,
+    }),
+    now: () => NOW,
+  });
+  assert.equal(model.unbuiltAtReading, 33, "the page model carries it");
 });
 
 test("a missed backlog is twenty events at least, and a tenth of the turns read", () => {

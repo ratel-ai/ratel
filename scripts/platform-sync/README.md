@@ -32,6 +32,10 @@ files this repository maintains, and ports what applies by hand.
 
 ## Rules
 
+The working rule for anyone landing Cloud code (map first, sync, resolve every unmapped
+specifier, minimal owned edits) is the "Code from ratel-cloud" section of
+[`AGENTS.md`](../../AGENTS.md). The specifics:
+
 - Never edit a `copy` file here: the next sync overwrites it. Fix it upstream, or change its mode
   to `owned` in `map.json` with a reason.
 - The `biome.json` override for copied code is `copyIncludes(map)` from `sync.mjs`; `sync.test.mjs`

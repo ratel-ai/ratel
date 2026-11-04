@@ -53,6 +53,28 @@ Don't skip clippy or biome — CI (`.github/workflows/ci.yml`) runs all of the a
   - Good: `feat(core): rank skills alongside tools in search_capabilities`
   - Bad: `updated some files`
 
+## Code from ratel-cloud
+
+The platform at `apps/web` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
+`RATEL_CLOUD_DIR`) through [`scripts/platform-sync/`](scripts/platform-sync/README.md)
+(ADR-0030). It is **moved, not rewritten**: every file taken from upstream is tracked in
+`scripts/platform-sync/map.json` and landed by the sync, so the difference from upstream stays
+visible and minimal.
+
+1. Find the upstream files the feature needs. Read them before writing anything.
+2. Add their entries to `map.json`: `copy` when the file works as it is after the import rewrite,
+   `owned` with a `$why` that says what differs and why, `excluded` when it stays out.
+3. Run `pnpm platform:sync -- --only <destination prefix>` and read its report (`--check` first
+   writes nothing).
+4. Resolve every *unmapped* specifier: map the target too, add a partition or a rule to
+   `rewrites.json`, or own the file and change only the import.
+5. Make owned edits minimal: keep upstream's names, structure and comments; change only what the
+   layers, the ports or the edition force, and say what in `$why`.
+6. Never hand-write a file that exists upstream, and never edit a `copy` file: the next sync
+   overwrites it. A `copy` entry changed means the `biome.json` override is regenerated
+   (`copyIncludes` in `sync.mjs`; `sync.test.mjs` fails until it is).
+7. A rewrite of upstream logic needs explicit agreement first.
+
 ## When in doubt
 
 - For locked architectural decisions: [`docs/adr/`](docs/adr/) — the ADR is the source of truth, not any README.
