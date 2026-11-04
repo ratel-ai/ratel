@@ -158,3 +158,5 @@ test("paths, open sets and expandable ids", () => {
   assert.deepEqual([...withExpanded(open, "tools", false)], []);
   assert.deepEqual([...open], ["tools"], "the original set is left alone");
 });
+
+// ci-scope-proof
