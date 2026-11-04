@@ -45,6 +45,11 @@ export type EditionUi = {
    * `--support-bar` on `:root` to its height; the shell's sticky parts sit below it.
    */
   ConsoleBanner?: ComponentType;
+  /**
+   * Wraps each console page inside the shell, absent otherwise. Cloud catches a write refused in
+   * an admin support session here, so the page and the banner stay on screen.
+   */
+  ConsoleBoundary?: ComponentType<{ children: ReactNode }>;
 };
 
 export type CompositionPorts = {
