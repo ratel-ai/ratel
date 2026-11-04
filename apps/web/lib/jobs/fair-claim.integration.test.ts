@@ -71,32 +71,6 @@ test("a drain takes turns: a project it just served goes behind the others", asy
   assert.equal(after?.projectId, BUSY, "when only served projects have work, it still runs");
 });
 
-test("a running import does not count against the project's cap, and a kind filter picks the lane", async () => {
-  const db = await setup();
-  const client = (db as unknown as { $client: { exec: (sql: string) => Promise<unknown> } })
-    .$client;
-  await client.exec(`
-    insert into jobs (project_id, kind, status, payload, started_at) values ('${QUIET}', 'run_import', 'running', '{"importId":"x"}', now());
-    insert into jobs (project_id, kind, status, payload, created_at) values ('${QUIET}', 'run_import', 'queued', '{"importId":"y"}', now() - interval '1 hour');
-  `);
-  const analysis = await claimNextQueuedJob(undefined, undefined, db, {
-    runningPerProject: 1,
-    kinds: { except: ["run_import"] },
-    avoidProjects: [BUSY],
-  });
-  assert.equal(
-    analysis?.projectId,
-    QUIET,
-    "the quiet project's analysis runs while its import does",
-  );
-  assert.notEqual(analysis?.kind, "run_import");
-  const imported = await claimNextQueuedJob(undefined, undefined, db, {
-    runningPerProject: 1,
-    kinds: { only: ["run_import"] },
-  });
-  assert.equal(imported?.kind, "run_import", "the import lane takes only imports");
-});
-
 test("work someone waits on is claimed before fresh data, and sweeps come last (RC-212)", async () => {
   const client = await createMigratedPGlite();
   await client.exec(`

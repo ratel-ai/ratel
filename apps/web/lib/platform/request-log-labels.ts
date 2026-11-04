@@ -1,8 +1,7 @@
-import { eq } from "drizzle-orm";
-import { getDb, isDbConfigured } from "@/lib/platform/db/client";
-import { organizations } from "@/lib/platform/db/test-support";
+import { isDbConfigured } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import { projects } from "@/lib/platform/projects/schema";
+import { getOrganizationById } from "@/lib/platform/organizations";
+import { getProjectById } from "@/lib/platform/projects/queries";
 
 /** Readable names for a project on the request log, so dashboards can group by
  * them instead of ids. `project_path` is `<org slug>/<project slug>`: project
@@ -51,23 +50,17 @@ export function cacheProjectLabels(
   };
 }
 
+/** The project from the core, its organization through the session port: the edition owns it. */
 async function queryProjectLabels(projectId: string): Promise<ProjectLabels | null> {
   if (!isDbConfigured()) return null;
-  const [row] = await getDb()
-    .select({
-      orgId: organizations.id,
-      orgSlug: organizations.slug,
-      projectSlug: projects.slug,
-    })
-    .from(projects)
-    .innerJoin(organizations, eq(projects.organizationId, organizations.id))
-    .where(eq(projects.id, projectId))
-    .limit(1);
-  if (!row) return null;
+  const project = await getProjectById(projectId);
+  if (!project) return null;
+  const organization = await getOrganizationById(project.organizationId);
+  if (!organization) return null;
   return {
-    org_id: row.orgId,
-    org_slug: row.orgSlug,
-    project_path: `${row.orgSlug}/${row.projectSlug}`,
+    org_id: organization.id,
+    org_slug: organization.slug,
+    project_path: `${organization.slug}/${project.slug}`,
   };
 }
 

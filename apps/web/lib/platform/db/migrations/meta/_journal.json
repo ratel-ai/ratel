@@ -148,6 +148,13 @@
       "when": 1793722097855,
       "tag": "0020_identity_leaves_core",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793790615926,
+      "tag": "0021_jobs_project_kind_done_idx",
+      "breakpoints": true
     }
   ]
 }

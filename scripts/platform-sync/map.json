@@ -55,7 +55,7 @@
     {"from":"apps/web/lib/jobs/role.ts","to":"apps/web/lib/jobs/role.ts","mode":"copy"},
     {"from":"apps/web/lib/jobs/policy.ts","to":"apps/web/lib/jobs/policy.ts","mode":"copy"},
     {"from":"apps/web/lib/jobs/policy.test.ts","to":"apps/web/lib/jobs/policy.test.ts","mode":"copy"},
-    {"from":"apps/web/lib/db/jobs-fair-claim.integration.test.ts","to":"apps/web/lib/jobs/fair-claim.integration.test.ts","mode":"copy"},
+    {"from":"apps/web/lib/db/jobs-fair-claim.integration.test.ts","to":"apps/web/lib/jobs/fair-claim.integration.test.ts","mode":"owned","$why":"no import lane in this edition"},
     { "from": "apps/web/lib/jobs/handlers.ts", "mode": "excluded", "$why": "replaced by each module's register.ts and the composition registry" },
     { "from": "apps/web/lib/cron/drain.ts", "to": "apps/web/lib/jobs/drain.ts", "mode": "owned", "$why": "runs the registry's drain steps instead of an enumerated list" },
     { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/jobs/schema.ts", "mode": "owned", "$why": "the jobs table" },
