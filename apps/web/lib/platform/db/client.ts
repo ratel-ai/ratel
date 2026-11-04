@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { hardenPoolClients, poolConfig } from "@/lib/platform/db/pool";
 import * as tables from "@/lib/platform/db/tables";
 import { getLogger, type LogError } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
@@ -37,12 +38,11 @@ export function sslConfig(
 }
 
 function createDb(url: string) {
-  const pool = new Pool({
-    connectionString: url,
-    ssl: sslConfig(url),
-    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
-  });
+  const pool = new Pool(poolConfig(url, sslConfig(url)));
   attachPoolErrorHandler(pool);
+  hardenPoolClients(pool, {
+    logWarn: (message, error) => logger.warn({ err: error }, message),
+  });
   return drizzle({ client: pool, schema: tables });
 }
 

@@ -22,6 +22,7 @@ export async function pruneExpiredRuntimeEvents(
   db: RuntimeEventMaintenanceDb = getDb(),
 ): Promise<number> {
   const cutoff = retentionCutoff(options, RUNTIME_EVENT_RETENTION_DAYS);
+  // cross-project: a bounded retention batch over every project (lib/db/tenant-scope.test.ts).
   const expiredIds = db
     .select({ id: traceEvents.id })
     .from(traceEvents)

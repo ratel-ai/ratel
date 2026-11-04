@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { setRuntimeCatalogOverride } from "@/lib/ingest/runtime-catalog/override-queries";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { projects } from "@/lib/platform/projects/schema";
+import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import { type ApplyDeps, applyProposal, applyProposals, revertProposal } from "./apply";
 import type { ProposalInsert } from "./queries";
 import {

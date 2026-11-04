@@ -121,6 +121,13 @@ export interface WorkflowInsights {
   sources?: { user: number; search: number };
 }
 
+/**
+ * Characters of an ask put to the choice model. A captured user message can carry a pasted
+ * document, and a decision engine rejects a state over its token budget, so an unclipped long ask
+ * fails every run. The opening states the request.
+ */
+export const MAX_ASK_CHARS = 4_000;
+
 const MAX_UNSERVED_GROUPS = 8;
 const MAX_SAMPLES = 3;
 const MAX_SAMPLE_CHARS = 160;
@@ -179,8 +186,8 @@ export function decisionCases(
   shortlist: readonly string[] = [],
 ): JudgeCase[] {
   return groups.map((g) => ({
-    id: hashText(normalizeAsk(g.ask)),
-    query: g.ask,
+    id: askHash(g),
+    query: g.ask.slice(0, MAX_ASK_CHARS),
     shortlist: [...shortlist],
     assumed: "",
     stratum: "control",

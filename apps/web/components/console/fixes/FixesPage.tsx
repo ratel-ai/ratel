@@ -3,8 +3,11 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { type StatProps, StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import Link from "next/link";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { FIX_GROUP_TITLES, groupAnchor, groupFixes } from "@/lib/views/fixes/groups";
 import type { FixesModel, FixSource } from "@/lib/views/fixes/types";
+import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
 import { compactCount } from "@/lib/views/home/overview-model";
 import { EvidenceLegend, EvidenceMeter } from "./FixCells";
 import { FixesList } from "./FixesList";
@@ -30,19 +33,24 @@ export function FixesPage({
   projectId,
   model,
   now,
+  progress = null,
 }: {
   projectId: string;
   model: FixesModel;
   now: string;
+  /** Where the jobs that find fixes stand; null reads as idle. */
+  progress?: SectionProgress | null;
 }) {
   const root = `/project/${encodeURIComponent(projectId)}`;
   const empty = model.open.length === 0 && model.applied.length === 0;
+  const working = analysisPending(progress);
   return (
     <Page>
       <PageHeader
         title="Fixes"
         crumbs={[{ label: "Improvements", href: `${root}/improvement` }]}
         description={FIXES_DESCRIPTION}
+        actions={<AnalysisStatus projectId={projectId} section="fixes" initial={progress} />}
       />
       <PageBody wide>
         {model.failed.length > 0 ? (
@@ -50,7 +58,15 @@ export function FixesPage({
             {`The ${listOf(model.failed.map((source) => SOURCE_WORDS[source]))} didn't load, so they are missing below. Reload the page to try again.`}
           </Callout>
         ) : null}
-        {empty ? (
+        {empty && working ? (
+          <div className="rounded-lg border border-line">
+            <EmptyState
+              working
+              title="Looking for fixes"
+              description={`${APP_NAME} is reading your latest runs for changes worth making. Fixes show up here when it finishes, and this page updates on its own.`}
+            />
+          </div>
+        ) : empty ? (
           <div className="rounded-lg border border-line">
             <EmptyState
               emblem

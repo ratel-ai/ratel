@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, sql } from "drizzle-orm";
+import { jobTierSql } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
 
@@ -117,33 +118,79 @@ export async function readJobQueueClock(
   return new Date((result.rows[0] as { now: string | Date }).now);
 }
 
+/** Running jobs one project may have at once, across every drain. 0 turns the cap off. */
+export function jobsRunningPerProject(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): number {
+  const raw = env.JOBS_RUNNING_PER_PROJECT?.trim();
+  if (!raw) return 1;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n >= 0 ? n : 1;
+}
+
 /**
- * Atomically claim the oldest `queued` job (optionally within a project), flipping it to
+ * Atomically claim the next `queued` job (optionally within a project), flipping it to
  * `running`. `FOR UPDATE SKIP LOCKED` means concurrent drains never claim the same row.
  * `createdBefore` leaves out rows queued after that instant, so a job a handler queues during a
  * drain waits for the next one instead of being claimed again by this one.
+ *
+ * Fair across projects: a project already running `runningPerProject` jobs is skipped (a soft
+ * cap: two drains claiming at the same instant can each pass it), and the projects in
+ * `avoidProjects` (the ones this drain just served) go last within a tier. Ordering, not a
+ * filter: if only they have work, it still runs. Tiers come from `lib/jobs/policy.ts`.
  */
 export async function claimNextQueuedJob(
   projectId?: string,
   createdBefore?: Date,
   db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
-): Promise<{ id: string; projectId: string; kind: string; payload: unknown } | null> {
-  const projectFilter = projectId ? sql`and ${jobs.projectId} = ${projectId}` : sql``;
+  options: { avoidProjects?: readonly string[]; runningPerProject?: number } = {},
+): Promise<{
+  id: string;
+  projectId: string;
+  kind: string;
+  payload: unknown;
+  createdAt: Date;
+} | null> {
+  const projectFilter = projectId ? sql`and q.project_id = ${projectId}` : sql``;
   const createdFilter = createdBefore
-    ? sql`and ${jobs.createdAt} <= ${createdBefore.toISOString()}`
+    ? sql`and q.created_at <= ${createdBefore.toISOString()}`
     : sql``;
+  const cap = options.runningPerProject ?? jobsRunningPerProject();
+  const capFilter =
+    cap > 0
+      ? sql`and (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running') < ${cap}`
+      : sql``;
+  const avoid = options.avoidProjects ?? [];
+  const tier = jobTierSql(sql`q.kind`);
+  const order =
+    avoid.length > 0
+      ? sql`order by ${tier}, (q.project_id = any(array[${sql.join(
+          avoid.map((id) => sql`${id}`),
+          sql`, `,
+        )}]::uuid[])), q.created_at`
+      : sql`order by ${tier}, q.created_at`;
   const claimed = await db
     .update(jobs)
     .set({ status: "running", startedAt: new Date() })
     .where(
-      sql`${jobs.id} = (select ${jobs.id} from ${jobs} where ${jobs.status} = 'queued' ${projectFilter} ${createdFilter} order by ${jobs.createdAt} for update skip locked limit 1)`,
+      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
     )
-    .returning({ id: jobs.id, projectId: jobs.projectId, kind: jobs.kind, payload: jobs.payload });
+    .returning({
+      id: jobs.id,
+      projectId: jobs.projectId,
+      kind: jobs.kind,
+      payload: jobs.payload,
+      createdAt: jobs.createdAt,
+    });
   return claimed[0] ?? null;
 }
 
-export async function markJobDone(id: string, result: unknown): Promise<void> {
-  await getDb()
+export async function markJobDone(
+  id: string,
+  result: unknown,
+  db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
+): Promise<void> {
+  await db
     .update(jobs)
     .set({ status: "done", result: result ?? null, finishedAt: new Date() })
     .where(eq(jobs.id, id));

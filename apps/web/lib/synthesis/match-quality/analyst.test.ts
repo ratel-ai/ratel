@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
-import { type AnalystDeps, analyse, parseAnalystResponse } from "./analyst";
+import { type AnalystDeps, analyse, DEFAULT_ANALYST_MODEL, parseAnalystResponse } from "./analyst";
 import type { AnalystContext } from "./context";
 import type { CorpusEntry } from "./types";
 
@@ -169,4 +169,8 @@ test("analyse feeds the corpus to the parser so the model cannot invent an id", 
     ["refund_payment"],
   );
   assert.deepEqual(result.rejectedEntryIds, ["not_real"]);
+});
+
+test("the analyst runs on the current Opus by default", () => {
+  assert.equal(DEFAULT_ANALYST_MODEL, "claude-opus-5-5");
 });

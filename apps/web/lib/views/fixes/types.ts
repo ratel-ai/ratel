@@ -70,13 +70,13 @@ export interface FixIssueRef {
 
 /** What making the fix would do, from the source's own measurement. */
 export interface FixEffect {
-  /** The one compact effect a row shows: "+40 pts found", "3 → 1 calls", "−1 failed call". */
+  /** Measured token, cost and waiting savings as one plain-text line. */
   value: string;
-  /** `value`'s figure, set large in the Panel: "+40 pts", "3 → 1", "−1". */
+  /** The complete savings line for the Panel. */
   figure: string;
-  /** `value`'s unit beside it: "found", "calls", "failed call"; empty when the figure says it all. */
+  /** Empty when the figure includes all units. */
   unit: string;
-  /** The counts behind it, for the Panel: "3 → 5 of 5 searches", "−123 model calls in all". */
+  /** Additional measurement context, when available. */
   detail: string | null;
   /** Good, bad or no change for the reader. */
   tone: "good" | "bad" | "neutral";
@@ -95,9 +95,36 @@ export interface EffectReading {
 
 /** What the fix saves over the window, when the source measured it; summed with care (`fixStats`). */
 export interface FixGain {
+  /** Days covered by the source. Null when the source window is unknown. */
+  windowDays: number | null;
   roundTrips: number;
   calls: number;
-  ms: number;
+  tokens: number | null;
+  usd: number | null;
+  ms: number | null;
+}
+
+/** Window totals. Null means that the source did not measure the metric. */
+export interface FixSavings {
+  tokens: number | null;
+  usd: number | null;
+  ms: number | null;
+}
+
+/** Usage totals. Legacy callers without a window cover 30 days. */
+export type FixUsage = FixSavings & { windowDays?: number };
+
+export interface FixSavingsEntry {
+  /** Days covered by absolute savings. Aggregates use one day. */
+  windowDays: number;
+  absolute: FixSavings;
+  /** Saving divided by usage. Null when usage is unknown or zero. */
+  relative: FixSavings;
+}
+
+export interface FixSavingsSummary {
+  total: FixSavingsEntry;
+  tasks: (FixSavingsEntry & { task: FixTaskRef })[];
 }
 
 export type EvidenceStrength = "early" | "solid" | "strong";
@@ -233,6 +260,7 @@ export interface FixStats {
   tools: number;
   /** Model round trips the open fixes save over their window, overlapping fixes counted once; null when none measured any. */
   roundTripsSaved: number | null;
+  savings: FixSavingsSummary;
   /** Open fixes by the strength of their evidence; `none` has no evidence to weigh. */
   evidence: Record<EvidenceStrength | "none", number>;
 }

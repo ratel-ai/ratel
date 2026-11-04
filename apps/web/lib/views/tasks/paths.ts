@@ -26,6 +26,21 @@ export function taskHref(projectId: string, taskId: string): string {
   return `${root(projectId)}/health/tasks/${encodeURIComponent(taskId)}`;
 }
 
+/** Build a Tasks URL and preserve each query value during a legacy redirect. */
+export function topLevelTasksHref(
+  projectId: string,
+  taskId?: string,
+  query: Record<string, string | string[] | undefined> = {},
+): string {
+  const path = `${root(projectId)}/tasks${taskId === undefined ? "" : `/${encodeURIComponent(taskId)}`}`;
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value])
+      search.append(key, item);
+  }
+  return search.size > 0 ? `${path}?${search}` : path;
+}
+
 /** A task's page with a panel open: one of its steps (`step:<toolId>`) or one of its issues (`issue:<id>`). */
 export function taskPeekHref(projectId: string, taskId: string, peek: string): string {
   return withQuery(taskHref(projectId, taskId), { peek });

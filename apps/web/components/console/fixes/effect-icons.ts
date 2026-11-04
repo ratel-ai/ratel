@@ -9,7 +9,7 @@ import {
   WholeWord,
   Wrench,
 } from "lucide-react";
-import type { EffectChip } from "@/lib/views/fixes/crafter-types";
+import type { EffectChip } from "@/lib/synthesis/tool-crafter/suggestion-model";
 
 /**
  * One mark per thing a fix moves, the same marks the rest of the console

@@ -1,4 +1,3 @@
-import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { getRuntimeCatalogOverrideAdoption } from "@/lib/synthesis/catalog/runtime-reads";
@@ -10,6 +9,7 @@ import type {
   MatchQualityRunRow,
 } from "@/lib/synthesis/match-quality/schema";
 import { isSearchTelemetry } from "@/lib/synthesis/match-quality/search-source";
+import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import { runStatus } from "@/lib/synthesis/match-quality/view";
 import type { QualityContext } from "./context";
 import {

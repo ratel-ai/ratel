@@ -189,3 +189,24 @@ button:not(:disabled),
   background-position: 4px 4px;
   mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
 }
+/*
+ * The texture behind an empty state's words: drawn on a layer under the content, so the fade never
+ * dims the text (dot-grid-fade masks the element itself, children included), and clear in the
+ * middle where the words sit.
+ */
+@utility dot-grid-backdrop {
+  position: relative;
+  isolation: isolate;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: radial-gradient(circle at center, var(--ds-line) 1px, transparent 1.25px);
+    background-size: 8px 8px;
+    background-position: 4px 4px;
+    mask-image: radial-gradient(ellipse at center, transparent 30%, black 60%, transparent 100%);
+  }
+}
