@@ -182,3 +182,4 @@ export { ContentCapture, clearContentCapture, setContentCapture } from "./teleme
 /** Turn scope: mark one user request once, and everything inside it carries its turn id (ADR-0026). */
 export type { ExternalToolCall, TurnOptions } from "./turn.js";
 export { currentTurnId, TURN_USER_MESSAGE_MAX_BYTES } from "./turn.js";
+
