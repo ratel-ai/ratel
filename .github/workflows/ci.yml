@@ -13,14 +13,12 @@ name: ci
 # check cannot deadlock a merge; marking the PR ready fires `ready_for_review`, which runs
 # the pipeline and posts `ci-gate`.
 #
-# Skip-green: `changes` (dorny/paths-filter) drives per-leg `if:` so untouched areas skip.
-# Filters are deliberately CONSERVATIVE for this FFI monorepo: the TS and Python SDKs each
-# build the native Rust binding, so their filters include the Rust core + `Cargo.*` (an FFI
-# change re-runs them), and every filter includes `.github/workflows/ci.yml` (editing CI
-# re-runs all legs). The heavy `setup`/`verify` release matrix has its own `release` filter
-# and only runs when a change alters what actually ships (or its e2e). On push to `main` and
-# `workflow_dispatch`, every leg and the verify matrix run regardless of the filters (full
-# validation on every merge / on demand).
+# Skip-green: `changes` runs scripts/ci-filters.mjs on the pull-request file list so
+# untouched areas skip. SDK / Python filters stay conservative for the FFI monorepo (Rust
+# core + Cargo.* re-run those legs). Platform and design-system name packages/brand and
+# packages/design-system by name (never a packages catch-all). Every rule treats
+# ci.yml as a full run. The heavy setup/verify matrix has its own release output. On push
+# to main and workflow_dispatch every leg runs regardless of the classifier.
 
 on:
   pull_request:
@@ -50,129 +48,33 @@ jobs:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     outputs:
-      rust: ${{ steps.f.outputs.rust }}
-      ts: ${{ steps.f.outputs.ts }}
-      python: ${{ steps.f.outputs.python }}
-      telemetry: ${{ steps.f.outputs.telemetry }}
-      protocol: ${{ steps.f.outputs.protocol }}
-      release: ${{ steps.f.outputs.release }}
-      platform: ${{ steps.f.outputs.platform }}
+      rust: ${{ steps.c.outputs.rust }}
+      sdk: ${{ steps.c.outputs.sdk }}
+      ai_sdk: ${{ steps.c.outputs.ai_sdk }}
+      rankers_ts: ${{ steps.c.outputs.rankers_ts }}
+      python: ${{ steps.c.outputs.python }}
+      telemetry: ${{ steps.c.outputs.telemetry }}
+      protocol: ${{ steps.c.outputs.protocol }}
+      design_system: ${{ steps.c.outputs.design_system }}
+      platform: ${{ steps.c.outputs.platform }}
+      compose: ${{ steps.c.outputs.compose }}
+      release: ${{ steps.c.outputs.release }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: f
         with:
+          list-files: json
           filters: |
-            # cargo *--workspace* touches every crate, so any workspace member,
-            # the root manifests, or the toolchain pin re-runs it.
-            rust:
-              - 'src/core/**'
-              - 'src/telemetry/core/**'
-              - 'src/sdk/ts/native/**'
-              - 'src/sdk/python/native/**'
-              - 'src/rankers/core/**'
-              - 'src/rankers/ts/native/**'
-              - 'src/rankers/python/native/**'
-              # src/core/src/usage.rs include_str!s the protocol conformance vectors and
-              # asserts the Rust parser accepts/rejects them, so `cargo test --workspace`
-              # must re-run when they change (the protocol leg only runs the JS validator).
-              - 'protocol/v1/conformance/vectors.json'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - '.github/workflows/ci.yml'
-            # `pnpm -r` spans every TS package + the pnpm examples, and the SDK build
-            # compiles the native Rust binding — so TS source, workspace config, the
-            # root release-tooling scripts, AND the Rust core / ts-native binding all
-            # re-run it. (ai-sdk-compat keys off this same filter.)
-            ts:
-              - 'src/sdk/ts/**'
-              - 'src/rankers/ts/**'
-              - 'src/rankers/core/**'
-              - 'src/adapters/**'
-              - 'src/telemetry/ts/**'
-              # conformance.test.ts (run by `pnpm -r test`) asserts the TS emitter against
-              # the shared cross-language pin, so a fixture edit must re-run this leg.
-              - 'src/telemetry/conformance/**'
-              - 'examples/**'
-              # The platform app, its design system and the Cloud modules manifest
-              # are workspace members, so `pnpm -r` builds, lints and tests them.
-              - 'apps/**'
-              - 'packages/**'
-              - 'ee/**'
-              - 'scripts/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'biome.json'
-              - 'src/core/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - '.github/workflows/ci.yml'
-              - '.github/workflows/release.yml'
-              - '.github/workflows/verify-install.yml'
-            # maturin builds the Python native binding from the Rust core; the SDK job
-            # also installs the telemetry sibling and exercises the pydantic-ai example.
-            # Also gates `rankers-python`: the plugin package builds the rankers crate
-            # and installs the in-repo SDK, so a change to either re-runs it.
-            python:
-              - 'src/sdk/python/**'
-              - 'src/rankers/python/**'
-              - 'src/rankers/core/**'
-              - 'src/telemetry/python/**'
-              - 'examples/pydantic-ai/**'
-              - 'src/core/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - '.github/workflows/ci.yml'
-            # Pure Python (ADR-0007), no Rust binding — so no FFI paths.
-            telemetry:
-              - 'src/telemetry/python/**'
-              # test_conformance.py asserts the Python emitter against the same shared pin.
-              - 'src/telemetry/conformance/**'
-              - 'examples/telemetry-python/**'
-              - '.github/workflows/ci.yml'
-            protocol:
-              - 'protocol/**'
-              - '.github/workflows/ci.yml'
-            # What the OSS image and its compose file are built from.
-            platform:
-              - 'apps/web/**'
-              - 'packages/**'
-              - 'ee/package.json'
-              - 'scripts/link-ee.mjs'
-              - 'docker-compose.yml'
-              - '.env.example'
-              - '.dockerignore'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - '.github/workflows/ci.yml'
-            # Gates the heavy `verify` matrix: only the paths whose change alters what
-            # actually ships (the crate, the wheel, the npm loader + native binding, the
-            # packed telemetry siblings) or the e2e / packaging tooling that validates
-            # them. Docs, examples, adapters, the protocol dir, and CI-only edits do NOT
-            # ship into these artifacts and are covered by the everyday legs, so they skip
-            # verify. Lockfiles + root manifests are in because they decide what gets
-            # compiled/packed. (On push/dispatch verify runs regardless — see `setup`.)
-            release:
-              - 'src/core/**'
-              - 'src/rankers/**'
-              - 'src/sdk/ts/**'
-              - 'src/sdk/python/**'
-              - 'src/telemetry/ts/**'
-              - 'src/telemetry/python/**'
-              - 'e2e/**'
-              - 'scripts/inject-sdk-optional-deps.mjs'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - '.github/workflows/ci.yml'
+            changed:
+              - '**'
+      - name: Classify changed paths
+        id: c
+        env:
+          CHANGED_FILES: ${{ steps.f.outputs.changed_files }}
+        run: node scripts/ci-filters.mjs --files-json "$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+      - name: Contract tests
+        run: node --test scripts/ci-filters.test.mjs scripts/workflow-contracts.test.mjs
 
   # cargo fmt/clippy/build/test across the workspace.
   rust:
@@ -194,9 +96,11 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
-  ts:
+  # SDK island: @ratel-ai/* packages and the pnpm examples. Rust toolchain stays because
+  # the SDK builds the native binding. Platform app and design-system are not here.
+  sdk:
     needs: changes
-    if: needs.changes.outputs.ts == 'true' || github.event_name != 'pull_request'
+    if: needs.changes.outputs.sdk == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,43 +114,28 @@ jobs:
           node-version: '24'
           cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter "./src/**" --filter "./examples/**"
       - name: Build
-        run: pnpm -r build
+        run: pnpm --filter "./src/**" --filter "./examples/**" --if-present build
       - name: Typecheck
-        run: pnpm -r typecheck
+        run: pnpm --filter "./src/**" --filter "./examples/**" --if-present typecheck
       - name: Lint
-        run: pnpm -r lint
+        run: pnpm --filter "./src/**" --filter "./examples/**" --if-present lint
       - name: Test
-        run: pnpm -r test
-      # Release and platform tooling lives at repo root (outside the pnpm workspace), so run
-      # its dependency-free node:test suites here rather than via `pnpm -r test`.
-      - name: Test repo tooling
-        run: node --test "scripts/**/*.test.mjs"
-      # The platform application's structural rules (ADR-0029, ADR-0030): nothing in core
-      # imports the private modules, layers only import downward, and no Cloud-only vendor or
-      # customer string reaches the public tree.
-      - name: Check ee boundary, layers and private strings
-        run: pnpm check:boundary && pnpm check:layers && pnpm check:private
-      # The committed baseline migration must match the composed schema (ADR-0030).
-      - name: Check platform migrations match the schema
-        run: pnpm --filter @ratel/platform db:check
-      # Example wiring (Vercel AI SDK) — folded in here to keep one TS check row.
-      # Drives the real ToolLoopAgent loop with a scripted MockLanguageModel (no API
-      # key), catching framework-integration drift the SDK-level tests can't see. The
-      # SDK is already built by `pnpm -r build` above, so run the test directly.
-      # See examples/ai-sdk/test/agent.test.ts.
+        run: pnpm --filter "./src/**" --filter "./examples/**" --if-present test
+      - name: Test sdk-owned scripts
+        run: >
+          node --test
+          scripts/inject-sdk-optional-deps.test.mjs
+          scripts/pin-adapter-sdk-peer.test.mjs
+          scripts/release-units.test.mjs
+          scripts/releasable.test.mjs
+          scripts/check-release-tag.test.mjs
+          scripts/rankers-sdk-floor.test.mjs
       - name: Test the AI SDK example wiring
         run: pnpm --filter @ratel-ai/example-ai-sdk exec tsx test/agent.test.ts
-      # Example wiring (Mastra) — parity with the AI SDK row. Drives a real 1.51
-      # Agent loop with Mastra's built-in mock model (no API key).
-      # @ratel-ai/mastra is already built by `pnpm -r build` above.
-      # See examples/mastra/test/agent.test.ts.
       - name: Test the Mastra example wiring
         run: pnpm --filter @ratel-ai/example-mastra exec tsx test/agent.test.ts
-      # Re-run the adapter at the customer's 1.31 line and its declared floor after
-      # all 1.51 workspace consumers are done. `--no-lockfile` keeps these ephemeral
-      # CI substitutions out of the lock.
       - name: Install customer-line Mastra
         run: pnpm --filter @ratel-ai/mastra add --save-dev --save-exact @mastra/core@1.31.0 --no-lockfile
       - name: Test Mastra 1.31
@@ -261,14 +150,83 @@ jobs:
           pnpm --filter @ratel-ai/mastra build
           pnpm --filter @ratel-ai/mastra typecheck
           pnpm --filter @ratel-ai/mastra test
-      # Telemetry example — runs offline (console exporter), emitting a ratel.search
-      # + execute_tool trace through the OTel SDK, so it verifies the `ratel.*` vocab
-      # end-to-end. The example owns its providers: a NodeTracerProvider for the console
-      # demo, plus a LoggerProvider + OTLP exporters when RATEL_OTLP_ENDPOINT is set.
-      # @ratel-ai/telemetry is already built by `pnpm -r build` above.
-      # See examples/telemetry-ts/src/index.ts.
       - name: Run the telemetry example
         run: pnpm --filter @ratel-ai/example-telemetry exec tsx src/index.ts
+
+  # Brand + design-system packages. No Rust. An apps/web-only change skips this job.
+  design-system:
+    needs: changes
+    if: needs.changes.outputs.design_system == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @ratel/design-system...
+      - name: Typecheck
+        run: pnpm --filter @ratel/design-system... --if-present typecheck
+      - name: Lint
+        run: pnpm --filter @ratel/design-system... --if-present lint
+      - name: Test
+        run: pnpm --filter @ratel/design-system... --if-present test
+
+  # Open-source platform app: production build, typecheck, lint, db:check, boundary
+  # checks. No Rust toolchain. Tests live in platform-test.
+  platform-build:
+    needs: changes
+    if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
+      - name: Build
+        run: pnpm --filter @ratel/platform... build
+      - name: Typecheck
+        run: pnpm --filter @ratel/platform typecheck
+      - name: Lint
+        run: |
+          pnpm --filter @ratel/platform lint
+          pnpm --filter @ratel/ee lint
+      - name: Check ee boundary, layers and private strings
+        run: pnpm check:boundary && pnpm check:layers && pnpm check:private
+      - name: Check platform migrations match the schema
+        run: pnpm --filter @ratel/platform db:check
+      - name: Test ee
+        run: pnpm --filter @ratel/ee test
+      - name: Test platform-owned scripts
+        run: >
+          node --test
+          scripts/check-layers.test.mjs
+          scripts/link-ee.test.mjs
+          scripts/platform-sync/sync.test.mjs
+          scripts/quick-start.test.mjs
+
+  # @ratel/platform tests (PGlite). Single job for now; sharding lands in the next commit.
+  platform-test:
+    needs: changes
+    if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...
+      - name: Test
+        run: pnpm --filter @ratel/platform test
 
   # AI SDK compatibility matrix — @ratel-ai/vercel-ai-sdk claims `ai@^5 || ^6 || ^7`,
   # so each supported major gets two exact rows (floor + latest verified): build,
@@ -279,7 +237,7 @@ jobs:
   ai-sdk-compat:
     name: ai-sdk compat (ai@${{ matrix.ai-version }})
     needs: changes
-    if: needs.changes.outputs.ts == 'true' || github.event_name != 'pull_request'
+    if: needs.changes.outputs.ai_sdk == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -525,12 +483,12 @@ jobs:
 
   # The rankers-ts publish build (scripts/build-rankers-ts.sh) on a clean runner.
   # release.yml's publish-rankers-ts runs only on a tag (the release env admits
-  # nothing else), and the ts leg's `pnpm -r build` builds every native binding
-  # first, so neither would catch a publish build that needs an ungenerated file.
+  # nothing else), and the sdk leg's filtered build does not exercise this script,
+  # so neither would catch a publish build that needs an ungenerated file.
   # The plugin's own native build stands in for the release's downloaded loader.
   rankers-ts-publish-build:
     needs: changes
-    if: needs.changes.outputs.ts == 'true' || github.event_name != 'pull_request'
+    if: needs.changes.outputs.rankers_ts == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -605,7 +563,7 @@ jobs:
   # Postgres, migrates on boot and serves.
   platform-compose:
     needs: changes
-    if: needs.changes.outputs.platform == 'true' || github.event_name != 'pull_request'
+    if: needs.changes.outputs.compose == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -800,14 +758,14 @@ jobs:
   # waiting on per-leg contexts a skipped matrix job never emits. Skipped and successful
   # upstream jobs both pass; only a real failure or cancellation fails the gate.
   #
-  # Do NOT register the per-leg checks (rust, ts, `verify (…)`, `ai-sdk compat (…)`) as
+  # Do NOT register the per-leg checks (rust, sdk, `verify (…)`, `ai-sdk compat (…)`) as
   # required directly: a skipped matrix job collapses to one check under the bare job name
   # and never emits its per-leg contexts, leaving them "Expected" forever and blocking merge.
   # When you add a new pre-merge job, ADD IT TO `needs` HERE — otherwise its failure won't
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, ts, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, platform-compose, setup, verify]
+    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -815,7 +773,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} ts=${{ needs.ts.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} platform-compose=${{ needs.platform-compose.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||
