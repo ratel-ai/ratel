@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BASE_URL } from "@/lib/platform/app-config";
+import { apiUrl } from "@/lib/platform/app-config";
 import {
   buildBoostWarning,
   buildGraphSteps,
@@ -311,7 +311,7 @@ test("the live recall waits for enough turns on both sides and says which way it
 
 test("the snippet points at this deployment, not the hosted default", () => {
   const code = connectSnippet("billing-agent");
-  assert.ok(code.includes(`baseUrl: "${BASE_URL}"`));
-  assert.ok(code.includes(`endpoint: "${BASE_URL}/intent-graph"`));
+  assert.ok(code.includes(`baseUrl: "${apiUrl()}"`));
+  assert.ok(code.includes(`endpoint: "${apiUrl("/intent-graph")}"`));
   assert.equal(code.includes("cloud.ratel.sh"), false);
 });
