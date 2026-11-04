@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { CelebrationBadger } from "@/components/console/badgers/honeybadgers";
 import { OnboardingBackground } from "@/components/console/onboarding/OnboardingBackground";
-import { BASE_URL } from "@/lib/platform/app-config";
+import { composition } from "@/lib/composition";
+import { apiUrl } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { billableProjectCount, checkQuota } from "@/lib/platform/entitlements";
 import { PROJECT_LIMIT_PARAM, PROJECT_LIMIT_VALUE } from "@/lib/platform/projects/capacity";
@@ -20,16 +21,16 @@ export const dynamic = "force-dynamic";
 /**
  * The first-run screen: outside the console shell on purpose (no rail, a full-bleed backdrop),
  * so it sits at `app/onboarding` as upstream does. The root layout gives it fonts and the app
- * config; access is the session port's business, so there is no gate around it.
+ * config. An edition's access gate wraps it, as it wraps the console.
  */
 export default async function OnboardingPage({
   searchParams,
 }: {
   searchParams: Promise<{ organization?: string | string[] }>;
 }) {
-  // Where this edition's SDK snippets point (`BASE_URL` ends in /api/v1), so a self-hosted
-  // deployment's reveal names its own ingest endpoint.
-  const ingestUrl = `${BASE_URL}/traces`;
+  // Where this edition's SDK snippets point, so a self-hosted deployment's reveal
+  // names its own ingest endpoint.
+  const ingestUrl = apiUrl("/traces");
   const requestedOrganization = (await searchParams).organization;
   let formOrganization:
     | { id: string; name: string; slug: string; isFirstProject: boolean }
@@ -79,7 +80,8 @@ export default async function OnboardingPage({
     }
   }
 
-  return (
+  const ConsoleAccessGate = (await composition.ui?.())?.ConsoleAccessGate;
+  const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
       <OnboardingBackground />
       {/* The naming step keeps itself to `max-w-lg` (see Card); the key reveal
@@ -95,4 +97,5 @@ export default async function OnboardingPage({
       </div>
     </main>
   );
+  return ConsoleAccessGate ? <ConsoleAccessGate>{page}</ConsoleAccessGate> : page;
 }

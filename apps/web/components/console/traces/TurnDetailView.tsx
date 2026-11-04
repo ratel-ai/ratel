@@ -1,5 +1,5 @@
 import { cn } from "@ratel/design-system/cn";
-import { ArrowLeft, ArrowRight, ArrowUpRight, HeartPulse } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, HeartPulse, History } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { StepGlyph } from "@/components/console/health/kinds";
@@ -41,9 +41,16 @@ export interface TurnDetailViewProps {
   turn: TurnDetail;
   /** The call to ring and scroll to (a `trace_events.id`). */
   focusEventId: string | null;
+  /** The session replay of this turn's session; null while `cloud-session-replay` is off. */
+  sessionHref?: string | null;
 }
 
-export function TurnDetailView({ projectId, turn, focusEventId }: TurnDetailViewProps) {
+export function TurnDetailView({
+  projectId,
+  turn,
+  focusEventId,
+  sessionHref = null,
+}: TurnDetailViewProps) {
   const started = new Date(turn.startedAt);
   const spanMs = Math.max(0, new Date(turn.endedAt).getTime() - started.getTime());
   const errors = turn.calls.filter((call) => call.outcome === "error").length;
@@ -80,6 +87,12 @@ export function TurnDetailView({ projectId, turn, focusEventId }: TurnDetailView
             Agent health
           </NavLink>
           <NavLink href={`/project/${encodeURIComponent(projectId)}/traces`}>All traces</NavLink>
+          {sessionHref && (
+            <NavLink href={sessionHref}>
+              <History className="size-3.5" aria-hidden />
+              Replay session
+            </NavLink>
+          )}
         </nav>
       </header>
 

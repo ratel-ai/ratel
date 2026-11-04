@@ -77,6 +77,17 @@ export interface TaskCost {
   medianModelCalls: number | null;
 }
 
+/**
+ * A task's totals for the savings on Fixes (RC-211), stored with the reading
+ * so a page never links model calls to runs again at request time.
+ */
+export interface TaskUsageTotals {
+  /** Input plus output tokens over the runs' linked model calls; null when none reported any. */
+  tokens: number | null;
+  /** Each SDK run's wall time with its model calls (start to end for a run without any), summed. */
+  waitMs: number;
+}
+
 export interface TaskReading {
   version: typeof TASK_READING_VERSION;
   runs: number;
@@ -91,6 +102,8 @@ export interface TaskReading {
   /** Self-corrections read from the runs' steps (asked again and phrases are read elsewhere). */
   corrections: { runs: number; events: number; byKind: TaskCorrectionCounts };
   cost: TaskCost | null;
+  /** Absent on readings stored before RC-211; Fixes then links model calls itself. */
+  usage?: TaskUsageTotals;
 }
 
 interface StepCount {
@@ -221,6 +234,21 @@ function costOf(runs: readonly WorkflowTurn[]): TaskCost | null {
   };
 }
 
+function usageOf(runs: readonly WorkflowTurn[]): TaskUsageTotals {
+  let tokens = 0;
+  let waitMs = 0;
+  for (const run of runs) {
+    // SDK runs only, as the live read in lib/fixes/usage.ts counts them: an
+    // OpenTelemetry run's model calls sit inside its own trace.
+    if (run.turnSource === "otlp") continue;
+    tokens += run.model?.tokens ?? 0;
+    waitMs += run.model
+      ? run.model.runMs
+      : Math.max(0, run.endedAt.getTime() - run.startedAt.getTime());
+  }
+  return { tokens: tokens > 0 ? tokens : null, waitMs };
+}
+
 interface RunOutcome {
   finished: boolean;
   errored: boolean;
@@ -273,5 +301,6 @@ export function readTask(
     steps: [...steps.values()].map(finishStep),
     corrections: { runs: correctionRuns, events, byKind },
     cost: costOf(runs),
+    usage: usageOf(runs),
   };
 }

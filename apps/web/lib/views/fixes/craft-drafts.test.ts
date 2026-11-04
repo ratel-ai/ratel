@@ -95,7 +95,14 @@ test("a merge is told with its one figure, the window's total, its gain and stro
     draft.effect?.also.every((reading) => /\d/.test(reading.label) && reading.icon !== "calls"),
     "the other marks carry a number and never repeat the headline",
   );
-  assert.deepEqual(draft.gain, { roundTrips: 40, calls: 40, ms: 0 });
+  assert.deepEqual(draft.gain, {
+    windowDays: null,
+    roundTrips: 40,
+    calls: 40,
+    tokens: null,
+    usd: null,
+    ms: 0,
+  });
   assert.deepEqual(draft.evidence, {
     strength: "strong",
     label: "Strong",

@@ -1,6 +1,7 @@
 import { TasksNoDatabase, TasksView } from "@/components/console/tasks/TasksView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
+import { loadPageProgress } from "@/lib/views/freshness/page";
 import { buildTaskList } from "@/lib/views/tasks/model";
 import { loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
 
@@ -15,10 +16,11 @@ export default async function TasksPage({ params }: { params: Promise<{ projectI
   const { projectId } = await params;
   if (!isDbConfigured()) return <TasksNoDatabase />;
   const { project, organization } = await requireProjectScope(projectId);
-  const [inputs, fixes] = await Promise.all([
+  const [inputs, fixes, progress] = await Promise.all([
     loadTasksInputs(project.id),
     loadTaskFixes(project.id, organization),
+    loadPageProgress(project.id, "tasks"),
   ]);
   const model = buildTaskList(inputs, { fixes });
-  return <TasksView projectId={project.id} model={model} now={new Date()} />;
+  return <TasksView projectId={project.id} model={model} now={new Date()} progress={progress} />;
 }

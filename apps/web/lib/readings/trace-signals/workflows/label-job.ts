@@ -37,7 +37,7 @@ import {
  */
 
 export const LABEL_WORKFLOWS_JOB_KIND = "label_workflows";
-export const DEFAULT_LABEL_MODEL = "claude-sonnet-5";
+export const DEFAULT_LABEL_MODEL = "claude-sonnet-5-5";
 export const MAX_LABELS_PER_JOB = Math.floor(envNumber("TRACE_WORKFLOW_MAX_LABELS", 30));
 const LABEL_MAX_TOKENS = 400;
 const logger = getLogger("trace-signals/label-workflows");

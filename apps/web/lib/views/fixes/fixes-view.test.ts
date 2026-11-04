@@ -207,6 +207,14 @@ test("with nothing to fix, the empty state says what fills it", () => {
       issues: 0,
       tools: 0,
       roundTripsSaved: null,
+      savings: {
+        total: {
+          windowDays: 1,
+          absolute: { tokens: null, usd: null, ms: null },
+          relative: { tokens: null, usd: null, ms: null },
+        },
+        tasks: [],
+      },
       evidence: { strong: 0, solid: 0, early: 0, none: 0 },
     },
   });

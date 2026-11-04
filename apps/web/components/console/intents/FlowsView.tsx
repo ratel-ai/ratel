@@ -1,6 +1,7 @@
 import { NOUN_ICONS } from "@ratel/design-system/entity";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { EmptyState } from "@ratel/design-system/states";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { FlowCanvas, type FlowTopics } from "@/components/console/intents/FlowCanvas";
 import {
   IntentsNoReading,
@@ -43,7 +44,11 @@ export function FlowsView({
         crumbs={intentsCrumbs(projectId)}
         title="Flows"
         description={FLOWS_DESCRIPTION}
-        actions={<ReadingAge reading={reading} />}
+        actions={
+          <AnalysisStatus projectId={projectId} section="intents">
+            <ReadingAge reading={reading} />
+          </AnalysisStatus>
+        }
       />
       <PageBody wide>
         {reading.status === "failed" ? (
@@ -83,7 +88,7 @@ function FlowsBody({
       <section
         aria-label="Flows unavailable"
         data-flows-gap=""
-        className="rounded-lg border border-line dot-grid-fade"
+        className="rounded-lg border border-line dot-grid-backdrop"
       >
         <EmptyState
           icon={NOUN_ICONS.conversation}

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BackgroundObservabilityDeps } from "./observability";
-import { drainJobs, type JobHandler, type JobRecord, type JobStore } from "./runner";
+import {
+  drainJobs,
+  type JobHandler,
+  type JobRecord,
+  type JobStore,
+  jobFinishedLines,
+} from "./runner";
 
 function job(over: Partial<JobRecord> = {}): JobRecord {
   return {
@@ -193,13 +199,13 @@ test("null handler result is stored as null (not undefined)", async () => {
 test("a job a handler queues mid-drain waits for the next drain instead of looping in this one", async () => {
   // A queue with a clock: rows carry the instant they were queued, and the claim honours the bound.
   let clock = 0;
-  const queue: Array<JobRecord & { createdAt: number }> = [
-    { ...job({ id: "j0", kind: "explore_tool_usage" }), createdAt: clock++ },
+  const queue: Array<JobRecord & { queuedAt: number }> = [
+    { ...job({ id: "j0", kind: "explore_tool_usage" }), queuedAt: clock++ },
   ];
   const store: JobStore = {
     claimNextQueued: async (_projectId, createdBefore) => {
       const at = queue.findIndex(
-        (row) => createdBefore === undefined || row.createdAt <= createdBefore.getTime(),
+        (row) => createdBefore === undefined || row.queuedAt <= createdBefore.getTime(),
       );
       return at === -1 ? null : queue.splice(at, 1)[0];
     },
@@ -212,7 +218,7 @@ test("a job a handler queues mid-drain waits for the next drain instead of loopi
   const requeueing: Partial<Record<string, JobHandler>> = {
     explore_tool_usage: async () => {
       calls++;
-      queue.push({ ...job({ id: `j${calls}`, kind: "explore_tool_usage" }), createdAt: clock++ });
+      queue.push({ ...job({ id: `j${calls}`, kind: "explore_tool_usage" }), queuedAt: clock++ });
       return { outcome: "busy" };
     },
   };
@@ -237,4 +243,68 @@ test("a store without a queue clock drains without a bound", async () => {
   };
   await drainJobs(store, noopHandlers);
   assert.deepEqual(seen, [undefined]);
+});
+
+test("a cross-project drain tells the store which projects it just served; a project drain does not", async () => {
+  const queue = [
+    job({ id: "a1", projectId: "A" }),
+    job({ id: "b1", projectId: "B" }),
+    job({ id: "a2", projectId: "A" }),
+  ];
+  const seen: Array<readonly string[] | undefined> = [];
+  const store: JobStore = {
+    claimNextQueued: async (_projectId, _createdBefore, options) => {
+      seen.push(options?.avoidProjects ? [...options.avoidProjects] : undefined);
+      return queue.shift() ?? null;
+    },
+    markDone: async () => {},
+    markError: async () => {},
+  };
+  await drainJobs(store, noopHandlers);
+  assert.deepEqual(seen, [[], ["A"], ["A", "B"], ["B", "A"]], "most recently served last");
+
+  const scoped: Array<unknown> = [];
+  const one: JobStore = {
+    claimNextQueued: async (_projectId, _createdBefore, options) => {
+      scoped.push(options);
+      return null;
+    },
+    markDone: async () => {},
+    markError: async () => {},
+  };
+  await drainJobs(one, noopHandlers, { projectId: "A" });
+  assert.deepEqual(scoped, [undefined]);
+});
+
+test("each finished job is one line with its project, kind, run time and queue wait, and a slow one warns", () => {
+  const finished = { id: "a", projectId: "p1", kind: "build_trace_turns" };
+  assert.deepEqual(jobFinishedLines(finished, "done", 1_200, 4_000), [
+    {
+      level: "info",
+      msg: "job_finished",
+      fields: {
+        project_id: "p1",
+        kind: "build_trace_turns",
+        job_id: "a",
+        outcome: "done",
+        duration_ms: 1_200,
+        wait_ms: 4_000,
+      },
+    },
+  ]);
+  const slow = jobFinishedLines(finished, "error", 61_000, null);
+  assert.equal(slow.length, 2);
+  assert.deepEqual(slow[1], {
+    level: "warn",
+    msg: "job_over_budget",
+    fields: {
+      project_id: "p1",
+      kind: "build_trace_turns",
+      job_id: "a",
+      outcome: "error",
+      duration_ms: 61_000,
+      wait_ms: null,
+      budget_ms: 60_000,
+    },
+  });
 });

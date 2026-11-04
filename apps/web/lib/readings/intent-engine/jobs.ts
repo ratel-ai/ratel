@@ -3,6 +3,7 @@ import {
   foldableEventPredicate,
   foldableReceivedBefore,
 } from "@/lib/ingest/trace-events/event-types";
+import { FOLD_MIN_INTERVAL_MS } from "@/lib/ingest/trace-events/fold-schedule";
 import { RUNTIME_EVENT_RETENTION_DAYS } from "@/lib/ingest/trace-events/maintenance";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { jobs } from "@/lib/jobs/schema";
@@ -129,7 +130,13 @@ export async function enqueueDueIntentEngineRuns(
   const deps = { listProjectsWithUnclusteredEvents, enqueueClusterIntentsJob, ...overrides };
   let enqueued = 0;
   for (const { id } of await deps.listProjectsWithUnclusteredEvents()) {
-    if ((await deps.enqueueClusterIntentsJob(id)) !== null) enqueued += 1;
+    // Paced like ingest: a project clustered within the interval waits for a later tick.
+    if (
+      (await deps.enqueueClusterIntentsJob(id, undefined, {
+        minIntervalMs: FOLD_MIN_INTERVAL_MS,
+      })) !== null
+    )
+      enqueued += 1;
   }
   return { enqueued };
 }

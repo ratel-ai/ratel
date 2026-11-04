@@ -2,6 +2,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { EmptyState } from "@ratel/design-system/states";
 import { redirect } from "next/navigation";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition";
 import { entryHref } from "@/lib/console/navigation";
 import { getConsoleScope } from "@/lib/console/shell-data";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -10,8 +11,10 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 // a static page would bake one edition into the build and ignore the runtime value.
 export const dynamic = "force-dynamic";
 
-/** The console entry: the first project, else the organization's projects page. */
+/** The console entry: the first project, else the organization's projects page. An edition may replace it. */
 export default async function HomePage() {
+  const RootPage = (await composition.ui?.())?.RootPage;
+  if (RootPage) return <RootPage />;
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Ratel">

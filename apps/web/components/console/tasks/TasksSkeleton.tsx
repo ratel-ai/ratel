@@ -25,7 +25,7 @@ function Stats({ count }: { count: number }) {
   );
 }
 
-export function TasksSkeleton() {
+export function TasksSkeleton({ topLevel = false }: { topLevel?: boolean } = {}) {
   return (
     <Page>
       <span role="status" className="sr-only">
@@ -42,13 +42,18 @@ export function TasksSkeleton() {
             <Skeleton className="h-3 w-20" />
           </div>
           {Array.from({ length: 6 }, (_, index) => (
-            <div key={index} className="flex h-16 items-center gap-6 border-b border-line px-3">
+            <div
+              key={index}
+              className={`flex ${topLevel ? "h-9" : "h-16"} items-center gap-6 border-b border-line px-3`}
+            >
               <div className="flex w-1/3 flex-col gap-2">
                 <Skeleton className="h-3 w-2/3" />
-                <div className="flex items-center gap-2 pl-4">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-5 w-28" />
-                </div>
+                {!topLevel ? (
+                  <div className="flex items-center gap-2 pl-4">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-28" />
+                  </div>
+                ) : null}
               </div>
               <Skeleton className="ml-auto h-3 w-14" />
               <Skeleton className="h-3 w-10" />

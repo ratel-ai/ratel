@@ -31,7 +31,7 @@ docker compose --profile demo run --rm demo
 On a server, run `cp .env.example .env` first, then set these before the first start. Generate each secret with `openssl rand -hex 32`:
 
 - `RATEL_ORG_NAME`: the organization's name when it is created. Afterwards it is renamed in Settings, and the variable has no effect.
-- `BASE_URL`: this deployment's API, with its `/api/v1` prefix.
+- `BASE_URL`: this deployment's API origin.
 - `POSTGRES_PASSWORD`: letters and digits only.
 - `TRACE_SIGNALS_HASH_SALT`
 
