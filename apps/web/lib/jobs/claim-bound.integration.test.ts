@@ -48,13 +48,15 @@ test("a job queued after the bound is not claimed; one queued before it is", asy
     createdAt: new Date(createdBefore.getTime() + 1000),
   });
 
-  const first = await claimNextQueuedJob(PROJ, createdBefore, db);
+  // The per-project running cap is not what this test is about.
+  const noCap = { runningPerProject: 0 };
+  const first = await claimNextQueuedJob(PROJ, createdBefore, db, noCap);
   assert.equal(first?.id, JOB_OLD);
   assert.equal(
-    await claimNextQueuedJob(PROJ, createdBefore, db),
+    await claimNextQueuedJob(PROJ, createdBefore, db, noCap),
     null,
     "the newer job waits for the next drain",
   );
-  const unbounded = await claimNextQueuedJob(PROJ, undefined, db);
+  const unbounded = await claimNextQueuedJob(PROJ, undefined, db, noCap);
   assert.equal(unbounded?.id, JOB_NEW, "without a bound it is claimed");
 });

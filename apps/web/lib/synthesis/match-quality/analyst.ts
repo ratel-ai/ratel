@@ -31,14 +31,14 @@ import type { AnalystDiagnosis, AnalystProposal, AnalystResult } from "./types";
  * in this data is a pair of entries that never say what separates them, and
  * seeing the pair means holding the whole corpus at once.
  */
-export const DEFAULT_ANALYST_MODEL = "claude-opus-5";
+export const DEFAULT_ANALYST_MODEL = "claude-opus-5-5";
 const ANALYST_EFFORT = "xhigh";
 
 /**
  * Output cap, and it has to cover the THINKING too.
  *
  * This is the one that bit. `max_tokens` bounds everything the model generates,
- * and on Opus 5 adaptive thinking is on by default, so at `xhigh` effort the
+ * and on Opus 5 and later adaptive thinking is on by default, so at `xhigh` effort the
  * reasoning alone can eat a budget sized for the answer. 16,000 was ample for
  * Sonnet and truncated a 30-day Opus run four and a half minutes in, mid-JSON.
  *
@@ -49,7 +49,7 @@ const ANALYST_EFFORT = "xhigh";
  */
 const ANALYST_MAX_TOKENS = 64_000;
 
-const ANALYST_SCHEMA = {
+export const ANALYST_SCHEMA = {
   type: "object",
   properties: {
     diagnosis: {

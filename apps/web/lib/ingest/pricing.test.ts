@@ -118,3 +118,54 @@ test("models without a cache-write rate bill writes at input", () => {
     costFor("gpt-5.5", { input_tokens: 1_000_000, output_tokens: 0 }),
   );
 });
+
+test("claude-sonnet-5 is priced at $2/$10, cache reads $0.20 and writes $2.50", () => {
+  // The default model of the workflow labels, intent names and topic names.
+  assert.equal(
+    costFor("claude-sonnet-5", { input_tokens: 1_000_000, output_tokens: 1_000_000 }),
+    12,
+  );
+  assert.equal(
+    costFor("claude-sonnet-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 0,
+      cached_tokens: 1_000_000,
+    }),
+    0.2,
+  );
+  assert.equal(
+    costFor("claude-sonnet-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 0,
+      cache_write_tokens: 1_000_000,
+    }),
+    2.5,
+  );
+});
+
+test("claude-opus-5 is priced at $5/$25, cache reads $0.50 and writes $6.25", () => {
+  // The default model of the match-quality analyst.
+  assert.equal(costFor("claude-opus-5", { input_tokens: 1_000_000, output_tokens: 1_000_000 }), 30);
+  assert.equal(
+    costFor("claude-opus-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 0,
+      cached_tokens: 1_000_000,
+    }),
+    0.5,
+  );
+  assert.equal(
+    costFor("claude-opus-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 0,
+      cache_write_tokens: 1_000_000,
+    }),
+    6.25,
+  );
+});
+
+test("the 5.5 models keep their own prices next to their 5 prefixes", () => {
+  assert.notEqual(priceFor("claude-sonnet-5-5"), priceFor("claude-sonnet-5"));
+  assert.notEqual(priceFor("claude-opus-5-5"), priceFor("claude-opus-5"));
+  assert.equal(priceFor("claude-opus-5-5-20261001"), priceFor("claude-opus-5-5"));
+});

@@ -154,7 +154,15 @@ export function craftDraft(
     effect,
     gain:
       measured || view.gain.roundTrips > 0
-        ? { roundTrips: view.gain.roundTrips, calls: view.gain.calls, ms: view.gain.ms }
+        ? {
+            // The token, cost and window savings land with fixes savings.
+            windowDays: null,
+            roundTrips: view.gain.roundTrips,
+            calls: view.gain.calls,
+            tokens: null,
+            usd: null,
+            ms: view.gain.ms,
+          }
         : null,
     evidence: strength
       ? {

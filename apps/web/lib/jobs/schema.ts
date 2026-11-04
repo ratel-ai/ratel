@@ -64,6 +64,12 @@ export const jobs = pgTable(
     index("jobs_cluster_intents_finished_idx")
       .on(t.projectId, t.finishedAt)
       .where(sql`${t.kind} = 'cluster_intents'`),
+    // "When did this page's analysis last finish?": the newest done job of each kind behind a
+    // page, one index probe per kind. jobs is never pruned, so a scan of a project's done rows
+    // would grow without end.
+    index("jobs_project_kind_done_idx")
+      .on(t.projectId, t.kind, t.finishedAt)
+      .where(sql`${t.status} = 'done'`),
   ],
 );
 

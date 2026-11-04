@@ -13,6 +13,7 @@ import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { parseWindowDays, windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
 import { loadFixes } from "@/lib/views/fixes/load";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import { loadPageProgress } from "@/lib/views/freshness/page";
 import {
   loadSelfCorrectionsPage,
   unavailableSelfCorrectionsPage,
@@ -60,7 +61,7 @@ export default async function SelfCorrectionsPage({
   const filters = parseFilters(search);
 
   const distinctId = `project:${project.id}`;
-  const [model, fixes] = await Promise.all([
+  const [model, fixes, progress] = await Promise.all([
     loadOrFallback({
       operation: "self_corrections_page",
       distinctId,
@@ -73,6 +74,7 @@ export default async function SelfCorrectionsPage({
       fallback: null,
       load: () => loadFixes({ projectId: project.id, organization, topics: false }),
     }),
+    loadPageProgress(project.id, "self_corrections"),
   ]);
 
   const windows = windowOptionsForPlan(limits.agentHealthWindowDays)
@@ -90,6 +92,7 @@ export default async function SelfCorrectionsPage({
       clearHref={selfCorrectionsHref(project.id, { days: windowDays, filters: NO_FILTERS })}
       now={new Date().toISOString()}
       actions={fixActions(project.id, model.fixes, fixLookups(fixes))}
+      progress={progress}
     />
   );
 }

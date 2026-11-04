@@ -1,7 +1,7 @@
 import { and, desc, eq, isNotNull, type SQL, sql } from "drizzle-orm";
-import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { getDb } from "@/lib/platform/db/client";
 import { matchQualityProposals, matchQualityRuns } from "@/lib/synthesis/match-quality/schema";
+import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import { catalogFingerprints } from "@/lib/synthesis/quality/schema";
 import { loadLabels, loadReplayHistory, saveRunBacktest } from "./queries";
 import { REPLAY_CREDIT } from "./replay";

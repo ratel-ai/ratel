@@ -13,7 +13,7 @@ import { mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
-import { getLogger } from "@/lib/platform/logger";
+import { currentLogContext, getLogger, setLogContext } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext } from "@/lib/platform/request-log";
@@ -306,6 +306,11 @@ async function runMessages(
         truncated: outcome.truncated,
       };
       logger.info(properties, "mcp operation executed");
+      // The request's `api_request` line names the tools it called.
+      const called = currentLogContext().mcp_operation;
+      setLogContext({
+        mcp_operation: called ? `${called},${outcome.operationId}` : outcome.operationId,
+      });
       const context =
         auth.kind === "api-key"
           ? { projectId: auth.projectId }
