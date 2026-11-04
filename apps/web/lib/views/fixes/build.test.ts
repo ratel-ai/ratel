@@ -285,7 +285,7 @@ test("the numbers over the list, summed only where it is honest", () => {
       drafts: [
         ...CRAFTS,
         craft("c-fold", "fold_prerequisite", ["find_task", "assign_task"], {
-          gain: { roundTrips: 25, calls: 25, ms: 0 },
+          gain: { windowDays: null, roundTrips: 25, calls: 25, tokens: null, usd: null, ms: 0 },
           measured: true,
           score: 25,
         }),

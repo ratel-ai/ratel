@@ -1310,6 +1310,7 @@
     {"from":"apps/web/lib/mcp/operations/index.ts","to":"apps/web/lib/mcp/operations/index.ts","mode":"owned","$why":"no improvement-loop tools: they lands with the task loop slice"},
     {"from":"apps/web/lib/mcp/route-handler.ts","to":"apps/web/lib/mcp/route-handler.ts","mode":"owned","$why":"no improvement-loop flag or stages: they lands with the task loop slice"},
     {"from":"apps/web/lib/mcp/server.ts","to":"apps/web/lib/mcp/server.ts","mode":"owned","$why":"no loop stage metadata: it lands with the task loop slice"},
+    {"from":"apps/web/lib/mcp/operations/naming.test.ts","to":"apps/web/lib/mcp/operations/naming.test.ts","mode":"owned","$why":"no improvement-loop tools to cross-reference: they land with the task loop slice"},
     { "from": "apps/web/app/api/mcp/route.ts", "to": "apps/web/app/api/mcp/route.ts", "mode": "copy" },
     { "from": "apps/web/lib/mcp-connect", "to": "apps/web/lib/mcp/connect", "mode": "copy" },
     { "from": "apps/web/lib/mcp-connect/snippets.ts", "to": "apps/web/lib/mcp/connect/snippets.ts", "mode": "owned", "$why": "every client carries the project key; there is no browser sign-in" },

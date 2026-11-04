@@ -373,6 +373,12 @@ export function ExampleRuns({
   runs: ReadonlyMap<string, ExampleRun>;
   focusTools: readonly string[];
   now: Date;
+  /**
+   * Upstream's run-to-test and session replay links, which land with the task loop and session
+   * replay; accepted so the copied TaskView compiles, and unused here.
+   */
+  testRuns?: readonly string[];
+  sessionReplay?: boolean;
 }) {
   return (
     <Section

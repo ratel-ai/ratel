@@ -9,6 +9,7 @@ import {
   decisionCases,
   decisionOptions,
   hashText,
+  MAX_ASK_CHARS,
   NONE_OPTION_ID,
   normalizeAsk,
   optionsHash,
@@ -300,5 +301,17 @@ test("the workflow judge is the OpenAI engine for both framings, and null withou
     workflowJudgeFromEnv({ OPENAI_API_KEY: "REPLACE_ME" }),
     null,
     "a placeholder seed is no key",
+  );
+});
+
+test("a long ask is clipped for the question but keeps its full-text id", () => {
+  const ask = `summarise this document: ${"lorem ipsum ".repeat(20_000)}`;
+  const [row] = decisionCases([{ ask, turns: [] }]);
+  assert.equal(row?.query.length, MAX_ASK_CHARS);
+  assert.ok(row?.query.startsWith("summarise this document:"));
+  assert.equal(row?.id, askHash({ ask }));
+  assert.equal(
+    decisionCases([{ ask: "read the pricing FAQ", turns: [] }])[0]?.query,
+    "read the pricing FAQ",
   );
 });

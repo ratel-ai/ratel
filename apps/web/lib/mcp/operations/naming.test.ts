@@ -133,11 +133,6 @@ const MUST_CROSS_REFERENCE: ReadonlyArray<[string, string]> = [
   ["list_invoked_tools", "list_declared_tools"],
   ["list_calibration_mismatches", "test_retrieval"],
   ["test_retrieval", "update_skill"],
-  ["list_insights", "get_improvement_signals"],
-  ["list_insights", "get_fix"],
-  ["get_fix", "run_eval"],
-  ["run_eval", "mark_fix_shipped"],
-  ["create_experiment", "ratel.experiment.id"],
 ];
 
 test("close neighbours name each other, so a near miss is one hop from right", () => {

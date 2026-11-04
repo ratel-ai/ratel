@@ -33,7 +33,7 @@ export const QUICKSTART_KEY_ENV = "RATEL_API_KEY";
 
 export interface QuickstartTarget {
   /**
-   * Absolute OTLP traces URL, e.g. `https://cloud.ratel.sh/api/v1/traces`.
+   * Absolute OTLP traces URL, e.g. `https://cloud.ratel.sh/v1/traces` (the standard OTLP path; `/api/v1/traces` is the same route).
    * Passed explicitly rather than left to the SDK default so the snippet is
    * correct on self-hosted and preview deployments too.
    */
