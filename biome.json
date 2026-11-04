@@ -1010,7 +1010,24 @@
         "apps/web/lib/console/onboarding/transition.ts",
         "apps/web/app/api/v1/events/route.test.ts",
         "apps/web/lib/readings/intent-graph/maintenance.integration.test.ts",
-        "apps/web/postcss.config.mjs"
+        "apps/web/postcss.config.mjs",
+        "apps/web/lib/console/scope/cookie.ts",
+        "apps/web/lib/console/scope/cookie.test.ts",
+        "apps/web/lib/console/scope/legacy-redirects.ts",
+        "apps/web/lib/console/scope/legacy-redirects.test.ts",
+        "apps/web/lib/console/scope/moved-pages.ts",
+        "apps/web/lib/console/scope/moved-pages.test.ts",
+        "apps/web/lib/console/scope/sentinel.ts",
+        "apps/web/lib/console/scope/landing.test.ts",
+        "apps/web/app/(console)/project/%5F/\\[\\[...path\\]\\]/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/runtime-events/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/runtime-events/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/chat/store/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/models/compaction/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/tool-explorer/sessions/\\[sessionId\\]/page.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/tool-explorer/suggestions/page.tsx",
+        "apps/web/components/console/settings/SettingsSkeleton.tsx",
+        "apps/web/components/console/settings/skeleton-parts.tsx"
       ],
       "linter": {
         "rules": {
@@ -1033,7 +1050,8 @@
         "apps/web/lib/views/**/*-ui.test.ts",
         "apps/web/components/console/intents/**",
         "apps/web/components/console/intent-map/**",
-        "apps/web/components/console/calibration/**"
+        "apps/web/components/console/calibration/**",
+        "apps/web/components/console/settings/skeleton-parts.tsx"
       ],
       "linter": {
         "rules": {
