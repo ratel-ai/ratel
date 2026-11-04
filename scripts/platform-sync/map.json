@@ -1359,7 +1359,7 @@
     { "$slice": "onboarding", "from": "apps/web/lib/onboarding-transition.ts", "to": "apps/web/lib/console/onboarding/transition.ts", "mode": "copy" },
     { "$slice": "onboarding", "from": "apps/web/components/ui/lightfall.tsx", "mode": "excluded", "$why": "the WebGL streak field behind onboarding and welcome; needs ogl, and this edition's backdrop is static" },
     { "$slice": "onboarding", "from": "apps/web/components/ui/lightfall.css", "mode": "excluded", "$why": "the WebGL streak field behind onboarding and welcome; needs ogl, and this edition's backdrop is static" },
-    { "$slice": "onboarding", "from": "apps/web/lib/onboarding/provision-demo.ts", "mode": "excluded", "$why": "seeds the customer replay demo at sign-in; a sample project is a follow-up (docker compose --profile demo seeds Site Copilot)" },
+    {"$slice":"onboarding","from":"apps/web/lib/onboarding/provision-demo.ts","to":"apps/web/lib/console/onboarding/provision-sample.ts","mode":"owned","$why":"seeds Site Copilot instead of the customer replay; the once-per-organization mark is a public table keyed on the organization id, since identity is the edition's; the actor is the session user"},
     { "$slice": "onboarding", "from": "apps/web/components/onboarding/GuidedTour.tsx", "mode": "excluded", "$why": "the guided tour; lands with its rail anchors as a follow-up" },
     { "$slice": "onboarding", "from": "apps/web/components/onboarding/TourLauncher.tsx", "mode": "excluded", "$why": "the guided tour; lands with its rail anchors as a follow-up" },
     { "$slice": "onboarding", "from": "apps/web/lib/onboarding/tour-steps.ts", "mode": "excluded", "$why": "the guided tour; lands with its rail anchors as a follow-up" },
@@ -1677,6 +1677,12 @@
     { "from": "apps/web/app/(app)/project/[projectId]/improvement/tool-explorer/sessions/[sessionId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/tool-explorer/sessions/[sessionId]/page.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/improvement/tool-explorer/suggestions/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/tool-explorer/suggestions/page.tsx", "mode": "copy" },
     { "from": "apps/web/components/settings/v2/SettingsSkeleton.tsx", "to": "apps/web/components/console/settings/SettingsSkeleton.tsx", "mode": "copy" },
-    { "from": "apps/web/components/settings/v2/skeleton-parts.tsx", "to": "apps/web/components/console/settings/skeleton-parts.tsx", "mode": "copy" }
+    { "from": "apps/web/components/settings/v2/skeleton-parts.tsx", "to": "apps/web/components/console/settings/skeleton-parts.tsx", "mode": "copy" },
+
+    { "$slice": "polish", "from": "apps/web/app/(app)/project/[projectId]/settings/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/loading.tsx", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/settings/api-keys/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/api-keys/loading.tsx", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/settings/danger/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/danger/loading.tsx", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/settings/developer/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/developer/loading.tsx", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/improvement/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/loading.tsx", "mode": "copy" }
   ]
 }

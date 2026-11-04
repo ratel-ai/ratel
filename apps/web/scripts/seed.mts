@@ -32,77 +32,18 @@
  *
  * Refuses a database that is not on this machine. Prints counts, never text.
  */
-import { eq, sql } from "drizzle-orm";
-import { siteCopilotCatalogEntries } from "@/lib/console/seed/site-copilot-catalog";
+import { sql } from "drizzle-orm";
 import { assertLocalDatabase } from "@/lib/console/seed/local-database";
-import { renderSiteCopilotOtlp, SITE_COPILOT_DAYS } from "@/lib/console/seed/site-copilot-otlp";
-import { planSiteCopilot } from "@/lib/console/seed/site-copilot-plan";
-import { replaceProject, resolveSeedOrganization } from "@/lib/console/seed/replace-project";
+import { resolveSeedOrganization } from "@/lib/console/seed/replace-project";
 import { parseSeedArgs } from "@/lib/console/seed/seed-args";
-import { siteCopilotSearchEvents } from "@/lib/console/seed/site-copilot-searches";
-import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
-import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
-import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
-import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
-import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
-import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
+import { SITE_COPILOT_DAYS } from "@/lib/console/seed/site-copilot-otlp";
+import { SITE_COPILOT_PROJECT_NAME, seedSiteCopilot } from "@/lib/console/seed/site-copilot-seed";
 import { runDrainTick } from "@/lib/jobs/drain";
-import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
-import { enqueueClusterIntentsJob } from "@/lib/readings/intent-engine/jobs";
-import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
-import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
-import { getDb, isDbConfigured } from "@/lib/platform/db/client";
+import { getDb } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getLogger } from "@/lib/platform/logger";
-import { createApiKey, findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 
 const logger = getLogger("scripts/seed");
-const PROJECT_NAME = "Site Copilot";
-const KEY_NAME = "site-copilot-seed";
-
-/** The seed's own key, created fresh with the project. */
-async function createSeedKey(projectId: string): Promise<string> {
-  const key = generateApiKey();
-  await createApiKey({ projectId, name: KEY_NAME, keyHash: key.hash, keyPrefix: key.prefix });
-  return key.plaintext;
-}
-
-/**
- * The traces route handler in-process, wired as `app/api/v1/traces/route.ts` wires it,
- * minus the ingest analytics (a seed is not customer traffic) and the post-response
- * drain (`--drain` runs the ticks explicitly once everything is sent).
- */
-async function send(apiKey: string, body: object): Promise<Record<string, number>> {
-  const request = new Request("http://seed.local/v1/traces", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const response = await handleTracesRequest(request, {
-    isDbConfigured,
-    hashApiKey,
-    findActiveApiKeyByHash,
-    touchApiKey,
-    insertEventsWithMetrics,
-    insertOtelSpans,
-    insertTraceEvents,
-    getOrganizationByProjectId,
-    traceTurns: { enqueueBuild: (projectId) => enqueueBuildTraceTurnsJob(projectId), scheduleProjectDrain: () => {} },
-    // The readings' first run for a project comes from this ingest kick (the drain's
-    // safety net only revisits projects it has met), so the seed queues them like the route.
-    enqueueFoldIntentGraphJob: (projectId, _payload, options) => enqueueFoldIntentGraphJob(projectId, undefined, options),
-    enqueueClusterIntentsJob: (projectId, _payload, options) => enqueueClusterIntentsJob(projectId, undefined, options),
-    scheduleProjectDrain: () => {},
-    findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe),
-  });
-  if (response.status !== 202) throw new Error(`ingest returned ${response.status}`);
-  const counts = (await response.json()) as Record<string, unknown>;
-  return Object.fromEntries(
-    Object.entries(counts).filter((entry): entry is [string, number] => typeof entry[1] === "number"),
-  );
-}
-
 /** The drain, `n` ticks: each runs the registered before-steps, the queued jobs, then the after-steps. */
 async function drain(n: number): Promise<Array<{ done: number; failed: number }>> {
   const ticks: Array<{ done: number; failed: number }> = [];
@@ -198,37 +139,14 @@ async function seed() {
   const db = getDb();
   const org = await resolveSeedOrganization(args.org);
   const windowDays = getAgentHealthLimits(org).agentHealthWindowDays;
-  const project = await replaceProject(db, {
-    organizationId: org.id,
-    slug: args.slug,
-    name: PROJECT_NAME,
-    isDemo: true,
-  });
-  await upsertRuntimeCatalogEntries(siteCopilotCatalogEntries(project.id, new Date(args.anchorMs)), "events", db);
-  const apiKey = await createSeedKey(project.id);
-
-  const plan = planSiteCopilot({ seed: args.seed, turns: args.turns });
-  const rendered = renderSiteCopilotOtlp(plan, { anchorMs: args.anchorMs, days: SITE_COPILOT_DAYS });
-  const accepted: Record<string, number> = {};
-  for (const body of rendered.batches) {
-    for (const [key, n] of Object.entries(await send(apiKey, body))) {
-      accepted[key] = (accepted[key] ?? 0) + n;
-    }
-  }
-  // The searches an agent on the SDK reports, which the spans alone do not produce.
-  const searches = parseTraceEvents(siteCopilotSearchEvents(plan, { anchorMs: args.anchorMs }));
-  if (searches.rejected.length > 0) throw new Error(`${searches.rejected.length} search events rejected`);
-  await insertTraceEvents(
-    project.id,
-    searches.valid.map((event) => ({ ...event, ingestSource: "runtime" as const })),
+  const seeded = await seedSiteCopilot(
+    { organizationId: org.id, slug: args.slug, anchorMs: args.anchorMs, turns: args.turns, seed: args.seed },
+    db,
   );
-
-  // The page's "read now": a build that, once caught up, enqueues the signal run. One tick
-  // drains only the jobs queued before it started, so build, run and what the run queues
-  // take one tick each (one more when the idle close is what closes the last turns).
-  await enqueueBuildTraceTurnsJob(project.id, undefined, { reading: "manual" });
+  // One tick drains only the jobs queued before it started, so build, run and what the run
+  // queues take one tick each (one more when the idle close is what closes the last turns).
   const ticks = await drain(args.drain);
-  return { org, windowDays, project, plan, rendered, accepted, ticks, stored: await storedCounts(project.id) };
+  return { org, windowDays, ...seeded, ticks, stored: await storedCounts(seeded.projectId) };
 }
 
 function report(out: Awaited<ReturnType<typeof seed>>): string {
@@ -242,8 +160,8 @@ function report(out: Awaited<ReturnType<typeof seed>>): string {
       .join(", ");
   const lines = [
     "",
-    `seeded '${PROJECT_NAME}' in organization '${out.org.slug}' (${out.project.replaced ? "replaced the previous copy" : "new"})`,
-    `   project ${out.project.id}`,
+    `seeded '${SITE_COPILOT_PROJECT_NAME}' in organization '${out.org.slug}' (${out.replaced ? "replaced the previous copy" : "new"})`,
+    `   project ${out.projectId}`,
     `   window ${new Date(rendered.window.startMs).toISOString()} to ${new Date(rendered.window.endMs).toISOString()}`,
     `   plan: ${s.conversations} conversations, ${s.turns} turns (${s.turnsWithoutTools} without a tool call), ${s.toolCalls} tool calls`,
     `   sent: ${rendered.stats.traces} traces, ${rendered.stats.spans} spans (${rendered.stats.chatSpans} model calls, ${rendered.stats.toolSpans} tool calls) in ${rendered.stats.bodies} requests`,

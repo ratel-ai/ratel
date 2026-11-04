@@ -1024,7 +1024,12 @@
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/tool-explorer/sessions/\\[sessionId\\]/page.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/tool-explorer/suggestions/page.tsx",
         "apps/web/components/console/settings/SettingsSkeleton.tsx",
-        "apps/web/components/console/settings/skeleton-parts.tsx"
+        "apps/web/components/console/settings/skeleton-parts.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/settings/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/settings/api-keys/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/settings/danger/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/settings/developer/loading.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/loading.tsx"
       ],
       "linter": {
         "rules": {

@@ -1,4 +1,4 @@
-import { getRuntime } from "@/lib/runtime";
+import { getRuntime } from "@/lib/composition/runtime";
 
 export async function GET() {
   const runtime = await getRuntime();
