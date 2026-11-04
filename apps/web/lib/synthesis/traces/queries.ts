@@ -1258,6 +1258,7 @@ export async function pruneExpiredOtelSpans(
     (options.now?.getTime() ?? Date.now()) -
       retentionDays(options.retentionDays) * MILLISECONDS_PER_DAY,
   );
+  // cross-project: a bounded retention batch over every project (lib/db/tenant-scope.test.ts).
   const expiredIds = db
     .select({ id: otelSpans.id })
     .from(otelSpans)

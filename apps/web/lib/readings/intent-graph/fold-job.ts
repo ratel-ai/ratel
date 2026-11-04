@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { FOLD_MIN_INTERVAL_MS } from "@/lib/ingest/trace-events/fold-schedule";
 import { RUNTIME_EVENT_RETENTION_DAYS } from "@/lib/ingest/trace-events/maintenance";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
@@ -465,7 +466,11 @@ export async function enqueueDueIntentGraphFolds(
   });
   let enqueued = 0;
   for (const { id } of candidates) {
-    if ((await deps.enqueueFoldIntentGraphJob(id)) !== null) enqueued += 1;
+    // Paced like ingest: a project folded within the interval waits for a later tick.
+    const job = await deps.enqueueFoldIntentGraphJob(id, undefined, {
+      minIntervalMs: FOLD_MIN_INTERVAL_MS,
+    });
+    if (job !== null) enqueued += 1;
   }
   return { enqueued };
 }

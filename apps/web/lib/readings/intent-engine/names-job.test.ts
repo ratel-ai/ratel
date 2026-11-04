@@ -134,7 +134,7 @@ test("the cap is INTENT_ENGINE_MAX_NAMES, one batch by default, and 0 turns nami
     DEFAULT_MAX_NAMES,
     "nonsense keeps the default",
   );
-  assert.equal(nameModel({}), "claude-sonnet-5", "the topics namer's model");
+  assert.equal(nameModel({}), "claude-sonnet-5-5", "the topics namer's model");
   assert.equal(nameModel({ TOPICS_LABEL_MODEL: "m-topics" }), "m-topics");
   assert.equal(
     nameModel({ INTENT_ENGINE_NAME_MODEL: "m-engine", TOPICS_LABEL_MODEL: "m-topics" }),

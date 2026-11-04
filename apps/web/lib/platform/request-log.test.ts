@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createLogger } from "./logger";
+import { createLogger, runWithLogContext } from "./logger";
 import { setRequestLogContext, withRequestLog } from "./request-log";
+import { cacheProjectLabels } from "./request-log-labels";
 
 test("preserves the CloudWatch request fields as top-level pino fields", async () => {
   const { logger, records } = createCaptureLogger();
@@ -10,13 +11,17 @@ test("preserves the CloudWatch request fields as top-level pino fields", async (
     statusText: "Created",
     headers: { "x-custom": "preserved" },
   });
-  const handler = withRequestLog(async (request) => {
-    setRequestLogContext(request, {
-      project_id: "project-1",
-      org_id: "org-1",
-    });
-    return original;
-  }, logger);
+  const handler = withRequestLog(
+    async (request) => {
+      setRequestLogContext(request, {
+        project_id: "project-1",
+        org_id: "org-1",
+      });
+      return original;
+    },
+    logger,
+    noLabels,
+  );
   const response = await handler(
     new Request("https://cloud.ratel.sh/api/things?draft=true", {
       method: "POST",
@@ -62,9 +67,13 @@ test("preserves the CloudWatch request fields as top-level pino fields", async (
 test("logs status 500 and rethrows the original handler error", async () => {
   const { logger, records } = createCaptureLogger();
   const thrown = new Error("database unavailable");
-  const handler = withRequestLog(async () => {
-    throw thrown;
-  }, logger);
+  const handler = withRequestLog(
+    async () => {
+      throw thrown;
+    },
+    logger,
+    noLabels,
+  );
   const request = new Request("https://cloud.ratel.sh/api/things/123", {
     method: "DELETE",
     headers: { "x-request-id": "error-id" },
@@ -89,14 +98,18 @@ test("logs status 500 and rethrows the original handler error", async () => {
 
 test("generates a request id and maps the request identity into the log context", async () => {
   const { logger, records } = createCaptureLogger();
-  const handler = withRequestLog(async (request) => {
-    setRequestLogContext(request, {
-      project_id: "project-1",
-      org_id: "org-1",
-      distinct_id: "user_123",
-    });
-    return new Response(null, { status: 204 });
-  }, logger);
+  const handler = withRequestLog(
+    async (request) => {
+      setRequestLogContext(request, {
+        project_id: "project-1",
+        org_id: "org-1",
+        distinct_id: "user_123",
+      });
+      return new Response(null, { status: 204 });
+    },
+    logger,
+    noLabels,
+  );
   const response = await handler(new Request("https://cloud.ratel.sh/api/things"));
 
   const requestId = response.headers.get("x-request-id");
@@ -151,6 +164,83 @@ test("preserves an immutable response while adding the request id", async () => 
   assert.equal(await response.text(), "");
   assert.equal(records.length, 1);
 });
+
+test("adds the org and project slugs, and the org id a project key alone lacks", async () => {
+  const { logger, records } = createCaptureLogger();
+  const lookups: string[] = [];
+  const handler = withRequestLog(
+    async (request) => {
+      setRequestLogContext(request, { project_id: "project-1" });
+      return new Response(null, { status: 204 });
+    },
+    logger,
+    async (projectId) => {
+      lookups.push(projectId);
+      return { org_id: "org-1", org_slug: "acme", project_path: "acme/default" };
+    },
+  );
+
+  await runWithLogContext({}, () => handler(new Request("https://cloud.ratel.sh/api/v1/catalog")));
+
+  assert.deepEqual(lookups, ["project-1"]);
+  assert.equal(records.length, 1);
+  assert.equal(records[0].project_id, "project-1");
+  assert.equal(records[0].org_id, "org-1");
+  assert.equal(records[0].org_slug, "acme");
+  assert.equal(records[0].project_path, "acme/default");
+});
+
+test("skips the lookup for requests without a project", async () => {
+  const { logger, records } = createCaptureLogger();
+  const handler = withRequestLog(
+    async () => new Response(null, { status: 204 }),
+    logger,
+    async () => assert.fail("no project, no lookup"),
+  );
+
+  await handler(new Request("https://cloud.ratel.sh/api/health"));
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].org_slug, undefined);
+  assert.equal(records[0].project_path, undefined);
+});
+
+test("label cache shares one lookup per project until it expires", async () => {
+  let clock = 0;
+  let calls = 0;
+  const lookup = cacheProjectLabels(
+    async (projectId) => {
+      calls += 1;
+      return { org_id: "org-1", org_slug: "acme", project_path: `acme/${projectId}` };
+    },
+    { ttlMs: 1000, now: () => clock },
+  );
+
+  const [first, second] = await Promise.all([lookup("p1"), lookup("p1")]);
+  assert.equal(calls, 1);
+  assert.equal(first?.project_path, "acme/p1");
+  assert.equal(second, first);
+
+  clock = 1001;
+  await lookup("p1");
+  assert.equal(calls, 2);
+});
+
+test("label cache logs ids only, and retries, when a lookup fails", async () => {
+  let calls = 0;
+  const lookup = cacheProjectLabels(async () => {
+    calls += 1;
+    throw new Error("database unavailable");
+  });
+
+  assert.equal(await lookup("p1"), null);
+  assert.equal(await lookup("p1"), null);
+  assert.equal(calls, 2);
+});
+
+async function noLabels() {
+  return null;
+}
 
 function createCaptureLogger() {
   const records: Array<Record<string, unknown>> = [];

@@ -50,6 +50,13 @@ export type EditionUi = {
    * an admin support session here, so the page and the banner stay on screen.
    */
   ConsoleBoundary?: ComponentType<{ children: ReactNode }>;
+  /** `/`, in place of the console's entry redirect. */
+  RootPage?: ComponentType;
+  /**
+   * Wraps the console shell and the first-run screen, absent otherwise. It renders before the
+   * shell resolves its data, so it may show something else instead (Cloud's waitlist).
+   */
+  ConsoleAccessGate?: ComponentType<{ children: ReactNode }>;
 };
 
 export type CompositionPorts = {

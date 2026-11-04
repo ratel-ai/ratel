@@ -100,7 +100,7 @@ the floor is GA and both packages hold `latest`, drop the `@rc` from those insta
 All pre-merge checks live in **one** workflow, `.github/workflows/ci.yml`, so a single
 terminal **`ci-gate`** job can `needs:` every leg (GitHub `needs:` can't cross workflow
 files). `ci-gate` is the **only required status check** on `main` — it aggregates the
-everyday legs (`rust`, `ts`, `ai-sdk-compat`, `python`, `telemetry`, `protocol`) **and** the
+everyday legs (`rust`, `sdk`, `ai-sdk-compat`, `python`, `telemetry`, `protocol`, `design-system`, `platform-build`, `platform-test`, `platform-compose`) **and** the
 heavy release-verify matrix, so one green check means the whole pipeline is green. See
 [ADR-0016](docs/adr/0016-single-ci-gate.md).
 
@@ -120,12 +120,14 @@ install + cross-SDK E2E into `ci-gate` catches packaging breaks (missing `files`
   the **`core-maintainers`** org team (self-maintaining — add/remove people on the team, not in
   the ruleset). A core maintainer can merge a red or in-flight PR via that bypass; everyone else
   is hard-blocked until `ci-gate` is green.
-- **Skip-green per area.** A `changes` job (dorny/paths-filter) skips untouched legs, and
-  `ci-gate` treats a *skipped* upstream job as passing (only `failure`/`cancelled` fail it).
-  Filters are conservative for this FFI monorepo: the TS and Python SDKs build the native Rust
-  binding, so a Rust-core or `Cargo.*` change re-runs them. On **push to `main`** and
-  **`workflow_dispatch`** every leg runs regardless of the filters (full validation on merge /
-  on demand).
+- **Skip-green per area.** A `changes` job classifies the pull-request file list with
+  `scripts/ci-filters.mjs` and skips untouched legs. `ci-gate` treats a *skipped* upstream job
+  as passing (only `failure`/`cancelled` fail it). The SDK and Python legs stay conservative
+  for this FFI monorepo: they build the native Rust binding, so a Rust-core or `Cargo.*` change
+  re-runs them. The platform app is not an FFI consumer; its jobs name `packages/brand` and
+  `packages/design-system` and never use a `packages/**` glob. On **push to `main`** and
+  **`workflow_dispatch`** every leg runs regardless of the classifier (full validation on
+  merge / on demand).
 - **What the verify matrix runs:** one **`verify` job per platform** that builds the real
   distributables (wheel, npm loader + native binding) and **installs each into a clean
   environment and runs the cross-SDK E2E** (`e2e/` — Python wheel, TS loader+native). The

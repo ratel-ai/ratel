@@ -108,6 +108,8 @@ export interface WorkflowRunModel {
   /** Summed model-call time, and the run's wall time with its model calls. */
   modelMs: number;
   runMs: number;
+  /** Input plus output tokens over the linked calls; absent where a caller has none to give. */
+  tokens?: number;
 }
 
 /**

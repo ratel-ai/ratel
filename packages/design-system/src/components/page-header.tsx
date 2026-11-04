@@ -88,7 +88,7 @@ export function PageBody({
  */
 export function Page({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div data-page="v2" className={cn("flex min-h-full flex-col", className)}>
+    <div data-page="v2" className={cn("flex min-h-full flex-1 flex-col", className)}>
       {children}
     </div>
   );

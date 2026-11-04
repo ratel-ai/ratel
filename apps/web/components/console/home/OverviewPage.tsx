@@ -33,7 +33,7 @@ export async function OverviewPage({
       setup={
         <SetupGuide
           root={data.root}
-          endpoint={publicUrl("/api/v1/traces")}
+          endpoint={publicUrl("/v1/traces")}
           serviceName={project.slug}
         />
       }

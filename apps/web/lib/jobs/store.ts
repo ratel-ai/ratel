@@ -32,8 +32,8 @@ export interface DrainProjectJobsDeps {
 
 /** The runner's DB surface, backed by the platform database. */
 export const dbJobStore: JobStore = {
-  claimNextQueued: async (projectId, createdBefore) => {
-    const row = await claimNextQueuedJob(projectId, createdBefore);
+  claimNextQueued: async (projectId, createdBefore, options) => {
+    const row = await claimNextQueuedJob(projectId, createdBefore, undefined, options);
     if (!row) return null;
     return {
       id: row.id,
@@ -41,6 +41,7 @@ export const dbJobStore: JobStore = {
       kind: row.kind,
       status: "running",
       payload: row.payload,
+      createdAt: row.createdAt,
     };
   },
   markDone: markJobDone,

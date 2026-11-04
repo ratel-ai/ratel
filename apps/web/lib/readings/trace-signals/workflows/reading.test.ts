@@ -223,3 +223,36 @@ test("an empty task reads as zeros, not as a division by zero", () => {
   );
   assert.equal(reading.steps[0]!.medianMs, null);
 });
+
+test("usage: tokens over the linked runs and every run's wall time, stored for Fixes (RC-211)", () => {
+  const linked = (tokens: number | undefined, runMs: number) => ({
+    model: {
+      calls: 2,
+      costUsd: 0.01,
+      modelMs: 500,
+      runMs,
+      ...(tokens === undefined ? {} : { tokens }),
+    },
+  });
+  const runs = [
+    run(["find", "assign"], [], linked(1_200, 5_000)),
+    run(["find", "assign"], [], linked(800, 4_000)),
+    run(["find", "assign"]),
+  ];
+  // The unlinked run counts its own start to end: 3 s in this world.
+  assert.deepEqual(readTask(TASK, runs).usage, { tokens: 2_000, waitMs: 12_000 });
+  assert.deepEqual(
+    readTask(TASK, [run(["find", "assign"]), run(["find", "assign"], [], linked(undefined, 4_000))])
+      .usage,
+    { tokens: null, waitMs: 7_000 },
+    "no tokens reported reads as unknown, not zero",
+  );
+});
+
+test("usage counts SDK runs only, as the live read on Fixes does", () => {
+  const otlp = run(["find", "assign"], [], { turnSource: "otlp" });
+  assert.deepEqual(readTask(TASK, [run(["find", "assign"]), otlp]).usage, {
+    tokens: null,
+    waitMs: 3_000,
+  });
+});

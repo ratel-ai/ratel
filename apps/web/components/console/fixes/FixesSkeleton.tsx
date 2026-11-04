@@ -19,14 +19,28 @@ export function FixesSkeleton() {
         </div>
       </div>
       <div aria-hidden className="flex flex-col gap-8 px-6 py-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line lg:grid-cols-4">
-          {Array.from({ length: 4 }, (_, cell) => (
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line lg:grid-cols-3 max-lg:[&>*:last-child]:col-span-2">
+          {Array.from({ length: 3 }, (_, cell) => (
             <div key={cell} className="flex flex-col gap-2 bg-app p-4">
               <Skeleton className="h-3 w-20" />
               <Skeleton className="h-7 w-12" />
               <Skeleton className="mt-1 h-2 w-32" />
             </div>
           ))}
+        </div>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-3 w-96 max-w-full" />
+          <div className="grid grid-cols-3 gap-4 rounded-lg border border-line p-4">
+            {Array.from({ length: 3 }, (_, metric) => (
+              <div key={metric} className="flex flex-col gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-7 w-24" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-8 w-48" />
         </div>
         <div className="flex items-center gap-2">
           <Skeleton className="h-8 w-52" />
