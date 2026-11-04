@@ -1007,7 +1007,10 @@
         "apps/web/components/console/onboarding/CaptureConsentPanel.tsx",
         "apps/web/lib/console/onboarding/capture-consent.ts",
         "apps/web/lib/console/onboarding/capture-consent-ui.test.ts",
-        "apps/web/lib/console/onboarding/transition.ts"
+        "apps/web/lib/console/onboarding/transition.ts",
+        "apps/web/app/api/v1/events/route.test.ts",
+        "apps/web/lib/readings/intent-graph/maintenance.integration.test.ts",
+        "apps/web/postcss.config.mjs"
       ],
       "linter": {
         "rules": {
