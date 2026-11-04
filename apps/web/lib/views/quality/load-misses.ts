@@ -1,4 +1,5 @@
 import { projectRoot } from "@/lib/console/navigation";
+import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { pickTunedArm } from "@/lib/synthesis/match-quality/evidence";
 import type {
@@ -11,7 +12,6 @@ import {
   loadSourceSelections,
   SEARCH_TELEMETRY_SOURCE,
 } from "@/lib/synthesis/match-quality/search-source";
-import { loadToolCorpus } from "@/lib/synthesis/match-quality/service";
 import { type EvaluableSelection, pickBaselineArm } from "@/lib/synthesis/quality/ground-truth";
 import { listQualityCalibrations, MAX_SELECTIONS } from "@/lib/synthesis/quality/queries";
 import {
