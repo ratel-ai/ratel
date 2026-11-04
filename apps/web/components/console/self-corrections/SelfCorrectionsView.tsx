@@ -3,6 +3,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { CircleCheck } from "lucide-react";
 import Link from "next/link";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { Change } from "@/components/console/self-corrections/Change";
 import { SELF_CORRECTIONS_DESCRIPTION } from "@/components/console/self-corrections/copy";
 import { DetailsPanel } from "@/components/console/self-corrections/DetailsPanel";
@@ -13,6 +14,7 @@ import { Said } from "@/components/console/self-corrections/Said";
 import { Where } from "@/components/console/self-corrections/Where";
 import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
 import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
+import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
 import type { SelfCorrectionsPageModel } from "@/lib/views/health/self-corrections/page-model";
 
 /**
@@ -33,6 +35,7 @@ export function SelfCorrectionsView({
   clearHref,
   now,
   actions = {},
+  progress = null,
 }: {
   model: SelfCorrectionsPageModel;
   /** The time windows the plan allows, as links. */
@@ -43,6 +46,8 @@ export function SelfCorrectionsView({
   now: string;
   /** What each fix's button does, by issue id; a fix without one opens Fixes on its subject. */
   actions?: Readonly<Record<string, FixAction>>;
+  /** Where the readings behind this page stand (RC-210); null reads as idle. */
+  progress?: SectionProgress | null;
 }) {
   return (
     <Page>
@@ -50,11 +55,26 @@ export function SelfCorrectionsView({
         title="Self-corrections"
         crumbs={[{ label: "Agent health", href: agentHealthHref(model.projectId) }]}
         description={SELF_CORRECTIONS_DESCRIPTION}
-        actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
+        actions={
+          <>
+            <AnalysisStatus
+              projectId={model.projectId}
+              section="self_corrections"
+              initial={progress}
+            />
+            {windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
+          </>
+        }
       />
       <PageBody>
         <Filters filters={model.filters} clearHref={clearHref} />
-        <Body model={model} clearHref={clearHref} now={now} actions={actions} />
+        <Body
+          model={model}
+          clearHref={clearHref}
+          now={now}
+          actions={actions}
+          working={analysisPending(progress)}
+        />
       </PageBody>
     </Page>
   );
@@ -65,11 +85,13 @@ function Body({
   clearHref,
   now,
   actions,
+  working,
 }: {
   model: SelfCorrectionsPageModel;
   clearHref: string;
   now: string;
   actions: Readonly<Record<string, FixAction>>;
+  working: boolean;
 }) {
   const health = agentHealthHref(model.projectId);
   const span = windowPhrase(model.windowDays);
@@ -81,7 +103,13 @@ function Body({
         </Callout>
       );
     case "not_read":
-      return (
+      return working ? (
+        <EmptyState
+          working
+          title="Reading your agent's runs"
+          description="Self-corrections show up here when it finishes, and this page updates on its own."
+        />
+      ) : (
         <EmptyState
           emblem
           title="No reading yet"

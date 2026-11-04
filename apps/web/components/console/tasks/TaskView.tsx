@@ -43,11 +43,20 @@ export function TaskView({
   task,
   examples,
   now = new Date(),
+  listHref,
+  scoring,
+  testRuns,
+  sessionReplay = false,
 }: {
   projectId: string;
   task: TaskDetailModel;
   examples: ReadonlyMap<string, ExampleRun>;
   now?: Date;
+  listHref?: string;
+  scoring?: ReactNode;
+  testRuns?: readonly string[];
+  /** `cloud-session-replay` is on: example runs link their session replay. */
+  sessionReplay?: boolean;
 }) {
   const names = Object.fromEntries(
     [...task.steps, ...task.sideSteps].map((step) => [step.toolId, step.label]),
@@ -64,7 +73,7 @@ export function TaskView({
     <Page>
       <PageHeader
         // One crumb: on a phone the task's name keeps the room (the rail says Agent health).
-        crumbs={[{ label: "Tasks", href: tasksHref(projectId) }]}
+        crumbs={[{ label: "Tasks", href: listHref ?? tasksHref(projectId) }]}
         title={
           <span className="inline-flex min-w-0 items-center gap-2.5">
             <TaskColorBar color={task.color} />
@@ -109,6 +118,8 @@ export function TaskView({
           runs={examples}
           focusTools={task.focusTools}
           now={now}
+          testRuns={testRuns}
+          sessionReplay={sessionReplay}
         />
         <TaskPanels
           projectId={projectId}
@@ -120,6 +131,7 @@ export function TaskView({
           issues={task.issues}
           hasReading={task.hasReading}
         />
+        {scoring}
       </PageBody>
     </Page>
   );

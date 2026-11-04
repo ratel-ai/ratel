@@ -2,6 +2,7 @@ import { NounIcon } from "@ratel/design-system/entity";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import {
   IntentsNoReading,
   IntentsNothingToGroup,
@@ -144,9 +145,13 @@ export function TopicsView({
             }
           />
         }
-        actions={<ReadingAge reading={reading} />}
+        actions={
+          <AnalysisStatus projectId={projectId} section="intents">
+            <ReadingAge reading={reading} />
+          </AnalysisStatus>
+        }
       />
-      <PageBody wide>
+      <PageBody wide className={ready && summary ? undefined : "flex-1"}>
         {reading.status === "failed" ? (
           <IntentsReadFailed />
         ) : reading.status === "none" ? (

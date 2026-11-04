@@ -153,6 +153,7 @@ export function compactTurn(turn: SignalTurn): WorkflowTurn | null {
         costUsd: linked.costUsd,
         modelMs: linked.modelMs,
         runMs: linkedRunMs(turn, linked),
+        tokens: linked.inputTokens + linked.outputTokens,
       }
     : null;
   const corrections = correctionsOf(turn.steps);
