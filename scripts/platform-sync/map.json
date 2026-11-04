@@ -1659,7 +1659,7 @@
     { "from": "apps/web/lib/scope/moved-pages.test.ts", "to": "apps/web/lib/console/scope/moved-pages.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/scope/sentinel.ts", "to": "apps/web/lib/console/scope/sentinel.ts", "mode": "copy" },
     { "from": "apps/web/lib/scope/sentinel.test.ts", "to": "apps/web/lib/console/scope/sentinel.test.ts", "mode": "owned", "$why": "the sentinel route lives under app/(console)" },
-    { "from": "apps/web/lib/scope/landing.ts", "to": "apps/web/lib/console/scope/landing.ts", "mode": "owned", "$why": "no stored last project: identity is the edition's; the cookie is the only memory, checked against the session organization's projects" },
+    { "from": "apps/web/lib/scope/landing.ts", "to": "apps/web/lib/console/scope/landing.ts", "mode": "owned", "$why": "identity is the edition's, so no pointer on the user: the cookie, checked against the session organization's projects, then its first project" },
     { "from": "apps/web/lib/scope/landing.test.ts", "to": "apps/web/lib/console/scope/landing.test.ts", "mode": "copy" },
     { "from": "apps/web/app/(app)/traces/page.tsx", "to": "apps/web/app/(console)/traces/page.tsx", "mode": "owned", "$why": "upstream's proxy redirects it; here the route does: the open-source edition has no proxy" },
     { "from": "apps/web/app/(app)/traces/[traceId]/page.tsx", "to": "apps/web/app/(console)/traces/[traceId]/page.tsx", "mode": "owned", "$why": "upstream's proxy redirects it; here the route does: the open-source edition has no proxy" },

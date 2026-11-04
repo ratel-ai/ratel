@@ -44,6 +44,14 @@ import { reportServerException, trackProductEvent } from "@/lib/platform/telemet
 
 const logger = getLogger("onboarding/provision-sample");
 
+/**
+ * The inline sample is a shorter plan than the full demo: a thousand and a half turns take
+ * about twenty-five seconds through the traces route, which is too long for a first render;
+ * four hundred take a few seconds and still give every page something to read over the thirty
+ * days. `pnpm --filter @ratel/platform seed` and the compose demo profile write the full plan.
+ */
+export const SAMPLE_PROJECT_TURNS = 400;
+
 export interface EnsureSampleProjectContext {
   organization: Organization;
   /** The session user's stable id, so the analytics event attributes to a person. */
@@ -70,7 +78,7 @@ export interface EnsureSampleProjectDeps {
 const defaultDeps: EnsureSampleProjectDeps = {
   listProjects: listProjectsForOrganization,
   claim: claimSampleProjectSeeding,
-  seed: (organizationId) => seedSiteCopilot({ organizationId }),
+  seed: (organizationId) => seedSiteCopilot({ organizationId, turns: SAMPLE_PROJECT_TURNS }),
   record: recordSampleProject,
   scheduleDrain: scheduleProjectDrain,
   track: trackProductEvent,

@@ -1,10 +1,13 @@
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
+import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
+import { getSessionContext } from "@/lib/platform/session";
 
 /**
  * The last project a reader was in. Owned (ADR-0030): upstream also keeps a pointer on the
- * users row; identity is the edition's here, so the cookie is the only memory, checked against
- * the session organization's projects.
+ * users row; identity is the edition's here, so the memory is the cookie, checked against the
+ * session organization's projects, and the stored pointer is the organization's first project,
+ * so an old link always lands somewhere live.
  */
 
 export type LastProjectResolverDeps = {
@@ -12,8 +15,15 @@ export type LastProjectResolverDeps = {
   resolveProjectScope(projectId: string, userId: string): Promise<unknown | null>;
 };
 
+async function firstProjectId(): Promise<string | null> {
+  const session = await getSessionContext();
+  if (!session) return null;
+  const [first] = await listProjectsForOrganization(session.organization.id);
+  return first?.id ?? null;
+}
+
 const DEFAULT_LAST_PROJECT_RESOLVER_DEPS: LastProjectResolverDeps = {
-  getLastProjectId: async () => null,
+  getLastProjectId: firstProjectId,
   resolveProjectScope: (projectId) => findProjectScope(projectId),
 };
 
