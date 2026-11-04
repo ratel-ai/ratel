@@ -12,7 +12,7 @@ The repeatable copy of the open-source parts of `ratel-cloud` into `apps/web`
 | `rewrites.json` | Explicit import-specifier rules (`@/components/ds/*` to `@ratel/design-system/*`, `@/lib/utils` to the design-system `cn`). Moves inside `apps/web/lib` are derived from `map.json`. |
 | `private-strings.txt` | Regexes for Cloud-only code (scoped to `apps/web`) and salted hashes of confidential words (whole tree; the word is never written down). A landed file or upstream path matching one fails or skips the sync; `pnpm check:private` scans the repository with the same list. |
 | `source.json` | The `ratel-cloud` commit last synced. |
-| `sync.mjs` | The driver: plan, private-string guard, write, format, record. |
+| `sync.mjs` | The driver: plan, format (one biome run over a staged mirror of the plan), private-string guard, write, record. |
 | `rewrite-imports.mjs` | The codemod (pure). |
 | `private-strings.mjs` | The guard (pure) and its CLI, `pnpm check:private`. |
 

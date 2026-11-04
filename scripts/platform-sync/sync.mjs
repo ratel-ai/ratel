@@ -11,7 +11,8 @@
 // nothing and exits 1 when a sync would change the tree. `source.json` records the commit synced.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findPrivateStrings, isHashEntry, loadPatterns } from "./private-strings.mjs";
@@ -63,27 +64,55 @@ export function copyIncludes(map, repoRoot = REPO_ROOT) {
     });
 }
 
-/** Format one file's content the way the repository's biome would, so a plan compares like with like. */
-export function formatWithBiome(repoRoot, path, content) {
+/**
+ * Format planned files the way the repository's biome would, in one run, so a plan compares like
+ * with like. The files are staged under a temporary mirror of the tree beside a copy of
+ * `biome.json`, so the path-based overrides (the copied-code one among them) apply as they do in
+ * the tree. One process for the whole plan: a process per file (`--stdin-file-path`) cost about
+ * half a second each, minutes for a full sync, which is what the per-folder checks timed out on.
+ * `check --write` applies the safe fixes (import sorting) as well as formatting, which is what a
+ * committed file has been through; it exits 1 when a file keeps a lint error it cannot fix, and
+ * the fixes it could make are written all the same.
+ */
+export function formatAllWithBiome(repoRoot, files) {
+  if (files.size === 0) return files;
+  const stage = mkdtempSync(join(tmpdir(), "platform-sync-format-"));
   try {
-    // `check --write` applies the safe fixes (import sorting) as well as formatting, which is what
-    // a committed file has been through.
-    return execFileSync("pnpm", ["exec", "biome", "check", "--write", "--stdin-file-path", path], {
-      cwd: repoRoot,
-      input: content,
-      stdio: ["pipe", "pipe", "ignore"],
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch {
-    return content; // biome refused the file (a parse error); the raw copy lands and lint reports it
+    const config = JSON.parse(readFileSync(join(repoRoot, "biome.json"), "utf8"));
+    writeFileSync(join(stage, "biome.json"), JSON.stringify({ ...config, vcs: { enabled: false } }));
+    for (const [to, content] of files) {
+      mkdirSync(dirname(join(stage, to)), { recursive: true });
+      writeFileSync(join(stage, to), content);
+    }
+    try {
+      execFileSync("pnpm", ["exec", "biome", "check", "--write", "--config-path", stage, stage], {
+        cwd: repoRoot,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
+    } catch {}
+    const out = new Map();
+    for (const to of files.keys()) out.set(to, readFileSync(join(stage, to)));
+    return out;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
   }
 }
 
 /**
  * Plan a sync without touching the tree. Returns the actions and the report; `apply` writes them.
- * With `format`, code is formatted before comparison, so a tree biome already formatted is in sync.
+ * With `format`, code is formatted before comparison, so a tree biome already formatted is in sync;
+ * `formatter` is the batch formatter, injectable for tests.
  */
-export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patterns = [], only = null, format = false }) {
+export function planSync({
+  sourceRoot,
+  repoRoot = REPO_ROOT,
+  map,
+  rewrites,
+  patterns = [],
+  only = null,
+  format = false,
+  formatter = formatAllWithBiome,
+}) {
   const entries = map.entries.filter((e) => !only || under(e.to ?? e.from, only) || under(e.from, only));
   const excluded = map.entries.filter((e) => e.mode === "excluded").map((e) => e.from);
   const ownedByTo = new Map(map.entries.filter((e) => e.mode === "owned").map((e) => [e.to, e]));
@@ -113,12 +142,7 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
       const { code, unmapped } = rewriteSource(content.toString("utf8"), codemod, pair.from);
       content = Buffer.from(code, "utf8");
       for (const u of unmapped) report.unmapped.push({ path: pair.to, specifier: u });
-      if (format) content = Buffer.from(formatWithBiome(repoRoot, pair.to, content));
     }
-    for (const h of findPrivateStrings(content.toString("utf8"), patterns)) {
-      report.privateHits.push({ path: pair.to, from: pair.from, ...h });
-    }
-    if (findPrivateStrings(pair.to, patterns).length) report.privateHits.push({ path: pair.to, from: pair.from, line: 0, pattern: "path" });
     writes.set(pair.to, { from: pair.from, content });
   };
 
@@ -135,6 +159,18 @@ export function planSync({ sourceRoot, repoRoot = REPO_ROOT, map, rewrites, patt
       }
       land(pair, false);
     }
+  }
+
+  // Formatted in one run, then guarded: a private string is looked for in what would land.
+  if (format) {
+    const code = new Map([...writes].filter(([to]) => CODE.test(to)).map(([to, w]) => [to, w.content]));
+    for (const [to, content] of formatter(repoRoot, code)) writes.get(to).content = content;
+  }
+  for (const [to, w] of writes) {
+    for (const h of findPrivateStrings(w.content.toString("utf8"), patterns)) {
+      report.privateHits.push({ path: to, from: w.from, ...h });
+    }
+    if (findPrivateStrings(to, patterns).length) report.privateHits.push({ path: to, from: w.from, line: 0, pattern: "path" });
   }
 
   // Mirror: a file under a copied directory that the source no longer has is deleted here.
