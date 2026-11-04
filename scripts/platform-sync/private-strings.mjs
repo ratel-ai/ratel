@@ -61,7 +61,8 @@ export function findPrivateStrings(text, patterns) {
 }
 
 const TEXT = /\.(c?m?[jt]sx?|json|css|md|mdx|sql|ya?ml|txt|html|rs|py|toml|sh|tf|example)$/;
-const SKIP = ["node_modules", ".next", ".git", "target", "dist", "coverage", ".turbo", ".venv", ".claude", "ee"];
+// `(ee)`: the private route stubs link-ee.mjs copies into apps/web/app, gitignored.
+const SKIP = ["node_modules", ".next", ".git", "target", "dist", "coverage", ".turbo", ".venv", ".claude", "ee", "(ee)"];
 
 /**
  * Scan a tree. Hash entries apply to every text file; regex entries only to files under
