@@ -225,7 +225,6 @@ test("the crafter's pending draft is a fix with its effect, evidence and price; 
     "function",
     "craft-drafts.ts filled the seam when load.ts loaded",
   );
-  assert.equal(typeof fixSeams.dismissDraft, "function");
   const model = await loadFixes({
     projectId: PROJECT,
     organization: await organization(db),

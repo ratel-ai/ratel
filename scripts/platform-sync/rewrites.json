@@ -383,7 +383,14 @@
         "RankHistogram": "@/lib/synthesis/quality/metrics",
         "CoverageScore": "@/lib/synthesis/quality/metrics",
         "ListCost": "@/lib/synthesis/quality/metrics",
-        "UnifiedScore": "@/lib/synthesis/quality/metrics"
+        "UnifiedScore": "@/lib/synthesis/quality/metrics",
+        "RankObservation": "@/lib/synthesis/quality/metrics",
+        "scoreTotals": "@/lib/synthesis/quality/metrics",
+        "totalsFromObservations": "@/lib/synthesis/quality/metrics",
+        "QualityGap": "@/lib/synthesis/quality/metrics",
+        "creditFromHistogram": "@/lib/synthesis/quality/metrics",
+        "separated": "@/lib/synthesis/quality/metrics",
+        "rankCredit": "@/lib/synthesis/quality/metrics"
       }
     },
     "@/lib/match-quality/types": {
@@ -392,14 +399,16 @@
         "CorpusEntry": "@/lib/readings/decisions/judge",
         "Candidate": "@/lib/synthesis/match-quality/types",
         "PROPOSAL_STATUSES": "@/lib/synthesis/match-quality/types",
-        "ProposalStatus": "@/lib/synthesis/match-quality/types"
+        "ProposalStatus": "@/lib/synthesis/match-quality/types",
+        "EvalItem": "@/lib/synthesis/match-quality/types"
       }
     },
     "@/lib/intent-graph/view": {
       "default": "@/lib/views/intents/adaptive-view",
       "symbols": {
         "capabilityCatalogHref": "@/lib/views/intents/hrefs",
-        "relativeTimeLabel": "@/lib/views/intents/adaptive-view"
+        "relativeTimeLabel": "@/lib/views/intents/adaptive-view",
+        "CloudGraphState": "@/lib/views/intents/adaptive-view"
       }
     },
     "@/lib/match-quality/judge": {
@@ -417,7 +426,10 @@
         "applyVerdicts": "@/lib/synthesis/match-quality/judge",
         "labelsFromVerdicts": "@/lib/synthesis/match-quality/judge",
         "stratifiedAccuracy": "@/lib/synthesis/match-quality/judge",
-        "judgeTargets": "@/lib/synthesis/match-quality/judge"
+        "judgeTargets": "@/lib/synthesis/match-quality/judge",
+        "JudgeCase": "@/lib/readings/decisions/judge",
+        "JudgeVerdict": "@/lib/readings/decisions/judge",
+        "JudgeEngine": "@/lib/readings/decisions/judge"
       }
     },
     "@/lib/match-quality/service": {
@@ -425,7 +437,7 @@
       "symbols": {
         "ServiceDb": "@/lib/synthesis/match-quality/service",
         "loadCorpusWithFingerprint": "@/lib/synthesis/match-quality/service",
-        "loadToolCorpus": "@/lib/synthesis/match-quality/service"
+        "loadToolCorpus": "@/lib/ingest/runtime-catalog/inventory"
 
       }
     },
@@ -435,7 +447,11 @@
         "FingerprintSourceRow": "@/lib/synthesis/quality/fingerprint",
         "FingerprintDb": "@/lib/synthesis/quality/fingerprint",
         "recordCatalogFingerprint": "@/lib/synthesis/quality/fingerprint",
-        "CatalogInventory": "@/lib/ingest/runtime-catalog/inventory"
+        "CatalogInventory": "@/lib/ingest/runtime-catalog/inventory",
+        "loadCatalogInventory": "@/lib/ingest/runtime-catalog/inventory",
+        "canonicalEntries": "@/lib/ingest/runtime-catalog/inventory",
+        "fingerprintOf": "@/lib/ingest/runtime-catalog/inventory",
+        "inventoryOf": "@/lib/ingest/runtime-catalog/inventory"
       }
     },
     "@/lib/dotmatrix-hooks": {

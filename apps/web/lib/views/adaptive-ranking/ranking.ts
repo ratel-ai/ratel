@@ -1,4 +1,3 @@
-import { APP_NAME } from "@/lib/platform/app-config";
 /**
  * Adaptive ranking in one reading (DESIGN.md, One question per page: "Does
  * adaptive ranking help?"): whether a graph is served, one headline from the
@@ -6,7 +5,7 @@ import { APP_NAME } from "@/lib/platform/app-config";
  * learned. Pure, over the Boost view the v1 panel already computes, so both
  * versions tell the same numbers. Recall@k, nDCG and MRR stay behind Details.
  */
-
+import { APP_NAME } from "@/lib/platform/app-config";
 import {
   type IntentGraphProducer,
   MAX_INTENT_GRAPH_BYTES,

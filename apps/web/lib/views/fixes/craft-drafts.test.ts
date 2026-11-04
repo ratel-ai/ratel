@@ -69,7 +69,6 @@ const name = (id: string) => id;
 
 test("loading the filler fills the fixes and tasks seams", () => {
   assert.equal(typeof fixSeams.loadDrafts, "function");
-  assert.equal(typeof fixSeams.dismissDraft, "function");
   assert.equal(fixSeams.priceOf, priceOf);
   assert.equal(typeof tasksSeams.loadDrafts, "function");
 });

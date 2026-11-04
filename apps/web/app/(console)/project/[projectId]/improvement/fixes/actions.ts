@@ -5,14 +5,14 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
-import { fixSeams } from "@/lib/views/fixes/seams";
+import { dismissCraftProposal } from "@/lib/synthesis/tool-crafter/queries";
 
 /**
  * Dismiss a drafted change on Fixes. Any member of the project may: it changes
  * what the team's list shows, and the next analysis keeps the same change from
- * being drafted again. The project is re-resolved here; the client posts only
- * the project and draft ids. Owned (ADR-0030): the project comes from the
- * console scope, and the dismissal from the seam the tool crafter fills.
+ * being drafted again (`finishCraftRun`). The project is re-resolved here; the
+ * client posts only the project and draft ids. Owned (ADR-0030): the project
+ * comes from the console scope.
  */
 
 const logger = getLogger("fixes/actions");
@@ -34,12 +34,10 @@ export async function dismissDraftedFixAction(
     !isDbConfigured()
   )
     return DENIED;
-  const dismissDraft = fixSeams.dismissDraft;
-  if (!dismissDraft) return DENIED;
   const scope = await findProjectScope(projectId);
   if (!scope) return DENIED;
   try {
-    const dismissed = await dismissDraft(scope.project.id, proposalId, new Date());
+    const dismissed = await dismissCraftProposal(scope.project.id, proposalId, new Date());
     if (!dismissed)
       return {
         ok: false,

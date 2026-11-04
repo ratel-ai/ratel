@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DEFAULT_FLOORS } from "@/lib/readings/trace-signals/signals/catalog";
-import { detectWorkflowSignals, WORKFLOW_THRESHOLDS } from "./detect";
-import { FIXED_ORDER, FIXED_PAIR_ORDER, runsInFixedOrder } from "./fixed-order";
-import type { Workflow, WorkflowHealth } from "./types";
-
-/**
- * Owned (ADR-0030): upstream also checks that the tool crafter drafts a compose fix for
- * exactly the tasks that raise the issue; that case lands with the tool crafter.
- */
+import {
+  detectWorkflowSignals,
+  WORKFLOW_THRESHOLDS,
+} from "@/lib/readings/trace-signals/workflows/detect";
+import {
+  FIXED_ORDER,
+  FIXED_PAIR_ORDER,
+  runsInFixedOrder,
+} from "@/lib/readings/trace-signals/workflows/fixed-order";
+import type { Workflow, WorkflowHealth } from "@/lib/readings/trace-signals/workflows/types";
+import {
+  COMPOSE_MIN_RUNS,
+  COMPOSE_MIN_STABILITY,
+  COMPOSE_MIN_STEPS,
+  pickComposeCandidates,
+} from "@/lib/synthesis/tool-crafter/candidates";
 
 const ORDER = ["find_pr", "link_pr", "update_status", "notify"];
 
@@ -56,25 +64,42 @@ function task(
 function verdicts(runs: number, orderStability: number) {
   const entry = task(runs, orderStability);
   const issue = detectWorkflowSignals([entry]).some((s) => s.kind === "workflow_fixed_chain");
-  return { issue, rule: runsInFixedOrder(entry.workflow) };
+  const fix =
+    pickComposeCandidates(
+      [
+        {
+          id: entry.workflow.id,
+          typicalOrder: ORDER,
+          orderStability,
+          runs,
+          medianMs: 1_000,
+          medianModelCalls: null,
+          medianCostUsd: null,
+        },
+      ],
+      new Set(),
+      new Set(ORDER),
+    ).length > 0;
+  return { issue, fix, rule: runsInFixedOrder(entry.workflow) };
 }
 
-test("the issue and the rule read one fixed-order threshold", () => {
+test("the issue, the drafted fix and the rule read one fixed-order threshold", () => {
   assert.deepEqual(WORKFLOW_THRESHOLDS.fixedChain, {
     minRuns: FIXED_ORDER.minRuns,
     minCoreSize: FIXED_ORDER.minSteps,
     minOrderStability: FIXED_ORDER.minShare,
   });
-  assert.equal(DEFAULT_FLOORS.workflow_fixed_chain.minRuns, FIXED_ORDER.minRuns);
-  assert.equal(DEFAULT_FLOORS.workflow_fixed_chain.minOrderStability, FIXED_ORDER.minShare);
-  assert.equal(DEFAULT_FLOORS.workflow_fixed_chain.minCoreSize, FIXED_ORDER.minSteps);
+  assert.equal(COMPOSE_MIN_RUNS, DEFAULT_FLOORS.workflow_fixed_chain.minRuns);
+  assert.equal(COMPOSE_MIN_STABILITY, DEFAULT_FLOORS.workflow_fixed_chain.minOrderStability);
+  assert.equal(COMPOSE_MIN_STEPS, DEFAULT_FLOORS.workflow_fixed_chain.minCoreSize);
 });
 
-test("a task raises the issue exactly when the rule holds", () => {
-  assert.deepEqual(verdicts(12, 0.85), { issue: false, rule: false });
-  assert.deepEqual(verdicts(30, 0.85), { issue: false, rule: false });
-  assert.deepEqual(verdicts(19, 1), { issue: false, rule: false });
-  assert.deepEqual(verdicts(25, 0.92), { issue: true, rule: true });
+test("a task raises the issue exactly when the fix is drafted for it", () => {
+  // Formerly 0.8 over 10 runs drafted a fix the issue never raised.
+  assert.deepEqual(verdicts(12, 0.85), { issue: false, fix: false, rule: false });
+  assert.deepEqual(verdicts(30, 0.85), { issue: false, fix: false, rule: false });
+  assert.deepEqual(verdicts(19, 1), { issue: false, fix: false, rule: false });
+  assert.deepEqual(verdicts(25, 0.92), { issue: true, fix: true, rule: true });
 });
 
 test("a pair reads the same rule with two steps: the runs and the share stay the one rule's", () => {

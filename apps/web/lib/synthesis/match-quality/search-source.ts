@@ -109,7 +109,7 @@ export async function countCapturedSearchesPerWindow(
  * (project_id, type, coalesce(occurred_at, received_at)) and stops at the first
  * search. A single GROUP BY over trace_events had no index to use (every one
  * leads with project_id), so each drain tick read the whole table
- * (2026-10-28, RC-28). The coalesce bounds are only there for the index;
+ * (2026-10-28). The coalesce bounds are only there for the index;
  * occurred_at decides, as before.
  */
 export async function listSearchTelemetryProjects(
