@@ -5,6 +5,7 @@ import {
   defaultBackgroundObservabilityDeps,
 } from "@/lib/jobs/observability";
 import { enqueueJob } from "@/lib/jobs/queries";
+import { runsJobsAfterResponse } from "@/lib/jobs/role";
 import type { JobKind } from "@/lib/jobs/runner";
 import { drainProjectJobs } from "@/lib/jobs/store";
 
@@ -18,12 +19,15 @@ export interface ScheduleProjectDrainDeps {
   after: (callback: () => void | Promise<void>) => void;
   drainProjectJobs: typeof drainProjectJobs;
   observability: BackgroundObservabilityDeps;
+  /** Whether this process runs jobs after its responses (`APP_ROLE`, lib/jobs/role.ts). */
+  runsJobs?: () => boolean;
 }
 
 const defaultScheduleProjectDrainDeps: ScheduleProjectDrainDeps = {
   after: (callback) => after(callback),
   drainProjectJobs,
   observability: defaultBackgroundObservabilityDeps,
+  runsJobs: () => runsJobsAfterResponse(),
 };
 
 /**
@@ -47,6 +51,9 @@ export function scheduleProjectDrain(
   projectId: string,
   deps: ScheduleProjectDrainDeps = defaultScheduleProjectDrainDeps,
 ): void {
+  // An API-only process (APP_ROLE=api) only queues: the worker runs the job, so
+  // a customer's request never shares its task with analysis.
+  if (deps.runsJobs && !deps.runsJobs()) return;
   const observability = createBackgroundObservability(deps.observability);
   deps.after(async () => {
     try {

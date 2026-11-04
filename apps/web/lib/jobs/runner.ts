@@ -15,6 +15,7 @@ import {
   type BackgroundObservabilityDeps,
   createBackgroundObservability,
 } from "./observability";
+import { jobBudgetMs } from "./policy";
 
 export type { JobHandler };
 /** Job kinds are open strings: each module registers the ones it handles. */
@@ -24,12 +25,18 @@ export type JobStatus = "queued" | "running" | "done" | "error";
 /** The minimal job shape a handler needs (the claimed, now-`running` row). */
 export interface JobRecord extends RegistryJobRecord {
   status: JobStatus;
+  /** When it was queued; with the claim time, how long it waited. */
+  createdAt?: Date;
 }
 
 /** The DB surface the runner drives; implemented by `lib/jobs/queries.ts`. */
 export interface JobStore {
   /** Atomically claim the next `queued` job, or null when the queue is empty. */
-  claimNextQueued(projectId?: string, createdBefore?: Date): Promise<JobRecord | null>;
+  claimNextQueued(
+    projectId?: string,
+    createdBefore?: Date,
+    options?: { avoidProjects?: readonly string[] },
+  ): Promise<JobRecord | null>;
   /** The instant a drain starts, on the clock the queue stamps `created_at` with. */
   queueClock?(): Promise<Date>;
   markDone(id: string, result: unknown): Promise<void>;
@@ -62,21 +69,35 @@ export async function drainJobs(
   let done = 0;
   let failed = 0;
   const createdBefore = await store.queueClock?.();
+  // Across projects, take turns: the projects this drain just served go to the back of the line
+  // for its next claims.
+  const served: string[] = [];
 
   for (let i = 0; i < max; i++) {
-    const job = await store.claimNextQueued(opts.projectId, createdBefore);
+    const job = opts.projectId
+      ? await store.claimNextQueued(opts.projectId, createdBefore)
+      : await store.claimNextQueued(undefined, createdBefore, { avoidProjects: served });
     if (!job) break;
+    if (!opts.projectId) {
+      const at = served.indexOf(job.projectId);
+      if (at >= 0) served.splice(at, 1);
+      served.push(job.projectId);
+      if (served.length > 50) served.shift();
+    }
     const startedAt = observability?.now() ?? Date.now();
+    const waitMs = job.createdAt ? Math.max(0, startedAt - job.createdAt.getTime()) : null;
     try {
       const handler = handlers[job.kind];
       if (!handler) throw new Error(`no handler for job kind: ${job.kind}`);
       const result = await handler(job);
       await store.markDone(job.id, result ?? null);
+      const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
       await observability?.trackProjectEvent("job_completed", job.projectId, {
         kind: job.kind,
         job_id: job.id,
-        duration_ms: Math.max(0, (observability?.now() ?? Date.now()) - startedAt),
+        duration_ms: durationMs,
       });
+      logJobFinished(job, "done", durationMs, waitMs);
       done++;
     } catch (err) {
       const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
@@ -94,9 +115,58 @@ export async function drainJobs(
         logger.error({ ...captureProperties, err }, "job_failed");
       }
       await store.markError(job.id, err instanceof Error ? err.message : String(err));
+      logJobFinished(job, "error", durationMs, waitMs);
       failed++;
     }
   }
 
   return { done, failed };
+}
+
+/**
+ * One line per finished job, so job time, queue wait and outcome can be read per project and
+ * per kind (`job_finished`), and a kind past its expected run time stands out (`job_over_budget`).
+ */
+export function jobFinishedLines(
+  job: Pick<JobRecord, "id" | "projectId" | "kind">,
+  outcome: "done" | "error",
+  durationMs: number,
+  waitMs: number | null,
+): Array<{
+  level: "info" | "warn";
+  fields: Record<string, unknown>;
+  msg: "job_finished" | "job_over_budget";
+}> {
+  const fields = {
+    project_id: job.projectId,
+    kind: job.kind,
+    job_id: job.id,
+    outcome,
+    duration_ms: durationMs,
+    wait_ms: waitMs,
+  };
+  const budgetMs = jobBudgetMs(job.kind);
+  return [
+    { level: "info", fields, msg: "job_finished" },
+    ...(durationMs > budgetMs
+      ? [
+          {
+            level: "warn" as const,
+            fields: { ...fields, budget_ms: budgetMs },
+            msg: "job_over_budget" as const,
+          },
+        ]
+      : []),
+  ];
+}
+
+function logJobFinished(
+  job: JobRecord,
+  outcome: "done" | "error",
+  durationMs: number,
+  waitMs: number | null,
+): void {
+  for (const line of jobFinishedLines(job, outcome, durationMs, waitMs)) {
+    logger[line.level](line.fields, line.msg);
+  }
 }

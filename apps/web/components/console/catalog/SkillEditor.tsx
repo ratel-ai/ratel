@@ -249,7 +249,7 @@ export function SkillEditor({
                 {...control}
                 value={values.model}
                 onChange={(event) => set("model", event.currentTarget.value)}
-                placeholder="claude-sonnet-5"
+                placeholder="claude-sonnet-5-5"
                 spellCheck={false}
                 className="font-mono"
               />

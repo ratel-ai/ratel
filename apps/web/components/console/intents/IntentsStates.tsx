@@ -9,7 +9,8 @@ import { type ReadingRequest, ReadNow } from "@/components/console/intents/ReadN
  * now; while a reading runs, the loader and a page that reads itself again.
  */
 
-const FRAME = "rounded-lg border border-line dot-grid-fade";
+/** Fills the page body's height when the body grows (All intents), centred. */
+const FRAME = "flex flex-1 flex-col justify-center rounded-lg border border-line dot-grid-backdrop";
 
 /** No reading yet. */
 export function IntentsNoReading({

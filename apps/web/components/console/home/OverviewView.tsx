@@ -6,6 +6,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout } from "@ratel/design-system/states";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
 import type { OverviewData } from "@/lib/views/home/load";
 import { OVERVIEW_WINDOWS, overviewRangeParam } from "@/lib/views/home/overview-model";
@@ -54,6 +55,7 @@ export function OverviewView({
         }
         actions={
           <>
+            {hasTelemetry ? <AnalysisStatus projectId={project.id} section="overview" /> : null}
             <TelemetryStatus lastEventAt={data.lastEventAt} now={now} />
             {hasTelemetry ? <WindowSwitch root={root} window={data.window} /> : null}
             {actions}

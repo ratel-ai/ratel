@@ -14,6 +14,10 @@
 \bposthog\b
 \bresend\b
 \bdeepinfra\b
+# The Cloud homepage and launch waitlist (apps/web)
+see what fills your agent
+filled the limit
+\b(LandingBackdrop|WaitlistScreen)\b
 # Decision engines that stay private (apps/web)
 \bTYPESAFE_API_KEY\b
 \bSAGE_API_KEY\b

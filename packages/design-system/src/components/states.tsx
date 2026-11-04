@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../cn";
-import { DotEmblem } from "./dot-matrix";
+import { DotEmblem, DotLoader } from "./dot-matrix";
 
 /**
  * No data yet, nothing matches, or not set up. Sits inside the area that would
@@ -12,6 +12,7 @@ import { DotEmblem } from "./dot-matrix";
 export function EmptyState({
   icon: Icon,
   emblem = false,
+  working = false,
   title,
   description,
   action,
@@ -21,6 +22,8 @@ export function EmptyState({
   icon?: LucideIcon;
   /** The brand's resting dot mark instead of an icon: first-run and "nothing here yet" moments. */
   emblem?: boolean;
+  /** Not empty, still being worked out: the dot mark moves. Wins over `emblem` and `icon`. */
+  working?: boolean;
   title: string;
   description?: ReactNode;
   action?: ReactNode;
@@ -29,9 +32,13 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center px-6 py-12 text-center", className)}>
-      {emblem ? <DotEmblem className="mb-4" /> : null}
-      {!emblem && Icon ? (
+    <div
+      className={cn("flex flex-col items-center px-6 py-12 text-center", className)}
+      data-empty-working={working ? "" : undefined}
+    >
+      {working ? <DotLoader label={title} className="mb-4" /> : null}
+      {!working && emblem ? <DotEmblem className="mb-4" /> : null}
+      {!working && !emblem && Icon ? (
         <Icon className="mb-3 size-5 text-fg-subtle" strokeWidth={1.5} aria-hidden />
       ) : null}
       <p className="text-sm font-semibold text-fg">{title}</p>

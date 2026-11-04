@@ -15,6 +15,7 @@ identical.
 | `health/summary/` | the Summary's links into Fixes and Tasks (`fix-links`, `task-chains`) |
 | `tasks/` | Tasks: `model` (the list and a task's page), `page-model` (the reads), `queries`, `issues`, `session`, `examples`, `flow-layout`, `status`, `format`, `paths` |
 | `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href` |
+| `freshness/` | where a page's analysis stands: `sections` (the jobs behind each page), `load` (the newest done job and the pending count), `page` (the server's first read), `model` (the poll pacing and the wording) |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
 | `home/` | the Overview: `load` (every read in one round, each degrading on its own, assembled into `OverviewData`), `glance` and `glance-queries` (intents, tasks, self-corrections and fixes, one tile each), `attention` (what needs a look now, from the issues, fixes, intents and context), `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the MCP project overview opens with) |

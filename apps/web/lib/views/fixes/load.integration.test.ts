@@ -246,7 +246,14 @@ test("the crafter's pending draft is a fix with its effect, evidence and price; 
     label: "Strong",
     detail: "Seen 40 times in this window",
   });
-  assert.deepEqual(merge?.gain, { roundTrips: 40, calls: 40, ms: 0 });
+  assert.deepEqual(merge?.gain, {
+    windowDays: null,
+    roundTrips: 40,
+    calls: 40,
+    tokens: null,
+    usd: null,
+    ms: 0,
+  });
   assert.deepEqual(
     merge?.subject.tasks.map((task) => [task.id, task.label, task.color]),
     [["wf_assign", "Hand a task over", "chart-1"]],

@@ -13,24 +13,26 @@ export function TaskGone({
   projectId,
   known,
   reading,
+  listHref,
 }: {
   projectId: string;
   known: boolean;
   reading: boolean;
+  listHref?: string;
 }) {
   return (
     <Page>
       <PageHeader
         title="Task"
         crumbs={[
-          { label: "Agent health", href: agentHealthHref(projectId) },
-          { label: "Tasks", href: tasksHref(projectId) },
+          ...(!listHref ? [{ label: "Agent health", href: agentHealthHref(projectId) }] : []),
+          { label: "Tasks", href: listHref ?? tasksHref(projectId) },
         ]}
       />
       <PageBody>
         <section
           aria-label="Task not found"
-          className="rounded-lg border border-line dot-grid-fade"
+          className="rounded-lg border border-line dot-grid-backdrop"
           data-task-gone=""
         >
           <EmptyState
@@ -45,7 +47,7 @@ export function TaskGone({
             }
             action={
               <Link
-                href={tasksHref(projectId)}
+                href={listHref ?? tasksHref(projectId)}
                 className={buttonVariants({ variant: "secondary" })}
               >
                 Open Tasks
