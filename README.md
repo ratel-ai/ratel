@@ -82,9 +82,11 @@ Model keys are optional, and every field is explained in `.env.example`.
 ```sh
 docker compose up -d --build --wait    # start, or update after a git pull; migrations run on boot
 docker compose down                    # stop, keeping your data
-docker compose logs -f web             # follow the logs
+docker compose logs -f web worker      # follow the logs
 docker compose down --volumes          # stop and DELETE ALL DATA
 ```
+
+Two containers run the app from the same image: `web` serves the console and the API and only queues background work, and `worker` runs it (analysis, sweeps, model calls), so a slow job never holds up a request. To run everything in one container instead, start the image without `APP_ROLE`.
 
 `POSTGRES_PASSWORD` is read only when the database is first created. Changing it later means deleting the data with the last command.
 

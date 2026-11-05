@@ -35,3 +35,26 @@ test("the demo service reaches the database as localhost and gets no model key",
   assert.match(demo, /DATABASE_URL: postgres:\/\/ratel:[^@]+@localhost:5432\/ratel/);
   assert.doesNotMatch(demo, /env_file|API_KEY/);
 });
+
+/** One service's block: from its key to the next service (or the volumes). */
+const service = (name) => {
+  const start = compose.indexOf(`\n  ${name}:`);
+  assert.ok(start >= 0, `${name} is a service`);
+  const next = compose.slice(start + 1).search(/\n {2}[a-z]+:\n|\nvolumes:/);
+  return compose.slice(start, start + 1 + next);
+};
+
+test("web only queues jobs and migrates; the worker runs them, unpublished, and never migrates", () => {
+  const web = service("web");
+  assert.match(web, /<<: \*platform\n/);
+  assert.match(web, /APP_ROLE: api/);
+  assert.match(web, /DATABASE_MIGRATE_ON_BOOT: "1"/);
+
+  const worker = service("worker");
+  assert.match(worker, /<<: \*platform\n/, "the same image and env file as web");
+  assert.match(worker, /APP_ROLE: worker/);
+  assert.match(worker, /NEXT_MANUAL_SIG_HANDLE: "true"/, "a stop waits for the step in flight");
+  assert.match(worker, /web:\n\s+condition: service_healthy/, "starts once web has migrated");
+  assert.doesNotMatch(worker, /ports:/);
+  assert.doesNotMatch(worker, /DATABASE_MIGRATE_ON_BOOT/);
+});

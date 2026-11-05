@@ -576,7 +576,7 @@ jobs:
         run: node protocol/v2/conformance/verify.mjs
 
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
-  # Postgres, migrates on boot and serves.
+  # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
   platform-compose:
     needs: changes
     if: needs.changes.outputs.compose == 'true' || github.event_name != 'pull_request'
@@ -601,7 +601,7 @@ jobs:
             -e "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" \
             -e "s/^TRACE_SIGNALS_HASH_SALT=.*/TRACE_SIGNALS_HASH_SALT=$(openssl rand -hex 32)/" \
             .env
-          docker compose up --detach --wait --wait-timeout 60
+          docker compose up --detach --wait --wait-timeout 120
           curl --fail --silent --show-error --location http://127.0.0.1:3000/ | grep --quiet 'CI &amp; Co'
           # The operator and the organization are constants: a visit writes no identity row, and
           # the open-source schema has no identity table. The first visit seeds the sample
@@ -612,7 +612,7 @@ jobs:
               "select (select count(*) from information_schema.tables where table_schema = 'public' and table_name in ('organizations', 'users', 'memberships')), (select count(*) from projects), (select count(*) from sample_project_seeds)"
           }
           test "$(counts)" = "0|1|1"
-          docker compose up --detach --wait --wait-timeout 60
+          docker compose up --detach --wait --wait-timeout 120
           curl --fail --silent --show-error --location --output /dev/null http://127.0.0.1:3000/
           test "$(counts)" = "0|1|1"
       - name: Demo data
@@ -621,6 +621,14 @@ jobs:
           turns=$(docker compose exec -T db psql -U ratel -d ratel -Atc \
             "select count(*) from trace_turns t join projects p on p.id = t.project_id where p.is_demo and t.status = 'closed'")
           test "$turns" -gt 0
+      - name: Jobs ran only in the worker
+        run: |
+          web=$(docker compose logs --no-log-prefix web | grep -c '"msg":"job_finished"' || true)
+          worker=$(docker compose logs --no-log-prefix worker | grep -c '"msg":"job_finished"' || true)
+          echo "job_finished: web $web, worker $worker"
+          test "$web" -eq 0
+          test "$worker" -gt 0
+          docker compose logs --no-log-prefix worker | grep --quiet 'the worker never migrates'
       - name: Logs
         if: failure()
         run: docker compose logs
