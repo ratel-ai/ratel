@@ -9,6 +9,7 @@ import {
   type McpRouteDeps,
   methodNotAllowed,
 } from "@/lib/mcp/route-handler";
+import { STAGE_META_KEY, TOOL_STAGES } from "@/lib/mcp/stages";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 
 /**
@@ -34,6 +35,7 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     perKeyLimiter: createTokenBucketRateLimiter({ limitPerMinute: 60, burst: 120 }),
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
+    loopEnabled: async () => true,
     ...overrides,
   };
 }
@@ -104,8 +106,25 @@ const TOOLS_BEFORE_LOOP: Array<Record<string, unknown> & { name: string }> = JSO
   readFileSync(new URL("./__fixtures__/tools-list-before-loop.json", import.meta.url), "utf8"),
 );
 
+test("with the loop off, the loop tools are not listed", async () => {
+  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
+  const body = await (await handler(rpc("tools/list"))).json();
+  const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
+  for (const hidden of [
+    "list_insights",
+    "get_fix",
+    "run_eval",
+    "create_experiment",
+    "mark_fix_shipped",
+  ]) {
+    assert.ok(!names.includes(hidden), `${hidden} should be hidden without the flag`);
+  }
+  assert.ok(names.includes("list_traces"));
+});
+
 test("with the loop off, every tool definition is exactly what it was before the loop", async () => {
-  const { body } = await call("tools/list");
+  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
+  const body = await (await handler(rpc("tools/list"))).json();
   const tools: Array<Record<string, unknown> & { name: string }> = body.result.tools;
 
   assert.deepEqual(
@@ -114,6 +133,48 @@ test("with the loop off, every tool definition is exactly what it was before the
     "no tool publishes _meta with the flag off",
   );
   assert.deepEqual(tools, TOOLS_BEFORE_LOOP, "the whole flag-off list, order included");
+});
+
+test("each tool in the loop publishes its stage as metadata", async () => {
+  const { body } = await call("tools/list");
+  const tools: Array<{ name: string; _meta?: Record<string, unknown> }> = body.result.tools;
+
+  assert.equal(
+    tools.find((tool) => tool.name === "list_traces")?._meta?.["sh.ratel/stage"],
+    "monitor",
+  );
+  assert.equal(
+    tools.find((tool) => tool.name === "list_insights")?._meta?.["sh.ratel/stage"],
+    "insights",
+  );
+  assert.equal(
+    tools.find((tool) => tool.name === "run_eval")?._meta?.["sh.ratel/stage"],
+    "improve",
+  );
+  assert.equal(
+    tools.find((tool) => tool.name === "mark_fix_shipped")?._meta?.["sh.ratel/stage"],
+    "ship",
+  );
+});
+
+test("with the loop on, an existing tool changes only by its stage _meta", async () => {
+  const { body } = await call("tools/list");
+  const listed = new Map<string, Record<string, unknown>>(
+    body.result.tools.map((tool: Record<string, unknown> & { name: string }) => [tool.name, tool]),
+  );
+  let staged = 0;
+  for (const before of TOOLS_BEFORE_LOOP) {
+    const { _meta, ...rest } = listed.get(before.name) ?? {};
+    assert.deepEqual(rest, before, `${before.name} keeps its definition`);
+    const stage = TOOL_STAGES[before.name];
+    assert.deepEqual(
+      _meta,
+      stage ? { [STAGE_META_KEY]: stage } : undefined,
+      `${before.name} publishes its stage, and only that`,
+    );
+    if (stage) staged++;
+  }
+  assert.ok(staged > 0, "existing tools carry a stage with the flag on");
 });
 
 test("each tool publishes a schema and a read-only or mutating annotation", async () => {

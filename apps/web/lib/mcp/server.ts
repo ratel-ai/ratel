@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchDeps, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation, Registry } from "@/lib/mcp/registry";
+import { stageMeta, TOOL_STAGES } from "@/lib/mcp/stages";
 
 export const MCP_SERVER_NAME = "ratel-cloud";
 export const MCP_SERVER_VERSION = "0.1.0";
@@ -37,6 +38,12 @@ export interface McpServerDeps {
   /** Resolves a project's owning organization, for OAuth membership checks. */
   projectOwner?: DispatchDeps["projectOwner"];
   onOutcome?: DispatchDeps["onOutcome"];
+  /**
+   * Whether the improvement-loop tools are on for this request (`FF_MCP_LOOP`).
+   * Only then do tools carry their loop stage as `_meta`; off, every tool is
+   * listed exactly as before.
+   */
+  includeLoop?: boolean;
 }
 
 function asToolResult(payload: unknown, isError = false) {
@@ -102,6 +109,11 @@ export function createRatelMcpServer(deps: McpServerDeps): McpServer {
         description: operation.description,
         inputSchema: operation.params,
         annotations: annotationsFor(operation),
+        // With the loop on, each staged tool (existing ones included) publishes its
+        // loop stage from lib/mcp/stages.ts. With it off no tool has _meta, as before.
+        ...(deps.includeLoop && TOOL_STAGES[operation.id]
+          ? { _meta: stageMeta(operation.id) }
+          : {}),
       },
       async (args: Record<string, unknown>) => {
         // Params are re-validated inside dispatch. The SDK has already checked

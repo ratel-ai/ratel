@@ -89,6 +89,9 @@ export const SERVER_EVENT_NAMES = [
   "fix_eval_case_removed",
   "fix_eval_simulation_completed",
   "fix_eval_simulation_failed",
+  "fix_eval_run",
+  "fix_experiment_created",
+  "fix_shipped",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

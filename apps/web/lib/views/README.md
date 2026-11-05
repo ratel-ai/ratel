@@ -71,13 +71,11 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   (with its PGlite test `loop-queries.integration.test.ts`). `lineage/lineage.test.ts`: this
   edition has one plan, so only a limit override closes the run behind an insight.
   `stage-spine-flag.ts` (new) replaces upstream's `cloud-stage-spine` flag.
-  `lineage/trail.integration.test.ts` is not here yet: it drives the improvement-loop MCP tools.
 - `eval-gate/gate.ts` (one env switch in place of upstream's per-organization flag, with
   `gate.test.ts`), `models.ts` (calls reported through `platform/model-call`), `store.ts` and
   `service.ts`, `page-model.ts` (the two seams above), `seams.ts`, `register.ts` and
   `no-outbound-without-key.test.ts` (new), and the two integration tests (no plan column; the
   no-key and mock cases with the network cut are at the end of `replay.integration.test.ts`).
-  `observability.test.ts` is not here yet: it reads the improvement-loop MCP tools.
 - `intents/map/queries.ts`: the tool-step read is `mapSeams.loadToolSteps`, filled by
   `intents/map/tool-steps.ts` (new: upstream's `loadToolSteps` body and `TOOL_STEP_READ_LIMIT`,
   with its PGlite test `tool-steps.integration.test.ts`); `intents/hrefs.ts`:
