@@ -49,6 +49,7 @@
     { "from": "@/components/ui/useCopyToClipboard", "to": "@ratel/design-system/use-copy-to-clipboard", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/improvement/fixes/", "to": "@/app/(console)/project/[projectId]/improvement/fixes/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
+    { "from": "@/components/session-replay/", "to": "@/components/console/session-replay/" },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
     { "from": "@/components/traces/TraceLifecycleEvents", "to": "@/components/console/traces/compare/TraceLifecycleEvents", "exact": true },

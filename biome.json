@@ -1032,7 +1032,9 @@
         "apps/web/app/(console)/project/\\[projectId\\]/settings/api-keys/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/settings/danger/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/settings/developer/loading.tsx",
-        "apps/web/app/(console)/project/\\[projectId\\]/improvement/loading.tsx"
+        "apps/web/app/(console)/project/\\[projectId\\]/improvement/loading.tsx",
+        "apps/web/lib/views/session-replay/**",
+        "apps/web/components/console/session-replay/**"
       ],
       "linter": {
         "rules": {

@@ -1704,6 +1704,19 @@
     { "from": "apps/web/app/(app)/project/[projectId]/settings/api-keys/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/api-keys/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/danger/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/danger/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/developer/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/developer/loading.tsx", "mode": "copy" },
-    { "from": "apps/web/app/(app)/project/[projectId]/improvement/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/loading.tsx", "mode": "copy" }
+    { "from": "apps/web/app/(app)/project/[projectId]/improvement/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/loading.tsx", "mode": "copy" },
+    { "$slice": "session-replay", "from": "apps/web/lib/session-replay", "to": "apps/web/lib/views/session-replay", "mode": "copy" },
+    { "from": "apps/web/lib/session-replay/fork.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/fork.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/job.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.integration.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/variant.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/replay-input-golden.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/gate.ts", "mode": "excluded", "$why": "a Cloud analytics organization flag; the core reads FF_SESSION_REPLAY through flags-env (views/session-replay-flag.ts)" },
+    { "from": "apps/web/lib/session-replay/gate.test.ts", "mode": "excluded", "$why": "tests the excluded gate" },
+    { "from": "apps/web/components/session-replay", "to": "apps/web/components/console/session-replay", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/sessions/[sessionId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/sessions/[sessionId]/page.tsx", "mode": "owned", "$why": "the project comes from the console scope; gated by FF_SESSION_REPLAY instead of the Cloud organization flag" }
   ]
 }
