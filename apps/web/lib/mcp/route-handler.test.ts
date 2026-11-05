@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { McpOperationError } from "@/lib/mcp/errors";
@@ -92,6 +93,27 @@ test("tools/list exposes every operation as its own tool, plus whoami", async ()
     assert.ok(names.includes(expected), `${expected} should be directly callable`);
   }
   assert.ok(!names.includes("execute_operation"), "the gateway façade is gone");
+});
+
+/**
+ * The tools/list surface before the improvement-loop tools, captured from this build's route
+ * handler. With the loop off, nothing a client sees may differ: same tools, same names, titles,
+ * descriptions, schemas and annotations, and no `_meta`.
+ */
+const TOOLS_BEFORE_LOOP: Array<Record<string, unknown> & { name: string }> = JSON.parse(
+  readFileSync(new URL("./__fixtures__/tools-list-before-loop.json", import.meta.url), "utf8"),
+);
+
+test("with the loop off, every tool definition is exactly what it was before the loop", async () => {
+  const { body } = await call("tools/list");
+  const tools: Array<Record<string, unknown> & { name: string }> = body.result.tools;
+
+  assert.deepEqual(
+    tools.filter((tool) => "_meta" in tool).map((tool) => tool.name),
+    [],
+    "no tool publishes _meta with the flag off",
+  );
+  assert.deepEqual(tools, TOOLS_BEFORE_LOOP, "the whole flag-off list, order included");
 });
 
 test("each tool publishes a schema and a read-only or mutating annotation", async () => {
