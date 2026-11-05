@@ -7,6 +7,8 @@
  * and guarded by a process-global handle so a dev server's module reloads do not stack timers.
  * Several replicas may each run it: the claim is atomic and the steps are idempotent.
  */
+import { appRole } from "./role";
+
 export type SchedulerDeps = {
   tick: () => Promise<unknown>;
   intervalMs?: number;
@@ -98,9 +100,12 @@ export function inProcessCronEnabled(
 
 /**
  * An external scheduler can only reach the drain with `CRON_SECRET`, so a deployment that
- * relies on one without a secret would never run a tick. Refuse to boot instead.
+ * relies on one without a secret would never run a tick. Refuse to boot instead. Only the
+ * all-in-one process relies on one: an API-only process leaves the tick to the worker, and the
+ * worker is its own clock (`boot-plan.ts`).
  */
 export function assertCronConfig(env: Record<string, string | undefined> = process.env): void {
+  if (appRole(env) !== "all") return;
   if (inProcessCronEnabled(env) || env.CRON_SECRET?.trim()) return;
   throw new Error(
     "RATEL_CRON=external needs CRON_SECRET: without it GET /api/cron/drain answers 401 and no tick ever runs",

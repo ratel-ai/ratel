@@ -177,6 +177,14 @@ test("an external scheduler without a secret is a boot error; in-process needs n
   assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "inprocess" }));
 });
 
+test("only the all-in-one process depends on an external scheduler's secret", () => {
+  assert.throws(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "all" }), /CRON_SECRET/);
+  // An API-only process leaves the tick to the worker, and the worker is its own clock.
+  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "api" }));
+  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "worker" }));
+  assert.doesNotThrow(() => assertCronConfig({ RATEL_COMPOSITION: "cloud", APP_ROLE: "worker" }));
+});
+
 test("RATEL_CRON decides where the tick runs; unset means in process for the open-source edition", () => {
   assert.equal(inProcessCronEnabled({ RATEL_CRON: "inprocess" }), true);
   assert.equal(inProcessCronEnabled({ RATEL_CRON: "external", RATEL_COMPOSITION: "oss" }), false);

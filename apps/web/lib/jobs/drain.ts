@@ -6,6 +6,7 @@ import {
   createBackgroundObservability,
   defaultBackgroundObservabilityDeps,
 } from "./observability";
+import { type AppRole, appRole } from "./role";
 import { drainProjectJobs } from "./store";
 
 /**
@@ -112,12 +113,19 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
  * including jobs that spend the operator's model keys. The open-source edition never needs
  * the route, its scheduler runs the tick in process.
  */
-export async function drainCron(req: Request, deps?: DrainCronDeps): Promise<Response> {
+export async function drainCron(
+  req: Request,
+  deps?: DrainCronDeps,
+  role: AppRole = appRole(),
+): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return new Response("CRON_SECRET is not configured", { status: 401 });
   if (req.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
+  // An API-only task leaves the sweeps and the drain to the worker, which runs
+  // them on its own timer.
+  if (role === "api") return Response.json({ ok: true, skipped: "worker" }, { status: 202 });
   const summary = await runDrainTick(deps);
   return Response.json(summary, { status: summary.ok ? 200 : 500 });
 }

@@ -185,6 +185,41 @@ test("the route is closed without a configured secret, and to a caller without t
   }
 });
 
+test("an API-only process answers the tick without running it, behind the same bearer", async () => {
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "s3cret";
+  let ticks = 0;
+  const deps = tick([], {
+    observability: observability().deps,
+    drainProjectJobs: async () => {
+      ticks++;
+      return { done: 0, failed: 0 };
+    },
+  });
+  const authorized = () =>
+    new Request("http://localhost/api/cron/drain", {
+      headers: { authorization: "Bearer s3cret" },
+    });
+  try {
+    const denied = await drainCron(new Request("http://localhost/api/cron/drain"), deps, "api");
+    assert.equal(denied.status, 401, "the role is not told to a caller without the bearer");
+
+    const skipped = await drainCron(authorized(), deps, "api");
+    assert.equal(skipped.status, 202);
+    assert.deepEqual(await skipped.json(), { ok: true, skipped: "worker" });
+    assert.equal(ticks, 0, "the worker runs the tick, on its own timer");
+
+    // The worker's own server still answers a tick: its port is not published, and the
+    // atomic claim keeps a tick here from overlapping the loop's work.
+    assert.equal((await drainCron(authorized(), deps, "worker")).status, 200);
+    assert.equal((await drainCron(authorized(), deps, "all")).status, 200);
+    assert.equal(ticks, 2);
+  } finally {
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
+  }
+});
+
 test("a failed tick answers 500 so an external scheduler can alert on it", async () => {
   const previous = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "s3cret";
