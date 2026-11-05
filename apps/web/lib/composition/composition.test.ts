@@ -100,6 +100,7 @@ describe("createComposition", () => {
         label: "APIs",
         items: [
           { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
         ],
       },
     ]);
