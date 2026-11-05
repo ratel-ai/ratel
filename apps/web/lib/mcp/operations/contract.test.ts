@@ -75,6 +75,29 @@ test("write operations are exactly those declaring mutates", () => {
   );
 });
 
+test("without the loop flag, the loop tools are absent and nothing else changes", () => {
+  const withoutLoop = assembleOperations({ includeLoop: false }).map((operation) => operation.id);
+  const loop = [
+    "list_insights",
+    "list_fixes",
+    "get_fix",
+    "get_eval",
+    "run_eval",
+    "create_experiment",
+    "mark_fix_shipped",
+  ];
+
+  for (const id of loop)
+    assert.ok(!withoutLoop.includes(id), `${id} must be hidden without FF_MCP_LOOP`);
+  assert.deepEqual(
+    withoutLoop.sort(),
+    operations
+      .map((operation) => operation.id)
+      .filter((id) => !loop.includes(id))
+      .sort(),
+  );
+});
+
 test("read-only assembly drops every mutating operation", () => {
   const readOnly = assembleOperations({ includeWrites: false });
 
@@ -130,6 +153,15 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["import_skills", true],
   ["set_catalog_override", true],
   ["generate_tool_crafts", true],
+  // The improvement loop (RC-43), behind FF_MCP_LOOP. run_eval mutates: the
+  // eval gate (RC-46) records each simulation it runs.
+  ["list_insights", false],
+  ["list_fixes", false],
+  ["get_fix", false],
+  ["get_eval", false],
+  ["run_eval", true],
+  ["create_experiment", true],
+  ["mark_fix_shipped", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

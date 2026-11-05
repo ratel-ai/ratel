@@ -3,6 +3,7 @@ import { calibrationOperations } from "@/lib/mcp/operations/calibration";
 import { catalogOperations } from "@/lib/mcp/operations/catalog";
 import { improvementOperations } from "@/lib/mcp/operations/improvement";
 import { joinsOperations } from "@/lib/mcp/operations/joins";
+import { loopReadOperations, loopWriteOperations } from "@/lib/mcp/operations/loop";
 import { observabilityOperations } from "@/lib/mcp/operations/observability";
 import { playgroundOperations } from "@/lib/mcp/operations/playground";
 import { scopeOperations } from "@/lib/mcp/operations/scope";
@@ -18,10 +19,17 @@ import { buildRegistry, type McpOperation, type Registry } from "@/lib/mcp/regis
 export interface AssembleOptions {
   /** Omit write operations, for a read-only deployment or a read-only test. */
   includeWrites?: boolean;
+  /**
+   * The improvement-loop tools (`lib/mcp/operations/loop`), behind
+   * `FF_MCP_LOOP`. Defaults to true so the contract tests see the whole
+   * surface; the route passes the caller's flag decision.
+   */
+  includeLoop?: boolean;
 }
 
 export function assembleOperations(options: AssembleOptions = {}): McpOperation[] {
   const includeWrites = options.includeWrites ?? true;
+  const includeLoop = options.includeLoop ?? true;
   return [
     ...scopeOperations(),
     ...catalogOperations(),
@@ -33,9 +41,11 @@ export function assembleOperations(options: AssembleOptions = {}): McpOperation[
     ...accountOperations(),
     ...joinsOperations(),
     ...playgroundOperations(),
+    ...(includeLoop ? loopReadOperations() : []),
     ...(includeWrites
       ? [...writeOperations(), ...runtimeWriteOperations(), ...toolCrafterWriteOperations()]
       : []),
+    ...(includeWrites && includeLoop ? loopWriteOperations() : []),
   ];
 }
 

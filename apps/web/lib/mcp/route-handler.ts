@@ -7,10 +7,13 @@ import {
 } from "@/lib/mcp/auth";
 import { clientAddress } from "@/lib/mcp/client-address";
 import { type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
+import { mcpLoopEnabled } from "@/lib/mcp/loop-flag";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
+import { loopReadOperations, loopWriteOperations } from "@/lib/mcp/operations/loop";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
+import { TOOL_STAGES } from "@/lib/mcp/stages";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { currentLogContext, getLogger, setLogContext } from "@/lib/platform/logger";
@@ -58,6 +61,16 @@ const CREDENTIAL_FAILURE_LIMIT = { limitPerMinute: 20, burst: 40 };
 /** Requests are JSON-RPC envelopes, not payloads. 256 KiB is already generous. */
 const MAX_BODY_BYTES = 256 * 1024;
 
+let loopToolIds: ReadonlySet<string> | null = null;
+
+/** Whether a tool is one of the improvement-loop tools (`FF_MCP_LOOP`), for the logs. */
+export function isLoopTool(operationId: string): boolean {
+  loopToolIds ??= new Set(
+    [...loopReadOperations(), ...loopWriteOperations()].map((operation) => operation.id),
+  );
+  return loopToolIds.has(operationId);
+}
+
 /** A stateless server has no reason to accept a batch large enough to amplify. */
 const MAX_BATCH = 5;
 
@@ -68,6 +81,8 @@ export interface McpRouteDeps {
   perKeyLimiter: ReturnType<typeof createTokenBucketRateLimiter>;
   globalLimiter: ReturnType<typeof createTokenBucketRateLimiter>;
   trackServerEvent: typeof trackServerEvent;
+  /** Whether the improvement-loop tools are listed for this caller (`FF_MCP_LOOP`). */
+  loopEnabled?: (auth: McpAuthContext) => Promise<boolean>;
   now?: () => number;
 }
 
@@ -77,6 +92,7 @@ export const defaultRouteDeps: McpRouteDeps = {
   perKeyLimiter: createTokenBucketRateLimiter(PER_KEY_LIMIT),
   globalLimiter: createTokenBucketRateLimiter(GLOBAL_LIMIT),
   trackServerEvent,
+  loopEnabled: mcpLoopEnabled,
 };
 
 /**
@@ -288,10 +304,12 @@ async function runMessages(
   auth: McpAuthContext,
   deps: McpRouteDeps,
 ): Promise<JSONRPCMessage[]> {
-  const registry = buildRequestRegistry();
+  const includeLoop = await (deps.loopEnabled ?? mcpLoopEnabled)(auth);
+  const registry = buildRequestRegistry({ includeLoop });
   const server = createRatelMcpServer({
     auth,
     registry,
+    includeLoop,
     describeCaller,
     projectOwner: async (projectId) => {
       const project = await getProjectById(projectId);
@@ -305,7 +323,15 @@ async function runMessages(
         mutates: outcome.mutates,
         truncated: outcome.truncated,
       };
-      logger.info(properties, "mcp operation executed");
+      // `loop` and `stage` tell the improvement-loop tools apart in the logs.
+      logger.info(
+        {
+          ...properties,
+          loop: isLoopTool(outcome.operationId),
+          stage: TOOL_STAGES[outcome.operationId] ?? null,
+        },
+        "mcp operation executed",
+      );
       // The request's `api_request` line names the tools it called.
       const called = currentLogContext().mcp_operation;
       setLogContext({
