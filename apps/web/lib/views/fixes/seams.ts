@@ -2,6 +2,7 @@ import type { OrgLimitView } from "@/lib/contracts/entitlements";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import type { RewriteInput } from "./build";
 import type { CraftKind, RoundTripPrice } from "./crafter-types";
+import type { FixShipmentRow, NewFixShipmentRow } from "./schema";
 import type { CraftDetail, FixEffect, FixEvidence, FixGain } from "./types";
 
 /**
@@ -60,6 +61,16 @@ export interface FixSeams {
   ) => Promise<RewriteRead>;
   /** What one model round trip costs the project, from a run's day buckets. Unset: no price. */
   priceOf?: (daily: unknown) => RoundTripPrice;
+  /**
+   * Records a fix as shipped in place of the plain insert: the task loop marks it live and
+   * queues its tasks for measuring, in one transaction. `write` inserts the row. Unset: the
+   * shipment is one inserted row.
+   */
+  recordShipment?: (
+    input: NewFixShipmentRow,
+    write: (values: NewFixShipmentRow) => Promise<FixShipmentRow>,
+    db: unknown,
+  ) => Promise<FixShipmentRow>;
 }
 
 export const fixSeams: FixSeams = {};

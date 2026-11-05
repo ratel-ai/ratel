@@ -11,6 +11,7 @@ import {
   HeartPulse,
   House,
   Orbit,
+  Rocket,
   Settings,
   Sparkles,
   Users,
@@ -32,5 +33,6 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   billing: CreditCard,
   embeddings: Database,
   "tool-picker": Crosshair,
+  ship: Rocket,
   edition: Blocks,
 };

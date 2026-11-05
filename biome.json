@@ -1037,7 +1037,13 @@
         "apps/web/lib/views/session-replay/**",
         "!apps/web/lib/views/session-replay/load.test.ts",
         "!apps/web/lib/views/session-replay/annotations-load.test.ts",
-        "apps/web/components/console/session-replay/**"
+        "apps/web/components/console/session-replay/**",
+        "apps/web/lib/views/lineage/**",
+        "!apps/web/lib/views/lineage/lineage.test.ts",
+        "!apps/web/lib/views/lineage/schema.ts",
+        "apps/web/lib/views/fixes/shipped.ts",
+        "apps/web/components/console/lineage/**",
+        "!apps/web/components/console/lineage/ExperimentSource.tsx"
       ],
       "linter": {
         "rules": {
@@ -1055,6 +1061,7 @@
         "apps/web/components/console/tasks/**",
         "apps/web/components/console/self-corrections/**",
         "apps/web/components/console/session-replay/**",
+        "apps/web/components/console/lineage/**",
         "apps/web/components/console/adaptive-ranking/**",
         "apps/web/components/console/quality/**",
         "apps/web/components/console/fixes/**",

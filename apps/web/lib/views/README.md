@@ -1,6 +1,7 @@
 # `lib/views` (L6)
 
-The read models behind the Agent health, Intents and Traces turn pages: what each page loads,
+The read models behind the Agent health, Intents and Traces turn pages, and the improvement
+loop's modules that read and write beside them (lineage, a fix's shipments): what each page loads,
 in which order, with which fallbacks, and the pure functions that turn rows into the words,
 numbers and layouts the components draw. Nothing here imports a component or a page; the pages
 (`app/(console)/project/[projectId]/{health,intents,traces/turns}`) and the components land with
@@ -14,7 +15,9 @@ identical.
 | `health/self-corrections/` | the Self-corrections page and card: `page-load`, `page-model`, `page-queries`, `example`, `paths` |
 | `health/summary/` | the Summary's links into Fixes and Tasks (`fix-links`, `task-chains`) |
 | `tasks/` | Tasks: `model` (the list and a task's page), `page-model` (the reads), `queries`, `issues`, `session`, `examples`, `flow-layout`, `status`, `format`, `paths` |
-| `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href` |
+| `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href`; the Improve → Ship half: `schema` (`fix_experiments`, `fix_shipments`, `fix_shipment_tasks`), `loop-queries` (the experiments declared for a fix and the record that it shipped) and `shipped` (which fixes shipped, derived from those rows) |
+| `lineage/` | where each object came from, Monitor → Insights → Improve → Ship: `types` and `refs` (a `LineageRef`, where it opens), `resolve` (one step back, the whole chain, and `recordLineage`), `shipments` and `trail` (the Ship page's list and a shipment's trail), `turn-traces`, `plan`, `stages`, `route` (the lineage endpoint's logic, every boundary injected), `schema` (`lineage_links`). Behind `FF_STAGE_SPINE`, read by `stage-spine-flag.ts`: the Ship page, `GET /api/projects/<id>/lineage`, the rail grouped by stage, the source links and the shipped marks |
+| `eval-gate/` | `schema` only for now (`fix_eval_sets`, `fix_eval_cases`, `fix_eval_runs`): a shipment's trail reads the newest eval set; the module itself lands in its own slice |
 | `freshness/` | where a page's analysis stands: `sections` (the jobs behind each page), `load` (the newest done job and the pending count), `page` (the server's first read), `model` (the poll pacing and the wording) |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
@@ -33,6 +36,7 @@ part named below.
 | Seam | Filled by | Empty means |
 |---|---|---|
 | `fixes/seams.ts` `fixSeams.loadDrafts`, `.priceOf`, `.loadRewrites` | filled: the tool crafter's drafts and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` and `craftEffect` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites by `quality/fix-rewrites.ts` | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
+| `fixes/seams.ts` `fixSeams.recordShipment` | the task loop: marking a shipment live and queuing its tasks for measuring, in one transaction | `createFixShipment` inserts one `fix_shipments` row; `fix_shipment_tasks` stays empty |
 | `tasks/seams.ts` `tasksSeams.loadDrafts` | filled: the tool crafter's pending drafts by `fixes/craft-drafts.ts` (upstream's `fixSources`), loaded with `fixes/load.ts`, which `tasks/page-model.ts` imports | a task's page shows no drafted fix |
 | `intents/map/seams.ts` `mapSeams.loadToolSteps` | the tool explorer: `intents/map/tool-steps.ts` reads the latest completed run's turn-scope `next` edges (`readings/tool-explorer/queries.ts#listTransitions`) and `map/queries.ts` imports it | the Map draws no "came next" arrows between tools |
 
@@ -58,6 +62,13 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   `craft-drafts.test.ts`), `fixes/test-fixtures.ts`, `fixes/build.test.ts`,
   `fixes/load.integration.test.ts`: drafted changes arrive as `DraftFixInput` through the seam;
   the build's craft cases run on `DraftFixInput` fixtures and the filler's on the crafter's cards.
+- `fixes/schema.ts`, `lineage/schema.ts`, `eval-gate/schema.ts`: hand-written partitions of the
+  upstream schema hub, column for column, because production already has these tables.
+  `fixes/loop-queries.ts`: a shipment is one inserted row, the rest is the `recordShipment` seam
+  (with its PGlite test `loop-queries.integration.test.ts`). `lineage/lineage.test.ts`: this
+  edition has one plan, so only a limit override closes the run behind an insight.
+  `stage-spine-flag.ts` (new) replaces upstream's `cloud-stage-spine` flag.
+  `lineage/trail.integration.test.ts` is not here yet: it drives the improvement-loop MCP tools.
 - `intents/map/queries.ts`: the tool-step read is `mapSeams.loadToolSteps`, filled by
   `intents/map/tool-steps.ts` (new: upstream's `loadToolSteps` body and `TOOL_STEP_READ_LIMIT`,
   with its PGlite test `tool-steps.integration.test.ts`); `intents/hrefs.ts`:

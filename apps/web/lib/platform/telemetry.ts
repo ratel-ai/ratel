@@ -81,6 +81,7 @@ export const SERVER_EVENT_NAMES = [
   "topic_run_requested",
   "topic_run_completed",
   "topic_run_failed",
+  "lineage_link_recorded",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

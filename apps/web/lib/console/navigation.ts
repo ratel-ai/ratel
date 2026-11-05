@@ -75,6 +75,7 @@ export function consoleNav({
   additions,
   organizationAdditions = [],
   projectGroups = [],
+  stageSpine = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -83,6 +84,11 @@ export function consoleNav({
   organizationAdditions?: readonly OrganizationNavItem[];
   /** Project page groups the edition adds (`composition.projectNav`), before Settings. */
   projectGroups?: readonly ProjectNavGroup[];
+  /**
+   * `FF_STAGE_SPINE`: the project rail grouped into the four stages, Monitor, Insights, Improve
+   * and Ship, then setup. Off: today's rail.
+   */
+  stageSpine?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const organization: NavItem[] = organizationSlug
@@ -255,7 +261,7 @@ export function consoleNav({
       ]
     : organization;
   return [
-    ...core,
+    ...(root && stageSpine ? stageSpineNav(root, core) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -263,6 +269,41 @@ export function consoleNav({
       icon: "edition" as const,
       section: "edition" as const,
     })),
+  ];
+}
+
+/**
+ * Group the project rail by stage (upstream's `stageSpineNav`, in this flat model: a stage is a
+ * labelled section). Ship is the one new page. Tasks stays under Agent health: its own pages
+ * arrive with the task loop.
+ */
+function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
+  const pick = (id: string): NavItem => {
+    const item = classic.find((candidate) => candidate.id === id);
+    if (!item) throw new Error(`the classic rail has no ${id}`);
+    return item;
+  };
+  const stage = (id: string, label: string, items: NavItem[]): NavItem[] =>
+    items.map((item, index) => ({
+      ...item,
+      section: `group:${id}` as const,
+      ...(index === 0 ? { sectionLabel: label } : {}),
+    }));
+  const ship: NavItem = {
+    id: "ship",
+    label: "Ship",
+    href: `${root}/ship`,
+    icon: "ship",
+    shortcut: "l",
+  };
+  return [
+    ...stage("monitor", "Monitor", [pick("overview"), pick("health"), pick("traces")]),
+    ...stage("insights", "Insights", [pick("intents")]),
+    ...stage("improve", "Improve", [pick("improvements")]),
+    ...stage("ship", "Ship", [ship]),
+    ...classic.filter((item) => item.section?.startsWith("group:")),
+    { ...pick("catalog"), section: "settings" },
+    pick("settings"),
   ];
 }
 

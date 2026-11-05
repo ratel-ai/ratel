@@ -32,6 +32,7 @@ export type NavIconName =
   | "billing"
   | "embeddings"
   | "tool-picker"
+  | "ship"
   | "edition";
 
 /** An organization page an edition adds: `/org/<slug>/<path>`. */

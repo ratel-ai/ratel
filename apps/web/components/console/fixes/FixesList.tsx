@@ -28,6 +28,7 @@ import {
 import { descriptionHref, type FixFilters, hasFilters } from "@/lib/views/fixes/href";
 import { FIX_KIND_LABELS, FIX_KINDS, type FixKind } from "@/lib/views/fixes/kinds";
 import { filterFixes, findFix } from "@/lib/views/fixes/select";
+import { type FixShipped, shippedFor, shippedLabel } from "@/lib/views/fixes/shipped";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import { relativeTimeLabel } from "@/lib/views/intents/adaptive-view";
 import { settle } from "@/lib/views/quality/suggestions";
@@ -58,7 +59,16 @@ const ROW_ACTION: Readonly<Record<FixGroup, string>> = {
  * Filters (kind and task as menus, tool and intent as chips) and the open
  * fix (`?peek=`) live in the URL.
  */
-export function FixesList({ model, now }: { model: FixesModel; now: string }) {
+export function FixesList({
+  model,
+  now,
+  shipped = null,
+}: {
+  model: FixesModel;
+  now: string;
+  /** Each shipped fix's newest shipment, by fix id (RC-72); null when `FF_STAGE_SPINE` is off. */
+  shipped?: Readonly<Record<string, FixShipped>> | null;
+}) {
   const router = useRouter();
   const peek = usePeek();
   const [filters, setFilters, hrefWith] = useFixFilters();
@@ -231,7 +241,7 @@ export function FixesList({ model, now }: { model: FixesModel; now: string }) {
       className: "max-w-0 max-xl:w-full xl:min-w-72",
       cell: (fix) => (
         <span className="flex min-w-0 flex-col gap-1.5 max-xl:py-2">
-          <FixTitleCell fix={fix} />
+          <ShippedTitle fix={fix} shipped={shippedFor(shipped, fix)} />
           <span className="flex min-w-0 pl-6.5 xl:hidden">{pins(fix)}</span>
         </span>
       ),
@@ -350,12 +360,18 @@ export function FixesList({ model, now }: { model: FixesModel; now: string }) {
           if (!next) peek.close();
         }}
         title={showing?.short ?? ""}
-        subtitle={showing ? subtitleOf(showing) : undefined}
+        subtitle={showing ? subtitleOf(showing, shippedFor(shipped, showing)) : undefined}
         onPrevious={() => step(-1)}
         onNext={() => step(1)}
       >
         {showing ? (
-          <FixDetail key={showing.id} fix={showing} actions={panelActions(showing)} />
+          <FixDetail
+            key={showing.id}
+            fix={showing}
+            actions={panelActions(showing)}
+            projectId={model.projectId}
+            shipped={shippedFor(shipped, showing)}
+          />
         ) : null}
       </Panel>
     </>
@@ -424,10 +440,28 @@ function DescriptionsAside({
   );
 }
 
-function subtitleOf(fix: Fix): string {
-  return [FIX_GROUP_TITLES[fix.group], fix.kindLabel, fix.status === "applied" ? "Applied" : null]
+function subtitleOf(fix: Fix, shipped: FixShipped | null): string {
+  return [
+    FIX_GROUP_TITLES[fix.group],
+    fix.kindLabel,
+    fix.status === "applied" ? "Applied" : null,
+    shipped ? shippedLabel(shipped) : null,
+  ]
     .filter(Boolean)
     .join(" · ");
+}
+
+/** The title, and "Shipped in v2.5.0" beside it once `mark_fix_shipped` recorded it (RC-72); unshipped, the title alone, as before. */
+function ShippedTitle({ fix, shipped }: { fix: Fix; shipped: FixShipped | null }) {
+  if (!shipped) return <FixTitleCell fix={fix} />;
+  return (
+    <span className="flex min-w-0 items-center gap-3">
+      <FixTitleCell fix={fix} />
+      <span className="shrink-0" data-fix-shipped={shipped.version}>
+        <StatusDot tone="success" label={shippedLabel(shipped)} className="text-xs" />
+      </span>
+    </span>
+  );
 }
 
 /** Kind and task as menus, tool and intent as chips, and how many are listed. */

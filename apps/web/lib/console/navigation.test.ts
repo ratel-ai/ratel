@@ -376,3 +376,57 @@ test("visibleOrganizationNav hides only the paths given", () => {
   assert.deepEqual(visibleOrganizationNav(nav, ["billing"]), [nav[0]]);
   assert.deepEqual(visibleOrganizationNav(nav, ["other"]), nav);
 });
+
+test("the stage spine is off unless asked for: the rail is today's", () => {
+  assert.deepEqual(
+    consoleNav({ projectId: P1, additions: [], stageSpine: false }),
+    consoleNav({ projectId: P1, additions: [] }),
+  );
+  assert.equal(
+    consoleNav({ projectId: P1, additions: [] }).some(({ id }) => id === "ship"),
+    false,
+  );
+});
+
+test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, then setup", () => {
+  const items = consoleNav({
+    projectId: P1,
+    additions: [],
+    stageSpine: true,
+    projectGroups: [{ id: "apis", label: "APIs", items: [{ path: "models/x", label: "X" }] }],
+  });
+  assert.deepEqual(
+    items.map(({ id, section, sectionLabel }) => `${id}|${section ?? ""}|${sectionLabel ?? ""}`),
+    [
+      "overview|group:monitor|Monitor",
+      "health|group:monitor|",
+      "traces|group:monitor|",
+      "intents|group:insights|Insights",
+      "improvements|group:improve|Improve",
+      "ship|group:ship|Ship",
+      "project-models/x|group:apis|APIs",
+      "catalog|settings|",
+      "settings|settings|",
+    ],
+  );
+  const ship = items.find(({ id }) => id === "ship");
+  assert.equal(ship?.href, `/project/${P1}/ship`, "Ship is the one new page");
+  assert.equal(activeNavItemId(`/project/${P1}/ship`, items), "ship");
+  assert.equal(shortcutHref(items, "l"), `/project/${P1}/ship`);
+  // Tasks stays under Agent health until the task loop brings its own pages.
+  assert.deepEqual(
+    items.find(({ id }) => id === "health")?.children?.map(({ id }) => id),
+    ["health-summary", "health-tasks", "health-self-corrections"],
+  );
+  const hrefs = commandEntries({ items, projects: PROJECTS, pathname: `/project/${P1}` }).map(
+    (entry) => entry.href,
+  );
+  assert.ok(hrefs.includes(`/project/${P1}/ship`), "⌘K reaches Ship");
+});
+
+test("outside a project the stage spine changes nothing", () => {
+  assert.deepEqual(
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [], stageSpine: true }),
+    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }),
+  );
+});

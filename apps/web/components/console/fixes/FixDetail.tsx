@@ -5,6 +5,9 @@ import { NounIcon } from "@ratel/design-system/entity";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, useId } from "react";
+import { FixSource } from "@/components/console/lineage/FixSource";
+import { formatStamp } from "@/lib/console/settings/format";
+import { type FixShipped, shippedLabel } from "@/lib/views/fixes/shipped";
 import type { CraftDetail, Fix, IssueDetail, RewriteDetail } from "@/lib/views/fixes/types";
 import { EFFECT_ICONS } from "./effect-icons";
 import { AffectsLinks } from "./FixAffects";
@@ -18,7 +21,18 @@ import { FIX_KIND_ICONS } from "./kind-icons";
  * before and after, the issues it resolves as compact rows, then the change.
  * The derivations and the drafted change's facts wait behind "Details".
  */
-export function FixDetail({ fix, actions }: { fix: Fix; actions: ReactNode }) {
+export function FixDetail({
+  fix,
+  actions,
+  projectId,
+  shipped = null,
+}: {
+  fix: Fix;
+  actions: ReactNode;
+  projectId?: string;
+  /** Its newest shipment (RC-72, behind `FF_STAGE_SPINE`); null when it has not shipped or the flag is off. */
+  shipped?: FixShipped | null;
+}) {
   const detail = fix.detail;
   return (
     <div
@@ -27,7 +41,10 @@ export function FixDetail({ fix, actions }: { fix: Fix; actions: ReactNode }) {
       data-fix-source={fix.source}
       data-fix-group={fix.group}
     >
+      {/* Where it came from (RC-45, behind FF_STAGE_SPINE). */}
+      {projectId ? <FixSource projectId={projectId} fix={fix} /> : null}
       <Hero fix={fix} actions={actions} />
+      {shipped ? <ShippedSection shipped={shipped} /> : null}
       <AffectsLinks subject={fix.subject} />
       {detail.source === "rewrite" ? (
         <BeforeAfter detail={detail} applied={fix.status === "applied"} />
@@ -51,6 +68,27 @@ function DetailSection({ title, children }: { title: string; children: ReactNode
       </h3>
       {children}
     </section>
+  );
+}
+
+/** The release it went out in, when, and its shipment on Ship with the trail back to the run. */
+function ShippedSection({ shipped }: { shipped: FixShipped }) {
+  return (
+    <DetailSection title="Shipped">
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line px-3 py-2"
+        data-fix-shipped={shipped.version}
+      >
+        <StatusDot tone="success" label={shippedLabel(shipped)} className="text-fg" />
+        <time dateTime={shipped.shippedAt} className="text-xs text-fg-subtle tabular-nums">
+          {formatStamp(shipped.shippedAt)}
+        </time>
+        <Link href={shipped.href} className={`${LINK} ml-auto`}>
+          Open on Ship
+          <ArrowUpRight aria-hidden className="size-3" />
+        </Link>
+      </div>
+    </DetailSection>
   );
 }
 
