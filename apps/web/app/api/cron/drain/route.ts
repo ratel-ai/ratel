@@ -12,6 +12,9 @@ export const maxDuration = 300;
  * a bearer; without a secret the route answers 401. Why every minute: `after()` drains a
  * project's jobs right after the enqueue response, but a cut-short function can leave jobs
  * `queued`, and the safety-net enqueues and self-throttled sweeps live in the tick.
+ *
+ * An API-only process (`APP_ROLE=api`) answers 202 `{ ok: true, skipped: "worker" }` and runs
+ * nothing: the worker sweeps on its own timer.
  */
 export const GET = withRequestLog(handleGet);
 

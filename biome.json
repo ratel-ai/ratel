@@ -138,6 +138,7 @@
         "apps/web/lib/jobs/role.ts",
         "apps/web/lib/jobs/policy.ts",
         "apps/web/lib/jobs/policy.test.ts",
+        "apps/web/lib/jobs/worker.ts",
         "apps/web/lib/jobs/claim-bound.integration.test.ts",
         "apps/web/lib/jobs/reaper.integration.test.ts",
         "apps/web/lib/ingest/categorize.ts",

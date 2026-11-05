@@ -47,6 +47,10 @@ pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on 
 docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
+One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
+`APP_ROLE=worker` makes it run them, which is how `docker-compose.yml` runs `web` and `worker`
+([`lib/jobs/README.md`](lib/jobs/README.md)).
+
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
