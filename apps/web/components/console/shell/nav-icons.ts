@@ -4,6 +4,7 @@ import {
   Blocks,
   BookOpen,
   Cable,
+  CreditCard,
   FolderKanban,
   HeartPulse,
   House,
@@ -26,5 +27,6 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   projects: FolderKanban,
   integrations: Cable,
   members: Users,
+  billing: CreditCard,
   edition: Blocks,
 };

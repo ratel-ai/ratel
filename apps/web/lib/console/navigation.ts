@@ -1,23 +1,16 @@
-import type { NavItem as EditionNavItem, OrganizationNavItem } from "@/lib/composition/ports";
+import type {
+  NavItem as EditionNavItem,
+  NavIconName,
+  OrganizationNavItem,
+} from "@/lib/composition/ports";
+
+export type { NavIconName };
 
 /**
  * The console navigation (DESIGN.md, Information architecture). Pure functions of the URL and the
  * composition, so the rail and the tests read one model. Only destinations this build has are
  * listed: a page that has not landed is absent, never disabled.
  */
-
-export type NavIconName =
-  | "overview"
-  | "health"
-  | "intents"
-  | "improvements"
-  | "catalog"
-  | "traces"
-  | "settings"
-  | "projects"
-  | "integrations"
-  | "members"
-  | "edition";
 
 export interface NavItem {
   /** Stable across renders and projects: core ids are fixed, edition ids derive from the href. */
@@ -82,7 +75,7 @@ export function consoleNav({
   projectId: string | undefined;
   organizationSlug?: string;
   additions: readonly EditionNavItem[];
-  /** Organization pages the edition adds (`composition.organizationNav`), before the settings. */
+  /** Organization pages the edition adds (`composition.organizationNav`), after Projects. */
   organizationAdditions?: readonly OrganizationNavItem[];
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
@@ -96,20 +89,20 @@ export function consoleNav({
           exact: true,
           shortcut: "o",
         },
+        ...organizationAdditions.map(
+          (item): NavItem => ({
+            id: `org-${item.path}`,
+            label: item.label,
+            href: `${organizationRoot(organizationSlug)}/${item.path}`,
+            icon: item.icon ?? "members",
+          }),
+        ),
         {
           id: "integrations",
           label: "Integrations",
           href: `${organizationRoot(organizationSlug)}/mcp`,
           icon: "integrations",
         },
-        ...organizationAdditions.map(
-          (item): NavItem => ({
-            id: `org-${item.path}`,
-            label: item.label,
-            href: `${organizationRoot(organizationSlug)}/${item.path}`,
-            icon: "members",
-          }),
-        ),
         {
           id: "org-settings",
           label: "Settings",

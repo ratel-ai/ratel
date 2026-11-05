@@ -90,8 +90,8 @@ describe("createComposition", () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
     assert.deepEqual(composition.organizationNav, [
-      { path: "team", label: "Members" },
-      { path: "billing", label: "Billing" },
+      { path: "team", label: "Members", icon: "members" },
+      { path: "billing", label: "Billing", icon: "billing" },
     ]);
     assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
     const quota = await composition.entitlements.checkEventQuota({ id: "org" });

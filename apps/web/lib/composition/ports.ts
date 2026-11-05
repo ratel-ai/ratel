@@ -17,10 +17,27 @@ export type NavItem = {
   label: string;
 };
 
+/** The rail's glyph keys; the console maps each to an icon. Declared here so an edition's nav can name one. */
+export type NavIconName =
+  | "overview"
+  | "health"
+  | "intents"
+  | "improvements"
+  | "catalog"
+  | "traces"
+  | "settings"
+  | "projects"
+  | "integrations"
+  | "members"
+  | "billing"
+  | "edition";
+
 /** An organization page an edition adds: `/org/<slug>/<path>`. */
 export type OrganizationNavItem = {
   path: string;
   label: string;
+  /** The rail glyph; the members one when absent. */
+  icon?: NavIconName;
 };
 
 export type Composition = CompositionPorts & {
@@ -71,8 +88,8 @@ export function createComposition(
     // The admin console is reached from the account menu, for allowlisted admins only.
     nav = [];
     organizationNav = [
-      { path: "team", label: "Members" },
-      { path: "billing", label: "Billing" },
+      { path: "team", label: "Members", icon: "members" },
+      { path: "billing", label: "Billing", icon: "billing" },
     ];
   } else {
     throw new Error(
