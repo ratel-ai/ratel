@@ -207,6 +207,9 @@ importers:
       '@clerk/themes':
         specifier: ^2.4.57
         version: 2.4.57(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@ratel-ai/sdk':
+        specifier: 0.13.0-rc.9
+        version: 0.13.0-rc.9(zod@4.4.3)
       '@ratel/design-system':
         specifier: workspace:*
         version: link:../packages/design-system

@@ -4,6 +4,7 @@ import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type { RegistryPort } from "@/lib/contracts/registry";
 import type { SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
+import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
 
 /**
  * The port set a composition supplies (ADR-0030). It lives among the contracts because both
@@ -76,12 +77,22 @@ export type EditionUi = {
   ConsoleAccessGate?: ComponentType<{ children: ReactNode }>;
 };
 
+/** What the core lends an edition: capabilities over core data that only the core implements. */
+export type CoreServices = {
+  toolCorpus: ToolCorpusPort;
+};
+
 export type CompositionPorts = {
   session: SessionPort;
   entitlements: EntitlementsPort;
   telemetry: TelemetryPort;
   embeddingProvider: EmbeddingProviderPort;
   registry: RegistryPort;
+  /**
+   * Absent in the open-source edition. The core calls it once at startup, before the first
+   * request, with what only the core implements.
+   */
+  connect?: (core: CoreServices) => void;
   /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
   ui?: () => Promise<EditionUi>;
 };
