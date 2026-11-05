@@ -20,6 +20,8 @@ npm packages.
 | `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
+| `model-call.ts` | the model-call seam: `trackModelCall`, `recordModelCall`, `anthropicUsage` report a model call (tokens, duration, outcome) to a sink that is unset here, so a tracked call only runs; an edition that tracks spend installs one with `setModelCallSink` (owned) |
+| `project-log-context.ts` | `withProjectLogContext`: background work for one project inside a log context that names it and its organization |
 | `deployment-config.ts` | `RATEL_ORG_NAME` validated at boot, and the warnings at boot for a public `BASE_URL` on public defaults |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `request-log-labels.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging (with the organization and project slugs), token buckets, body caps, self-telemetry |

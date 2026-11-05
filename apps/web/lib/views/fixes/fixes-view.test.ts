@@ -459,3 +459,33 @@ test("a shipped fix reads Shipped with its version in the list and the panel, li
   );
   assert.equal(shippedFor(null, fix), null);
 });
+
+// Owned (ADR-0030): the eval gate on Fixes, behind FF_EVAL_GATE (the page passes no badges when it is off).
+test("with the eval gate on, each fix carries its eval badge and the panel offers a simulation", () => {
+  const evalBadges = { "craft:c-merge": { state: "pending" as const, runs: 4 } };
+  const on = render(
+    createElement(FixesPage, { projectId: "p1", model, now: NOW.toISOString(), evalBadges }),
+  );
+  assert.match(on, /data-eval-badge="pending"/, "the simulated fix says so");
+  assert.match(on, /data-eval-badge="none"/, "a fix never simulated says so");
+  assert.match(
+    on,
+    /href="\/project\/p1\/improvement\/fixes\/[^"]+\/eval"/,
+    "the badge opens the eval",
+  );
+  assert.doesNotMatch(page(), /data-eval-badge/, "gate off: no Eval column");
+
+  const fix = findFix(model.open, "craft:c-merge")!;
+  const panel = render(
+    createElement(FixDetail, {
+      fix,
+      actions: createElement("span"),
+      gate: createElement("div", { "data-eval-gate": "" }, "Run simulation"),
+    }),
+  );
+  assert.match(panel, /data-eval-gate/);
+  assert.doesNotMatch(
+    render(createElement(FixDetail, { fix, actions: createElement("span") })),
+    /data-eval-gate/,
+  );
+});

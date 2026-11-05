@@ -1,7 +1,7 @@
 # `lib/views` (L6)
 
 The read models behind the Agent health, Intents and Traces turn pages, and the improvement
-loop's modules that read and write beside them (lineage, a fix's shipments): what each page loads,
+loop's modules that read and write beside them (lineage, a fix's shipments, the eval gate): what each page loads,
 in which order, with which fallbacks, and the pure functions that turn rows into the words,
 numbers and layouts the components draw. Nothing here imports a component or a page; the pages
 (`app/(console)/project/[projectId]/{health,intents,traces/turns}`) and the components land with
@@ -17,7 +17,8 @@ identical.
 | `tasks/` | Tasks: `model` (the list and a task's page), `page-model` (the reads), `queries`, `issues`, `session`, `examples`, `flow-layout`, `status`, `format`, `paths` |
 | `fixes/` | Fixes, the one list of changes the pages link an issue to: `build` (the model), `load` (the reads), `select`, `groups`, `effect`, `acted`, `skill-gaps`, `topics`, `copy`, `kinds`, `href`; the Improve → Ship half: `schema` (`fix_experiments`, `fix_shipments`, `fix_shipment_tasks`), `loop-queries` (the experiments declared for a fix and the record that it shipped) and `shipped` (which fixes shipped, derived from those rows) |
 | `lineage/` | where each object came from, Monitor → Insights → Improve → Ship: `types` and `refs` (a `LineageRef`, where it opens), `resolve` (one step back, the whole chain, and `recordLineage`), `shipments` and `trail` (the Ship page's list and a shipment's trail), `turn-traces`, `plan`, `stages`, `route` (the lineage endpoint's logic, every boundary injected), `schema` (`lineage_links`). Behind `FF_STAGE_SPINE`, read by `stage-spine-flag.ts`: the Ship page, `GET /api/projects/<id>/lineage`, the rail grouped by stage, the source links and the shipped marks |
-| `eval-gate/` | `schema` only for now (`fix_eval_sets`, `fix_eval_cases`, `fix_eval_runs`): a shipment's trail reads the newest eval set; the module itself lands in its own slice |
+| `eval-gate/` | a fix tested before it ships, on the project's own past runs: `service` (the eval set, a simulation, the badge), `store` and `schema` (`fix_eval_sets`, `fix_eval_cases`, `fix_eval_runs`), `runs` (the runs read from the ledger), `simulate` and `ranker` (a re-rank in process), `replay` and `simulation` (the run replayed on a model), `judge`, `score`, `method`, `change`, `defaults`, `models` (the agent, the tool stand-in and the judge, with their budgets), `page-model` and `view` (the eval page), `job` and `register` (`simulate_fix_eval`, run by the worker), `gate` (`FF_EVAL_GATE`), `seams`. With no `ANTHROPIC_API_KEY` there is no model: a re-rank fix still simulates, a fix that needs replay says no model is configured, and nothing calls out; `EVAL_GATE_MOCK_MODEL=1` gives deterministic stand-ins outside production |
+| `task-scorers/` | the pure scorer core the eval gate grades a run with: `engine` (`scoreRun`), `outcome`, `replay`, `defaults`, `labels`, `format`, `types`. No table and no model call; the scorers' store, judge and job land with the task loop |
 | `freshness/` | where a page's analysis stands: `sections` (the jobs behind each page), `load` (the newest done job and the pending count), `page` (the server's first read), `model` (the poll pacing and the wording) |
 | `intents/` | the Intents pages: the topic list and detail (`topics-*`), an intent's breakdown and asks tree (`breakdown*`, `asks-tree`), `hrefs` |
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
@@ -37,6 +38,8 @@ part named below.
 |---|---|---|
 | `fixes/seams.ts` `fixSeams.loadDrafts`, `.priceOf`, `.loadRewrites` | filled: the tool crafter's drafts and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` and `craftEffect` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites by `quality/fix-rewrites.ts` | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
 | `fixes/seams.ts` `fixSeams.recordShipment` | the task loop: marking a shipment live and queuing its tasks for measuring, in one transaction | `createFixShipment` inserts one `fix_shipments` row; `fix_shipment_tasks` stays empty |
+| `eval-gate/seams.ts` `evalGateSeams.resolveChange` | fix drafts: the drafted change of a fix, or a queued draft | the gate simulates the change the fix itself carries; a rewrite with no ready text is refused as nothing to simulate |
+| `eval-gate/seams.ts` `evalGateSeams.spendSince` | fix drafts, the task loop and What-if: what each spent on models, so they share the one daily budget | the daily budget counts the eval gate's own runs |
 | `tasks/seams.ts` `tasksSeams.loadDrafts` | filled: the tool crafter's pending drafts by `fixes/craft-drafts.ts` (upstream's `fixSources`), loaded with `fixes/load.ts`, which `tasks/page-model.ts` imports | a task's page shows no drafted fix |
 | `intents/map/seams.ts` `mapSeams.loadToolSteps` | the tool explorer: `intents/map/tool-steps.ts` reads the latest completed run's turn-scope `next` edges (`readings/tool-explorer/queries.ts#listTransitions`) and `map/queries.ts` imports it | the Map draws no "came next" arrows between tools |
 
@@ -69,6 +72,12 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   edition has one plan, so only a limit override closes the run behind an insight.
   `stage-spine-flag.ts` (new) replaces upstream's `cloud-stage-spine` flag.
   `lineage/trail.integration.test.ts` is not here yet: it drives the improvement-loop MCP tools.
+- `eval-gate/gate.ts` (one env switch in place of upstream's per-organization flag, with
+  `gate.test.ts`), `models.ts` (calls reported through `platform/model-call`), `store.ts` and
+  `service.ts`, `page-model.ts` (the two seams above), `seams.ts`, `register.ts` and
+  `no-outbound-without-key.test.ts` (new), and the two integration tests (no plan column; the
+  no-key and mock cases with the network cut are at the end of `replay.integration.test.ts`).
+  `observability.test.ts` is not here yet: it reads the improvement-loop MCP tools.
 - `intents/map/queries.ts`: the tool-step read is `mapSeams.loadToolSteps`, filled by
   `intents/map/tool-steps.ts` (new: upstream's `loadToolSteps` body and `TOOL_STEP_READ_LIMIT`,
   with its PGlite test `tool-steps.integration.test.ts`); `intents/hrefs.ts`:
