@@ -4,7 +4,23 @@
 #   docker compose up db                           Postgres only, for `pnpm --filter @ratel/platform dev`
 # Works with no `.env`, on public defaults. `.env.example` lists what to set on a server.
 # Both ports stay on 127.0.0.1: the console has no login and belongs behind your own proxy.
+# `web` serves and only queues jobs (APP_ROLE=api); `worker` runs them, from the same image
+# (ADR-0031). Without APP_ROLE one container does both, as `pnpm dev` does.
 name: ratel
+
+# What web and worker share: one image, one `.env`, one database.
+x-platform: &platform
+  build:
+    context: .
+    dockerfile: apps/web/Dockerfile
+    target: oss
+  env_file:
+    - path: .env
+      required: false
+
+x-platform-env: &platform-env
+  DATABASE_URL: postgres://ratel:${POSTGRES_PASSWORD:-ratel}@db:5432/ratel
+  DATABASE_SSL: disable
 
 services:
   db:
@@ -22,21 +38,29 @@ services:
       retries: 15
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      target: oss
+    <<: *platform
     depends_on:
       db:
         condition: service_healthy
-    env_file:
-      - path: .env
-        required: false
     environment:
-      DATABASE_URL: postgres://ratel:${POSTGRES_PASSWORD:-ratel}@db:5432/ratel
-      DATABASE_SSL: disable
+      <<: *platform-env
+      APP_ROLE: api
       DATABASE_MIGRATE_ON_BOOT: "1"
     ports: ["127.0.0.1:${RATEL_PORT:-3000}:3000"]
+
+  # Runs the jobs and the minute tick. Waits for a healthy web, which has migrated by then; it
+  # never migrates itself. Its server answers only its own health check. On a stop it finishes
+  # the step in flight first (NEXT_MANUAL_SIG_HANDLE keeps Next from exiting before it).
+  worker:
+    <<: *platform
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      <<: *platform-env
+      APP_ROLE: worker
+      NEXT_MANUAL_SIG_HANDLE: "true"
+    stop_grace_period: 60s
 
   demo:
     profiles: [demo]

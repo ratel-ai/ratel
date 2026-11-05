@@ -34,6 +34,7 @@
  */
 import { sql } from "drizzle-orm";
 import { assertLocalDatabase } from "@/lib/console/seed/local-database";
+import { settleProjectQueue } from "@/lib/console/seed/settle-queue";
 import { resolveSeedOrganization } from "@/lib/console/seed/replace-project";
 import { parseSeedArgs } from "@/lib/console/seed/seed-args";
 import { SITE_COPILOT_DAYS } from "@/lib/console/seed/site-copilot-otlp";
@@ -44,13 +45,20 @@ import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { getLogger } from "@/lib/platform/logger";
 
 const logger = getLogger("scripts/seed");
-/** The drain, `n` ticks: each runs the registered before-steps, the queued jobs, then the after-steps. */
-async function drain(n: number): Promise<Array<{ done: number; failed: number }>> {
+/**
+ * The drain, `n` ticks: each runs the registered before-steps, the queued jobs, then the
+ * after-steps. After each, the project's queue is settled (`settleProjectQueue`): a worker
+ * (`APP_ROLE=worker`) may have claimed the jobs this tick was meant to run.
+ */
+async function drain(n: number, projectId: string): Promise<Array<{ done: number; failed: number }>> {
   const ticks: Array<{ done: number; failed: number }> = [];
   for (let i = 0; i < n; i++) {
     const tick = await runDrainTick();
     ticks.push({ done: tick.done, failed: tick.failed });
     if (!tick.ok) throw new Error(`drain tick ${i + 1} failed: ${tick.error ?? "unknown"}`);
+    if (!(await settleProjectQueue(projectId))) {
+      logger.warn({ tick: i + 1 }, "the project's queue did not settle within two minutes");
+    }
   }
   return ticks;
 }
@@ -145,7 +153,7 @@ async function seed() {
   );
   // One tick drains only the jobs queued before it started, so build, run and what the run
   // queues take one tick each (one more when the idle close is what closes the last turns).
-  const ticks = await drain(args.drain);
+  const ticks = await drain(args.drain, seeded.projectId);
   return { org, windowDays, ...seeded, ticks, stored: await storedCounts(seeded.projectId) };
 }
 
