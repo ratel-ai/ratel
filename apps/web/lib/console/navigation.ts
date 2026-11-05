@@ -2,6 +2,7 @@ import type {
   NavItem as EditionNavItem,
   NavIconName,
   OrganizationNavItem,
+  ProjectNavGroup,
 } from "@/lib/composition/ports";
 
 export type { NavIconName };
@@ -23,7 +24,9 @@ export interface NavItem {
   /** The key after `g` that jumps here. */
   shortcut?: string;
   /** The rail section it sits in; the rail leaves a gap between sections. Absent means `main`. */
-  section?: "settings" | "edition";
+  section?: "settings" | "edition" | `group:${string}`;
+  /** The section's heading, on its first item (an edition's project group). */
+  sectionLabel?: string;
   /** Sub-pages folded under this item; its own href is the group's landing page. */
   children?: readonly NavItem[];
 }
@@ -71,12 +74,15 @@ export function consoleNav({
   organizationSlug,
   additions,
   organizationAdditions = [],
+  projectGroups = [],
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
   additions: readonly EditionNavItem[];
   /** Organization pages the edition adds (`composition.organizationNav`), after Projects. */
   organizationAdditions?: readonly OrganizationNavItem[];
+  /** Project page groups the edition adds (`composition.projectNav`), before Settings. */
+  projectGroups?: readonly ProjectNavGroup[];
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const organization: NavItem[] = organizationSlug
@@ -225,6 +231,19 @@ export function consoleNav({
             },
           ],
         },
+        ...projectGroups.flatMap((group) =>
+          group.items.map(
+            (item, index): NavItem => ({
+              id: `project-${item.path}`,
+              label: item.label,
+              href: `${root}/${item.path}`,
+              icon: item.icon ?? "edition",
+              ...(item.shortcut ? { shortcut: item.shortcut } : {}),
+              section: `group:${group.id}`,
+              ...(index === 0 ? { sectionLabel: group.label } : {}),
+            }),
+          ),
+        ),
         {
           id: "settings",
           label: "Settings",

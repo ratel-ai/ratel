@@ -17,3 +17,7 @@ Picker ranks.
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source
 edition, which is unchanged.
+
+`ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
+project id and showing its own loading state; any other key is a 404. Its rail entries come from
+`composition.projectNav`. The open-source edition has neither.

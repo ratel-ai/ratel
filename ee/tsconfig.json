@@ -1,10 +1,11 @@
 {
-  "//": "Read by tsx when the private tests run (pnpm --filter @ratel/ee test): the app's aliases, from here. Type checking stays the app's (apps/web/tsconfig.json).",
+  "//": "Read by tsx when the private tests run (pnpm --filter @ratel/ee test): the app's aliases, from here, and the JSX transform for the design system's sources the UI tests render. Type checking stays the app's (apps/web/tsconfig.json).",
   "compilerOptions": {
     "jsx": "react-jsx",
     "paths": {
       "@ee/*": ["./src/*"],
       "@/*": ["../apps/web/*"]
     }
-  }
+  },
+  "include": ["src", "../packages/design-system/src"]
 }

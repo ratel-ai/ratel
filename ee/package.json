@@ -27,7 +27,9 @@
     "@electric-sql/pglite": "^0.5.3",
     "@types/pg": "^8.11.10",
     "@types/react": "^19",
+    "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
+    "react-dom": "19.2.4",
     "tsx": "^4.20.6"
   },
   "scripts": {

@@ -586,7 +586,7 @@
     {"from": "apps/web/lib/trace-signals/linked-copy.test.ts", "to": "apps/web/lib/views/traces/linked-copy.test.ts", "mode": "copy"},
     {"from": "apps/web/components/traces/TurnDetailView.tsx", "to": "apps/web/components/console/traces/TurnDetailView.tsx", "mode": "copy"},
     {"from": "apps/web/components/traces/TurnLinkedPanel.tsx", "to": "apps/web/components/console/traces/TurnLinkedPanel.tsx", "mode": "copy"},
-    {"from": "apps/web/app/(app)/project/[projectId]/traces/turns/[turnId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/traces/turns/[turnId]/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route; no retired flag gate"},
+    {"from": "apps/web/app/(app)/project/[projectId]/traces/turns/[turnId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/traces/turns/[turnId]/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route; no retired flag gate; the session replay link follows FF_SESSION_REPLAY"},
     {"from": "apps/web/lib/trace-signals/signals/claims-model.ts", "to": "apps/web/lib/views/health/signals/claims-model.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/signals/claims-model.test.ts", "to": "apps/web/lib/views/health/signals/claims-model.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/signals/claims-kit.ts", "to": "apps/web/lib/views/health/signals/claims-kit.ts", "mode": "copy"},
@@ -1704,6 +1704,21 @@
     { "from": "apps/web/app/(app)/project/[projectId]/settings/api-keys/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/api-keys/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/danger/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/danger/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/settings/developer/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/settings/developer/loading.tsx", "mode": "copy" },
-    { "from": "apps/web/app/(app)/project/[projectId]/improvement/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/loading.tsx", "mode": "copy" }
+    { "from": "apps/web/app/(app)/project/[projectId]/improvement/loading.tsx", "to": "apps/web/app/(console)/project/[projectId]/improvement/loading.tsx", "mode": "copy" },
+    { "$slice": "session-replay", "from": "apps/web/lib/session-replay", "to": "apps/web/lib/views/session-replay", "mode": "copy" },
+    { "from": "apps/web/lib/session-replay/load.test.ts", "to": "apps/web/lib/views/session-replay/load.test.ts", "mode": "owned", "$why": "OSS organizations have no plan column; the fixture inserts without it" },
+    { "from": "apps/web/lib/session-replay/annotations-load.test.ts", "to": "apps/web/lib/views/session-replay/annotations-load.test.ts", "mode": "owned", "$why": "OSS organizations have no plan column; the fixture inserts without it" },
+    { "from": "apps/web/lib/session-replay/fork.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/fork.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/job.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/runs.integration.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/variant.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/replay-input-golden.test.ts", "mode": "excluded", "$why": "the What-if: re-running a session with a variant needs the eval gate, which lands with the task loop" },
+    { "from": "apps/web/lib/session-replay/gate.ts", "mode": "excluded", "$why": "a Cloud analytics organization flag; the core reads FF_SESSION_REPLAY through flags-env (views/session-replay-flag.ts)" },
+    { "from": "apps/web/lib/session-replay/gate.test.ts", "mode": "excluded", "$why": "tests the excluded gate" },
+    { "from": "apps/web/components/session-replay", "to": "apps/web/components/console/session-replay", "mode": "copy" },
+    { "from": "apps/web/app/(app)/project/[projectId]/sessions/[sessionId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/sessions/[sessionId]/page.tsx", "mode": "owned", "$why": "the project comes from the console scope; gated by FF_SESSION_REPLAY instead of the Cloud organization flag" }
   ]
 }

@@ -20,6 +20,7 @@ identical.
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
 | `home/` | the Overview: `load` (every read in one round, each degrading on its own, assembled into `OverviewData`), `glance` and `glance-queries` (intents, tasks, self-corrections and fixes, one tile each), `attention` (what needs a look now, from the issues, fixes, intents and context), `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the MCP project overview opens with) |
 | `traces/` | the turn page of Traces, where an Agent health example's "Open in Traces" lands: `turn-detail` (one turn's calls in ledger order, the live query and error text read by event id, a trace link only where Traces holds the trace, the session's neighbouring turns), `turn-detail-linked` (an SDK run's linked OpenTelemetry model calls), `turn-linked` (the linked text, pure) |
+| `session-replay/` | one session step by step, read-only: `timeline` (turns, model calls, searches and tool calls in order, with coverage), `load` (its reads), `composition` (what the context held at each model call), `annotations` and `annotations-load` (why each tool choice was good or bad), `view` (rows, decision chips, the page link). Behind `FF_SESSION_REPLAY`, read by `session-replay-flag.ts`; the What-if re-run waits for the eval gate |
 
 ## Seams
 
@@ -66,6 +67,8 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   with its PGlite test `home/queries.integration.test.ts`; `home/load.ts`: no feature-flag gate
   (Agent health is always on, so its read runs with the rest), and the issue anchor spelled
   inline, since `lib/` never imports the UI.
+- `session-replay/load.test.ts` and `annotations-load.test.ts`: the organization fixture has no
+  plan column. `session-replay-flag.ts` (new) replaces upstream's organization flag gate.
 - Tests whose fixtures named a confidential word, copied with a neutral tenant:
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.

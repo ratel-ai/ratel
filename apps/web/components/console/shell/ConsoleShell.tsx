@@ -37,6 +37,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           account: scope?.account ?? null,
           editionNav: composition.nav,
           organizationNav: visibleOrganizationNav(composition.organizationNav, hidden),
+          projectNav: composition.projectNav,
           scopeSwitcher: ScopeSwitcher
             ? {
                 expanded: <ScopeSwitcher projects={projects} collapsed={false} />,

@@ -77,6 +77,7 @@ describe("createComposition", () => {
     const composition = createComposition("oss");
     assert.equal(composition.edition, "Ratel OSS");
     assert.deepEqual(composition.organizationNav, []);
+    assert.deepEqual(composition.projectNav, []);
     const session = await composition.session.resolveSession();
     assert.equal(session?.user.name, "Local operator");
     assert.equal(await composition.session.actingAs(), null);
@@ -92,6 +93,15 @@ describe("createComposition", () => {
     assert.deepEqual(composition.organizationNav, [
       { path: "team", label: "Members", icon: "members" },
       { path: "billing", label: "Billing", icon: "billing" },
+    ]);
+    assert.deepEqual(composition.projectNav, [
+      {
+        id: "apis",
+        label: "APIs",
+        items: [
+          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+        ],
+      },
     ]);
     assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
     const quota = await composition.entitlements.checkEventQuota({ id: "org" });

@@ -54,8 +54,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         organizationSlug: data.organizationSlug ?? undefined,
         additions: data.editionNav,
         organizationAdditions: data.organizationNav,
+        projectGroups: data.projectNav,
       }),
-    [project, data.organizationSlug, data.editionNav, data.organizationNav],
+    [project, data.organizationSlug, data.editionNav, data.organizationNav, data.projectNav],
   );
   const activeId = activeNavItemId(pathname, items);
   const entries = useMemo(

@@ -259,9 +259,15 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.3.0(@types/react@19.3.0)
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.11
+      react-dom:
+        specifier: 19.2.4
+        version: 19.2.4(react@19.2.4)
       tsx:
         specifier: ^4.20.6
         version: 4.21.0
