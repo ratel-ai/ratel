@@ -622,13 +622,17 @@ jobs:
             "select count(*) from trace_turns t join projects p on p.id = t.project_id where p.is_demo and t.status = 'closed'")
           test "$turns" -gt 0
       - name: Jobs ran only in the worker
+        # Logs are read whole first: a grep that stops early would end `docker compose logs` on a
+        # closed pipe, and pipefail fails the step.
         run: |
-          web=$(docker compose logs --no-log-prefix web | grep -c '"msg":"job_finished"' || true)
-          worker=$(docker compose logs --no-log-prefix worker | grep -c '"msg":"job_finished"' || true)
+          web_logs=$(docker compose logs --no-log-prefix web)
+          worker_logs=$(docker compose logs --no-log-prefix worker)
+          web=$(grep -c '"msg":"job_finished"' <<<"$web_logs" || true)
+          worker=$(grep -c '"msg":"job_finished"' <<<"$worker_logs" || true)
           echo "job_finished: web $web, worker $worker"
           test "$web" -eq 0
           test "$worker" -gt 0
-          docker compose logs --no-log-prefix worker | grep --quiet 'the worker never migrates'
+          grep --quiet 'the worker never migrates' <<<"$worker_logs"
       - name: Logs
         if: failure()
         run: docker compose logs
