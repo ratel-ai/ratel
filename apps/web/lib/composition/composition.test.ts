@@ -117,6 +117,17 @@ describe("createComposition", () => {
     assert.equal(createComposition("oss", { eeComposition: null }).ui, undefined);
   });
 
+  it("hands the edition's connect over, and the open-source edition has none", () => {
+    const lent: unknown[] = [];
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...cloudPorts, connect: (core) => lent.push(core) },
+    });
+    const toolCorpus = { load: async () => [] };
+    cloud.connect?.({ toolCorpus });
+    assert.deepEqual(lent, [{ toolCorpus }]);
+    assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
+  });
+
   it("throws when a port is missing or the edition key is unknown", () => {
     assert.throws(
       () => createComposition("oss", { ports: { telemetry: undefined } }),

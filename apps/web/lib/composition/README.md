@@ -11,6 +11,9 @@ port implementations is mounted; a missing port stops the process at startup
   the boundary around each page, and the access gate around the console and `/onboarding`, which
   decides before the shell resolves its data. A loader, so the boot path never imports it. Absent
   in the open-source edition.
+- `connect`, optional on a composition: `instrumentation.node.ts` calls it at startup with the
+  core services (`CoreServices`), so the edition reads core data without importing a core module.
+  Absent in the open-source edition.
 - `organizationNav`: the organization pages an edition adds to the rail (Cloud: Members, Billing). The edition's optional `hiddenOrganizationNav(slug)` names paths to hide for one organization; the shell filters with it, and nothing is hidden without it.
 - `ee-absent.ts` — what the `#ee-composition` alias resolves to when `ee/src` is absent: `null`.
 

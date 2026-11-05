@@ -9,6 +9,10 @@ export async function assertComposition(): Promise<void> {
   try {
     const { composition } = await import("@/lib/composition");
     composition.session.assertConfigured?.();
+    if (composition.connect) {
+      const { createToolCorpus } = await import("@/lib/synthesis/tool-corpus");
+      composition.connect({ toolCorpus: createToolCorpus() });
+    }
     const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
     configuredOrganizationName();
   } catch (error) {
