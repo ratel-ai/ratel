@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { findPrivateStrings, hashToken, scanDir } from "./private-strings.mjs";
 import { absolutizeRelative, brandStrings, buildRules, partitionImports, renameIdentifiers, rewriteSource, rewriteSpecifiers } from "./rewrite-imports.mjs";
 import { applySync, copyIncludes, formatAllWithBiome, planSync } from "./sync.mjs";
+import { classifyUpstream } from "./undecided.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -404,6 +405,31 @@ describe("sync", () => {
     const { report } = plan({ only: "apps/web/lib/platform" });
     assert.deepEqual(report.copied, []);
     assert.deepEqual(report.ownedBootstrapped, ["apps/web/lib/platform/db/client.ts"]);
+  });
+});
+
+describe("undecided", () => {
+  it("counts a path under the mode of its entry, a folder's or its own", () => {
+    const result = classifyUpstream(["apps/web/lib/otlp/a.ts", "apps/web/lib/otlp/nested/b.ts", "apps/web/lib/db/index.ts", "apps/web/lib/stripe/client.ts"], MAP);
+    assert.deepEqual(result, { copy: 2, owned: 1, excluded: 1, confidential: 0, undecided: [] });
+  });
+
+  it("lets the most specific entry decide", () => {
+    const result = classifyUpstream(["apps/web/lib/otlp/billing-hook.ts"], MAP);
+    assert.deepEqual(result, { copy: 0, owned: 0, excluded: 1, confidential: 0, undecided: [] });
+  });
+
+  it("lists a path no entry covers, and not one that only shares a prefix", () => {
+    const result = classifyUpstream(["apps/web/lib/eval-gate/gate.ts", "apps/web/lib/otlp-extra.ts", "apps/web/lib/otlp/a.ts"], MAP);
+    assert.deepEqual(result.undecided, ["apps/web/lib/eval-gate/gate.ts", "apps/web/lib/otlp-extra.ts"]);
+    assert.equal(result.copy, 1);
+  });
+
+  it("counts a path naming confidential data as decided, and never repeats it", () => {
+    const paths = ["apps/web/lib/seed/acmecorp-replay.ts", "apps/web/lib/otlp/acmecorp-replay.ts", "apps/web/lib/otlp/a.ts"];
+    const result = classifyUpstream(paths, MAP, [{ hash: hashToken("acmecorp") }, /\botlp\b/i]);
+    assert.deepEqual(result, { copy: 1, owned: 0, excluded: 0, confidential: 2, undecided: [] });
+    assert.ok(!JSON.stringify(result).includes("acmecorp"));
   });
 });
 
