@@ -11,8 +11,9 @@ exception (the Cloud modules share source with the core rather than a protocol).
 [ADR-0009](0009-licensing.md): no proprietary code enters this repository.
 
 Amended by [ADR-0030](0030-platform-oss-layered-core-and-cloud-sync.md): the two spike ports
-(identity, workspace) become five, the core is layered, and the application code arrives from
-`ratel-cloud` through a repeatable sync until that repository is retired.
+(identity, workspace) become five, the composition also carries the edition's optional UI slots,
+the core is layered, and the application code arrives from `ratel-cloud` through a repeatable sync
+until that repository is retired.
 
 ## Context
 

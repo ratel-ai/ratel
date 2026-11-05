@@ -33,7 +33,7 @@ plain copy unworkable:
 **Five ports, in `apps/web/lib/contracts`.** `session` (the user, the active organization, the
 role and the memberships; organizations by id for paths with no session; the member count;
 `actingAs`), `entitlements` (limits, quotas, metered features, `planId`),
-`telemetry` (events, identify, exceptions), `embedding-provider`, and `registry` (job handlers and
+`telemetry` (events, exceptions), `embedding-provider`, and `registry` (job handlers and
 drain steps a module contributes). They replace the spike's `identity` and `workspace`. Email is
 not a port (no open-source caller); admin is not a port (support sessions become `actingAs` on
 the session principal). The OSS adapters are a single local operator with one organization, both constants with no
@@ -41,6 +41,19 @@ table behind them,
 unlimited entitlements, log-line telemetry, an OpenAI or local-hash embedder, and an empty
 registry. The composition root is split: `lib/composition/ports.ts` assembles the ports and
 imports no module; `lib/composition/registry.ts` imports every module's `register.ts`.
+
+**The composition also carries what an edition adds to the console; these are not ports.**
+`CompositionPorts.ui` is an optional loader for `EditionUi` (`lib/contracts/composition.ts`): a
+provider around the app and items in the account menu, plus optional components the layouts put in
+place of the open-source defaults (the rail's scope switcher; `/`, `/organizations`,
+`/org/<slug>/team` and `/org/<slug>/billing`; the organization's General and Danger zone settings;
+a banner above the console, a boundary around each page, and an access gate around the console and
+`/onboarding`), and `hiddenOrganizationNav(slug)`, which hides edition organization pages for one
+organization. It is a loader so the boot path never imports UI, and it is not among the required
+ports: the open-source edition has none, and a missing slot is the open-source behaviour.
+`composition.organizationNav` lists the organization pages an edition adds to the rail, with their
+icons (Cloud: Members and Billing; empty in open source). The slots are read only above L7, in
+`app/**` and `components/**`.
 
 **A layered core under `apps/web/lib`**, imports pointing downward only:
 
@@ -51,7 +64,7 @@ imports no module; `lib/composition/registry.ts` imports every module's `registe
 | L2 | `ingest`, `catalog` | OTLP and runtime-event ingest, catalogs; the catalog contract and skills |
 | L3 | `ledger` | turns, steps, closed-turn reader (the signal verdict and insight store depends on the judge and the workflow labels, so it is part of the trace-signals reading in L4) |
 | L4 | `readings` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
-| L5 | `synthesis` | match quality (it reads the experiments and shares its ground truth with the quality meter), quality, experiments, playground, traces, tool crafter (`craft_tools`, a reading of the tool explorer's reading; owned: `schema.ts`, `job.ts` without the flag gate, `job.integration.test.ts`, `register.ts`, which fills the explorer's `enqueueCraft` seam), health imports |
+| L5 | `synthesis` | match quality (it reads the experiments and shares its ground truth with the quality meter), quality, experiments, playground, traces, tool crafter (`craft_tools`, a reading of the tool explorer's reading; owned: `schema.ts`, `job.ts` without the flag gate, `job.integration.test.ts`, `register.ts`, which fills the explorer's `enqueueCraft` seam) |
 | L6 | `views`, `console` | the page read models (Agent health, Tasks, Fixes, Intents: upstream's trace-signals page files, tasks, fixes, health summary, topics views, intent-graph v2); scope, navigation, settings, projects, onboarding, seeds |
 | L7 | `mcp` | the MCP operations |
 
@@ -60,8 +73,8 @@ in level L imports only levels at or below L; nothing under `lib/` imports `@/co
 `@/app`; a test file (`*.test.ts`, `test-support.ts`) is exempt from both, since it reads what
 it verifies and is not part of the module graph (the explorer's timing test reads the crafter's
 sentences over its arithmetic); `lib/composition/registry.ts` is the one root exempt from the rule.
-`scripts/layers-allow.json` is a ratchet: an entry silences one violation while copied code is
-being layered, a stale entry fails the check, so the list can only shrink. `app/**`,
+`scripts/layers-allow.json` is a ratchet: an entry silences one violation, a stale entry fails the
+check, so the list can only shrink. It is empty now. `app/**`,
 `components/**`, `proxy.ts` and `instrumentation*.ts` sit above L7 and may import any layer.
 
 **Each module owns its schema, queries and registration.** `platform/db` exports the client, the
@@ -79,7 +92,7 @@ sync prints the upstream diff for a human to port), `excluded` (never lands). `p
 names the Cloud-only vendors and the private decision engines as patterns scoped to
 `apps/web`, and carries the customer whose data appears in Cloud fixtures only as a salted hash
 checked against the whole tree, so the name is never written in this repository; a landed file matching any pattern fails the sync before a byte is written,
-and CI greps `apps/web` and the OSS image with the same list. `source.json` records the commit
+and CI runs the same guard over the repository (`pnpm check:private`). `source.json` records the commit
 synced. Owned files keep the upstream export names (`getSessionContext`, `trackServerEvent`,
 `reportServerException`, `getLimits`), so call sites stay byte-identical to upstream and the
 owned set stays small.
@@ -101,8 +114,8 @@ level; a model only writes names. The decisions client ships with OpenAI only: `
 names no other engine here, and the other engine clients stay private. With no key there is no
 outbound call and every feature degrades as upstream does: workflows keep their tool-order
 names and topics are named from their own asks. The Agent health and Tool Explorer gates are
-always on in the open-source edition: every project with recent turns is swept. Retention is on by default in OSS (`DATA_RETENTION_ENABLED=1`, 30
-days), and no event or log carries member text, queries, prompts or labels.
+always on in the open-source edition: every project with recent turns is swept. Retention deletion is opt-in (`DATA_RETENTION_ENABLED=1`; 30
+days when on), and no event or log carries member text, queries, prompts or labels.
 
 **`@ratel-ai/sdk` from npm**, pinned to the version `ratel-cloud` runs, hoisted only inside the
 Docker deps stage. The in-tree SDK needs the Rust toolchain to build its native addon, which the
@@ -115,10 +128,11 @@ image does not carry; a `workspace:*` dependency is a follow-up once the image b
 - Until `ratel-cloud` is retired, a change there reaches this repository through
   `pnpm platform:sync`; the reviewer reads only the owned-drift section. The owned set is the
   standing cost: every owned file is a place where the two trees can diverge.
-- The layer check holds the structure after the move; the allowlist shows how far the layering
-  has progressed and cannot grow.
+- The layer check holds the structure after the move. The allowlist is empty: the copied code is
+  fully layered, and a new entry would be a visible exception, not a step of the move.
 - A fresh migration set means the open-source schema and the Cloud schema share tables by name
   but not migration history. The Cloud side reconciles when `ratel-platform` adopts the composed
   schema; this repository never runs against the Cloud database.
-- The spike's `ee/src` no longer typechecks against the five ports; `ratel-platform` adapts to the
-  new `CompositionPorts` when the Cloud adapters are written.
+- The spike's `ee/src` stopped typechecking against the five ports; `ratel-platform` now supplies
+  all five through `CompositionPorts`, and its own CI builds and typechecks it against this
+  repository's branch.
