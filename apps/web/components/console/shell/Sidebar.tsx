@@ -124,6 +124,11 @@ export function SidebarContent({
       >
         {sections(items).map(({ id, items: sectionItems }) => (
           <div key={id} className={cn("flex flex-col gap-0.5", collapsed && "items-center")}>
+            {sectionItems[0]?.sectionLabel && !collapsed ? (
+              <span className="px-2 pt-1 pb-1 text-xs font-medium text-fg-faint">
+                {sectionItems[0].sectionLabel}
+              </span>
+            ) : null}
             {sectionItems.map((item) =>
               item.children?.length && !collapsed ? (
                 <RailGroup key={item.id} item={item} activeId={activeId} onNavigate={onNavigate} />

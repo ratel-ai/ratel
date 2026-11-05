@@ -5,6 +5,8 @@ import {
   BookOpen,
   Cable,
   CreditCard,
+  Crosshair,
+  Database,
   FolderKanban,
   HeartPulse,
   House,
@@ -28,5 +30,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   integrations: Cable,
   members: Users,
   billing: CreditCard,
+  embeddings: Database,
+  "tool-picker": Crosshair,
   edition: Blocks,
 };

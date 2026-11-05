@@ -46,6 +46,13 @@ export type EditionUi = {
    * entries by `path`), by slug. Nothing is hidden when absent.
    */
   hiddenOrganizationNav?: (slug: string) => Promise<readonly string[]>;
+  /**
+   * Project pages at `/project/<id>/models/<key>`, by key; any other key is a 404. Each page shows
+   * its own loading state.
+   */
+  ProjectPages?: Readonly<
+    Record<string, { title: string; Page: ComponentType<{ projectId: string }> }>
+  >;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */

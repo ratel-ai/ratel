@@ -30,6 +30,8 @@ export type NavIconName =
   | "integrations"
   | "members"
   | "billing"
+  | "embeddings"
+  | "tool-picker"
   | "edition";
 
 /** An organization page an edition adds: `/org/<slug>/<path>`. */
@@ -40,10 +42,28 @@ export type OrganizationNavItem = {
   icon?: NavIconName;
 };
 
+/** A project page an edition adds: `/project/<id>/<path>`. */
+export type ProjectNavItem = {
+  path: string;
+  label: string;
+  /** The rail glyph; the edition one when absent. */
+  icon?: NavIconName;
+  /** The key after `g` that jumps here. */
+  shortcut?: string;
+};
+
+/** A named group of edition pages in the project rail, between the core pages and Settings. */
+export type ProjectNavGroup = {
+  id: string;
+  label: string;
+  items: ProjectNavItem[];
+};
+
 export type Composition = CompositionPorts & {
   edition: string;
   nav: NavItem[];
   organizationNav: OrganizationNavItem[];
+  projectNav: ProjectNavGroup[];
 };
 
 const VALID_EDITIONS = "oss, cloud";
@@ -72,6 +92,7 @@ export function createComposition(
   let edition: string;
   let nav: NavItem[];
   let organizationNav: OrganizationNavItem[] = [];
+  let projectNav: ProjectNavGroup[] = [];
 
   if (editionKey === "oss") {
     base = OSS_PORTS;
@@ -91,6 +112,15 @@ export function createComposition(
       { path: "team", label: "Members", icon: "members" },
       { path: "billing", label: "Billing", icon: "billing" },
     ];
+    projectNav = [
+      {
+        id: "apis",
+        label: "APIs",
+        items: [
+          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+        ],
+      },
+    ];
   } else {
     throw new Error(
       `RATEL_COMPOSITION has unknown value ${JSON.stringify(editionKey)}; valid values: ${VALID_EDITIONS}`,
@@ -103,7 +133,7 @@ export function createComposition(
     if (ports[port] == null) throw new Error(`Composition is missing required port: ${port}`);
   }
 
-  return { edition, nav, organizationNav, ...(ports as CompositionPorts) };
+  return { edition, nav, organizationNav, projectNav, ...(ports as CompositionPorts) };
 }
 
 export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");

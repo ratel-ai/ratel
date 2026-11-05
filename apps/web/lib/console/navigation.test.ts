@@ -165,10 +165,68 @@ test("composition additions follow the core destinations with stable ids", () =>
 });
 
 test("the OSS composition adds no destination", () => {
-  const items = consoleNav({ projectId: P1, additions: createComposition("oss").nav });
+  const oss = createComposition("oss");
+  const items = consoleNav({
+    projectId: P1,
+    additions: oss.nav,
+    projectGroups: oss.projectNav,
+  });
   assert.deepEqual(
     items.map(({ id }) => id),
     ["overview", "health", "traces", "catalog", "intents", "improvements", "settings"],
+  );
+  assert.ok(items.every(({ sectionLabel }) => sectionLabel === undefined));
+});
+
+test("an edition's project group sits between the core pages and Settings, under its label", () => {
+  const items = consoleNav({
+    projectId: P1,
+    additions: [],
+    projectGroups: [
+      {
+        id: "apis",
+        label: "APIs",
+        items: [
+          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+          { path: "models/tool-picker", label: "Tool Picker" },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    items.map(
+      ({ id, section, sectionLabel }) => `${section ?? "main"}:${id}:${sectionLabel ?? ""}`,
+    ),
+    [
+      "main:overview:",
+      "main:health:",
+      "main:traces:",
+      "main:catalog:",
+      "main:intents:",
+      "main:improvements:",
+      "group:apis:project-models/embeddings:APIs",
+      "group:apis:project-models/tool-picker:",
+      "settings:settings:",
+    ],
+  );
+  const [embeddings, toolPicker] = items.filter(({ section }) => section === "group:apis");
+  assert.equal(embeddings.href, `/project/${P1}/models/embeddings`);
+  assert.equal(embeddings.icon, "embeddings");
+  assert.equal(toolPicker.icon, "edition");
+  assert.equal(shortcutHref(items, "e"), `/project/${P1}/models/embeddings`);
+  assert.equal(
+    activeNavItemId(`/project/${P1}/models/embeddings`, items),
+    "project-models/embeddings",
+  );
+  // The organization rail never shows a project group.
+  assert.deepEqual(
+    consoleNav({
+      projectId: undefined,
+      organizationSlug: "acme",
+      additions: [],
+      projectGroups: [{ id: "apis", label: "APIs", items: [{ path: "x", label: "X" }] }],
+    }).map(({ id }) => id),
+    ["projects", "integrations", "org-settings"],
   );
 });
 
