@@ -69,6 +69,7 @@ export const SCRIPT_OWNERS = {
   "scripts/platform-sync/source.json": "platform",
   "scripts/platform-sync/sync.mjs": "platform",
   "scripts/platform-sync/sync.test.mjs": "platform",
+  "scripts/platform-sync/undecided.mjs": "platform",
   "scripts/quick-start.test.mjs": "platform",
 
   "scripts/workflow-contracts.test.mjs": "changes",
