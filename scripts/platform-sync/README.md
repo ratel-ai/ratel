@@ -15,6 +15,7 @@ The repeatable copy of the open-source parts of `ratel-cloud` into `apps/web`
 | `sync.mjs` | The driver: plan, format (one biome run over a staged mirror of the plan), private-string guard, write, record. |
 | `rewrite-imports.mjs` | The codemod (pure). |
 | `private-strings.mjs` | The guard (pure) and its CLI, `pnpm check:private`. |
+| `undecided.mjs` | The upstream files with no decision in `map.json`, at the synced commit. A local tool: it needs the `ratel-cloud` repository. |
 
 ## Run
 
@@ -23,6 +24,7 @@ pnpm platform:sync                                  # from ../ratel-cloud, every
 pnpm platform:sync -- --only apps/web/lib/ingest    # one destination prefix
 pnpm platform:sync -- --check                       # write nothing; exit 1 if a sync would change the tree
 RATEL_CLOUD_DIR=~/Developer/Ratel/ratel-cloud pnpm platform:sync  # another source (or --source); fails if it is not a ratel-cloud checkout
+pnpm platform:undecided                             # upstream files with no decision; exit 1 if there is one
 ```
 
 A sync lands as its own pull request, `chore(platform): sync ratel-cloud <sha>`, with the
@@ -45,3 +47,11 @@ specifier, minimal owned edits) is the "Code from ratel-cloud" section of
 - The product's name in a copied string becomes `APP_NAME` (the `brand` rule in `rewrites.json`); a
   test gets the default name. A string that spans lines is left alone: own the file.
 - A private-string hit is never worked around in the list; the file is excluded or fixed upstream.
+- Every upstream file under `apps/web` and `packages` has a decision. Most are an entry in
+  `map.json`. A file whose upstream path contains a confidential word has none on purpose: writing
+  the path would publish the word. The sync never lands such a path, even under a mapped folder
+  (it reports "skipped N upstream path(s) naming confidential data" when an entry reaches one); at
+  the synced commit there are three, a customer replay seed (a module and its test under
+  `apps/web/lib/seed/`, its loader under `apps/web/scripts/`). `pnpm platform:undecided` lists the
+  upstream files with no decision and counts those three as decided. It reads the synced commit from the `ratel-cloud` repository's
+  history, whatever is checked out there, so it is a local tool, not a CI check.
