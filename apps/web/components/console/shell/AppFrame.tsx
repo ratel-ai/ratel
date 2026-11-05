@@ -9,6 +9,7 @@ import { TooltipProvider } from "@ratel/design-system/tooltip";
 import { Menu, Search } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StageSpineProvider } from "@/components/console/lineage/stage-spine-context";
 import {
   activeNavItemId,
   commandEntries,
@@ -55,8 +56,16 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         additions: data.editionNav,
         organizationAdditions: data.organizationNav,
         projectGroups: data.projectNav,
+        stageSpine: data.stageSpine,
       }),
-    [project, data.organizationSlug, data.editionNav, data.organizationNav, data.projectNav],
+    [
+      project,
+      data.organizationSlug,
+      data.editionNav,
+      data.organizationNav,
+      data.projectNav,
+      data.stageSpine,
+    ],
   );
   const activeId = activeNavItemId(pathname, items);
   const entries = useMemo(
@@ -170,7 +179,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
             tabIndex={-1}
             className="min-w-0 flex-1 px-6 py-8 outline-none lg:px-10 has-[>[data-page]]:p-0"
           >
-            {children}
+            <StageSpineProvider enabled={data.stageSpine}>{children}</StageSpineProvider>
           </main>
         </div>
       </div>

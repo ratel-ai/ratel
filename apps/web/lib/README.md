@@ -15,7 +15,7 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 | L3 | `ledger/` | turns, steps, the closed-turn reader |
 | L4 | `readings/` | intent engine, intent graph, topics, signals, workflows, self-corrections, tool explorer, decisions |
 | L5 | `synthesis/` | match quality, quality, experiments, playground, traces, tool crafter |
-| L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents, the Traces turn page); scope, navigation, settings, projects, onboarding, seeds, the popover placement the date-range control uses (`console/popover-position.ts`) |
+| L6 | `views/`, `console/` | the page read models (Agent health, Tasks, Fixes, Intents, the Traces turn page) and the improvement loop beside them (lineage, a fix's experiments and shipments, with their tables); scope, navigation, settings, projects, onboarding, seeds, the popover placement the date-range control uses (`console/popover-position.ts`) |
 | L7 | `mcp/` | the MCP server behind `POST /api/mcp`: auth, dispatch, the operations, and the connect page's snippets (`mcp/connect/`); its owned files are listed in `mcp/README.md` |
 
 Each module owns its `schema.ts` (tables), `queries.ts` and `register.ts` (job handlers and drain

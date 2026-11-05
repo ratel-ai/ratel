@@ -15,6 +15,7 @@ import { groupFixLead, memberLabel, primaryOf } from "@/components/console/healt
 import { storyDay } from "@/components/console/health/TurnStory";
 import { type ExamplesCache, IssueExamples } from "@/components/console/health/v2/IssueExamples";
 import { type IssueRow, memberNoun } from "@/components/console/health/v2/issue-rows";
+import { InsightSource } from "@/components/console/lineage/InsightSource";
 import {
   clampFigures,
   figureCaption,
@@ -82,6 +83,8 @@ export function IssueDetail({
 
   return (
     <div className="flex flex-col gap-6" data-issue-detail={row.kind}>
+      {/* Where it came from (RC-45, behind FF_STAGE_SPINE). */}
+      <InsightSource projectId={projectId} signalId={(selected ?? lead).id} />
       <Subject projectId={projectId} row={row} member={several ? selected : lead} />
       <section aria-label="What to do" className="flex flex-col gap-3">
         <p className="text-sm text-fg">{lede}</p>

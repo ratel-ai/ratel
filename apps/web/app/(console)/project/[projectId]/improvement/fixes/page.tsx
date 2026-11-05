@@ -19,6 +19,7 @@ export default async function FixesRoute({ params }: { params: Promise<{ project
       projectId={data.projectId}
       model={data.model}
       now={data.now}
+      shipped={data.shipped}
       progress={data.progress}
     />
   );

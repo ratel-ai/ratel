@@ -15,6 +15,7 @@ import { FixesPage } from "@/components/console/fixes/FixesPage";
 import { FixesSkeleton } from "@/components/console/fixes/FixesSkeleton";
 import { buildFixes } from "@/lib/views/fixes/build";
 import { findFix } from "@/lib/views/fixes/select";
+import { shippedByFix, shippedFor } from "@/lib/views/fixes/shipped";
 import { fixesInput, NOW } from "@/lib/views/fixes/test-fixtures";
 import type { FixesModel } from "@/lib/views/fixes/types";
 
@@ -397,4 +398,64 @@ test("a fix that resolves many issues lists the worst three and links to the res
   assert.match(text, /Issue c/);
   assert.doesNotMatch(text, /Issue d/);
   assert.match(text, /And 2 more issues in Agent health/);
+});
+
+test("a shipped fix reads Shipped with its version in the list and the panel, linking to Ship (RC-72)", () => {
+  const SHIPMENT = "d4ae8432-6b26-49a9-abe4-a913e8c6262e";
+  const shipped = shippedByFix("p1", [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      fixId: "craft:c-merge",
+      version: "v2.4.0",
+      shippedAt: new Date("2026-10-30T09:00:00.000Z"),
+    },
+    {
+      id: SHIPMENT,
+      fixId: "craft:c-merge",
+      version: "v2.5.0",
+      shippedAt: new Date("2026-10-31T11:00:00.000Z"),
+    },
+  ]);
+  assert.deepEqual(shipped["craft:c-merge"], {
+    shipmentId: SHIPMENT,
+    version: "v2.5.0",
+    shippedAt: "2026-10-31T11:00:00.000Z",
+    href: `/project/p1/ship?peek=${SHIPMENT}`,
+  });
+
+  const on = render(
+    createElement(FixesPage, { projectId: "p1", model, now: NOW.toISOString(), shipped }),
+  );
+  assert.match(table(on, "tools"), /data-fix-shipped="v2\.5\.0"[\s\S]*Shipped in v2\.5\.0/);
+  assert.equal(on.match(/data-fix-shipped=/g)?.length, 1, "only the shipped fix");
+  assert.doesNotMatch(
+    page(),
+    /data-fix-shipped|Shipped in/,
+    "flag off (no shipments read): unchanged",
+  );
+
+  const fix = findFix(model.open, "craft:c-merge")!;
+  const panel = render(
+    createElement(FixDetail, {
+      fix,
+      actions: createElement("span"),
+      shipped: shippedFor(shipped, fix),
+    }),
+  );
+  assert.match(
+    visibleText(panel),
+    /Shipped Shipped in v2\.5\.0 Oct 31, 2026, 11:00:00 UTC Open on Ship/,
+  );
+  assert.match(panel, new RegExp(`href="/project/p1/ship\\?peek=${SHIPMENT}"`));
+  assert.doesNotMatch(
+    render(createElement(FixDetail, { fix, actions: createElement("span") })),
+    /data-fix-shipped/,
+  );
+
+  // Recorded under an id later merged into the fix, it still reads shipped.
+  assert.equal(
+    shippedFor(shipped, { id: "craft:other", aliases: ["craft:c-merge"] })?.version,
+    "v2.5.0",
+  );
+  assert.equal(shippedFor(null, fix), null);
 });

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { APP_NAME } from "@/lib/platform/app-config";
 import { FIX_GROUP_TITLES, groupAnchor, groupFixes } from "@/lib/views/fixes/groups";
+import type { FixShipped } from "@/lib/views/fixes/shipped";
 import type { FixesModel, FixSource } from "@/lib/views/fixes/types";
 import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
 import { compactCount } from "@/lib/views/home/overview-model";
@@ -33,11 +34,14 @@ export function FixesPage({
   projectId,
   model,
   now,
+  shipped = null,
   progress = null,
 }: {
   projectId: string;
   model: FixesModel;
   now: string;
+  /** Each shipped fix's newest shipment; null when `FF_STAGE_SPINE` is off. */
+  shipped?: Readonly<Record<string, FixShipped>> | null;
   /** Where the jobs that find fixes stand; null reads as idle. */
   progress?: SectionProgress | null;
 }) {
@@ -96,7 +100,7 @@ export function FixesPage({
         ) : (
           <>
             <StatRow stats={fixStatProps(model, root)} />
-            <FixesList model={model} now={now} />
+            <FixesList model={model} now={now} shipped={shipped} />
           </>
         )}
       </PageBody>

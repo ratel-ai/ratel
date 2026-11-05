@@ -1,5 +1,6 @@
 import ExperimentDetailContent from "@/app/(console)/project/[projectId]/calibration/[name]/content";
 import { RankingCalibrationContent } from "@/app/(console)/project/[projectId]/calibration/[name]/ranking-content";
+import { ExperimentSource } from "@/components/console/lineage/ExperimentSource";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
@@ -41,8 +42,16 @@ export default async function ScopedCalibrationDetailPage({
   const view = resolveTraceListView({ ...query, project: project.slug });
   const window = { since: view.range.since, until: view.range.until };
 
+  // Where the experiment came from (RC-45, behind FF_STAGE_SPINE).
+  const lineage = <ExperimentSource projectId={project.id} name={name} />;
   const kind = await resolveKind(query, project.id, name, window);
-  if (kind !== "ranking-shadow") return genericDetail;
+  if (kind !== "ranking-shadow")
+    return (
+      <>
+        {lineage}
+        {genericDetail}
+      </>
+    );
 
   const calibration = await loadOrFallback({
     operation: "calibration_ranking_view",
@@ -58,17 +67,26 @@ export default async function ScopedCalibrationDetailPage({
         ),
       ),
   });
-  if (!calibration) return genericDetail;
+  if (!calibration)
+    return (
+      <>
+        {lineage}
+        {genericDetail}
+      </>
+    );
 
   return (
-    <RankingCalibrationContent
-      calibration={calibration}
-      experimentName={name}
-      basePath={`/project/${project.id}/calibration`}
-      projectId={project.id}
-      projectSlug={project.slug}
-      view={view}
-    />
+    <>
+      {lineage}
+      <RankingCalibrationContent
+        calibration={calibration}
+        experimentName={name}
+        basePath={`/project/${project.id}/calibration`}
+        projectId={project.id}
+        projectSlug={project.slug}
+        view={view}
+      />
+    </>
   );
 }
 

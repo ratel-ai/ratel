@@ -5,7 +5,7 @@ search, projects, settings, and development seeds.
 
 | Path | Holds |
 |---|---|
-| `navigation.ts` | the rail model: project URLs, the destinations this build has (inside a project its pages; outside one the organization's Projects, Integrations and Settings) plus `composition.nav`, the active item, project switching, the ⌘K entries, where `/dashboard` lands |
+| `navigation.ts` | the rail model: project URLs, the destinations this build has (inside a project its pages; outside one the organization's Projects, Integrations and Settings) plus `composition.nav`, the same rail grouped into Monitor, Insights, Improve and Ship (with the Ship page) when `stageSpine` is passed (`FF_STAGE_SPINE`), the active item, project switching, the ⌘K entries, where `/dashboard` lands |
 | `scope/command-search.ts` | the ⌘K ranking |
 | `scope/project-scope.ts` | one project of the session organization, or a 404 |
 | `scope/legacy-redirects.ts`, `scope/moved-pages.ts` | upstream's old-address rules: `/traces`, `/explore`, `/experiments`, `/settings` to their project pages, and the pages the redesign folded into others |

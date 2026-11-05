@@ -23,5 +23,7 @@ export type ShellData = {
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
   accountMenuItems: ReactNode;
+  /** `FF_STAGE_SPINE`: the rail grouped into Monitor, Insights, Improve and Ship, and lineage links. */
+  stageSpine: boolean;
   initiallyCollapsed: boolean;
 };
