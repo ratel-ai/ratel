@@ -50,7 +50,7 @@ async function setup(): Promise<{ client: PGlite; db: Db }> {
   const metrics = (history: number) =>
     `'{"skills":200,"tools":80,"history":${history},"memory":0,"user_input":20}', '{"tools_used":0,"tools_unused":80,"history_cached":0,"history_uncached":${history}}', '{"search_docs":{"calls":0,"tokens":50},"never_used":{"calls":0,"tokens":30}}'`;
   await client.exec(`
-    insert into organizations (id, name, slug, plan) values ('${ORG}', 'Org', 'org', 'pro');
+    insert into organizations (id, name, slug) values ('${ORG}', 'Org', 'org');
     insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '${ORG}', 'A', 'a');
     insert into trace_turns (id, project_id, session_id, turn_key, turn_source, lane, status, ended_by, started_at, ended_at, last_received_at, abandoned) values
       ('${TURN}', '${PROJECT}', 's1', 'declared:1', 'declared', 'runtime', 'closed', 'next_turn', '2026-10-20T10:00:00Z', '2026-10-20T10:00:05Z', '2026-10-20T10:00:05Z', false);

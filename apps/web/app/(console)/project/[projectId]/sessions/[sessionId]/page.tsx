@@ -1,16 +1,15 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout } from "@ratel/design-system/states";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { SessionTimeline } from "@/components/console/session-replay/SessionTimeline";
-import { getProjectScope } from "@/lib/console/scope/project-scope";
+import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
-import { getSessionContext } from "@/lib/platform/session";
 import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
-import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
 import { loadSessionTimeline } from "@/lib/views/session-replay/load";
 import { buildSessionView } from "@/lib/views/session-replay/view";
+import { sessionReplayEnabled } from "@/lib/views/session-replay-flag";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Session replay" };
@@ -19,8 +18,8 @@ export const metadata = { title: "Session replay" };
  * One session step by step (RC-144): each turn, model call, search and tool
  * call in order, what the context held at each model call, and why each tool
  * choice was good or bad. Read-only and text-free: no message, argument or
- * query text is shown. Behind `cloud-session-replay`; without it the page
- * does not exist.
+ * query text is shown. Owned (ADR-0030): behind `FF_SESSION_REPLAY`, off by
+ * default; without it the page does not exist.
  */
 export default async function SessionReplayPage({
   params,
@@ -28,11 +27,8 @@ export default async function SessionReplayPage({
   params: Promise<{ projectId: string; sessionId: string }>;
 }) {
   const { projectId, sessionId } = await params;
-  if (!isDbConfigured()) notFound();
-  const context = await getSessionContext();
-  if (!context) redirect("/");
-  const { project } = await getProjectScope(projectId, context.user.id);
-  if (!(await sessionReplayEnabledForActor(project.id, context.user.externalId))) notFound();
+  if (!sessionReplayEnabled() || !isDbConfigured()) notFound();
+  const { project } = await requireProjectScope(projectId);
 
   const view = await withStatementTimeout(
     async (db) => {

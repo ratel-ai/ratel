@@ -48,7 +48,7 @@ async function setup(): Promise<{ client: PGlite; db: Db }> {
     ],
   });
   await client.exec(`
-    insert into organizations (id, name, slug, plan) values ('${ORG}', 'Org', 'org', 'pro');
+    insert into organizations (id, name, slug) values ('${ORG}', 'Org', 'org');
     insert into projects (id, organization_id, name, slug) values ('${PROJECT}', '${ORG}', 'A', 'a'), ('${OTHER_PROJECT}', '${ORG}', 'B', 'b');
     insert into trace_turns (id, project_id, session_id, turn_key, turn_source, lane, status, ended_by, started_at, ended_at, last_received_at, abandoned, re_search_count) values
       ('${TURN_1}', '${PROJECT}', 's1', 'declared:1', 'declared', 'runtime', 'closed', 'next_turn', '2026-10-20T10:00:00Z', '2026-10-20T10:00:05Z', '2026-10-20T10:00:05Z', false, 0),

@@ -1034,6 +1034,8 @@
         "apps/web/app/(console)/project/\\[projectId\\]/settings/developer/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/loading.tsx",
         "apps/web/lib/views/session-replay/**",
+        "!apps/web/lib/views/session-replay/load.test.ts",
+        "!apps/web/lib/views/session-replay/annotations-load.test.ts",
         "apps/web/components/console/session-replay/**"
       ],
       "linter": {
@@ -1051,6 +1053,7 @@
         "apps/web/components/console/health/**",
         "apps/web/components/console/tasks/**",
         "apps/web/components/console/self-corrections/**",
+        "apps/web/components/console/session-replay/**",
         "apps/web/components/console/adaptive-ranking/**",
         "apps/web/components/console/quality/**",
         "apps/web/components/console/fixes/**",
