@@ -70,7 +70,10 @@ export function createComposition(
     edition = "Ratel Cloud";
     // The admin console is reached from the account menu, for allowlisted admins only.
     nav = [];
-    organizationNav = [{ path: "team", label: "Members" }];
+    organizationNav = [
+      { path: "team", label: "Members" },
+      { path: "billing", label: "Billing" },
+    ];
   } else {
     throw new Error(
       `RATEL_COMPOSITION has unknown value ${JSON.stringify(editionKey)}; valid values: ${VALID_EDITIONS}`,

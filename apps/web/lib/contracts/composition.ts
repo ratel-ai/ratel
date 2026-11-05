@@ -36,6 +36,16 @@ export type EditionUi = {
   OrganizationsPage?: ComponentType;
   /** `/org/<slug>/team`, a 404 otherwise. */
   MembersPage?: ComponentType<{ slug: string }>;
+  /** `/org/<slug>/billing`, a 404 otherwise. */
+  OrganizationBillingPage?: ComponentType<{
+    slug: string;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+  }>;
+  /**
+   * Edition organization-nav paths to hide for one organization (`composition.organizationNav`
+   * entries by `path`), by slug. Nothing is hidden when absent.
+   */
+  hiddenOrganizationNav?: (slug: string) => Promise<readonly string[]>;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */

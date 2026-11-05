@@ -354,3 +354,11 @@ export function entryHref(
 export function dashboardHref(projects: readonly { id: string }[]): string {
   return projects[0] ? `${projectRoot(projects[0].id)}/dashboards` : "/";
 }
+
+/** The edition's organization pages without the paths it hides for this organization. */
+export function visibleOrganizationNav(
+  nav: readonly OrganizationNavItem[],
+  hidden: readonly string[],
+): OrganizationNavItem[] {
+  return nav.filter((item) => !hidden.includes(item.path));
+}
