@@ -11,6 +11,7 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { fixHref } from "@/lib/views/fixes/href";
 import { lineageShowsTraces } from "@/lib/views/lineage/plan";
 import { loadShipments, type ShipmentRow } from "@/lib/views/lineage/shipments";
@@ -26,8 +27,8 @@ export const metadata = { title: "Ship" };
  * each with the fix it came from. Today that is applied description rewrites
  * and shipments recorded through lineage; RC-53 brings releases. With the flag
  * off the page does not exist, like its rail item. Owned (ADR-0030): the
- * project comes from the console scope, and a shipment's trail has no eval
- * step until the eval gate lands.
+ * project comes from the console scope, and the flags are read from the
+ * environment.
  */
 export default async function ShipPage({
   params,
@@ -66,21 +67,23 @@ export default async function ShipPage({
           operation: "ship_lineage_chain",
           distinctId,
           fallback: opened.source ? [opened.source, opened.ref] : [opened.ref],
-          load: () =>
-            withStatementTimeout(
+          load: async () => {
+            const evals = await evalGateEnabledFor(organization).catch(() => false);
+            return withStatementTimeout(
               (db) =>
                 shipmentTrail(
                   opened.ref,
                   {
                     projectId: project.id,
                     traces: lineageShowsTraces(organization),
-                    evals: false,
+                    evals,
                     db,
                   },
                   opened.source,
                 ),
               { operation: "ship_lineage_chain" },
-            ),
+            );
+          },
         }),
       }
     : null;

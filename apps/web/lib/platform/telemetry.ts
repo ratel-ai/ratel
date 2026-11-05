@@ -82,6 +82,13 @@ export const SERVER_EVENT_NAMES = [
   "topic_run_completed",
   "topic_run_failed",
   "lineage_link_recorded",
+  "fix_eval_simulation_requested",
+  "fix_eval_set_created",
+  "fix_eval_case_added",
+  "fix_eval_case_updated",
+  "fix_eval_case_removed",
+  "fix_eval_simulation_completed",
+  "fix_eval_simulation_failed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

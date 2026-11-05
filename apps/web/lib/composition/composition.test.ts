@@ -223,6 +223,7 @@ describe("registry root", () => {
       "fold_intent_graph",
       "label_workflows",
       "match_quality_run",
+      "simulate_fix_eval",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
     // can carry events through turns, recurring asks, the graph and the engine. After-steps are

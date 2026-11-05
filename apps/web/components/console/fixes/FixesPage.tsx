@@ -5,6 +5,7 @@ import { Callout, EmptyState } from "@ratel/design-system/states";
 import Link from "next/link";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { APP_NAME } from "@/lib/platform/app-config";
+import type { EvalBadge } from "@/lib/views/eval-gate/types";
 import { FIX_GROUP_TITLES, groupAnchor, groupFixes } from "@/lib/views/fixes/groups";
 import type { FixShipped } from "@/lib/views/fixes/shipped";
 import type { FixesModel, FixSource } from "@/lib/views/fixes/types";
@@ -34,12 +35,15 @@ export function FixesPage({
   projectId,
   model,
   now,
+  evalBadges = null,
   shipped = null,
   progress = null,
 }: {
   projectId: string;
   model: FixesModel;
   now: string;
+  /** Each fix's eval gate badge; null when `FF_EVAL_GATE` is off. */
+  evalBadges?: Readonly<Record<string, EvalBadge>> | null;
   /** Each shipped fix's newest shipment; null when `FF_STAGE_SPINE` is off. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
   /** Where the jobs that find fixes stand; null reads as idle. */
@@ -100,7 +104,7 @@ export function FixesPage({
         ) : (
           <>
             <StatRow stats={fixStatProps(model, root)} />
-            <FixesList model={model} now={now} shipped={shipped} />
+            <FixesList model={model} now={now} evalBadges={evalBadges} shipped={shipped} />
           </>
         )}
       </PageBody>

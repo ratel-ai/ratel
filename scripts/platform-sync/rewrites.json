@@ -51,6 +51,8 @@
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/session-replay/", "to": "@/components/console/session-replay/" },
     { "from": "@/components/lineage/", "to": "@/components/console/lineage/" },
+    { "from": "@/components/eval-gate/", "to": "@/components/console/eval-gate/" },
+    { "from": "@/lib/task-scorers", "to": "@/lib/views/task-scorers", "exact": true },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },
     { "from": "@/components/traces/TraceLifecycleEvents", "to": "@/components/console/traces/compare/TraceLifecycleEvents", "exact": true },

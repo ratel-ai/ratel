@@ -16,7 +16,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { dismissDraftedFixAction } from "@/app/(console)/project/[projectId]/improvement/fixes/actions";
+import { EvalBadgeValue } from "@/components/console/eval-gate/EvalBadge";
+import { EvalGateSection } from "@/components/console/eval-gate/EvalGateSection";
 import { formatTimestamp } from "@/lib/synthesis/traces/format";
+import { changeOf } from "@/lib/views/eval-gate/change";
+import { nothingToSimulate } from "@/lib/views/eval-gate/method";
+import type { EvalBadge } from "@/lib/views/eval-gate/types";
+import { evalHref } from "@/lib/views/eval-gate/view";
 import { type Acted, withActed } from "@/lib/views/fixes/acted";
 import {
   FIX_GROUP_LINES,
@@ -62,10 +68,13 @@ const ROW_ACTION: Readonly<Record<FixGroup, string>> = {
 export function FixesList({
   model,
   now,
+  evalBadges = null,
   shipped = null,
 }: {
   model: FixesModel;
   now: string;
+  /** Each fix's eval gate, by fix id; null when `FF_EVAL_GATE` is off (no column, no section). */
+  evalBadges?: Readonly<Record<string, EvalBadge>> | null;
   /** Each shipped fix's newest shipment, by fix id (RC-72); null when `FF_STAGE_SPINE` is off. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
 }) {
@@ -268,6 +277,19 @@ export function FixesList({
       className: "min-w-24",
       cell: (fix) => <EvidenceValue evidence={fix.evidence} />,
     },
+    ...(evalBadges
+      ? [
+          {
+            id: "eval",
+            header: "Eval",
+            hiddenBelow: "lg",
+            className: "min-w-40",
+            cell: (fix) => (
+              <EvalBadgeValue badge={evalBadges[fix.id]} href={evalHref(model.projectId, fix.id)} />
+            ),
+          } satisfies Column<Fix>,
+        ]
+      : []),
     {
       id: "action",
       header: <span className="sr-only">Action</span>,
@@ -371,6 +393,20 @@ export function FixesList({
             actions={panelActions(showing)}
             projectId={model.projectId}
             shipped={shippedFor(shipped, showing)}
+            gate={
+              evalBadges ? (
+                <EvalGateSection
+                  projectId={model.projectId}
+                  fixId={showing.id}
+                  badge={evalBadges[showing.id]}
+                  blocked={
+                    showing.kind === "rewrite" || showing.kind === "tell-apart"
+                      ? null
+                      : nothingToSimulate(showing.kind, changeOf(showing))
+                  }
+                />
+              ) : null
+            }
           />
         ) : null}
       </Panel>

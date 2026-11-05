@@ -25,11 +25,14 @@ export function FixDetail({
   fix,
   actions,
   projectId,
+  gate,
   shipped = null,
 }: {
   fix: Fix;
   actions: ReactNode;
   projectId?: string;
+  /** The eval gate's section (behind `FF_EVAL_GATE`); absent when the gate is off. */
+  gate?: ReactNode;
   /** Its newest shipment (RC-72, behind `FF_STAGE_SPINE`); null when it has not shipped or the flag is off. */
   shipped?: FixShipped | null;
 }) {
@@ -45,6 +48,7 @@ export function FixDetail({
       {projectId ? <FixSource projectId={projectId} fix={fix} /> : null}
       <Hero fix={fix} actions={actions} />
       {shipped ? <ShippedSection shipped={shipped} /> : null}
+      {gate ?? null}
       <AffectsLinks subject={fix.subject} />
       {detail.source === "rewrite" ? (
         <BeforeAfter detail={detail} applied={fix.status === "applied"} />

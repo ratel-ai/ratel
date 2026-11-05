@@ -8,7 +8,7 @@ export const metadata = { title: "Fixes" };
  * Improvements, Fixes: one list of the changes that would make the agent
  * better, whatever found them. Filters (`?kind=`, `?task=`, `?tool=`,
  * `?topic=`) and the open fix (`?peek=`) live in the URL and are read on
- * the client. Owned (ADR-0030): no Cloud flag gate and no eval gate.
+ * the client. Owned (ADR-0030): no Cloud flag gate.
  */
 export default async function FixesRoute({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;
@@ -19,6 +19,7 @@ export default async function FixesRoute({ params }: { params: Promise<{ project
       projectId={data.projectId}
       model={data.model}
       now={data.now}
+      evalBadges={data.evalBadges}
       shipped={data.shipped}
       progress={data.progress}
     />
