@@ -1,5 +1,5 @@
 {
-  "id": "a71c1e83-f84c-4bac-ba23-062207732fec",
+  "id": "43d24524-d8a5-4ce1-a26f-4b3cf0621106",
   "prevId": "203895ea-828f-41d1-89d0-2b3c37a6eb17",
   "version": "7",
   "dialect": "postgresql",
@@ -3120,6 +3120,28 @@
           ],
           "isUnique": true,
           "where": "\"jobs\".\"status\" = 'queued' and \"jobs\".\"kind\" = 'craft_tools'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jobs_draft_fix_pending_idx": {
+          "name": "jobs_draft_fix_pending_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "(\"payload\"->>'fixId')",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"jobs\".\"kind\" = 'draft_fix' and \"jobs\".\"status\" in ('queued', 'running')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9543,6 +9565,156 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.fix_drafts": {
+      "name": "fix_drafts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fix_id": {
+          "name": "fix_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "change": {
+          "name": "change",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'drafted'"
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "spend": {
+          "name": "spend",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "fix_drafts_project_fix_created_idx": {
+          "name": "fix_drafts_project_fix_created_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fix_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "fix_drafts_drafting_idx": {
+          "name": "fix_drafts_drafting_idx",
+          "columns": [
+            {
+              "expression": "project_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "fix_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"fix_drafts\".\"status\" = 'drafting'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "fix_drafts_project_id_projects_id_fk": {
+          "name": "fix_drafts_project_id_projects_id_fk",
+          "tableFrom": "fix_drafts",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "fix_drafts_origin_check": {
+          "name": "fix_drafts_origin_check",
+          "value": "\"fix_drafts\".\"origin\" in ('drafted', 'user')"
+        },
+        "fix_drafts_status_check": {
+          "name": "fix_drafts_status_check",
+          "value": "\"fix_drafts\".\"status\" in ('drafting', 'ready', 'budget_refused', 'failed')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.fix_experiments": {
       "name": "fix_experiments",
       "schema": "",
@@ -10031,311 +10203,6 @@
         "lineage_links_project_id_projects_id_fk": {
           "name": "lineage_links_project_id_projects_id_fk",
           "tableFrom": "lineage_links",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.session_replay_runs": {
-      "name": "session_replay_runs",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "turn_id": {
-          "name": "turn_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "step": {
-          "name": "step",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "variant_kind": {
-          "name": "variant_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "variant_ref": {
-          "name": "variant_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "variant_key": {
-          "name": "variant_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "method": {
-          "name": "method",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "k": {
-          "name": "k",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "recorded_tool": {
-          "name": "recorded_tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "before_tool": {
-          "name": "before_tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "after_tool": {
-          "name": "after_tool",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "distribution": {
-          "name": "distribution",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tokens": {
-          "name": "tokens",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "spend": {
-          "name": "spend",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'queued'"
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "requested_by": {
-          "name": "requested_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "job_id": {
-          "name": "job_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "session_replay_runs_live_idx": {
-          "name": "session_replay_runs_live_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "turn_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "step",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "variant_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"session_replay_runs\".\"status\" in ('queued', 'running')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "session_replay_runs_project_created_idx": {
-          "name": "session_replay_runs_project_created_idx",
-          "columns": [
-            {
-              "expression": "project_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "session_replay_runs_created_idx": {
-          "name": "session_replay_runs_created_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "session_replay_runs_project_id_projects_id_fk": {
-          "name": "session_replay_runs_project_id_projects_id_fk",
-          "tableFrom": "session_replay_runs",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "session_replay_runs_status_check": {
-          "name": "session_replay_runs_status_check",
-          "value": "\"session_replay_runs\".\"status\" in ('queued', 'running', 'completed', 'failed')"
-        },
-        "session_replay_runs_method_check": {
-          "name": "session_replay_runs_method_check",
-          "value": "\"session_replay_runs\".\"method\" in ('replay', 'rerank')"
-        },
-        "session_replay_runs_k_check": {
-          "name": "session_replay_runs_k_check",
-          "value": "\"session_replay_runs\".\"k\" between 1 and 10"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.session_replay_settings": {
-      "name": "session_replay_settings",
-      "schema": "",
-      "columns": {
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "read_content": {
-          "name": "read_content",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "session_replay_settings_project_id_projects_id_fk": {
-          "name": "session_replay_settings_project_id_projects_id_fk",
-          "tableFrom": "session_replay_settings",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"

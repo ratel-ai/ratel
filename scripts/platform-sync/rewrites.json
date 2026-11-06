@@ -121,6 +121,8 @@
         "sessionReplayRuns": "@/lib/views/session-replay/schema",
         "SessionReplaySettingsRow": "@/lib/views/session-replay/schema",
         "SessionReplayRunRow": "@/lib/views/session-replay/schema",
+        "fixDrafts": "@/lib/views/fix-drafts/schema",
+        "FixDraftRow": "@/lib/views/fix-drafts/schema",
         "catalogFingerprints": "@/lib/synthesis/quality/schema",
         "CatalogFingerprintEntry": "@/lib/synthesis/quality/schema",
         "CatalogFingerprintRow": "@/lib/synthesis/quality/schema",

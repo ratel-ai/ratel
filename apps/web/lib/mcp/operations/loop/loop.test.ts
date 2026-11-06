@@ -29,8 +29,8 @@ import type { LineageRef } from "@/lib/views/lineage/types";
  * back, the chain walks to the trace, writes are scoped to a fix that exists in
  * the project, and every write emits its event.
  *
- * Owned (ADR-0030): the seven tools here; the task tools, task simulations
- * and fix drafts' cases land with the task loop and fix drafts.
+ * Owned (ADR-0030): the seven tools here; the task tools and task simulations
+ * land with the task loop. The fix drafts' cases are upstream's, without tasks.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const INSIGHT = "22222222-2222-4222-8222-222222222222";
@@ -203,6 +203,7 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     runSimulation: async (fixId) => simulated(fixId),
     latestEval: async (_projectId, f) => simulated(f.id),
     evalGateEnabled: async () => true,
+    latestFixDraft: async () => null,
     recordLineage: async (input) => input.object,
     createFixExperiment: async (input) => ({ row: experimentRow({ ...input }) }),
     getFixExperiment: async (_projectId, id) => (id === EXPERIMENT ? experimentRow() : null),
@@ -780,4 +781,79 @@ test("list_fixes and get_fix report a fix's shipped state once mark_fix_shipped 
 
   const none = data<{ fixes: { shipped: unknown }[] }>(await run("list_fixes", {}));
   assert.equal(none.fixes[0]!.shipped, null, "not shipped: null");
+});
+
+test("list_fixes and get_fix return the latest draft, and a ready draft supplies the change", async () => {
+  const draft: NonNullable<Awaited<ReturnType<LoopOperationDeps["latestFixDraft"]>>> = {
+    id: "draft-1",
+    projectId: PROJECT,
+    fixId: fix.id,
+    change: { ...emptyChange(), patches: { hold_fare: "Retry once." } },
+    origin: "drafted",
+    model: "claude-sonnet-5-5",
+    spend: null,
+    status: "ready",
+    createdBy: "system:fix-drafts",
+    createdAt: new Date("2026-11-01T00:00:00Z"),
+  };
+  const reads: [string, string][] = [];
+  const over: Partial<LoopOperationDeps> = {
+    latestFixDraft: async (projectId, fixId) => {
+      reads.push([projectId, fixId]);
+      return draft;
+    },
+  };
+  const listed = data<{ fixes: { draft: { status: string; change: { patches: unknown } } }[] }>(
+    await run("list_fixes", {}, [], over),
+  );
+  assert.equal(listed.fixes[0]!.draft.status, "ready");
+  assert.deepEqual(listed.fixes[0]!.draft.change.patches, { hold_fare: "Retry once." });
+  const one = data<{ fix: { draft: { origin: string }; change: { patches: unknown } } }>(
+    await run("get_fix", { fixId: fix.id }, [], over),
+  );
+  assert.equal(one.fix.draft.origin, "drafted");
+  assert.deepEqual(one.fix.change.patches, { hold_fare: "Retry once." });
+  assert.deepEqual(reads, [
+    [PROJECT, fix.id],
+    [PROJECT, fix.id],
+  ]);
+});
+
+test("a draft that is not ready is shown, but the fix's own change stays", async () => {
+  const over: Partial<LoopOperationDeps> = {
+    latestFixDraft: async () => ({
+      id: "draft-2",
+      projectId: PROJECT,
+      fixId: fix.id,
+      change: emptyChange(),
+      origin: "drafted",
+      model: "claude-sonnet-5-5",
+      spend: { usd: 0.05, reserved: true },
+      status: "drafting",
+      createdBy: "system:fix-drafts",
+      createdAt: new Date("2026-11-01T00:00:00Z"),
+    }),
+  };
+  const one = data<{ fix: { draft: { status: string }; change: { steps: string[] } } }>(
+    await run("get_fix", { fixId: fix.id }, [], over),
+  );
+  assert.equal(one.fix.draft.status, "drafting");
+  assert.deepEqual(one.fix.change.steps, ["Retry hold_fare with backoff."]);
+});
+
+test("fix drafts remain unread when the eval gate is off", async () => {
+  const over: Partial<LoopOperationDeps> = {
+    evalGateEnabled: async () => false,
+    latestFixDraft: async () => {
+      throw new Error("The draft read must not run.");
+    },
+  };
+  assert.equal(
+    data<{ fixes: { draft: null }[] }>(await run("list_fixes", {}, [], over)).fixes[0]!.draft,
+    null,
+  );
+  assert.equal(
+    data<{ fix: { draft: null } }>(await run("get_fix", { fixId: fix.id }, [], over)).fix.draft,
+    null,
+  );
 });

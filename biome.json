@@ -681,6 +681,8 @@
         "apps/web/components/console/health/v2/setup-nudge.ts",
         "apps/web/components/console/health/v2/setup-peek.ts",
         "apps/web/components/console/health/v2/summary-model.ts",
+        "apps/web/components/console/health/v2/OpenImportButtonV2.tsx",
+        "apps/web/components/console/health/imports/open-import.ts",
         "apps/web/components/console/tasks/SessionView.tsx",
         "apps/web/components/console/tasks/StepPins.tsx",
         "apps/web/components/console/tasks/TaskFlowDiagram.tsx",
@@ -1087,7 +1089,8 @@
         "!apps/web/lib/views/eval-gate/no-outbound-without-key.test.ts",
         "apps/web/components/console/eval-gate/**",
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
-        "apps/web/lib/platform/project-log-context.ts"
+        "apps/web/lib/platform/project-log-context.ts",
+        "apps/web/lib/views/fix-drafts/change.test.ts"
       ],
       "linter": {
         "rules": {

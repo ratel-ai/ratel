@@ -100,6 +100,7 @@ describe("createComposition", () => {
         label: "APIs",
         items: [
           { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
         ],
       },
     ]);
@@ -133,8 +134,14 @@ describe("createComposition", () => {
       eeComposition: { ...cloudPorts, connect: (core) => lent.push(core) },
     });
     const toolCorpus = { load: async () => [] };
-    cloud.connect?.({ toolCorpus });
-    assert.deepEqual(lent, [{ toolCorpus }]);
+    const importedRuns = {
+      persist: async () => ({ ok: true as const, accepted: 0, calls: 0 }),
+      requestReading: async () => {},
+      enqueueJob: async () => ({ id: "j" }),
+      scheduleDrain: () => {},
+    };
+    cloud.connect?.({ toolCorpus, importedRuns });
+    assert.deepEqual(lent, [{ toolCorpus, importedRuns }]);
     assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
   });
 
@@ -219,6 +226,7 @@ describe("registry root", () => {
       "cluster_intents",
       "compute_trace_signals",
       "craft_tools",
+      "draft_fix",
       "explore_tool_usage",
       "fold_intent_graph",
       "label_workflows",

@@ -30,7 +30,9 @@ graph's compaction; the graph never imports the engine.
 **Seams.** The ledger's `ledgerSeams` (`enqueueReading`, `onBacklogDrained`) are filled by
 `trace-signals/register.ts` when the registry loads. `trace-signals/signals/compute-job.ts`
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
-`enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id).
+`enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id) and
+`enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
+behind `FF_EVAL_GATE` and a model key).
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading
 of the explorer's reading, so its registration fills the seam when it lands; unset, a completed
 explorer run queues nothing. `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two

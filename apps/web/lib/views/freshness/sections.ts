@@ -22,7 +22,13 @@ export const ANALYSIS_SECTIONS = {
   self_corrections: ["compute_trace_signals", "assign_topics"],
   tasks: ["compute_trace_signals", "label_workflows", "assign_topics"],
   intents: ["compute_trace_signals", "assign_topics", "cluster_intents"],
-  fixes: ["compute_trace_signals", "explore_tool_usage", "craft_tools", "match_quality_run"],
+  fixes: [
+    "compute_trace_signals",
+    "explore_tool_usage",
+    "craft_tools",
+    "match_quality_run",
+    "draft_fix",
+  ],
 } as const satisfies Record<string, readonly JobKind[]>;
 
 export type AnalysisSection = keyof typeof ANALYSIS_SECTIONS;

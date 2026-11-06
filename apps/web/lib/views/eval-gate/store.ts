@@ -437,6 +437,26 @@ export async function organizationModelSpendSince(
   return Number.isFinite(usd) ? usd : 0;
 }
 
+/**
+ * Serialise the reservations of one organization's daily budget until the transaction ends.
+ * Owned (ADR-0030): upstream locks the organization's row (`for update of organizations`);
+ * the core has no `organizations` table since 0020, so an advisory lock keyed on the
+ * project's organization id stands in. Every reservation that reads the budget takes it.
+ * Returns false when the project does not exist.
+ */
+export async function lockOrganizationSpend(projectId: string, tx: EvalDb): Promise<boolean> {
+  const [project] = await tx
+    .select({ organizationId: projects.organizationId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  if (!project) return false;
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`organization-spend:${project.organizationId}`}, 0))`,
+  );
+  return true;
+}
+
 export async function getEvalRun(
   runId: string,
   db: EvalDb = getDb(),

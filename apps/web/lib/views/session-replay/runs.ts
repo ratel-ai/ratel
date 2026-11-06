@@ -2,10 +2,13 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import { projects } from "@/lib/platform/projects/schema";
 import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
 import { DAILY_ORG_BUDGET_USD } from "@/lib/views/eval-gate/models";
-import { organizationModelSpendSince, STALE_EVAL_RUN_MS } from "@/lib/views/eval-gate/store";
+import {
+  lockOrganizationSpend,
+  organizationModelSpendSince,
+  STALE_EVAL_RUN_MS,
+} from "@/lib/views/eval-gate/store";
 import { DEFAULT_K, MAX_K, type WhatIfMethod } from "@/lib/views/session-replay/fork";
 import {
   defaultOrganizationFlagDeps,
@@ -133,14 +136,9 @@ export async function requestWhatIf(
 
   const queued = await db.transaction(async (tx) => {
     // The organization's lock: two requests can't both fit in the last of the budget. Owned
-    // (ADR-0030): an advisory lock on the organization id, since the edition owns
-    // `organizations`; upstream locks its row.
-    const [org] = await tx
-      .select({ id: projects.organizationId })
-      .from(projects)
-      .where(eq(projects.id, projectId));
-    if (!org) throw refuse("not_found", request);
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`what_if_budget:${org.id}`}))`);
+    // (ADR-0030): the eval gate's `lockOrganizationSpend`, the advisory lock every reservation
+    // of the budget takes, since the core has no `organizations`; upstream locks its row.
+    if (!(await lockOrganizationSpend(projectId, tx))) throw refuse("not_found", request);
     const live = await liveRun(
       projectId,
       request.turnId,

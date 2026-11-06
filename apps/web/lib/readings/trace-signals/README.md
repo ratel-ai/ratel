@@ -34,8 +34,9 @@ run completes, workflows keep their tool-order names, and the label job reports 
 
 **Seams.** `register.ts` fills the ledger's `ledgerSeams` (`enqueueReading`,
 `onBacklogDrained`) when the registry loads. `signals/compute-job.ts` exports `computeSeams`:
-`enqueueTopics` (the topics registration fills it) and `enqueueExplore` (the tool-explorer
-reading, later); unset, a run queues nothing after itself.
+`enqueueTopics` (the topics registration fills it), `enqueueExplore` (the tool-explorer
+reading) and `enqueueFixDrafts` (fix drafts, `views/fix-drafts`); unset, a run queues nothing
+after itself, and a failed enqueue never fails the run.
 
 **Owned files** (the rest mirror upstream through the sync): `schema.ts`, `register.ts` and
 their tests; `view.ts`, `workflows/decide.ts` and `workflows/label-queries.integration.test.ts`

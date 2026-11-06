@@ -43,8 +43,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.
 - `loop-flag.ts` (with its test): one env switch, `FF_MCP_LOOP`, in place of upstream's per-key and
   per-organization flag. `operations/loop/index.ts` and `loop.test.ts`: seven tools; the task tools
-  (`list_tasks`, `get_task`), task simulations and fix drafts land with the task loop and fix
-  drafts, and `draft` is null until then. `run-eval-gate.integration.test.ts`: the gate is the env
+  (`list_tasks`, `get_task`) and task simulations land with the task loop. `list_fixes` and
+  `get_fix` return a fix's newest draft (`lib/views/fix-drafts`) while `FF_EVAL_GATE` is on, null
+  otherwise, and a ready draft supplies `get_fix`'s change. `run-eval-gate.integration.test.ts`: the gate is the env
   switch. `stages.ts`: no stage for the tools this build does not have. `operations/index.ts`,
   `route-handler.ts` and `server.ts` wire the loop as upstream does.
   `__fixtures__/tools-list-before-loop.json` is this build's tool list before the loop:

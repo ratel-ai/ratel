@@ -38,6 +38,7 @@ export type BackgroundEventName = Extract<
   | "trace_signal_run_failed"
   | "fix_eval_simulation_completed"
   | "fix_eval_simulation_failed"
+  | "fix_draft_finished"
 >;
 
 export interface BackgroundObservabilityDeps {

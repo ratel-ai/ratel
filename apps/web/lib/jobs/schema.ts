@@ -50,6 +50,10 @@ export const jobs = pgTable(
     uniqueIndex("jobs_craft_tools_queued_idx")
       .on(t.projectId, t.kind)
       .where(sql`${t.status} = 'queued' and ${t.kind} = 'craft_tools'`),
+    // One pending draft per fix, queued or running (fix drafts, `lib/views/fix-drafts`).
+    uniqueIndex("jobs_draft_fix_pending_idx")
+      .on(t.projectId, sql`(${t.payload}->>'fixId')`)
+      .where(sql`${t.kind} = 'draft_fix' and ${t.status} in ('queued', 'running')`),
     uniqueIndex("jobs_fold_intent_graph_queued_idx")
       .on(t.projectId, t.kind)
       .where(sql`${t.status} = 'queued' and ${t.kind} = 'fold_intent_graph'`),

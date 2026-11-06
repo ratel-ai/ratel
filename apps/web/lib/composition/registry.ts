@@ -12,6 +12,7 @@ import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
+import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 
 /**
@@ -32,6 +33,7 @@ const CORE: Registration[] = [
   qualityRegistration,
   toolCrafterRegistration,
   evalGateRegistration,
+  fixDraftsRegistration,
   sessionReplayRegistration,
 ];
 

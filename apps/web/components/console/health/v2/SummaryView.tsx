@@ -1,5 +1,6 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout } from "@ratel/design-system/states";
+import type { ComponentType } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { pageGap, signalsForGap, tilesForGap } from "@/components/console/health/data-gaps-model";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
@@ -28,6 +29,8 @@ import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLoo
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
+import type { HealthImporterProps } from "@/lib/contracts/composition";
+import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   type HealthPageModel,
   runWindowLabel,
@@ -49,9 +52,17 @@ import type { TaskListModel } from "@/lib/views/tasks/model";
  * and the requests no task handles. Before there is a reading, one designed
  * state sits where the reading would.
  *
- * Owned (ADR-0030): no importer, public share link or plan to pick. The
- * sections that upstream hands an upgrade link get none, so nothing is sold.
+ * Owned (ADR-0030): no public share link or plan to pick. The sections that
+ * upstream hands an upgrade link get none, so nothing is sold. The importer is
+ * the edition's (`EditionUi.HealthImports`), absent without one.
  */
+
+export interface SummaryImports {
+  list: readonly ImportSummary[];
+  contactUrl: string | null;
+  sourceLabel: Readonly<Record<string, string>>;
+  Importer: ComponentType<HealthImporterProps>;
+}
 
 export interface SummaryViewProps {
   projectId: string;
@@ -68,14 +79,33 @@ export interface SummaryViewProps {
   corrections: SelfCorrectionsCardModel;
   /** The printable report for this window; null hides it. */
   reportHref: string | null;
+  /** Null when the importer is off (no edition importer, or its read failed). */
+  imports: SummaryImports | null;
   now?: Date;
 }
 
 export function SummaryView(props: SummaryViewProps) {
-  const { projectId, projectName, model } = props;
+  const { projectId, projectName, model, imports } = props;
   const state = summaryState(props.state, model);
   const ready = state.kind === "ready";
   const reading = ready && model.computedAt !== null;
+  const canImport = imports !== null;
+  const importer = (variant: "history" | "dialog") =>
+    imports ? (
+      <imports.Importer
+        projectId={projectId}
+        windowOptions={props.windowOptions}
+        initialImports={imports.list}
+        variant={variant}
+        contactUrl={imports.contactUrl}
+        readingBuilding={
+          state.kind === "building" &&
+          state.phase === "computing" &&
+          state.working &&
+          state.imported
+        }
+      />
+    ) : null;
   return (
     <Page>
       <PageHeader
@@ -95,7 +125,10 @@ export function SummaryView(props: SummaryViewProps) {
               windowDays={model.windowDays}
               options={props.windowOptions}
             />
-            <SummaryMenu reportHref={ready ? props.reportHref : null} />
+            <SummaryMenu
+              reportHref={ready ? props.reportHref : null}
+              canImport={ready && canImport}
+            />
           </>
         }
       />
@@ -105,22 +138,39 @@ export function SummaryView(props: SummaryViewProps) {
           data-health-page-state={state.kind}
           data-health-readiness={stateReadiness(state)}
         >
-          {ready ? <Ready {...props} /> : <NotReady {...props} state={state} />}
+          {ready ? (
+            <Ready {...props} />
+          ) : (
+            <NotReady {...props} state={state} canImport={canImport} />
+          )}
         </div>
+        {ready ? importer("dialog") : importer("history")}
       </PageBody>
     </Page>
   );
 }
 
 /** Before a reading: the state block where the reading would be, then the readings as dashes while it fills. */
-function NotReady({ projectId, model, state }: SummaryViewProps & { state: HealthPageState }) {
+function NotReady({
+  projectId,
+  model,
+  state,
+  canImport,
+  imports,
+}: SummaryViewProps & { state: HealthPageState; canImport: boolean }) {
   const collecting = stateReadiness(state) === "collecting";
   return (
     <>
       {state.kind === "tool_spans" ? (
         <ToolSpansBlock />
       ) : state.kind === "ready" ? null : (
-        <HealthStateV2 projectId={projectId} state={state} windowDays={model.windowDays} />
+        <HealthStateV2
+          projectId={projectId}
+          state={state}
+          windowDays={model.windowDays}
+          canImport={canImport}
+          sourceLabel={imports?.sourceLabel}
+        />
       )}
       {collecting ? <Readings readings={readingViews(model.tiles)} interactive={false} /> : null}
     </>
