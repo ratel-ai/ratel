@@ -198,6 +198,9 @@ importers:
 
   ee:
     dependencies:
+      '@base-ui/react':
+        specifier: ^1.6.0
+        version: 1.9.0(@types/react@19.3.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@clerk/backend':
         specifier: ^3.26.5
         version: 3.26.5(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -213,6 +216,9 @@ importers:
       '@ratel/design-system':
         specifier: workspace:*
         version: link:../packages/design-system
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.4(@electric-sql/pglite@0.5.12)(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(pg@8.23.1)

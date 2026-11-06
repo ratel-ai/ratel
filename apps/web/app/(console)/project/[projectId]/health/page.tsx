@@ -1,5 +1,11 @@
-import { SummaryNoDatabase, SummaryView } from "@/components/console/health/v2/SummaryView";
+import {
+  type SummaryImports,
+  SummaryNoDatabase,
+  SummaryView,
+} from "@/components/console/health/v2/SummaryView";
+import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
+import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -34,7 +40,7 @@ export const metadata = { title: "Agent health" };
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits from the entitlements port.
- * No importer, share link or plan to pick here.
+ * No share link or plan to pick here; the importer is the edition's.
  */
 export default async function AgentHealthPage({
   params,
@@ -52,7 +58,8 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
-  const [loaded, tasks, fixes, corrections] = await Promise.all([
+  const importsSlot = (await composition.ui?.())?.HealthImports;
+  const [loaded, imports, tasks, fixes, corrections] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
       distinctId,
@@ -63,6 +70,7 @@ export default async function AgentHealthPage({
           getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
         }),
     }),
+    loadImportState(project.id, importsSlot),
     loadOrFallback<TaskListModel | null>({
       operation: "agent_health_tasks",
       distinctId,
@@ -92,8 +100,9 @@ export default async function AgentHealthPage({
     organizationId: organization.id,
     model,
     modelUnavailable: loaded === fallbackModel,
-    // No importer in this edition: none, which the state reads as none.
-    imports: [],
+    // A failed read is unknown, not "no imports": a held one may be in there.
+    // Without an edition importer: none, which the state reads as none.
+    imports: imports ? imports.list : importsSlot ? null : [],
     planWindowDays: limits.agentHealthWindowDays,
     readOnly: false,
   });
@@ -120,6 +129,25 @@ export default async function AgentHealthPage({
       fixes={fixes}
       corrections={corrections}
       reportHref={healthReportHref(project.id, windowDays)}
+      imports={imports}
     />
   );
+}
+
+/** The project's recent imports. A failed read hides the importer, not the page. */
+async function loadImportState(
+  projectId: string,
+  slot: EditionUi["HealthImports"],
+): Promise<SummaryImports | null> {
+  if (!slot) return null;
+  return loadOrFallback<SummaryImports | null>({
+    operation: "agent_health_import_state",
+    distinctId: `project:${projectId}`,
+    fallback: null,
+    load: async () => ({
+      ...(await slot.load(projectId)),
+      sourceLabel: slot.sourceLabel,
+      Importer: slot.Importer,
+    }),
+  });
 }

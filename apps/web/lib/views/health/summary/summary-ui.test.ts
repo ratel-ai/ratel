@@ -276,6 +276,7 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     fixes: { open: [FIX, REWRITE, COMBINE], applied: [] },
     corrections: CARD,
     reportHref: `/report/health/${PROJECT}?days=7&print=1`,
+    imports: null,
     now: NOW,
     ...over,
   };
@@ -901,6 +902,29 @@ for (const [name, state, expected] of STATES) {
     else assert.doesNotMatch(html, /data-health-readings=/);
   });
 }
+
+test("an edition's importer: offered by the state and the menu, mounted once, its source names in the copy", () => {
+  const Importer = ({ variant }: { variant: string }) =>
+    createElement("div", { "data-stub-importer": variant });
+  const imports = { list: [], contactUrl: null, sourceLabel: { langsmith: "LangSmith" }, Importer };
+  const empty = page({ model: MOCK_NO_TELEMETRY, state: { kind: "nothing_yet" }, imports });
+  assert.match(empty, /No runs yet[^]*Import past runs[^]*Get an API key/);
+  assert.match(empty, /data-stub-importer="history"/);
+  const named = page({
+    model: pendingHealthModel(7),
+    state: { kind: "imported_no_tools", runs: 12, source: "langsmith" },
+    imports,
+  });
+  assert.match(named, /imported from LangSmith/);
+  const ready = page({ imports });
+  assert.match(ready, /aria-label="Import and download"/);
+  assert.match(ready, /data-stub-importer="dialog"/);
+  assert.doesNotMatch(
+    page(),
+    /Import past runs|data-stub-importer/,
+    "no importer without an edition",
+  );
+});
 
 test("model calls arrive with no tool spans: what to send, with the guide in place", () => {
   const html = page({
