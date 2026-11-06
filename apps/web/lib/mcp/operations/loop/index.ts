@@ -27,6 +27,8 @@ import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
+import type { FixDraftRow } from "@/lib/views/fix-drafts/schema";
+import { latestFixDraft } from "@/lib/views/fix-drafts/store";
 import {
   createFixExperiment,
   createFixShipment,
@@ -59,10 +61,10 @@ import type { LineageRef } from "@/lib/views/lineage/types";
  * listed. `run_eval` and `get_eval` also need `FF_EVAL_GATE`; off, they refuse
  * with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): seven tools. The task tools (`list_tasks`, `get_task`), a
- * fix's task simulations and its drafted change land with the task loop and
- * fix drafts; until then every fix is simulated on its own eval set and
- * `draft` is null.
+ * Owned (ADR-0030): seven tools. The task tools (`list_tasks`, `get_task`) and
+ * a fix's task simulations land with the task loop; until then every fix is
+ * simulated on its own eval set. A fix's `draft` is its newest fix draft while
+ * the eval gate is on (`FF_EVAL_GATE`), else null.
  */
 export interface LoopOperationDeps {
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
@@ -80,6 +82,8 @@ export interface LoopOperationDeps {
    * API key as `project:<id>` with the organization's properties.
    */
   evalGateEnabled: (projectId: string, actor: string) => Promise<boolean>;
+  /** The fix's newest draft (`lib/views/fix-drafts`), read only while the eval gate is on. */
+  latestFixDraft: (projectId: string, fixId: string) => ReturnType<typeof latestFixDraft>;
   recordLineage: typeof recordLineage;
   createFixExperiment: typeof createFixExperiment;
   getFixExperiment: typeof getFixExperiment;
@@ -98,6 +102,7 @@ export const defaultLoopDeps: LoopOperationDeps = {
   runSimulation,
   latestEval: (projectId, fix) => latestEvalOutcome(projectId, fix),
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
+  latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
   recordLineage,
   createFixExperiment,
   getFixExperiment,
@@ -186,6 +191,7 @@ function fixRow(
   fix: Fix,
   tracker: TruncationTracker,
   shipped: FixShipped | null,
+  draft: FixDraftRow | null,
 ) {
   return {
     id: fix.id,
@@ -202,8 +208,15 @@ function fixRow(
       : null,
     insightIds: fix.issues.map((issue) => issue.id),
     taskIds: [...new Set(fix.subject.tasks.map((task) => task.id))],
-    // Owned (ADR-0030): a drafted change arrives with fix drafts.
-    draft: null,
+    draft: draft
+      ? {
+          id: draft.id,
+          status: draft.status,
+          origin: draft.origin,
+          change: draft.change,
+          createdAt: draft.createdAt.toISOString(),
+        }
+      : null,
     tools: fix.subject.tools.map((tool) => tool.label),
     href: fixRef(projectId, fix).href,
     source: fixSource(projectId, fix),
@@ -439,7 +452,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "improvement",
       title: "List fixes",
       description:
-        "List proposed fixes with their effect, insightIds, taskIds, source and shipped version. Filter by insightId or taskId. Call get_fix to read the change.",
+        "List proposed fixes with their effect, insightIds, taskIds, draft, source and shipped version. Filter by insightId or taskId. The draft is null when the eval gate is off. Call get_fix to read the change.",
       keywords: ["list fixes", "proposed changes", "fixes"],
       scope: "project",
       mutates: false,
@@ -474,8 +487,20 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
             (!params.taskId || fix.subject.tasks.some((task) => task.id === params.taskId)),
         );
         const page = tracker.take(capRows(matching, params.limit));
-        const fixes = page.map((fix) =>
-          fixRow(ctx.projectId, fix, tracker, shippedFor(shipped, fix)),
+        const draftsEnabled = await deps.evalGateEnabled(
+          ctx.projectId,
+          actorOf(ctx.auth, ctx.projectId),
+        );
+        const fixes = await Promise.all(
+          page.map(async (fix) =>
+            fixRow(
+              ctx.projectId,
+              fix,
+              tracker,
+              shippedFor(shipped, fix),
+              draftsEnabled ? await deps.latestFixDraft(ctx.projectId, fix.id) : null,
+            ),
+          ),
         );
         return {
           data: {
@@ -492,7 +517,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "improvement",
       title: "Get fix",
       description:
-        "Read one fix with its change, taskIds, evidence, experiments and shipments. The chain lists its sources in order. Pass fixId or insightId. Call run_eval to simulate the fix.",
+        "Read one fix with its change, taskIds, draft, evidence, experiments and shipments. The chain lists its sources in order. A ready draft supplies the change when the eval gate is on. Pass fixId or insightId. Call run_eval to simulate the fix.",
       keywords: ["get fix", "fix for an insight", "how do i fix"],
       scope: "project",
       mutates: false,
@@ -514,6 +539,9 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
           // As list_fixes reads it, so a shipment under an id merged into the fix counts here too.
           readProjectShipments(deps, ctx.projectId),
         ]);
+        const draft = (await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId)))
+          ? await deps.latestFixDraft(ctx.projectId, fix.id)
+          : null;
         const self = fixRef(ctx.projectId, fix);
         return {
           data: {
@@ -523,9 +551,10 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
                 fix,
                 tracker,
                 shippedFor(shippedByFix(ctx.projectId, [...shipments, ...projectShipments]), fix),
+                draft,
               ),
               short: fix.short,
-              change: changeOf(fix, tracker),
+              change: draft?.status === "ready" ? draft.change : changeOf(fix, tracker),
               copy: fix.actions.copy
                 ? {
                     label: fix.actions.copy.label,
