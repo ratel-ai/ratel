@@ -134,8 +134,14 @@ describe("createComposition", () => {
       eeComposition: { ...cloudPorts, connect: (core) => lent.push(core) },
     });
     const toolCorpus = { load: async () => [] };
-    cloud.connect?.({ toolCorpus });
-    assert.deepEqual(lent, [{ toolCorpus }]);
+    const importedRuns = {
+      persist: async () => ({ ok: true as const, accepted: 0, calls: 0 }),
+      requestReading: async () => {},
+      enqueueJob: async () => ({ id: "j" }),
+      scheduleDrain: () => {},
+    };
+    cloud.connect?.({ toolCorpus, importedRuns });
+    assert.deepEqual(lent, [{ toolCorpus, importedRuns }]);
     assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
   });
 

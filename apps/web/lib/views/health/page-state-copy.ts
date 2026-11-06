@@ -98,8 +98,11 @@ export function inProgressLine(
   return `${subject} ${one ? "is" : "are"} ${rest}`;
 }
 
-function buildingCopy(state: Extract<HealthPageState, { kind: "building" }>): StateCopy {
-  const source = state.source ? SOURCE_LABEL[state.source] : null;
+function buildingCopy(
+  state: Extract<HealthPageState, { kind: "building" }>,
+  labels: Readonly<Record<string, string>>,
+): StateCopy {
+  const source = state.source ? (labels[state.source] ?? SOURCE_LABEL[state.source]) : null;
   switch (state.phase) {
     case "importing":
       return {
@@ -142,10 +145,12 @@ export interface StateCopyContext {
   canImport?: boolean;
   /** Plans can be picked (billing is on); off, no plan is named. */
   plans?: boolean;
+  /** The edition's names for import sources, by id; a missing one is the id, capitalized. */
+  sourceLabel?: Readonly<Record<string, string>>;
 }
 
 export function healthStateCopy(state: HealthPageState, context: StateCopyContext): StateCopy {
-  const { windowDays, now, canImport = true, plans = true } = context;
+  const { windowDays, now, canImport = true, plans = true, sourceLabel = {} } = context;
   switch (state.kind) {
     case "ready":
     case "tool_spans":
@@ -163,7 +168,7 @@ export function healthStateCopy(state: HealthPageState, context: StateCopyContex
         body: "Something went wrong on our side. Reload the page to try again.",
       };
     case "imported_no_tools": {
-      const source = SOURCE_LABEL[state.source];
+      const source = sourceLabel[state.source] ?? SOURCE_LABEL[state.source];
       const from =
         state.runs === 1
           ? `the 1 run imported from ${source} called none`
@@ -176,7 +181,7 @@ export function healthStateCopy(state: HealthPageState, context: StateCopyContex
       };
     }
     case "building":
-      return buildingCopy(state);
+      return buildingCopy(state, sourceLabel);
     case "too_few": {
       const wider = widerNote(state.wider, plans);
       // Only open turns so far: that is what the window has, never "0 turns".

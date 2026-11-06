@@ -256,6 +256,14 @@ test("an import whose runs a later reading found no turns in called no tools: sa
     ).body,
     /the 1 run imported from Postgres called none/,
   );
+  // Owned: the edition names its sources; without it the id is capitalized.
+  assert.match(
+    healthStateCopy(
+      { kind: "imported_no_tools", runs: 1, source: "langsmith" },
+      { windowDays: 7, now: NOW, sourceLabel: { langsmith: "LangSmith" } },
+    ).body,
+    /imported from LangSmith called none/,
+  );
   assert.doesNotMatch(
     healthStateCopy(s, { windowDays: 7, now: NOW, canImport: false }).body,
     /Import runs/,

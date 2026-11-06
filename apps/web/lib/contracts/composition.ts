@@ -1,6 +1,11 @@
 import type { ComponentType, ReactNode } from "react";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
+import type {
+  ImportedRunsPort,
+  ImportSummary,
+  ImportWindowOption,
+} from "@/lib/contracts/imported-runs";
 import type { RegistryPort } from "@/lib/contracts/registry";
 import type { SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
@@ -20,6 +25,21 @@ export type EditionProject = {
   name: string;
   slug: string;
   isDemo: boolean;
+};
+
+/** What the Agent health page hands an edition's importer. */
+export type HealthImporterProps = {
+  projectId: string;
+  windowOptions: readonly ImportWindowOption[];
+  initialImports: readonly ImportSummary[];
+  /**
+   * `history`: the list of imports and the dialog, under a state block that offers the import.
+   * `dialog`: only the dialog, opened from the page menu (`openHealthImport`).
+   */
+  variant: "history" | "dialog";
+  contactUrl: string | null;
+  /** A reading is being built right now from imported runs. */
+  readingBuilding: boolean;
 };
 
 /**
@@ -75,11 +95,23 @@ export type EditionUi = {
    * shell resolves its data, so it may show something else instead (Cloud's waitlist).
    */
   ConsoleAccessGate?: ComponentType<{ children: ReactNode }>;
+  /**
+   * Agent health's importer (past runs read from another product), absent otherwise: the page
+   * then offers no import and reads `imports: []`.
+   */
+  HealthImports?: {
+    /** The project's recent imports, and where a customer whose import is held can book time. */
+    load(projectId: string): Promise<{ list: readonly ImportSummary[]; contactUrl: string | null }>;
+    /** How the page's copy names each import source, by source id. */
+    sourceLabel: Readonly<Record<string, string>>;
+    Importer: ComponentType<HealthImporterProps>;
+  };
 };
 
 /** What the core lends an edition: capabilities over core data that only the core implements. */
 export type CoreServices = {
   toolCorpus: ToolCorpusPort;
+  importedRuns: ImportedRunsPort;
 };
 
 export type CompositionPorts = {

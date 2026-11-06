@@ -15,6 +15,7 @@ turns, never from raw events, so a 90-day window survives the 30-day event prune
 | `closed-turns.ts`, `turn-pages.ts` | the reader the readings use: closed turns paged by `(ended_at, id)` with their steps, under a time budget |
 | `run-trigger.ts` | why a signal run was asked for; a queued build may carry such a request |
 | `register.ts` | the `build_trace_turns` job and the `trace_turns_build_enqueue` before-step |
+| `imported-runs.ts` | the core's `importedRuns` service, lent to the edition at startup: stores imported runs through OTLP ingest, asks for a reading, queues a job |
 
 Three kicks start a build: the traces and events routes after a stored batch (then a
 post-response drain), the drain's before-step for projects with unbuilt events or idle open

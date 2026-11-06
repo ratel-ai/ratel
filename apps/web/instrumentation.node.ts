@@ -11,7 +11,8 @@ export async function assertComposition(): Promise<void> {
     composition.session.assertConfigured?.();
     if (composition.connect) {
       const { createToolCorpus } = await import("@/lib/synthesis/tool-corpus");
-      composition.connect({ toolCorpus: createToolCorpus() });
+      const { createImportedRuns } = await import("@/lib/ledger/imported-runs");
+      composition.connect({ toolCorpus: createToolCorpus(), importedRuns: createImportedRuns() });
     }
     const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
     configuredOrganizationName();

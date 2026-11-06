@@ -5,6 +5,7 @@ import { CalendarRange, KeyRound, Wrench } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
+import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
 import { agentHealthHref, type WindowDays } from "@/lib/readings/trace-signals/view";
 import type {
   BuildingPhase,
@@ -27,6 +28,10 @@ export interface HealthStateV2Props {
   projectId: string;
   state: HealthStateV2State;
   windowDays: WindowDays;
+  /** The importer is on the page, so "Import past runs" can open it. */
+  canImport: boolean;
+  /** The edition's names for import sources, by id. */
+  sourceLabel?: Readonly<Record<string, string>>;
   now?: Date;
 }
 
@@ -35,16 +40,18 @@ export interface HealthStateV2Props {
  * block in the place the reading would take, saying what is true for the selected window and
  * the one thing to do about it (DESIGN.md, Empty states). The words come from `healthStateCopy`.
  *
- * Owned (ADR-0030): no importer to open and no plan to pick, so the one action besides a wider
- * window is the API key.
+ * Owned (ADR-0030): no plan to pick; the importer is the edition's, and without it the one
+ * action besides a wider window is the API key.
  */
 export function HealthStateV2({
   projectId,
   state,
   windowDays,
+  canImport,
+  sourceLabel,
   now = new Date(),
 }: HealthStateV2Props) {
-  const copy = healthStateCopy(state, { windowDays, now, canImport: false, plans: false });
+  const copy = healthStateCopy(state, { windowDays, now, canImport, plans: false, sourceLabel });
   return (
     <section
       id="health-state"
@@ -54,7 +61,7 @@ export function HealthStateV2({
         state.kind === "unavailable" ? undefined : "rounded-lg border border-line bg-raised"
       }
     >
-      <StateBody projectId={projectId} state={state} copy={copy} />
+      <StateBody projectId={projectId} state={state} copy={copy} canImport={canImport} />
     </section>
   );
 }
@@ -63,20 +70,37 @@ function StateBody({
   projectId,
   state,
   copy,
+  canImport,
 }: {
   projectId: string;
   state: HealthStateV2State;
   copy: StateCopy;
+  canImport: boolean;
 }) {
-  const getKey = <ApiKeyLink projectId={projectId} />;
+  const getKey = <ApiKeyLink projectId={projectId} primary={!canImport} />;
+  const importRuns = canImport ? <OpenImportButtonV2 variant="primary" /> : null;
   switch (state.kind) {
     case "nothing_yet":
-      return <EmptyState emblem title={copy.title} description={copy.body} action={getKey} />;
+      return (
+        <EmptyState
+          emblem
+          title={copy.title}
+          description={copy.body}
+          action={importRuns ?? getKey}
+          secondary={importRuns ? getKey : undefined}
+        />
+      );
     case "building":
       return <Building phase={state.phase} copy={copy} />;
     case "imported_no_tools":
       return (
-        <EmptyState icon={Wrench} title={copy.title} description={copy.body} action={getKey} />
+        <EmptyState
+          icon={Wrench}
+          title={copy.title}
+          description={copy.body}
+          action={importRuns ?? getKey}
+          secondary={importRuns ? getKey : undefined}
+        />
       );
     case "unavailable":
       // A failed section is one callout in its place (DESIGN.md, Errors), not a card in a card.
@@ -100,6 +124,11 @@ function StateBody({
           <p className="mt-1 max-w-sm text-sm text-fg-muted">{copy.body}</p>
           <Actions>
             <WindowAction projectId={projectId} suggestion={state.wider} />
+            {canImport && (
+              <OpenImportButtonV2
+                variant={state.wider && !state.wider.plan ? "secondary" : "primary"}
+              />
+            )}
           </Actions>
         </div>
       );
@@ -113,9 +142,10 @@ function StateBody({
             state.suggestion ? (
               <WindowAction projectId={projectId} suggestion={state.suggestion} />
             ) : (
-              getKey
+              (importRuns ?? getKey)
             )
           }
+          secondary={state.suggestion ? undefined : importRuns ? getKey : undefined}
         />
       );
   }
@@ -169,11 +199,11 @@ function WindowAction({
   );
 }
 
-function ApiKeyLink({ projectId }: { projectId: string }) {
+function ApiKeyLink({ projectId, primary }: { projectId: string; primary: boolean }) {
   return (
     <Link
       href={`/project/${encodeURIComponent(projectId)}/settings/api-keys`}
-      className={buttonVariants({ variant: "primary" })}
+      className={buttonVariants({ variant: primary ? "primary" : "secondary" })}
     >
       <KeyRound strokeWidth={1.5} aria-hidden />
       Get an API key
