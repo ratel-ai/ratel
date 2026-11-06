@@ -231,6 +231,8 @@ describe("registry root", () => {
       "fold_intent_graph",
       "label_workflows",
       "match_quality_run",
+      "refresh_task_eval_set",
+      "score_tasks",
       "simulate_fix_eval",
       "what_if_step",
     ]);

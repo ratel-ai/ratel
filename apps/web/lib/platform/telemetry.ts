@@ -89,6 +89,8 @@ export const SERVER_EVENT_NAMES = [
   "fix_eval_case_removed",
   "fix_eval_simulation_completed",
   "fix_eval_simulation_failed",
+  "task_scores_written",
+  "task_eval_set_refreshed",
   "fix_draft_finished",
   "fix_eval_run",
   "fix_experiment_created",

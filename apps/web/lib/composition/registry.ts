@@ -14,6 +14,8 @@ import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
+import { taskEvalsRegistration } from "@/lib/views/task-evals/register";
+import { taskScorersRegistration } from "@/lib/views/task-scorers/register";
 
 /**
  * The other composition root: the one file that imports every module's `register.ts` and so the
@@ -35,6 +37,8 @@ const CORE: Registration[] = [
   evalGateRegistration,
   fixDraftsRegistration,
   sessionReplayRegistration,
+  taskScorersRegistration,
+  taskEvalsRegistration,
 ];
 
 export function collectRegistrations(

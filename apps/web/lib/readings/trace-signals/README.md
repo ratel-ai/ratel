@@ -35,7 +35,8 @@ run completes, workflows keep their tool-order names, and the label job reports 
 **Seams.** `register.ts` fills the ledger's `ledgerSeams` (`enqueueReading`,
 `onBacklogDrained`) when the registry loads. `signals/compute-job.ts` exports `computeSeams`:
 `enqueueTopics` (the topics registration fills it), `enqueueExplore` (the tool-explorer
-reading) and `enqueueFixDrafts` (fix drafts, `views/fix-drafts`); unset, a run queues nothing
+reading), `enqueueFixDrafts` (fix drafts, `views/fix-drafts`) and `enqueueTaskScores` (live task
+scores, `views/task-scorers`); unset, a run queues nothing
 after itself, and a failed enqueue never fails the run.
 
 **Owned files** (the rest mirror upstream through the sync): `schema.ts`, `register.ts` and
@@ -48,7 +49,8 @@ readers are `lib/ledger/closed-turns.ts`); `sweep-service.ts` (no gate, no organ
 `workflows/decide-job.ts` and `decide.test.ts` (OpenAI only; the corpus from the runtime
 catalog); `signals/integration-support.ts`, `signals/compute-job.integration.test.ts`,
 `sweep.test.ts` and `workflows/fixed-order.test.ts` (no flag or page-model cases; the
-compose-candidate case lands with the tool crafter). The page read models (`page-model*`,
+compose-candidate case lands with the tool crafter); `signals/task-scores.integration.test.ts`
+(the gate is the `FF_EVAL_GATE` env value). The page read models (`page-model*`,
 `page-state*`, `tiles`, `flow-*`, `issue-examples`, `ledger-facts*`, `signals/claims-*`,
 `signals/story`, the self-corrections page files) are `lib/views/health`; `turn-detail*`,
 `turn-linked` and `linked-copy.test` (the turn page of Traces) are `lib/views/traces`; `replay*`
