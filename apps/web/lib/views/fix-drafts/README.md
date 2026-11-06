@@ -12,7 +12,7 @@ everything runs only when the eval gate is on (`FF_EVAL_GATE`, `eval-gate/gate.t
 | `resolve.ts` | `resolveFixChange`: the change a fix makes. A ready draft supplies it; a rewrite or tell-apart with no text queues a `draft_fix` job (one per fix while it waits or runs) and answers "being prepared"; with no model key it says so and queues nothing |
 | `model.ts` | the draft model: `claude-sonnet-5-5` (`EVAL_GATE_DRAFT_MODEL`) through `platform/model-call`; `null` with no key (the placeholder key is no key); a deterministic stand-in with `EVAL_GATE_MOCK_MODEL=1` outside production |
 | `job.ts` | `draftFixJob` (the `draft_fix` handler: the fix's evidence runs into the match-quality analyst prompt, one model call, the proposals become patches) and `enqueueProjectFixDrafts` |
-| `register.ts` | the `draft_fix` registration, and the fills of `evalGateSeams.resolveChange` and `.spendSince` when the module loads |
+| `register.ts` | the `draft_fix` registration, and the fills of `evalGateSeams.resolveChange` and `.spendSince`, and of `computeSeams.enqueueFixDrafts` (a completed signal run queues drafts for the new fixes, as upstream's job handler does), when the module loads |
 
 The table comes with `jobs_draft_fix_pending_idx` on `jobs` (`lib/jobs/schema.ts`): at most one
 queued or running `draft_fix` job per fix.

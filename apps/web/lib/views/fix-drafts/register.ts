@@ -1,7 +1,8 @@
 import type { Registration } from "@/lib/contracts/registry";
 import { withProjectLogContext } from "@/lib/platform/project-log-context";
+import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
-import { draftFixJob } from "@/lib/views/fix-drafts/job";
+import { draftFixJob, enqueueProjectFixDrafts } from "@/lib/views/fix-drafts/job";
 import { resolveFixChange } from "@/lib/views/fix-drafts/resolve";
 import { fixDraftSpendSince } from "@/lib/views/fix-drafts/store";
 
@@ -23,6 +24,17 @@ export function fillEvalGateSeams(seams: typeof evalGateSeams = evalGateSeams): 
 }
 
 fillEvalGateSeams();
+
+/** A completed signal run queues drafts for the project's new rewrite and tell-apart fixes. */
+export const computeSeamFills: Required<Pick<typeof computeSeams, "enqueueFixDrafts">> = {
+  enqueueFixDrafts: (projectId) => enqueueProjectFixDrafts(projectId),
+};
+
+export function fillComputeSeams(seams: typeof computeSeams = computeSeams): void {
+  Object.assign(seams, computeSeamFills);
+}
+
+fillComputeSeams();
 
 export const fixDraftsRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.

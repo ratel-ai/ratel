@@ -537,3 +537,31 @@ test("fixture rows helper stays in step with the seeded ledger", async () => {
     1,
   );
 });
+
+test("a completed run queues fix drafts through the seam, and a failed enqueue never fails the run", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  const queued: string[] = [];
+  const done = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "manual" },
+    jobDeps(db, NOW, [], {
+      enqueueFixDrafts: async (projectId) => {
+        queued.push(projectId);
+      },
+    }),
+  );
+  assert.equal(done.outcome, "completed");
+  assert.deepEqual(queued, [PROJECT_ID]);
+
+  const failing = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "manual" },
+    jobDeps(db, new Date(NOW.getTime() + 60_000), [], {
+      enqueueFixDrafts: async () => {
+        throw new Error("draft enqueue down");
+      },
+    }),
+  );
+  assert.equal(failing.outcome, "completed");
+});

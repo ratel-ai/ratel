@@ -9,7 +9,7 @@ import { type AnalystContext, buildAnalystPrompt } from "@/lib/synthesis/match-q
 import { changeOf, emptyChange, hasEffect } from "@/lib/views/eval-gate/change";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { DAILY_ORG_BUDGET_USD } from "@/lib/views/eval-gate/models";
-import { loadEvidenceTurnIds, loadRuns } from "@/lib/views/eval-gate/runs";
+import { type EvalDb, loadEvidenceTurnIds, loadRuns } from "@/lib/views/eval-gate/runs";
 import type { loadFixContext } from "@/lib/views/eval-gate/service";
 import { searchFor } from "@/lib/views/eval-gate/simulate";
 import {
@@ -23,6 +23,7 @@ import {
 import { DRAFT_FIX_ACTOR, enqueueDraftFix } from "@/lib/views/fix-drafts/resolve";
 import { fixDrafts } from "@/lib/views/fix-drafts/schema";
 import { latestFixDraft, reserveFixDraft } from "@/lib/views/fix-drafts/store";
+import type { Fix } from "@/lib/views/fixes/types";
 
 type Env = Record<string, string | undefined>;
 
@@ -244,20 +245,38 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
   }
 }
 
-/** Queue the new issue fixes after a signal run. No Quality analysis is required. */
-export async function enqueueProjectFixDrafts(projectId: string, env: Env = process.env) {
-  if (!(await evalGateEnabledForActor(projectId, DRAFT_FIX_ACTOR, undefined, env))) return;
-  // Owned (ADR-0030): with no model there is nothing to draft, so nothing is queued.
-  if (!draftModelAvailable(env)) return;
+/** Owned (ADR-0030): the reads are injectable, so the queueing is testable without the Fixes load. */
+export interface EnqueueProjectFixDraftsDeps {
+  env?: Env;
+  environment?: string;
+  db?: EvalDb;
+  loadOpenFixes?: (projectId: string) => Promise<Fix[] | null>;
+}
+
+async function loadOpenFixes(projectId: string): Promise<Fix[] | null> {
   const { getOrganizationByProjectId } = await import("@/lib/platform/organizations");
   const organization = await getOrganizationByProjectId(projectId);
-  if (!organization) return;
+  if (!organization) return null;
   const { loadFixes } = await import("@/lib/views/fixes/load");
-  const model = await loadFixes({ projectId, organization, topics: false });
-  for (const fix of model.open) {
+  return (await loadFixes({ projectId, organization, topics: false })).open;
+}
+
+/** Queue the new issue fixes after a signal run. No Quality analysis is required. */
+export async function enqueueProjectFixDrafts(
+  projectId: string,
+  deps: EnqueueProjectFixDraftsDeps = {},
+) {
+  const env = deps.env ?? process.env;
+  const db = deps.db ?? getDb();
+  if (!(await evalGateEnabledForActor(projectId, DRAFT_FIX_ACTOR, db, env))) return;
+  // Owned (ADR-0030): with no model there is nothing to draft, so nothing is queued.
+  if (!draftModelAvailable(env, deps.environment)) return;
+  const open = await (deps.loadOpenFixes ?? loadOpenFixes)(projectId);
+  if (!open) return;
+  for (const fix of open) {
     if ((fix.kind !== "rewrite" && fix.kind !== "tell-apart") || hasEffect(changeOf(fix))) continue;
-    const draft = await latestFixDraft(projectId, fix.id);
+    const draft = await latestFixDraft(projectId, fix.id, db);
     if (draft?.status === "ready" || draft?.status === "drafting") continue;
-    await enqueueDraftFix(projectId, fix.id);
+    await enqueueDraftFix(projectId, fix.id, DRAFT_FIX_ACTOR, db);
   }
 }

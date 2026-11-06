@@ -7,13 +7,14 @@ import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { matchQualityRuns } from "@/lib/synthesis/match-quality/schema";
 import { changeOf } from "@/lib/views/eval-gate/change";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
 import { runSimulation } from "@/lib/views/eval-gate/service";
-import { draftFixJob } from "@/lib/views/fix-drafts/job";
+import { draftFixJob, enqueueProjectFixDrafts } from "@/lib/views/fix-drafts/job";
 import { STAND_IN_SUFFIX } from "@/lib/views/fix-drafts/model";
-import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
+import { computeSeamFills, fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { NO_DRAFT_MODEL_MESSAGE, resolveFixChange } from "@/lib/views/fix-drafts/resolve";
 import { fixDrafts } from "@/lib/views/fix-drafts/schema";
 import { fixDraftSpendSince, latestFixDraft } from "@/lib/views/fix-drafts/store";
@@ -585,6 +586,7 @@ test("loading the module fills the eval gate seams and registers draft_fix", () 
     "the drafts' spend reader is added once",
   );
   assert.deepEqual(Object.keys(fixDraftsRegistration.jobs ?? {}), ["draft_fix"]);
+  assert.equal(computeSeams.enqueueFixDrafts, computeSeamFills.enqueueFixDrafts);
 });
 
 test("the pending index allows one queued or running draft_fix job per fix", async () => {
@@ -596,6 +598,36 @@ test("the pending index allows one queued or running draft_fix job per fix", asy
     assert.equal(again.length, 0);
     await db.insert(jobs).values({ ...row, payload: { fixId: "issue:y" } });
     assert.equal((await db.select().from(jobs)).length, 2);
+  } finally {
+    await client.close();
+  }
+});
+
+test("after a signal run, drafts are queued only for open rewrites with no draft, and only with a model", async () => {
+  const { client, db, fix } = await setup();
+  try {
+    const other: Fix = { ...fix, id: "issue:drafted" };
+    const notRewrite: Fix = { ...fix, id: "issue:retry", kind: "retry" as Fix["kind"] };
+    await db.insert(fixDrafts).values({
+      projectId: PROJECT,
+      fixId: other.id,
+      status: "ready",
+      createdBy: "system:fix-drafts",
+      change: { patches: { lookup_order: "Already drafted." } },
+      createdAt: NOW,
+    });
+    const loadOpenFixes = async () => [fix, other, notRewrite];
+    for (const env of [OFF, NO_KEY]) {
+      await enqueueProjectFixDrafts(PROJECT, { db, env, environment: "test", loadOpenFixes });
+    }
+    assert.equal((await db.select().from(jobs)).length, 0, "gate off or no key queues nothing");
+    await enqueueProjectFixDrafts(PROJECT, { db, env: ON, environment: "test", loadOpenFixes });
+    await enqueueProjectFixDrafts(PROJECT, { db, env: ON, environment: "test", loadOpenFixes });
+    const queued = await db.select().from(jobs);
+    assert.deepEqual(
+      queued.map((job) => [job.kind, (job.payload as { fixId: string }).fixId]),
+      [["draft_fix", fix.id]],
+    );
   } finally {
     await client.close();
   }
