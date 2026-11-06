@@ -25,7 +25,7 @@ identical.
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
 | `home/` | the Overview: `load` (every read in one round, each degrading on its own, assembled into `OverviewData`), `glance` and `glance-queries` (intents, tasks, self-corrections and fixes, one tile each), `attention` (what needs a look now, from the issues, fixes, intents and context), `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the MCP project overview opens with) |
 | `traces/` | the turn page of Traces, where an Agent health example's "Open in Traces" lands: `turn-detail` (one turn's calls in ledger order, the live query and error text read by event id, a trace link only where Traces holds the trace, the session's neighbouring turns), `turn-detail-linked` (an SDK run's linked OpenTelemetry model calls), `turn-linked` (the linked text, pure) |
-| `session-replay/` | one session step by step, read-only: `timeline` (turns, model calls, searches and tool calls in order, with coverage), `load` (its reads), `composition` (what the context held at each model call), `annotations` and `annotations-load` (why each tool choice was good or bad), `view` (rows, decision chips, the page link). Behind `FF_SESSION_REPLAY`, read by `session-replay-flag.ts`; the What-if re-run waits for the eval gate |
+| `session-replay/` | one session step by step, read-only: `timeline` (turns, model calls, searches and tool calls in order, with coverage), `load` (its reads), `composition` (what the context held at each model call), `annotations` and `annotations-load` (why each tool choice was good or bad), `view` (rows, decision chips, the page link). What-if, a step forked with one change and sampled before and after: `variant` (the change), `fork` (the engine, over the eval gate's replay), `runs` (`requestWhatIf` under the daily budget, the content opt-in, `pruneWhatIfRuns`), `job` and `register` (`what_if_step`, run by the worker, and the drain's `what_if_prune`, which runs with retention off so a timed-out run frees its hold), `spend` (its share of the budget), `schema` (`session_replay_runs`, `session_replay_settings`), `gate`. Behind `FF_SESSION_REPLAY`, read by `session-replay-flag.ts`. No page yet: upstream has no What-if UI. With no `ANTHROPIC_API_KEY` a replay run fails with no model and nothing calls out; without the content opt-in (off unless set) a run re-ranks and calls no model |
 
 ## Seams
 
@@ -40,7 +40,7 @@ part named below.
 | `fixes/seams.ts` `fixSeams.loadDrafts`, `.priceOf`, `.loadRewrites` | filled: the tool crafter's drafts and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` and `craftEffect` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites by `quality/fix-rewrites.ts` | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
 | `fixes/seams.ts` `fixSeams.recordShipment` | the task loop: marking a shipment live and queuing its tasks for measuring, in one transaction | `createFixShipment` inserts one `fix_shipments` row; `fix_shipment_tasks` stays empty |
 | `eval-gate/seams.ts` `evalGateSeams.resolveChange` | filled: fix drafts' `resolveFixChange` by `fix-drafts/register.ts`, which `eval-gate/service.ts` and `page-model.ts` import for its side effect: a ready draft's change, or a queued draft ("being prepared"), or, with no model key, a refusal that says so | the gate simulates the change the fix itself carries; a rewrite with no ready text is refused as nothing to simulate |
-| `eval-gate/seams.ts` `evalGateSeams.spendSince` | fix drafts (filled by `fix-drafts/register.ts`), the task loop and What-if: what each spent on models, so they share the one daily budget | the daily budget counts the eval gate's own runs |
+| `eval-gate/seams.ts` `evalGateSeams.spendSince` | fix drafts (filled by `fix-drafts/register.ts`), What-if (`session-replay/spend.ts`, loaded by its `register.ts` and `runs.ts`) and the task loop: what each spent on models, so they share the one daily budget | the daily budget counts the eval gate's own runs |
 | `tasks/seams.ts` `tasksSeams.loadDrafts` | filled: the tool crafter's pending drafts by `fixes/craft-drafts.ts` (upstream's `fixSources`), loaded with `fixes/load.ts`, which `tasks/page-model.ts` imports | a task's page shows no drafted fix |
 | `intents/map/seams.ts` `mapSeams.loadToolSteps` | the tool explorer: `intents/map/tool-steps.ts` reads the latest completed run's turn-scope `next` edges (`readings/tool-explorer/queries.ts#listTransitions`) and `map/queries.ts` imports it | the Map draws no "came next" arrows between tools |
 
@@ -88,6 +88,13 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   inline, since `lib/` never imports the UI.
 - `session-replay/load.test.ts` and `annotations-load.test.ts`: the organization fixture has no
   plan column. `session-replay-flag.ts` (new) replaces upstream's organization flag gate.
+- `session-replay/gate.ts`: upstream's `sessionReplayEnabledForActor` over `FF_SESSION_REPLAY`,
+  with its test. `runs.ts` and `job.ts` take the gate's dependencies from it; `runs.ts` also
+  takes the budget lock as an advisory lock on the organization id (the edition owns
+  `organizations`) and loads `spend.ts`. `spend.ts` (upstream's What-if term of
+  `organizationModelSpendSince`), `register.ts` and `schema.ts` are this module's parts of
+  upstream hubs. `runs.test.ts` reads this repository's migration; `runs.integration.test.ts`
+  has no plan column and an env flag. `no-outbound-without-key.test.ts` is new.
 - Tests whose fixtures named a confidential word, copied with a neutral tenant:
   `health/flow-journey-layout.test.ts`, `intents/topics-view.test.ts`, `intents/map/{classify,
   flow,map-model,tool-globe}.test.ts` and `intents/map/tool-network-fixture.ts`.

@@ -232,10 +232,12 @@ describe("registry root", () => {
       "label_workflows",
       "match_quality_run",
       "simulate_fix_eval",
+      "what_if_step",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
     // can carry events through turns, recurring asks, the graph and the engine. After-steps are
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
+    // What-if's prune runs with retention off: a timed-out run must free its budget hold.
     assert.deepEqual(
       drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
       [
@@ -251,8 +253,16 @@ describe("registry root", () => {
         "after:trace_summary_refresh",
         "after:quality_snapshot_refresh",
         "after:match_quality_sweep",
+        "after:what_if_prune",
       ],
     );
+  });
+
+  it("loading the registry adds What-if's reader to the eval gate's daily budget", async () => {
+    const { evalGateSeams } = await import("@/lib/views/eval-gate/seams");
+    const { whatIfSpendSince } = await import("@/lib/views/session-replay/spend");
+    assert.ok(evalGateSeams.spendSince.includes(whatIfSpendSince));
+    assert.equal(evalGateSeams.spendSince.filter((read) => read === whatIfSpendSince).length, 1);
   });
 
   it("refuses a job kind or drain step registered twice", () => {
