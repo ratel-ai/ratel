@@ -689,10 +689,12 @@
         "apps/web/components/console/tasks/TaskGone.tsx",
         "apps/web/components/console/tasks/TaskMarks.tsx",
         "apps/web/components/console/tasks/TaskPanels.tsx",
+        "apps/web/components/console/tasks/TaskSections.tsx",
         "apps/web/components/console/tasks/TaskSteps.tsx",
         "apps/web/components/console/tasks/TaskView.tsx",
         "apps/web/components/console/tasks/TasksSkeleton.tsx",
         "apps/web/components/console/tasks/TasksTable.tsx",
+        "apps/web/components/console/tasks/TasksView.tsx",
         "apps/web/components/console/tasks/kind-icons.tsx",
         "apps/web/components/console/self-corrections/Change.tsx",
         "apps/web/components/console/self-corrections/DetailsPanel.tsx",
@@ -722,6 +724,7 @@
         "apps/web/lib/views/health/summary/issue-rows.test.ts",
         "apps/web/lib/views/health/summary/task-chains.test.ts",
         "apps/web/lib/views/tasks/flow-layout.test.ts",
+        "apps/web/lib/views/tasks/tasks-ui.test.ts",
         "apps/web/lib/views/health/self-corrections/self-corrections-ui.test.ts",
         "apps/web/lib/views/health/kind-icons-consistency.test.ts",
         "apps/web/components/console/intents/FlowCanvas.tsx",
@@ -1090,6 +1093,8 @@
         "!apps/web/lib/views/task-evals/simulation-actions.integration.test.ts",
         "!apps/web/lib/views/task-evals/post-ship.ts",
         "!apps/web/lib/views/task-evals/post-ship.integration.test.ts",
+        "!apps/web/lib/views/task-evals/run-to-test.ts",
+        "!apps/web/lib/views/task-evals/run-to-test.integration.test.ts",
         "!apps/web/lib/views/task-evals/register.ts",
         "!apps/web/lib/views/task-evals/spend.ts",
         "!apps/web/lib/views/task-evals/no-outbound-without-key.test.ts",
@@ -1113,7 +1118,16 @@
         "apps/web/components/console/eval-gate/**",
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "apps/web/lib/platform/project-log-context.ts",
-        "apps/web/lib/views/fix-drafts/change.test.ts"
+        "apps/web/lib/views/fix-drafts/change.test.ts",
+        "apps/web/app/(console)/project/\\[projectId\\]/tasks/**",
+        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/page.tsx",
+        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/page.tsx",
+        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/actions.ts",
+        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/context.ts",
+        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/actions.ts",
+        "apps/web/components/console/tasks/RunToTest.tsx",
+        "apps/web/components/console/tasks/TopLevelTasksTable.tsx",
+        "apps/web/lib/views/tasks/top-level-ui.test.ts"
       ],
       "linter": {
         "rules": {
@@ -1141,7 +1155,8 @@
         "apps/web/components/console/intents/**",
         "apps/web/components/console/intent-map/**",
         "apps/web/components/console/calibration/**",
-        "apps/web/components/console/settings/skeleton-parts.tsx"
+        "apps/web/components/console/settings/skeleton-parts.tsx",
+        "apps/web/app/(console)/project/\\[projectId\\]/tasks/**"
       ],
       "linter": {
         "rules": {

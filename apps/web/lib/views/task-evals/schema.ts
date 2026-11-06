@@ -18,8 +18,8 @@ import { projects } from "@/lib/platform/projects/schema";
 import { fixShipments } from "@/lib/views/fixes/schema";
 
 /**
- * A task's eval set and the runs over it. Owned fragment of the upstream schema (ADR-0030):
- * `task_eval_sets`, `task_eval_cases` and `task_eval_runs`, the task-evals partition of the
+ * A task's eval set, the runs over it and the drafted tests. Owned fragment of the upstream schema (ADR-0030):
+ * `task_eval_sets`, `task_eval_cases`, `task_eval_runs` and `task_test_drafts`, the task-evals partition of the
  * upstream schema hub, column for column, because production already has these tables.
  */
 
@@ -130,3 +130,19 @@ export const taskEvalRuns = pgTable(
 );
 
 export type TaskEvalRunRow = typeof taskEvalRuns.$inferSelect;
+
+/** Reserve each test draft charge before the model call. */
+export const taskTestDrafts = pgTable(
+  "task_test_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    turnId: uuid("turn_id").notNull(),
+    spend: jsonb("spend").$type<{ usd: number; reserved: boolean }>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("task_test_drafts_project_created_idx").on(t.projectId, t.createdAt)],
+);

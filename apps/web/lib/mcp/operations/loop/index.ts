@@ -47,6 +47,11 @@ import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import { fixSourceRef } from "@/lib/views/lineage/refs";
 import type { LineageRef } from "@/lib/views/lineage/types";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
+import { taskEvalViewFor } from "@/lib/views/task-evals/store";
+import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
+import { buildTaskList, type TaskRow } from "@/lib/views/tasks/model";
+import { loadTasksInputs } from "@/lib/views/tasks/page-model";
+import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 // The shipment record of the task loop (`fixSeams.recordShipment`): mark_fix_shipped queues
 // the post-ship measures with the eval gate on.
 import "@/lib/views/task-evals/ship";
@@ -67,13 +72,18 @@ import "@/lib/views/task-evals/ship";
  * listed. `run_eval` and `get_eval` also need `FF_EVAL_GATE`; off, they refuse
  * with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): seven tools. The task tools (`list_tasks`, `get_task`)
- * land with the task pages. A fix with tasks is simulated once per task on the
- * task's eval set (`lib/views/task-evals`); other fixes on their own eval set.
+ * Owned (ADR-0030): the gates are env flags. `list_tasks` and `get_task` read
+ * the project's tasks; a task's scorers, scores and eval set only with
+ * `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
+ * eval set (`lib/views/task-evals`); other fixes on their own eval set.
  * A fix's `draft` is its newest fix draft while the eval gate is on
  * (`FF_EVAL_GATE`), else null.
  */
 export interface LoopOperationDeps {
+  loadTasks: (projectId: string) => Promise<TaskRow[]>;
+  scorersFor: (projectId: string, taskId: string) => ReturnType<typeof scorersFor>;
+  dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
+  taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
   loadInsight: (projectId: string, insightId: string) => Promise<InsightView | null>;
   loadProjectFixes: (projectId: string) => Promise<FixesModel | null>;
@@ -108,6 +118,10 @@ export interface LoopOperationDeps {
 }
 
 export const defaultLoopDeps: LoopOperationDeps = {
+  loadTasks: async (projectId) => buildTaskList(await loadTasksInputs(projectId)).rows,
+  scorersFor: (projectId, taskId) => scorersFor(projectId, taskId),
+  dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
+  taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
   loadInsight,
   loadProjectFixes,
@@ -427,6 +441,80 @@ function evalData(outcome: SimulationOutcome, fixId: string, self: LineageRef) {
 
 export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): McpOperation[] {
   return [
+    defineOperation({
+      id: "list_tasks",
+      domain: "observability",
+      title: "List tasks",
+      description:
+        "List the project's tasks with their run counts, status and completion rate. Call get_task with a taskId for its scorers, score series and eval set.",
+      keywords: ["list tasks", "workflows", "task scores"],
+      scope: "project",
+      mutates: false,
+      params: z.object({ ...projectScoped, limit: limitParam }),
+      async execute(ctx, params) {
+        const tracker = new TruncationTracker();
+        const tasks = await deps.loadTasks(ctx.projectId);
+        const page = tracker.take(capRows(tasks, params.limit));
+        return {
+          data: {
+            count: tasks.length,
+            tasks: page.map((task) => ({
+              ...task,
+              href: topLevelTasksHref(ctx.projectId, task.id),
+            })),
+          },
+          truncated: tracker.value,
+          hint: "Call get_task with a taskId to read its scorers, score series and eval set.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "get_task",
+      domain: "observability",
+      title: "Get task",
+      description:
+        "Read one task with its scorers, daily score series and eval set. Scoring fields are empty when FF_EVAL_GATE is off. Use list_fixes to find fixes for the task.",
+      keywords: ["get task", "task scorers", "task eval set"],
+      scope: "project",
+      mutates: false,
+      params: z.object({
+        ...projectScoped,
+        taskId: z.string().min(1).max(200).describe("A task id from list_tasks."),
+      }),
+      async execute(ctx, params) {
+        const task = (await deps.loadTasks(ctx.projectId)).find(
+          (task) => task.id === params.taskId,
+        );
+        if (!task) throw notFound("task");
+        const tracker = new TruncationTracker();
+        const enabled = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
+        const [scorers, scores, evalSet] = enabled
+          ? await Promise.all([
+              deps.scorersFor(ctx.projectId, task.id),
+              deps.dailyScoresFor(ctx.projectId, task.id),
+              deps.taskEvalViewFor(ctx.projectId, task.id),
+            ])
+          : [[], [], null];
+        return {
+          data: {
+            task: {
+              ...task,
+              href: topLevelTasksHref(ctx.projectId, task.id),
+              scorers,
+              scoreSeries: tracker.take(capRows(scores, 200)),
+              evalSet: evalSet
+                ? {
+                    ...evalSet,
+                    count: evalSet.rows.length,
+                    rows: tracker.take(capRows(evalSet.rows, 50)),
+                  }
+                : null,
+            },
+          },
+          truncated: tracker.value,
+        };
+      },
+    }),
     defineOperation({
       id: "list_insights",
       domain: "observability",

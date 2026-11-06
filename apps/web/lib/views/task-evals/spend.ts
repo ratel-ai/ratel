@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { projects } from "@/lib/platform/projects/schema";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
-import { taskEvalRuns } from "@/lib/views/task-evals/schema";
+import { taskEvalRuns, taskTestDrafts } from "@/lib/views/task-evals/schema";
 import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
 
 /**
@@ -60,7 +60,34 @@ export async function taskEvalRunSpendSince(
   return Number(row?.usd ?? 0);
 }
 
-export const taskLoopSpendReaders = [taskJudgeSpendSince, taskEvalRunSpendSince];
+/** Drafted tests: since `since`, and reservations still held. */
+export async function taskTestDraftSpendSince(
+  projectId: string,
+  since: Date,
+  db: EvalDb,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      usd: sql<
+        string | number | null
+      >`coalesce(sum((${taskTestDrafts.spend}->>'usd')::numeric), 0)`,
+    })
+    .from(taskTestDrafts)
+    .innerJoin(projects, eq(projects.id, taskTestDrafts.projectId))
+    .where(
+      and(
+        sameOrganization(projectId),
+        sql`(${taskTestDrafts.createdAt} >= ${since.toISOString()}::timestamptz or (${taskTestDrafts.spend}->>'reserved')::boolean = true)`,
+      ),
+    );
+  return Number(row?.usd ?? 0);
+}
+
+export const taskLoopSpendReaders = [
+  taskJudgeSpendSince,
+  taskEvalRunSpendSince,
+  taskTestDraftSpendSince,
+];
 
 for (const read of taskLoopSpendReaders) {
   if (!evalGateSeams.spendSince.includes(read)) evalGateSeams.spendSince.push(read);

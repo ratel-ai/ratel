@@ -70,6 +70,7 @@ export function FixesList({
   now,
   evalBadges = null,
   shipped = null,
+  taskSimulations = false,
 }: {
   model: FixesModel;
   now: string;
@@ -77,6 +78,8 @@ export function FixesList({
   evalBadges?: Readonly<Record<string, EvalBadge>> | null;
   /** Each shipped fix's newest shipment, by fix id (RC-72); null when `FF_STAGE_SPINE` is off. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
+  /** Each fix's tasks link to their simulations (the task loop); `FF_EVAL_GATE` and `FF_STAGE_SPINE`. */
+  taskSimulations?: boolean;
 }) {
   const router = useRouter();
   const peek = usePeek();
@@ -395,16 +398,32 @@ export function FixesList({
             shipped={shippedFor(shipped, showing)}
             gate={
               evalBadges ? (
-                <EvalGateSection
-                  projectId={model.projectId}
-                  fixId={showing.id}
-                  badge={evalBadges[showing.id]}
-                  blocked={
-                    showing.kind === "rewrite" || showing.kind === "tell-apart"
-                      ? null
-                      : nothingToSimulate(showing.kind, changeOf(showing))
-                  }
-                />
+                <>
+                  {taskSimulations && showing.subject.tasks.length > 0 ? (
+                    <div className="flex flex-col gap-2 py-3">
+                      <p className="text-sm font-semibold text-fg">Task simulations</p>
+                      {showing.subject.tasks.map((task) => (
+                        <Link
+                          key={task.id}
+                          href={`/project/${encodeURIComponent(model.projectId)}/tasks/${encodeURIComponent(task.id)}/simulations/${encodeURIComponent(showing.id)}`}
+                          className="rounded-md text-ui text-fg-muted outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+                        >
+                          Simulate on {task.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                  <EvalGateSection
+                    projectId={model.projectId}
+                    fixId={showing.id}
+                    badge={evalBadges[showing.id]}
+                    blocked={
+                      showing.kind === "rewrite" || showing.kind === "tell-apart"
+                        ? null
+                        : nothingToSimulate(showing.kind, changeOf(showing))
+                    }
+                  />
+                </>
               ) : null
             }
           />

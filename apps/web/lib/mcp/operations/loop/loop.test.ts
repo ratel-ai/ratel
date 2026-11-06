@@ -12,6 +12,7 @@ import {
 } from "@/lib/mcp/operations/loop";
 import type { InsightView } from "@/lib/mcp/operations/loop/read";
 import { EvalGateError, type SimulationOutcome } from "@/lib/mcp/operations/loop/simulation";
+import { latestTaskSimulations } from "@/lib/mcp/operations/loop/task-simulation";
 import { buildRegistry } from "@/lib/mcp/registry";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -23,7 +24,13 @@ import type { FixExperimentRow, FixShipmentRow } from "@/lib/views/fixes/schema"
 import { fixStats } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import type { LineageRef } from "@/lib/views/lineage/types";
-import type { TaskEvalRunRow } from "@/lib/views/task-evals/schema";
+import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
+import { type TaskEvalRunRow, taskEvalRuns, taskEvalSets } from "@/lib/views/task-evals/schema";
+import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
+import { taskEvalViewFor } from "@/lib/views/task-evals/store";
+import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
+import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
+import type { TaskRow } from "@/lib/views/tasks/model";
 
 /**
  * The loop tools against injected reads: each result names its source one step
@@ -196,8 +203,35 @@ interface Tracked {
   properties: Record<string, unknown>;
 }
 
+const task: TaskRow = {
+  id: "book-flight",
+  name: "Book a flight",
+  description: "Reserve a seat",
+  icon: "workflow",
+  color: null,
+  status: "healthy",
+  runs: 42,
+  share: 0.7,
+  finishRate: 0.9,
+  weakest: null,
+  correctionsPer100: 2,
+  topics: [],
+  issues: 1,
+  fixes: 1,
+  fixesHref: "/fixes",
+};
+
 function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOperationDeps {
   return {
+    loadTasks: async () => [task],
+    scorersFor: async () => [{ kind: "ends_well", enabled: true, source: "default", version: 1 }],
+    dailyScoresFor: async () => [],
+    taskEvalViewFor: async () => ({
+      rows: [],
+      targetRuns: 20,
+      refreshedAt: null,
+      refreshJob: null,
+    }),
     loadOpenInsights: async () => [insight],
     loadInsight: async (_projectId, id) => (id === INSIGHT ? insight : null),
     loadProjectFixes: async () => model,
@@ -861,8 +895,75 @@ test("fix drafts remain unread when the eval gate is off", async () => {
   );
 });
 
-// The task loop's simulations (upstream #318): a fix with tasks is simulated once per task.
-const TASK = { id: "book-flight", name: "Book a flight" };
+// The task loop (upstream #318): the task tools, and a fix with tasks simulated once per task.
+const TASK = task;
+
+test("list_tasks returns project tasks with a bounded page and task links", async () => {
+  const projects: string[] = [];
+  const result = await run("list_tasks", { limit: 1 }, [], {
+    loadTasks: async (projectId) => {
+      projects.push(projectId);
+      return [task, { ...task, id: "cancel-flight", name: "Cancel a flight" }];
+    },
+  });
+  const out = data<{
+    count: number;
+    tasks: { id: string; name: string; runs: number; href: string }[];
+  }>(result);
+  assert.deepEqual(projects, [PROJECT]);
+  assert.equal(out.count, 2);
+  assert.equal(out.tasks.length, 1);
+  assert.equal(out.tasks[0]!.id, "book-flight");
+  assert.equal(out.tasks[0]!.name, "Book a flight");
+  assert.equal(out.tasks[0]!.runs, 42);
+  assert.equal(out.tasks[0]!.href, `/project/${PROJECT}/tasks/book-flight`);
+  assert.equal((result as DispatchSuccess).truncated, true);
+});
+
+test("get_task returns its scorers, score series and eval set within the project", async () => {
+  const reads: [string, string][] = [];
+  const out = data<{
+    task: {
+      id: string;
+      scorers: { kind: string }[];
+      scoreSeries: unknown[];
+      evalSet: { targetRuns: number };
+    };
+  }>(
+    await run("get_task", { taskId: task.id }, [], {
+      scorersFor: async (projectId, taskId) => {
+        reads.push([projectId, taskId]);
+        return [{ kind: "max_tool_calls", max: 3, enabled: true, source: "user", version: 2 }];
+      },
+    }),
+  );
+  assert.equal(out.task.id, task.id);
+  assert.deepEqual(reads, [[PROJECT, task.id]]);
+  assert.equal(out.task.scorers[0]!.kind, "max_tool_calls");
+  assert.deepEqual(out.task.scoreSeries, []);
+  assert.equal(out.task.evalSet.targetRuns, 20);
+  assert.equal(
+    ((await run("get_task", { taskId: "foreign-task" })) as { error: string }).error,
+    "not_found",
+  );
+});
+
+test("get_task does not read scorers or evals when the eval gate is off", async () => {
+  const unavailable = async (): Promise<never> => {
+    throw new Error("The read must not run.");
+  };
+  const out = data<{ task: { scorers: unknown[]; scoreSeries: unknown[]; evalSet: null } }>(
+    await run("get_task", { taskId: task.id }, [], {
+      evalGateEnabled: async () => false,
+      scorersFor: unavailable,
+      dailyScoresFor: unavailable,
+      taskEvalViewFor: unavailable,
+    }),
+  );
+  assert.deepEqual(out.task.scorers, []);
+  assert.deepEqual(out.task.scoreSeries, []);
+  assert.equal(out.task.evalSet, null);
+});
 
 function taskFix(): Fix {
   return {
@@ -1066,4 +1167,121 @@ test("get_eval hides task comparisons when the replay is unreliable", async () =
   assert.equal(out.eval.tasks[0]!.after, null);
   assert.equal(out.eval.tasks[0]!.breakdown, null);
   assert.deepEqual(out.eval.tasks[0]!.fidelity, { matched: 0, total: 20 });
+});
+
+test("MCP task reads, simulations and shipments use the existing stores without mixing post-ship results", async () => {
+  const client = await createMigratedPGlite();
+  const db = drizzle(client, { schema }) as unknown as ReturnType<typeof getDb>;
+  const ORG = "99999999-9999-4999-8999-999999999999";
+  const OTHER = "88888888-8888-4888-8888-888888888888";
+  const boundFix = taskFix();
+  // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value; OSS organizations have no plan.
+  const taskDeps = {
+    db,
+    flagDeps: { FF_EVAL_GATE: "1" },
+    loadFix: async (projectId: string) => ({ projectId, fix: boundFix }),
+    observability: { trackSystemEvent: async () => {} },
+  };
+  try {
+    await db.insert(organizations).values({ id: ORG, name: "Test", slug: "test-task-mcp" });
+    await db.insert(projects).values([
+      { id: PROJECT, organizationId: ORG, name: "Test", slug: "test-task-mcp" },
+      { id: OTHER, organizationId: ORG, name: "Other", slug: "other-task-mcp" },
+    ]);
+    await db.insert(taskEvalSets).values(
+      boundFix.subject.tasks.map((item) => ({
+        projectId: PROJECT,
+        taskId: item.id,
+        targetRuns: 25,
+        scorerVersion: 1,
+        refreshedAt: new Date("2026-11-01T00:00:00Z"),
+      })),
+    );
+    await db.insert(taskScoresDaily).values({
+      projectId: PROJECT,
+      taskId: task.id,
+      day: "2026-11-01",
+      scorerKind: "overall",
+      scorerVersion: 1,
+      n: 20,
+      passed: 15,
+    });
+    const over: Partial<LoopOperationDeps> = {
+      loadProjectFixes: async () => ({ ...model, open: [boundFix] }),
+      scorersFor: (projectId, taskId) => scorersFor(projectId, taskId, db),
+      dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId, db),
+      taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId, db),
+      runTaskSimulation: (fixId, options) =>
+        runTaskSimulation(fixId, { ...options, deps: taskDeps }),
+      latestTaskSimulations: (projectId, fixId) => latestTaskSimulations(projectId, fixId, db),
+      createFixShipment: (input) => createFixShipment(input, db, taskDeps),
+    };
+    const detail = data<{
+      task: {
+        scorers: { kind: string }[];
+        scoreSeries: { n: number; passed: number }[];
+        evalSet: { targetRuns: number };
+      };
+    }>(await run("get_task", { taskId: task.id }, [], over));
+    assert.ok(detail.task.scorers.some((scorer) => scorer.kind === "ends_well"));
+    assert.equal(detail.task.scoreSeries[0]!.n, 20);
+    assert.equal(detail.task.scoreSeries[0]!.passed, 15);
+    assert.equal(detail.task.evalSet.targetRuns, 25);
+
+    const queued = data<{ eval: { tasks: { id: string; taskId: string }[] } }>(
+      await run("run_eval", { fixId: fix.id }, [], over),
+    );
+    assert.deepEqual(queued.eval.tasks.map((item) => item.taskId).sort(), [
+      "book-flight",
+      "cancel-flight",
+    ]);
+    const again = data<{ eval: { tasks: { id: string }[] } }>(
+      await run("run_eval", { fixId: fix.id }, [], over),
+    );
+    assert.deepEqual(
+      again.eval.tasks.map((item) => item.id),
+      queued.eval.tasks.map((item) => item.id),
+    );
+    await db
+      .update(taskEvalRuns)
+      .set({ status: "completed", verdict: "same", methods: { replay: 0, rerank: 0, none: 0 } })
+      .where(and(eq(taskEvalRuns.projectId, PROJECT), eq(taskEvalRuns.fixId, fix.id)));
+    await db.insert(taskEvalRuns).values({
+      projectId: OTHER,
+      taskId: "foreign-task",
+      fixId: fix.id,
+      scorerVersion: 1,
+      status: "completed",
+      createdBy: "test",
+    });
+
+    const shipment = data<{ shipment: { id: string } }>(
+      await run(
+        "mark_fix_shipped",
+        { fixId: fix.id, version: "v3", notes: "Test release" },
+        [],
+        over,
+      ),
+    );
+    for (const item of boundFix.subject.tasks) {
+      const markers = await taskShipmentsFor(PROJECT, item.id, db);
+      assert.equal(markers.length, 1);
+      assert.equal(markers[0]!.id, shipment.shipment.id);
+      assert.equal(markers[0]!.status, "queued");
+    }
+    const polled = data<{ eval: { status: string; tasks: { id: string }[] } }>(
+      await run("get_eval", { fixId: fix.id }, [], over),
+    );
+    assert.equal(
+      polled.eval.status,
+      "completed",
+      "The pending post-ship measures are not simulations.",
+    );
+    assert.deepEqual(
+      polled.eval.tasks.map((item) => item.id).sort(),
+      queued.eval.tasks.map((item) => item.id).sort(),
+    );
+  } finally {
+    await client.close();
+  }
 });

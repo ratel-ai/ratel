@@ -401,7 +401,8 @@ test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, 
       "overview|group:monitor|Monitor",
       "health|group:monitor|",
       "traces|group:monitor|",
-      "intents|group:insights|Insights",
+      "tasks|group:insights|Insights",
+      "intents|group:insights|",
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
@@ -413,10 +414,14 @@ test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, 
   assert.equal(ship?.href, `/project/${P1}/ship`, "Ship is the one new page");
   assert.equal(activeNavItemId(`/project/${P1}/ship`, items), "ship");
   assert.equal(shortcutHref(items, "l"), `/project/${P1}/ship`);
-  // Tasks stays under Agent health until the task loop brings its own pages.
+  // Tasks is a top-level page under Insights; Agent health keeps its Summary and Self-corrections.
+  const tasks = items.find(({ id }) => id === "tasks");
+  assert.equal(tasks?.href, `/project/${P1}/tasks`);
+  assert.equal(activeNavItemId(`/project/${P1}/tasks/book-flight`, items), "tasks");
+  assert.equal(shortcutHref(items, "w"), `/project/${P1}/tasks`);
   assert.deepEqual(
     items.find(({ id }) => id === "health")?.children?.map(({ id }) => id),
-    ["health-summary", "health-tasks", "health-self-corrections"],
+    ["health-summary", "health-self-corrections"],
   );
   const hrefs = commandEntries({ items, projects: PROJECTS, pathname: `/project/${P1}` }).map(
     (entry) => entry.href,
