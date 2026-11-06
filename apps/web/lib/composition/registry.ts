@@ -12,6 +12,7 @@ import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
+import { sessionReplayRegistration } from "@/lib/views/session-replay/register";
 
 /**
  * The other composition root: the one file that imports every module's `register.ts` and so the
@@ -31,6 +32,7 @@ const CORE: Registration[] = [
   qualityRegistration,
   toolCrafterRegistration,
   evalGateRegistration,
+  sessionReplayRegistration,
 ];
 
 export function collectRegistrations(
