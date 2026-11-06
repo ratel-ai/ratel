@@ -1,6 +1,6 @@
 <div align="center">
   <h1>Ratel</h1>
-  <p>Your AI agent is paying for tools it never uses. Ratel fixes that.</p>
+  <p>See what your AI agent gets wrong, and what to change. On your own infrastructure.</p>
 
   <p>
     <a href="https://docs.ratel.sh">Docs</a> •
@@ -9,178 +9,139 @@
   </p>
 
   <p>
-    <a href="https://www.npmjs.com/package/@ratel-ai/sdk"><img src="https://img.shields.io/npm/v/@ratel-ai/sdk?label=npm&color=cb3837" alt="npm" /></a>
-    <a href="https://pypi.org/project/ratel-ai/"><img src="https://img.shields.io/pypi/v/ratel-ai?label=PyPI&color=3775a9" alt="PyPI" /></a>
-    <a href="https://crates.io/crates/ratel-ai-core"><img src="https://img.shields.io/crates/v/ratel-ai-core?label=crates.io&color=e57300" alt="crates.io" /></a>
     <a href="https://github.com/ratel-ai/ratel/stargazers"><img src="https://img.shields.io/github/stars/ratel-ai/ratel?style=social" alt="GitHub stars" /></a>
     <a href="https://discord.gg/75vAPdjYqT"><img src="https://img.shields.io/discord/1478702964003705015?label=Discord&logo=discord&logoColor=white&color=5865F2" alt="Discord" /></a>
     <a href="#license"><img src="https://img.shields.io/badge/license-Apache--2.0%20%26%20MIT-blue" alt="license" /></a>
   </p>
 </div>
 
-<div align="center">
-  <img src="./docs/assets/ratel-hero.gif" width="960" alt="Ratel hero animation" />
-</div>
-
 ## Introduction
 
-The context engineering layer for AI agents. Selects only the tools and skills relevant to each turn, recovering accuracy lost to tool overload and cutting what you pay per call. No vector DB, no infra.
+Ratel is a self-hosted platform for AI agents. Your agent sends it traces and its catalog of tools and skills. Ratel reads that traffic and shows you what the agent gets wrong, what people ask it for, and which changes would make it find and finish more.
 
-## Why
+It is for anyone building or running an agent who wants to see how it behaves and keep that data on their own machines. It runs as one application and one Postgres database, and it needs nothing else:
 
-- **Cost:** Every tool schema, every skill, and a growing list of instructions in the system prompt are tokens you pay for on every call. Send them all up front and you pay for them all, every turn.
-- **Accuracy:** Models get worse as that context grows. Crowd it with tools, skills, and instructions a turn doesn't need and the model picks the wrong option and drifts off task.
-- **Ratel fixes both:** it indexes your tools and skills into a catalog the agent *progressively discloses*, searching for what each turn needs and injecting only the matching capabilities instead of loading everything up front. Constant grounding your agent always needs — a shop's address, a brand's voice — is registered as *facts* and pushed into context, re-injected only when it isn't already fresh in the transcript.
+- **Console:** the pages you read and act on. See [What is in the console](#what-is-in-the-console).
+- **Ingest and catalog APIs:** OTLP traces and logs, SDK events, catalog pull, skills and intent graph sync, authenticated with per-project API keys.
+- **Background jobs:** a durable queue in Postgres, drained every minute inside the application. There is no separate worker or scheduler to run.
+- **Readings:** what Ratel works out from the traffic, as jobs over a ledger of your agent's turns: Agent health signals, workflows and self-corrections, topics, intent clusters and the intent graph, the tool explorer, and match quality.
 
-Across local, open-source, and frontier model setups, Ratel cuts token usage and recovers accuracy lost to tool overload, with no vector DB required. Full results: [benchmark.ratel.sh](https://benchmark.ratel.sh)
+Model keys are optional. With no key, Ratel makes no outbound model call. The readings that need a model report themselves skipped, workflows keep their tool-order names, and topics are named from their own asks.
 
-## Quickstart
+## Quick Start
 
-Guides: [Quickstart](https://docs.ratel.sh/docs/quickstart) · [TypeScript SDK](https://docs.ratel.sh/docs/sdks/typescript) · [Python SDK](https://docs.ratel.sh/docs/sdks/python)
+**You need** Docker with Compose 2.24 or later.
 
-Examples: [Vercel AI SDK](examples/ai-sdk/README.md) · [Pydantic AI](examples/pydantic-ai/README.md)
+### On your machine
 
-### Typescript
-
-Install the SDK first:
-
-```bash
-pnpm add @ratel-ai/sdk
+```sh
+git clone https://github.com/ratel-ai/ratel.git
+cd ratel
+docker compose up -d --build --wait
 ```
 
-Then create and use your Catalogs:
+Open `http://localhost:3000`. The first build takes a few minutes, and no configuration is needed.
 
-```ts
-import { readFile } from "node:fs/promises";
-import {
-  SkillCatalog,
-  ToolCatalog,
-  getSkillContentTool,
-  invokeToolTool,
-  searchCapabilitiesTool,
-} from "@ratel-ai/sdk";
+### Explore with demo data (optional)
 
-const catalog = new ToolCatalog();
-catalog.register({
-  id: "read_file",
-  name: "read_file",
-  description: "Read a file from local disk.",
-  inputSchema: { type: "object", properties: { path: { type: "string" } } },
-  outputSchema: { type: "object", properties: { contents: { type: "string" } } },
-  execute: async ({ path }) => ({ contents: await readFile(path, "utf8") }),
-});
-
-const skills = new SkillCatalog();
-skills.register({
-  id: "inspect-local-file",
-  name: "inspect-local-file",
-  description: "Inspect a local file before answering questions about it.",
-  tools: ["read_file"],
-  body: "Read the requested file, then ground your answer in its contents.",
-});
-
-// use the following as tools in your agent framework
-const search = searchCapabilitiesTool(catalog, skills);
-const invoke = invokeToolTool(catalog);
-const loadSkill = getSkillContentTool(skills);
+```sh
+docker compose --profile demo run --rm demo
 ```
 
+A fresh install seeds this sample project, Site Copilot, by itself the first time the console opens with no project: 30 days of agent activity, marked as sample data, seeded once per organization (deleting it does not bring it back). Some pages fill in over the next couple of minutes. This command replaces it with a fresh copy, or restores it after a delete.
 
-### Python
+### On a server
 
-Install the SDK first:
+> **The console has no login.** Anyone who reaches it is an admin. Ratel binds to `127.0.0.1` only: keep it behind your own proxy with authentication and TLS.
 
-```bash
-pip install ratel-ai
+```sh
+git clone https://github.com/ratel-ai/ratel.git
+cd ratel
+cp .env.example .env
 ```
 
-Then create and use your Catalogs:
+Set these in `.env` **before the first start**. Generate each secret with `openssl rand -hex 32`:
 
-```python
-from ratel_ai import (
-    ExecutableTool,
-    Skill,
-    SkillCatalog,
-    ToolCatalog,
-    get_skill_content_tool,
-    invoke_tool_tool,
-    search_capabilities_tool,
-)
-
-catalog = ToolCatalog()
-catalog.register(ExecutableTool(
-    id="read_file",
-    name="read_file",
-    description="Read a file from local disk.",
-    input_schema={"properties": {"path": {"type": "string"}}},
-    execute=lambda args: {"contents": open(args["path"]).read()},
-))
-
-skills = SkillCatalog()
-skills.register(Skill(
-    id="inspect-local-file",
-    name="inspect-local-file",
-    description="Inspect a local file before answering questions about it.",
-    tools=["read_file"],
-    body="Read the requested file, then ground your answer in its contents.",
-))
-
-# use the following as tools in your agent framework
-search = search_capabilities_tool(catalog, skills)
-invoke = invoke_tool_tool(catalog)
-load_skill = get_skill_content_tool(skills)
+```sh
+RATEL_ORG_NAME=Acme
+BASE_URL=https://ratel.example.com
+POSTGRES_PASSWORD=<generated>
+TRACE_SIGNALS_HASH_SALT=<generated>
 ```
 
-## How it works
+Then start it with `docker compose up -d --build --wait`. Point your proxy at `127.0.0.1:3000`, and configure it so that:
 
-When your agent needs to act, it calls `search_capabilities`. Ratel searches separate tool and skill indexes and returns focused results from each. Tools can be invoked by id; skill instructions stay out of context until the agent loads a relevant playbook with `get_skill_content`.
+- `/v1`, `/v2`, `/api/v1` and `/api/v2` pass through without your login, because the SDKs authenticate with API keys.
+- Everything else requires your login.
+- It preserves `Host` or sets `X-Forwarded-Host`, otherwise console actions fail.
 
-The indexes use BM25 by default, the same algorithm behind most search engines, applied to each tool's name, description and argument names, and to skill names, descriptions, and tags. Retrieval is fast and deterministic. Semantic and hybrid ranking are opt-in per catalog or per call; SDK callers register (which embeds) and search dense indexes asynchronously, using either an in-process model or an OpenAI-compatible embedding endpoint.
+Model keys are optional, and every field is explained in `.env.example`.
 
-[Full docs](https://docs.ratel.sh)
+### Everyday commands
 
-## Related projects
+```sh
+docker compose up -d --build --wait    # start, or update after a git pull; migrations run on boot
+docker compose down                    # stop, keeping your data
+docker compose logs -f web worker      # follow the logs
+docker compose down --volumes          # stop and DELETE ALL DATA
+```
 
-Related open-source projects extend and validate this repository:
+Two containers run the app from the same image: `web` serves the console and the API and only queues background work, and `worker` runs it (analysis, sweeps, model calls), so a slow job never holds up a request. To run everything in one container instead, start the image without `APP_ROLE`.
 
-| Project | Repo | What it is |
-|---|---|---|
-| **ratel-local** | [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp) | The local distribution for your Coding Agents: Ratel in front of your MCP setup. |
-| **ratel-bench** | [ratel-ai/ratel-bench](https://github.com/ratel-ai/ratel-bench) | The benchmark harness behind [benchmark.ratel.sh](https://benchmark.ratel.sh). |
+`POSTGRES_PASSWORD` is read only when the database is first created. Changing it later means deleting the data with the last command.
+
+## What is in the console
+
+An organization holds projects, and each project is one agent's view:
+
+| Page | What it shows |
+|---|---|
+| **Overview** | The project at a glance: activity over the last 7 or 30 days, and what needs attention. |
+| **Agent health** | What your agent gets wrong. **Summary** lists the issues, **Tasks** follows what people tried to do down to each session, and **Self-corrections** lists the times the agent retried, switched tools, gave up or apologized. The Summary also prints as a report. |
+| **Traces** | Every run step by step, with spans, operations and logs, and two traces side by side. |
+| **Catalog** | Every **tool** and **skill** your agent can use, and how each one is found. **Test a search** ranks a prompt against the live catalog, with what-if edits. |
+| **Intents** | What people ask for. **All intents** lists the topics, **Flows** shows what people want next, ask after ask, and **Map** lays the intents out. |
+| **Improvements** | **Fixes** is the one list of changes that would make your agent find and finish more. **Quality** measures how well searches find the right tool, with misses, description rewrites and experiments. **Adaptive ranking** puts the tool your agent needs first, using what people asked before. |
+| **Settings** | Projects general settings, **API keys**, SDK events under **Developer**, and a danger zone. |
 
 ## Repo layout
 
 ```
-src/
-├── core/              # ratel-ai-core — Rust retrieval engine
-├── sdk/ts/            # @ratel-ai/sdk — TypeScript SDK (NAPI-bound)
-├── sdk/python/        # ratel-ai — Python SDK (PyO3-bound)
-├── adapters/ts-vercel-ai-sdk/ # @ratel-ai/vercel-ai-sdk — Vercel AI SDK adapter
-├── adapters/ts-mastra/ # @ratel-ai/mastra — Mastra adapter
-├── rankers/           # @ratel-ai/rankers-plugin / ratel-ai-rankers-plugin — vendor rankers (Jev, OpenAI Decisions)
-└── telemetry/         # OTel conventions + helper packages
-protocol/              # catalog-source wire contract
-examples/              # End-to-end SDK examples
+apps/
+└── web/                       # @ratel/platform: the console and APIs
+packages/
+├── brand/                     # @ratel/brand: palette, fonts and logo assets
+├── design-system/             # @ratel/design-system: semantic tokens and UI primitives
+└── sdk/                       # Ratel SDK
+scripts/                       # Repository checks and release tooling
 docs/
-├── adr/                # Architecture decision records
-└── assets/             # Images and other static assets
+├── adr/                       # Architecture decision records
+└── assets/                    # Images and other static assets
+ee/                            # Manifest for the Enterprise modules
 ```
 
-## Build & test
+The application's own layout and commands are in [apps/web/README.md](apps/web/README.md), and the layers of its core in [apps/web/lib/README.md](apps/web/lib/README.md).
 
-Prerequisites: Rust stable, Node 24+, pnpm 10.28+. Python SDK: Python 3.9+ and [`uv`](https://docs.astral.sh/uv/).
+## Development
 
-```bash
-cargo build --workspace && cargo test --workspace   # Rust
-pnpm install && pnpm -r build && pnpm -r test       # TypeScript
-# Python: see src/sdk/python/README.md
-```
+### Ratel Platform
+
+Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres. 
+
+- [apps/web/README.md](apps/web/README.md)
+
+### Ratel SDK
+
+Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (pinned via `rust-toolchain.toml`). The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
+
+- [packages/sdk/README.md](packages/sdk/README.md)
 
 ## Contributing
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
-- [AGENTS.md](AGENTS.md) — for coding agents working in this repo
+- [AGENTS.md](AGENTS.md): for coding agents working in this repo
+- [SECURITY.md](SECURITY.md): how to report a vulnerability, and which versions get fixes
 
 ## License
 
-The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE) — an explicit patent grant for the engine others embed. Everything else (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.

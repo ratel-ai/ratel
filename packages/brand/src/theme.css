@@ -1,0 +1,72 @@
+/*
+ * Ratel shared Tailwind v4 theme — single source of truth for the brand palette,
+ * the context-source data-viz colors, and the pixel webfont.
+ *
+ * Consume from an app's globals.css, after the Tailwind import:
+ *
+ *   @import "tailwindcss";
+ *   @import "@ratel/brand/theme.css";
+ *
+ * The @font-face rule loads the woff2 file in this package's `assets/fonts/` by
+ * relative URL; the app's bundler emits them as static assets.
+ *
+ * The raw `--ratel-*` brand variables remain in `tokens.css` for non-Tailwind
+ * consumers; this file is the Tailwind-flavoured `@theme` mapping of the same
+ * palette plus app-surface shades and fonts.
+ */
+
+@font-face {
+  font-family: "Geist Pixel Square";
+  src: url("../assets/fonts/geist-pixel-square.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* Geist comes from the `geist` npm package (variables wired in the app layout). */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-sans);
+  --font-pixel: "Geist Pixel Square", var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Brand surfaces + palette (mirrors packages/brand/tokens.css, plus app shades) */
+  --color-canvas: #001c16;
+  --color-base-deep: #00130f;
+  --color-forest: #023a2e;
+  --color-forest-600: #04332a;
+  --color-forest-300: #0c4d3e;
+  --color-cream: #eee3ce;
+  --color-cream-dim: #d9cdb4;
+  --color-coral: #ed5126;
+  --color-coral-deep: #c4431f;
+  --color-green: #239452;
+  --color-teal: #7ba0a0;
+  --color-indigo: #140092;
+  --color-indigo-300: #9b8cff;
+  --color-ink: #111113;
+  --color-near-black: #09090b;
+  --color-paper: #fafafa;
+  --color-warm-muted: #9e9788;
+
+  /* Context-source data-viz palette (skills · tools · history · memory · user input) */
+  --color-ctx-skills: #ed5126;
+  --color-ctx-tools: #e0922f;
+  --color-ctx-history: #9b8cff;
+  --color-ctx-memory: #5b9bd5;
+  --color-ctx-user-input: #239452;
+
+  /* Sub-split shades — same hue as the parent source, paler for the reclaimable
+     half (unused tools, uncached history) so the split reads as one group. */
+  --color-ctx-tools-used: #e0922f;
+  --color-ctx-tools-unused: #f4cd9c;
+  --color-ctx-history-cached: #9b8cff;
+  --color-ctx-history-uncached: #cfc6ff;
+}
+
+/* Backward-compatible CSS variable only. Keeping this outside `@theme` avoids
+   generating a color utility that collides with Tailwind's `text-base` size. */
+:root {
+  --color-base: var(--color-canvas);
+}

@@ -13,7 +13,7 @@ all 26 tools carry property descriptions and 9 carry enums — so this is a nega
 absent test. End to end through all three arms it moved one query of 25 in the right direction,
 which is inside the noise of a fixture this size.
 
-The only evidence for it is experiment E2 in the Kestral misranking investigation: on *their*
+The only evidence for it is experiment E2 in the design-partner misranking investigation: on *their*
 catalog the create family rode 3–6 ranks on schema tokens alone. Real, but not reproducible here,
 and not enough to justify changing the projection **for every catalog** — a breaking change that
 alters ranking for anyone who upgrades.

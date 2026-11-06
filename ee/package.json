@@ -1,0 +1,42 @@
+{
+  "name": "@ratel/ee",
+  "version": "0.1.0",
+  "description": "Manifest for Ratel Cloud edition modules. Source code lives in a private repository, checked out at ee/src.",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@clerk/backend": "^3.26.5",
+    "@clerk/nextjs": "^7.5.17",
+    "@clerk/themes": "^2.4.57",
+    "@ratel-ai/sdk": "0.13.0-rc.9",
+    "@ratel/design-system": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.22.0",
+    "next": "16.2.4",
+    "ogl": "^1.0.11",
+    "pg": "^8.13.1",
+    "pino": "^9.14.0",
+    "posthog-js": "^1.399.2",
+    "posthog-node": "^5.41.0",
+    "react": "19.2.4",
+    "resend": "^4.5.1",
+    "stripe": "^22.3.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
+    "react-dom": "19.2.4",
+    "tsx": "^4.20.6"
+  },
+  "scripts": {
+    "lint": "biome check . --no-errors-on-unmatched",
+    "test": "tsx --test --test-force-exit \"src/**/*.test.ts\"",
+    "db:generate": "drizzle-kit generate --config src/db/drizzle.config.ts"
+  }
+}

@@ -28,7 +28,8 @@ repos meet the same gate.
 
 **One pre-merge workflow, one required check.** All pre-merge jobs live in
 `.github/workflows/ci.yml`; a terminal `ci-gate` job `needs:` every leg (the everyday `rust` /
-`ts` / `ai-sdk-compat` / `python` / `telemetry` / `protocol` legs **and** the heavy
+`sdk` / `ai-sdk-compat` / `python` / `telemetry` / `protocol` / `design-system` /
+`platform-build` / `platform-test` / `platform-compose` legs **and** the heavy
 release-verify matrix). `ci-gate` is the **sole** required status check on `main`. It runs
 `if: always()`, so a *skipped* upstream job passes and only `failure`/`cancelled` fails the
 gate — giving the ruleset a definitive answer even when skip-green elides untouched legs.
@@ -54,10 +55,12 @@ as the strict required check.
 
 - A single green `ci-gate` means the whole pre-merge pipeline is green; branch-protection
   config no longer drifts from what CI actually runs.
-- Skip-green filters must stay conservative for this FFI monorepo (ADR-0006): the TS and Python
-  SDK legs include the Rust core + `Cargo.*` paths so an FFI change re-runs them, and every
-  filter includes `ci.yml` so editing CI re-runs all legs. On push to `main` and
-  `workflow_dispatch` every leg runs regardless of filters.
+- Skip-green path rules live in `scripts/ci-filters.mjs`. The SDK and Python legs stay
+  conservative for this FFI monorepo (ADR-0006): they include the Rust core + `Cargo.*` paths
+  so an FFI change re-runs them. The platform app is not an FFI consumer; its jobs name
+  `packages/brand` and `packages/design-system` and never use a `packages/**` glob. Editing
+  `ci.yml` re-runs every leg. On push to `main` and `workflow_dispatch` every leg runs
+  regardless of the classifier.
 - Enforcement is a checked-in script, not click-ops. Applying it is a privileged manual step
   (create the `core-maintainers` team, run the script, delete the obsolete `ready-to-merge`
   label) done by an admin after this lands.

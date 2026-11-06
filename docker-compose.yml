@@ -1,0 +1,91 @@
+# Ratel Platform, open-source edition, with its Postgres. See the Quick Start in README.md.
+#   docker compose up -d --build --wait            the app at http://localhost:3000
+#   docker compose --profile demo run --rm demo    optional demo data
+#   docker compose up db                           Postgres only, for `pnpm --filter @ratel/platform dev`
+# Works with no `.env`, on public defaults. `.env.example` lists what to set on a server.
+# Both ports stay on 127.0.0.1: the console has no login and belongs behind your own proxy.
+# `web` serves and only queues jobs (APP_ROLE=api); `worker` runs them, from the same image
+# (ADR-0031). Without APP_ROLE one container does both, as `pnpm dev` does.
+name: ratel
+
+# What web and worker share: one image, one `.env`, one database.
+x-platform: &platform
+  build:
+    context: .
+    dockerfile: apps/web/Dockerfile
+    target: oss
+  env_file:
+    - path: .env
+      required: false
+
+x-platform-env: &platform-env
+  DATABASE_URL: postgres://ratel:${POSTGRES_PASSWORD:-ratel}@db:5432/ratel
+  DATABASE_SSL: disable
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ratel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratel}
+      POSTGRES_DB: ratel
+    ports: ["127.0.0.1:${RATEL_DB_PORT:-5432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ratel -d ratel"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  web:
+    <<: *platform
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *platform-env
+      APP_ROLE: api
+      DATABASE_MIGRATE_ON_BOOT: "1"
+    ports: ["127.0.0.1:${RATEL_PORT:-3000}:3000"]
+
+  # Runs the jobs and the minute tick. Waits for a healthy web, which has migrated by then; it
+  # never migrates itself. Its server answers only its own health check. On a stop it finishes
+  # the step in flight first (NEXT_MANUAL_SIG_HANDLE keeps Next from exiting before it).
+  worker:
+    <<: *platform
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      <<: *platform-env
+      APP_ROLE: worker
+      NEXT_MANUAL_SIG_HANDLE: "true"
+    stop_grace_period: 60s
+
+  demo:
+    profiles: [demo]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: demo
+    # Shares the database's network, so `localhost` is exactly this Postgres and the seeds' guard
+    # against any other database stays as it is.
+    network_mode: service:db
+    depends_on:
+      web:
+        condition: service_healthy
+    # Named one by one, not from `.env`: demo data must not spend the operator's model keys.
+    environment:
+      DATABASE_URL: postgres://ratel:${POSTGRES_PASSWORD:-ratel}@localhost:5432/ratel
+      DATABASE_SSL: disable
+      RATEL_ORG_NAME: ${RATEL_ORG_NAME:-}
+      TRACE_SIGNALS_HASH_SALT: ${TRACE_SIGNALS_HASH_SALT:-}
+      TRACE_TURNS_IDLE_CLOSE_MS: "1000"
+      LOG_LEVEL: warn
+    command:
+      - sh
+      - -c
+      - pnpm exec tsx scripts/seed.mts --drain 8 && pnpm exec tsx scripts/seed-site-copilot-quality.mts
+
+volumes:
+  pgdata:
