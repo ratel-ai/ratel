@@ -1756,6 +1756,7 @@
     { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/views/lineage/schema.ts", "mode": "owned", "$why": "lineage_links: the lineage partition of the upstream schema hub" },
     { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/views/fixes/schema.ts", "mode": "owned", "$why": "fix_experiments, fix_shipments, fix_shipment_tasks: the fixes partition of the upstream schema hub" },
     { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/views/eval-gate/schema.ts", "mode": "owned", "$why": "fix_eval_sets, fix_eval_cases, fix_eval_runs: the eval-gate partition of the upstream schema hub" },
+    { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/views/fix-drafts/schema.ts", "mode": "owned", "$why": "fix_drafts: the fix-drafts partition of the upstream schema hub" },
     { "$slice": "eval-gate", "from": "apps/web/lib/task-scorers/index.ts", "to": "apps/web/lib/views/task-scorers/index.ts", "mode": "copy" },
     { "from": "apps/web/lib/task-scorers/types.ts", "to": "apps/web/lib/views/task-scorers/types.ts", "mode": "copy" },
     { "from": "apps/web/lib/task-scorers/format.ts", "to": "apps/web/lib/views/task-scorers/format.ts", "mode": "copy" },
