@@ -1079,7 +1079,8 @@
         "!apps/web/lib/views/eval-gate/no-outbound-without-key.test.ts",
         "apps/web/components/console/eval-gate/**",
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
-        "apps/web/lib/platform/project-log-context.ts"
+        "apps/web/lib/platform/project-log-context.ts",
+        "apps/web/lib/views/fix-drafts/change.test.ts"
       ],
       "linter": {
         "rules": {

@@ -117,6 +117,8 @@
         "NewFixEvalCaseRow": "@/lib/views/eval-gate/schema",
         "FixEvalRunRow": "@/lib/views/eval-gate/schema",
         "NewFixEvalRunRow": "@/lib/views/eval-gate/schema",
+        "fixDrafts": "@/lib/views/fix-drafts/schema",
+        "FixDraftRow": "@/lib/views/fix-drafts/schema",
         "catalogFingerprints": "@/lib/synthesis/quality/schema",
         "CatalogFingerprintEntry": "@/lib/synthesis/quality/schema",
         "CatalogFingerprintRow": "@/lib/synthesis/quality/schema",

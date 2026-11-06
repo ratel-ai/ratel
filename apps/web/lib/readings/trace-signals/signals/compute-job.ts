@@ -78,7 +78,7 @@ import {
  * Logs and events carry counts only: no query text, no end-user ids.
  *
  * Owned (ADR-0030): Agent health is on for every project here, so there is no flag gate.
- * The readings that follow a run (topics, the tool explorer) are seams: each one's
+ * The readings that follow a run (topics, the tool explorer, fix drafts) are seams: each one's
  * registration fills its enqueue in {@link computeSeams} when it lands, and a run with
  * the seam unset simply queues nothing.
  */
@@ -122,6 +122,8 @@ export interface ComputeJobDeps {
   enqueueTopics?: (projectId: string) => Promise<unknown>;
   /** Queue the tool-explorer run that reads this run's ledger window; a seam its registration fills. */
   enqueueExplore?: (projectId: string, signalRunId: string) => Promise<unknown>;
+  /** Queue drafts for the project's new rewrite fixes; a seam fix drafts' registration fills. */
+  enqueueFixDrafts?: (projectId: string) => Promise<unknown>;
   now: () => Date;
   timeBudgetMs: number;
 }
@@ -130,7 +132,10 @@ export interface ComputeJobDeps {
  * The enqueues of the readings that follow a signal run. Empty until their registrations
  * assign them, so this module never imports a reading that may not have landed.
  */
-export const computeSeams: Pick<ComputeJobDeps, "enqueueTopics" | "enqueueExplore"> = {};
+export const computeSeams: Pick<
+  ComputeJobDeps,
+  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts"
+> = {};
 
 /** The turn build's seed window: what a project's first build reads. */
 const SEED_WINDOW_MS = TURN_BUILD_SEED_WINDOW_DAYS * 86_400_000;
@@ -323,6 +328,7 @@ export async function computeProjectTraceSignals(
     await queueWorkflowLabels(projectId, result.summary, deps);
     await queueTopics(projectId, deps);
     await queueToolExplorer(projectId, run.id, deps);
+    await queueFixDrafts(projectId, deps);
     await deps.observability.trackSystemEvent("trace_signal_run_completed", SYSTEM_DISTINCT_ID, {
       object_action: "trace_signal_run_completed",
       ...fields,
@@ -499,6 +505,22 @@ async function queueToolExplorer(
   } catch (err) {
     logger.error({ err, project_id: projectId }, "tool explorer enqueue failed");
     reportServerException(err, `project:${projectId}`, { operation: "explore_tool_usage_enqueue" });
+  }
+}
+
+/**
+ * Best-effort: drafts read the fixes this run's signals produce, so a failed enqueue never fails
+ * the run. Upstream queues them in the job handler once the run completed (`lib/jobs/handlers.ts`).
+ */
+async function queueFixDrafts(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueFixDrafts">,
+): Promise<void> {
+  try {
+    await deps.enqueueFixDrafts?.(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "fix draft enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "draft_fix_enqueue" });
   }
 }
 

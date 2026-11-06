@@ -226,6 +226,7 @@ describe("registry root", () => {
       "cluster_intents",
       "compute_trace_signals",
       "craft_tools",
+      "draft_fix",
       "explore_tool_usage",
       "fold_intent_graph",
       "label_workflows",
