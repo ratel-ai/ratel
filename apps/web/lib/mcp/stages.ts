@@ -12,8 +12,8 @@ import type { LineageStage } from "@/lib/views/lineage/types";
  * `null` marks tools that sit outside the loop (identity, account, catalog
  * authoring). `stages.test.ts` fails when a tool is missing from the map.
  *
- * Owned (ADR-0030): the map names the tools this build has. The task tools
- * and the embedding usage tool are not here.
+ * Owned (ADR-0030): the map names the tools this build has. The embedding
+ * usage tool is not here.
  */
 export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   // Outside the loop: who you are, what you can reach, limits, background jobs.
@@ -24,6 +24,8 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   get_job_status: null,
 
   // Monitor: what the agent did, and whether data is arriving.
+  list_tasks: "monitor",
+  get_task: "monitor",
   get_project_overview: "monitor",
   list_traces: "monitor",
   get_trace: "monitor",

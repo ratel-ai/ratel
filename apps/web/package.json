@@ -17,7 +17,8 @@
     "db:check": "node scripts/db-check.mjs",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.mts",
-    "seed:quality": "tsx scripts/seed-site-copilot-quality.mts"
+    "seed:quality": "tsx scripts/seed-site-copilot-quality.mts",
+    "seed:task-loop": "tsx scripts/seed-task-loop.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

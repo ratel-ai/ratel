@@ -78,6 +78,8 @@ test("write operations are exactly those declaring mutates", () => {
 test("without the loop flag, the loop tools are absent and nothing else changes", () => {
   const withoutLoop = assembleOperations({ includeLoop: false }).map((operation) => operation.id);
   const loop = [
+    "list_tasks",
+    "get_task",
     "list_insights",
     "list_fixes",
     "get_fix",
@@ -155,6 +157,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["generate_tool_crafts", true],
   // The improvement loop (RC-43), behind FF_MCP_LOOP. run_eval mutates: the
   // eval gate (RC-46) records each simulation it runs.
+  ["list_tasks", false],
+  ["get_task", false],
   ["list_insights", false],
   ["list_fixes", false],
   ["get_fix", false],

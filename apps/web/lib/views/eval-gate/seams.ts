@@ -17,6 +17,8 @@ export interface ResolvedChange {
 export interface ResolveChangeOptions {
   db?: EvalDb;
   actor?: string;
+  /** The environment the gate reads (upstream's flag deps); unset, `process.env`. */
+  env?: Record<string, string | undefined>;
 }
 
 export interface EvalGateSeams {

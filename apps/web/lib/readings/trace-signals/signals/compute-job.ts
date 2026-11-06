@@ -78,7 +78,7 @@ import {
  * Logs and events carry counts only: no query text, no end-user ids.
  *
  * Owned (ADR-0030): Agent health is on for every project here, so there is no flag gate.
- * The readings that follow a run (topics, the tool explorer, fix drafts) are seams: each one's
+ * The readings that follow a run (live task scores, topics, the tool explorer, fix drafts) are seams: each one's
  * registration fills its enqueue in {@link computeSeams} when it lands, and a run with
  * the seam unset simply queues nothing.
  */
@@ -124,6 +124,8 @@ export interface ComputeJobDeps {
   enqueueExplore?: (projectId: string, signalRunId: string) => Promise<unknown>;
   /** Queue drafts for the project's new rewrite fixes; a seam fix drafts' registration fills. */
   enqueueFixDrafts?: (projectId: string) => Promise<unknown>;
+  /** Queue live task scores after placement and signal persistence. The queue checks the organization flag. */
+  enqueueTaskScores?: (projectId: string) => Promise<unknown>;
   now: () => Date;
   timeBudgetMs: number;
 }
@@ -134,7 +136,7 @@ export interface ComputeJobDeps {
  */
 export const computeSeams: Pick<
   ComputeJobDeps,
-  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts"
+  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts" | "enqueueTaskScores"
 > = {};
 
 /** The turn build's seed window: what a project's first build reads. */
@@ -325,6 +327,7 @@ export async function computeProjectTraceSignals(
       );
     }
     logger.info(fields, "trace signal run completed");
+    await queueTaskScores(projectId, deps);
     await queueWorkflowLabels(projectId, result.summary, deps);
     await queueTopics(projectId, deps);
     await queueToolExplorer(projectId, run.id, deps);
@@ -521,6 +524,19 @@ async function queueFixDrafts(
   } catch (err) {
     logger.error({ err, project_id: projectId }, "fix draft enqueue failed");
     reportServerException(err, `project:${projectId}`, { operation: "draft_fix_enqueue" });
+  }
+}
+
+/** Keep the completed signal run when the score queue fails. Log and report the failure. */
+async function queueTaskScores(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueTaskScores">,
+): Promise<void> {
+  try {
+    await deps.enqueueTaskScores?.(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "task scores enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "score_tasks_enqueue" });
   }
 }
 

@@ -274,8 +274,8 @@ export function consoleNav({
 
 /**
  * Group the project rail by stage (upstream's `stageSpineNav`, in this flat model: a stage is a
- * labelled section). Ship is the one new page. Tasks stays under Agent health: its own pages
- * arrive with the task loop.
+ * labelled section). Monitor contains Agent health, without its Tasks child; Insights contains
+ * Tasks, a top-level page (`/tasks`; the Agent health Tasks pages redirect there). Ship is new.
  */
 function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
   const pick = (id: string): NavItem => {
@@ -289,6 +289,18 @@ function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
       section: `group:${id}` as const,
       ...(index === 0 ? { sectionLabel: label } : {}),
     }));
+  const classicHealth = pick("health");
+  const health: NavItem = {
+    ...classicHealth,
+    children: (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks"),
+  };
+  const tasks: NavItem = {
+    id: "tasks",
+    label: "Tasks",
+    href: `${root}/tasks`,
+    icon: "health",
+    shortcut: "w",
+  };
   const ship: NavItem = {
     id: "ship",
     label: "Ship",
@@ -297,8 +309,8 @@ function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
     shortcut: "l",
   };
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), pick("health"), pick("traces")]),
-    ...stage("insights", "Insights", [pick("intents")]),
+    ...stage("monitor", "Monitor", [pick("overview"), health, pick("traces")]),
+    ...stage("insights", "Insights", [tasks, pick("intents")]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),

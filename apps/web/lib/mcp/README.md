@@ -19,7 +19,7 @@ identical.
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
 | `operations/account.ts` | `get_flag_status`, `get_quota_status` (the entitlements port), `get_job_status` (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
-| `operations/loop/` | the improvement loop as tools, behind `FF_MCP_LOOP` (`loop-flag.ts`): `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
+| `operations/loop/` | the improvement loop as tools, behind `FF_MCP_LOOP` (`loop-flag.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]` while the loop is on |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
 | `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real (owned snippets, see below) |
@@ -42,11 +42,12 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   (`composition.embeddingProvider`), as the Playground route does, instead of a vendor key.
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.
 - `loop-flag.ts` (with its test): one env switch, `FF_MCP_LOOP`, in place of upstream's per-key and
-  per-organization flag. `operations/loop/index.ts` and `loop.test.ts`: seven tools; the task tools
-  (`list_tasks`, `get_task`) and task simulations land with the task loop. `list_fixes` and
+  per-organization flag. `operations/loop/index.ts` and `loop.test.ts`: the gates are the env
+  switches; `mark_fix_shipped` loads the task loop's shipment record (`views/task-evals/ship.ts`),
+  so with `FF_EVAL_GATE` on it queues the post-ship measures. `list_fixes` and
   `get_fix` return a fix's newest draft (`lib/views/fix-drafts`) while `FF_EVAL_GATE` is on, null
   otherwise, and a ready draft supplies `get_fix`'s change. `run-eval-gate.integration.test.ts`: the gate is the env
-  switch. `stages.ts`: no stage for the tools this build does not have. `operations/index.ts`,
+  switch. `stages.ts`: no stage for the tools this build does not have (the embedding usage tool). `operations/index.ts`,
   `route-handler.ts` and `server.ts` wire the loop as upstream does.
   `__fixtures__/tools-list-before-loop.json` is this build's tool list before the loop:
   `route-handler.test.ts` checks that with the loop off it is listed exactly as before, and with it on

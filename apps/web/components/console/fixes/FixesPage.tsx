@@ -37,6 +37,7 @@ export function FixesPage({
   now,
   evalBadges = null,
   shipped = null,
+  taskSimulations = false,
   progress = null,
 }: {
   projectId: string;
@@ -46,6 +47,8 @@ export function FixesPage({
   evalBadges?: Readonly<Record<string, EvalBadge>> | null;
   /** Each shipped fix's newest shipment; null when `FF_STAGE_SPINE` is off. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
+  /** Each fix's tasks link to their simulations; `FF_EVAL_GATE` and `FF_STAGE_SPINE`. */
+  taskSimulations?: boolean;
   /** Where the jobs that find fixes stand; null reads as idle. */
   progress?: SectionProgress | null;
 }) {
@@ -104,7 +107,13 @@ export function FixesPage({
         ) : (
           <>
             <StatRow stats={fixStatProps(model, root)} />
-            <FixesList model={model} now={now} evalBadges={evalBadges} shipped={shipped} />
+            <FixesList
+              model={model}
+              now={now}
+              evalBadges={evalBadges}
+              shipped={shipped}
+              taskSimulations={taskSimulations}
+            />
           </>
         )}
       </PageBody>

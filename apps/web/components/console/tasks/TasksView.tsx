@@ -7,11 +7,13 @@ import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { readingSinceText } from "@/components/console/health/section-preview-model";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { TasksTable } from "@/components/console/tasks/TasksTable";
+import { TopLevelTasksTable } from "@/components/console/tasks/TopLevelTasksTable";
 import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/types";
 import { analysisPending, type SectionProgress } from "@/lib/views/freshness/model";
 import { absoluteTime, timeAgo } from "@/lib/views/intents/map/labels";
 import { compactNumber } from "@/lib/views/intents/map/map-model";
 import { formatPer100, formatShare } from "@/lib/views/tasks/format";
+import type { TaskLiveScore } from "@/lib/views/tasks/live-scores";
 import type { TaskListModel } from "@/lib/views/tasks/model";
 import { agentHealthHref, selfCorrectionsHref } from "@/lib/views/tasks/paths";
 
@@ -35,19 +37,23 @@ export function TasksView({
   projectId,
   model,
   now,
+  topLevel = false,
+  scores,
   progress = null,
 }: {
   projectId: string;
   model: TaskListModel;
   now: Date;
-  /** Where the jobs behind tasks stand; null reads as idle. */
+  topLevel?: boolean;
+  scores?: ReadonlyMap<string, TaskLiveScore> | null;
+  /** Where the jobs behind tasks stand (RC-210); null reads as idle. */
   progress?: SectionProgress | null;
 }) {
   return (
     <Page>
       <PageHeader
         title={TASKS_TITLE}
-        crumbs={tasksCrumbs(projectId)}
+        crumbs={topLevel ? undefined : tasksCrumbs(projectId)}
         actions={<AnalysisStatus projectId={projectId} section="tasks" initial={progress} />}
       />
       <PageBody wide className={model.state === "ready" ? undefined : "flex-1"}>
@@ -57,7 +63,18 @@ export function TasksView({
             {model.readingSince ? (
               <Callout>{readingSinceText(model.readingSince, model.excludedRuns)}</Callout>
             ) : null}
-            <TasksTable projectId={projectId} rows={model.rows} unserved={model.unserved} />
+            {topLevel ? (
+              <>
+                {scores === null ? (
+                  <Callout tone="danger" title="Live scores did not load">
+                    Refresh to try again.
+                  </Callout>
+                ) : null}
+                <TopLevelTasksTable projectId={projectId} rows={model.rows} scores={scores} />
+              </>
+            ) : (
+              <TasksTable projectId={projectId} rows={model.rows} unserved={model.unserved} />
+            )}
           </>
         ) : (
           <TasksState projectId={projectId} model={model} working={analysisPending(progress)} />
