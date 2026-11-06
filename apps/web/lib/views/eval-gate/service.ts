@@ -1,3 +1,6 @@
+// Owned (ADR-0030): fills evalGateSeams (the drafted change and the drafts' spend) in every
+// process that reads a fix's change, the web process included.
+import "@/lib/views/fix-drafts/register";
 import { and, eq, inArray } from "drizzle-orm";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";

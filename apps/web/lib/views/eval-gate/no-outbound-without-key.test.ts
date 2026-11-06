@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { draftModelAvailable, draftModelFromEnv } from "@/lib/views/fix-drafts/model";
 import { mockModelsEnabled, resolveEvalModels } from "./models";
 
 /**
@@ -43,4 +44,19 @@ test("EVAL_GATE_MOCK_MODEL=1 gives the local stand-ins, and only outside product
     judge: null,
     standIn: false,
   });
+});
+
+test("with no key and no mock there is no fix-draft model, and nothing to queue a draft for", () => {
+  for (const environment of ["production", "development", "test"]) {
+    assert.equal(draftModelFromEnv(NO_KEYS, environment), null);
+    assert.equal(draftModelAvailable(NO_KEYS, environment), false);
+  }
+  assert.equal(
+    draftModelFromEnv({ ANTHROPIC_API_KEY: "REPLACE_ME" }, "production"),
+    null,
+    "the placeholder key is no key",
+  );
+  const mock = { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" };
+  assert.ok(draftModelFromEnv(mock, "development"));
+  assert.equal(draftModelFromEnv(mock, "production"), null);
 });
