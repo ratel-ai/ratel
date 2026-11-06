@@ -45,6 +45,12 @@ export interface RewriteRead {
   overridesAdopted: boolean | null;
 }
 
+/**
+ * What a caller hands the shipment record besides the row: upstream's `TaskSimulationDeps` (the
+ * gate's deps, the fix loader, the clock), opaque here and read by the seam's filler.
+ */
+export type ShipmentDeps = object;
+
 export interface FixSeams {
   /** The tool crafter's pending drafts as fixes. Unset: no "craft" source. */
   loadDrafts?: (
@@ -70,6 +76,7 @@ export interface FixSeams {
     input: NewFixShipmentRow,
     write: (values: NewFixShipmentRow) => Promise<FixShipmentRow>,
     db: unknown,
+    deps?: ShipmentDeps,
   ) => Promise<FixShipmentRow>;
 }
 

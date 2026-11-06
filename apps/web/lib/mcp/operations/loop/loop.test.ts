@@ -23,6 +23,7 @@ import type { FixExperimentRow, FixShipmentRow } from "@/lib/views/fixes/schema"
 import { fixStats } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import type { TaskEvalRunRow } from "@/lib/views/task-evals/schema";
 
 /**
  * The loop tools against injected reads: each result names its source one step
@@ -201,6 +202,8 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     loadInsight: async (_projectId, id) => (id === INSIGHT ? insight : null),
     loadProjectFixes: async () => model,
     runSimulation: async (fixId) => simulated(fixId),
+    runTaskSimulation: async () => ({ status: "queued", runs: [] }),
+    latestTaskSimulations: async () => [],
     latestEval: async (_projectId, f) => simulated(f.id),
     evalGateEnabled: async () => true,
     latestFixDraft: async () => null,
@@ -856,4 +859,211 @@ test("fix drafts remain unread when the eval gate is off", async () => {
     data<{ fix: { draft: null } }>(await run("get_fix", { fixId: fix.id }, [], over)).fix.draft,
     null,
   );
+});
+
+// The task loop's simulations (upstream #318): a fix with tasks is simulated once per task.
+const TASK = { id: "book-flight", name: "Book a flight" };
+
+function taskFix(): Fix {
+  return {
+    ...fix,
+    kind: "fail-clearly",
+    subject: {
+      ...fix.subject,
+      tasks: [
+        { id: TASK.id, label: TASK.name, color: null, href: "/tasks" },
+        { id: "cancel-flight", label: "Cancel a flight", color: null, href: "/tasks" },
+      ],
+    },
+  };
+}
+
+function taskRun(over: Partial<TaskEvalRunRow> = {}): TaskEvalRunRow {
+  return {
+    id: "66666666-6666-4666-8666-666666666666",
+    projectId: PROJECT,
+    fixId: fix.id,
+    taskId: TASK.id,
+    kind: "simulation",
+    shipmentId: null,
+    scorerVersion: 2,
+    status: "queued",
+    trigger: "mcp",
+    before: null,
+    after: null,
+    results: null,
+    breakdown: null,
+    methods: null,
+    spend: null,
+    judge: null,
+    change: null,
+    verdict: null,
+    error: null,
+    caseCount: 20,
+    fixCaseCount: 1,
+    createdBy: `project:${PROJECT}`,
+    createdAt: new Date("2026-11-01T00:00:00Z"),
+    startedAt: null,
+    finishedAt: null,
+    ...over,
+  };
+}
+
+test("run_eval queues task simulations for a fix with tasks and preserves task result links", async () => {
+  const events: Tracked[] = [];
+  const calls: unknown[] = [];
+  const result = await run("run_eval", { fixId: fix.id }, events, {
+    loadProjectFixes: async () => ({ ...model, open: [taskFix()] }),
+    runSimulation: async () => {
+      throw new Error("The per-fix simulation must not run.");
+    },
+    runTaskSimulation: async (id, options) => {
+      calls.push([id, options]);
+      return {
+        status: "queued",
+        runs: [taskRun(), taskRun({ id: "run-2", taskId: "cancel-flight" })],
+      };
+    },
+  });
+  const out = data<{
+    eval: {
+      kind: string;
+      status: string;
+      simulated: boolean;
+      tasks: { taskId: string; status: string; href: string }[];
+    };
+    chain: LineageRef[];
+  }>(result);
+  assert.deepEqual(calls, [
+    [fix.id, { projectId: PROJECT, actor: `project:${PROJECT}`, trigger: "mcp" }],
+  ]);
+  assert.equal(out.eval.kind, "task_simulation");
+  assert.equal(out.eval.status, "queued");
+  assert.equal(out.eval.simulated, false);
+  assert.deepEqual(
+    out.eval.tasks.map((item) => item.taskId),
+    [TASK.id, "cancel-flight"],
+  );
+  assert.equal(
+    out.eval.tasks[0]!.href,
+    `/project/${PROJECT}/tasks/${TASK.id}/simulations/${encodeURIComponent(fix.id)}`,
+  );
+  assert.equal(out.chain.at(-1)!.kind, "eval");
+  assert.match((result as DispatchSuccess).hint ?? "", /get_eval/);
+  assert.equal(events[0]!.name, "fix_eval_run");
+  assert.equal(events[0]!.properties.task_count, 2);
+});
+
+test("run_eval returns drafting without reporting a completed task simulation", async () => {
+  const result = await run("run_eval", { fixId: fix.id }, [], {
+    loadProjectFixes: async () => ({ ...model, open: [{ ...taskFix(), kind: "rewrite" }] }),
+    runTaskSimulation: async () => ({ status: "drafting", runs: [] }),
+  });
+  const out = data<{ eval: { status: string; simulated: boolean; tasks: unknown[] } }>(result);
+  assert.equal(out.eval.status, "drafting");
+  assert.equal(out.eval.simulated, false);
+  assert.deepEqual(out.eval.tasks, []);
+  assert.match((result as DispatchSuccess).hint ?? "", /get_fix/);
+});
+
+test("get_eval reads task results without queuing a simulation", async () => {
+  const before = { passed: 10, total: 20, passRate: 0.5, score: 0.5 };
+  const after = { passed: 18, total: 20, passRate: 0.9, score: 0.9 };
+  const out = data<{
+    eval: {
+      status: string;
+      simulated: boolean;
+      tasks: {
+        scorerVersion: number;
+        before: unknown;
+        after: unknown;
+        verdict: string;
+        breakdown: unknown;
+      }[];
+    };
+  }>(
+    await run("get_eval", { fixId: fix.id }, [], {
+      loadProjectFixes: async () => ({ ...model, open: [taskFix()] }),
+      latestTaskSimulations: async (projectId, fixId) => {
+        assert.deepEqual([projectId, fixId], [PROJECT, fix.id]);
+        return [
+          taskRun({
+            status: "completed",
+            before,
+            after,
+            verdict: "better",
+            methods: { replay: 20, rerank: 0, none: 0 },
+            breakdown: { task: { ends_well: { before, after } } },
+          }),
+        ];
+      },
+      runTaskSimulation: async () => {
+        throw new Error("A read must not queue a simulation.");
+      },
+      latestEval: async () => {
+        throw new Error("The per-fix result must not be read.");
+      },
+    }),
+  );
+  assert.equal(out.eval.status, "completed");
+  assert.equal(out.eval.simulated, true);
+  assert.equal(out.eval.tasks[0]!.scorerVersion, 2);
+  assert.deepEqual(out.eval.tasks[0]!.before, before);
+  assert.deepEqual(out.eval.tasks[0]!.after, after);
+  assert.equal(out.eval.tasks[0]!.verdict, "better");
+  assert.deepEqual(out.eval.tasks[0]!.breakdown, { task: { ends_well: { before, after } } });
+});
+
+test("run_eval with tasks refuses before queuing when the eval gate is off", async () => {
+  const result = await run("run_eval", { fixId: fix.id }, [], {
+    loadProjectFixes: async () => ({ ...model, open: [taskFix()] }),
+    evalGateEnabled: async () => false,
+    runTaskSimulation: async () => {
+      throw new Error("The task simulation must not run.");
+    },
+    runSimulation: async () => {
+      throw new Error("The per-fix simulation must not run.");
+    },
+  });
+  assert.equal((result as { reason: string }).reason, "eval_gate_off");
+});
+
+test("run_eval refuses an unsupported task fix with its reason before queuing", async () => {
+  const result = await run("run_eval", { fixId: fix.id }, [], {
+    loadProjectFixes: async () => ({ ...model, open: [{ ...taskFix(), kind: "split" }] }),
+    runTaskSimulation: async () => {
+      throw new Error("An unsupported fix must not queue a simulation.");
+    },
+  });
+  assert.equal((result as { error: string }).error, "conflict");
+  assert.equal((result as { reason: string }).reason, "nothing_to_simulate");
+  assert.match((result as { message: string }).message, /Splitting a tool/);
+});
+
+test("get_eval hides task comparisons when the replay is unreliable", async () => {
+  const out = data<{
+    eval: {
+      simulated: boolean;
+      tasks: { before: unknown; after: unknown; breakdown: unknown; fidelity: unknown }[];
+    };
+  }>(
+    await run("get_eval", { fixId: fix.id }, [], {
+      loadProjectFixes: async () => ({ ...model, open: [taskFix()] }),
+      latestTaskSimulations: async () => [
+        taskRun({
+          status: "completed",
+          verdict: "unreliable",
+          before: { passRate: 0.5 },
+          after: { passRate: 1 },
+          breakdown: { task: "untrusted" },
+          methods: { replay: 20, rerank: 0, fidelity: { matched: 0, total: 20 } },
+        }),
+      ],
+    }),
+  );
+  assert.equal(out.eval.simulated, false);
+  assert.equal(out.eval.tasks[0]!.before, null);
+  assert.equal(out.eval.tasks[0]!.after, null);
+  assert.equal(out.eval.tasks[0]!.breakdown, null);
+  assert.deepEqual(out.eval.tasks[0]!.fidelity, { matched: 0, total: 20 });
 });

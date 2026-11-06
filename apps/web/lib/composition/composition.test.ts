@@ -234,6 +234,7 @@ describe("registry root", () => {
       "refresh_task_eval_set",
       "score_tasks",
       "simulate_fix_eval",
+      "simulate_task_eval",
       "what_if_step",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick

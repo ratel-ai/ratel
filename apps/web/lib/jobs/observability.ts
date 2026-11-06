@@ -40,6 +40,8 @@ export type BackgroundEventName = Extract<
   | "fix_eval_simulation_failed"
   | "task_scores_written"
   | "task_eval_set_refreshed"
+  | "task_eval_simulation_requested"
+  | "task_eval_simulation_finished"
   | "fix_draft_finished"
 >;
 

@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { projects } from "@/lib/platform/projects/schema";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
+import { taskEvalRuns } from "@/lib/views/task-evals/schema";
 import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
 
 /**
@@ -38,7 +39,28 @@ export async function taskJudgeSpendSince(
   return Number(row?.usd ?? 0);
 }
 
-export const taskLoopSpendReaders = [taskJudgeSpendSince];
+/** Task simulations and post-ship measures: finished since `since`, and running ones at what they hold. */
+export async function taskEvalRunSpendSince(
+  projectId: string,
+  since: Date,
+  db: EvalDb,
+): Promise<number> {
+  const [row] = await db
+    .select({
+      usd: sql<string | number | null>`coalesce(sum((${taskEvalRuns.spend}->>'usd')::numeric), 0)`,
+    })
+    .from(taskEvalRuns)
+    .innerJoin(projects, eq(projects.id, taskEvalRuns.projectId))
+    .where(
+      and(
+        sameOrganization(projectId),
+        sql`(coalesce(${taskEvalRuns.finishedAt}, ${taskEvalRuns.createdAt}) >= ${since.toISOString()}::timestamptz or ${taskEvalRuns.status} = 'running')`,
+      ),
+    );
+  return Number(row?.usd ?? 0);
+}
+
+export const taskLoopSpendReaders = [taskJudgeSpendSince, taskEvalRunSpendSince];
 
 for (const read of taskLoopSpendReaders) {
   if (!evalGateSeams.spendSince.includes(read)) evalGateSeams.spendSince.push(read);
