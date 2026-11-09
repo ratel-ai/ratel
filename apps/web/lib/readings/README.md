@@ -32,7 +32,8 @@ graph's compaction; the graph never imports the engine.
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 `enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id) and
 `enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
-behind `FF_EVAL_GATE` and a model key).
+behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
+`views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading
 of the explorer's reading, so its registration fills the seam when it lands; unset, a completed
 explorer run queues nothing. `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two

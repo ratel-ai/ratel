@@ -21,11 +21,13 @@ import {
   runSimulation,
   type SimulationOutcome,
 } from "@/lib/mcp/operations/loop/simulation";
+import { latestTaskSimulations, taskEvalData } from "@/lib/mcp/operations/loop/task-simulation";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
+import { hasEffect, changeOf as simulationChangeOf } from "@/lib/views/eval-gate/change";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import type { FixDraftRow } from "@/lib/views/fix-drafts/schema";
 import { latestFixDraft } from "@/lib/views/fix-drafts/store";
@@ -44,6 +46,15 @@ import { type FixShipped, shippedByFix, shippedFor } from "@/lib/views/fixes/shi
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import { fixSourceRef } from "@/lib/views/lineage/refs";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
+import { taskEvalViewFor } from "@/lib/views/task-evals/store";
+import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
+import { buildTaskList, type TaskRow } from "@/lib/views/tasks/model";
+import { loadTasksInputs } from "@/lib/views/tasks/page-model";
+import { topLevelTasksHref } from "@/lib/views/tasks/paths";
+// The shipment record of the task loop (`fixSeams.recordShipment`): mark_fix_shipped queues
+// the post-ship measures with the eval gate on.
+import "@/lib/views/task-evals/ship";
 
 /**
  * The improvement loop as tools (RC-43): Insights → Improve → Ship, so an
@@ -61,16 +72,27 @@ import type { LineageRef } from "@/lib/views/lineage/types";
  * listed. `run_eval` and `get_eval` also need `FF_EVAL_GATE`; off, they refuse
  * with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): seven tools. The task tools (`list_tasks`, `get_task`) and
- * a fix's task simulations land with the task loop; until then every fix is
- * simulated on its own eval set. A fix's `draft` is its newest fix draft while
- * the eval gate is on (`FF_EVAL_GATE`), else null.
+ * Owned (ADR-0030): the gates are env flags. `list_tasks` and `get_task` read
+ * the project's tasks; a task's scorers, scores and eval set only with
+ * `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
+ * eval set (`lib/views/task-evals`); other fixes on their own eval set.
+ * A fix's `draft` is its newest fix draft while the eval gate is on
+ * (`FF_EVAL_GATE`), else null.
  */
 export interface LoopOperationDeps {
+  loadTasks: (projectId: string) => Promise<TaskRow[]>;
+  scorersFor: (projectId: string, taskId: string) => ReturnType<typeof scorersFor>;
+  dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
+  taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
   loadInsight: (projectId: string, insightId: string) => Promise<InsightView | null>;
   loadProjectFixes: (projectId: string) => Promise<FixesModel | null>;
   runSimulation: typeof runSimulation;
+  runTaskSimulation: typeof runTaskSimulation;
+  latestTaskSimulations: (
+    projectId: string,
+    fixId: string,
+  ) => ReturnType<typeof latestTaskSimulations>;
   /** The fix's newest simulation, queued, running or done (RC-70). */
   latestEval: (
     projectId: string,
@@ -96,10 +118,16 @@ export interface LoopOperationDeps {
 }
 
 export const defaultLoopDeps: LoopOperationDeps = {
+  loadTasks: async (projectId) => buildTaskList(await loadTasksInputs(projectId)).rows,
+  scorersFor: (projectId, taskId) => scorersFor(projectId, taskId),
+  dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
+  taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
   loadInsight,
   loadProjectFixes,
   runSimulation,
+  runTaskSimulation,
+  latestTaskSimulations: (projectId, fixId) => latestTaskSimulations(projectId, fixId),
   latestEval: (projectId, fix) => latestEvalOutcome(projectId, fix),
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
   latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
@@ -414,6 +442,80 @@ function evalData(outcome: SimulationOutcome, fixId: string, self: LineageRef) {
 export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): McpOperation[] {
   return [
     defineOperation({
+      id: "list_tasks",
+      domain: "observability",
+      title: "List tasks",
+      description:
+        "List the project's tasks with their run counts, status and completion rate. Call get_task with a taskId for its scorers, score series and eval set.",
+      keywords: ["list tasks", "workflows", "task scores"],
+      scope: "project",
+      mutates: false,
+      params: z.object({ ...projectScoped, limit: limitParam }),
+      async execute(ctx, params) {
+        const tracker = new TruncationTracker();
+        const tasks = await deps.loadTasks(ctx.projectId);
+        const page = tracker.take(capRows(tasks, params.limit));
+        return {
+          data: {
+            count: tasks.length,
+            tasks: page.map((task) => ({
+              ...task,
+              href: topLevelTasksHref(ctx.projectId, task.id),
+            })),
+          },
+          truncated: tracker.value,
+          hint: "Call get_task with a taskId to read its scorers, score series and eval set.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "get_task",
+      domain: "observability",
+      title: "Get task",
+      description:
+        "Read one task with its scorers, daily score series and eval set. Scoring fields are empty when FF_EVAL_GATE is off. Use list_fixes to find fixes for the task.",
+      keywords: ["get task", "task scorers", "task eval set"],
+      scope: "project",
+      mutates: false,
+      params: z.object({
+        ...projectScoped,
+        taskId: z.string().min(1).max(200).describe("A task id from list_tasks."),
+      }),
+      async execute(ctx, params) {
+        const task = (await deps.loadTasks(ctx.projectId)).find(
+          (task) => task.id === params.taskId,
+        );
+        if (!task) throw notFound("task");
+        const tracker = new TruncationTracker();
+        const enabled = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
+        const [scorers, scores, evalSet] = enabled
+          ? await Promise.all([
+              deps.scorersFor(ctx.projectId, task.id),
+              deps.dailyScoresFor(ctx.projectId, task.id),
+              deps.taskEvalViewFor(ctx.projectId, task.id),
+            ])
+          : [[], [], null];
+        return {
+          data: {
+            task: {
+              ...task,
+              href: topLevelTasksHref(ctx.projectId, task.id),
+              scorers,
+              scoreSeries: tracker.take(capRows(scores, 200)),
+              evalSet: evalSet
+                ? {
+                    ...evalSet,
+                    count: evalSet.rows.length,
+                    rows: tracker.take(capRows(evalSet.rows, 50)),
+                  }
+                : null,
+            },
+          },
+          truncated: tracker.value,
+        };
+      },
+    }),
+    defineOperation({
       id: "list_insights",
       domain: "observability",
       title: "List insights",
@@ -583,7 +685,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "improvement",
       title: "Get eval of a fix",
       description:
-        "Read the latest simulation of a fix without starting one. Poll this tool after run_eval. The eval is null before the first simulation.",
+        "Read the latest simulation without starting one. A fix with tasks returns one result per task, including scorerVersion and score breakdown. Other fixes return the per-fix result. Poll this tool after run_eval. The eval is null before the first simulation.",
       keywords: ["get eval", "eval result", "simulation status"],
       scope: "project",
       mutates: false,
@@ -591,6 +693,21 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       async execute(ctx, params) {
         const fix = await requireFix(deps, ctx.projectId, params.fixId);
         await requireEvalGate(deps, ctx);
+        if (fix.subject.tasks.length > 0) {
+          const runs = await deps.latestTaskSimulations(ctx.projectId, fix.id);
+          if (runs.length === 0)
+            return {
+              data: { eval: null },
+              hint: "No task simulation exists. Call get_fix to check the draft before run_eval.",
+            };
+          const { eval: view, hint } = taskEvalData(
+            ctx.projectId,
+            fix.id,
+            runs,
+            fixRef(ctx.projectId, fix),
+          );
+          return { data: { eval: view }, hint };
+        }
         const outcome = await deps.latestEval(ctx.projectId, fix);
         if (!outcome)
           return {
@@ -611,7 +728,7 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
       domain: "writes",
       title: "Run eval on a fix",
       description:
-        "Queue a simulation of a fix on the project's own historical runs. Poll get_eval while it is pending. Call mark_fix_shipped when the fix is live.",
+        "Queue one simulation per affected task when FF_EVAL_GATE is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
       keywords: ["run eval", "simulate a fix", "before and after"],
       scope: "project",
       mutates: true,
@@ -619,6 +736,45 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
       async execute(ctx, params) {
         const fix = await requireFix(deps, ctx.projectId, params.fixId);
         const actor = await requireEvalGate(deps, ctx);
+        if (fix.subject.tasks.length > 0) {
+          const draft = await deps.latestFixDraft(ctx.projectId, fix.id);
+          const change = simulationChangeOf(fix, draft?.status === "ready" ? draft.change : null);
+          if (!hasEffect(change) && fix.kind !== "rewrite" && fix.kind !== "tell-apart") {
+            throw nothingToSimulateError(
+              change.unsupportedReason ?? "This fix has no change to simulate.",
+            );
+          }
+          const outcome = await deps.runTaskSimulation(fix.id, {
+            projectId: ctx.projectId,
+            actor,
+            trigger: "mcp",
+          });
+          const {
+            eval: view,
+            hint,
+            refs,
+          } = taskEvalData(
+            ctx.projectId,
+            fix.id,
+            outcome.runs,
+            fixRef(ctx.projectId, fix),
+            outcome.status,
+          );
+          await deps.trackServerEvent("fix_eval_run", eventContext(ctx), {
+            object_action: "fix_eval_run",
+            fix_id: fix.id,
+            simulated: view.simulated,
+            verdict: view.verdict,
+            status: view.status,
+            runs: view.runs,
+            task_count: outcome.runs.length,
+            surface: "mcp",
+          });
+          return {
+            data: { eval: view, chain: [...(await fixChain(deps, ctx.projectId, fix)), ...refs] },
+            hint,
+          };
+        }
         // RC-70: queued for the job worker, never run inline, so a slow
         // simulation can't outlast the MCP request. A simulation already
         // running for this fix is returned as it is.

@@ -197,6 +197,27 @@
       "when": 1793983859398,
       "tag": "0027_session_replay_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793987883884,
+      "tag": "0028_task_scores_eval_sets",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793988376362,
+      "tag": "0029_task_eval_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793988719347,
+      "tag": "0030_task_test_drafts",
+      "breakpoints": true
     }
   ]
 }

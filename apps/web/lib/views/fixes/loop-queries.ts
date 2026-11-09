@@ -8,7 +8,7 @@ import {
   fixShipments,
   type NewFixShipmentRow,
 } from "@/lib/views/fixes/schema";
-import { fixSeams } from "./seams";
+import { fixSeams, type ShipmentDeps } from "./seams";
 
 /**
  * Reads and writes for the Improve → Ship half of the loop (RC-43): the
@@ -84,13 +84,14 @@ export interface CreateFixShipmentInput {
 export async function createFixShipment(
   input: CreateFixShipmentInput,
   db: LoopDb = getDb(),
+  deps: ShipmentDeps = {},
 ): Promise<FixShipmentRow> {
   const write = async (values: NewFixShipmentRow): Promise<FixShipmentRow> => {
     const [row] = await db.insert(fixShipments).values(values).returning();
     if (!row) throw new Error("the shipment was not recorded");
     return row;
   };
-  return fixSeams.recordShipment ? fixSeams.recordShipment(input, write, db) : write(input);
+  return fixSeams.recordShipment ? fixSeams.recordShipment(input, write, db, deps) : write(input);
 }
 
 export async function listFixShipments(

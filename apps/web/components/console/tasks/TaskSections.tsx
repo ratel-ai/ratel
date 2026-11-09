@@ -9,6 +9,7 @@ import {
   Activity,
   ArrowRight,
   CircleCheck,
+  History,
   MessageSquareQuote,
   Search,
   SquareArrowOutUpRight,
@@ -22,9 +23,11 @@ import {
   issueIcon,
   KindIcon,
 } from "@/components/console/tasks/kind-icons";
+import { RunToTest } from "@/components/console/tasks/RunToTest";
 import { StepPins } from "@/components/console/tasks/StepPins";
 import { turnTracesHref } from "@/lib/readings/trace-signals/view";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { collapseRepeats, EXAMPLE_STATUS_LABEL } from "@/lib/views/tasks/examples";
 import { formatCount, formatMs, formatPer100, formatShare, plural } from "@/lib/views/tasks/format";
 import type {
@@ -366,6 +369,8 @@ export function ExampleRuns({
   runs,
   focusTools,
   now,
+  testRuns,
+  sessionReplay = false,
 }: {
   projectId: string;
   taskId: string;
@@ -373,11 +378,8 @@ export function ExampleRuns({
   runs: ReadonlyMap<string, ExampleRun>;
   focusTools: readonly string[];
   now: Date;
-  /**
-   * Upstream's run-to-test and session replay links, which land with the task loop and session
-   * replay; accepted so the copied TaskView compiles, and unused here.
-   */
   testRuns?: readonly string[];
+  /** `cloud-session-replay` is on: each run links its session replay. */
   sessionReplay?: boolean;
 }) {
   return (
@@ -405,6 +407,8 @@ export function ExampleRuns({
               run={runs.get(example.turnId)}
               focusTools={focusTools}
               now={now}
+              testRuns={testRuns}
+              sessionReplay={sessionReplay}
             />
           ))}
         </ul>
@@ -420,6 +424,8 @@ function ExampleRow({
   run,
   focusTools,
   now,
+  testRuns,
+  sessionReplay,
 }: {
   projectId: string;
   taskId: string;
@@ -427,6 +433,8 @@ function ExampleRow({
   run: ExampleRun | undefined;
   focusTools: readonly string[];
   now: Date;
+  testRuns?: readonly string[];
+  sessionReplay: boolean;
 }) {
   const status = run?.status ?? (example.why === "failed" ? "failed" : null);
   const mark = status ? EXAMPLE_STATUS_ICONS[status] : null;
@@ -494,6 +502,14 @@ function ExampleRow({
         </span>
       ) : null}
       <span className="order-4 flex shrink-0 items-center gap-2 whitespace-nowrap">
+        {testRuns ? (
+          <RunToTest
+            projectId={projectId}
+            taskId={taskId}
+            turnId={example.turnId}
+            inEvalSet={testRuns.includes(example.turnId)}
+          />
+        ) : null}
         <Link
           href={turnTracesHref(projectId, example.turnId, example.focusEventId)}
           className={LINK_SMALL}
@@ -501,6 +517,16 @@ function ExampleRow({
           <SquareArrowOutUpRight aria-hidden className="size-3" />
           Open in Traces
         </Link>
+        {run && sessionReplay ? (
+          <Link
+            href={sessionReplayHref(projectId, run.sessionId)}
+            className={LINK_SMALL}
+            data-session-replay-link
+          >
+            <History aria-hidden className="size-3" />
+            Replay
+          </Link>
+        ) : null}
         {run ? (
           <Tooltip content="Open the conversation">
             <Link

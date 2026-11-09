@@ -149,6 +149,7 @@ export function jobDeps(
     // The topic and explorer readings are their own jobs with their own tests; here no
     // enqueue reaches a real database.
     enqueueTopics: async () => null,
+    enqueueTaskScores: async () => null,
     enqueueExplore: async () => null,
     observability: {
       trackSystemEvent: async (event, _id, properties) => {
