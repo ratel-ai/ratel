@@ -1,0 +1,33 @@
+{
+  "subject": "source-facts",
+  "cloudCommit": "2848c52c1b6f91e6eeb6b533e2082d2847dbe1df",
+  "value": {
+    "selfTelemetryAtBoot": true,
+    "sidebarFreshness": true,
+    "overviewOffersTour": true,
+    "apiKeysQuickstart": true,
+    "turnPageRunToTest": true,
+    "spanInspectorSdkEvents": true,
+    "sdkEventsOpenTrace": true,
+    "lastProjectWritten": true,
+    "projectPagesWithoutDatabase": true,
+    "ingestAddressBuilders": 1,
+    "adoptionReadApart": true,
+    "routesUseProjectScope": true,
+    "rootMetadata": [
+      "template=%s · Ratel Cloud",
+      "description=true",
+      "icon=true"
+    ],
+    "jobsInProjectLogContext": [
+      "assign_topics",
+      "cluster_intents",
+      "draft_fix",
+      "label_workflows",
+      "match_quality_run",
+      "simulate_task_eval",
+      "what_if_step"
+    ],
+    "playgroundHeading": "Playground"
+  }
+}
