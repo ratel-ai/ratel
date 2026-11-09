@@ -17,8 +17,8 @@ const OPTIONS = QUICKSTART_LANGS.map((lang) => ({
 }));
 
 /**
- * "Send your first trace": the OpenTelemetry wiring for TypeScript, with curl
- * as the zero-install fallback.
+ * "Send your first trace": the Ratel SDK wiring for TypeScript, with curl as
+ * the zero-install fallback.
  *
  * Upstream's component sits on its own code block and segmented control; this
  * one is the same shape on the design system's, so the snippet a reader meets

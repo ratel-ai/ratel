@@ -204,22 +204,6 @@
       "side": "here",
       "pattern": "^(Model calls saved|[\\d.,]+|If you make every measured fix|Better:|\\d+ → \\d+|calls?|Model calls: .*|Waiting: .*|Cost: .*|Tokens: .*|[−+]\\d+( pts)?|tools? per list|found|failed calls?)$",
       "what": "Fixes has no savings: the page shows the older stat and effects"
-    },
-    {
-      "item": 6,
-      "check": "pages",
-      "part": "settings-api-keys$",
-      "side": "cloud",
-      "pattern": "^(?!site-copilot-seed\\t).+",
-      "what": "Settings › API keys has no \"Send a trace\" quickstart"
-    },
-    {
-      "item": 15,
-      "check": "pages",
-      "part": "catalog-tools$",
-      "side": "cloud",
-      "pattern": "^(import \\* as ratelCloud from |ratelCloud\\.attach\\()",
-      "what": "the catalog snippet no longer connects to the platform"
     }
   ],
   "flagWording": {

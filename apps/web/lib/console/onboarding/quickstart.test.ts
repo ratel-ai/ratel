@@ -44,15 +44,12 @@ test("every snippet targets the endpoint it was built for", () => {
   }
 });
 
-test("TypeScript wires a stock OTLP exporter with the key as a bearer header", () => {
+test("TypeScript wires the cloud SDK's span processor onto a host provider", () => {
   const { code, install } = buildQuickstart("typescript", TARGET);
+  assert.match(code, /import \{ RatelSpanProcessor \} from "@ratel-ai\/cloud-sdk\/otel";/);
   assert.match(
     code,
-    /import \{\n {2}OTLPTraceExporter,\n\} from "@opentelemetry\/exporter-trace-otlp-proto";/,
-  );
-  assert.match(
-    code,
-    /traceExporter: new OTLPTraceExporter\(\{\n {4}url: "https:\/\/cloud\.ratel\.sh\/api\/v1\/traces",\n {4}headers: \{\n {6}Authorization: `Bearer \$\{process\.env\.RATEL_API_KEY\}`,\n {4}\},\n {2}\}\),/,
+    /new RatelSpanProcessor\(\{\n {6}endpoint: "https:\/\/cloud\.ratel\.sh\/api\/v1\/traces",\n {4}\}\),/,
   );
   assert.match(code, /serviceName: "support-copilot",/);
   // Every line stays inside the snippet box's width, so nothing soft-wraps into
@@ -61,21 +58,23 @@ test("TypeScript wires a stock OTLP exporter with the key as a bearer header", (
     assert.ok(line.length <= 72, `line stays readable without wrapping: ${line}`);
   }
   assert.match(code, /sdk\.start\(\);/);
-  // Nothing beyond the OpenTelemetry packages: ingest accepts any OTLP exporter.
+  // The OTel packages are optional peers of the cloud SDK: a snippet that
+  // omits them from the install line fails at import, not at export time.
   assert.ok(install);
   for (const pkg of [
+    "@ratel-ai/cloud-sdk",
     "@opentelemetry/api",
     "@opentelemetry/sdk-node",
+    "@opentelemetry/sdk-trace-base",
     "@opentelemetry/exporter-trace-otlp-proto",
   ]) {
     assert.ok(install.includes(pkg), `install line covers ${pkg}`);
   }
-  assert.ok(!install.includes("cloud-sdk"), "the install line names no Cloud package");
 });
 
-test("TypeScript and curl are the tabs", () => {
-  // The OTel wiring is the same in every language, and curl shows the request
-  // itself, so a Python tab would add nothing the reader cannot see here.
+test("only the languages the cloud SDK actually ships get an SDK tab", () => {
+  // TypeScript is the whole SDK surface; curl is the honest fallback for every
+  // other runtime. A Python tab would have to point at a different package.
   assert.deepEqual([...QUICKSTART_LANGS], ["typescript", "curl"]);
 });
 
@@ -121,20 +120,17 @@ test("buildQuickstartSet returns one entry per language", () => {
 // can never change it by accident.
 const TYPESCRIPT_WITHOUT_CAPTURE = [
   'import { NodeSDK } from "@opentelemetry/sdk-node";',
-  "import {",
-  "  OTLPTraceExporter,",
-  '} from "@opentelemetry/exporter-trace-otlp-proto";',
+  'import { RatelSpanProcessor } from "@ratel-ai/cloud-sdk/otel";',
   "",
   "const sdk = new NodeSDK({",
   '  serviceName: "support-copilot",',
-  "  // Reads RATEL_API_KEY. Sends your spans to Ratel; the gen_ai.*",
-  "  // and ratel.* ones are what the pages read.",
-  "  traceExporter: new OTLPTraceExporter({",
-  '    url: "https://cloud.ratel.sh/api/v1/traces",',
-  "    headers: {",
-  `      Authorization: \`Bearer \${process.env.RATEL_API_KEY}\`,`,
-  "    },",
-  "  }),",
+  "  spanProcessors: [",
+  "    // Reads RATEL_API_KEY. Forwards gen_ai.* / ratel.* spans to",
+  "    // Ratel; any exporter you already run is left untouched.",
+  "    new RatelSpanProcessor({",
+  '      endpoint: "https://cloud.ratel.sh/api/v1/traces",',
+  "    }),",
+  "  ],",
   "});",
   "",
   "sdk.start();",
@@ -165,8 +161,7 @@ test("content capture is emitted only when asked, before the SDK starts", () => 
   const withoutCapture = code
     .split("\n")
     .filter(
-      (line) =>
-        !/content capture|along on the spans|process\.env\.OTEL|"SPAN_AND_EVENT"/i.test(line),
+      (line) => !/content capture|along on the spans|process\.env|"SPAN_AND_EVENT"/i.test(line),
     )
     .join("\n")
     .replace("\n\n\n", "\n\n");
