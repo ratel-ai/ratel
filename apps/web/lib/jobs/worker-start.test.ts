@@ -103,6 +103,37 @@ test("a stop signal waits for the step in flight, then exits 0", async () => {
   assert.deepEqual(h.exits, [0]);
 });
 
+test("a stop runs the flush after the step in flight and before the exit", async () => {
+  const h = harness();
+  startBackgroundWorker(h.deps, {
+    beforeExit: async () => {
+      h.calls.push("flush");
+    },
+  });
+  h.listeners.SIGTERM?.();
+  await settle();
+  assert.deepEqual(h.calls, ["stop"], "nothing is flushed while the step runs");
+
+  h.finishStep();
+  await settle();
+  assert.deepEqual(h.calls, ["stop", "flush"]);
+  assert.deepEqual(h.exits, [0]);
+});
+
+test("a flush that fails is a warning and the worker still exits 0", async () => {
+  const h = harness();
+  startBackgroundWorker(h.deps, {
+    beforeExit: async () => {
+      throw new Error("collector gone");
+    },
+  });
+  h.listeners.SIGTERM?.();
+  h.finishStep();
+  await settle();
+  assert.deepEqual(h.warnings, [{ error: "Error: collector gone" }]);
+  assert.deepEqual(h.exits, [0]);
+});
+
 test("a second signal does not wait", async () => {
   const h = harness();
   startBackgroundWorker(h.deps);

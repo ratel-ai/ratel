@@ -37,8 +37,14 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  * `NEXT_MANUAL_SIG_HANDLE=true`: without it Next's own handling ends the process
  * first. A job cut short is marked as an error by the reaper
  * (`reapStaleRunningJobs`); the cron safety nets queue its work again.
+ *
+ * `beforeExit` runs between the last step and the exit: the self-telemetry flush, when this
+ * process exports its own traces and logs. A failure there never keeps the process alive.
  */
-export function startBackgroundWorker(deps: BackgroundWorkerDeps = defaultDeps()): WorkerHandle {
+export function startBackgroundWorker(
+  deps: BackgroundWorkerDeps = defaultDeps(),
+  options: { beforeExit?: () => Promise<void> } = {},
+): WorkerHandle {
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
   const existing = globals[GLOBAL_KEY];
   if (existing) return existing;
@@ -56,7 +62,16 @@ export function startBackgroundWorker(deps: BackgroundWorkerDeps = defaultDeps()
   const stop = () => {
     if (stopping) return deps.exit(1);
     stopping = true;
-    void handle.stop().then(() => deps.exit(0));
+    void handle
+      .stop()
+      .then(async () => {
+        try {
+          await options.beforeExit?.();
+        } catch (error) {
+          deps.warn({ error: String(error) }, "worker flush before exit failed");
+        }
+      })
+      .then(() => deps.exit(0));
   };
   deps.on("SIGTERM", stop);
   deps.on("SIGINT", stop);

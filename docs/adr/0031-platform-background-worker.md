@@ -48,8 +48,10 @@ and retry.
 
 **A stop waits for the step in flight.** With `NEXT_MANUAL_SIG_HANDLE=true` the worker handles
 SIGTERM itself: it stops the loop, lets the running step finish and exits 0; a second signal
-exits at once. A job cut short anyway stays `running` until the reaper fails it after ten
-minutes, and the tick's safety nets queue its work again.
+exits at once. When the platform exports its own telemetry, the worker flushes it after that last
+step and before the exit, instead of the telemetry handler ending the process first. A job cut
+short anyway stays `running` until the reaper fails it after ten minutes, and the tick's safety
+nets queue its work again.
 
 `docker-compose.yml` runs `web` as `api` next to a `worker`. Everything else (the image run by
 hand, `pnpm dev`) stays `all`.
