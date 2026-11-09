@@ -6,8 +6,16 @@ import { composition } from "@/lib/composition";
 import { APP_NAME, appConfigScript } from "@/lib/platform/app-config";
 import "./globals.css";
 
+const DESCRIPTION = `${APP_NAME} breaks down how your agent spends its input token budget across skills, tools, history, memory, and user input, then tells you what to reclaim.`;
+
 export const metadata: Metadata = {
-  title: APP_NAME,
+  title: {
+    default: APP_NAME,
+    template: `%s · ${APP_NAME}`,
+  },
+  description: DESCRIPTION,
+  // The mark on its tile: `ratel-mark.png` of @ratel/brand, served from `public/`.
+  icons: { icon: "/icon.png" },
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {

@@ -43,3 +43,27 @@ test("an idle step emits no event; one that did work emits its event once", asyn
   ).run();
   assert.deepEqual(events, ["quality_snapshots_refreshed", "match_quality_runs_enqueued"]);
 });
+
+test("the steps report under upstream's four heartbeat names", async () => {
+  const track = async () => {};
+  assert.deepEqual(
+    await snapshotStep(
+      async () => ({
+        skipped: false,
+        projectsScanned: 1,
+        calibrationsRolledUp: 2,
+        daysWritten: 3,
+        fingerprintsChanged: 4,
+      }),
+      track as never,
+    ).run(),
+    { qualityCalibrationsRolledUp: 2, qualityDaysWritten: 3, qualityFingerprintsChanged: 4 },
+  );
+  assert.deepEqual(
+    await sweepStep(
+      async () => ({ skipped: false, projectsScanned: 5, runsEnqueued: 6 }),
+      track as never,
+    ).run(),
+    { matchQualityRunsEnqueued: 6 },
+  );
+});

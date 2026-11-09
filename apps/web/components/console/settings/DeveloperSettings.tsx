@@ -1,3 +1,4 @@
+import { projectRoot } from "@/lib/console/navigation";
 import {
   sdkEventLabel,
   sourceStatusNote,
@@ -49,6 +50,7 @@ export async function DeveloperSettings({
   const { project } = await requireProjectScope(projectId);
   const view = resolveRuntimeEventsView(searchParams);
   const root = `${projectSettingsRoot(project.id)}/developer`;
+  const traceRoot = `${projectRoot(project.id)}/traces`;
   // The summary answers for the window (and source); the lists also honor the event filter.
   const windowFilters = {
     sourceId: view.sourceId || undefined,
@@ -106,14 +108,11 @@ export async function DeveloperSettings({
         : Promise.resolve(null),
     ]);
 
-  // No trace link: the trace view is not in this build.
-  const toView = (row: Parameters<typeof toSdkEventView>[0]) => ({
-    ...toSdkEventView(row, ""),
-    traceHref: null,
-  });
-  const eventViews = events?.map(toView) ?? null;
+  const eventViews = events?.map((row) => toSdkEventView(row, traceRoot)) ?? null;
   const pinned =
-    selected && !eventViews?.some((event) => event.key === selected.id) ? toView(selected) : null;
+    selected && !eventViews?.some((event) => event.key === selected.id)
+      ? toSdkEventView(selected, traceRoot)
+      : null;
 
   return (
     <SdkEventsView

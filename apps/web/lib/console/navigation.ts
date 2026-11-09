@@ -415,11 +415,6 @@ export function entryHref(
   return organizationSlug ? ONBOARDING_ROUTE : null;
 }
 
-/** Where `/dashboard` lands: the first project's dashboards, else the console entry. */
-export function dashboardHref(projects: readonly { id: string }[]): string {
-  return projects[0] ? `${projectRoot(projects[0].id)}/dashboards` : "/";
-}
-
 /** The edition's organization pages without the paths it hides for this organization. */
 export function visibleOrganizationNav(
   nav: readonly OrganizationNavItem[],

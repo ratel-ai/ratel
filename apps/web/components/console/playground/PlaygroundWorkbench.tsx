@@ -407,7 +407,7 @@ export function PlaygroundWorkbench({
     <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-4">
       <header className="card-enter flex flex-wrap items-baseline gap-x-2">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-cream">
-          Test a search
+          Playground
         </h1>
         <span className="font-mono text-xs text-warm-muted">{projectSlug}</span>
       </header>

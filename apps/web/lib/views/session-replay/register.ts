@@ -1,6 +1,7 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import { whatIfStepJob } from "./job";
-import { pruneWhatIfRuns, WHAT_IF_JOB } from "./runs";
+import { pruneWhatIfRuns } from "./runs";
 import "./spend";
 
 /**
@@ -13,8 +14,10 @@ import "./spend";
  * upstream counterpart: upstream lists the handler in its job hub and the step in its drain.
  */
 export const sessionReplayRegistration: Registration = {
+  // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    [WHAT_IF_JOB]: (job) => whatIfStepJob(job.projectId, job.payload),
+    what_if_step: (job) =>
+      withProjectLogContext(job.projectId, () => whatIfStepJob(job.projectId, job.payload)),
   },
   drainSteps: [
     {
