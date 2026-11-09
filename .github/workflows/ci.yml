@@ -814,7 +814,7 @@ jobs:
           fi
           docker run --rm -v "$PWD:/repo" -w /repo \
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
-            ghcr.io/gitleaks/gitleaks:v8.30.0 git /repo --redact --log-opts="$range"
+            ghcr.io/gitleaks/gitleaks:v8.30.0 git /repo --redact --verbose --log-opts="$range"
 
   # THE single required status check for the `main` ruleset (scripts/setup-branch-ruleset.sh).
   # `if: always()` (plus the non-draft guard) makes it run regardless of upstream results —

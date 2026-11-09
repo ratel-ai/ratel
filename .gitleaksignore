@@ -15,3 +15,7 @@
 # Placeholder bearer token in an OTLP header test (trace-token).
 7fd97f549d2c2331e25102b28ce326036198624c:apps/web/lib/platform/otel/config.test.ts:generic-api-key:13
 97a5a97b3b8c607a1cd9cbbff1783defde30adf5:apps/web/lib/platform/otel/config.test.ts:generic-api-key:13
+# Fake ghp_ token planted in PR 261 to prove the scan fails, removed in the same PR.
+4b3bcc9df05f21fc618e28b60aca197aad8003ef:scripts/tmp-fake-secret.mjs:github-pat:1
+82d98fe1a97fdaea329ad459e2af546c25c30b19:scripts/tmp-fake-secret.mjs:github-pat:1
+803a912858e8048121c24e8f87801955033bedae:docs/tmp-fake-secret.md:github-pat:1
