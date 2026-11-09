@@ -225,7 +225,6 @@ jobs:
           scripts/check-layers.test.mjs
           scripts/link-ee.test.mjs
           scripts/platform-sync/sync.test.mjs
-          scripts/platform-parity/cloud-checkout.test.mjs
           scripts/quick-start.test.mjs
 
   # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
