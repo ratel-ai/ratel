@@ -200,3 +200,30 @@ test("tool metrics return every run's per-tool footprint inside the window", asy
     ],
   );
 });
+
+// Upstream's case from its query hub test: the storage options its migration 0026 sets, which
+// migration 0031 sets here. Drizzle's schema cannot express them, so the migrated database is
+// the only place to check them.
+test("otel ingest tables use fixed-threshold planner maintenance", async () => {
+  const { client } = await setup();
+  try {
+    const result = await client.query<{ relname: string; reloptions: string[] }>(`
+      select relname, reloptions
+        from pg_class
+       where relname in ('otel_logs', 'otel_spans', 'otel_trace_summaries')
+       order by relname
+    `);
+    const reloptions = [
+      "autovacuum_analyze_scale_factor=0.0",
+      "autovacuum_analyze_threshold=1000",
+      "autovacuum_vacuum_scale_factor=0.05",
+    ];
+    assert.deepEqual(result.rows, [
+      { relname: "otel_logs", reloptions },
+      { relname: "otel_spans", reloptions },
+      { relname: "otel_trace_summaries", reloptions },
+    ]);
+  } finally {
+    await client.close();
+  }
+});

@@ -187,15 +187,7 @@
       "why": "This deployment's own address (natural difference 7): a self-hosted deployment names its own address, and its ingest route is under /api/v1 where Cloud's quickstart names /v1. The same rule as the parity tests' base-url rule (apps/web/parity/normalise.ts)."
     }
   ],
-  "audit": [
-    {
-      "item": 10,
-      "check": "schema",
-      "side": "cloud",
-      "pattern": "^reloptions\\|otel_(spans|logs|trace_summaries)\\|",
-      "what": "three OTel tables lack Cloud's autovacuum settings"
-    }
-  ],
+  "audit": [],
   "flagWording": {
     "the eval gate": "FF_EVAL_GATE"
   }

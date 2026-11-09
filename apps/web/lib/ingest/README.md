@@ -9,7 +9,7 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `gateway-tools.ts` | the gateway's meta-tool ids, so an `invoke_tool` call counts against the real tool |
 | `pricing.ts` | the model token price table and `costFor` |
 | `otlp/` | OTLP decode, the event/span/log writes, and the `/v1/traces` and `/v1/logs` handlers |
-| `otlp/schema.ts` | `events`, `event_metrics`, `otel_spans`, `otel_logs` |
+| `otlp/schema.ts` | `events`, `event_metrics`, `otel_spans`, `otel_logs` (the two OTel tables and `otel_trace_summaries` carry autovacuum storage options set by migration `0031_otel_autovacuum`, which the schema cannot express; `otlp/queries.integration.test.ts` checks them) |
 | `trace-events/schema.ts` | `trace_events`, `trace_event_hits`, `trace_event_rejects`, `tool_usage_counters`, `intent_graph_runtime_status` |
 | `trace-events/parse.ts`, `route-handler.ts` | `POST /api/v1/events`: validate a batch, store it, report rejects |
 | `trace-events/consolidate.ts`, `queries.ts` | the write path: events, hits, sources, tool counters and runtime ranking status in one transaction; `queries.ts` also holds the reads the MCP joins take: the top search queries, the skills searched but never invoked, the erroring tools and the queries that surfaced a skill |
