@@ -1,0 +1,17 @@
+# Triaged gitleaks findings, none a real secret.
+# keyPrefix test fixtures: the stored prefix of a fake API key in unit tests.
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/console/settings/api-keys.test.ts:generic-api-key:17
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:201
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:208
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:26
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:270
+13aa0bc70e7164147aa2ca6ea61fca92b681c5d7:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:289
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/console/settings/api-keys.test.ts:generic-api-key:17
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:201
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:208
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:26
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:270
+8f233d340c710b50b09b59b89ed7e340b84cf3f8:apps/web/lib/platform/api-key-actions.test.ts:generic-api-key:289
+# Placeholder bearer token in an OTLP header test (trace-token).
+7fd97f549d2c2331e25102b28ce326036198624c:apps/web/lib/platform/otel/config.test.ts:generic-api-key:13
+97a5a97b3b8c607a1cd9cbbff1783defde30adf5:apps/web/lib/platform/otel/config.test.ts:generic-api-key:13

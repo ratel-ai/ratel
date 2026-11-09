@@ -790,6 +790,32 @@ jobs:
           node scripts/inject-sdk-optional-deps.mjs
           node scripts/inject-sdk-optional-deps.mjs src/rankers/ts
 
+  # gitleaks on the commits a PR or push adds (not the whole history each time). Triaged
+  # false positives live in .gitleaksignore, each with a comment. workflow_dispatch and a
+  # new-branch push scan everything.
+  secret-scan:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          range="--all"
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            range="$PR_BASE..$PR_HEAD"
+          elif [ "${{ github.event_name }}" = push ] && [ "${PUSH_BEFORE//0/}" != "" ]; then
+            range="$PUSH_BEFORE..$GITHUB_SHA"
+          fi
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*' \
+            ghcr.io/gitleaks/gitleaks:v8.30.0 git /repo --redact --log-opts="$range"
+
   # THE single required status check for the `main` ruleset (scripts/setup-branch-ruleset.sh).
   # `if: always()` (plus the non-draft guard) makes it run regardless of upstream results —
   # including skips — so the ruleset always gets a definitive Success/Failure instead of
@@ -803,7 +829,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, setup, verify]
+    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, secret-scan, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -811,7 +837,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} secret-scan=${{ needs.secret-scan.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||
