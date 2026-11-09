@@ -7,6 +7,7 @@ import { enqueueJob } from "@/lib/jobs/queries";
 import { runsJobsAfterResponse } from "@/lib/jobs/role";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { drainProjectJobs } from "@/lib/jobs/store";
+import { registerImportedSourceIds } from "@/lib/ledger/constants";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 
 export type ImportedRunsDeps = {
@@ -70,5 +71,6 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
     },
     enqueueJob: (projectId, kind, payload) => deps.enqueueJob({ projectId, kind, payload }),
     scheduleDrain: (projectId) => deps.scheduleProjectDrain(projectId),
+    registerSourceIds: (ids) => registerImportedSourceIds(ids),
   };
 }

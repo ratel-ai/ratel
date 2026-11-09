@@ -1,7 +1,7 @@
-import { and, desc, eq, gt, gte, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, or, sql } from "drizzle-orm";
 import { STALE_JOB_MS } from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
-import { IMPORTED_SOURCE_SUFFIX, TURN_IDLE_CLOSE_MS } from "@/lib/ledger/constants";
+import { IMPORTED_SOURCE_IDS, TURN_IDLE_CLOSE_MS } from "@/lib/ledger/constants";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { traceSignalRuns } from "@/lib/readings/trace-signals/schema";
@@ -167,8 +167,7 @@ export async function loadLedgerFacts(
           .where(
             and(
               project,
-              // Owned: imported runs are known by their source suffix here, not a vendor list.
-              like(traceTurns.sourceId, `%${IMPORTED_SOURCE_SUFFIX}`),
+              inArray(traceTurns.sourceId, [...IMPORTED_SOURCE_IDS]),
               or(
                 and(eq(traceTurns.status, "closed"), gte(traceTurns.endedAt, horizon)),
                 eq(traceTurns.status, "open"),

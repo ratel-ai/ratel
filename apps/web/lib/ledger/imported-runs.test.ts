@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { isImportedSourceId } from "@/lib/ledger/constants";
 import { createImportedRuns, type ImportedRunsDeps } from "@/lib/ledger/imported-runs";
 
 const ORG = { id: "o", name: "Acme", slug: "acme" };
@@ -80,5 +81,12 @@ describe("createImportedRuns", () => {
       ["enqueue", { projectId: "p", kind: "run_import", payload: { importId: "i" } }],
       ["schedule", "p"],
     ]);
+  });
+
+  it("registers the importer's source ids with the ledger", () => {
+    const { port } = fakes(true);
+    assert.equal(isImportedSourceId("relay-import"), false);
+    port.registerSourceIds?.(["relay-import"]);
+    assert.equal(isImportedSourceId("relay-import"), true);
   });
 });

@@ -13,7 +13,8 @@ edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool
 Picker ranks, and `importedRuns` (`imported-runs.ts`), which stores runs Cloud's Agent health
 import read from another product as live ingest does, asks for a reading and queues the import's
-job. `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
+job; its optional `registerSourceIds` names the source ids the importer stores runs under, which
+the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`

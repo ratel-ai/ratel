@@ -8,8 +8,8 @@ import { envNumber } from "@/lib/platform/env-number";
  *
  * Owned (ADR-0030): `TURN_EVENT_TYPES` has one source, the ingest kick in
  * `lib/ingest/trace-events/turns-schedule.ts`, re-exported here so the ledger reads the
- * same list that triggers it. Imported sources are recognised by their `-import` suffix
- * rather than an enumerated vendor list.
+ * same list that triggers it. The imported source ids are upstream's exact set less the one
+ * that names a vendor this repository cannot write; an importer adds its own (see below).
  */
 
 /** The runtime event types a turn is made of. Mirrors the partial index on `trace_events`. */
@@ -24,15 +24,37 @@ export const TURN_DURATION_CAP_MS = envNumber("TRACE_TURNS_DURATION_CAP_MS", 15 
 /** A turn whose session has been quiet (by receipt time) this long is closed. */
 export const TURN_IDLE_CLOSE_MS = envNumber("TRACE_TURNS_IDLE_CLOSE_MS", 30 * 60_000);
 
+const IMPORTED_SOURCE_IDS_KEY = Symbol.for("ratel.platform.importedSourceIds");
+
 /**
- * An Agent health import stores its runs under `<source>-import` (the `service.name`
- * its spans carry). An import is history read once: nothing more arrives for its runs.
+ * The `source_id` an Agent health import stores its runs under (`<source>-import`, the
+ * `service.name` its spans carry). An import is history read once: nothing more arrives for
+ * its runs. Exact ids, as upstream's: a live runtime whose id only ends in `-import` is live
+ * telemetry. An importer names any other id through the imported-runs port
+ * ({@link registerImportedSourceIds}). One set per process, kept on `globalThis`: the boot
+ * hook that registers and the pages that read may each load this module.
  */
-export const IMPORTED_SOURCE_SUFFIX = "-import";
+export const IMPORTED_SOURCE_IDS: ReadonlySet<string> = importedSourceIds();
+
+function importedSourceIds(): Set<string> {
+  const store = globalThis as { [IMPORTED_SOURCE_IDS_KEY]?: Set<string> };
+  store[IMPORTED_SOURCE_IDS_KEY] ??= new Set([
+    "langfuse-import",
+    "langsmith-import",
+    "postgres-import",
+  ]);
+  return store[IMPORTED_SOURCE_IDS_KEY];
+}
+
+/** Add the source ids an importer stores its runs under. Exact strings; idempotent. */
+export function registerImportedSourceIds(ids: readonly string[]): void {
+  const set = importedSourceIds();
+  for (const id of ids) set.add(id);
+}
 
 /** Whether a row came from an Agent health import rather than live telemetry. */
 export function isImportedSourceId(sourceId: string | null | undefined): boolean {
-  return typeof sourceId === "string" && sourceId.endsWith(IMPORTED_SOURCE_SUFFIX);
+  return typeof sourceId === "string" && IMPORTED_SOURCE_IDS.has(sourceId);
 }
 
 /** A gateway row this close to a native row it summarizes is the same fact. */

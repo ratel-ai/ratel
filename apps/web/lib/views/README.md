@@ -55,8 +55,7 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 
 - `health/page-model.ts`: limits come from the entitlements port (no plan table); `page-state.ts`
   and `page-state-copy.ts`: a wider window never names a plan to buy, and no import source is
-  named; `page-state.test.ts` accordingly; `ledger-facts-query.ts`: imported turns are found by
-  the ledger's source suffix; `mock-fixture.ts`: the development fixture with a neutral tenant;
+  named; `page-state.test.ts` accordingly; `mock-fixture.ts`: the development fixture with a neutral tenant;
   `imports-types.ts`: new, see above.
 - `tasks/tasks-ui.test.ts` and the components `TasksView` and `TaskSections` are copies again: the
   live scores, run-to-test and session replay links they carried land with the task loop.

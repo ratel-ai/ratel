@@ -499,6 +499,7 @@
         "apps/web/lib/views/health/issue-examples.integration.test.ts",
         "apps/web/lib/views/health/ledger-facts.ts",
         "apps/web/lib/views/health/ledger-facts.test.ts",
+        "apps/web/lib/views/health/ledger-facts-query.ts",
         "apps/web/lib/views/health/ledger-facts-query.integration.test.ts",
         "apps/web/lib/views/health/evidence.ts",
         "apps/web/lib/views/health/source-mode.ts",
