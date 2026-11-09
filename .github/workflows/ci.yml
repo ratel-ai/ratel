@@ -86,7 +86,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
+      # PyO3 links libpython: pin it, and key the cache on the image and interpreter so a
+      # runner image change cannot reuse build output linked against another Python.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: echo "PYO3_PYTHON=$(which python)" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: CARGO CC CFLAGS CXX CMAKE RUST ImageOS PYO3
       - name: cargo fmt
         run: cargo fmt --check --all
       - name: cargo clippy
