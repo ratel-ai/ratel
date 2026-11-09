@@ -1,23 +1,30 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createConsoleProject } from "@/lib/console/create-project";
-import { projectRoot } from "@/lib/console/navigation";
-import { createProject, listProjectsForOrganization } from "@/lib/platform/projects/queries";
+import { notFound, redirect } from "next/navigation";
+import { startProjectCreation } from "@/lib/console/start-project-creation";
+import { isDbConfigured } from "@/lib/platform/db/client";
+import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
+import { trackProductEvent } from "@/lib/platform/telemetry";
 
-/** Creates a project in the session organization and opens it; returns the error otherwise. */
-export async function createProjectAction(
-  organizationSlug: string,
-  name: string,
-): Promise<{ error: string }> {
-  const result = await createConsoleProject(organizationSlug, name, {
-    organization: async () => (await getSessionContext())?.organization ?? null,
+/** "New project": opens onboarding for the organization, or says why it cannot at the plan's cap. */
+export async function startProjectCreationAction(orgSlug: string): Promise<void> {
+  if (!isDbConfigured()) throw new Error("database not configured");
+
+  const context = await getSessionContext();
+  if (!context) redirect("/");
+
+  const destination = await startProjectCreation(orgSlug, {
+    organization: async () => context.organization,
     listProjects: (organizationId) => listProjectsForOrganization(organizationId),
-    createProject: (input) => createProject(input),
+    onRefused: async (organization, capacity) => {
+      await trackProductEvent(
+        "quota_limit_hit",
+        { externalId: context.user.externalId, orgId: organization.id },
+        { limit: "maxProjects", cap: capacity.limit },
+      );
+    },
   });
-  if (!result.ok) return { error: result.error };
-  revalidatePath("/", "layout");
-  redirect(projectRoot(result.projectId));
+  if ("notFound" in destination) notFound();
+  redirect(destination.redirect);
 }

@@ -99,7 +99,7 @@ export function ProjectSwitcher({
         <MenuItem icon={<Building2 />} onClick={() => router.push(root)}>
           All projects
         </MenuItem>
-        <MenuItem icon={<Plus />} onClick={() => router.push(newProjectHref(root))}>
+        <MenuItem icon={<Plus />} onClick={() => router.push(newProjectHref(organizationSlug))}>
           New project
         </MenuItem>
       </MenuContent>

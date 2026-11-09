@@ -1,4 +1,4 @@
-import { newProjectHref, organizationRoot } from "@/lib/console/navigation";
+import { newProjectHref } from "@/lib/console/navigation";
 import { isImportedSourceId } from "@/lib/ledger/constants";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { resolveSelfTelemetryConfig } from "@/lib/platform/otel/config";
@@ -40,7 +40,7 @@ parity(
 );
 
 parity(14, '"New project" sends a person where Cloud sends them', () => {
-  const href = newProjectHref(organizationRoot(ORGANIZATION_SLUG));
+  const href = newProjectHref(ORGANIZATION_SLUG);
   same(
     { destinationPath: new URL(href, "https://console.example").pathname },
     golden("new-project"),
