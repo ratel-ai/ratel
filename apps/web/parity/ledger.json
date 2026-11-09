@@ -42,7 +42,7 @@
       "item": 7,
       "kind": "missing",
       "title": "A turn page has no \"run to test\" action with FF_EVAL_GATE on",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 8,
