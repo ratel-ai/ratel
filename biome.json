@@ -931,6 +931,7 @@
         "!apps/web/lib/console/catalog/render.test.ts",
         "!apps/web/lib/console/catalog/item-id.test.ts",
         "!apps/web/lib/console/catalog/sync-snippet.ts",
+        "!apps/web/lib/console/catalog/sync-snippet.test.ts",
         "apps/web/lib/console/catalog/table-view.ts",
         "apps/web/lib/console/catalog/table-view.test.ts",
         "apps/web/lib/synthesis/catalog/tools.ts",

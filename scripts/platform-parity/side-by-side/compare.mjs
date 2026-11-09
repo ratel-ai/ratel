@@ -38,7 +38,7 @@ function steady(text) {
     .replace(UUID, "<uuid>")
     .replace(/localhost:\d+/g, "localhost:<port>")
     .replace(/\brtl_[A-Za-z0-9_-]+…?/g, "<key>")
-    .replace(/\b(\d+|an?|a few)\s*(s|sec|secs|seconds?|min|mins|minutes?|h|hours?|d|days?|weeks?|months?)\s+ago\b/g, "<ago>")
+    .replace(/\b(\d+|an?|a few)\s*(s|sec|secs|seconds?|m|min|mins|minutes?|h|hours?|d|days?|weeks?|months?)\s+ago\b/g, "<ago>")
     .replace(/\bjust now\b/g, "<ago>")
     .replace(/\bRatel Cloud\b/g, "<app>")
     .replace(/\bRatel\b/g, "<app>")
