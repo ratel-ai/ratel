@@ -9,21 +9,37 @@ import { type KeyboardEvent, useId, useMemo, useState } from "react";
 import type { CommandEntry } from "@/lib/console/navigation";
 import { searchCommands } from "@/lib/console/scope/command-search";
 
-/** ⌘K: every page and project, searched by name. */
+export type CommandAction = {
+  id: string;
+  label: string;
+  group: string;
+  keywords?: readonly string[];
+  run: () => void;
+};
+
+type Item = (CommandEntry & { run?: undefined }) | (CommandAction & { href: string });
+
+/** ⌘K: every page and project and the few actions worth a shortcut, searched by name or intent. */
 export function CommandMenu({
   open,
   onOpenChange,
   entries,
+  actions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entries: readonly CommandEntry[];
+  actions: readonly CommandAction[];
 }) {
   const router = useRouter();
   const listId = useId();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const results = useMemo(() => searchCommands(entries, query).slice(0, 40), [entries, query]);
+  const items = useMemo<Item[]>(
+    () => [...entries, ...actions.map((action) => ({ ...action, href: "" }))],
+    [entries, actions],
+  );
+  const results = useMemo(() => searchCommands(items, query).slice(0, 40), [items, query]);
   const active = Math.min(activeIndex, Math.max(0, results.length - 1));
 
   function reset() {
@@ -31,10 +47,11 @@ export function CommandMenu({
     setActiveIndex(0);
   }
 
-  function choose(entry: CommandEntry) {
+  function choose(item: Item) {
     onOpenChange(false);
     reset();
-    router.push(entry.href);
+    if (item.run) item.run();
+    else router.push(item.href);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -139,6 +156,9 @@ export function CommandMenu({
             </span>
             <span className="inline-flex items-center gap-1">
               <Kbd>↵</Kbd> to open
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1">
+              <Kbd>G</Kbd> then a letter jumps
             </span>
           </div>
         </Dialog.Popup>

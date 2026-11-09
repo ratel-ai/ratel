@@ -203,13 +203,6 @@
       "what": "Fixes has no savings: a fix's effect is told differently"
     },
     {
-      "item": 4,
-      "check": "pages",
-      "side": "cloud",
-      "pattern": "^Analysis updated ",
-      "what": "the sidebar's freshness line is missing"
-    },
-    {
       "item": 5,
       "check": "pages",
       "part": "overview$",
