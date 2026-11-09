@@ -168,13 +168,6 @@
       "what": "three OTel tables lack Cloud's autovacuum settings"
     },
     {
-      "item": 12,
-      "check": "seed",
-      "side": "here",
-      "pattern": "^trace_events\\|search\\|",
-      "what": "the Site Copilot seed stores SDK search events Cloud's does not"
-    },
-    {
       "item": 1,
       "check": "mcp",
       "part": "^list_fixes",

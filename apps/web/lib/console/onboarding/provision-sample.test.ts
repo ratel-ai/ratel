@@ -28,7 +28,6 @@ function deps(over: Partial<EnsureSampleProjectDeps> = {}) {
         projectSlug: "site-copilot",
         skills: 3,
         traces: 40,
-        searchEvents: 9,
       };
     },
     record: async (_org, projectId) => {

@@ -66,7 +66,6 @@ export interface EnsureSampleProjectDeps {
     projectSlug: string;
     skills: number;
     traces: number;
-    searchEvents: number;
   }>;
   record: (organizationId: string, projectId: string) => Promise<void>;
   scheduleDrain: (projectId: string) => void;
@@ -111,7 +110,6 @@ export async function ensureSampleProject(
         projectId: result.projectId,
         skills: result.skills,
         traces: result.traces,
-        searchEvents: result.searchEvents,
         durationMs,
       },
       "sample project seeded",
