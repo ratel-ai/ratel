@@ -1,6 +1,7 @@
 import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 import { type FixFilters, parseFixFilters } from "@/lib/views/fixes/href";
+import type { SavingsPeriod } from "@/lib/views/fixes/period";
 
 /** A query string (with its `?`, or empty) with some parameters set or removed. */
 export function withParams(
@@ -46,4 +47,23 @@ export function useFixFilters(): [
     [pathname],
   );
   return [filters, set, hrefWith];
+}
+
+/** The savings period uses the same URL state as the list filters. */
+export function useSavingsPeriod(): [SavingsPeriod, (period: SavingsPeriod) => void] {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const raw = searchParams.get("period");
+  const period: SavingsPeriod = raw === "day" || raw === "week" ? raw : "month";
+  const set = useCallback(
+    (next: SavingsPeriod) => {
+      window.history.pushState(
+        null,
+        "",
+        `${pathname}${withParams(window.location.search, { period: next === "month" ? null : next })}`,
+      );
+    },
+    [pathname],
+  );
+  return [period, set];
 }

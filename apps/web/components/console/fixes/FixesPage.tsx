@@ -14,11 +14,12 @@ import { compactCount } from "@/lib/views/home/overview-model";
 import { EvidenceLegend, EvidenceMeter } from "./FixCells";
 import { FixesList } from "./FixesList";
 import { FIX_GROUP_ICONS } from "./kind-icons";
+import { SavingsSummary } from "./SavingsSummary";
 
 /**
  * Fixes (DESIGN.md, One question per page): what should I change? The
  * numbers lead, as marks: the open fixes by what you do, their evidence in
- * color, the issues they resolve and the model calls they save. Then one
+ * color, the issues they resolve and the savings. Then one
  * table per thing you do, and the Panel.
  */
 
@@ -107,6 +108,7 @@ export function FixesPage({
         ) : (
           <>
             <StatRow stats={fixStatProps(model, root)} />
+            <SavingsSummary savings={model.stats.savings} />
             <FixesList
               model={model}
               now={now}
@@ -124,8 +126,7 @@ export function FixesPage({
 /**
  * The numbers, each with a mark: the open fixes with a jump to each table,
  * how many stand on strong evidence (every strength as pixels), the issues
- * they resolve, and the model calls they save where that can honestly be
- * summed.
+ * they resolve. The savings follow in their own table.
  */
 export function fixStatProps(model: FixesModel, root: string): StatProps[] {
   const { stats } = model;
@@ -144,13 +145,6 @@ export function fixStatProps(model: FixesModel, root: string): StatProps[] {
       href: `${root}/health`,
     },
   ];
-  if (stats.roundTripsSaved !== null) {
-    out.push({
-      label: "Model calls saved",
-      value: compactCount(stats.roundTripsSaved),
-      hint: "If you make every measured fix",
-    });
-  }
   return out;
 }
 

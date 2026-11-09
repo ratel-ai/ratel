@@ -9,9 +9,8 @@ import { FixSource } from "@/components/console/lineage/FixSource";
 import { formatStamp } from "@/lib/console/settings/format";
 import { type FixShipped, shippedLabel } from "@/lib/views/fixes/shipped";
 import type { CraftDetail, Fix, IssueDetail, RewriteDetail } from "@/lib/views/fixes/types";
-import { EFFECT_ICONS } from "./effect-icons";
 import { AffectsLinks } from "./FixAffects";
-import { EffectArrow, EvidenceValue } from "./FixCells";
+import { EffectValue, EvidenceValue } from "./FixCells";
 import { KIND_MOTION_STYLES, KindMotion } from "./KindMotion";
 import { FIX_KIND_ICONS } from "./kind-icons";
 
@@ -31,9 +30,8 @@ export function FixDetail({
   fix: Fix;
   actions: ReactNode;
   projectId?: string;
-  /** The eval gate's section (behind `FF_EVAL_GATE`); absent when the gate is off. */
   gate?: ReactNode;
-  /** Its newest shipment (RC-72, behind `FF_STAGE_SPINE`); null when it has not shipped or the flag is off. */
+  /** Its newest shipment (RC-72, behind `cloud-stage-spine`); null when it has not shipped or the flag is off. */
   shipped?: FixShipped | null;
 }) {
   const detail = fix.detail;
@@ -44,7 +42,7 @@ export function FixDetail({
       data-fix-source={fix.source}
       data-fix-group={fix.group}
     >
-      {/* Where it came from (RC-45, behind FF_STAGE_SPINE). */}
+      {/* Where it came from (RC-45, behind cloud-stage-spine). */}
       {projectId ? <FixSource projectId={projectId} fix={fix} /> : null}
       <Hero fix={fix} actions={actions} />
       {shipped ? <ShippedSection shipped={shipped} /> : null}
@@ -58,7 +56,7 @@ export function FixDetail({
       {detail.source === "issue" || detail.source === "intent" ? (
         <IssueChange detail={detail} />
       ) : null}
-      {detail.source === "craft" ? <CraftDetails detail={detail} /> : null}
+      {detail.source === "craft" ? <CraftDetails detail={detail} fix={fix} /> : null}
     </div>
   );
 }
@@ -104,7 +102,7 @@ function effectCaption(fix: Fix): string | null {
     return effect.detail
       ? `${effect.detail}, in a replay of past searches`
       : "In a replay of past searches";
-  const window = fix.detail.source === "craft" ? fix.detail.worthCaption : null;
+  const window = fix.gain?.windowDays ? `based on ${fix.gain.windowDays} days of runs` : null;
   const parts = [effect.detail, window].filter((part): part is string => Boolean(part));
   return parts.length > 0 ? capitalize(parts.join(", ")) : null;
 }
@@ -128,28 +126,14 @@ function Hero({ fix, actions }: { fix: Fix; actions: ReactNode }) {
           <span className="sr-only">{fix.kindLabel}</span>
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          {fix.effect ? (
-            <p className="flex min-w-0 flex-wrap items-baseline gap-x-2" data-effect-figure="">
-              <span className="inline-flex items-center gap-1 self-center">
-                <EffectArrow effect={fix.effect} className="size-4" />
-              </span>
-              <span className="text-2xl font-semibold tracking-tight text-fg tabular-nums">
-                {fix.effect.figure}
-              </span>
-              {fix.effect.unit ? (
-                <span className="text-sm text-fg-muted">{fix.effect.unit}</span>
-              ) : null}
+          <p className="text-lg font-semibold tracking-tight" data-effect-figure="">
+            <EffectValue effect={fix.effect} gain={fix.gain} />
+          </p>
+          {today ? (
+            <p className="text-sm text-fg-muted tabular-nums" data-today-figure="">
+              {today.display} {today.caption}
             </p>
-          ) : today ? (
-            <p className="flex min-w-0 flex-wrap items-baseline gap-x-2" data-today-figure="">
-              <span className="text-2xl font-semibold tracking-tight text-fg tabular-nums">
-                {today.display}
-              </span>
-              <span className="text-sm text-fg-muted">{today.caption}</span>
-            </p>
-          ) : (
-            <p className="text-sm text-fg-muted">Not measured yet</p>
-          )}
+          ) : null}
           {caption ? <p className="text-xs text-fg-subtle tabular-nums">{caption}</p> : null}
           {today ? <p className="text-xs text-fg-subtle">Today, before the fix</p> : null}
           {fix.evidence ? (
@@ -356,8 +340,11 @@ const REPLAY: Record<
 };
 
 /** The specialist's numbers: how the effect adds up, the facts it stands on, and the tools as declared today. */
-function CraftDetails({ detail }: { detail: CraftDetail }) {
-  const hasWorth = detail.worth.length > 0 || detail.replay !== null;
+function CraftDetails({ detail, fix }: { detail: CraftDetail; fix: Fix }) {
+  const worth = detail.worth.filter(
+    (chip) => chip.icon === "tokens" || chip.icon === "cost" || chip.icon === "time",
+  );
+  const hasWorth = worth.length > 0 || detail.replay !== null;
   if (!hasWorth && detail.facts.length === 0 && detail.sources.length === 0) return null;
   return (
     <Disclosure
@@ -368,32 +355,9 @@ function CraftDetails({ detail }: { detail: CraftDetail }) {
       <div className="flex flex-col gap-5">
         {hasWorth ? (
           <DetailSection title="How it adds up">
-            {detail.worth.length > 0 ? (
-              <ul className="flex flex-col">
-                {detail.worth.map((chip, index) => {
-                  const Icon = EFFECT_ICONS[chip.icon];
-                  return (
-                    <li
-                      key={`${chip.icon}:${index}`}
-                      className="flex items-start gap-2 border-b border-line py-2 last:border-b-0"
-                    >
-                      <Icon
-                        aria-hidden
-                        strokeWidth={1.5}
-                        className="mt-0.5 size-4 shrink-0 text-fg-subtle"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-ui text-fg tabular-nums">{chip.text}</p>
-                        {chip.title ? <p className="text-xs text-fg-subtle">{chip.title}</p> : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : null}
-            {detail.worthCaption ? (
-              <p className="text-xs text-fg-subtle tabular-nums">
-                {capitalize(detail.worthCaption)}
+            {worth.length > 0 ? (
+              <p className="text-ui tabular-nums">
+                <EffectValue effect={fix.effect} gain={fix.gain} />
               </p>
             ) : null}
             {detail.replay ? (

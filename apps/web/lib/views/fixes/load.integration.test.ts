@@ -130,7 +130,12 @@ async function seedSources(client: PGlite): Promise<void> {
 /** Drafted changes: one pending merge, one superseded that must not show. */
 async function seedDrafts(client: PGlite): Promise<void> {
   await client.query(
-    `insert into tool_craft_runs (id, project_id, trigger, status, created_at) values ('55555555-5555-4555-8555-555555555555', $1, 'chained', 'crafted', $2)`,
+    `insert into tool_explorer_runs (id, project_id, trigger, status, window_days, window_start, window_end)
+     values ('99999999-9999-4999-8999-999999999999', $1, 'manual', 'completed', 30, $2, $3)`,
+    [PROJECT, ago(30), NOW.toISOString()],
+  );
+  await client.query(
+    `insert into tool_craft_runs (id, project_id, trigger, status, created_at, explorer_run_id) values ('55555555-5555-4555-8555-555555555555', $1, 'chained', 'crafted', $2, '99999999-9999-4999-8999-999999999999')`,
     [PROJECT, ago(1)],
   );
   const merge = {
@@ -216,7 +221,7 @@ test("the issue and topic sources read into one list, linked by subject; a seam 
   await client.close();
 });
 
-test("the crafter's pending draft is a fix with its effect, evidence and price; dismissed, it is gone; a failing read is named", async () => {
+test("the crafter's pending draft is a fix with its gain, window and evidence; dismissed, it is gone; a failing read is named", async () => {
   const { client, db } = await setup();
   await seedSources(client);
   await seedDrafts(client);
@@ -239,20 +244,21 @@ test("the crafter's pending draft is a fix with its effect, evidence and price; 
   );
   const merge = findFix(model.open, "craft:66666666-6666-4666-8666-666666666661");
   assert.equal(merge?.title, "Merge find_task and assign_task");
-  assert.equal(merge?.effect?.value, "2 → 1 calls");
-  assert.equal(merge?.effect?.detail, "−40 model calls in all");
+  // The run's day buckets carry no linked model calls, so the price is none: the calls are
+  // counted over the crafter run's 30 days, and no token, cost or waiting saving is claimed.
+  assert.equal(merge?.effect, null);
   assert.deepEqual(merge?.evidence, {
     strength: "strong",
     label: "Strong",
     detail: "Seen 40 times in this window",
   });
   assert.deepEqual(merge?.gain, {
-    windowDays: null,
+    windowDays: 30,
     roundTrips: 40,
     calls: 40,
     tokens: null,
     usd: null,
-    ms: 0,
+    ms: null,
   });
   assert.deepEqual(
     merge?.subject.tasks.map((task) => [task.id, task.label, task.color]),
@@ -260,11 +266,6 @@ test("the crafter's pending draft is a fix with its effect, evidence and price; 
   );
   assert.equal(merge?.actions.dismiss, true);
   assert.equal(merge?.actions.apply, false);
-  // The run's day buckets carry no linked model calls, so the price is none: no cost figure on the draft.
-  assert.equal(
-    merge?.effect?.also.some((reading) => reading.icon === "cost"),
-    false,
-  );
 
   // Dismissed (what the Fixes action does through the seam), it is gone from the next read.
   assert.equal(
@@ -403,4 +404,248 @@ test("a skill gap read that fails is named, and the rest still lists", async () 
   assert.deepEqual(model.failed, ["intent"]);
   assert.ok(findFix(model.open, "issue:44444444-4444-4444-8444-444444444441"));
   await client.close();
+});
+
+/** Upstream's savings cases (#323), on the crafter's seeded merge of the hand-over task's tools. */
+async function savingsSetup(): Promise<{ client: PGlite; db: Db }> {
+  const { client, db } = await setup();
+  await seedSources(client);
+  await seedDrafts(client);
+  return { client, db };
+}
+
+const STORED_COST = {
+  version: 1,
+  runs: 40,
+  steps: [],
+  cost: { linkedRuns: 40, pricedRuns: 40, totalUsd: 4, medianUsd: 0.1, medianModelCalls: 2 },
+};
+const LINKED_COST = [
+  { day: "2026-10-19", linked: { runs: 2, modelCalls: 4, pricedRuns: 2, costUsd: 0.04 } },
+];
+
+test("task savings use measured usage from linked runs in the signal window", async () => {
+  const { client, db } = await savingsSetup();
+  try {
+    await client.query(
+      `update trace_signal_runs set summary = jsonb_set(summary, '{daily}', $2::jsonb) where project_id = $1`,
+      [
+        PROJECT,
+        JSON.stringify([
+          {
+            day: "2026-10-19",
+            turns: 50,
+            linked: {
+              runs: 2,
+              modelCalls: 4,
+              pricedRuns: 2,
+              costUsd: 0.04,
+              modelMs: 400,
+              inputTokens: 4_000,
+              outputTokens: 1_000,
+            },
+          },
+        ]),
+      ],
+    );
+    for (const [session, at] of [
+      ["usage-1", ago(2)],
+      ["usage-2", ago(3)],
+      ["before-window", ago(31)],
+      ["after-window", ago(-1)],
+    ] as const) {
+      const end = new Date(new Date(at).getTime() + 5_000).toISOString();
+      await client.query(
+        `insert into trace_turns (project_id, session_id, turn_key, turn_source, lane, status, workflow_id, started_at, ended_at, last_received_at)
+         values ($1, $2, $2, 'declared', 'runtime', 'closed', 'wf_assign', $3, $4, $4)`,
+        [PROJECT, session, at, end],
+      );
+      await client.query(
+        `insert into trace_events (id, project_id, type, session_id, occurred_at, received_at, ingest_source, client_event_id, took_ms, input_tokens, output_tokens, payload)
+         values (gen_random_uuid(), $1, 'otlp_model_call', $2, $3, $3, 'otlp', $2, 100, 2000, 500, '{"model":"claude-sonnet-4-6"}'::jsonb)`,
+        [PROJECT, session, at],
+      );
+    }
+    const model = await loadFixes({
+      projectId: PROJECT,
+      organization: await organization(db),
+      now: NOW,
+      deps: { db },
+    });
+    assert.deepEqual(model.failed, []);
+    const entry = model.stats.savings.tasks.find((candidate) => candidate.task.id === "wf_assign");
+    assert.ok(entry);
+    assert.deepEqual(entry.absolute, { tokens: 50_000 / 30, usd: 0.4 / 30, ms: 4_000 / 30 });
+    assert.ok(Math.abs((entry.relative.tokens ?? 0) - 10) < 1e-9);
+    assert.ok(Math.abs((entry.relative.ms ?? 0) - 0.4) < 1e-9);
+    assert.ok(
+      entry.relative.usd !== null && Math.abs(entry.relative.usd - 14.814814814814815) < 1e-9,
+    );
+    // The draft's own effect is the same saving, told for a month.
+    const merge = findFix(model.open, "craft:66666666-6666-4666-8666-666666666661");
+    assert.equal(merge?.effect?.value, "−50k tokens · −$0.40 · −4 s waiting per month");
+  } finally {
+    await client.close();
+  }
+});
+
+test("a task with untimed and unpriced model calls has no token or cost share", async () => {
+  const { client, db } = await savingsSetup();
+  try {
+    await client.query(
+      `update trace_turns set workflow_id = 'wf_assign', ended_at = started_at + interval '1 second' where project_id = $1`,
+      [PROJECT],
+    );
+    await client.query(
+      `insert into trace_events (id, project_id, type, session_id, occurred_at, received_at, ingest_source, client_event_id, payload)
+       values (gen_random_uuid(), $1, 'otlp_model_call', 's1', $2, $2, 'otlp', 'unknown-usage', '{}'::jsonb)`,
+      [PROJECT, ago(3)],
+    );
+    const model = await loadFixes({
+      projectId: PROJECT,
+      organization: await organization(db),
+      now: NOW,
+      deps: { db },
+    });
+    assert.deepEqual(model.stats.savings.tasks[0]?.relative, { tokens: null, usd: null, ms: null });
+    assert.deepEqual(model.stats.savings.tasks[0]?.absolute, { tokens: null, usd: null, ms: null });
+  } finally {
+    await client.close();
+  }
+});
+
+test("task cost shares use the stored task reading when source events are absent", async () => {
+  const { client, db } = await savingsSetup();
+  try {
+    await client.query(
+      `update trace_signal_runs set summary = jsonb_set(jsonb_set(summary, '{daily}', $2::jsonb), '{workflows,items,0,reading}', $3::jsonb) where project_id = $1`,
+      [PROJECT, JSON.stringify(LINKED_COST), JSON.stringify(STORED_COST)],
+    );
+    const model = await loadFixes({
+      projectId: PROJECT,
+      organization: await organization(db),
+      now: NOW,
+      deps: { db },
+    });
+    assert.deepEqual(model.stats.savings.tasks[0]?.relative, { tokens: null, usd: 0.1, ms: null });
+  } finally {
+    await client.close();
+  }
+});
+
+test("draft savings retain their source window when task usage covers another window", async () => {
+  const { client, db } = await savingsSetup();
+  try {
+    await client.query(
+      `update tool_explorer_runs set window_days = 7, window_start = $2 where project_id = $1`,
+      [PROJECT, ago(7)],
+    );
+    await client.query(
+      `update trace_signal_runs set summary = jsonb_set(jsonb_set(summary, '{daily}', $2::jsonb), '{workflows,items,0,reading}', $3::jsonb) where project_id = $1`,
+      [PROJECT, JSON.stringify(LINKED_COST), JSON.stringify(STORED_COST)],
+    );
+    const model = await loadFixes({
+      projectId: PROJECT,
+      organization: await organization(db),
+      now: NOW,
+      deps: { db },
+    });
+    assert.equal(model.open.find((fix) => fix.source === "craft")?.gain?.windowDays, 7);
+    assert.ok(
+      Math.abs((model.stats.savings.tasks[0]?.relative.usd ?? 0) - 0.42857142857142855) < 1e-9,
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("a draft window read that fails leaves the drafts listed, without a rate", async () => {
+  const { client, db } = await savingsSetup();
+  const loadDraftWindows = fixSeams.loadDraftWindows;
+  fixSeams.loadDraftWindows = async () => {
+    throw new Error("the windows could not be read");
+  };
+  try {
+    const model = await loadFixes({
+      projectId: PROJECT,
+      organization: await organization(db),
+      now: NOW,
+      deps: { db },
+    });
+    assert.deepEqual(model.failed, [], "the drafts were read: no source failed");
+    const merge = findFix(model.open, "craft:66666666-6666-4666-8666-666666666661");
+    assert.equal(merge?.gain?.windowDays, null);
+    assert.equal(merge?.gain?.roundTrips, 40);
+  } finally {
+    fixSeams.loadDraftWindows = loadDraftWindows;
+    await client.close();
+  }
+});
+
+/** Quality's rewrites, as upstream seeds them: one pending for lookup_order, one dismissed. */
+async function seedRewrites(client: PGlite): Promise<void> {
+  await client.query(
+    `insert into match_quality_runs (id, project_id, experiment_name, trigger, status, window_days, window_start, window_end, created_at)
+     values ('77777777-7777-4777-8777-777777777777', $1, 'ratel:search-telemetry', 'manual', 'analyzed', 7, $2, $3, $3)`,
+    [PROJECT, ago(7), ago(1)],
+  );
+  const evidence = {
+    misses: 9,
+    failures: [
+      {
+        query: "where is my order",
+        ourRank: null,
+        ourTop: "find_task",
+        baselineTop: null,
+        targetSource: "invoked",
+      },
+    ],
+  };
+  await client.query(
+    `insert into match_quality_proposals (id, run_id, project_id, entry_id, entry_name, status, current_searchable, current_source, proposed_searchable, rationale, evidence, preview, created_at, updated_at)
+     values
+       ('88888888-8888-4888-8888-888888888881', '77777777-7777-4777-8777-777777777777', $1, 'lookup_order', 'lookup_order', 'pending',
+        'Look up an order.', 'runtime', 'Look up an order. Use for order status.', 'Added the words.', $2::jsonb, '{}'::jsonb, $3, $3),
+       ('88888888-8888-4888-8888-888888888882', '77777777-7777-4777-8777-777777777777', $1, 'notify', 'notify', 'dismissed',
+        'Notify.', 'runtime', 'Notify someone.', 'Added the words.', '{}'::jsonb, '{}'::jsonb, $3, $3)`,
+    [PROJECT, JSON.stringify(evidence), ago(1)],
+  );
+}
+
+test("the override adoption is a read of its own: failing, the rewrites are still listed", async () => {
+  const { client, db } = await setup();
+  await seedSources(client);
+  await seedRewrites(client);
+  const load = async () =>
+    loadFixes({ projectId: PROJECT, organization: await organization(db), now: NOW, deps: { db } });
+  const rewrite = "rewrite:88888888-8888-4888-8888-888888888881";
+  const loadOverrideAdoption = fixSeams.loadOverrideAdoption;
+  assert.equal(typeof loadOverrideAdoption, "function", "quality filled the seam");
+  try {
+    // Nothing fetched the overrides yet: unknown, and the rewrite says it may not reach the agent.
+    const unknown = await load();
+    assert.equal(unknown.overridesAdopted, null);
+    assert.ok(findFix(unknown.open, rewrite));
+
+    await client.query(`update projects set overrides_pulled_at = $2 where id = $1`, [
+      PROJECT,
+      ago(0),
+    ]);
+    assert.equal((await load()).overridesAdopted, true);
+
+    fixSeams.loadOverrideAdoption = async () => {
+      throw new Error("the adoption could not be read");
+    };
+    const partial = await load();
+    assert.deepEqual(partial.failed, [], "the rewrites were read: no source failed");
+    assert.equal(partial.rewritesOn, true);
+    assert.equal(partial.overridesAdopted, null, "unknown, as when nothing fetched them");
+    assert.equal(
+      findFix(partial.open, rewrite)?.title,
+      "Rewrite lookup_order's searchable description",
+    );
+  } finally {
+    fixSeams.loadOverrideAdoption = loadOverrideAdoption;
+    await client.close();
+  }
 });

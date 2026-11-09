@@ -14,7 +14,6 @@ interface CloudInput extends Omit<FixesInput, "names" | "drafts"> {
   names: ReadonlyMap<string, string>;
   crafts: (Omit<CraftCardModel, "createdAt"> & { createdAt: string; windowDays?: number | null })[];
   price?: RoundTripPrice;
-  taskUsage?: ReadonlyMap<string, unknown>;
 }
 interface Model {
   open: { id: string; title: string; effect: unknown; gain: unknown; rank: unknown }[];
@@ -34,7 +33,7 @@ function build(stored: unknown): Model {
       price ?? NO_PRICE,
     ),
   );
-  return plain(buildFixes({ ...input, price, drafts } as FixesInput)) as Model;
+  return plain(buildFixes({ ...input, drafts })) as Model;
 }
 
 const titles = (model: Model) => model.open.map((fix) => fix.title);

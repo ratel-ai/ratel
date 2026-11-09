@@ -14,9 +14,9 @@ import { FixDetail } from "@/components/console/fixes/FixDetail";
 import { FixesPage } from "@/components/console/fixes/FixesPage";
 import { FixesSkeleton } from "@/components/console/fixes/FixesSkeleton";
 import { buildFixes } from "@/lib/views/fixes/build";
-import { findFix } from "@/lib/views/fixes/select";
+import { findFix, fixStats } from "@/lib/views/fixes/select";
 import { shippedByFix, shippedFor } from "@/lib/views/fixes/shipped";
-import { fixesInput, NOW } from "@/lib/views/fixes/test-fixtures";
+import { fixesInput, measuredDrafts, NOW } from "@/lib/views/fixes/test-fixtures";
 import type { FixesModel } from "@/lib/views/fixes/types";
 
 const ROUTER = {
@@ -99,7 +99,8 @@ test("one h1 under its crumb, one sentence, the numbers as marks, then the table
   assert.match(text, /Strong evidence 5 2 solid 1 early/);
   assert.match(html, /role="img" aria-label="Evidence: 5 strong, 2 solid, 1 early"/);
   assert.match(text, /Issues they resolve 8 On Agent health/);
-  assert.match(text, /Model calls saved 46/);
+  assert.match(text, /Potential savings/);
+  assert.doesNotMatch(text, /Model calls saved/);
   assert.match(text, /8 open fixes/);
 });
 
@@ -137,8 +138,8 @@ test("a row: the kind's mark and the verb-first title, pins, one effect, evidenc
   assert.doesNotMatch(visibleText(merge), /precedes/);
   assert.match(merge, /href="\/project\/p1\/improvement\/fixes\?tool=find_task"/);
   assert.match(merge, /href="\/project\/p1\/improvement\/fixes\?tool=assign_task"/);
-  // One compact effect, its derivation in the Panel.
-  assert.match(visibleText(merge), /2 → 1 calls/);
+  // No savings metric was measured for this fixture.
+  assert.match(visibleText(merge), /Not measured/);
   assert.doesNotMatch(visibleText(merge), /model calls in all/);
   assert.match(merge, /data-evidence="strong"[^>]*>/);
   assert.match(merge, /class="[^"]*text-success[^"]*"[^>]*data-evidence="strong"/);
@@ -149,8 +150,8 @@ test("a row: the kind's mark and the verb-first title, pins, one effect, evidenc
   // A task pin wears its task's color.
   assert.match(retry, /class="size-2 shrink-0 rounded-\[2px\] bg-chart-4"/);
   assert.match(visibleText(retry), /Not measured/);
-  // The rewrite's effect, found in a replay.
-  assert.match(visibleText(table(html, "descriptions")), /\+40 pts found/);
+  // A replay does not measure token, cost or waiting savings.
+  assert.match(visibleText(table(html, "descriptions")), /Not measured/);
 });
 
 test("each table has one action, the same on every row", () => {
@@ -208,14 +209,7 @@ test("with nothing to fix, the empty state says what fills it", () => {
       issues: 0,
       tools: 0,
       roundTripsSaved: null,
-      savings: {
-        total: {
-          windowDays: 1,
-          absolute: { tokens: null, usd: null, ms: null },
-          relative: { tokens: null, usd: null, ms: null },
-        },
-        tasks: [],
-      },
+      savings: fixStats([]).savings,
       evidence: { strong: 0, solid: 0, early: 0, none: 0 },
     },
   });
@@ -236,7 +230,7 @@ test("a source that failed is named above the rest", () => {
   );
 });
 
-test("the panel leads with the kind, the effect as a big figure and the evidence, then the pins", () => {
+test("the panel marks unknown savings and keeps the current issue figure as context", () => {
   const fix = findFix(model.open, "craft:c-merge")!;
   const html = render(
     createElement(FixDetail, { fix, actions: createElement("span", { "data-testid": "actions" }) }),
@@ -244,9 +238,9 @@ test("the panel leads with the kind, the effect as a big figure and the evidence
   const text = visibleText(html);
   assert.match(
     text,
-    /^ ?Merge tools Better: 2 → 1 calls −40 model calls in all, over the window · 40 times together Strong Seen 40 times in this window/,
+    /^ ?Merge tools Not measured 50% of turns Today, before the fix Strong Seen 40 times in this window/,
   );
-  assert.match(html, /class="text-2xl[^"]*"[^>]*>2 → 1<\/span>/);
+
   assert.match(html, /data-testid="actions"/);
   // The pins open where each thing lives.
   assert.match(html, /href="\/project\/p1\/catalogs\/tools\?highlight=find_task"/);
@@ -263,10 +257,7 @@ test("the panel tells a rewrite with its before and after, its issue, and where 
     createElement(FixDetail, { fix, actions: createElement("span", { "data-testid": "actions" }) }),
   );
   const text = visibleText(html);
-  assert.match(
-    text,
-    /\+40 pts found 3 → 5 of 5 searches, in a replay of past searches Solid Missed 12 searches · Seen it run/,
-  );
+  assert.match(text, /41% of lists Today, before the fix Solid Missed 12 searches · Seen it run/);
   assert.match(
     text,
     /Searchable description Now Look up an order\. After the rewrite Look up an order\. Use for order status, tracking and where is my order\./,
@@ -289,10 +280,7 @@ test("the panel tells a drafted change: what it is worth, why, the change", () =
   const text = visibleText(
     render(createElement(FixDetail, { fix, actions: createElement("span") })),
   );
-  assert.match(
-    text,
-    /−1 failed call −6 model calls in all, over the window · 6 failures Early Seen 6 times in this window/,
-  );
+  assert.match(text, /50% of turns Today, before the fix Early Seen 6 times in this window/);
   assert.match(text, /The agent's first call to this tool often fails and the retry works/);
   assert.match(
     text,
@@ -458,6 +446,93 @@ test("a shipped fix reads Shipped with its version in the list and the panel, li
     "v2.5.0",
   );
   assert.equal(shippedFor(null, fix), null);
+});
+
+test("measured savings use the same plain text in the row and Panel", () => {
+  const measured = buildFixes(fixesInput({ drafts: measuredDrafts({ ms: 20_000 }) }));
+  const fix = findFix(measured.open, "craft:c-merge")!;
+  assert.equal(fix.effect?.value, "−10k tokens · −$0.40 · −20 s waiting per month");
+  const row = rows(table(page(measured), "tools"))[0]!;
+  const panel = render(createElement(FixDetail, { fix, actions: createElement("span") }));
+  for (const html of [row, panel]) {
+    assert.match(visibleText(html), /−10k tokens · −\$0.40 · −20 s waiting/);
+    assert.doesNotMatch(
+      html,
+      /data-effect-reading|lucide-arrow-down-right|lucide-timer|lucide-dollar-sign/,
+    );
+    assert.doesNotMatch(visibleText(html), /\d+ (?:→ \d+ )?calls|round-trips total/);
+  }
+});
+
+test("the summary renders supplied totals and task shares with task links", () => {
+  const task = model.open.find((fix) => fix.id === "craft:c-merge")!.subject.tasks[0]!;
+  const savings = {
+    total: {
+      windowDays: 30,
+      absolute: { tokens: 12_400, usd: 3.1, ms: 4_200 },
+      relative: { tokens: 0.2, usd: 0.25, ms: 0.3 },
+    },
+    tasks: [
+      {
+        task,
+        windowDays: 30,
+        absolute: { tokens: 1_000, usd: 1, ms: 1_000 },
+        relative: { tokens: 0.1, usd: 0.5, ms: 0.2 },
+      },
+      {
+        task: { ...task, id: "unknown", label: "Unknown usage" },
+        windowDays: 30,
+        absolute: { tokens: 200, usd: null, ms: null },
+        relative: { tokens: null, usd: null, ms: null },
+      },
+      {
+        task: { ...task, id: "zero", label: "Measured zero" },
+        windowDays: 30,
+        absolute: { tokens: 0, usd: 0, ms: 0 },
+        relative: { tokens: 0, usd: 0, ms: 0 },
+      },
+    ],
+  };
+  const html = page({ stats: { ...model.stats, savings } });
+  const summary = html.slice(
+    html.indexOf('aria-labelledby="fix-savings-heading"'),
+    html.indexOf('id="fixes-tools"'),
+  );
+  const text = visibleText(summary);
+  assert.match(text, /Tokens saved 12k tokens per month \(30 days\) · 20% of project usage/);
+  assert.match(text, /Cost saved \$3.10 per month \(30 days\) · 25% of project usage/);
+  assert.match(text, /Waiting saved 4.2 s per month \(30 days\) · 30% of project usage/);
+  assert.match(summary, /aria-expanded="false"/);
+  assert.match(text, /Hand a task over −1.0k tokens \(10%\) −\$1.00 \(50%\) −1 s \(20%\)/);
+  assert.match(html, new RegExp(`<a[^>]*href="${task.href}"[^>]*>Hand a task over</a>`));
+  assert.match(text, /Unknown usage −200 tokens Not measured Not measured/);
+  assert.match(text, /Measured zero 0 tokens \(0%\) \$0.00 \(0%\) 0 ms \(0%\)/);
+});
+
+test("the URL period scales row and Panel savings and caps excessive shares", () => {
+  const measured = buildFixes(
+    fixesInput({
+      drafts: measuredDrafts({ windowDays: 10 }),
+      taskUsage: new Map([["wf_assign", { windowDays: 30, tokens: 1_000, usd: 1, ms: 1_000 }]]),
+    }),
+  );
+  const fix = findFix(measured.open, "craft:c-merge")!;
+  for (const [period, text] of [
+    ["day", "−1.0k tokens · −$0.04 · −400 ms waiting per day"],
+    ["week", "−7.0k tokens · −$0.28 · −2.8 s waiting per week"],
+  ]) {
+    const html = page(measured, `period=${period}&task=wf_assign`);
+    assert.ok(visibleText(html).includes(text));
+    assert.ok(
+      visibleText(
+        render(
+          createElement(FixDetail, { fix, actions: createElement("span") }),
+          `period=${period}`,
+        ),
+      ).includes(text),
+    );
+    assert.match(visibleText(html), /100%\+/);
+  }
 });
 
 // Owned (ADR-0030): the eval gate on Fixes, behind FF_EVAL_GATE (the page passes no badges when it is off).

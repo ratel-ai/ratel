@@ -30,7 +30,8 @@ import { NO_PRICE } from "./crafter-types";
 import { type DraftFixInput, fixSeams, type RewriteRead } from "./seams";
 import { type IntentGapInput, type PublishedSkill, SKILL_GAP_MIN_TURNS } from "./skill-gaps";
 import { loadTopicInputs } from "./topics";
-import type { FixesModel, FixSource } from "./types";
+import type { FixesModel, FixSource, FixUsage } from "./types";
+import { loadTaskUsage, storedTaskUsage } from "./usage";
 
 /**
  * Fixes' reads: every source on its own, under a statement timeout, each degrading to "not
@@ -40,9 +41,10 @@ import type { FixesModel, FixSource } from "./types";
  *
  * Other pages call `loadFixes` and then pick theirs with `fixesForSubject`.
  *
- * Owned (ADR-0030): the issue and intent sources are read here; the tool crafter's drafts and
- * quality's rewrites arrive through `fixSeams` once those readings land. Unset, a seam
- * contributes nothing and is not a failed source.
+ * Owned (ADR-0030): the issue and intent sources and the task usage are read here; the tool
+ * crafter's drafts with their windows, quality's rewrites and the override adoption arrive
+ * through `fixSeams`, each in a read of its own. Unset, a seam contributes nothing and is not a
+ * failed source.
  */
 
 export interface LoadFixesDeps {
@@ -153,8 +155,8 @@ export async function loadFixes(input: {
 
   const summary = run ? parseRunSummary(run.summary) : null;
   const price = fixSeams.priceOf ? fixSeams.priceOf(summary?.daily ?? []) : NO_PRICE;
-  const { loadDrafts, loadRewrites } = fixSeams;
-  const [drafts, rewrites] = await Promise.all([
+  const { loadDrafts, loadDraftWindows, loadRewrites, loadOverrideAdoption } = fixSeams;
+  const [drafts, rewrites, overridesAdopted] = await Promise.all([
     loadDrafts
       ? read<DraftFixInput[] | null>("fixes_drafts", null, (db) =>
           loadDrafts(projectId, db, { names, price }),
@@ -163,6 +165,11 @@ export async function loadFixes(input: {
     rewritesOn && loadRewrites
       ? read<RewriteRead | null>("fixes_rewrites", null, (db) =>
           loadRewrites(projectId, organization, db, now),
+        )
+      : Promise.resolve(null),
+    rewritesOn && loadOverrideAdoption
+      ? read<boolean | null>("fixes_override_adoption", null, (db) =>
+          loadOverrideAdoption(projectId, db, now),
         )
       : Promise.resolve(null),
   ]);
@@ -179,12 +186,51 @@ export async function loadFixes(input: {
       ? evidenceSpanDays(summary.daily, run.windowEnd, run.windowDays) || run.windowDays
       : 30;
 
+  // Stored by the signal job; a run from before the stored totals is read live once more.
+  const taskUsage = !run
+    ? new Map<string, FixUsage>()
+    : (storedTaskUsage(summary?.workflows, run) ??
+      (await read(
+        "fixes_task_usage",
+        new Map<string, FixUsage>(),
+        (db) => loadTaskUsage(projectId, run, db),
+        supplementary,
+      )));
+  const draftRunIds = [...new Set((drafts ?? []).flatMap((draft) => draft.runId ?? []))];
+  const windowByRun =
+    loadDraftWindows && draftRunIds.length > 0
+      ? await read("fixes_draft_windows", new Map<string, number | null>(), (db) =>
+          loadDraftWindows(projectId, draftRunIds, db),
+        )
+      : new Map<string, number | null>();
+  // The stored task cost survives source-event retention and matches the task page.
+  for (const task of summary?.workflows?.items ?? []) {
+    const cost = task.reading?.version === 1 ? task.reading.cost : null;
+    if (
+      cost &&
+      cost.pricedRuns > 0 &&
+      cost.totalUsd !== null &&
+      Number.isFinite(cost.totalUsd) &&
+      cost.totalUsd >= 0
+    ) {
+      taskUsage.set(task.id, {
+        ...(taskUsage.get(task.id) ?? { tokens: null, ms: null }),
+        usd: cost.totalUsd,
+        windowDays: run ? (run.windowEnd.getTime() - run.windowStart.getTime()) / 86_400_000 : 30,
+      });
+    }
+  }
+
   return buildFixes({
     projectId,
     names,
     rewrites: rewritesOn ? (rewrites?.rewrites ?? []) : null,
     dismissedRewrites: rewrites?.dismissed ?? [],
-    drafts: drafts ?? [],
+    drafts: (drafts ?? []).map((draft) =>
+      draft.gain && draft.runId
+        ? { ...draft, gain: { ...draft.gain, windowDays: windowByRun.get(draft.runId) ?? null } }
+        : draft,
+    ),
     // The limits' cut, as on Agent health: the worst issues first, the rest not read.
     issues: issueInputs(
       (issueRows ?? []).slice(
@@ -196,11 +242,12 @@ export async function loadFixes(input: {
       labels,
     ),
     tasks: taskInputs(summary?.workflows, names, labels),
+    taskUsage,
     topics,
     intents: gaps?.intents ?? null,
     skills: gaps?.skills ?? [],
     intentWindowDays: TOPIC_WINDOW_DAYS,
-    overridesAdopted: rewrites?.overridesAdopted ?? null,
+    overridesAdopted,
     failed,
   });
 }

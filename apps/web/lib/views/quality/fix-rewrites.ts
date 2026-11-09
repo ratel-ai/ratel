@@ -12,9 +12,13 @@ import { fixSeams } from "@/lib/views/fixes/seams";
 import { toSuggestionRows } from "./suggestions";
 
 /**
- * Quality's rewrites as Fixes reads them. Loading this module fills the seam `loadFixes` reads,
- * so Fixes lists the pending and applied rewrites, the dismissals and the override adoption.
+ * Quality's rewrites as Fixes reads them. Loading this module fills the seams `loadFixes` reads,
+ * so Fixes lists the pending and applied rewrites and the dismissals (`loadRewrites`) and knows
+ * whether the overrides reach the agent (`loadOverrideAdoption`, a read of its own, as upstream).
  */
+
+fixSeams.loadOverrideAdoption = (projectId, db, now) =>
+  getRuntimeCatalogOverrideAdoption(projectId, db, now);
 
 /** Most of a rewrite's missed searches knew their right answer because the agent ran it, or a judge read them. */
 export function howWeKnow(evidence: unknown): RewriteInput["howWeKnow"] {
@@ -59,6 +63,5 @@ fixSeams.loadRewrites = async (projectId, _organization, db) => {
     dismissed: proposals
       .filter((proposal) => proposal.status === "dismissed")
       .map((proposal) => ({ toolId: proposal.entryId, at: proposal.updatedAt.toISOString() })),
-    overridesAdopted: await getRuntimeCatalogOverrideAdoption(projectId, db),
   };
 };

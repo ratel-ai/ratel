@@ -6,7 +6,7 @@
       "item": 1,
       "kind": "missing",
       "title": "Fixes has no savings (Cloud #323)",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 2,
@@ -96,7 +96,7 @@
       "item": 16,
       "kind": "wrong",
       "title": "A drafted fix whose replay came out worse is ranked last only if it is a rewrite",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 17,
@@ -138,7 +138,7 @@
       "item": 23,
       "kind": "wrong",
       "title": "Rewrites vanish from Fixes if the adoption read fails",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 24,

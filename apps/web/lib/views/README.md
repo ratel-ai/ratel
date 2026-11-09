@@ -38,7 +38,7 @@ part named below.
 
 | Seam | Filled by | Empty means |
 |---|---|---|
-| `fixes/seams.ts` `fixSeams.loadDrafts`, `.priceOf`, `.loadRewrites` | filled: the tool crafter's drafts and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` and `craftEffect` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites by `quality/fix-rewrites.ts` | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
+| `fixes/seams.ts` `fixSeams.loadDrafts`, `.loadDraftWindows`, `.priceOf`, `.loadRewrites`, `.loadOverrideAdoption` | filled: the tool crafter's drafts (each with its gain: the calls, tokens, cost and waiting it saves), the days of runs each crafter run measured and the round-trip price by `fixes/craft-drafts.ts` (upstream's `craftSeed` over `synthesis/tool-crafter`), which `fixes/load.ts` imports for its side effect; match quality's description rewrites and, in a read of its own, the override adoption by `quality/fix-rewrites.ts`. `fixes/load.ts` runs each in its own resilient read, so a failed window or adoption read costs a rate or a caveat, never the drafts or the rewrites | Fixes lists the issue and intent sources only; `rewritesOn` is false, nothing can be applied or dismissed, no per-run cost |
 | `fixes/seams.ts` `fixSeams.recordShipment` | filled: `task-evals/ship.ts` (upstream's gate-on branch of `createFixShipment`), loaded by the task-evals registration, the MCP loop tools and the simulations page: with `FF_EVAL_GATE` on, the shipment is marked live and its tasks queued for measuring, in one transaction; `createFixShipment`'s `deps` (upstream's) reach it | `createFixShipment` inserts one `fix_shipments` row; `fix_shipment_tasks` stays empty |
 | `eval-gate/seams.ts` `evalGateSeams.resolveChange` | filled: fix drafts' `resolveFixChange` by `fix-drafts/register.ts`, which `eval-gate/service.ts` and `page-model.ts` import for its side effect: a ready draft's change, or a queued draft ("being prepared"), or, with no model key, a refusal that says so | the gate simulates the change the fix itself carries; a rewrite with no ready text is refused as nothing to simulate |
 | `eval-gate/seams.ts` `evalGateSeams.spendSince` | fix drafts (filled by `fix-drafts/register.ts`), What-if (`session-replay/spend.ts`, loaded by its `register.ts` and `runs.ts`) and the task loop (`task-evals/spend.ts`, loaded by both task-loop registrations, `task-scorers/judge.ts` and `task-evals/simulation.ts`: the live judge's daily spend, task simulations and post-ship measures (running ones at what they hold), and drafted tests (held reservations too)): what each spent on models, so they share the one daily budget | the daily budget counts the eval gate's own runs |
@@ -68,6 +68,10 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   `craft-drafts.test.ts`), `fixes/test-fixtures.ts`, `fixes/build.test.ts`,
   `fixes/load.integration.test.ts`: drafted changes arrive as `DraftFixInput` through the seam;
   the build's craft cases run on `DraftFixInput` fixtures and the filler's on the crafter's cards.
+  Savings are upstream's (#323): `fixes/period.ts`, `fixes/usage.ts` and `fixes/select.ts` are
+  copies; the build tells a draft's gain as its effect ("−10k tokens · −$0.40 · −4 s waiting per
+  month") and ranks a draft whose replay came out worse last; the load reads each task's usage
+  (stored with the task's reading, else live) for the shares in Savings by task.
 - `fixes/schema.ts`, `lineage/schema.ts`, `eval-gate/schema.ts`, `fix-drafts/schema.ts`: hand-written partitions of the
   upstream schema hub, column for column, because production already has these tables.
   `fixes/loop-queries.ts`: a shipment is one inserted row, the rest is the `recordShipment` seam
@@ -130,7 +134,7 @@ Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream
 `adaptive-ranking/` holds the Adaptive ranking page's read models and the Boost reads.
 
 `quality/` holds the Quality pages' read models. `quality/fix-rewrites.ts` fills
-`fixSeams.loadRewrites` when `fixes/load.ts` loads it. `quality/report-href.ts` (owned, new) is
+`fixSeams.loadRewrites` and `fixSeams.loadOverrideAdoption` when `fixes/load.ts` loads it. `quality/report-href.ts` (owned, new) is
 the link to the printable Quality report, the sibling of `health/report-href.ts`; the
 calibration detail offers it, where upstream reaches the report from its admin console.
 

@@ -4,7 +4,15 @@ import type { StoredTopicPattern } from "@/lib/readings/topics/types";
 import { buildFixes } from "./build";
 import { filterFixes, findFix, fixesForSubject } from "./select";
 import type { IntentGapInput } from "./skill-gaps";
-import { CRAFTS, craft, fixesInput, ISSUES, issue, REWRITES } from "./test-fixtures";
+import {
+  CRAFTS,
+  craft,
+  fixesInput,
+  ISSUES,
+  issue,
+  measuredDrafts,
+  REWRITES,
+} from "./test-fixtures";
 
 /**
  * Owned (ADR-0030): the drafted changes are `DraftFixInput`s (what the tool crafter's seam
@@ -217,35 +225,76 @@ test("each fix knows what you do with it, and a short title that leaves the name
   }
 });
 
-test("the expected effect comes from the source's own measurement", () => {
-  const rewrite = byTitle("Rewrite lookup_order's searchable description");
-  assert.deepEqual(rewrite.effect, {
-    value: "+40 pts found",
-    figure: "+40 pts",
-    unit: "found",
-    detail: "3 → 5 of 5 searches",
-    tone: "good",
-    basis: "replay",
-    also: [],
+test("a fix carries measured window savings and keeps missing metrics null", () => {
+  const measured = buildFixes(fixesInput({ drafts: measuredDrafts() })).open.find(
+    (fix) => fix.id === "craft:c-merge",
+  )!;
+  assert.deepEqual(measured.gain, {
+    windowDays: 30,
+    roundTrips: 40,
+    calls: 40,
+    tokens: 10_000,
+    usd: 0.4,
+    ms: 4_000,
   });
-  // A draft's effect is what its filler measured, carried as is.
-  const merge = byTitle("Merge find_task and assign_task");
-  assert.equal(merge.effect?.value, "2 → 1 calls");
-  assert.deepEqual([merge.effect?.figure, merge.effect?.unit], ["2 → 1", "calls"]);
-  assert.equal(merge.effect?.detail, "−40 model calls in all, over the window · 40 times together");
-  assert.equal(merge.effect?.basis, "runs");
-  assert.deepEqual(merge.gain, {
-    windowDays: null,
+  assert.deepEqual(byTitle("Merge find_task and assign_task").gain, {
+    windowDays: 30,
     roundTrips: 40,
     calls: 40,
     tokens: null,
     usd: null,
-    ms: 0,
+    ms: null,
   });
-  assert.equal(byTitle("Retire legacy_export").effect?.value, "−1 tool per list");
-  assert.equal(byTitle("Tighten flaky_api's input schema").effect?.value, "−1 failed call");
-  // An issue states what it costs, not what fixing it would save.
-  assert.equal(byTitle("Make notify fail clearly").effect, null);
+});
+
+test("the effect lists only measured tokens, cost and waiting over the window", () => {
+  const measured = buildFixes(fixesInput({ drafts: measuredDrafts() })).open.find(
+    (fix) => fix.id === "craft:c-merge",
+  )!;
+  assert.deepEqual(measured.effect, {
+    value: "−10k tokens · −$0.40 · −4 s waiting per month",
+    figure: "−10k tokens · −$0.40 · −4 s waiting per month",
+    unit: "",
+    detail: null,
+    tone: "good",
+    basis: "runs",
+    also: [],
+  });
+  // Nothing in the unpriced project measures tokens, cost or waiting: a replay of past searches
+  // and an issue's own figure are not savings.
+  for (const fix of model.open) assert.equal(fix.effect, null, fix.id);
+  const tokensOnly = buildFixes(
+    fixesInput({ drafts: measuredDrafts({ tokens: 4_000, usd: null, ms: null }) }),
+  ).open.find((fix) => fix.id === "craft:c-merge")!;
+  assert.equal(tokensOnly.effect?.value, "−4.0k tokens per month");
+});
+
+test("a measured fix states its default monthly period and carries its source window", () => {
+  const built = buildFixes(fixesInput({ drafts: measuredDrafts({ windowDays: 10 }) }));
+  const fix = built.open.find((candidate) => candidate.id === "craft:c-merge")!;
+  assert.equal(fix.gain?.windowDays, 10);
+  assert.equal(fix.effect?.value, "−30k tokens · −$1.20 · −12 s waiting per month");
+});
+
+test("a drafted change whose replay came out worse ranks last, whatever it measured", () => {
+  const worse = (id: string, kind: "merge_tools" | "fold_prerequisite" | "compose_chain") =>
+    craft(id, kind, ["notify", "lookup_order"], {
+      gain: { windowDays: 30, roundTrips: 90, calls: 90, tokens: 50_000, usd: 2, ms: 9_000 },
+      evidence: { strength: "strong", label: "Strong", detail: "Seen 90 times in this window" },
+      measured: true,
+      worse: true,
+      score: 90,
+    });
+  for (const kind of ["merge_tools", "fold_prerequisite", "compose_chain"] as const) {
+    const built = buildFixes(fixesInput({ drafts: [...CRAFTS, worse("c-worse", kind)] }));
+    assert.equal(built.open.at(-1)?.id, "craft:c-worse", kind);
+    assert.equal(built.open.at(-1)?.rank.tier, 4, kind);
+    // The same draft with a replay that did not come out worse leads the list.
+    const fine = buildFixes(
+      fixesInput({ drafts: [...CRAFTS, { ...worse("c-worse", kind), worse: false }] }),
+    );
+    assert.equal(fine.open[0]?.id, "craft:c-worse", kind);
+  }
 });
 
 test("evidence strength reads from how often the problem was seen", () => {
@@ -276,9 +325,9 @@ test("applied rewrites stay listed apart, ready to revert", () => {
 });
 
 test("the numbers over the list, summed only where it is honest", () => {
-  // The savings land with fixes savings: this edition's sources measure no tokens or cost.
-  const { savings: _savings, ...stats } = model.stats;
-  assert.deepEqual(stats, {
+  const { savings, ...counts } = model.stats;
+  assert.deepEqual(savings.total.absolute, { tokens: null, usd: null, ms: null });
+  assert.deepEqual(counts, {
     open: 8,
     ready: 1,
     fromIssues: 8,
