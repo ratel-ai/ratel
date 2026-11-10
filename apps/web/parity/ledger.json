@@ -102,7 +102,7 @@
       "item": 17,
       "kind": "wrong",
       "title": "Any source id ending in -import counts as an import",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 18,

@@ -62,6 +62,16 @@ export type ImportedRunsPort = {
   enqueueJob(projectId: string, kind: string, payload: unknown): Promise<{ id: string }>;
   /** Run the project's queued jobs after the response, where this process runs jobs. */
   scheduleDrain(projectId: string): void;
+  /**
+   * Name the source ids the importer stores its runs under (the `service.name` of its spans),
+   * as exact strings, from `connect`. A turn under one of them is history read once: it closes
+   * as soon as it is built, and Agent health counts it as imported. The core knows the ids it
+   * can name; any other id is live telemetry until an importer registers it, whatever it ends
+   * in. Optional in the type so an edition's stand-ins keep compiling; the core always supplies
+   * it. ratel-platform's importer registers its ids from `connect` (all four, so it does not
+   * depend on which ones the core can name).
+   */
+  registerSourceIds?(ids: readonly string[]): void;
 };
 
 /** One import as the Agent health page reads it (Cloud's `ImportSummary`). */

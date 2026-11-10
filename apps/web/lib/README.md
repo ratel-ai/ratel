@@ -35,7 +35,8 @@ the counting edition now does both behind the entitlements port. `incrementEvent
 upstream name and signature.
 
 In `ledger/` the owned files are `constants.ts` (`TURN_EVENT_TYPES` has one source, the
-ingest kick; imported sources are recognised by suffix, not an enumerated vendor list),
+ingest kick; the imported source ids are an exact set, upstream's less the one that names a
+vendor, and an importer registers its own through the imported-runs port),
 `hash.ts` (`queryKey` inlined from the match-quality labels), `same-ask.ts` (a comment),
 `turns/queries.ts` and `turns/build-job.ts` (no retired feature-flag gate; the run-trigger
 vocabulary lives in `run-trigger.ts`; the two seams into the signal runs, `enqueueReading`

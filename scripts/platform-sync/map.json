@@ -208,7 +208,7 @@
 
     {"$slice": 7, "from": "apps/web/lib/trace-events/maintenance.ts", "to": "apps/web/lib/ingest/trace-events/maintenance.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/types.ts", "to": "apps/web/lib/ledger/types.ts", "mode": "copy"},
-    {"from": "apps/web/lib/trace-signals/constants.ts", "to": "apps/web/lib/ledger/constants.ts", "mode": "owned", "$why": "TURN_EVENT_TYPES has one source, the ingest kick; the import source list named a Cloud vendor"},
+    {"from": "apps/web/lib/trace-signals/constants.ts", "to": "apps/web/lib/ledger/constants.ts", "mode": "owned", "$why": "TURN_EVENT_TYPES has one source, the ingest kick; the import source set leaves out the id that names a Cloud vendor, and an importer registers its ids through the imported-runs port"},
     {"from": "apps/web/lib/trace-signals/hash.ts", "to": "apps/web/lib/ledger/hash.ts", "mode": "owned", "$why": "queryKey inlined: match-quality is L4"},
     {"from": "apps/web/lib/trace-signals/hash.test.ts", "to": "apps/web/lib/ledger/hash.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/same-ask.ts", "to": "apps/web/lib/ledger/same-ask.ts", "mode": "owned", "$why": "a comment named a confidential word"},
@@ -578,7 +578,7 @@
     {"from": "apps/web/lib/trace-signals/issue-examples.integration.test.ts", "to": "apps/web/lib/views/health/issue-examples.integration.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/ledger-facts.ts", "to": "apps/web/lib/views/health/ledger-facts.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/ledger-facts.test.ts", "to": "apps/web/lib/views/health/ledger-facts.test.ts", "mode": "copy"},
-    {"from": "apps/web/lib/trace-signals/ledger-facts-query.ts", "to": "apps/web/lib/views/health/ledger-facts-query.ts", "mode": "owned", "$why": "imported turns are found by the ledger's source suffix, not upstream's vendor list"},
+    {"from": "apps/web/lib/trace-signals/ledger-facts-query.ts", "to": "apps/web/lib/views/health/ledger-facts-query.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/ledger-facts-query.integration.test.ts", "to": "apps/web/lib/views/health/ledger-facts-query.integration.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/evidence.ts", "to": "apps/web/lib/views/health/evidence.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/source-mode.ts", "to": "apps/web/lib/views/health/source-mode.ts", "mode": "copy"},
