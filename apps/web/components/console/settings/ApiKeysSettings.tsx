@@ -1,12 +1,17 @@
 import { PageBody } from "@ratel/design-system/page-header";
 import { type ApiKeySummary, toApiKeySummary } from "@/lib/platform/api-key-actions";
+import { apiUrl } from "@/lib/platform/app-config";
 import { listApiKeysForProject } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { ApiKeysTable } from "./ApiKeysTable";
 import { LoadError } from "./LoadError";
 import { requireProjectScope } from "./project-scope";
+import { SdkQuickstart } from "./SdkQuickstart";
 
-/** Settings > API keys: the keys. A key list that fails to load becomes a retry in its place. */
+/**
+ * Settings > API keys: the keys, then how to use one. A key list
+ * that fails to load becomes a retry in its place; the quickstart still shows.
+ */
 export async function ApiKeysSettings({ projectId }: { projectId: string }) {
   const { project, organization } = await requireProjectScope(projectId);
   const now = new Date();
@@ -30,6 +35,7 @@ export async function ApiKeysSettings({ projectId }: { projectId: string }) {
       ) : (
         <LoadError what="API keys" />
       )}
+      <SdkQuickstart endpoint={apiUrl("/traces")} serviceName={project.slug} />
     </PageBody>
   );
 }

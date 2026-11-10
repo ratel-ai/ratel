@@ -2,7 +2,7 @@ import { ContextBreakdown } from "@/components/console/home/ContextBreakdown";
 import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { OverviewView } from "@/components/console/home/OverviewView";
 import { SetupGuide } from "@/components/console/home/SetupGuide";
-import { publicUrl } from "@/lib/platform/public-url";
+import { apiUrl } from "@/lib/platform/app-config";
 import { loadOverview, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
 
@@ -31,11 +31,7 @@ export async function OverviewPage({
       data={data}
       now={now}
       setup={
-        <SetupGuide
-          root={data.root}
-          endpoint={publicUrl("/v1/traces")}
-          serviceName={project.slug}
-        />
+        <SetupGuide root={data.root} endpoint={apiUrl("/traces")} serviceName={project.slug} />
       }
       contextPanel={
         <ContextPanel subtitle={`Tokens sent to the model, last ${window} days`}>

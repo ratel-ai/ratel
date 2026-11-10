@@ -36,7 +36,7 @@
       "item": 6,
       "kind": "missing",
       "title": "Settings › API keys has no \"Send a trace\" quickstart",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 7,
@@ -90,7 +90,7 @@
       "item": 15,
       "kind": "wrong",
       "title": "The catalog's \"Register tools with the SDK\" snippet no longer connects to the platform",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 16,
@@ -126,13 +126,13 @@
       "item": 21,
       "kind": "wrong",
       "title": "Project home builds its ingest address from a variable this edition never documents",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 22,
       "kind": "wrong",
       "title": "The capture nudge shows a diff against a snippet this edition no longer hands out",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 23,

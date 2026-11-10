@@ -1,14 +1,14 @@
 /**
- * The "send your first trace" snippets, in one place so every surface that asks
- * hands out the same wiring. Pure string builders — no React, no env reads — so
- * the snippets we ship are unit-testable (see quickstart.test.ts).
+ * The "send your first trace" snippets, in one place so the dashboard empty
+ * state, the onboarding key reveal, and Settings all hand out the same wiring.
+ * Pure string builders — no React, no env reads — so the snippets we ship are
+ * unit-testable (see quickstart.test.ts).
  *
- * TypeScript is the SDK path: a stock OpenTelemetry `NodeSDK` with the OTLP
- * exporter pointed at this deployment's traces endpoint and the project key as
- * a bearer header. Upstream wires its Cloud SDK's span processor here; this
- * edition's ingest accepts any OTLP exporter, so nothing beyond the OpenTelemetry
- * packages is installed. There is deliberately no Python tab: the OTel wiring is
- * the same in every language, and curl shows the request itself.
+ * TypeScript is the SDK path: `@ratel-ai/cloud-sdk/otel` exposes
+ * `RatelSpanProcessor`, a filtered batch processor you compose onto a provider
+ * *you* own, so an existing exporter (Langfuse, a vendor OTLP endpoint) keeps
+ * working. It is the only language the cloud SDK ships — there is deliberately
+ * no Python tab, because there is no Python cloud SDK to point it at.
  *
  * curl is the second tab: it needs nothing installed, which is what you want
  * when the question is "is my key even working?", and it's the honest answer
@@ -52,9 +52,9 @@ export interface QuickstartTarget {
 }
 
 /**
- * The OTel GenAI content-capture switch. The exporter forwards whatever the
- * spans carry, so the snippet flips the ecosystem gate the Ratel SDK and other
- * GenAI instrumentations read.
+ * The OTel GenAI content-capture switch. `RatelSpanProcessor` has no capture
+ * option of its own (it forwards whatever the spans carry), so the snippet
+ * flips the ecosystem gate the Ratel SDK and other GenAI instrumentations read.
  */
 export const QUICKSTART_CAPTURE_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT";
 
@@ -100,30 +100,25 @@ function typescriptSnippet({
   return {
     lang: "typescript",
     install:
-      "npm install @opentelemetry/api @opentelemetry/sdk-node " +
-      "@opentelemetry/exporter-trace-otlp-proto",
+      "npm install @ratel-ai/cloud-sdk @opentelemetry/api @opentelemetry/sdk-node " +
+      "@opentelemetry/sdk-trace-base @opentelemetry/exporter-trace-otlp-proto",
     code: [
       'import { NodeSDK } from "@opentelemetry/sdk-node";',
-      // The import is split so the package name stays inside the snippet box's
-      // width; a single line soft-wraps on narrow panels.
-      "import {",
-      "  OTLPTraceExporter,",
-      '} from "@opentelemetry/exporter-trace-otlp-proto";',
+      'import { RatelSpanProcessor } from "@ratel-ai/cloud-sdk/otel";',
       "",
       ...(captureContent ? CAPTURE_LINES : []),
       "const sdk = new NodeSDK({",
       `  serviceName: ${quoted(serviceName)},`,
-      `  // Reads ${QUICKSTART_KEY_ENV}. Sends your spans to Ratel; the gen_ai.*`,
-      "  // and ratel.* ones are what the pages read.",
+      "  spanProcessors: [",
+      `    // Reads ${QUICKSTART_KEY_ENV}. Forwards gen_ai.* / ratel.* spans to`,
+      "    // Ratel; any exporter you already run is left untouched.",
       // Broken across lines rather than inlined: the endpoint is long enough on
       // a real deployment that a single line soft-wraps in the snippet box,
       // leaving an unindented `}),` hanging at the left margin.
-      "  traceExporter: new OTLPTraceExporter({",
-      `    url: ${quoted(endpoint)},`,
-      "    headers: {",
-      `      Authorization: \`Bearer \${process.env.${QUICKSTART_KEY_ENV}}\`,`,
-      "    },",
-      "  }),",
+      "    new RatelSpanProcessor({",
+      `      endpoint: ${quoted(endpoint)},`,
+      "    }),",
+      "  ],",
       "});",
       "",
       "sdk.start();",

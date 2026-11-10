@@ -157,6 +157,34 @@
       "part": "^list_fixes",
       "pattern": "^data\\.fixes\\[.*\\]\\.evidence\\.detail = \"Seen \\d+ times in this window\"$",
       "why": "Readings: tool-craft proposals differ only through the project id, as topics do (the audit confirmed it)."
+    },
+    {
+      "check": "pages",
+      "part": "catalog-tools$",
+      "side": "cloud",
+      "pattern": "^ratelCloud\\.attach\\(runtime, \\{ useCloudDefinitions: true \\}\\); // Reads RATEL_API_KEY\\.$",
+      "why": "This deployment's own address (natural difference 7): a self-hosted deployment names its own address in the catalog snippet's attach call, where Cloud's SDK default is Cloud. The same rule as the parity tests' base-url rule (apps/web/parity/normalise.ts)."
+    },
+    {
+      "check": "pages",
+      "part": "catalog-tools$",
+      "side": "here",
+      "pattern": "^ratelCloud\\.attach\\(runtime, \\{ baseUrl: \"https?://[^\"]+/api/v1\", useCloudDefinitions: true \\}\\); // Reads RATEL_API_KEY\\.$",
+      "why": "This deployment's own address (natural difference 7): a self-hosted deployment names its own address in the catalog snippet's attach call, where Cloud's SDK default is Cloud. The same rule as the parity tests' base-url rule (apps/web/parity/normalise.ts)."
+    },
+    {
+      "check": "pages",
+      "part": "settings-api-keys$",
+      "side": "cloud",
+      "pattern": "^endpoint: \"https?://[^\"/]+/v1/traces\",$",
+      "why": "This deployment's own address (natural difference 7): a self-hosted deployment names its own address, and its ingest route is under /api/v1 where Cloud's quickstart names /v1. The same rule as the parity tests' base-url rule (apps/web/parity/normalise.ts)."
+    },
+    {
+      "check": "pages",
+      "part": "settings-api-keys$",
+      "side": "here",
+      "pattern": "^endpoint: \"https?://[^\"/]+/api/v1/traces\",$",
+      "why": "This deployment's own address (natural difference 7): a self-hosted deployment names its own address, and its ingest route is under /api/v1 where Cloud's quickstart names /v1. The same rule as the parity tests' base-url rule (apps/web/parity/normalise.ts)."
     }
   ],
   "audit": [
@@ -204,22 +232,6 @@
       "side": "here",
       "pattern": "^(Model calls saved|[\\d.,]+|If you make every measured fix|Better:|\\d+ → \\d+|calls?|Model calls: .*|Waiting: .*|Cost: .*|Tokens: .*|[−+]\\d+( pts)?|tools? per list|found|failed calls?)$",
       "what": "Fixes has no savings: the page shows the older stat and effects"
-    },
-    {
-      "item": 6,
-      "check": "pages",
-      "part": "settings-api-keys$",
-      "side": "cloud",
-      "pattern": "^(?!site-copilot-seed\\t).+",
-      "what": "Settings › API keys has no \"Send a trace\" quickstart"
-    },
-    {
-      "item": 15,
-      "check": "pages",
-      "part": "catalog-tools$",
-      "side": "cloud",
-      "pattern": "^(import \\* as ratelCloud from |ratelCloud\\.attach\\()",
-      "what": "the catalog snippet no longer connects to the platform"
     }
   ],
   "flagWording": {
