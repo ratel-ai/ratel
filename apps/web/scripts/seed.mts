@@ -23,8 +23,7 @@
  *                      30-minute idle window passes (set TRACE_TURNS_IDLE_CLOSE_MS=1000 for one
  *                      more tick to close them, so 4 ticks read everything)
  *
- * Also stores one capability search per topic-opening turn, which is what Test a search offers
- * as real prompts. Writes through the traces route handler in-process, so `events`,
+ * Writes through the traces route handler in-process, so `events`,
  * `trace_events` and `otel_spans` get exactly the rows live ingest writes, and the
  * turn-ledger build is enqueued the way the route enqueues it. Idempotent: the project
  * is deleted (with everything it owns) and created again under the same id before

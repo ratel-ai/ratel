@@ -39,7 +39,12 @@ test("the Site Copilot seed creates the sample project with its key, catalog, te
   assert.equal(await n(apiKeys), 1, "the seed's own key");
   assert.ok((await n(runtimeCatalogEntries)) > 0, "the catalog");
   assert.ok((await n(events)) > 0, "the spans landed as events");
-  assert.ok((await n(traceEvents)) >= seeded.searchEvents, "the searches");
+  assert.ok((await n(traceEvents)) > 0, "the spans' tool and model calls landed as trace events");
+  const [searches] = await db
+    .select({ n: count() })
+    .from(traceEvents)
+    .where(eq(traceEvents.type, "search"));
+  assert.equal(searches?.n, 0, "only what the spans produce: no search events of the seed's own");
   assert.ok((await n(jobs)) >= 1, "the ledger build is queued, not run");
 
   const again = await seedSiteCopilot({ organizationId: ORG, turns: 12, seed: 7 }, db);

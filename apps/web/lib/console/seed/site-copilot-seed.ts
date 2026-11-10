@@ -6,12 +6,10 @@ import {
   SITE_COPILOT_SEED,
   SITE_COPILOT_TURNS,
 } from "@/lib/console/seed/site-copilot-plan";
-import { siteCopilotSearchEvents } from "@/lib/console/seed/site-copilot-searches";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
-import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
@@ -28,9 +26,9 @@ import { enqueueFoldIntentGraphJob } from "@/lib/readings/intent-graph/queries";
 /**
  * Seed "Site Copilot" into an organization: a general contractor's field assistant, sent the
  * way an agent that exports OpenTelemetry with content capture on sends it (the traces route
- * handler in-process, GenAI semantic conventions, API-key auth), plus the capability searches
- * an agent on the SDK reports, which the spans alone do not produce. The scenario is described
- * in `site-copilot-plan.ts` and `site-copilot-turns.ts`.
+ * handler in-process, GenAI semantic conventions, API-key auth), and nothing else: the same
+ * history upstream's seed sends. The scenario is described in `site-copilot-plan.ts` and
+ * `site-copilot-turns.ts`.
  *
  * Idempotent: the project is deleted (with everything it owns) and created again under the
  * same id before anything is sent. Nothing is drained here: the ledger build is enqueued the
@@ -63,7 +61,6 @@ export interface SeededSiteCopilot {
   skills: number;
   traces: number;
   spans: number;
-  searchEvents: number;
   /** The plan and what was rendered, for a report. */
   plan: ReturnType<typeof planSiteCopilot>;
   rendered: ReturnType<typeof renderSiteCopilotOtlp>;
@@ -151,16 +148,6 @@ export async function seedSiteCopilot(
       accepted[key] = (accepted[key] ?? 0) + n;
     }
   }
-  // The searches an agent on the SDK reports, which the spans alone do not produce.
-  const searches = parseTraceEvents(siteCopilotSearchEvents(plan, { anchorMs }));
-  if (searches.rejected.length > 0)
-    throw new Error(`${searches.rejected.length} search events rejected`);
-  await insertTraceEvents(
-    project.id,
-    searches.valid.map((event) => ({ ...event, ingestSource: "runtime" as const })),
-    db,
-  );
-
   // The page's "read now": a build that, once caught up, enqueues the signal run.
   await enqueueBuildTraceTurnsJob(project.id, db, { reading: "manual" });
   return {
@@ -171,7 +158,6 @@ export async function seedSiteCopilot(
     skills: catalog.filter((entry) => entry.kind === "skill").length,
     traces: rendered.stats.traces,
     spans: rendered.stats.spans,
-    searchEvents: searches.valid.length,
     plan,
     rendered,
   };

@@ -56,9 +56,6 @@ Five things to know:
 - **The collected output stays outside the repository** (`PARITY_WORK`, default
   `/private/tmp/ratel-parity`). It contains Cloud's output, which `pnpm check:private` would
   refuse, and that check also walks git-ignored folders.
-- **The seed's extra events are counted, then removed.** This edition's seed stores SDK search
-  events Cloud's does not (audit item 12). They are reported, then deleted before the drain, so
-  the readings are compared on the same history.
 - **Cloud is set up to be comparable.** Its local organization is put on the enterprise plan,
   whose limits are this edition's. Its flags are switched off and on by their environment names
   (`FF_CLOUD_…`), because they default to on in local development. Its first visit provisions a
