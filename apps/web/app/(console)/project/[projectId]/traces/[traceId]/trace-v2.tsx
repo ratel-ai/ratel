@@ -82,8 +82,7 @@ export async function TracePageV2({
       compareHref={`${tracesPath}${searchFromParams({ ...listParams, peek: undefined, project: undefined, compare: id })}`}
       initialTab={requestedTab && TABS.has(requestedTab) ? (requestedTab as TraceTab) : "timeline"}
       initialSpanId={firstParam(span) ?? null}
-      // No runtime-events page in this build.
-      runtimeEventsRoot={null}
+      runtimeEventsRoot={`/project/${encodeURIComponent(project.id)}/runtime-events`}
     />
   );
 }

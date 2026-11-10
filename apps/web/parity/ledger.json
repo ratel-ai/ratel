@@ -54,7 +54,7 @@
       "item": 9,
       "kind": "missing",
       "title": "Two cross-links are switched off by stale comments",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 10,
@@ -66,7 +66,7 @@
       "item": 11,
       "kind": "missing",
       "title": "The Tasks page's freshness ignores score_tasks",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 12,
@@ -114,13 +114,13 @@
       "item": 19,
       "kind": "wrong",
       "title": "Two redirects go elsewhere",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 20,
       "kind": "wrong",
       "title": "Project pages answer 404 without a database",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 21,
@@ -144,31 +144,31 @@
       "item": 24,
       "kind": "wrong",
       "title": "Two routes match the project id case-sensitively",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 25,
       "kind": "cosmetic",
       "title": "Root metadata is reduced",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 26,
       "kind": "cosmetic",
       "title": "Two drain heartbeat keys lost their Cloud names",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 27,
       "kind": "cosmetic",
       "title": "Five jobs lost their project log context",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 28,
       "kind": "cosmetic",
       "title": "The playground heading says \"Test a search\"",
-      "status": "open"
+      "status": "fixed"
     }
   ]
 }

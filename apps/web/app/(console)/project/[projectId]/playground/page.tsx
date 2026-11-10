@@ -17,7 +17,7 @@ import { embeddingsConfigured } from "@/lib/synthesis/playground/embed";
 import { loadSuggestedPrompts, type SuggestedPrompt } from "@/lib/synthesis/playground/prompts";
 import { getSelectionDetail } from "@/lib/synthesis/traces/experiment-calibration-queries";
 
-export const metadata = { title: "Test a search" };
+export const metadata = { title: "Playground" };
 
 type SearchParams = {
   q?: string | string[];

@@ -1,4 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import { runIntentEngine } from "./job";
 import { enqueueDueIntentEngineRuns, expireIntentEngineClusters } from "./jobs";
 
@@ -9,8 +10,10 @@ import { enqueueDueIntentEngineRuns, expireIntentEngineClusters } from "./jobs";
  * retention. The step results keep upstream's heartbeat keys.
  */
 export const intentEngineRegistration: Registration = {
+  // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    cluster_intents: (job) => runIntentEngine(job.projectId),
+    cluster_intents: (job) =>
+      withProjectLogContext(job.projectId, () => runIntentEngine(job.projectId)),
   },
   drainSteps: [
     {

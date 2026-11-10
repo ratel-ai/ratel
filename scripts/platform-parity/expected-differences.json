@@ -189,12 +189,6 @@
       "what": "the sidebar's freshness line is missing"
     },
     {
-      "item": 25,
-      "check": "pages",
-      "pattern": "^TITLE ",
-      "what": "root metadata is reduced: page titles carry no product name"
-    },
-    {
       "item": 5,
       "check": "pages",
       "part": "overview$",
@@ -233,13 +227,6 @@
       "side": "cloud",
       "pattern": "^(import \\* as ratelCloud from |ratelCloud\\.attach\\()",
       "what": "the catalog snippet no longer connects to the platform"
-    },
-    {
-      "item": 28,
-      "check": "pages",
-      "part": "playground$",
-      "pattern": "^(Playground|Test a search)$",
-      "what": "the playground heading says \"Test a search\""
     }
   ],
   "flagWording": {

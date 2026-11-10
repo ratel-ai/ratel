@@ -1,13 +1,17 @@
-import { redirect } from "next/navigation";
-import { dashboardHref } from "@/lib/console/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import { legacyRouteHref } from "@/lib/console/scope/legacy-route";
+import type { RouteSearchParams } from "@/lib/console/scope/sentinel";
 import { getConsoleScope } from "@/lib/console/shell-data";
 
 export const dynamic = "force-dynamic";
 
-/**
- * `/dashboard`. Owned (ADR-0030): upstream's proxy redirects it; here the route does,
- * to the session organization's first project. Temporary, since the target follows the session.
- */
-export default async function DashboardPage() {
-  redirect(dashboardHref((await getConsoleScope())?.projects ?? []));
+/** `/dashboard`. Owned (ADR-0030): upstream's proxy redirects it; here the route does. */
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<RouteSearchParams>;
+}) {
+  const href = await legacyRouteHref("/dashboard", await searchParams, await getConsoleScope());
+  if (!href) notFound();
+  permanentRedirect(href);
 }

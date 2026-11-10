@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { anthropicUsage, recordModelCall, setModelCallSink, trackModelCall } from "./model-call";
+import { withProjectLogContext } from "./project-log-context";
 
 const META = { provider: "anthropic", model: "claude-haiku-5-5", feature: "eval_gate_judge" };
 
@@ -82,6 +83,43 @@ test("a failed call is a line with the error's class and no tokens; a refusal ca
         ["refused_budget", undefined, 3, null],
       ],
     );
+  } finally {
+    restore();
+  }
+});
+
+test("withProjectLogContext names the project and its organization for the work inside", async () => {
+  const { lines, restore } = capture();
+  try {
+    const result = await withProjectLogContext(
+      "project-9",
+      async () => {
+        recordModelCall({ ...META, outcome: "ok", durationMs: 1 });
+        return "done";
+      },
+      async () => ({ org_id: "org-9", org_slug: "acme", project_path: "acme/default" }),
+    );
+
+    assert.equal(result, "done");
+    assert.equal(lines[0]?.fields.organization_id, "org-9");
+    assert.equal(lines[0]?.fields.project_id, "project-9");
+  } finally {
+    restore();
+  }
+});
+
+test("withProjectLogContext still runs the work when the organization can't be found", async () => {
+  const { lines, restore } = capture();
+  try {
+    await withProjectLogContext(
+      "project-9",
+      async () => recordModelCall({ ...META, outcome: "ok", durationMs: 1 }),
+      async () => {
+        throw new Error("db down");
+      },
+    );
+    assert.equal(lines[0]?.fields.project_id, "project-9");
+    assert.equal(lines[0]?.fields.organization_id, null);
   } finally {
     restore();
   }

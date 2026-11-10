@@ -1,6 +1,7 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { ledgerSeams } from "@/lib/ledger/turns/build-job";
+import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import {
   computeProjectTraceSignals,
   enqueueFirstSignalRun,
@@ -64,7 +65,9 @@ export const traceSignalsRegistration: Registration = {
   jobs: {
     compute_trace_signals: (job) =>
       computeProjectTraceSignals(job.projectId, parseComputePayload(job.payload)),
-    label_workflows: (job) => labelProjectWorkflows(job.projectId),
+    // In the project's log context, so `model_call` lines carry the project and organization.
+    label_workflows: (job) =>
+      withProjectLogContext(job.projectId, () => labelProjectWorkflows(job.projectId)),
   },
   drainSteps: [sweepStep()],
 };

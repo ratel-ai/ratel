@@ -1,8 +1,7 @@
-import { findProject } from "@/lib/console/navigation";
+import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
-import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
 import { reportServerException } from "@/lib/platform/telemetry";
@@ -31,11 +30,8 @@ async function handleGet(
       session ? { userId: session.user.id, externalId: session.user.externalId } : null,
     // One organization per session: the project must be one of its projects.
     findProject: async (projectId) => {
-      if (!session) return null;
-      const projects = await listProjectsForOrganization(session.organization.id);
-      return findProject(projects, projectId)
-        ? { projectId, organizationId: session.organization.id }
-        : null;
+      const scope = await findProjectScope(projectId);
+      return scope ? { projectId: scope.project.id, organizationId: scope.organization.id } : null;
     },
     loadSpans: (projectId, traceId) =>
       withStatementTimeout((db) => getTraceSpansWithTruncation(projectId, traceId, db), {

@@ -5,7 +5,6 @@ import {
   activeNavItemId,
   commandEntries,
   consoleNav,
-  dashboardHref,
   entryHref,
   findProject,
   ONBOARDING_ROUTE,
@@ -293,11 +292,6 @@ test("the entry goes to the first project, else to onboarding, else nowhere", ()
   assert.equal(entryHref([], "acme"), ONBOARDING_ROUTE);
   assert.equal(ONBOARDING_ROUTE, "/onboarding");
   assert.equal(entryHref([], undefined), null);
-});
-
-test("/dashboard opens the first project's dashboards, else the console entry", () => {
-  assert.equal(dashboardHref(PROJECTS), `/project/${P1}/dashboards`);
-  assert.equal(dashboardHref([]), "/");
 });
 
 test("the command menu lists the rail's destinations, then every project", () => {

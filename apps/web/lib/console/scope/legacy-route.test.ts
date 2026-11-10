@@ -30,6 +30,17 @@ test("an unknown or missing project slug leaves the sentinel to pick the project
   assert.equal(await legacyRouteHref("/traces", {}, null), "/project/_/traces");
 });
 
+test("/dashboard follows the same rule: the named project's context peek, else the sentinel with the query kept", async () => {
+  assert.equal(
+    await legacyRouteHref("/dashboard", { project: "acme", range: "7d" }, scope),
+    `/project/${PROJECT}?peek=context`,
+  );
+  assert.equal(
+    await legacyRouteHref("/dashboard", { project: "ghost", range: "7d" }, scope),
+    "/project/_/dashboards?range=7d",
+  );
+});
+
 test("explore lands on the skills catalog, its retired tabs on Fixes with their parameters dropped", async () => {
   assert.equal(
     await legacyRouteHref("/explore", { project: "acme" }, scope),
