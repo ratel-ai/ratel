@@ -904,6 +904,7 @@
         "apps/web/lib/console/settings/projects.ts",
         "apps/web/lib/console/settings/projects.test.ts",
         "apps/web/components/console/org/ProjectsList.tsx",
+        "apps/web/components/console/org/NewProjectButton.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/settings/layout.tsx",
         "apps/web/lib/platform/chart.ts",
         "apps/web/lib/synthesis/dashboard.ts",

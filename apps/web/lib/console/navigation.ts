@@ -333,7 +333,6 @@ export function commandEntries({
   pathname: string;
   organizationSlug?: string;
 }): CommandEntry[] {
-  const root = organizationSlug ? organizationRoot(organizationSlug) : null;
   return [
     ...flattenNav(items).map(({ id, label, href }) => ({
       id: `page:${id}`,
@@ -347,14 +346,19 @@ export function commandEntries({
       group: "Projects",
       href: switchProjectHref(pathname, id),
     })),
-    ...(root
+    ...(organizationSlug
       ? [
-          { id: "org:projects", label: "All projects", group: "Projects", href: root },
+          {
+            id: "org:projects",
+            label: "All projects",
+            group: "Projects",
+            href: organizationRoot(organizationSlug),
+          },
           {
             id: "org:new-project",
             label: "New project",
             group: "Projects",
-            href: newProjectHref(root),
+            href: newProjectHref(organizationSlug),
           },
         ]
       : []),
@@ -395,13 +399,13 @@ export function findProject<T extends { id: string }>(
   return id ? projects.find((project) => project.id === id) : undefined;
 }
 
-/** The projects page with its New project dialog open. */
-export function newProjectHref(organizationHref: string): string {
-  return `${organizationHref}?new=1`;
-}
-
-/** The first-project flow, outside the console shell. */
+/** The project-creation flow, outside the console shell: the first project and every later one. */
 export const ONBOARDING_ROUTE = "/onboarding";
+
+/** "New project": onboarding for the organization, which creates the project and its API key. */
+export function newProjectHref(organizationSlug: string): string {
+  return `${ONBOARDING_ROUTE}?organization=${encodeURIComponent(organizationSlug)}`;
+}
 
 /**
  * Where the console opens: the first project, else onboarding, so a fresh install sets up its

@@ -327,7 +327,7 @@ test("the command menu lists the rail's destinations, then every project", () =>
       `Projects|One|/project/${P1}/traces`,
       `Projects|Two|/project/${P2}/traces`,
       "Projects|All projects|/org/acme",
-      "Projects|New project|/org/acme?new=1",
+      "Projects|New project|/onboarding?organization=acme",
     ],
   );
   assert.equal(new Set(entries.map(({ id }) => id)).size, entries.length);

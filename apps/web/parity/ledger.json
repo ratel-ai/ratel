@@ -78,13 +78,13 @@
       "item": 13,
       "kind": "wrong",
       "title": "\"Last project\" is never remembered",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 14,
       "kind": "wrong",
       "title": "\"New project\" skips onboarding, so the project gets no API key",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 15,
