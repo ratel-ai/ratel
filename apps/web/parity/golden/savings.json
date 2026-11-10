@@ -1,0 +1,415 @@
+{
+  "subject": "savings",
+  "cloudCommit": "2848c52c1b6f91e6eeb6b533e2082d2847dbe1df",
+  "value": {
+    "savingsForPeriod": [
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 30,
+        "period": "day",
+        "result": {
+          "tokens": 1000,
+          "usd": 0.1,
+          "ms": 3000
+        }
+      },
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 30,
+        "period": "week",
+        "result": {
+          "tokens": 7000,
+          "usd": 0.7,
+          "ms": 21000
+        }
+      },
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 30,
+        "period": "month",
+        "result": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        }
+      },
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 10,
+        "period": "day",
+        "result": {
+          "tokens": 3000,
+          "usd": 0.30000000000000004,
+          "ms": 9000
+        }
+      },
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 10,
+        "period": "week",
+        "result": {
+          "tokens": 21000,
+          "usd": 2.0999999999999996,
+          "ms": 62999.99999999999
+        }
+      },
+      {
+        "savings": {
+          "tokens": 30000,
+          "usd": 3,
+          "ms": 90000
+        },
+        "windowDays": 10,
+        "period": "month",
+        "result": {
+          "tokens": 90000,
+          "usd": 9,
+          "ms": 270000
+        }
+      },
+      {
+        "savings": {
+          "tokens": 1200,
+          "usd": null,
+          "ms": null
+        },
+        "windowDays": 7,
+        "period": "day",
+        "result": {
+          "tokens": 171.42857142857142,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 1200,
+          "usd": null,
+          "ms": null
+        },
+        "windowDays": 7,
+        "period": "week",
+        "result": {
+          "tokens": 1200,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 1200,
+          "usd": null,
+          "ms": null
+        },
+        "windowDays": 7,
+        "period": "month",
+        "result": {
+          "tokens": 5142.857142857143,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": null,
+        "period": "day",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": null,
+        "period": "week",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": null,
+        "period": "month",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": 0,
+        "period": "day",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": 0,
+        "period": "week",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      },
+      {
+        "savings": {
+          "tokens": 500,
+          "usd": 0.5,
+          "ms": 500
+        },
+        "windowDays": 0,
+        "period": "month",
+        "result": {
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        }
+      }
+    ],
+    "fixSavingsText": [
+      {
+        "gain": null,
+        "period": "day",
+        "result": null
+      },
+      {
+        "gain": null,
+        "period": "week",
+        "result": null
+      },
+      {
+        "gain": null,
+        "period": "month",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "day",
+        "result": "−333 tokens · −$0.01 · −133 ms waiting per day"
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "week",
+        "result": "−2.3k tokens · −$0.09 · −933 ms waiting per week"
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "month",
+        "result": "−10k tokens · −$0.40 · −4 s waiting per month"
+      },
+      {
+        "gain": {
+          "windowDays": 10,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "day",
+        "result": "−1.0k tokens · −$0.04 · −400 ms waiting per day"
+      },
+      {
+        "gain": {
+          "windowDays": 10,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "week",
+        "result": "−7.0k tokens · −$0.28 · −2.8 s waiting per week"
+      },
+      {
+        "gain": {
+          "windowDays": 10,
+          "roundTrips": 40,
+          "calls": 40,
+          "tokens": 10000,
+          "usd": 0.4,
+          "ms": 4000
+        },
+        "period": "month",
+        "result": "−30k tokens · −$1.20 · −12 s waiting per month"
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": null,
+          "usd": null,
+          "ms": 50000
+        },
+        "period": "day",
+        "result": "−1.7 s waiting per day"
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": null,
+          "usd": null,
+          "ms": 50000
+        },
+        "period": "week",
+        "result": "−12 s waiting per week"
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": null,
+          "usd": null,
+          "ms": 50000
+        },
+        "period": "month",
+        "result": "−50 s waiting per month"
+      },
+      {
+        "gain": {
+          "windowDays": null,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": 900,
+          "usd": 0.1,
+          "ms": 600
+        },
+        "period": "day",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": null,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": 900,
+          "usd": 0.1,
+          "ms": 600
+        },
+        "period": "week",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": null,
+          "roundTrips": 6,
+          "calls": 6,
+          "tokens": 900,
+          "usd": 0.1,
+          "ms": 600
+        },
+        "period": "month",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 0,
+          "calls": 0,
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        },
+        "period": "day",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 0,
+          "calls": 0,
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        },
+        "period": "week",
+        "result": null
+      },
+      {
+        "gain": {
+          "windowDays": 30,
+          "roundTrips": 0,
+          "calls": 0,
+          "tokens": null,
+          "usd": null,
+          "ms": null
+        },
+        "period": "month",
+        "result": null
+      }
+    ]
+  }
+}

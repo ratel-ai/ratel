@@ -1,0 +1,102 @@
+{
+  "subject": "seed-plan",
+  "cloudCommit": "2848c52c1b6f91e6eeb6b533e2082d2847dbe1df",
+  "value": {
+    "input": {
+      "seed": 20261109,
+      "turns": 400,
+      "anchor": "2026-11-09T10:00:00.000Z"
+    },
+    "plan": {
+      "conversations": 222,
+      "turns": 400,
+      "turnsWithoutTools": 29,
+      "byKind": {
+        "equipment_rental": 12,
+        "handoff": 3,
+        "schedule_status": 58,
+        "spec_question": 29,
+        "safety_report": 42,
+        "safety_checklist": 5,
+        "rfis": 42,
+        "material_delivery": 52,
+        "subcontractors": 19,
+        "payment_status": 15,
+        "thanks": 28,
+        "rfi_draft": 5,
+        "asked_again": 8,
+        "change_orders": 36,
+        "try_again": 7,
+        "change_order_refine": 9,
+        "schedule_impact": 4,
+        "inspection_booking": 14,
+        "retainage": 2,
+        "weather_risk": 2,
+        "correction": 8
+      },
+      "byTopic": {
+        "equipment_rental": 17,
+        "schedule_status": 70,
+        "spec_question": 31,
+        "safety_report": 47,
+        "rfis": 47,
+        "material_delivery": 59,
+        "subcontractors": 19,
+        "payment_status": 18,
+        "none": 28,
+        "change_orders": 47,
+        "inspection_booking": 17
+      },
+      "toolCalls": 659,
+      "failedCalls": {
+        "track_material_delivery timeout": 12,
+        "get_project_schedule result": 4,
+        "track_material_delivery 503": 9,
+        "get_rfi 404": 1,
+        "create_rfi 422": 1,
+        "get_subcontractor_compliance 500": 2,
+        "search_spec_book timeout": 2,
+        "check_weather_delay 502": 1,
+        "log_safety_incident 400": 1,
+        "check_payment_status timeout": 2,
+        "estimate_change_order 500": 1
+      },
+      "behaviors": {
+        "retry": 21,
+        "switch": 6,
+        "gaveUp": 13
+      },
+      "chains": {
+        "get_project_info > search_spec_book": 26,
+        "log_safety_incident > notify_team": 32,
+        "list_rfis > get_rfi": 19,
+        "list_projects > get_purchase_order > track_material_delivery": 31,
+        "list_subcontractors > get_subcontractor_compliance": 13,
+        "get_project_schedule > check_weather_delay": 32,
+        "get_pay_application > check_payment_status": 14,
+        "list_projects > get_purchase_order > track_material_delivery > get_daily_log": 2,
+        "get_purchase_order > track_material_delivery": 21,
+        "get_project_schedule > list_projects > check_weather_delay": 2,
+        "get_change_order > estimate_change_order": 36,
+        "get_project_schedule > list_projects": 2
+      }
+    },
+    "rendered": {
+      "traces": 400,
+      "spans": 2118,
+      "toolSpans": 659,
+      "chatSpans": 1059,
+      "bodies": 4
+    },
+    "stored": {
+      "otelSpans": 2118,
+      "events": 1059,
+      "traceEvents": {
+        "invoke_end": 623,
+        "invoke_error": 36,
+        "otlp_model_call": 1059
+      },
+      "traceEventsTotal": 1718
+    }
+  }
+}

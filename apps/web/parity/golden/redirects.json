@@ -1,0 +1,65 @@
+{
+  "subject": "redirects",
+  "cloudCommit": "2848c52c1b6f91e6eeb6b533e2082d2847dbe1df",
+  "value": {
+    "table": {
+      "/dashboard": {
+        "destination": "/project/_/dashboards",
+        "status": 308
+      },
+      "/dashboard?range=7d": {
+        "destination": "/project/_/dashboards?range=7d",
+        "status": 308
+      },
+      "/dashboard/usage?range=7d": {
+        "destination": "/project/_/dashboards/usage?range=7d",
+        "status": 308
+      },
+      "/traces": {
+        "destination": "/project/_/traces",
+        "status": 308
+      },
+      "/traces/events": {
+        "destination": "/project/_/traces/logs",
+        "status": 308
+      },
+      "/traces/abc?tab=logs": {
+        "destination": "/project/_/traces/abc?tab=logs",
+        "status": 308
+      },
+      "/explore": {
+        "destination": "/project/_/catalogs/skills",
+        "status": 308
+      },
+      "/explore?tab=intents&intentsPage=2": {
+        "destination": "/project/_/improvement",
+        "status": 308
+      },
+      "/explore?tab=suggestions&sstatus=open": {
+        "destination": "/project/_/improvement",
+        "status": 308
+      },
+      "/experiments": {
+        "destination": "/project/_/calibration",
+        "status": 308
+      },
+      "/experiments/exp-1": {
+        "destination": "/project/_/calibration/exp-1",
+        "status": 308
+      },
+      "/settings": {
+        "destination": "/project/_/settings",
+        "status": 308
+      },
+      "/nothing-here": null
+    },
+    "dashboard": {
+      "destination": "/project/_/dashboards?range=7d",
+      "status": 308
+    },
+    "improvementIntents": {
+      "destination": "/project/11111111-1111-4111-8111-111111111111/improvement",
+      "status": 307
+    }
+  }
+}
