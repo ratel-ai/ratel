@@ -43,6 +43,10 @@ function shell(scope: NavScope) {
   const root = inProject ? projectRoot(PROJECT_ID) : organizationRoot(ORGANIZATION_SLUG);
   const entries = commandEntries({
     items,
+    organizationItems: inProject
+      ? consoleNav({ projectId: undefined, organizationSlug: ORGANIZATION_SLUG, additions: [] })
+      : [],
+    projectId: inProject ? PROJECT_ID : undefined,
     projects: [],
     pathname: root,
     organizationSlug: ORGANIZATION_SLUG,
@@ -50,19 +54,18 @@ function shell(scope: NavScope) {
   return { items, root, entries, paths: inProject ? PROJECT_PATHS : ORGANIZATION_PATHS };
 }
 
-/** A rail item as a row, with whichever of Cloud's fields this model carries. */
+/** A rail item as a row, with Cloud's fields. */
 function rows(items: readonly NavItem[]): RailRow[] {
   const row = (item: NavItem, extra: Partial<RailRow>): RailRow => {
-    const more = item as NavItem & Partial<Pick<RailRow, "also" | "keywords" | "activeId">>;
     return {
       id: item.id,
       label: item.label,
       href: item.href,
       ...(item.exact ? { exact: true } : {}),
-      ...(more.also ? { also: more.also } : {}),
+      ...(item.also ? { also: item.also } : {}),
       ...(item.shortcut ? { shortcut: item.shortcut } : {}),
-      ...(more.keywords ? { keywords: more.keywords } : {}),
-      ...(more.activeId ? { activeId: more.activeId } : {}),
+      ...(item.keywords ? { keywords: item.keywords } : {}),
+      ...(item.activeId ? { activeId: item.activeId } : {}),
       ...extra,
     };
   };

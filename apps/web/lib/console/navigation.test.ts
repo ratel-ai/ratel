@@ -16,6 +16,7 @@ import {
   switchProjectHref,
   visibleOrganizationNav,
 } from "./navigation";
+import { searchCommands } from "./scope/command-search";
 
 const P1 = "11111111-1111-4111-8111-111111111111";
 const P2 = "22222222-2222-4222-8222-222222222222";
@@ -270,6 +271,24 @@ test("the active item matches exact index pages and nested paths", () => {
   assert.equal(activeNavItemId("/administer", items), null);
 });
 
+test("an item is lit on every path it has absorbed, old URLs included", () => {
+  const items = consoleNav({ projectId: P1, additions: [] });
+  const active = (path: string) => activeNavItemId(`/project/${P1}${path}`, items);
+  assert.equal(active("/dashboards"), "overview");
+  assert.equal(active("/insights"), "overview");
+  assert.equal(active("/improvement/health"), "health");
+  assert.equal(active("/improvement/tool-explorer"), "health-tasks");
+  // The longer absorbed path wins over the shorter one above it.
+  assert.equal(active("/improvement/tool-explorer/suggestions"), "fixes");
+  assert.equal(active("/intents/asks"), "intents-topics");
+  assert.equal(active("/quality"), "quality");
+  assert.equal(active("/calibration"), "quality");
+  assert.equal(active("/calibration/exp-1"), "quality");
+  assert.equal(active("/improvement/match-quality"), "quality");
+  assert.equal(active("/runtime-events"), "settings");
+  assert.equal(active("/calibrations"), null, "an absorbed path matches whole segments");
+});
+
 test("switching project keeps the section the reader is on", () => {
   assert.equal(switchProjectHref(`/project/${P1}`, P2), `/project/${P2}`);
   assert.equal(
@@ -294,36 +313,47 @@ test("the entry goes to the first project, else to onboarding, else nowhere", ()
   assert.equal(entryHref([], undefined), null);
 });
 
-test("the command menu lists the rail's destinations, then every project", () => {
+test("the command menu lists the project's pages, the organization's, then every project", () => {
+  const additions = [{ href: "/admin", label: "Admin" }];
   const entries = commandEntries({
-    items: consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] }),
+    items: consoleNav({ projectId: P1, additions }),
+    organizationItems: consoleNav({ projectId: undefined, organizationSlug: "acme", additions }),
+    projectId: P1,
     projects: PROJECTS,
     pathname: `/project/${P1}/traces`,
     organizationSlug: "acme",
   });
+  // A page is listed once: Summary and All intents share their group's address, and the
+  // edition's Admin is on both rails.
   assert.deepEqual(
     entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
     [
-      `Pages|Overview|/project/${P1}`,
-      `Pages|Agent health|/project/${P1}/health`,
-      `Pages|Summary|/project/${P1}/health`,
-      `Pages|Tasks|/project/${P1}/health/tasks`,
-      `Pages|Self-corrections|/project/${P1}/health/self-corrections`,
-      `Pages|Traces|/project/${P1}/traces`,
-      `Pages|Catalog|/project/${P1}/catalogs`,
-      `Pages|Tools|/project/${P1}/catalogs/tools`,
-      `Pages|Skills|/project/${P1}/catalogs/skills`,
-      `Pages|Test a search|/project/${P1}/playground`,
-      `Pages|Intents|/project/${P1}/intents`,
-      `Pages|All intents|/project/${P1}/intents`,
-      `Pages|Flows|/project/${P1}/intents/flows`,
-      `Pages|Map|/project/${P1}/intents/map`,
-      `Pages|Improvements|/project/${P1}/improvement`,
-      `Pages|Fixes|/project/${P1}/improvement/fixes`,
-      `Pages|Quality|/project/${P1}/quality`,
-      `Pages|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
-      `Pages|Settings|/project/${P1}/settings`,
+      `Project|Overview|/project/${P1}`,
+      `Project|Agent health|/project/${P1}/health`,
+      `Project|Tasks|/project/${P1}/health/tasks`,
+      `Project|Self-corrections|/project/${P1}/health/self-corrections`,
+      `Project|Traces|/project/${P1}/traces`,
+      `Project|Catalog|/project/${P1}/catalogs`,
+      `Project|Tools|/project/${P1}/catalogs/tools`,
+      `Project|Skills|/project/${P1}/catalogs/skills`,
+      `Project|Test a search|/project/${P1}/playground`,
+      `Project|Intents|/project/${P1}/intents`,
+      `Project|Flows|/project/${P1}/intents/flows`,
+      `Project|Map|/project/${P1}/intents/map`,
+      `Project|Improvements|/project/${P1}/improvement`,
+      `Project|Fixes|/project/${P1}/improvement/fixes`,
+      `Project|Quality|/project/${P1}/quality`,
+      `Project|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
+      `Project|Settings|/project/${P1}/settings`,
       "Pages|Admin|/admin",
+      `Overview|Usage and spend|/project/${P1}/dashboards`,
+      `Settings|API keys|/project/${P1}/settings/api-keys`,
+      `Settings|Danger zone|/project/${P1}/settings/danger`,
+      `Quality|Experiments|/project/${P1}/calibration`,
+      `Settings|SDK events|/project/${P1}/runtime-events`,
+      "Organization|Projects|/org/acme",
+      "Organization|Integrations|/org/acme/mcp",
+      "Organization|Settings|/org/acme/settings",
       `Projects|One|/project/${P1}/traces`,
       `Projects|Two|/project/${P2}/traces`,
       "Projects|All projects|/org/acme",
@@ -331,6 +361,94 @@ test("the command menu lists the rail's destinations, then every project", () =>
     ],
   );
   assert.equal(new Set(entries.map(({ id }) => id)).size, entries.length);
+});
+
+test("outside a project the command menu lists the organization's pages only", () => {
+  const entries = commandEntries({
+    items: consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }),
+    projects: PROJECTS,
+    pathname: "/org/acme",
+    organizationSlug: "acme",
+  });
+  assert.deepEqual(
+    entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
+    [
+      "Organization|Projects|/org/acme",
+      "Organization|Integrations|/org/acme/mcp",
+      "Organization|Settings|/org/acme/settings",
+      `Projects|One|/project/${P1}`,
+      `Projects|Two|/project/${P2}`,
+      "Projects|All projects|/org/acme",
+      "Projects|New project|/onboarding?organization=acme",
+    ],
+  );
+});
+
+test("the command menu finds a page by its keywords, not only its name", () => {
+  const entries = commandEntries({
+    items: consoleNav({ projectId: P1, additions: [] }),
+    organizationItems: consoleNav({
+      projectId: undefined,
+      organizationSlug: "acme",
+      additions: [],
+    }),
+    projectId: P1,
+    projects: PROJECTS,
+    pathname: `/project/${P1}`,
+    organizationSlug: "acme",
+  });
+  const first = (query: string) => searchCommands(entries, query)[0]?.label;
+  assert.equal(first("delete project"), "Danger zone");
+  assert.equal(first("spend"), "Usage and spend");
+  assert.equal(first("api keys"), "API keys");
+  assert.equal(first("experiments"), "Experiments");
+  assert.equal(first("sdk events"), "SDK events");
+  assert.equal(first("retries"), "Self-corrections");
+  assert.equal(first("cursor"), "Integrations");
+  assert.deepEqual(searchCommands(entries, "zzz"), []);
+});
+
+test("an edition's nav items carry their keywords and shortcuts into the rail and ⌘K", () => {
+  const organization = consoleNav({
+    projectId: undefined,
+    organizationSlug: "acme",
+    additions: [{ href: "/admin", label: "Admin", keywords: ["operators"] }],
+    organizationAdditions: [
+      { path: "team", label: "Members", shortcut: "m", keywords: ["invite", "people"] },
+      { path: "billing", label: "Billing" },
+    ],
+  });
+  assert.equal(shortcutHref(organization, "m"), "/org/acme/team");
+  const project = consoleNav({
+    projectId: P1,
+    additions: [],
+    projectGroups: [
+      {
+        id: "apis",
+        label: "APIs",
+        items: [{ path: "models/embeddings", label: "Embeddings", keywords: ["vectors"] }],
+      },
+    ],
+  });
+  const entries = commandEntries({
+    items: project,
+    organizationItems: organization,
+    projectId: P1,
+    projects: [],
+    pathname: `/project/${P1}`,
+  });
+  const first = (query: string) => searchCommands(entries, query)[0]?.label;
+  assert.equal(first("invite"), "Members");
+  assert.equal(first("vectors"), "Embeddings");
+  assert.equal(first("operators"), "Admin");
+  // An item without the new fields works as before.
+  const billing = entries.find(({ label }) => label === "Billing");
+  assert.deepEqual(billing, {
+    id: "/org/acme/billing",
+    label: "Billing",
+    group: "Organization",
+    href: "/org/acme/billing",
+  });
 });
 
 test("g then a letter jumps to the rail item that owns it, in either rail", () => {
@@ -417,9 +535,19 @@ test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, 
     items.find(({ id }) => id === "health")?.children?.map(({ id }) => id),
     ["health-summary", "health-self-corrections"],
   );
-  const hrefs = commandEntries({ items, projects: PROJECTS, pathname: `/project/${P1}` }).map(
-    (entry) => entry.href,
-  );
+  // Agent health is lit as one item, wherever inside it the reader is.
+  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
+  assert.equal(activeNavItemId(`/project/${P1}/health/self-corrections`, items), "health");
+  // Tasks has absorbed the Agent health Tasks pages.
+  assert.equal(activeNavItemId(`/project/${P1}/health/tasks`, items), "tasks");
+  assert.equal(activeNavItemId(`/project/${P1}/health/tasks/sessions/s-1`, items), "tasks");
+  assert.equal(activeNavItemId(`/project/${P1}/improvement/tool-explorer`, items), "tasks");
+  const hrefs = commandEntries({
+    items,
+    projectId: P1,
+    projects: PROJECTS,
+    pathname: `/project/${P1}`,
+  }).map((entry) => entry.href);
   assert.ok(hrefs.includes(`/project/${P1}/ship`), "⌘K reaches Ship");
 });
 

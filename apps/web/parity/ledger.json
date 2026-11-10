@@ -24,7 +24,7 @@
       "item": 4,
       "kind": "missing",
       "title": "The sidebar's \"Analysis updated … ago\" line is missing",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 5,
@@ -48,7 +48,7 @@
       "item": 8,
       "kind": "missing",
       "title": "⌘K finds less",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 9,
@@ -108,7 +108,7 @@
       "item": 18,
       "kind": "wrong",
       "title": "The rail highlights the wrong item, or none",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 19,

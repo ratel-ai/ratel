@@ -10,6 +10,7 @@ import { type ReactNode, useState } from "react";
 import type { NavItem } from "@/lib/console/navigation";
 import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
 import { AccountMenu } from "./AccountMenu";
+import { AnalysisFreshness } from "./AnalysisFreshness";
 import { NAV_ICONS } from "./nav-icons";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 
@@ -149,14 +150,17 @@ export function SidebarContent({
         ))}
       </nav>
 
-      {account ? (
+      {project || account ? (
         <div className="shrink-0 border-t border-line p-2">
-          <AccountMenu
-            account={account}
-            collapsed={collapsed}
-            editionItems={accountMenuItems}
-            onShortcuts={onShortcuts}
-          />
+          {project ? <AnalysisFreshness projectId={project.id} collapsed={collapsed} /> : null}
+          {account ? (
+            <AccountMenu
+              account={account}
+              collapsed={collapsed}
+              editionItems={accountMenuItems}
+              onShortcuts={onShortcuts}
+            />
+          ) : null}
         </div>
       ) : null}
     </div>

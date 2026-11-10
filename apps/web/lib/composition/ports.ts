@@ -15,6 +15,8 @@ import { type CompositionPorts, PORT_NAMES } from "@/lib/contracts/composition";
 export type NavItem = {
   href: string;
   label: string;
+  /** Other words ⌘K finds it by. */
+  keywords?: readonly string[];
 };
 
 /** The rail's glyph keys; the console maps each to an icon. Declared here so an edition's nav can name one. */
@@ -41,6 +43,10 @@ export type OrganizationNavItem = {
   label: string;
   /** The rail glyph; the members one when absent. */
   icon?: NavIconName;
+  /** The key after `g` that jumps here. */
+  shortcut?: string;
+  /** Other words ⌘K finds it by. */
+  keywords?: readonly string[];
 };
 
 /** A project page an edition adds: `/project/<id>/<path>`. */
@@ -51,6 +57,8 @@ export type ProjectNavItem = {
   icon?: NavIconName;
   /** The key after `g` that jumps here. */
   shortcut?: string;
+  /** Other words ⌘K finds it by. */
+  keywords?: readonly string[];
 };
 
 /** A named group of edition pages in the project rail, between the core pages and Settings. */

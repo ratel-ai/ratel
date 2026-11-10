@@ -19,7 +19,7 @@ import {
   shortcutHref,
 } from "@/lib/console/navigation";
 import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
-import { CommandMenu } from "./CommandMenu";
+import { type CommandAction, CommandMenu } from "./CommandMenu";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { SidebarContent } from "./Sidebar";
 import type { ShellData } from "./types";
@@ -27,7 +27,7 @@ import type { ShellData } from "./types";
 /**
  * The console shell (DESIGN.md, Layout): rail on the left, the page on the right, no top bar.
  * Owns the global keyboard (⌘K, `[`, `?`, `g` then a letter), the mobile drawer and the
- * app-wide overlays.
+ * app-wide overlays (command menu, shortcuts, toasts).
  */
 /** How long `g` waits for its second key. */
 const JUMP_WINDOW_MS = 1200;
@@ -68,15 +68,30 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     ],
   );
   const activeId = activeNavItemId(pathname, items);
+  // Inside a project ⌘K reaches the organization's pages too.
+  const organizationItems = useMemo(
+    () =>
+      project
+        ? consoleNav({
+            projectId: undefined,
+            organizationSlug: data.organizationSlug ?? undefined,
+            additions: data.editionNav,
+            organizationAdditions: data.organizationNav,
+          })
+        : [],
+    [project, data.organizationSlug, data.editionNav, data.organizationNav],
+  );
   const entries = useMemo(
     () =>
       commandEntries({
         items,
+        organizationItems,
+        projectId: project?.id,
         projects: data.projects,
         pathname,
         organizationSlug: data.organizationSlug ?? undefined,
       }),
-    [items, data.projects, pathname, data.organizationSlug],
+    [items, organizationItems, project, data.projects, pathname, data.organizationSlug],
   );
 
   const toggleCollapsed = useCallback(() => {
@@ -87,6 +102,26 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       return next;
     });
   }, []);
+
+  const actions = useMemo<CommandAction[]>(
+    () => [
+      {
+        id: "shortcuts",
+        label: "Keyboard shortcuts",
+        group: "Actions",
+        keywords: ["keys", "hotkeys", "help"],
+        run: () => setShortcutsOpen(true),
+      },
+      {
+        id: "sidebar",
+        label: collapsed ? "Expand sidebar" : "Collapse sidebar",
+        group: "Actions",
+        keywords: ["rail", "menu"],
+        run: toggleCollapsed,
+      },
+    ],
+    [collapsed, toggleCollapsed],
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -198,7 +233,12 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         </Dialog.Portal>
       </Dialog.Root>
 
-      <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} entries={entries} />
+      <CommandMenu
+        open={commandOpen}
+        onOpenChange={setCommandOpen}
+        entries={entries}
+        actions={actions}
+      />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} items={items} />
       <Toaster />
     </TooltipProvider>
