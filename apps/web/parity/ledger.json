@@ -60,7 +60,7 @@
       "item": 10,
       "kind": "missing",
       "title": "Three OTel tables lack Cloud's autovacuum settings",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 11,

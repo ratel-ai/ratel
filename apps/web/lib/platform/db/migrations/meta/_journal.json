@@ -218,6 +218,13 @@
       "when": 1793988719347,
       "tag": "0030_task_test_drafts",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794239987446,
+      "tag": "0031_otel_autovacuum",
+      "breakpoints": true
     }
   ]
 }
