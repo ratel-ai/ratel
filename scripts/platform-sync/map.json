@@ -599,7 +599,7 @@
     {"from": "apps/web/lib/trace-signals/linked-copy.test.ts", "to": "apps/web/lib/views/traces/linked-copy.test.ts", "mode": "copy"},
     {"from": "apps/web/components/traces/TurnDetailView.tsx", "to": "apps/web/components/console/traces/TurnDetailView.tsx", "mode": "copy"},
     {"from": "apps/web/components/traces/TurnLinkedPanel.tsx", "to": "apps/web/components/console/traces/TurnLinkedPanel.tsx", "mode": "copy"},
-    {"from": "apps/web/app/(app)/project/[projectId]/traces/turns/[turnId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/traces/turns/[turnId]/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route; no retired flag gate; the session replay link follows FF_SESSION_REPLAY"},
+    {"from": "apps/web/app/(app)/project/[projectId]/traces/turns/[turnId]/page.tsx", "to": "apps/web/app/(console)/project/[projectId]/traces/turns/[turnId]/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route; no retired flag gate; the session replay link follows FF_SESSION_REPLAY and run to test follows FF_EVAL_GATE"},
     {"from": "apps/web/lib/trace-signals/signals/claims-model.ts", "to": "apps/web/lib/views/health/signals/claims-model.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/signals/claims-model.test.ts", "to": "apps/web/lib/views/health/signals/claims-model.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/signals/claims-kit.ts", "to": "apps/web/lib/views/health/signals/claims-kit.ts", "mode": "copy"},
