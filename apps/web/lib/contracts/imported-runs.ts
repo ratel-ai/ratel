@@ -68,8 +68,8 @@ export type ImportedRunsPort = {
    * as soon as it is built, and Agent health counts it as imported. The core knows the ids it
    * can name; any other id is live telemetry until an importer registers it, whatever it ends
    * in. Optional in the type so an edition's stand-ins keep compiling; the core always supplies
-   * it. ratel-platform registers its ids when its importer lands: it has none yet, so this
-   * addition needs no paired change there.
+   * it. ratel-platform's importer registers its ids from `connect` (all four, so it does not
+   * depend on which ones the core can name).
    */
   registerSourceIds?(ids: readonly string[]): void;
 };
