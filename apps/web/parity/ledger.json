@@ -12,13 +12,13 @@
       "item": 2,
       "kind": "missing",
       "title": "OTel spans, logs and trace summaries are never pruned",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 3,
       "kind": "missing",
       "title": "The platform's own OpenTelemetry export is never registered",
-      "status": "open"
+      "status": "fixed"
     },
     {
       "item": 4,

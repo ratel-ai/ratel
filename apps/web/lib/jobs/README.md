@@ -17,7 +17,7 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 | `drain.ts` | one cron tick: `before` steps, the drain, `after` steps (retention-only ones gated by `DATA_RETENTION_ENABLED=1`); `GET /api/cron/drain`, which an API-only process answers with 202 and no tick |
 | `scheduler.ts` | the in-process timer an all-in-one process runs the tick with (`RATEL_CRON=inprocess`, the OSS default); Cloud uses an external caller |
 | `worker.ts` | the worker's loop: one step at a time, the tick every 60 s, a drain otherwise, a 3 s wait when nothing is queued |
-| `worker-start.ts` | the loop wired to `drainProjectJobs` and `runDrainTick`, started once per process; on SIGTERM it finishes the step in flight, then exits |
+| `worker-start.ts` | the loop wired to `drainProjectJobs` and `runDrainTick`, started once per process; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
 
 ## Roles
 

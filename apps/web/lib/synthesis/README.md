@@ -7,7 +7,7 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `dashboard.ts` | the date-range presets and deltas the trace views share (the overview model rides along) |
 | `tool-corpus.ts` | the core's `toolCorpus` service (the match-quality corpus loader), lent to the edition at startup |
 | `traces/schema.ts` | `otel_trace_summaries`, `trace_summary_cursor` |
-| `traces/summary-refresh.ts`, `register.ts` | the drain step that folds new spans into one summary row per trace |
+| `traces/summary-refresh.ts`, `register.ts` | the drain step that folds new spans into one summary row per trace, between the retention-only prunes of expired spans and logs (before it) and of expired summaries (after it) |
 | `traces/queries.ts`, `run-details.ts`, `events-queries.ts` | the trace, span, operation and log reads over `otel_spans`, `otel_logs` and the summaries |
 | `traces/view.ts`, `events-view.ts` | search params to query options and cursors, rows to view models |
 | `traces/waterfall.ts`, `tree.ts`, `content-view.ts`, `format.ts` | one trace as a span tree, a waterfall and its message content |

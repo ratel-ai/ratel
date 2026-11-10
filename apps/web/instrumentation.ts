@@ -5,11 +5,19 @@
  *
  * The Node-only work lives in instrumentation.node.ts so Edge instrumentation never sees
  * process.exit.
+ *
+ * Self-telemetry registers first, so `pg` and `fetch` load already patched and the background
+ * work is traced. It does nothing unless both OTLP endpoints are set.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { assertComposition, bootBackground } = await import("./instrumentation.node");
+    const { assertComposition, bootBackground, registerNodeInstrumentation } = await import(
+      "./instrumentation.node"
+    );
+    const flushTelemetry = await registerNodeInstrumentation(process.env, {
+      deploymentEnvironment: process.env.APP_ENV,
+    });
     await assertComposition();
-    await bootBackground();
+    await bootBackground(flushTelemetry);
   }
 }
