@@ -12,6 +12,7 @@ npm packages.
 | `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from the environment; `apiUrl()` builds `/api/v1` URLs |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
+| `db/tenant-scope.test.ts` | upstream's source check, a copy: every read of a big telemetry table names a project, or says why not with a `// cross-project:` comment |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |
 | `projects/` | `schema.ts` and `queries.ts` for projects and API keys |
 | `organizations.ts` | organizations by id or by project, through the session port: the edition owns the table |

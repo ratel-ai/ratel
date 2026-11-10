@@ -20,7 +20,6 @@ intelligence that reads them. One Next.js app, two editions
 app/              routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the old-address redirects (/dashboard, /traces, /explore, /experiments, /settings and /project/_ to the session organization's project, as upstream's proxy answered them; inside a project, the pages the redesign folded into others), the printable Agent health and Quality reports under (report)/, the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
 components/       React components; the design system lives in packages/design-system
 lib/              the core, in layers (see lib/README.md)
-parity/           temporary: tests that hold this edition to Ratel Cloud's answers while the platform split audit's items are fixed (see parity/README.md)
 Dockerfile        targets `oss` and `cloud`; build context is the repository root
 next.config.ts    the #ee-composition alias, /v1 and /v2 rewrites, standalone output
 ```

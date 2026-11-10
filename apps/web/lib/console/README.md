@@ -21,6 +21,7 @@ search, projects, settings, and development seeds.
 | `explore/` | the browser client for the skills API, its form payloads and error copy |
 | `shell-data.ts` | the session organization and its projects, once per request, for the shell and the pages |
 | `sidebar-cookie.ts` | the persisted collapse state of the sidebar |
+| `wiring.test.ts` | source checks for what a page renders or a route calls where no unit test can run the page (the sidebar freshness line, the tour offer, the API keys quickstart, run to test, the SDK event links, the last-project request, the no-database layout, one ingest address builder, project scope in two routes, root metadata, jobs in the project log context, the playground heading), and the capture nudge against the quickstart |
 | `seed/` | local-database guard, seed organization and project replace, seed command-line args, Site Copilot OTLP and catalog fixtures, and `site-copilot-seed.ts`: the seed itself (the project, its key and catalog, the traces through the route handler, the queued ledger build), shared by the seed script and the sample provisioner; `settle-queue.ts`: after each of the seed's drain ticks, waits for a job a worker is running and drains what is left queued, so the result does not depend on a worker; `task-loop.ts`: the task loop demo, run through the production jobs (live scores, eval sets, a draft, two simulations, a shipment and its post-ship measure), with its PGlite test |
 
 `pnpm --filter @ratel/platform seed` runs `scripts/seed.mts`, which writes Site Copilot through the
