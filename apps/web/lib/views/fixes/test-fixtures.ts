@@ -1,6 +1,7 @@
 import type { FixesInput, IssueInput, RewriteInput, TaskInput, TopicInput } from "./build";
 import type { CraftKind, SuggestionRow } from "./crafter-types";
 import type { DraftFixInput } from "./seams";
+import type { FixGain } from "./types";
 
 /**
  * One small project for the Fixes tests: an order lookup that searches miss, a hand-over task
@@ -116,7 +117,6 @@ export function craft(
     intentId: null,
     ask: null,
     why: "Drafted from the agent's runs.",
-    effect: null,
     gain: null,
     evidence: null,
     copy: { label: "Copy prompt", text: "## Problem\nDrafted from the agent's runs." },
@@ -144,45 +144,20 @@ export function craft(
 }
 
 export const CRAFTS: DraftFixInput[] = [
+  // Measured over 30 days in a project whose model calls are not priced: no token, cost or
+  // waiting savings yet (`measuredDrafts` prices it).
   craft("c-merge", "merge_tools", ["find_task", "assign_task"], {
-    effect: {
-      value: "2 → 1 calls",
-      figure: "2 → 1",
-      unit: "calls",
-      detail: "−40 model calls in all, over the window · 40 times together",
-      tone: "good",
-      basis: "runs",
-      also: [],
-    },
-    gain: { windowDays: null, roundTrips: 40, calls: 40, tokens: null, usd: null, ms: 0 },
+    gain: { windowDays: 30, roundTrips: 40, calls: 40, tokens: null, usd: null, ms: null },
     evidence: { strength: "strong", label: "Strong", detail: "Seen 40 times in this window" },
     measured: true,
     score: 40,
   }),
   craft("c-rewrite", "rewrite_tool", ["lookup_order"]),
   craft("c-retire", "deprecate_tool", ["legacy_export"], {
-    effect: {
-      value: "−1 tool per list",
-      figure: "−1",
-      unit: "tool per list",
-      detail: null,
-      tone: "good",
-      basis: "runs",
-      also: [],
-    },
     evidence: { strength: "strong", label: "Strong", detail: "Not called in 30 days" },
   }),
   craft("c-tighten", "tighten_schema", ["flaky_api"], {
-    effect: {
-      value: "−1 failed call",
-      figure: "−1",
-      unit: "failed call",
-      detail: "−6 model calls in all, over the window · 6 failures",
-      tone: "good",
-      basis: "runs",
-      also: [],
-    },
-    gain: { windowDays: null, roundTrips: 6, calls: 6, tokens: null, usd: null, ms: 0 },
+    gain: { windowDays: 30, roundTrips: 6, calls: 6, tokens: null, usd: null, ms: null },
     evidence: { strength: "early", label: "Early", detail: "Seen 6 times in this window" },
     measured: true,
     score: 6,
@@ -201,6 +176,19 @@ export const CRAFTS: DraftFixInput[] = [
     },
   }),
 ];
+
+/**
+ * The fixture drafts with the merge's savings measured, as the crafter's filler tells them in a
+ * project whose model round trip is priced (upstream's `price` of 250 tokens, $0.01 and 100 ms a
+ * round trip, over the merge's 40): what upstream's cases get from `fixesInput({ price })`.
+ */
+export function measuredDrafts(gain: Partial<FixGain> = {}): DraftFixInput[] {
+  return CRAFTS.map((draft) =>
+    draft.id === "c-merge" && draft.gain
+      ? { ...draft, gain: { ...draft.gain, tokens: 10_000, usd: 0.4, ms: 4_000, ...gain } }
+      : draft,
+  );
+}
 
 export function issue(over: Partial<IssueInput> & Pick<IssueInput, "id" | "kind">): IssueInput {
   return {

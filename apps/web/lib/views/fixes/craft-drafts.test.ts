@@ -9,9 +9,9 @@ import { craftDraft, fixSources, priceOf } from "./craft-drafts";
 import { fixSeams } from "./seams";
 
 /**
- * The crafter's cards told as drafted fixes: what upstream's `craftSeed` and `craftEffect`
- * cases in `fixes/build.test.ts` asserted on the built fix, asserted here on the
- * `DraftFixInput` the filler hands the build.
+ * The crafter's cards told as drafted fixes: what upstream's `craftSeed` cases in
+ * `fixes/build.test.ts` asserted on the built fix, asserted here on the `DraftFixInput` the
+ * filler hands the build (the build tells its gain as the effect).
  */
 
 const tool = (id: string): SourceTool => ({
@@ -69,11 +69,12 @@ const name = (id: string) => id;
 
 test("loading the filler fills the fixes and tasks seams", () => {
   assert.equal(typeof fixSeams.loadDrafts, "function");
+  assert.equal(typeof fixSeams.loadDraftWindows, "function");
   assert.equal(fixSeams.priceOf, priceOf);
   assert.equal(typeof tasksSeams.loadDrafts, "function");
 });
 
-test("a merge is told with its one figure, the window's total, its gain and strong evidence", () => {
+test("a merge is told with its gain over the window and strong evidence", () => {
   const draft = craftDraft(
     card("c-merge", "merge_tools", ["find_task", "assign_task"], MERGE),
     name,
@@ -87,22 +88,17 @@ test("a merge is told with its one figure, the window's total, its gain and stro
   );
   assert.equal(draft.createdAt, "2026-10-19T08:00:00.000Z");
   assert.deepEqual(draft.toolIds, ["find_task", "assign_task"]);
-  assert.equal(draft.effect?.value, "2 → 1 calls");
-  assert.deepEqual([draft.effect?.figure, draft.effect?.unit], ["2 → 1", "calls"]);
-  assert.equal(draft.effect?.detail, "−40 model calls in all");
-  assert.equal(draft.effect?.basis, "runs");
-  assert.ok(
-    draft.effect?.also.every((reading) => /\d/.test(reading.label) && reading.icon !== "calls"),
-    "the other marks carry a number and never repeat the headline",
-  );
+  // Unpriced: the calls are counted, the tokens, cost and waiting are not known. A card that
+  // names no window is read as 30 days.
   assert.deepEqual(draft.gain, {
-    windowDays: null,
+    windowDays: 30,
     roundTrips: 40,
     calls: 40,
     tokens: null,
     usd: null,
-    ms: 0,
+    ms: null,
   });
+  assert.equal(draft.worse, false);
   assert.deepEqual(draft.evidence, {
     strength: "strong",
     label: "Strong",
@@ -123,7 +119,35 @@ test("a merge is told with its one figure, the window's total, its gain and stro
   assert.doesNotMatch(draft.why, /round-trip/, "the fix speaks of model calls");
 });
 
-test("a retirement reads its evidence off the silence, a tightened schema off the failures, a plain rewrite has no effect yet", () => {
+test("a priced project's merge carries its token, cost and waiting savings over its own window", () => {
+  const price = { ms: 100, usd: 0.01, inputTokens: 200, outputTokens: 50, modelCalls: 100 };
+  const merge = card("c-merge", "merge_tools", ["find_task", "assign_task"], MERGE);
+  assert.deepEqual(craftDraft(merge, name, price).gain, {
+    windowDays: 30,
+    roundTrips: 40,
+    calls: 40,
+    tokens: 10_000,
+    usd: 0.4,
+    ms: 4_000,
+  });
+  assert.equal(craftDraft({ ...merge, windowDays: 10 }, name, price).gain?.windowDays, 10);
+  assert.equal(
+    craftDraft({ ...merge, windowDays: null }, name, price).gain?.windowDays,
+    null,
+    "a draft whose run's window is unknown has no rate",
+  );
+  const tokensOnly = { ms: null, usd: null, inputTokens: 100, outputTokens: 0, modelCalls: 100 };
+  assert.deepEqual(craftDraft(merge, name, tokensOnly).gain, {
+    windowDays: 30,
+    roundTrips: 40,
+    calls: 40,
+    tokens: 4_000,
+    usd: null,
+    ms: null,
+  });
+});
+
+test("a retirement reads its evidence off the silence, a tightened schema off the failures, a plain rewrite measures nothing yet", () => {
   const retire = craftDraft(
     card("c-retire", "deprecate_tool", ["legacy_export"], {
       kind: "deprecate_tool",
@@ -138,7 +162,7 @@ test("a retirement reads its evidence off the silence, a tightened schema off th
     name,
     NO_PRICE,
   );
-  assert.equal(retire.effect?.value, "−1 tool per list");
+  assert.equal(retire.gain, null, "a tool nobody calls saves no call");
   assert.deepEqual(retire.evidence, {
     strength: "strong",
     label: "Strong",
@@ -162,7 +186,10 @@ test("a retirement reads its evidence off the silence, a tightened schema off th
     name,
     NO_PRICE,
   );
-  assert.equal(tighten.effect?.value, "−1 failed call");
+  assert.deepEqual(
+    [tighten.gain?.roundTrips, tighten.gain?.calls, tighten.gain?.windowDays],
+    [6, 6, 30],
+  );
   assert.equal(tighten.evidence?.strength, "early");
   assert.equal(tighten.measured, true);
 
@@ -178,12 +205,9 @@ test("a retirement reads its evidence off the silence, a tightened schema off th
     name,
     NO_PRICE,
   );
-  assert.equal(
-    rewrite.effect,
-    null,
-    "a replay says how much more often the tool is found; without one there is no figure",
-  );
+  assert.equal(rewrite.gain, null, "a rewrite saves no tokens, cost or waiting");
   assert.equal(rewrite.measured, false);
+  assert.equal(rewrite.worse, false);
 });
 
 test("a combined chain names its task, a gap its ask, and an intent's own merge its intent", () => {

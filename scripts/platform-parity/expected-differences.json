@@ -196,35 +196,12 @@
       "what": "three OTel tables lack Cloud's autovacuum settings"
     },
     {
-      "item": 1,
-      "check": "mcp",
-      "part": "^list_fixes",
-      "pattern": "^data\\.fixes\\[.*\\]\\.effect",
-      "what": "Fixes has no savings: a fix's effect is told differently"
-    },
-    {
       "item": 5,
       "check": "pages",
       "part": "overview$",
       "side": "cloud",
       "pattern": "^(Take the tour|Step \\d+ of \\d+|Skip tour|Next|Overview: how this project is doing|Runs, first try, latency and cost at a glance.*)$",
       "what": "the guided tour is absent"
-    },
-    {
-      "item": 1,
-      "check": "pages",
-      "part": "fixes$",
-      "side": "cloud",
-      "pattern": "^(Potential savings|Day|Week|Month|Tokens saved|Cost saved|Waiting saved|Not measured|per (day|week|month) \\(\\d+ days?\\)|Savings by task|\\d+ tasks? · per (day|week|month)|−.* per (day|week|month)|[\\d.,]+ ?(s|ms|min|h|k|M)?|\\$[\\d.,]+)$",
-      "what": "Fixes has no savings: the page shows the older stat and effects"
-    },
-    {
-      "item": 1,
-      "check": "pages",
-      "part": "fixes$",
-      "side": "here",
-      "pattern": "^(Model calls saved|[\\d.,]+|If you make every measured fix|Better:|\\d+ → \\d+|calls?|Model calls: .*|Waiting: .*|Cost: .*|Tokens: .*|[−+]\\d+( pts)?|tools? per list|found|failed calls?)$",
-      "what": "Fixes has no savings: the page shows the older stat and effects"
     }
   ],
   "flagWording": {

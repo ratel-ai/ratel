@@ -14,7 +14,9 @@ test("how a rewrite's right answers were known: the majority, seen on a tie, nul
   assert.equal(howWeKnow(failures("judge", "judge", "invoked")), "judged");
 });
 
-test("no proposals make no rewrites, and loading the module fills the seam", () => {
+test("no proposals make no rewrites, and loading the module fills the seams", () => {
   assert.deepEqual(rewriteInputs("p1", [], null), []);
   assert.equal(typeof fixSeams.loadRewrites, "function");
+  // The override adoption is its own seam, so Fixes reads it apart from the rewrites.
+  assert.equal(typeof fixSeams.loadOverrideAdoption, "function");
 });

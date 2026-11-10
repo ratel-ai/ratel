@@ -13,7 +13,6 @@ import {
   type TitleContext,
 } from "./copy";
 import type { EffectChip, SuggestionRow } from "./crafter-types";
-import { effectLine } from "./effect";
 import { fixGroup } from "./groups";
 import { catalogToolHref, descriptionHref, issueHref, taskHref, topicHref } from "./href";
 import {
@@ -26,6 +25,7 @@ import {
   resolvesIssue,
   routeFixKind,
 } from "./kinds";
+import { fixSavingsText } from "./period";
 import type { DraftFixInput } from "./seams";
 import { compareFixes, fixStats } from "./select";
 import {
@@ -48,6 +48,7 @@ import type {
   FixStatus,
   FixTaskRef,
   FixTopicRef,
+  FixUsage,
 } from "./types";
 
 /**
@@ -147,6 +148,8 @@ export interface FixesInput {
   /** Open issues, already cut to what the limits show. */
   issues: readonly IssueInput[];
   tasks: readonly TaskInput[];
+  /** Each task's measured usage and its measurement window. */
+  taskUsage?: ReadonlyMap<string, FixUsage>;
   topics: readonly TopicInput[];
   /** Each live intent's stored tool pattern with its name, for skill gaps; absent or null reads none. */
   intents?: readonly IntentGapInput[] | null;
@@ -223,6 +226,8 @@ interface Seed {
   detail: FixDetail | null;
   /** A measured improvement: ranks first. */
   measured: boolean;
+  /** Its replay came out worse: ranks last. */
+  worse?: boolean;
   /** How often it applies, for ranking measured fixes. */
   score: number;
   appliedAt: string | null;
@@ -376,7 +381,7 @@ export function buildFixes(raw: FixesInput): FixesModel {
     projectId: input.projectId,
     open,
     applied,
-    stats: fixStats(open),
+    stats: fixStats(open, input.taskUsage),
     failed: [...(input.failed ?? [])],
     rewritesOn: input.rewrites !== null,
     overridesAdopted: input.overridesAdopted,
@@ -409,7 +414,7 @@ function rewriteSeed({ row, howWeKnow }: RewriteInput, overridesAdopted: boolean
     intentName: null,
     title: {},
     why: `${missedLabel(row.missed)}${row.missed > 0 ? " where it was the right tool" : ""}.`,
-    effect: row.effect ? replayEffect(row.effect.delta, row.effect.detail, tone) : null,
+    effect: null,
     gain: null,
     evidence: {
       strength: strengthOf(row.missed),
@@ -431,6 +436,7 @@ function rewriteSeed({ row, howWeKnow }: RewriteInput, overridesAdopted: boolean
       caveat: pending && overridesAdopted !== true ? NOT_REACHING_RUNTIME : null,
     },
     measured: tone === "good",
+    worse: tone === "bad",
     score: row.missed,
     appliedAt: row.appliedAt,
     issues: [],
@@ -451,19 +457,11 @@ export function plainChip(chip: EffectChip): EffectChip {
   return { ...chip, text: plain(chip.text), ...(chip.title ? { title: plain(chip.title) } : {}) };
 }
 
-/** A replay of past searches: how much more often the right tool is found; a flat one is "No change". */
-export function replayEffect(
-  figure: string,
-  detail: string | null,
-  tone: FixEffect["tone"],
-): FixEffect {
-  const compact =
-    tone === "neutral"
-      ? { figure: "No change", unit: "" }
-      : tone === "bad" && !/\d/.test(figure)
-        ? { figure, unit: "in a replay" }
-        : { figure, unit: "found" };
-  return { value: effectLine(compact), ...compact, detail, tone, basis: "replay", also: [] };
+/** The measured window savings, as plain text. */
+function craftEffect(gain: FixGain | null): FixEffect | null {
+  const value = fixSavingsText(gain);
+  if (!value) return null;
+  return { value, figure: value, unit: "", detail: null, tone: "good", basis: "runs", also: [] };
 }
 
 /** A drafted change, as its filler told it: the seed carries what the filler measured. */
@@ -482,7 +480,7 @@ function draftSeed(draft: DraftFixInput): Seed {
     intentName: null,
     title: { ask: draft.ask },
     why: draft.why,
-    effect: draft.effect,
+    effect: craftEffect(draft.gain),
     gain: draft.gain,
     evidence: draft.evidence,
     copy: draft.copy,
@@ -492,6 +490,7 @@ function draftSeed(draft: DraftFixInput): Seed {
     revert: false,
     detail: draft.detail,
     measured: draft.measured,
+    worse: draft.worse,
     score: draft.score,
     appliedAt: null,
     issues: [],
@@ -677,16 +676,15 @@ function finish(
   }
   // A measured effect leads only on solid evidence: "+100 pts" on one search is not the biggest effect.
   const solid = evidence !== null && evidence.strength !== "early";
-  const tier =
-    seed.effect?.tone === "bad"
-      ? 4
-      : seed.measured && solid
-        ? 0
-        : issues.length > 0
-          ? 1
-          : seed.measured
-            ? 2
-            : 3;
+  const tier = seed.worse
+    ? 4
+    : seed.measured && solid
+      ? 0
+      : issues.length > 0
+        ? 1
+        : seed.measured
+          ? 2
+          : 3;
 
   const actions: FixActions = {
     apply: seed.apply,

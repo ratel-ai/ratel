@@ -3,7 +3,7 @@ import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import type { RewriteInput } from "./build";
 import type { CraftKind, RoundTripPrice } from "./crafter-types";
 import type { FixShipmentRow, NewFixShipmentRow } from "./schema";
-import type { CraftDetail, FixEffect, FixEvidence, FixGain } from "./types";
+import type { CraftDetail, FixEvidence, FixGain } from "./types";
 
 /**
  * The sources of fixes that other readings supply. Fixes derived from Agent health's issues
@@ -17,6 +17,8 @@ import type { CraftDetail, FixEffect, FixEvidence, FixGain } from "./types";
 export interface DraftFixInput {
   id: string;
   kind: CraftKind;
+  /** The crafter run that drafted it, for `loadDraftWindows`. */
+  runId?: string;
   /** One drafted change per kind and tools (`${kind}:${sorted source ids}`): a second draft of the same change opens the first. */
   key: string;
   createdAt: string;
@@ -26,13 +28,15 @@ export interface DraftFixInput {
   /** The ask a `fill_gap` draft answers, for its title. */
   ask: string | null;
   why: string;
-  effect: FixEffect | null;
+  /** What it saves over its measurement window; the build tells it as the fix's effect. */
   gain: FixGain | null;
   evidence: FixEvidence | null;
   copy: { label: string; text: string };
   detail: CraftDetail;
   /** A measured improvement: ranks first. */
   measured: boolean;
+  /** Its replay came out worse: ranks last. */
+  worse?: boolean;
   /** How often it applies, for ranking measured fixes. */
   score: number;
 }
@@ -41,8 +45,6 @@ export interface RewriteRead {
   rewrites: RewriteInput[];
   /** Tools whose rewrite was dismissed, and when. */
   dismissed: { toolId: string; at: string }[];
-  /** Whether anything fetched the project's overrides recently; null when unknown. */
-  overridesAdopted: boolean | null;
 }
 
 /**
@@ -58,13 +60,28 @@ export interface FixSeams {
     db: BoundReadDb,
     context: { names: ReadonlyMap<string, string>; price: RoundTripPrice },
   ) => Promise<DraftFixInput[]>;
-  /** Quality's rewrites (pending and applied), their dismissals and the override adoption. Unset: rewrites are off. */
+  /**
+   * The days of runs each crafter run measured, by run id (null: unknown), so a draft's savings
+   * scale to a period. Read apart from the drafts: failing, the drafts stay and carry no rate.
+   * Unset: no draft has a window.
+   */
+  loadDraftWindows?: (
+    projectId: string,
+    runIds: readonly string[],
+    db: BoundReadDb,
+  ) => Promise<Map<string, number | null>>;
+  /** Quality's rewrites (pending and applied) and their dismissals. Unset: rewrites are off. */
   loadRewrites?: (
     projectId: string,
     organization: OrgLimitView,
     db: BoundReadDb,
     now: Date,
   ) => Promise<RewriteRead>;
+  /**
+   * Whether anything fetched the project's overrides recently. Read apart from the rewrites, so
+   * a failed read leaves them listed and the adoption unknown. Unset: unknown.
+   */
+  loadOverrideAdoption?: (projectId: string, db: BoundReadDb, now: Date) => Promise<boolean | null>;
   /** What one model round trip costs the project, from a run's day buckets. Unset: no price. */
   priceOf?: (daily: unknown) => RoundTripPrice;
   /**

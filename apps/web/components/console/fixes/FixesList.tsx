@@ -74,11 +74,10 @@ export function FixesList({
 }: {
   model: FixesModel;
   now: string;
-  /** Each fix's eval gate, by fix id; null when `FF_EVAL_GATE` is off (no column, no section). */
+  /** Each fix's eval gate, by fix id; null when `cloud-eval-gate` is off (no column, no section). */
   evalBadges?: Readonly<Record<string, EvalBadge>> | null;
-  /** Each shipped fix's newest shipment, by fix id (RC-72); null when `FF_STAGE_SPINE` is off. */
+  /** Each shipped fix's newest shipment, by fix id (RC-72); null when `cloud-stage-spine` is off. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
-  /** Each fix's tasks link to their simulations (the task loop); `FF_EVAL_GATE` and `FF_STAGE_SPINE`. */
   taskSimulations?: boolean;
 }) {
   const router = useRouter();
@@ -255,6 +254,9 @@ export function FixesList({
         <span className="flex min-w-0 flex-col gap-1.5 max-xl:py-2">
           <ShippedTitle fix={fix} shipped={shippedFor(shipped, fix)} />
           <span className="flex min-w-0 pl-6.5 xl:hidden">{pins(fix)}</span>
+          <span className="pl-6.5 sm:hidden">
+            <EffectValue effect={fix.effect} gain={fix.gain} />
+          </span>
         </span>
       ),
     },
@@ -270,8 +272,8 @@ export function FixesList({
       id: "effect",
       header: "Effect",
       hiddenBelow: "sm",
-      className: "max-w-52 min-w-52",
-      cell: (fix) => <EffectValue effect={fix.effect} />,
+      className: "max-w-64 min-w-52 py-2",
+      cell: (fix) => <EffectValue effect={fix.effect} gain={fix.gain} />,
     },
     {
       id: "evidence",
