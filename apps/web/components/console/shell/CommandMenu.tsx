@@ -80,7 +80,10 @@ export function CommandMenu({
     >
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-dialog bg-scrim transition-opacity duration-160 data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none" />
-        <Dialog.Popup className="fixed top-[14vh] left-1/2 z-dialog flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none transition-[scale,opacity] duration-160 ease-enter data-starting-style:scale-[0.98] data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none">
+        <Dialog.Popup
+          data-tour-surface="command-menu"
+          className="fixed top-[14vh] left-1/2 z-dialog flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none transition-[scale,opacity] duration-160 ease-enter data-starting-style:scale-[0.98] data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none"
+        >
           <Dialog.Title className="sr-only">Search pages and projects</Dialog.Title>
           <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
             <Search className="size-4 shrink-0 text-fg-subtle" aria-hidden />

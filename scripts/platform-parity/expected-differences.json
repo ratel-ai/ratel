@@ -194,14 +194,6 @@
       "side": "cloud",
       "pattern": "^reloptions\\|otel_(spans|logs|trace_summaries)\\|",
       "what": "three OTel tables lack Cloud's autovacuum settings"
-    },
-    {
-      "item": 5,
-      "check": "pages",
-      "part": "overview$",
-      "side": "cloud",
-      "pattern": "^(Take the tour|Step \\d+ of \\d+|Skip tour|Next|Overview: how this project is doing|Runs, first try, latency and cost at a glance.*)$",
-      "what": "the guided tour is absent"
     }
   ],
   "flagWording": {

@@ -102,10 +102,12 @@ export function SidebarContent({
             size="icon-sm"
             icon={<Search />}
             onClick={onSearch}
+            data-tour="command-palette"
           />
         ) : (
           <button
             type="button"
+            data-tour="command-palette"
             onClick={onSearch}
             className="flex h-8 w-full items-center gap-2 rounded-md border border-line bg-app px-2 text-ui text-fg-subtle outline-none transition-colors duration-120 hover:border-line-strong hover:text-fg-muted focus-visible:ring-2 focus-visible:ring-focus"
           >
@@ -167,6 +169,14 @@ export function SidebarContent({
   );
 }
 
+/**
+ * Tour anchors (`lib/console/onboarding/tour-steps.ts`): `nav-<id>` for every rail item, and
+ * `agent-health` on that item.
+ */
+export function tourAnchor(item: NavItem): string {
+  return item.id === "health" ? "agent-health" : `nav-${item.id}`;
+}
+
 /** Consecutive items of one section, in rail order. */
 function sections(items: readonly NavItem[]): { id: string; items: NavItem[] }[] {
   const out: { id: string; items: NavItem[] }[] = [];
@@ -194,6 +204,7 @@ function RailLink({
   const link = (
     <Link
       href={item.href}
+      data-tour={tourAnchor(item)}
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? item.label : undefined}
       onClick={onNavigate}
@@ -249,6 +260,7 @@ function RailGroup({
       <div className="group relative flex items-center">
         <Link
           href={item.href}
+          data-tour={tourAnchor(item)}
           aria-current={item.id === activeId ? "page" : undefined}
           onClick={() => {
             setToggled(true);
@@ -303,6 +315,7 @@ function RailGroup({
                 <li key={child.id}>
                   <Link
                     href={child.href}
+                    data-tour={tourAnchor(child)}
                     aria-current={active ? "page" : undefined}
                     onClick={onNavigate}
                     className={cn(

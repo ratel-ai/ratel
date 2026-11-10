@@ -1028,6 +1028,13 @@
         "apps/web/lib/console/onboarding/capture-consent.ts",
         "apps/web/lib/console/onboarding/capture-consent-ui.test.ts",
         "apps/web/lib/console/onboarding/transition.ts",
+        "apps/web/components/console/onboarding/GuidedTour.tsx",
+        "apps/web/components/console/onboarding/TourLauncher.tsx",
+        "apps/web/lib/console/onboarding/tour-steps.ts",
+        "apps/web/lib/console/onboarding/tour-state.ts",
+        "apps/web/lib/console/onboarding/tour-state.test.ts",
+        "apps/web/lib/console/onboarding/tour-geometry.ts",
+        "apps/web/lib/console/onboarding/tour-geometry.test.ts",
         "apps/web/app/api/v1/events/route.test.ts",
         "apps/web/lib/readings/intent-graph/maintenance.integration.test.ts",
         "apps/web/postcss.config.mjs",
@@ -1163,6 +1170,7 @@
         "apps/web/components/console/intent-map/**",
         "apps/web/components/console/calibration/**",
         "apps/web/components/console/settings/skeleton-parts.tsx",
+        "apps/web/components/console/onboarding/GuidedTour.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/tasks/**"
       ],
       "linter": {
