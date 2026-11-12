@@ -1,0 +1,78 @@
+# Weekly version updates, grouped to keep noise low. Majors are left to people: the
+# `ignore` rules apply to version updates only, so security updates still arrive for every
+# ecosystem (they need "Dependabot security updates" on in the repository settings).
+# Release units version independently (ADR-0008), so a dependency bump never touches a
+# package version and there is no changeset to add.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - "/"
+      - "/apps/*"
+      - "/packages/*"
+      - "/src/sdk/ts"
+      - "/src/telemetry/ts"
+      - "/src/rankers/ts"
+      - "/src/adapters/*"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: pip
+    directories:
+      - "/src/sdk/python"
+      - "/src/telemetry/python"
+      - "/src/rankers/python"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      pip-minor-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  # Base images: the platform Dockerfile and docker-compose.yml. The Node major follows the runtime (24).
+  - package-ecosystem: docker
+    directories:
+      - "/"
+      - "/apps/web"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
