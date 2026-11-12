@@ -30,7 +30,7 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 
 ## Quick Start
 
-**You need** Docker with Compose 2.24 or later.
+**You need** Docker with Compose 2.24 or later, network access to pull images and packages, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). The first build takes about 5 minutes.
 
 ### On your machine
 
@@ -40,7 +40,21 @@ cd ratel
 docker compose up -d --build --wait
 ```
 
-Open `http://localhost:3000`. The first build takes a few minutes, and no configuration is needed.
+Open `http://localhost:3000`. No configuration is needed.
+
+If port 3000 or 5432 is taken, set `RATEL_PORT` and `RATEL_DB_PORT` in `.env` (copy `.env.example`) and set `BASE_URL` to the address you open, such as `http://localhost:3950`. The console's snippets and the demo's links use `BASE_URL`.
+
+If `docker compose up --wait` fails, read `docker compose logs db web worker`. A full Docker disk shows up only in the `db` log (`No space left on device`). On a small machine the worker can report unhealthy for the first minutes after a restart, while it catches up on queued jobs; it usually settles by itself.
+
+### First steps
+
+1. In the console, open **Settings > API keys** and create a key. It is shown once.
+2. Send a first trace. The same page shows a TypeScript and a curl snippet with your endpoint; the curl one posts a single span to the traces endpoint and answers `202`. Set `RATEL_API_KEY` to the key.
+3. To let an agent query Ratel, connect it over MCP: `POST <BASE_URL>/api/mcp` with `Authorization: Bearer <project key>`. The console's **Integrations** page has copy-paste setup for Claude Code, Claude Desktop, Cursor and VS Code, for example `claude mcp add --transport http ratel <BASE_URL>/api/mcp --header "Authorization: Bearer $RATEL_API_KEY"`. Details are in [apps/web/lib/mcp/README.md](apps/web/lib/mcp/README.md).
+
+### Experimental features
+
+Tasks and Ship, testing a fix before it ships, session replay and the improvement-loop MCP tools are off by default. Add `RATEL_EXPERIMENTAL_FEATURES=1` to `.env` and run `docker compose up -d --build --wait` to turn them on; remove the line (or set `0`) and run it again to turn them off. With them on, **Tasks** becomes a page of its own in the rail and replaces the Tasks tab under Agent health, and the MCP server lists 9 more tools (40 without).
 
 ### Explore with demo data (optional)
 
@@ -71,11 +85,17 @@ TRACE_SIGNALS_HASH_SALT=<generated>
 
 Then start it with `docker compose up -d --build --wait`. Point your proxy at `127.0.0.1:3000`, and configure it so that:
 
-- `/v1`, `/v2`, `/api/v1` and `/api/v2` pass through without your login, because the SDKs authenticate with API keys.
-- Everything else requires your login.
+- `/v1`, `/v2`, `/api/v1`, `/api/v2` and `/api/mcp` pass through without your login, because the SDKs and MCP clients authenticate with API keys (bearer project keys). `/api/health` can pass too, for your monitor.
+- Everything else requires your login. That includes `/api/cron/drain`, which only matters if you set `RATEL_CRON=external`; it takes `CRON_SECRET` as a bearer, so give your scheduler that route and nothing else.
 - It preserves `Host` or sets `X-Forwarded-Host`, otherwise console actions fail.
 
-Model keys are optional, and every field is explained in `.env.example`. Experimental features (Tasks and Ship, testing a fix before it ships, session replay, the improvement-loop MCP tools) are off until you set `RATEL_EXPERIMENTAL_FEATURES=1`.
+Model keys are optional, and every field is explained in `.env.example`.
+
+**TLS.** Terminate it at the proxy and keep `BASE_URL` on the `https://` address, since the console's snippets are built from it.
+
+**Backups.** All state is in the Postgres volume (`ratel_pgdata`). Dump it with `docker compose exec -T db pg_dump -U ratel ratel > ratel.sql`, and restore into an empty database with `docker compose exec -T db psql -U ratel ratel < ratel.sql`. Keep `.env` too: a lost `TRACE_SIGNALS_HASH_SALT` splits old hashes from new.
+
+**Upgrades.** Check out a tag or a commit rather than following a moving branch, then run `docker compose up -d --build --wait`. Migrations run on boot and only add to the schema, so a rollback means restoring the dump you took before the upgrade and checking out the earlier version.
 
 ### Everyday commands
 

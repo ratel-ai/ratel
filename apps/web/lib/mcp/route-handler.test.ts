@@ -66,7 +66,7 @@ test("initialize negotiates and advertises the tools capability", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.jsonrpc, "2.0");
   assert.ok(body.result.capabilities.tools, "must advertise tools");
-  assert.equal(body.result.serverInfo.name, "ratel-cloud");
+  assert.equal(body.result.serverInfo.name, "ratel");
   assert.ok(body.result.instructions.length > 0);
 });
 

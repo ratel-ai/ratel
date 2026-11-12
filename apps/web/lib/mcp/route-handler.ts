@@ -132,7 +132,7 @@ function errorResponse(error: McpOperationError, status: number, request?: Reque
     // at the origin the client actually used, or discovery walks off this
     // server and the client stalls with no browser ever opening.
     headers["www-authenticate"] =
-      `Bearer realm="ratel-cloud", resource_metadata="${mcpResourceMetadataUrl(request)}"`;
+      `Bearer realm="ratel", resource_metadata="${mcpResourceMetadataUrl(request)}"`;
   }
   return new Response(JSON.stringify(body), { status, headers });
 }
