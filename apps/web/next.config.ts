@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // before the Cloud proxy sees them.
   skipTrailingSlashRedirect: true,
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
+  // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
+  // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.
+  experimental: { useTypeScriptCli: false },
   // A self-contained server bundle for the image: `node apps/web/server.js`, no pnpm at runtime.
   // The tracing root is the monorepo root so the workspace packages and the native
   // `@ratel-ai/sdk` addon are copied into .next/standalone.
