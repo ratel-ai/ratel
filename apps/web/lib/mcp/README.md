@@ -41,7 +41,8 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/playground.ts`: `test_retrieval` embeds through the embedding-provider port
   (`composition.embeddingProvider`), as the Playground route does, instead of a vendor key.
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.
-- `loop-flag.ts` (with its test): one env switch, `FF_MCP_LOOP`, in place of upstream's per-key and
+- `loop-flag.ts` (with its test): one env switch, `FF_MCP_LOOP` (or `RATEL_EXPERIMENTAL_FEATURES` in
+  the open-source edition, through `platform/experimental-features.ts`), in place of upstream's per-key and
   per-organization flag. `operations/loop/index.ts` and `loop.test.ts`: the gates are the env
   switches; `mark_fix_shipped` loads the task loop's shipment record (`views/task-evals/ship.ts`),
   so with `FF_EVAL_GATE` on it queues the post-ship measures. `list_fixes` and

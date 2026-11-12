@@ -1,4 +1,4 @@
-import { flagEnvEnabled } from "@/lib/platform/flags-env";
+import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import type { Organization } from "@/lib/platform/organizations";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
 
@@ -6,8 +6,9 @@ import type { EvalDb } from "@/lib/views/eval-gate/runs";
  * Whether the eval gate (RC-46 and its follow-up RC-61: holdout, outcome
  * checks, the judge and model replay) is on.
  *
- * Owned (ADR-0030): one switch for the deployment, `FF_EVAL_GATE`, read from
- * the environment and off by default. Upstream decides it per organization and
+ * Owned (ADR-0030): one switch for the deployment, `FF_EVAL_GATE` (or
+ * `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition), read from the
+ * environment and off by default. Upstream decides it per organization and
  * person through its flag service; the functions keep upstream's names and
  * arguments so every call site stays identical, and ignore who is asking.
  */
@@ -18,7 +19,7 @@ type Env = Record<string, string | undefined>;
 export const EVAL_GATE_OFF_ERROR = "The eval gate is off for this organization.";
 
 export function evalGateEnabled(env: Env = process.env): boolean {
-  return flagEnvEnabled(env.FF_EVAL_GATE);
+  return experimentalFeatureEnabled("FF_EVAL_GATE", env);
 }
 
 /** The signed-in person, in this organization (the project's, from its scope). */
