@@ -137,6 +137,18 @@ test("docker-compose.yml sets compose and platform", () => {
   assertFalse(r, ["sdk"]);
 });
 
+test("lockfile and exceptions-file changes set lockfiles", () => {
+  for (const f of ["pnpm-lock.yaml", "Cargo.lock", ".trivyignore.yaml"]) {
+    assertTrue(on([f]), ["lockfiles"]);
+  }
+  assertFalse(on(["apps/web/package.json"]), ["lockfiles"]);
+});
+
+test("dependabot.yml alone runs no leg", () => {
+  const r = on([".github/dependabot.yml"]);
+  assertFalse(r, ["lockfiles", "platform", "sdk", "compose", "rust", "python"]);
+});
+
 test("every file under scripts/ has an owner", () => {
   assert.deepEqual(listUnownedScripts(ROOT), []);
 });

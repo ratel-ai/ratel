@@ -59,6 +59,7 @@ jobs:
       platform: ${{ steps.c.outputs.platform }}
       compose: ${{ steps.c.outputs.compose }}
       release: ${{ steps.c.outputs.release }}
+      lockfiles: ${{ steps.c.outputs.lockfiles }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
@@ -75,6 +76,29 @@ jobs:
         run: node scripts/ci-filters.mjs --files-json "$CHANGED_FILES" >> "$GITHUB_OUTPUT"
       - name: Contract tests
         run: node --test scripts/ci-filters.test.mjs scripts/workflow-contracts.test.mjs
+
+  # Dependency scan: HIGH/CRITICAL advisories with a fix in pnpm-lock.yaml (runtime
+  # dependencies) and Cargo.lock fail the leg; the rest is printed, never gating. Accepted
+  # exceptions live in .trivyignore.yaml, each with a reason and an expiry. Trivy runs from a
+  # digest-pinned image; examples/ are not shipped and are skipped.
+  dependency-scan:
+    needs: changes
+    if: needs.changes.outputs.lockfiles == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report (not gating)
+        run: >
+          docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE" fs
+          --scanners vuln --severity HIGH,CRITICAL --skip-dirs examples
+          --ignorefile /src/.trivyignore.yaml --exit-code 0 /src
+      - name: Gate on fixable HIGH and CRITICAL
+        run: >
+          docker run --rm -v "$PWD:/src:ro" "$TRIVY_IMAGE" fs
+          --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --skip-dirs examples
+          --ignorefile /src/.trivyignore.yaml --exit-code 1 /src
 
   # cargo fmt/clippy/build/test across the workspace.
   rust:
@@ -593,6 +617,19 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and start
         run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Scan the image (fixable HIGH and CRITICAL in app dependencies)
+        # Same build as above, no second one. Operating-system packages are listed but do not
+        # gate: the base tag moves under us and a Debian fix lands before the Node image does.
+        env:
+          TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+        run: |
+          scan() {
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/src:ro" \
+              "$TRIVY_IMAGE" image --scanners vuln --severity HIGH,CRITICAL \
+              --ignorefile /src/.trivyignore.yaml "$@" ratel-web
+          }
+          scan --exit-code 0
+          scan --pkg-types library --ignore-unfixed --exit-code 1
       - name: Health, console and migrated schema
         run: |
           curl --fail --silent --show-error http://127.0.0.1:3000/api/health
@@ -829,7 +866,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, secret-scan, setup, verify]
+    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, dependency-scan, secret-scan, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -837,7 +874,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} secret-scan=${{ needs.secret-scan.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||

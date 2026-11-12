@@ -21,6 +21,7 @@ export const OUTPUTS = [
   "platform",
   "compose",
   "release",
+  "lockfiles",
 ];
 
 /** Doc allowlist: these paths set no output. */
@@ -244,6 +245,8 @@ const CLAIMS = [
   "Cargo.toml",
   "Cargo.lock",
   "rust-toolchain.toml",
+  ".github/dependabot.yml",
+  ".trivyignore.yaml",
   "src/core/**",
   "src/telemetry/core/**",
   "src/sdk/ts/**",
@@ -292,6 +295,14 @@ function applyFile(result, file) {
     // Unowned script: fall through to setAll via isUnclaimed.
     return setAll(result);
   }
+
+  // Lockfile scan: the lockfiles themselves and the exceptions file.
+  if (file === "pnpm-lock.yaml" || file === "Cargo.lock" || file === ".trivyignore.yaml") {
+    merge(result, ["lockfiles"]);
+  }
+
+  // Dependabot config: a bot setting, no leg to run.
+  if (file === ".github/dependabot.yml") return result;
 
   if (
     file === "pnpm-lock.yaml" ||
