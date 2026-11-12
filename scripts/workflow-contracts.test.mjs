@@ -165,3 +165,16 @@ test("verify-rankers-ts runs the README's install command and checks the floor",
   assert.match(body, /src\/rankers\/ts\/README\.md/);
   assert.match(body, /require\('@ratel-ai\/sdk\/package\.json'\)\.version/);
 });
+
+test("dependency-scan runs on lockfile changes and gates ci-gate", () => {
+  const body = jobBody(ciWorkflow, "dependency-scan");
+  assert.match(body, /needs\.changes\.outputs\.lockfiles == 'true'/);
+  assert.match(body, /--ignore-unfixed/);
+  assert.ok(jobBody(ciWorkflow, "ci-gate").includes("dependency-scan"));
+});
+
+test("platform-compose scans the image it built, pinned by digest", () => {
+  const body = jobBody(ciWorkflow, "platform-compose");
+  assert.match(body, /image --scanners vuln/);
+  assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
+});
