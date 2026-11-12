@@ -5,14 +5,14 @@ import { type DispatchDeps, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation, Registry } from "@/lib/mcp/registry";
 import { stageMeta, TOOL_STAGES } from "@/lib/mcp/stages";
 
-export const MCP_SERVER_NAME = "ratel-cloud";
+export const MCP_SERVER_NAME = "ratel";
 export const MCP_SERVER_VERSION = "0.1.0";
 
 /**
  * How the model is told to use this server. Deliberately short: it is prepended
  * to the agent's context on every session, so it should orient and stop.
  */
-const INSTRUCTIONS = `Ratel Cloud: agent context-usage analytics.
+const INSTRUCTIONS = `Ratel: agent context-usage analytics.
 
 Each tool reads or changes one thing about a project. Call whoami first to learn
 which project this credential reaches; most tools default to it.
