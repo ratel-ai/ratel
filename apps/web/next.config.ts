@@ -10,6 +10,8 @@ const eeCompositionTarget =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // `next dev` would write apps/web/AGENTS.md (Next 16.3+); the repo's AGENTS.md is the source.
+  agentRules: false,
   // Telemetry paths end in a slash (/ingest/flags/); without this Next answers them with a 308
   // before the Cloud proxy sees them.
   skipTrailingSlashRedirect: true,

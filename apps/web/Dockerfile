@@ -80,6 +80,10 @@ RUN node ee/src/db/bundle-migrator.mjs /app/migrator
 # --- runtime base: minimal Node, no toolchain -----------------------------
 FROM node:24-trixie-slim AS runtime
 WORKDIR /app
+# The app runs `node` only. The bundled npm and corepack carry their own copies of undici and
+# brace-expansion, so the image drops them (base/deps/demo keep them to build and seed).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 RUN groupadd --system --gid 1001 ratel \
   && useradd --system --uid 1001 --gid ratel ratel
 ENV NODE_ENV=production
