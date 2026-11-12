@@ -1,26 +1,8 @@
 # Accepted dependency-scan exceptions. Each entry needs a reason and an expiry; an
 # expired entry stops suppressing and the scan fails again. Remove an entry when its fix lands.
 vulnerabilities:
-  - id: CVE-2026-102276
-    statement: "brace-expansion: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
-    expired_at: 2026-12-12
-  - id: CVE-2026-102278
-    statement: "brace-expansion: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
-    expired_at: 2026-12-12
   - id: GHSA-36hh-v3qg-5jq4
     statement: "pyo3: Python extension build only; bump is a 0.x minor (0.23 to 0.24+), needs a decision. Not in the OSS image."
-    expired_at: 2026-12-12
-  - id: CVE-2026-109383
-    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
-    expired_at: 2026-12-12
-  - id: CVE-2026-109869
-    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
-    expired_at: 2026-12-12
-  - id: CVE-2026-19534
-    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
-    expired_at: 2026-12-12
-  - id: CVE-2026-87018
-    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-115905
     statement: "zip: Transitive of candle-core in the Rust SDK build; archive extraction is not used. Not in the OSS image. Needs candle bump."
