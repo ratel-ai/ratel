@@ -24,6 +24,7 @@ npm packages.
 | `model-call.ts` | the model-call seam: `trackModelCall`, `recordModelCall`, `anthropicUsage` report a model call (tokens, duration, outcome) to a sink that is unset here, so a tracked call only runs; an edition that tracks spend installs one with `setModelCallSink` (owned) |
 | `project-log-context.ts` | `withProjectLogContext`: background work for one project inside a log context that names it and its organization |
 | `deployment-config.ts` | `RATEL_ORG_NAME` validated at boot, and the warnings at boot for a public `BASE_URL` on public defaults |
+| `experimental-features.ts` | `experimentalFeatureEnabled(flag)`: a feature's own `FF_*` flag, or `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition (the composition's edition; Cloud ignores it). Every experimental flag reads through it |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `request-log-labels.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging (with the organization and project slugs), token buckets, body caps, self-telemetry: the platform's own traces and logs, registered at boot by `instrumentation.node.ts` only when both `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` are set, and flushed on a stop |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions; refused in a support session |

@@ -9,7 +9,7 @@
  *   --no-models   local stand-ins for the drafts and simulations (EVAL_GATE_MOCK_MODEL=1, the
  *                 model keys unset), and no live judging: nothing calls out
  *
- * Then start the app with FF_STAGE_SPINE=true FF_EVAL_GATE=true to open the pages it prints.
+ * Then start the app with RATEL_EXPERIMENTAL_FEATURES=1 to open the pages it prints.
  * Owned (ADR-0030): upstream's `scripts/seed-task-loop.mts`; the pipeline runs through the
  * platform seed's `--drain`, so this script only seeds the task loop. Refuses a database that
  * is not on this machine.

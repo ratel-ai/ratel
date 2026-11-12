@@ -9,7 +9,7 @@ import { useRef, useState, useTransition } from "react";
 import {
   changeTaskEvalAction,
   draftTaskTestAction,
-} from "@/app/(console)/project/[projectId]/tasks/[taskId]/eval-actions";
+} from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/eval-actions";
 import type { TestProposal } from "@/lib/views/task-evals/test-proposal";
 
 const LIMITS = [

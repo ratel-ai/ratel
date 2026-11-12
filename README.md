@@ -75,7 +75,7 @@ Then start it with `docker compose up -d --build --wait`. Point your proxy at `1
 - Everything else requires your login.
 - It preserves `Host` or sets `X-Forwarded-Host`, otherwise console actions fail.
 
-Model keys are optional, and every field is explained in `.env.example`.
+Model keys are optional, and every field is explained in `.env.example`. Experimental features (Tasks and Ship, testing a fix before it ships, session replay, the improvement-loop MCP tools) are off until you set `RATEL_EXPERIMENTAL_FEATURES=1`.
 
 ### Everyday commands
 

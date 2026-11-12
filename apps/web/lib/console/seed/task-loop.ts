@@ -224,7 +224,7 @@ export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOpt
     `Score marker (${version}, ${shipment.shippedAt.toISOString().slice(0, 10)})`,
   ];
   for (const [index, url] of urls.entries()) out(`${labels[index]}: ${url}`);
-  out("Start the app with FF_STAGE_SPINE=true FF_EVAL_GATE=true to open these pages.");
+  out("Start the app with RATEL_EXPERIMENTAL_FEATURES=1 to open these pages.");
   if (options.noModels)
     out("Models are off. Drafts and simulations use local stand-ins. Live judging is skipped.");
   return {
