@@ -1143,15 +1143,15 @@
         "!apps/web/lib/views/eval-gate/seams.ts",
         "!apps/web/lib/views/eval-gate/no-outbound-without-key.test.ts",
         "apps/web/components/console/eval-gate/**",
-        "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
+        "apps/web/app/(console)/(eval-gate)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "apps/web/lib/platform/project-log-context.ts",
         "apps/web/lib/views/fix-drafts/change.test.ts",
-        "apps/web/app/(console)/project/\\[projectId\\]/tasks/**",
-        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/page.tsx",
-        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/page.tsx",
-        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/actions.ts",
-        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/context.ts",
-        "!apps/web/app/(console)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/actions.ts",
+        "apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/**",
+        "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/page.tsx",
+        "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/page.tsx",
+        "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/actions.ts",
+        "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/context.ts",
+        "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/simulations/actions.ts",
         "apps/web/components/console/tasks/RunToTest.tsx",
         "apps/web/components/console/tasks/TopLevelTasksTable.tsx",
         "apps/web/lib/views/tasks/top-level-ui.test.ts"
@@ -1174,7 +1174,7 @@
         "apps/web/components/console/session-replay/**",
         "apps/web/components/console/lineage/**",
         "apps/web/components/console/eval-gate/**",
-        "apps/web/app/(console)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
+        "apps/web/app/(console)/(eval-gate)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "apps/web/components/console/adaptive-ranking/**",
         "apps/web/components/console/quality/**",
         "apps/web/components/console/fixes/**",
@@ -1184,7 +1184,7 @@
         "apps/web/components/console/calibration/**",
         "apps/web/components/console/settings/skeleton-parts.tsx",
         "apps/web/components/console/onboarding/GuidedTour.tsx",
-        "apps/web/app/(console)/project/\\[projectId\\]/tasks/**"
+        "apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/**"
       ],
       "linter": {
         "rules": {

@@ -48,7 +48,7 @@
     { "from": "@/app/(app)/project/[projectId]/improvement/match-quality/", "to": "@/app/(console)/project/[projectId]/improvement/match-quality/" },
     { "from": "@/components/ui/useCopyToClipboard", "to": "@ratel/design-system/use-copy-to-clipboard", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/improvement/fixes/", "to": "@/app/(console)/project/[projectId]/improvement/fixes/" },
-    { "from": "@/app/(app)/project/[projectId]/tasks/", "to": "@/app/(console)/project/[projectId]/tasks/" },
+    { "from": "@/app/(app)/project/[projectId]/tasks/", "to": "@/app/(console)/(stage-spine)/project/[projectId]/tasks/" },
     { "from": "@/components/traces/v2/", "to": "@/components/console/traces/" },
     { "from": "@/components/session-replay/", "to": "@/components/console/session-replay/" },
     { "from": "@/components/lineage/", "to": "@/components/console/lineage/" },
