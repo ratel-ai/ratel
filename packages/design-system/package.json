@@ -33,7 +33,7 @@
     "tailwind-merge": "^3.6.0"
   },
   "peerDependencies": {
-    "next": "16.2.4",
+    "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -41,7 +41,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "next": "16.2.4",
+    "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "tsx": "^4.20.6",
