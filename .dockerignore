@@ -8,3 +8,9 @@ e2e/
 benchmark/
 **/.env*
 !**/.env.example
+# Terraform caches, state and plans (ee/src/infra, when ee/src is checked out):
+# provider binaries are large and state holds secrets; the image needs none.
+**/.terraform
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
