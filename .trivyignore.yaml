@@ -1,116 +1,26 @@
 # Accepted dependency-scan exceptions. Each entry needs a reason and an expiry; an
 # expired entry stops suppressing and the scan fails again. Remove an entry when its fix lands.
 vulnerabilities:
-  - id: CVE-2026-104850
-    statement: "@modelcontextprotocol/sdk: Used by the /mcp route. Fix is a minor bump of a pinned direct dependency (1.29 to 1.30.1+); tracked for a decision."
-    expired_at: 2026-12-12
-  - id: CVE-2026-111767
-    statement: "@modelcontextprotocol/sdk: Used by the /mcp route. Fix is a minor bump of a pinned direct dependency (1.29 to 1.30.1+); tracked for a decision."
-    expired_at: 2026-12-12
-  - id: CVE-2026-111768
-    statement: "@modelcontextprotocol/sdk: Used by the /mcp route. Fix is a minor bump of a pinned direct dependency (1.29 to 1.30.1+); tracked for a decision."
-    expired_at: 2026-12-12
-  - id: GHSA-f897-62hf-6gxq
-    statement: "@modelcontextprotocol/sdk: Used by the /mcp route. Fix is a minor bump of a pinned direct dependency (1.29 to 1.30.1+); tracked for a decision."
-    expired_at: 2026-12-12
-  - id: CVE-2026-111181
-    statement: "body-parser: Transitive of the MCP SDK / express; fix is a minor bump, ships with the MCP SDK bump."
-    expired_at: 2026-12-12
   - id: CVE-2026-102276
-    statement: "brace-expansion: Transitive glob tooling bundled by next; in-range refresh to 5.0.12 planned."
+    statement: "brace-expansion: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-102278
-    statement: "brace-expansion: Transitive glob tooling bundled by next; in-range refresh to 5.0.12 planned."
-    expired_at: 2026-12-12
-  - id: CVE-2026-13676
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-16221
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-18446
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-6321
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-6322
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-75975
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-76172
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-84292
-    statement: "fast-uri: Transitive of ajv via the MCP SDK; in-range lockfile refresh to 3.1.9 is planned with the MCP SDK bump."
-    expired_at: 2026-12-12
-  - id: CVE-2026-54290
-    statement: "hono: Transitive of the MCP SDK; in-range lockfile refresh planned. Not in the OSS image."
-    expired_at: 2026-12-12
-  - id: CVE-2026-69192
-    statement: "ip-address: Transitive of the MCP SDK rate limiter; in-range lockfile refresh planned. Not in the OSS image."
-    expired_at: 2026-12-12
-  - id: CVE-2026-84375
-    statement: "js-yaml: Transitive build/lint tooling; in-range lockfile refresh planned. Not in the OSS image."
-    expired_at: 2026-12-12
-  - id: GHSA-5p4m-2wfm-xmqj
-    statement: "js-yaml: Transitive build/lint tooling; in-range lockfile refresh planned. Not in the OSS image."
-    expired_at: 2026-12-12
-  - id: CVE-2026-75604
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: CVE-2026-94482
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: CVE-2026-94483
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: GHSA-2464-fhr4-w9xw
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: GHSA-2xp9-vwfh-vxw4
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: GHSA-673q-mjm6-r5xr
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: GHSA-vcvr-r3jv-pc5j
-    statement: "next: Fix needs next 16.3.x or 16.4.1 (minor bump of the framework). Image optimizer path is on by default and reachable; tracked for a decision before release."
-    expired_at: 2026-12-12
-  - id: CVE-2026-45623
-    statement: "postcss: Pinned inside next 16.2 itself (postcss 8.4.31 vendored); goes away with the next minor bump. Build-time CSS only."
-    expired_at: 2026-12-12
-  - id: CVE-2026-73646
-    statement: "postcss: Pinned inside next 16.2 itself (postcss 8.4.31 vendored); goes away with the next minor bump. Build-time CSS only."
-    expired_at: 2026-12-12
-  - id: CVE-2026-90711
-    statement: "proxy-addr: Transitive of express in the MCP SDK; in-range refresh to 2.0.8 planned. Not in the OSS image."
+    statement: "brace-expansion: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: GHSA-36hh-v3qg-5jq4
     statement: "pyo3: Python extension build only; bump is a 0.x minor (0.23 to 0.24+), needs a decision. Not in the OSS image."
     expired_at: 2026-12-12
-  - id: GHSA-f88m-g3jw-g9cj
-    statement: "sharp: Used by the next image optimizer; fix is a 0.x minor bump (0.35). Ships with the next bump."
-    expired_at: 2026-12-12
-  - id: GHSA-rgj7-g3m4-5g8c
-    statement: "sharp: Used by the next image optimizer; fix is a 0.x minor bump (0.35). Ships with the next bump."
-    expired_at: 2026-12-12
-  - id: GHSA-wq5f-xc86-pv6w
-    statement: "sharp: Used by the next image optimizer; fix is a 0.x minor bump (0.35). Ships with the next bump."
-    expired_at: 2026-12-12
   - id: CVE-2026-109383
-    statement: "undici: Transitive in next bundled tracing; in-range refresh to 6.28.1 planned."
+    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-109869
-    statement: "undici: Transitive in next bundled tracing; in-range refresh to 6.28.1 planned."
+    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-19534
-    statement: "undici: Transitive in next bundled tracing; in-range refresh to 6.28.1 planned."
+    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-87018
-    statement: "undici: Transitive in next bundled tracing; in-range refresh to 6.28.1 planned."
+    statement: "undici: Bundled with npm in the node:24-trixie-slim base image (/usr/local/lib/node_modules/npm), even the newest tag; the app never runs npm. Cleared by a base image whose npm ships the fix, or by dropping npm from the runtime stage."
     expired_at: 2026-12-12
   - id: CVE-2026-115905
     statement: "zip: Transitive of candle-core in the Rust SDK build; archive extraction is not used. Not in the OSS image. Needs candle bump."
