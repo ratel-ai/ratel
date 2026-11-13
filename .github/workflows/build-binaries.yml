@@ -67,7 +67,7 @@ jobs:
         shell: bash
         run: ls -la src/sdk/ts/native/
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bindings-${{ matrix.triple }}
           path: |
@@ -140,7 +140,7 @@ jobs:
       - name: List final bundle
         run: ls -la tarballs/
       - name: Upload bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-tarballs
           path: tarballs/
