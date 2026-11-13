@@ -1,0 +1,1 @@
+CREATE INDEX "jobs_project_kind_done_idx" ON "jobs" USING btree ("project_id","kind","finished_at") WHERE "jobs"."status" = 'done';

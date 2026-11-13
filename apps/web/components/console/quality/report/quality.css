@@ -1,0 +1,444 @@
+/*
+ * Layout for the quality charts and panels.
+ *
+ * Every colour here is a `--q-*` token resolved by the scope wrapper, never a
+ * literal and never a Tailwind palette class. That is what lets the same
+ * components render on the dark console and on a white printed page without a
+ * second implementation drifting away from the first.
+ */
+
+.q-scope {
+  color: var(--q-ink);
+}
+
+/* Containment and Quality, side by side. Two numbers, never averaged. */
+.q-headline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.q-headline-cell {
+  border: 1px solid var(--q-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--q-surface);
+}
+
+.q-headline-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--q-muted);
+}
+
+.q-headline-value {
+  font-family: var(--font-display), sans-serif;
+  font-size: 30px;
+  line-height: 1.05;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+
+.q-headline-sub {
+  font-size: 11px;
+  color: var(--q-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* A proportion with its confidence band. */
+.q-rate {
+  margin-bottom: 10px;
+}
+
+.q-rate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.q-rate-label {
+  color: var(--q-ink-dim);
+}
+
+.q-rate-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--q-ink);
+  font-weight: 600;
+}
+
+.q-rate-bar {
+  width: 100%;
+  height: 10px;
+  display: block;
+}
+
+.q-rate-caption {
+  font-size: 10.5px;
+  color: var(--q-muted);
+  margin-top: 3px;
+}
+
+/* Rank histogram. */
+.q-hist-svg {
+  width: 100%;
+  display: block;
+}
+
+.q-hist-axis {
+  display: flex;
+  margin-top: 4px;
+}
+
+.q-hist-tick {
+  flex: 1;
+  text-align: center;
+  font-size: 9px;
+  color: var(--q-muted);
+  line-height: 1.3;
+}
+
+.q-hist-tick b {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--q-ink-dim);
+  min-height: 12px;
+}
+
+.q-hist-tick--absent {
+  color: var(--q-ink-dim);
+}
+
+/* Latency bars. */
+.q-latency-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+
+.q-latency-arm {
+  width: 104px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--q-ink-dim);
+}
+
+.q-latency-bar {
+  flex: 1;
+  height: 12px;
+  display: block;
+}
+
+.q-latency-value {
+  width: 66px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--q-ink);
+}
+
+/* Trend. */
+.q-trend {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.q-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Small shared pieces. */
+.q-legend {
+  display: flex;
+  gap: 14px;
+  font-size: 10.5px;
+  color: var(--q-muted);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.q-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.q-swatch-svg {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.q-note {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--q-muted);
+}
+
+.q-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--q-line);
+}
+
+.q-stat-row:last-child {
+  border-bottom: 0;
+}
+
+.q-stat-row dt {
+  color: var(--q-muted);
+}
+
+.q-stat-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--q-ink);
+}
+
+/* A method note that stays out of the way until it is wanted. */
+.q-disclosure {
+  margin-top: 10px;
+  border-top: 1px solid var(--q-line);
+  padding-top: 8px;
+}
+
+.q-disclosure > summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--q-muted);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.q-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.q-disclosure > summary::before {
+  content: "+";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--q-border);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--q-muted);
+}
+
+.q-disclosure[open] > summary::before {
+  content: "\2212";
+}
+
+.q-disclosure > summary:hover {
+  color: var(--q-ink-dim);
+}
+
+.q-disclosure-body {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--q-muted);
+}
+
+.q-disclosure-body p {
+  margin: 0 0 7px;
+}
+
+.q-disclosure-body p:last-child {
+  margin-bottom: 0;
+}
+
+.q-disclosure-body code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--q-ink-dim);
+}
+
+.q-fact {
+  margin: 0 0 7px;
+}
+
+.q-fact-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--q-ink-dim);
+  margin-bottom: 1px;
+}
+
+/* A figure meant to be read before anything else on the card. */
+.q-figures {
+  display: flex;
+  gap: 18px;
+  margin: 0 0 14px;
+}
+
+.q-figure {
+  flex: 1;
+  min-width: 0;
+}
+
+.q-figure-n {
+  font-family: var(--font-display), sans-serif;
+  font-size: 30px;
+  font-weight: 640;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: var(--q-accent);
+}
+
+.q-figure-l {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--q-muted);
+  margin-top: 5px;
+}
+
+/* One-of-N picker whose selection slides. */
+.q-segmented {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--q-seg-count), minmax(0, 1fr));
+  gap: 0;
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid var(--q-border);
+  background: var(--q-track);
+  isolation: isolate;
+}
+
+.q-segmented-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  z-index: 0;
+  border-radius: 7px;
+  background: var(--q-surface);
+  border: 1px solid var(--q-border);
+  /* Width is set inline from the segment count, so the inset is taken off the
+     track rather than the thumb to keep the two edges symmetrical. */
+  margin-right: 6px;
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .q-segmented-thumb {
+    transition: none;
+  }
+}
+
+.q-segmented-item {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  text-align: center;
+  color: var(--q-muted);
+  transition: color 160ms ease;
+  min-width: 0;
+}
+
+.q-segmented-item:hover {
+  color: var(--q-ink-dim);
+}
+
+.q-segmented-item.is-active {
+  color: var(--q-ink);
+}
+
+.q-segmented-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.q-segmented-meta {
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--q-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The answer band: the figures a reader should get without scrolling. */
+.q-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.q-summary-cell {
+  border: 1px solid var(--q-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--q-surface);
+  min-width: 0;
+}
+
+.q-summary-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--q-muted);
+}
+
+.q-summary-value {
+  font-family: var(--font-display), sans-serif;
+  font-size: 34px;
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: 6px;
+  color: var(--q-ink);
+}
+
+.q-summary-value.accent {
+  color: var(--q-accent);
+}
+
+.q-summary-sub {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--q-muted);
+  margin-top: 6px;
+}
+
+.q-banner {
+  border: 1px solid var(--q-border);
+  border-left-width: 3px;
+  border-left-color: var(--q-accent);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--q-ink-dim);
+  background: var(--q-surface);
+}

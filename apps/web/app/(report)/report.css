@@ -1,0 +1,334 @@
+/*
+ * The printed partner report: A4, light, and typeset rather than screenshotted.
+ *
+ * Printing the console would produce a dark page that wastes a cartridge and
+ * reads badly, so this is a genuine second surface, but only for the page
+ * furniture. The charts are the same components as the console's, rendering
+ * against the light `--q-*` tokens the scope wrapper hands them.
+ *
+ * Loaded only by the report route group, so none of these rules reach the app.
+ */
+
+@page {
+  size: A4;
+  margin: 14mm 13mm;
+}
+
+/*
+ * The app paints a near-black canvas on BOTH `html` and `body`, and declares
+ * `color-scheme: dark` on the root. Overriding `body` alone is not enough: the
+ * page canvas comes from `html`, so the printed sheet stayed black behind a
+ * white body box, and the dark colour-scheme kept the UA painting dark chrome
+ * around it. This file only loads on the report route, so resetting the root
+ * here is scoped to this surface.
+ */
+:root {
+  color-scheme: light;
+}
+
+html:has(.report),
+body:has(.report) {
+  background: #ffffff;
+  color: #0b0b0b;
+  overflow-x: visible;
+}
+
+@media print {
+  html:has(.report),
+  body:has(.report) {
+    background: #ffffff !important;
+    color: #0b0b0b !important;
+  }
+}
+
+/*
+ * On screen the document is a centred page preview. In print it must simply be
+ * the page: `@page` already reserves the margins, so any width of our own here
+ * is added ON TOP of them and pushes the content off both edges.
+ */
+.report {
+  background: #ffffff;
+  color: #0b0b0b;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  max-width: 184mm;
+  margin: 0 auto;
+  padding: 8mm 0 24mm;
+}
+
+.report-page {
+  page-break-after: always;
+  break-after: page;
+  padding-top: 2px;
+}
+
+.report-page:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+
+.report h1 {
+  font-family: var(--font-display), sans-serif;
+  font-size: 24pt;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.report h2 {
+  font-family: var(--font-display), sans-serif;
+  font-size: 15pt;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.report h3 {
+  font-size: 10.5pt;
+  margin: 0 0 5px;
+  font-weight: 600;
+}
+
+.report p {
+  margin: 0 0 9px;
+}
+
+.report .kicker {
+  font-size: 8.5pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #52514e;
+  margin: 0 0 3px;
+  font-weight: 600;
+}
+
+.report .sub {
+  color: #52514e;
+  font-size: 10pt;
+  margin: 0 0 18px;
+}
+
+.report .lede {
+  font-size: 12pt;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.report .card {
+  border: 1px solid #e3e2dd;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin: 0 0 10px;
+  background: #ffffff;
+  break-inside: avoid;
+}
+
+.report .card.warn {
+  border-color: #f0c9b6;
+  background: #fdf6f2;
+}
+
+.report .card.ok {
+  border-color: #bfe3d4;
+  background: #f2faf7;
+}
+
+.report .card.info {
+  border-color: #c5d8f0;
+  background: #f3f7fd;
+}
+
+.report .card p:last-child {
+  margin-bottom: 0;
+}
+
+.report .tiles {
+  display: flex;
+  gap: 9px;
+  margin: 0 0 14px;
+}
+
+.report .tile {
+  flex: 1;
+  border: 1px solid #e3e2dd;
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: #ffffff;
+}
+
+.report .tile .n {
+  font-family: var(--font-display), sans-serif;
+  font-size: 19pt;
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.report .tile .l {
+  font-size: 8.5pt;
+  color: #52514e;
+  margin-top: 3px;
+  line-height: 1.35;
+}
+
+.report .two {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.report .two > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.report table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  margin: 0 0 10px;
+}
+
+.report th,
+.report td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8e7e2;
+  vertical-align: top;
+}
+
+.report th {
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #52514e;
+  font-weight: 600;
+}
+
+.report code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 9pt;
+  background: #f2f1ec;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.report .small {
+  font-size: 9pt;
+  color: #52514e;
+}
+
+/* Cover page: one idea per band, generous air, no chart. */
+.report-cover {
+  display: flex;
+  flex-direction: column;
+  min-height: 246mm;
+}
+
+.report-cover .cover-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.report-cover .cover-mid {
+  margin-top: auto;
+  margin-bottom: auto;
+  padding: 12mm 0;
+}
+
+.report-cover h1 {
+  font-size: 34pt;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin: 0 0 10px;
+}
+
+.report-cover .cover-lede {
+  font-size: 12.5pt;
+  line-height: 1.5;
+  color: #2a2a28;
+  max-width: 135mm;
+  margin: 0;
+}
+
+.report-cover .cover-foot {
+  border-top: 1px solid #e3e2dd;
+  padding-top: 8px;
+  font-size: 9pt;
+  color: #52514e;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* A headline figure that is meant to be read from across a desk. */
+.hero-row {
+  display: flex;
+  gap: 14px;
+  margin: 0 0 16px;
+}
+
+.hero {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero .n {
+  font-family: var(--font-display), sans-serif;
+  font-size: 40pt;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: #0b0b0b;
+}
+
+.hero .n.accent {
+  color: #c4431f;
+}
+
+.hero .l {
+  font-size: 9.5pt;
+  color: #52514e;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+
+.report .foot {
+  font-size: 8.5pt;
+  color: #52514e;
+  margin-top: 12px;
+}
+
+.report .mark {
+  height: 30px;
+  width: auto;
+  color: #0b0b0b;
+  flex-shrink: 0;
+}
+
+.report-toolbar {
+  max-width: 190mm;
+  margin: 0 auto;
+  padding: 12px 0 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 12px;
+  color: #52514e;
+}
+
+/* Screen-only chrome. The print button cannot appear in its own output. */
+@media print {
+  .report-toolbar {
+    display: none;
+  }
+
+  .report {
+    padding: 0;
+    margin: 0;
+    width: auto;
+    max-width: none;
+  }
+}

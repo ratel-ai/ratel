@@ -1,0 +1,59 @@
+import { cookies } from "next/headers";
+import type { ReactNode } from "react";
+import { AppFrame } from "@/components/console/shell/AppFrame";
+import { composition } from "@/lib/composition";
+import { visibleOrganizationNav } from "@/lib/console/navigation";
+import { getConsoleScope } from "@/lib/console/shell-data";
+import {
+  parseSidebarCollapsedCookie,
+  SIDEBAR_COLLAPSED_COOKIE,
+} from "@/lib/console/sidebar-cookie";
+import type { EditionUi } from "@/lib/contracts/composition";
+import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
+
+/** The console's rail and page, with its data resolved on the server. */
+export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
+  const [scope, cookieStore] = await Promise.all([getConsoleScope(), cookies()]);
+  const AccountMenuItems = ui?.AccountMenuItems;
+  const ConsoleBoundary = ui?.ConsoleBoundary;
+  const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
+  const projects = scope?.projects ?? [];
+  const hidden =
+    scope?.organizationSlug && ui?.hiddenOrganizationNav
+      ? await ui.hiddenOrganizationNav(scope.organizationSlug)
+      : [];
+  return (
+    <>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-md focus:border focus:border-line focus:bg-overlay focus:px-3 focus:py-2 focus:text-sm focus:text-fg focus:outline-none focus:ring-2 focus:ring-focus"
+      >
+        Skip to content
+      </a>
+      <AppFrame
+        data={{
+          organizationName: scope?.organizationName ?? null,
+          organizationSlug: scope?.organizationSlug ?? null,
+          projects,
+          account: scope?.account ?? null,
+          editionNav: composition.nav,
+          organizationNav: visibleOrganizationNav(composition.organizationNav, hidden),
+          projectNav: composition.projectNav,
+          scopeSwitcher: ScopeSwitcher
+            ? {
+                expanded: <ScopeSwitcher projects={projects} collapsed={false} />,
+                collapsed: <ScopeSwitcher projects={projects} collapsed />,
+              }
+            : null,
+          accountMenuItems: AccountMenuItems ? <AccountMenuItems /> : null,
+          stageSpine: stageSpineEnabled(),
+          initiallyCollapsed: parseSidebarCollapsedCookie(
+            cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value,
+          ),
+        }}
+      >
+        {ConsoleBoundary ? <ConsoleBoundary>{children}</ConsoleBoundary> : children}
+      </AppFrame>
+    </>
+  );
+}

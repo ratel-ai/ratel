@@ -1,0 +1,18 @@
+# gitleaks configuration: the default rules, plus path allowlists for test fixtures.
+#
+# .gitleaksignore pins findings by commit SHA, which a squash or rebase merge
+# rewrites: the same fake keys then come back as new findings on the push to main.
+# These files only hold fake API keys and a placeholder bearer token in unit tests,
+# so they are allowed by path, for the one rule that flags them.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake API-key fixtures and a placeholder OTLP bearer token in unit tests"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^apps/web/lib/platform/api-key-actions\.test\.ts$''',
+  '''^apps/web/lib/console/settings/api-keys\.test\.ts$''',
+  '''^apps/web/lib/platform/otel/config\.test\.ts$''',
+]

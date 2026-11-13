@@ -51,19 +51,12 @@ test("publish-rc.sh restores adapter manifests with a git checkout EXIT trap", (
   assert.match(publishRc, /trap .*git .*checkout/);
 });
 
-// Scoped to the `ts` filter on purpose: workflow-contracts and mastra's
-// package-layout test run in the `ts` job, so a release.yml-only PR must trip it.
-// A file-wide match would keep passing if the path moved to another filter.
-test("ts path filter lists release.yml", () => {
-  const ts = ciWorkflow.indexOf("\n            ts:");
-  const next = ciWorkflow.indexOf("\n            python:", ts);
-  assert.ok(ciWorkflow.slice(ts, next).includes("- '.github/workflows/release.yml'"));
-});
-
-test("ts path filter lists verify-install.yml", () => {
-  const ts = ciWorkflow.indexOf("\n            ts:");
-  const next = ciWorkflow.indexOf("\n            python:", ts);
-  assert.ok(ciWorkflow.slice(ts, next).includes("- '.github/workflows/verify-install.yml'"));
+// workflow-contracts runs in the changes job on every ready PR, so a release.yml-only
+// or verify-install.yml-only edit still exercises these assertions without forcing sdk.
+test("changes job runs workflow-contracts and ci-filters tests", () => {
+  const body = jobBody(ciWorkflow, "changes");
+  assert.match(body, /scripts\/workflow-contracts\.test\.mjs/);
+  assert.match(body, /scripts\/ci-filters\.test\.mjs/);
 });
 
 // The rankers plugin (ADR-0028) peers on the SDK, so its npm loader must publish
@@ -102,7 +95,7 @@ test("publish-rc.sh builds the rankers-ts bootstrap with build-rankers-ts.sh", (
 
 test("ci runs build-rankers-ts.sh on a clean runner, gated by ci-gate", () => {
   const body = jobBody(ciWorkflow, "rankers-ts-publish-build");
-  assert.match(body, /needs\.changes\.outputs\.ts == 'true'/);
+  assert.match(body, /needs\.changes\.outputs\.rankers_ts == 'true'/);
   assert.match(body, /run: scripts\/build-rankers-ts\.sh/);
   assert.doesNotMatch(body, /pnpm -r build/);
   assert.match(jobBody(ciWorkflow, "ci-gate"), /rankers-ts-publish-build/);
@@ -118,16 +111,12 @@ test("release.yml triggers on the rankers tags and the GitHub release waits for 
   }
 });
 
-for (const filter of ["rust", "ts", "python"]) {
-  test(`${filter} path filter lists the rankers packages`, () => {
-    const start = ciWorkflow.indexOf(`\n            ${filter}:`);
-    assert.notEqual(start, -1, `missing ${filter} filter`);
-    const rest = ciWorkflow.slice(start + 1);
-    const next = rest.slice(1).search(/^            [a-z]+:\s*$/m);
-    const body = next === -1 ? rest : rest.slice(0, next + 1);
-    assert.ok(body.includes("- 'src/rankers/"), `${filter} filter must list src/rankers`);
-  });
-}
+test("classifier selects rust, sdk, and python for rankers paths", async () => {
+  const { classify } = await import("./ci-filters.mjs");
+  assert.equal(classify(["src/rankers/core/src/lib.rs"]).rust, true);
+  assert.equal(classify(["src/rankers/ts/src/index.ts"]).sdk, true);
+  assert.equal(classify(["src/rankers/python/src/lib.rs"]).python, true);
+});
 
 test("ci-gate needs the rankers python job", () => {
   assert.ok(jobBody(ciWorkflow, "ci-gate").includes("rankers-python"));
@@ -175,4 +164,17 @@ test("verify-rankers-ts runs the README's install command and checks the floor",
   const body = jobBody(verifyInstallWorkflow, "verify-rankers-ts");
   assert.match(body, /src\/rankers\/ts\/README\.md/);
   assert.match(body, /require\('@ratel-ai\/sdk\/package\.json'\)\.version/);
+});
+
+test("dependency-scan runs on lockfile changes and gates ci-gate", () => {
+  const body = jobBody(ciWorkflow, "dependency-scan");
+  assert.match(body, /needs\.changes\.outputs\.lockfiles == 'true'/);
+  assert.match(body, /--ignore-unfixed/);
+  assert.ok(jobBody(ciWorkflow, "ci-gate").includes("dependency-scan"));
+});
+
+test("platform-compose scans the image it built, pinned by digest", () => {
+  const body = jobBody(ciWorkflow, "platform-compose");
+  assert.match(body, /image --scanners vuln/);
+  assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
 });

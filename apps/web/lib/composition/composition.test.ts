@@ -1,0 +1,283 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { CompositionPorts } from "@/lib/contracts/composition";
+
+process.env.RATEL_COMPOSITION = "oss";
+const { createComposition } = await import("@/lib/composition");
+const { drainSteps, jobHandlers } = await import("@/lib/composition/registry");
+const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
+
+/** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
+const cloudPorts: CompositionPorts = {
+  session: {
+    async resolveSession() {
+      return null;
+    },
+    async getOrganization() {
+      return null;
+    },
+    async countMembers() {
+      return 0;
+    },
+    async actingAs() {
+      return { kind: "organization", targetId: "org_1", readOnly: true };
+    },
+  },
+  entitlements: {
+    planId: () => "pro",
+    getLimits: () => ({
+      maxProjects: 10,
+      maxSkillsPerProject: 1000,
+      maxMembers: 25,
+      monthlyEventLimit: 5_000_000,
+      embeddingMonthlyAllowanceUsd: 20,
+      matchQualityRunsPerMonth: 4,
+      agentHealthSignalsShown: Number.POSITIVE_INFINITY,
+      agentHealthEvidenceTurns: 6,
+      agentHealthWindowDays: 90,
+      toolPickerMonthlyAllowanceUsd: 40,
+    }),
+    checkQuota: () => ({ ok: true }),
+    checkMeteredFeature: () => ({ ok: true, limit: 4, used: 0, remaining: 4 }),
+    async checkEventQuota() {
+      return {
+        ok: false,
+        plan: "pro",
+        limit: 5_000_000,
+        used: 5_000_000,
+        message: "Monthly event limit reached for your plan.",
+      };
+    },
+    async recordEventUsage() {},
+  },
+  telemetry: {
+    async trackEvent() {},
+    reportException() {},
+  },
+  embeddingProvider: {
+    model: "hosted",
+    local: false,
+    isAvailable: () => true,
+    async embed(texts) {
+      return texts.map(() => [1]);
+    },
+  },
+  registry: {
+    registrations: () => [
+      {
+        jobs: { grant_allowances: async () => "granted" },
+        drainSteps: [{ name: "stripe_sync", phase: "after", run: async () => 1 }],
+      },
+    ],
+  },
+};
+
+describe("createComposition", () => {
+  it("assembles the OSS edition with the five ports", async () => {
+    const composition = createComposition("oss");
+    assert.equal(composition.edition, "Ratel OSS");
+    assert.deepEqual(composition.organizationNav, []);
+    assert.deepEqual(composition.projectNav, []);
+    const session = await composition.session.resolveSession();
+    assert.equal(session?.user.name, "Local operator");
+    assert.equal(await composition.session.actingAs(), null);
+    assert.equal(composition.entitlements.planId({ id: "org" }), "oss");
+    assert.deepEqual(await composition.entitlements.checkEventQuota({ id: "org" }), { ok: true });
+    assert.equal(composition.embeddingProvider.local, true);
+    assert.deepEqual(composition.registry.registrations(), []);
+  });
+
+  it("assembles the Cloud edition from the seam", async () => {
+    const composition = createComposition("cloud", { eeComposition: cloudPorts });
+    assert.equal(composition.edition, "Ratel Cloud");
+    assert.deepEqual(composition.organizationNav, [
+      { path: "team", label: "Members", icon: "members" },
+      { path: "billing", label: "Billing", icon: "billing" },
+    ]);
+    assert.deepEqual(composition.projectNav, [
+      {
+        id: "apis",
+        label: "APIs",
+        items: [
+          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
+        ],
+      },
+    ]);
+    assert.equal(composition.entitlements.planId({ id: "org" }), "pro");
+    const quota = await composition.entitlements.checkEventQuota({ id: "org" });
+    assert.equal(quota.ok, false);
+    if (!quota.ok) assert.equal(quota.used, 5_000_000);
+    await composition.entitlements.recordEventUsage({ id: "org" }, 12);
+    const actingAs = await composition.session.actingAs();
+    assert.equal(actingAs?.kind, "organization");
+  });
+
+  it("hands the edition's UI loader over, and the open-source edition has none", async () => {
+    const ui = {
+      RootProvider: () => null,
+      AccountMenuItems: () => null,
+      OrganizationBillingPage: () => null,
+      hiddenOrganizationNav: async () => ["billing"],
+    };
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...cloudPorts, ui: async () => ui },
+    });
+    assert.equal(await cloud.ui?.(), ui);
+    assert.deepEqual(await (await cloud.ui?.())?.hiddenOrganizationNav?.("acme"), ["billing"]);
+    assert.equal(createComposition("oss", { eeComposition: null }).ui, undefined);
+  });
+
+  it("hands the edition's connect over, and the open-source edition has none", () => {
+    const lent: unknown[] = [];
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...cloudPorts, connect: (core) => lent.push(core) },
+    });
+    const toolCorpus = { load: async () => [] };
+    const importedRuns = {
+      persist: async () => ({ ok: true as const, accepted: 0, calls: 0 }),
+      requestReading: async () => {},
+      enqueueJob: async () => ({ id: "j" }),
+      scheduleDrain: () => {},
+    };
+    cloud.connect?.({ toolCorpus, importedRuns });
+    assert.deepEqual(lent, [{ toolCorpus, importedRuns }]);
+    assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
+  });
+
+  it("throws when a port is missing or the edition key is unknown", () => {
+    assert.throws(
+      () => createComposition("oss", { ports: { telemetry: undefined } }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /telemetry/);
+        return true;
+      },
+    );
+    assert.throws(
+      () => createComposition("nope"),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /RATEL_COMPOSITION/);
+        assert.match(error.message, /oss/);
+        assert.match(error.message, /cloud/);
+        return true;
+      },
+    );
+  });
+
+  it("adds no rail destination in either edition: Cloud's admin console is in the account menu", () => {
+    assert.deepEqual(createComposition("oss").nav, []);
+    assert.deepEqual(createComposition("cloud", { eeComposition: cloudPorts }).nav, []);
+  });
+
+  it("throws when cloud is requested but the seam is null", () => {
+    assert.throws(
+      () => createComposition("cloud", { eeComposition: null }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /excludes the commercial modules/);
+        return true;
+      },
+    );
+  });
+
+  it("reports zero ee boundary violations on the real tree", () => {
+    assert.deepEqual(scanEeBoundary(), []);
+  });
+
+  it("lets every ee route stub and the proxy stub import ee, and nothing else", () => {
+    const web = new URL("../../", import.meta.url).pathname;
+    assert.ok(allowsInward(`${web}app/(ee)/admin/page.tsx`));
+    assert.ok(allowsInward(`${web}app/(ee)/admin/organizations/[id]/page.tsx`));
+    assert.ok(allowsInward(`${web}proxy.ts`));
+    assert.ok(!allowsInward(`${web}app/(app)/page.tsx`));
+    assert.ok(!allowsInward(`${web}app/(ee)-other/page.tsx`));
+  });
+});
+
+describe("registry root", () => {
+  it("merges core and port registrations, before steps first", () => {
+    const core = [
+      {
+        jobs: { cluster_intents: async () => "ok" },
+        drainSteps: [
+          { name: "prune_spans", phase: "after" as const, retentionOnly: true, run: async () => 0 },
+          { name: "enqueue_folds", phase: "before" as const, run: async () => 1 },
+        ],
+      },
+    ];
+    const registrations = [...core, ...cloudPorts.registry.registrations()];
+    assert.deepEqual(Object.keys(jobHandlers(registrations)).sort(), [
+      "cluster_intents",
+      "grant_allowances",
+    ]);
+    assert.deepEqual(
+      drainSteps(registrations).map((s) => s.name),
+      ["enqueue_folds", "prune_spans", "stripe_sync"],
+    );
+  });
+
+  it("the core modules landed so far register their jobs and steps in layer order", () => {
+    assert.deepEqual(Object.keys(jobHandlers()).sort(), [
+      "assign_topics",
+      "build_trace_turns",
+      "categorize_queries",
+      "cluster_intents",
+      "compute_trace_signals",
+      "craft_tools",
+      "draft_fix",
+      "explore_tool_usage",
+      "fold_intent_graph",
+      "label_workflows",
+      "match_quality_run",
+      "refresh_task_eval_set",
+      "score_tasks",
+      "simulate_fix_eval",
+      "simulate_task_eval",
+      "what_if_step",
+    ]);
+    // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
+    // can carry events through turns, recurring asks, the graph and the engine. After-steps are
+    // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
+    // What-if's prune runs with retention off: a timed-out run must free its budget hold.
+    assert.deepEqual(
+      drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
+      [
+        "before:trace_turns_build_enqueue",
+        "before:query_categorizations_enqueue",
+        "before:intent_graph_fold_enqueue",
+        "before:intent_engine_enqueue",
+        "after:runtime_events_prune:retention",
+        "after:runtime_event_rejects_prune:retention",
+        "after:intent_graph_revisions_prune:retention",
+        "after:intent_engine_expire:retention",
+        "after:trace_signal_sweep",
+        "after:otel_spans_prune:retention",
+        "after:otel_logs_prune:retention",
+        "after:trace_summary_refresh",
+        "after:trace_summary_prune:retention",
+        "after:quality_snapshot_refresh",
+        "after:match_quality_sweep",
+        "after:what_if_prune",
+      ],
+    );
+  });
+
+  it("loading the registry adds What-if's reader to the eval gate's daily budget", async () => {
+    const { evalGateSeams } = await import("@/lib/views/eval-gate/seams");
+    const { whatIfSpendSince } = await import("@/lib/views/session-replay/spend");
+    assert.ok(evalGateSeams.spendSince.includes(whatIfSpendSince));
+    assert.equal(evalGateSeams.spendSince.filter((read) => read === whatIfSpendSince).length, 1);
+  });
+
+  it("refuses a job kind or drain step registered twice", () => {
+    const twice = [{ jobs: { a: async () => 1 } }, { jobs: { a: async () => 2 } }];
+    assert.throws(() => jobHandlers(twice), /job kind registered twice: a/);
+    const steps = [
+      { drainSteps: [{ name: "s", phase: "before" as const, run: async () => 1 }] },
+      { drainSteps: [{ name: "s", phase: "after" as const, run: async () => 1 }] },
+    ];
+    assert.throws(() => drainSteps(steps), /drain step registered twice: s/);
+  });
+});
