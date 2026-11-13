@@ -37,7 +37,7 @@ dependencies = []
 otlp = [
     "opentelemetry-api>=1.41.0,<1.42",
     "opentelemetry-sdk>=1.41.0,<1.42",
-    "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
+    "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.46",
 ]
 # dev pulls the [otlp] extra so the init() + conformance tests exercise the real SDK.
 dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11", "ratel-ai-telemetry[otlp]"]
