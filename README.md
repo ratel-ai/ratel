@@ -132,7 +132,8 @@ apps/
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
 ├── design-system/             # @ratel/design-system: semantic tokens and UI primitives
-└── sdk/                       # Ratel SDK
+└── sdk/                       # Ratel SDK documentation; the SDK code will move here later
+src/                           # Ratel SDK: core (Rust), sdk, adapters, rankers, telemetry
 scripts/                       # Repository checks and release tooling
 docs/
 ├── adr/                       # Architecture decision records
