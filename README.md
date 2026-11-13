@@ -15,6 +15,10 @@
   </p>
 </div>
 
+<div align="center">
+  <img src="./docs/assets/ratel-flow-demo.gif" width="960" alt="Ratel flow animation" />
+</div>
+
 ## Introduction
 
 Ratel is a self-hosted platform for AI agents. Your agent sends it traces and its catalog of tools and skills. Ratel reads that traffic and shows you what the agent gets wrong, what people ask it for, and which changes would make it find and finish more.
