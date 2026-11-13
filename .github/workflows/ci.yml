@@ -441,7 +441,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/sdk/python/native
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Create venv + install dev tools
         run: |
           uv venv --python 3.11 .venv
@@ -515,7 +515,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/rankers/python/native
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Create venv + install the SDK, the plugin and dev tools
         run: |
           uv venv --python 3.11 .venv
@@ -570,7 +570,7 @@ jobs:
         working-directory: src/telemetry/python
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Create venv + install (editable, pure Python)
         run: |
           uv venv --python 3.11 .venv
