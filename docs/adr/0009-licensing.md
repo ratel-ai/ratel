@@ -7,7 +7,8 @@ Date: 2026-07-05
 Accepted
 
 Compacted 2026-07 from pre-compaction ADR-0017 (relicense, 2026-07-04); the relicense was
-executed in the product-split restructure (PR #92).
+executed in the product-split restructure (PR #92). Extended to the Ratel Platform (MIT) by
+[ADR-0032](0032-platform-licensing.md).
 
 ## Context
 
