@@ -171,7 +171,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Download all binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: src/sdk/ts/artifacts
           pattern: bindings-*
@@ -386,7 +386,7 @@ jobs:
       contents: read
     steps:
       - name: Download wheels + sdist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: wheels-*
@@ -798,7 +798,7 @@ jobs:
         with:
           workspaces: src/sdk/ts/native
       - name: Download all binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: src/rankers/ts/artifacts
           pattern: rankers-bindings-*
@@ -975,7 +975,7 @@ jobs:
           python -m pip download --no-deps --pre --only-binary=:all: --dest /tmp/ratel-ai-check "$req" >/dev/null \
             || { echo "::error::no ratel-ai on PyPI satisfies ${req} — publish sdk-py before rankers-py"; exit 1; }
       - name: Download wheels + sdist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           pattern: rankers-wheels-*
@@ -1030,7 +1030,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download binaries
         if: needs.tag-version-check.outputs.unit == 'sdk-ts'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: bindings-*
