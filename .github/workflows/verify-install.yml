@@ -62,7 +62,7 @@ jobs:
             node_arch: x64
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           architecture: ${{ matrix.node_arch }}
@@ -93,7 +93,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'vercel-ai-sdk'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Resolve version
@@ -173,7 +173,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'mastra'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Resolve version
@@ -267,7 +267,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'rankers-ts'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Resolve version
@@ -481,7 +481,7 @@ jobs:
     if: github.event_name == 'schedule' || inputs.unit == 'all' || inputs.unit == 'telemetry-ts'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
       - name: Resolve version
