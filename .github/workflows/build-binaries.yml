@@ -54,7 +54,7 @@ jobs:
         with:
           workspaces: src/sdk/ts/native
           key: ${{ matrix.triple }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -85,7 +85,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
