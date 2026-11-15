@@ -178,3 +178,53 @@ test("platform-compose scans the image it built, pinned by digest", () => {
   assert.match(body, /image --scanners vuln/);
   assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
 });
+
+// Vercel and AWS Lambda run Node on Amazon Linux 2023 (glibc 2.34). A Linux gnu
+// binding built on the runner's own glibc (2.39 on ubuntu-24.04) does not load there.
+// The release builds both Linux gnu bindings in the manylinux_2_28 image (glibc 2.28),
+// and a check job loads each one on Amazon Linux 2023 before the publish.
+const MANYLINUX = /quay\.io\/pypa\/manylinux_2_28_(x86_64|aarch64):[\w.-]+/;
+
+test("release builds the Linux gnu SDK bindings in the manylinux_2_28 image", () => {
+  const body = jobBody(releaseWorkflow, "build");
+  assert.match(body, /container: \$\{\{ matrix\.container \}\}/);
+  for (const arch of ["x86_64", "aarch64"]) {
+    assert.ok(
+      body.includes(`container: quay.io/pypa/manylinux_2_28_${arch}:`),
+      `missing the manylinux_2_28_${arch} container`,
+    );
+  }
+  assert.match(body, MANYLINUX);
+});
+
+test("publish-sdk-ts waits for the glibc check of the Linux bindings", () => {
+  const check = jobBody(releaseWorkflow, "check-sdk-linux-glibc");
+  assert.match(check, /needs: \[tag-version-check, build\]/);
+  assert.match(check, /scripts\/check-native-glibc\.sh/);
+  for (const triple of ["linux-x64-gnu", "linux-arm64-gnu"]) {
+    assert.ok(check.includes(`triple: ${triple}`), `check misses ${triple}`);
+  }
+  assert.match(
+    jobBody(releaseWorkflow, "publish-sdk-ts"),
+    /needs: \[tag-version-check, build, check-sdk-linux-glibc\]/,
+  );
+});
+
+test("ci builds the Linux gnu SDK binding in manylinux_2_28 and checks it, gated by ci-gate", () => {
+  const build = jobBody(ciWorkflow, "sdk-linux-glibc-build");
+  assert.match(build, /needs\.changes\.outputs\.release == 'true'/);
+  assert.match(build, /container: \$\{\{ matrix\.container \}\}/);
+  assert.match(build, MANYLINUX);
+  const check = jobBody(ciWorkflow, "sdk-linux-glibc");
+  assert.match(check, /needs: sdk-linux-glibc-build/);
+  assert.match(check, /scripts\/check-native-glibc\.sh/);
+  assert.match(jobBody(ciWorkflow, "ci-gate"), /sdk-linux-glibc-build, sdk-linux-glibc[,\]]/);
+});
+
+test("ci and release build the Linux bindings in the same manylinux image", () => {
+  const images = (wf) => [...wf.matchAll(new RegExp(MANYLINUX.source, "g"))].map((m) => m[0]);
+  const ci = new Set(images(ciWorkflow));
+  const release = new Set(images(releaseWorkflow));
+  assert.ok(release.size > 0);
+  assert.deepEqual([...ci].sort(), [...release].sort());
+});

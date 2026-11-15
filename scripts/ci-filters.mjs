@@ -54,6 +54,7 @@ export const SCRIPT_OWNERS = {
   "scripts/rankers-sdk-floor.test.mjs": "sdk",
   "scripts/build-rankers-ts.sh": "sdk",
   "scripts/publish-rc.sh": "sdk",
+  "scripts/check-native-glibc.sh": "sdk",
 
   "scripts/check-layers.mjs": "platform",
   "scripts/check-layers.test.mjs": "platform",
@@ -283,8 +284,14 @@ function applyFile(result, file) {
     if (owner === "changes") return result;
     if (owner === "sdk") {
       merge(result, ["sdk"]);
-      // inject-sdk-optional-deps also gates release verify.
-      if (file.includes("inject-sdk-optional-deps")) merge(result, ["release"]);
+      // inject-sdk-optional-deps gates release verify; check-native-glibc gates the
+      // Linux glibc check, which runs on the release output.
+      if (
+        file.includes("inject-sdk-optional-deps") ||
+        file === "scripts/check-native-glibc.sh"
+      ) {
+        merge(result, ["release"]);
+      }
       return result;
     }
     if (owner === "platform") {
