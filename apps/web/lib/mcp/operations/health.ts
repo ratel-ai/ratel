@@ -30,7 +30,7 @@ import {
   lastTopicReadingActivity,
   TOPIC_READING_COOLDOWN_MS,
 } from "@/lib/readings/topics/queries";
-import { signalTitle } from "@/lib/readings/trace-signals/claims";
+import { signalsTitle } from "@/lib/readings/trace-signals/claims";
 import { DISMISSABLE_KINDS, isDismissable } from "@/lib/readings/trace-signals/dismiss";
 import { type RunTrigger, setSignalDismissed } from "@/lib/readings/trace-signals/signals/queries";
 import {
@@ -255,7 +255,7 @@ function signalRow(projectId: string, signal: SignalView, tracker: TruncationTra
   return {
     id: signal.id,
     kind: signal.kind,
-    title: signalTitle(signal.kind),
+    title: signalsTitle(signal.kind, [signal]),
     claim: tracker.text(signal.claim, 400),
     cost: signal.cost,
     whatToDo: tracker.text(signal.fix, 400),

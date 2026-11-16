@@ -649,3 +649,75 @@ test("the override adoption is a read of its own: failing, the rewrites are stil
     await client.close();
   }
 });
+
+/** A stored unknown_tool in today's shape: a menu miss, no `okCalls`. */
+async function seedUnknownTool(client: PGlite, toolId: string): Promise<void> {
+  await client.query(
+    `insert into trace_signals (project_id, kind, subject_kind, subject_key, subject, status, severity, impact, n, metrics, evidence, first_seen_at, last_seen_at)
+     values ($1, 'unknown_tool', 'tool', $2, $3::jsonb, 'open', 0.3, 8, 8, '{"route":"show_turns","unknown":8,"calls":8,"byError":0,"byMenu":8,"share":1,"low":0.6,"high":1}', '{"totalTurns":8}', $4, $5)`,
+    [PROJECT, toolId, JSON.stringify({ ids: [toolId], entryKind: "tool" }), ago(10), ago(1)],
+  );
+}
+
+async function seedCall(
+  client: PGlite,
+  toolId: string,
+  outcome: string,
+  at: string,
+): Promise<void> {
+  await client.query(
+    `insert into trace_turn_steps (turn_id, project_id, ordinal, kind, event_type, trace_event_id, occurred_at, received_at, target_type, target_id, outcome)
+     values ('99999999-9999-4999-8999-999999999991', $1, (select coalesce(max(ordinal), 1) + 1 from trace_turn_steps), 'invoke', 'invoke_start', gen_random_uuid(), $2, $2, 'tool', $3, $4)`,
+    [PROJECT, at, toolId, outcome],
+  );
+}
+
+const builds = (model: Awaited<ReturnType<typeof loadFixes>>) =>
+  model.open.filter((fix) => fix.kind === "build").map((fix) => fix.subject.tools[0]?.id);
+
+test("stored unknown_tool rows: the guard cleans up the Build fixes at read time, and off restores them", async () => {
+  const { client, db } = await setup();
+  await seedSources(client);
+  await seedUnknownTool(client, "lookup_order"); // In the catalog.
+  await seedUnknownTool(client, "runs_fine"); // Not in the catalog, ok calls only in the steps.
+  await seedUnknownTool(client, "ghost_tool"); // Nothing vouches for it.
+  await seedUnknownTool(client, "old_tool"); // Its only ok call is before the window.
+  await seedUnknownTool(client, "broken_tool"); // Called in the window, never ok.
+  await seedCall(client, "runs_fine", "ok", ago(2));
+  await seedCall(client, "old_tool", "ok", ago(60));
+  await seedCall(client, "broken_tool", "error", ago(2));
+  const organizationRow = await organization(db);
+  assert.deepEqual(
+    builds(
+      await loadFixes({
+        projectId: PROJECT,
+        organization: organizationRow,
+        now: NOW,
+        deps: { db },
+      }),
+    ).sort(),
+    ["broken_tool", "ghost_tool", "old_tool"],
+  );
+
+  const { rows } = await client.query<{ n: number }>(
+    `select count(*)::int as n from trace_signals where kind = 'unknown_tool' and status = 'open'`,
+  );
+  assert.equal(rows[0]?.n, 5, "the guard deletes and rewrites nothing");
+  await client.close();
+});
+
+test("the guard's ok-call lookup failing leaves today's fix", async () => {
+  const { client, db } = await setup();
+  await seedSources(client);
+  await seedUnknownTool(client, "ghost_tool");
+  await client.exec("alter table trace_turn_steps rename column outcome to outcome_gone");
+  const model = await loadFixes({
+    projectId: PROJECT,
+    organization: await organization(db),
+    now: NOW,
+    topics: false,
+    deps: { db },
+  });
+  assert.deepEqual(builds(model), ["ghost_tool"]);
+  await client.close();
+});

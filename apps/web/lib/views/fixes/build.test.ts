@@ -11,6 +11,7 @@ import {
   ISSUES,
   issue,
   measuredDrafts,
+  NAMES,
   REWRITES,
 } from "./test-fixtures";
 
@@ -473,6 +474,75 @@ test("a topic-wide issue of a kind this build does not know still becomes a fix"
   assert.deepEqual(
     fix?.subject.topics.map((t) => t.id),
     ["t_orders"],
+  );
+});
+
+/** An unknown_tool issue as stored today: a menu miss, with no `okCalls` in its metrics. */
+const unknownTool = (toolId: string, metrics: Record<string, unknown> = {}) =>
+  issue({
+    id: `i-unknown-${toolId}`,
+    kind: "unknown_tool",
+    route: "show_turns",
+    toolIds: [toolId],
+    claim: `The agent calls ${toolId}, a tool that was not in the list it was given.`,
+    fix: `Add ${toolId} if the agent needs it, or fix the prompt or tool list that makes the agent expect it.`,
+    metrics: { unknown: 8, calls: 8, byError: 0, byMenu: 8, ...metrics },
+  });
+const buildsFor = (toolId: string, over: Parameters<typeof fixesInput>[0] = {}) =>
+  buildFixes(fixesInput({ issues: [...ISSUES, unknownTool(toolId)], ...over })).open.filter(
+    (fix) => fix.kind === "build" && fix.issues.some((i) => i.id === `i-unknown-${toolId}`),
+  );
+test("a tool missing from a captured list, already in the catalog and also succeeding, is not a fix to build it", () => {
+  assert.ok(NAMES.has("lookup_order"));
+  const builds = buildsFor("lookup_order", { succeededToolIds: new Set(["lookup_order"]) });
+  assert.deepEqual(
+    builds.map((fix) => fix.title),
+    [],
+  );
+});
+
+test("a tool nothing vouches for is still a fix to build it", () => {
+  const builds = buildsFor("ghost_tool");
+  assert.deepEqual(
+    builds.map((fix) => fix.kindLabel),
+    ["Build a tool"],
+  );
+  assert.equal(
+    builds[0]?.why,
+    "The agent calls ghost_tool, a tool that was not in the list it was given.",
+  );
+});
+
+test("a catalog tool with no ok calls is not a fix to build it", () => {
+  assert.deepEqual(buildsFor("lookup_order"), []);
+});
+
+test("a tool outside the catalog with ok calls is not a fix to build it", () => {
+  assert.equal(NAMES.has("ghost_tool"), false);
+  assert.deepEqual(buildsFor("ghost_tool", { succeededToolIds: new Set(["ghost_tool"]) }), []);
+});
+
+test("a stored okCalls count vouches for the tool without a lookup", () => {
+  const built = buildFixes(fixesInput({ issues: [unknownTool("ghost_tool", { okCalls: 3 })] }));
+  assert.equal(
+    built.open.some((fix) => fix.kind === "build"),
+    false,
+  );
+  const none = buildFixes(fixesInput({ issues: [unknownTool("ghost_tool", { okCalls: 0 })] }));
+  assert.equal(none.open.filter((fix) => fix.kind === "build").length, 1);
+});
+
+test("a catalog entry whose id differs from the called name still vouches for it", () => {
+  const names = new Map([...NAMES, ["entry_7", "ghost_tool"]]);
+  assert.deepEqual(buildsFor("ghost_tool", { names }), []);
+});
+
+test("only unknown_tool is skipped: other issues keep their fix and the open list keeps its order", () => {
+  const off = buildFixes(fixesInput({ issues: ISSUES }));
+  const on = buildFixes(fixesInput({ issues: [...ISSUES, unknownTool("lookup_order")] }));
+  assert.deepEqual(
+    on.open.map((fix) => fix.id),
+    off.open.map((fix) => fix.id),
   );
 });
 

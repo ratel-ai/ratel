@@ -36,6 +36,8 @@ export interface OtelToolStats {
   turns: number;
   calls: number;
   okCalls: number;
+  /** Ok calls whose captured result said the tool does not exist: they vouch for nothing. */
+  noSuchToolResults: number;
   /** Ok calls whose result was captured, and those that came back empty. */
   captured: number;
   empty: number;
@@ -214,6 +216,7 @@ function toolOf(stats: OtelStats, id: string): OtelToolStats {
     turns: 0,
     calls: 0,
     okCalls: 0,
+    noSuchToolResults: 0,
     captured: 0,
     empty: 0,
     unknownByError: 0,
@@ -313,6 +316,7 @@ function addCalls(
     tool.calls += 1;
     if (call.outcome === "ok") {
       tool.okCalls += 1;
+      if (fact?.resultNoSuchTool) tool.noSuchToolResults += 1;
       addResult(stats, tool, fact, () =>
         once(flagged, `empty:${tool.id}`, () =>
           tool.emptyEvidence.add(sample(turn, call.traceEventId)),

@@ -178,6 +178,46 @@ test("unknown_tool fires on a called name missing from the captured menu", () =>
   assert.equal(signal?.metrics.byError, 0);
 });
 
+test("unknown_tool still fires on menu misses of a tool that also succeeds on turns whose menu has it", () => {
+  const world = otelWorld([
+    ...times(10, () => trace([call("lookup_order")], { modelCalls: 1, menu: ["lookup_order"] })),
+    ...times(6, () => trace([call("lookup_order")], { modelCalls: 1, menu: ["search"] })),
+  ]);
+  const [signal] = only(analyze(world).signals, "unknown_tool");
+  assert.equal(signal?.subjectKey, "lookup_order");
+  assert.ok(Number(signal?.metrics.byMenu) >= 5, "the menu path alone reaches the floor");
+  assert.equal(signal?.metrics.byError, 0);
+  assert.equal(signal?.metrics.calls, 16, "every call ran, including the ones on the menu");
+  assert.equal(signal?.metrics.okCalls, 16, "the row carries its ok calls");
+});
+
+test("unknown_tool carries okCalls when every call is a menu miss, where calls equals unknown", () => {
+  const world = otelWorld(
+    times(6, () => trace([call("lookup_order")], { modelCalls: 1, menu: ["search"] })),
+  );
+  const [signal] = only(analyze(world).signals, "unknown_tool");
+  assert.equal(signal?.metrics.calls, signal?.metrics.unknown);
+  assert.equal(signal?.metrics.okCalls, 6);
+});
+
+test("unknown_tool does not count an ok call whose result says the tool does not exist, and fires as before", () => {
+  const world = otelWorld([
+    ...times(4, () =>
+      trace([call("ghost_tool", { noSuchTool: true })], { modelCalls: 1, menu: ["search"] }),
+    ),
+    ...times(2, () => trace([call("ghost_tool")], { modelCalls: 1, menu: ["search"] })),
+  ]);
+  const [signal] = only(analyze(world).signals, "unknown_tool");
+  assert.equal(signal?.metrics.okCalls, 2);
+  assert.equal(signal?.metrics.unknown, 6);
+});
+
+test("unknown_tool carries no ok calls for a tool that only fails", () => {
+  const world = otelWorld(times(6, () => trace([call("ghost_tool", { error: "unknown_tool" })])));
+  const [signal] = only(analyze(world).signals, "unknown_tool");
+  assert.equal(signal?.metrics.okCalls, 0);
+});
+
 /* - unused_tool --------------------------------------------------------- */
 
 const MENU = ["create_ticket", "export_board", "search"];

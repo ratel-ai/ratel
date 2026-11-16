@@ -20,7 +20,10 @@ import type { AnalysisContext, DetectedSignal } from "@/lib/readings/trace-signa
  *   missing itself, so error-type matches only count for a name that never
  *   succeeded in the window; menu misses always count. Fires at `minCalls`
  *   such calls; severity is the Wilson lower bound of their share of the
- *   name's calls. Measured whenever the window has OTel turns.
+ *   name's calls. Measured whenever the window has OTel turns. `okCalls` is
+ *   stored beside them: `calls` cannot tell it, since every call of a tool that
+ *   always succeeds can still be a menu miss (`unknown-tool-standing.ts`). It
+ *   leaves out ok calls whose result says the tool does not exist.
  * - `unused_tool` (subject: the project, one signal listing the tools): tools
  *   offered in the menus of at least `minModelCalls` model calls across at
  *   least `minTurns` turns and never called in the window on any lane, nor by
@@ -80,6 +83,7 @@ function unknownTool(tool: OtelToolStats, floors: Floors): DetectedSignal[] {
       metrics: {
         unknown: unknown.calls,
         calls: tool.calls,
+        okCalls: tool.okCalls - tool.noSuchToolResults,
         byError: unknown.byError,
         byMenu: tool.unknownByMenu,
         share: round4(unknown.calls / tool.calls),

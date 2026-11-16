@@ -113,6 +113,8 @@ export interface HealthStateInputs {
   planWindowDays: number;
   /** `model.waitingOn`: model calls arrive with no tool spans. */
   waitingOn?: "tool_spans";
+  /** `model.emptyEarlyReading`: the reading read none of the turns it counts. */
+  emptyEarlyReading?: boolean;
 }
 
 const READY: HealthPageState = { kind: "ready" };
@@ -173,9 +175,11 @@ function pendingPhase(runs: RunFacts): BuildingPhase {
 }
 
 export function healthPageState(input: HealthStateInputs): HealthPageState {
-  if (input.readingTurns >= input.floor) return READY;
   const { ledger, floor } = input;
   const window = ledger.windows[input.windowDays];
+  // Imported runs older than the first reading's window: the next reading reads them, this one cannot judge them.
+  const unreadImports = input.emptyEarlyReading === true && window.imported > 0;
+  if (input.readingTurns >= floor && !unreadImports) return READY;
   const imports = input.imports ?? [];
 
   const importing = newest(imports, (item) => item.status === "running");
@@ -187,6 +191,16 @@ export function healthPageState(input: HealthStateInputs): HealthPageState {
       imported: true,
       source: importing.source,
       working: true,
+    };
+  }
+  if (unreadImports) {
+    return {
+      kind: "building",
+      phase: pendingPhase(ledger),
+      turns: window.turns,
+      imported: allImported(window),
+      source: null,
+      working: ledger.working,
     };
   }
   if (window.turns >= floor) {

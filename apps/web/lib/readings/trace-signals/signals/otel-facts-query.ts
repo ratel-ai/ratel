@@ -62,6 +62,7 @@ async function readPage(
       : or(
           isNotNull(traceEvents.errorMessage),
           sql`jsonb_typeof(${traceEvents.payload} -> 'result_empty') = 'boolean'`,
+          sql`${traceEvents.payload} ->> 'result_no_such_tool' = 'true'`,
           sql`jsonb_typeof(${traceEvents.payload} -> 'arg_hash') = 'string'`,
           sql`jsonb_typeof(${traceEvents.payload} -> 'agent') = 'string'`,
         );
@@ -74,6 +75,7 @@ async function readPage(
       resultEmpty: sql<
         boolean | null
       >`case jsonb_typeof(${traceEvents.payload} -> 'result_empty') when 'boolean' then (${traceEvents.payload} ->> 'result_empty')::boolean end`,
+      resultNoSuchTool: sql<boolean>`coalesce(${traceEvents.payload} ->> 'result_no_such_tool' = 'true', false)`,
       argHash: sql<string | null>`${traceEvents.payload} ->> 'arg_hash'`,
       inputTokens: traceEvents.inputTokens,
       outputTokens: traceEvents.outputTokens,
@@ -107,6 +109,7 @@ function toFactRow(row: RawRow): OtelFactRow {
     traceId: row.traceId,
     errorType: row.errorType,
     resultEmpty: row.resultEmpty,
+    resultNoSuchTool: row.resultNoSuchTool,
     argHash: row.argHash,
     inputTokens: row.inputTokens,
     outputTokens: row.outputTokens,

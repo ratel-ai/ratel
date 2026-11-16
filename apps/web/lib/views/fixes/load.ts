@@ -14,9 +14,16 @@ import { loadTopicPatterns } from "@/lib/readings/topics/queries";
 import { TOPIC_WINDOW_DAYS } from "@/lib/readings/topics/types";
 import { figureCaption, signalTitle } from "@/lib/readings/trace-signals/claims";
 import type { TraceSignalRow, TraceSignalRunRow } from "@/lib/readings/trace-signals/schema";
-import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
+import {
+  loadCatalogNames,
+  loadSucceededTools,
+} from "@/lib/readings/trace-signals/signals/analysis-context";
 import { evidenceSpanDays } from "@/lib/readings/trace-signals/signals/project-metrics";
 import { latestSignalRun, listOpenSignals } from "@/lib/readings/trace-signals/signals/queries";
+import {
+  catalogIdentities,
+  unknownToolsToProbe,
+} from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type { StoredWorkflows } from "@/lib/readings/trace-signals/signals/workflow-stored";
 import { loadWorkflowLabels } from "@/lib/readings/trace-signals/workflows/label-queries";
 import {
@@ -221,6 +228,25 @@ export async function loadFixes(input: {
     }
   }
 
+  // The plan's cut, as on Agent health: the worst issues first, the rest not read.
+  const issues = issueInputs(
+    (issueRows ?? []).slice(0, Number.isFinite(shown) ? Math.max(0, Math.floor(shown)) : undefined),
+    names,
+    spanDays,
+    labels,
+  );
+  // Asked only of a project with such an issue. A failed look-up leaves today's fix, never a wrong skip.
+  const toProbe = unknownToolsToProbe(issues, catalogIdentities(names));
+  const succeededToolIds =
+    run && toProbe.length > 0
+      ? await read(
+          "fixes_unknown_tool_ok_calls",
+          new Set<string>(),
+          (db) => loadSucceededTools(projectId, toProbe, run, db),
+          supplementary,
+        )
+      : new Set<string>();
+
   return buildFixes({
     projectId,
     names,
@@ -231,16 +257,8 @@ export async function loadFixes(input: {
         ? { ...draft, gain: { ...draft.gain, windowDays: windowByRun.get(draft.runId) ?? null } }
         : draft,
     ),
-    // The limits' cut, as on Agent health: the worst issues first, the rest not read.
-    issues: issueInputs(
-      (issueRows ?? []).slice(
-        0,
-        Number.isFinite(shown) ? Math.max(0, Math.floor(shown)) : undefined,
-      ),
-      names,
-      spanDays,
-      labels,
-    ),
+    issues,
+    succeededToolIds,
     tasks: taskInputs(summary?.workflows, names, labels),
     taskUsage,
     topics,

@@ -889,6 +889,35 @@ test("an early reading says it is a first look, still being processed, and that 
   assert.doesNotMatch(page(), /data-health-early-reading/);
 });
 
+test("a reading that read none of the imported runs shows no score and no verdict, only the building state (RC-255)", () => {
+  const score = healthScoreView([], 0);
+  const model = {
+    ...READY_MODEL,
+    signals: [],
+    score,
+    earlyReading: true as const,
+    earlyProgress: { read: 0, total: 73, percent: 1 },
+    emptyEarlyReading: true as const,
+  };
+  const html = page({
+    model,
+    scoreLeads: true,
+    state: {
+      kind: "building",
+      phase: "computing",
+      turns: 73,
+      imported: true,
+      source: null,
+      working: true,
+    },
+  });
+  assertHouseStyle(html, "empty early reading");
+  const text = visibleText(html);
+  assert.match(text, /Building your reading from 73/);
+  assert.doesNotMatch(html, /data-health-score=/);
+  assert.doesNotMatch(text, /great shape|Healthy|of 100/);
+});
+
 test("with the Health score on, the page leads with it and each issue says what fixing it wins back (RC-225)", () => {
   const issues = scoredIssues(
     READY_MODEL.signals.map((signal) => ({

@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, gte, lt, max, sql, sum } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, max, sql, sum } from "drizzle-orm";
 import { loadCatalogInventory } from "@/lib/ingest/runtime-catalog/inventory";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { toolUsageCounters, traceEvents } from "@/lib/ingest/trace-events/schema";
 import { ledgerStartedAt, type SignalsDb } from "@/lib/ledger/closed-turns";
-import { traceTurns } from "@/lib/ledger/schema";
+import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
@@ -230,6 +230,39 @@ export async function loadRunBasisCounts(
     exactSince: row?.exactSince ? new Date(row.exactSince).getTime() : null,
     inferredMultiTool: row?.inferredMulti ?? 0,
   };
+}
+
+/**
+ * Which of these tools have an ok call in the window, in one query. Any lane
+ * counts: an ok call shows the tool exists, unless its result says otherwise.
+ */
+export async function loadSucceededTools(
+  projectId: string,
+  toolIds: readonly string[],
+  window: { windowStart: Date; windowEnd: Date },
+  db: Pick<SignalsDb, "select"> = getDb(),
+): Promise<Set<string>> {
+  if (toolIds.length === 0) return new Set();
+  const rows = await db
+    .select({ targetId: traceTurnSteps.targetId })
+    .from(traceTurnSteps)
+    .leftJoin(
+      traceEvents,
+      and(eq(traceEvents.id, traceTurnSteps.traceEventId), eq(traceEvents.projectId, projectId)),
+    )
+    .where(
+      and(
+        eq(traceTurnSteps.projectId, projectId),
+        eq(traceTurnSteps.targetType, "tool"),
+        inArray(traceTurnSteps.targetId, [...toolIds]),
+        eq(traceTurnSteps.outcome, "ok"),
+        sql`${traceEvents.payload} -> 'result_no_such_tool' is null`,
+        gte(traceTurnSteps.occurredAt, window.windowStart),
+        lt(traceTurnSteps.occurredAt, window.windowEnd),
+      ),
+    )
+    .groupBy(traceTurnSteps.targetId);
+  return new Set(rows.flatMap((r) => (r.targetId ? [r.targetId] : [])));
 }
 
 /** Display names of the project's catalog entries, by entry id. Names only, for claims and chips. */

@@ -34,6 +34,7 @@ exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 `enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
 behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 `views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
+An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
 Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
 its summary, so the page can show the change. `trace-signals/signals/early-reading.ts` is the
 quick first reading (RC-224), behind `FF_QUICK_FIRST_READING`: a new project's first run reads
