@@ -9,14 +9,14 @@
     "test:integration": "pnpm -F @ratel-ai/sdk build && pnpm -F @ratel-ai/mastra build && tsx test/agent.test.ts"
   },
   "dependencies": {
-    "@mastra/core": "^1.51.0",
+    "@mastra/core": "^1.83.0",
     "@ratel-ai/mastra": "workspace:*",
     "@ratel-ai/sdk": "workspace:*",
-    "zod": "^4.0.0"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.20.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.0"
   }
 }
