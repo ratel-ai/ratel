@@ -247,7 +247,10 @@ export async function pruneWhatIfRuns(
 }
 
 /** Whether the project lets a What-if run read captured content (off unless set). */
-export async function contentOptIn(projectId: string, db: RunsDb = getDb()): Promise<boolean> {
+export async function contentOptIn(
+  projectId: string,
+  db: Pick<RunsDb, "select"> = getDb(),
+): Promise<boolean> {
   const [row] = await db
     .select({ readContent: sessionReplaySettings.readContent })
     .from(sessionReplaySettings)

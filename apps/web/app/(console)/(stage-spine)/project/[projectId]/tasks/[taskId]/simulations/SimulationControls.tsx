@@ -5,7 +5,8 @@ import { Button } from "@ratel/design-system/button";
 import { toast } from "@ratel/design-system/toast";
 import { useRouter } from "next/navigation";
 import { useEffect, useTransition } from "react";
-import type { TaskSimulationState } from "@/lib/views/task-evals/simulation-view";
+import type { ScorerMove, TaskSimulationState } from "@/lib/views/task-evals/simulation-view";
+import { SCORER_LABELS } from "@/lib/views/task-scorers/labels";
 import { changeTaskSimulationAction } from "./actions";
 
 export type SimulationScope = { projectId: string; taskId: string; fixId: string };
@@ -21,14 +22,19 @@ const STATES: Record<
   unreliable: { label: "Unreliable", tone: "warning" },
 };
 
-export function SimulationStatus({ state, stale }: TaskSimulationState) {
+export function SimulationStatus({ state, stale, moved }: TaskSimulationState) {
   const words = STATES[state];
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-2">
       <StatusDot {...words} />
+      {moved?.length ? <Badge tone="warning">Mixed: {moved.map(moveText).join(", ")}</Badge> : null}
       {stale ? <Badge tone="warning">Stale</Badge> : null}
     </span>
   );
+}
+
+function moveText({ kind, delta }: ScorerMove): string {
+  return `${SCORER_LABELS[kind]} ${delta > 0 ? "+" : "−"}${Math.abs(delta)} pts`;
 }
 
 export function RunTaskSimulationButton({

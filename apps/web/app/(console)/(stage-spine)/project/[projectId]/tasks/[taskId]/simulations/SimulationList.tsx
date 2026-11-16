@@ -38,7 +38,7 @@ export function SimulationList({
         row.drafting ? (
           <span className="text-ui text-fg-muted">Preparing draft…</span>
         ) : (
-          <SimulationStatus state={row.state} stale={row.stale} />
+          <SimulationStatus state={row.state} stale={row.stale} moved={row.moved} />
         ),
     },
     {

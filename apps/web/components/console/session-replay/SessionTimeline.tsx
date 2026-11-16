@@ -6,16 +6,29 @@ import { cn } from "@ratel/design-system/cn";
 import { Section } from "@ratel/design-system/section";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { StepText } from "@/lib/views/session-replay/settings";
 import type { SessionView, ViewRow } from "@/lib/views/session-replay/view";
+import type { WhatIfOptions, WhatIfRunView } from "@/lib/views/session-replay/what-if";
 import { ContextBar, ContextLens, Markers } from "./ContextLens";
 import { DecisionChip } from "./DecisionChip";
+import { type ForkTarget, WhatIfPanel } from "./WhatIfPanel";
 
 /**
  * The session as a scrubbable timeline: a slider and a strip of every step
  * on top, the steps in order on the left, and on the right the context lens
- * of the model call the current step sits in. Coral marks the current step
- * only (DESIGN.md, Brand).
+ * of the model call the current step sits in, with that call's message text
+ * when the page was given it (the content opt-in is on), and What if… to
+ * fork that call with a change. Coral marks the current step only (DESIGN.md, Brand).
  */
+
+/** What the What-if panel needs: the forkable model calls by step index, the changes on offer and the session's runs. */
+export interface WhatIfSetup {
+  projectId: string;
+  targets: Readonly<Record<number, ForkTarget>>;
+  options: WhatIfOptions;
+  runs: readonly WhatIfRunView[];
+  readContent: boolean;
+}
 
 const COVERAGE_BADGE: Record<
   ViewRow["coverage"],
@@ -26,7 +39,15 @@ const COVERAGE_BADGE: Record<
   expired: { label: "Expired", tone: "warning" },
 };
 
-export function SessionTimeline({ view }: { view: SessionView }) {
+export function SessionTimeline({
+  view,
+  texts = {},
+  whatIf,
+}: {
+  view: SessionView;
+  texts?: Readonly<Record<number, StepText>>;
+  whatIf?: WhatIfSetup;
+}) {
   const total = view.rows.length;
   const [current, setCurrent] = useState(
     () => view.rows.find((row) => row.chips.some((chip) => chip.tone === "bad"))?.index ?? 1,
@@ -94,6 +115,17 @@ export function SessionTimeline({ view }: { view: SessionView }) {
           aria-label="Context lens"
         >
           <ContextLens row={lensRow} gaps={view.gaps} />
+          {lensRow && texts[lensRow.index] ? <StepMessages text={texts[lensRow.index]!} /> : null}
+          {lensRow && whatIf?.targets[lensRow.index] ? (
+            <WhatIfPanel
+              key={lensRow.index}
+              projectId={whatIf.projectId}
+              target={whatIf.targets[lensRow.index]!}
+              options={whatIf.options}
+              runs={whatIf.runs}
+              readContent={whatIf.readContent}
+            />
+          ) : null}
         </aside>
       </div>
     </Section>
@@ -217,5 +249,34 @@ function StepRow({
         ) : null}
       </div>
     </li>
+  );
+}
+
+/** The message text of the model call in the lens: its system prompt and last messages, each cut short. */
+function StepMessages({ text }: { text: StepText }) {
+  return (
+    <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4" aria-label="Message text">
+      <h3 className="text-xs font-medium text-fg-muted">Message text</h3>
+      {text.system ? <MessageBlock role="system" text={text.system} /> : null}
+      {text.omitted > 0 ? (
+        <p className="text-xs text-fg-subtle">
+          {text.omitted} earlier {text.omitted === 1 ? "message" : "messages"} not shown.
+        </p>
+      ) : null}
+      {text.messages.map((message, i) => (
+        <MessageBlock key={i} role={message.role} text={message.text} />
+      ))}
+    </div>
+  );
+}
+
+function MessageBlock({ role, text }: { role: string; text: string }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-xs text-fg-subtle">{role}</span>
+      <p className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-ui text-fg">
+        {text}
+      </p>
+    </div>
   );
 }

@@ -14,6 +14,7 @@ import {
 import type { Ranker } from "@/lib/views/eval-gate/simulate";
 import type { FixChange, RunRecord, RunStep, ToolDef } from "@/lib/views/eval-gate/types";
 import {
+  carriesText,
   forkInput,
   NO_TOOL,
   recordingAt,
@@ -362,7 +363,7 @@ test("sampleStep: without captured content it re-ranks the step's search and say
   assert.equal(sample.method, "rerank");
   assert.match(sample.note ?? "", /re-ranked/i);
   assert.equal(sample.recorded, "hold_fare");
-  assert.equal(sample.before.choice, "find_booking");
+  assert.equal(sample.before.choice, "hold_fare");
   assert.equal(sample.after.choice, "quote_fare");
   assert.deepEqual(sample.after.distribution, { quote_fare: 1 });
   assert.equal(sample.after.inputTokens, 0);
@@ -376,6 +377,412 @@ test("sampleStep: without content and without a ranker it can't simulate", async
     await sampleStep(run, calls, 0, { kind: "add_tool", tool: def("quote_fare") }, deps()),
     { ok: false, reason: CANT_SIMULATE.noPrompts },
   );
+});
+
+test("recordingAt: a call whose messages hold no text has nothing to replay", () => {
+  const { run, calls } = recordedRun(["hold_fare"], ["hold_fare"]);
+  const hollow = calls.map((call) => ({
+    ...call,
+    payload: {
+      ...call.payload!,
+      system: "",
+      messages: [
+        { role: "user", content: "" },
+        { role: "assistant", content: [callBlock("toolu_0", "hold_fare")] },
+      ] as CloudMessage[],
+    },
+  }));
+  assert.equal(recordingAt(hollow, 0, run), null);
+});
+
+test("sampleStep: a call whose messages hold no text is re-ranked, not replayed", async () => {
+  const { run, calls } = recordedRun(["hold_fare"], ["hold_fare"]);
+  const hollow = calls.map((call) => ({
+    ...call,
+    payload: {
+      ...call.payload!,
+      system: "",
+      messages: [
+        { role: "user", content: "" },
+        { role: "assistant", content: [callBlock("toolu_0", "hold_fare")] },
+      ] as CloudMessage[],
+    },
+  }));
+  const sample = await sampleStep(
+    run,
+    hollow,
+    0,
+    { kind: "remove_tool", tool: "hold_fare" },
+    deps({ rank: () => ({ before: () => ["hold_fare"], after: () => [] }) }),
+  );
+  assert.ok(sample.ok);
+  assert.equal(sample.method, "rerank");
+});
+
+test("carriesText: the same answer as the timeline's content check", () => {
+  const payload = (fields: Partial<CloudEvent>): CloudEvent => ({
+    provider: "anthropic",
+    model: MODEL,
+    ts: "2026-11-02T12:00:00.000Z",
+    system: "",
+    tools: [],
+    messages: [],
+    finish_reason: "tool_call",
+    ...fields,
+  });
+  assert.equal(carriesText(payload({ system: "You help." })), true);
+  assert.equal(carriesText(payload({ messages: [{ role: "user", content: "Hello" }] })), true);
+  assert.equal(
+    carriesText(
+      payload({ messages: [{ role: "user", content: [{ type: "text", text: "Hello" }] }] }),
+    ),
+    true,
+  );
+  assert.equal(carriesText(payload({ messages: [{ role: "user", content: "" }] })), false);
+  assert.equal(
+    carriesText(payload({ messages: [{ role: "assistant", content: [callBlock("t", "a")] }] })),
+    false,
+  );
+  assert.equal(
+    carriesText(payload({ messages: [{ role: "user", content: [{ type: "text", text: "" }] }] })),
+    false,
+  );
+});
+
+/* - sampleStep: which tool call a model call made, by time ---------------------- */
+
+const atSecond = (second: number) => new Date(Date.UTC(2026, 10, 2, 12, 0, second));
+const timedCall = (second: number): ModelCall => ({
+  turnId: "t1",
+  occurredAt: atSecond(second),
+  model: MODEL,
+  finishReason: "tool_call",
+  costUsd: 0.003,
+  latencyMs: 800,
+  inputTokens: 900,
+  outputTokens: 30,
+  payload: null,
+});
+const timedSearch = (
+  ordinal: number,
+  second: number | null,
+  query: string,
+  searchType?: string,
+): RunStep => ({
+  kind: "search",
+  ordinal,
+  query,
+  hitIds: null,
+  topK: 5,
+  searchType,
+  ...(second === null ? {} : { occurredAt: atSecond(second).toISOString() }),
+});
+const timedInvoke = (ordinal: number, second: number | null, targetId: string): RunStep => ({
+  kind: "invoke",
+  ordinal,
+  targetId,
+  outcome: "ok",
+  ...(second === null ? {} : { occurredAt: atSecond(second).toISOString() }),
+});
+const timedRun = (steps: RunStep[]): RunRecord => ({
+  turnId: "t1",
+  traceId: "trace-1",
+  startedAt: atSecond(0).toISOString(),
+  taskId: null,
+  steps,
+});
+
+/** Re-ranks model call `n` and reads which search the ranker was asked about. */
+async function rerankAt(
+  run: RunRecord,
+  calls: ModelCall[],
+  n: number,
+): Promise<{ recorded: string | null; query: string | null }> {
+  let query: string | null = null;
+  const sample = await sampleStep(
+    run,
+    calls,
+    n,
+    { kind: "remove_tool", tool: "A" },
+    deps({
+      rank: () => ({
+        before: (asked) => {
+          query = asked;
+          return [asked];
+        },
+        after: (asked) => [asked],
+      }),
+      models: { agent: null, tool: null, judge: null, standIn: false },
+    }),
+  );
+  assert.ok(sample.ok);
+  assert.equal(sample.method, "rerank");
+  return { recorded: sample.recorded, query };
+}
+
+/** Call 0 at 0s made A and B, call 1 at 10s made C. */
+const parallelRun = () =>
+  timedRun([
+    timedSearch(1, 1, "q1"),
+    timedInvoke(2, 2, "A"),
+    timedSearch(3, 3, "q2"),
+    timedInvoke(4, 4, "B"),
+    timedSearch(5, 11, "q3"),
+    timedInvoke(6, 12, "C"),
+  ]);
+
+test("sampleStep rerank: a model call that made two tool calls doesn't shift the next call", async () => {
+  assert.deepEqual(await rerankAt(parallelRun(), [timedCall(0), timedCall(10)], 1), {
+    recorded: "C",
+    query: "q3",
+  });
+});
+
+test("sampleStep rerank: the fork is the call's first tool call, with the search before it", async () => {
+  assert.deepEqual(await rerankAt(parallelRun(), [timedCall(0), timedCall(10)], 0), {
+    recorded: "A",
+    query: "q1",
+  });
+});
+
+test("sampleStep rerank: a call without a tool call records none, and takes the last search before the next call", async () => {
+  const run = timedRun([
+    timedSearch(1, 1, "q1"),
+    timedInvoke(2, 2, "A"),
+    timedSearch(3, 11, "q2"),
+    timedSearch(4, 21, "q3"),
+    timedInvoke(5, 22, "B"),
+  ]);
+  assert.deepEqual(await rerankAt(run, [timedCall(0), timedCall(10), timedCall(20)], 1), {
+    recorded: null,
+    query: "q2",
+  });
+});
+
+test("sampleStep rerank: the last call without a tool call takes the run's last search", async () => {
+  const run = timedRun([timedSearch(1, 1, "q1"), timedInvoke(2, 2, "A"), timedSearch(3, 11, "q2")]);
+  assert.deepEqual(await rerankAt(run, [timedCall(0), timedCall(10)], 1), {
+    recorded: null,
+    query: "q2",
+  });
+});
+
+test("sampleStep rerank: a tool call at a call's time is that call's, not the one before", async () => {
+  const run = timedRun([timedSearch(1, 1, "q1"), timedInvoke(2, 10, "A")]);
+  const calls = [timedCall(0), timedCall(10)];
+  assert.deepEqual(await rerankAt(run, calls, 0), { recorded: null, query: "q1" });
+  assert.deepEqual(await rerankAt(run, calls, 1), { recorded: "A", query: "q1" });
+});
+
+test("sampleStep rerank: a skill search is never the fork's search, with times", async () => {
+  const run = timedRun([
+    timedSearch(1, 1, "q1"),
+    timedSearch(2, 2, "skills", "skill_search"),
+    timedInvoke(3, 3, "A"),
+  ]);
+  assert.deepEqual(await rerankAt(run, [timedCall(0)], 0), { recorded: "A", query: "q1" });
+});
+
+test("sampleStep rerank: without times on every step it stays index-based", async () => {
+  const untimed = timedRun([
+    timedSearch(1, null, "q1"),
+    timedInvoke(2, null, "A"),
+    timedSearch(3, null, "q2"),
+    timedInvoke(4, null, "B"),
+    timedSearch(5, null, "q3"),
+    timedInvoke(6, null, "C"),
+  ]);
+  assert.deepEqual(await rerankAt(untimed, [timedCall(0), timedCall(10)], 1), {
+    recorded: "B",
+    query: "q2",
+  });
+  const partly = timedRun([
+    timedSearch(1, 1, "q1"),
+    timedInvoke(2, null, "A"),
+    timedSearch(3, 3, "q2"),
+    timedInvoke(4, 4, "B"),
+    timedSearch(5, 11, "q3"),
+    timedInvoke(6, 12, "C"),
+  ]);
+  assert.deepEqual(await rerankAt(partly, [timedCall(0), timedCall(10)], 1), {
+    recorded: "B",
+    query: "q2",
+  });
+});
+
+test("sampleStep rerank: without the model call it stays index-based", async () => {
+  assert.deepEqual(await rerankAt(parallelRun(), [], 1), { recorded: "B", query: "q2" });
+});
+
+test("sampleStep rerank: a call whose first tool call came before any search takes the search it made next", async () => {
+  const run = timedRun([timedInvoke(1, 1, "A"), timedSearch(2, 2, "q1"), timedInvoke(3, 3, "B")]);
+  assert.deepEqual(await rerankAt(run, [timedCall(0), timedCall(10)], 0), {
+    recorded: "A",
+    query: "q1",
+  });
+});
+
+test("sampleStep rerank: a call without a search never borrows the next call's", async () => {
+  const run = timedRun([timedInvoke(1, 1, "A"), timedSearch(2, 11, "q1"), timedInvoke(3, 12, "B")]);
+  const sample = await sampleStep(
+    run,
+    [timedCall(0), timedCall(10)],
+    0,
+    { kind: "remove_tool", tool: "A" },
+    deps({
+      rank: () => ({ before: (query) => [query], after: (query) => [query] }),
+      models: { agent: null, tool: null, judge: null, standIn: false },
+    }),
+  );
+  assert.deepEqual(sample, { ok: false, reason: CANT_SIMULATE.noSearch });
+});
+
+test("sampleStep rerank: a run with no search says so, not that prompts are missing", async () => {
+  const run = timedRun([timedInvoke(1, 1, "A")]);
+  const sample = await sampleStep(
+    run,
+    [timedCall(0)],
+    0,
+    { kind: "remove_tool", tool: "A" },
+    deps({
+      rank: () => ({ before: (query) => [query], after: (query) => [query] }),
+      models: { agent: null, tool: null, judge: null, standIn: false },
+    }),
+  );
+  assert.deepEqual(sample, { ok: false, reason: CANT_SIMULATE.noSearch });
+});
+
+/* - sampleStep: the re-rank's baseline is the run ---------------------------------- */
+
+const noModels = { agent: null, tool: null, judge: null, standIn: false };
+const hitSearch = (ordinal: number, hitIds: string[] | null): RunStep => ({
+  kind: "search",
+  ordinal,
+  query: "find it",
+  hitIds,
+  topK: 5,
+});
+const invoke = (ordinal: number, targetId: string): RunStep => ({
+  kind: "invoke",
+  ordinal,
+  targetId,
+  outcome: "ok",
+});
+const baselineRun = (hitIds: string[] | null, tool = "search_docs") =>
+  timedRun([hitSearch(1, hitIds), invoke(2, tool)]);
+async function rerankSides(
+  run: RunRecord,
+  variant: Variant,
+  before: string[],
+  after: string[],
+): Promise<{ recorded: string | null; before: string | null; after: string | null }> {
+  const sample = await sampleStep(
+    run,
+    [],
+    0,
+    variant,
+    deps({ rank: () => ({ before: () => before, after: () => after }), models: noModels }),
+  );
+  assert.ok(sample.ok);
+  return { recorded: sample.recorded, before: sample.before.choice, after: sample.after.choice };
+}
+const OVERRIDE: Variant = {
+  kind: "catalog_override",
+  tool: "get_trace",
+  searchable: "Fetch a trace.",
+};
+
+test("re-rank baseline: before is the tool the run recorded, not the catalog's top hit", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["search_docs", "get_trace"]),
+      OVERRIDE,
+      ["sentry_search_issues", "get_trace", "search_docs"],
+      ["sentry_search_issues", "get_trace", "search_docs"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "search_docs" },
+  );
+});
+
+test("re-rank baseline: a change that doesn't move the ranker leaves the recorded tool", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["get_trace", "search_docs"]),
+      OVERRIDE,
+      ["get_trace", "search_docs"],
+      ["get_trace", "search_docs"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "search_docs" },
+  );
+});
+
+test("re-rank baseline: a change that moves the top hit among the served tools shows the new tool", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["search_docs", "get_trace"]),
+      OVERRIDE,
+      ["search_docs", "get_trace"],
+      ["get_trace", "search_docs"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "get_trace" },
+  );
+});
+
+test("re-rank baseline: a catalog tool the agent wasn't served can't win", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["search_docs", "get_trace"]),
+      OVERRIDE,
+      ["search_docs", "other_tool", "get_trace"],
+      ["other_tool", "search_docs", "get_trace"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "search_docs" },
+  );
+});
+
+test("re-rank baseline: a tool the change adds can win", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["search_docs"]),
+      { kind: "add_tool", tool: def("quote_fare") },
+      ["search_docs"],
+      ["quote_fare", "search_docs"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "quote_fare" },
+  );
+});
+
+test("re-rank baseline: removing the recorded tool moves to the next served tool", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(["get_trace", "search_docs"]),
+      { kind: "remove_tool", tool: "search_docs" },
+      ["get_trace", "search_docs"],
+      ["get_trace"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "get_trace" },
+  );
+});
+
+test("re-rank baseline: without a served list it ranks the whole catalog", async () => {
+  assert.deepEqual(
+    await rerankSides(
+      baselineRun(null),
+      OVERRIDE,
+      ["other_tool", "search_docs"],
+      ["get_trace", "other_tool"],
+    ),
+    { recorded: "search_docs", before: "search_docs", after: "get_trace" },
+  );
+});
+
+test("re-rank baseline: a call that made no tool call compares the ranker's top hits", async () => {
+  const run = timedRun([hitSearch(1, ["a", "b"])]);
+  assert.deepEqual(await rerankSides(run, OVERRIDE, ["a", "b"], ["b", "a"]), {
+    recorded: null,
+    before: "a",
+    after: "b",
+  });
 });
 
 /* - variant ----------------------------------------------------------------------- */

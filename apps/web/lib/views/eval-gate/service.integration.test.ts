@@ -630,6 +630,11 @@ test("a run's skill lookup is read as one, so the right-tool check reads the too
       ],
     );
     assert.equal(searchFor(run, "get_purchase")?.query, "where is my order");
+    // The ledger's time reaches every step, so a What-if re-rank can place them by time.
+    assert.deepEqual(
+      run.steps.map((step) => step.occurredAt),
+      run.steps.map(() => new Date(at(1)).toISOString()),
+    );
   } finally {
     await client.close();
   }

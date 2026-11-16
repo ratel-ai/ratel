@@ -342,6 +342,7 @@ export async function loadRuns(
         ordinal: traceTurnSteps.ordinal,
         kind: traceTurnSteps.kind,
         traceEventId: traceTurnSteps.traceEventId,
+        occurredAt: traceTurnSteps.occurredAt,
         searchType: traceTurnSteps.searchType,
         hitIds: traceTurnSteps.hitIds,
         topK: traceTurnSteps.topK,
@@ -425,13 +426,22 @@ export async function loadRuns(
                 query: query && query.trim() ? query : null,
                 hitIds: step.hitIds,
                 topK: step.topK,
+                occurredAt: step.occurredAt.toISOString(),
               },
             ];
           }
           if (step.kind === "invoke" && step.targetId) {
             const outcome =
               step.outcome === "ok" || step.outcome === "error" ? step.outcome : "unknown";
-            return [{ kind: "invoke", ordinal: step.ordinal, targetId: step.targetId, outcome }];
+            return [
+              {
+                kind: "invoke",
+                ordinal: step.ordinal,
+                targetId: step.targetId,
+                outcome,
+                occurredAt: step.occurredAt.toISOString(),
+              },
+            ];
           }
           return [];
         }),

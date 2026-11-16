@@ -46,6 +46,7 @@ export const SERVER_EVENT_NAMES = [
   "onboarding_tour_finished",
   "mcp_operation_executed",
   "mcp_operation_denied",
+  "what_if_submitted",
   "match_quality_runs_enqueued",
   "match_quality_run_started",
   "match_quality_run_completed",

@@ -112,6 +112,8 @@ export interface SearchStep {
   /** The list the agent was served, in rank order (up to 32); null when none was recorded. */
   hitIds: string[] | null;
   topK: number | null;
+  /** When it happened (ISO). Absent on fixtures and on runs not read from the ledger. */
+  occurredAt?: string;
 }
 
 export interface InvokeStep {
@@ -119,6 +121,8 @@ export interface InvokeStep {
   ordinal: number;
   targetId: string;
   outcome: "ok" | "error" | "unknown";
+  /** When it happened (ISO). Absent on fixtures and on runs not read from the ledger. */
+  occurredAt?: string;
 }
 
 export type RunStep = SearchStep | InvokeStep;
