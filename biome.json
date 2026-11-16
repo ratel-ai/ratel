@@ -973,6 +973,7 @@
         "apps/web/lib/mcp/**",
         "!apps/web/lib/mcp/README.md",
         "!apps/web/lib/mcp/auth.ts",
+        "!apps/web/lib/mcp/auth-edition.test.ts",
         "!apps/web/lib/mcp/naming.ts",
         "!apps/web/lib/mcp/route-handler.test.ts",
         "!apps/web/lib/mcp/operations/account.ts",
