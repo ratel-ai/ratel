@@ -3,7 +3,7 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { type KeyboardEvent, type ReactNode, useCallback, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, type RefObject, useCallback, useRef } from "react";
 import { cn } from "../cn";
 import { IconButton } from "./button";
 import { canStep, eventFromInside, isTypingTarget, PEEK_PARAM, withPeek } from "./peek";
@@ -21,6 +21,8 @@ export type PanelProps = {
   onNext?: () => void;
   /** `wide` for a body built around a drawing that needs the room (an ask's workflow). */
   size?: "default" | "wide";
+  /** Where focus lands on open, when the body has one obvious first field. Defaults to the first control. */
+  initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
   className?: string;
 };
@@ -42,6 +44,7 @@ export function Panel({
   onPrevious,
   onNext,
   size = "default",
+  initialFocus,
   children,
   className,
 }: PanelProps) {
@@ -67,6 +70,7 @@ export function Panel({
       <BaseDialog.Portal>
         <BaseDialog.Popup
           onKeyDown={onKeyDown}
+          initialFocus={initialFocus}
           className={cn(
             "fixed inset-y-2 right-2 z-panel flex flex-col overflow-hidden rounded-xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none",
             size === "wide" ? "w-[min(48rem,calc(100vw-1rem))]" : "w-[min(36rem,calc(100vw-1rem))]",

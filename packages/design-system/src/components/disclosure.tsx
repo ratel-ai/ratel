@@ -38,9 +38,11 @@ export function Disclosure({
       </Collapsible.Trigger>
       <Collapsible.Panel
         hiddenUntilFound
-        className="pt-3 transition-opacity duration-160 ease-enter data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none"
+        className="transition-opacity duration-160 ease-enter data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none"
       >
-        {children}
+        {/* Padding lives on the content: a closed panel stays in the DOM (for
+            find-in-page) and would otherwise keep its padding as empty space. */}
+        <div className="pt-3">{children}</div>
       </Collapsible.Panel>
     </Collapsible.Root>
   );

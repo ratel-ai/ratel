@@ -66,7 +66,7 @@ export function Autocomplete({
         <BaseAutocomplete.Input
           aria-label={label}
           placeholder={placeholder}
-          className="h-8 w-full rounded-md border border-line-strong bg-app pr-2.5 pl-8 text-ui text-fg outline-none placeholder:text-fg-faint hover:border-line-active focus-visible:border-line-active focus-visible:ring-2 focus-visible:ring-focus/40 max-md:text-base"
+          className="h-8 w-full rounded-md border border-line-strong bg-app pr-2.5 pl-8 text-ui text-fg outline-none placeholder:text-fg-faint hover:border-line-active focus-visible:border-fg-subtle max-md:text-base"
         />
       </div>
       <BaseAutocomplete.Portal>

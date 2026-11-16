@@ -131,9 +131,8 @@ test("every job that works on one project runs in the project log context", () =
   ]);
 });
 
-test('the playground page is headed "Playground"', () => {
-  const heading = source("components/console/playground/PlaygroundWorkbench.tsx").match(
-    /<h1[^>]*>\s*([^<{]+?)\s*<\/h1>/,
-  )?.[1];
-  assert.equal(heading, "Playground");
+test('the playground page is headed "Test a search", under Catalog', () => {
+  const page = source("app/(console)/project/[projectId]/playground/page.tsx");
+  assert.match(page, /title="Test a search"/);
+  assert.match(page, /crumbs=\{\[\{ label: "Catalog"/);
 });

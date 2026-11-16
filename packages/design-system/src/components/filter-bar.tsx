@@ -63,7 +63,7 @@ export function SearchInput({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onValueChange(event.currentTarget.value)}
-        className="h-8 w-full rounded-md border border-line-strong bg-app pr-2.5 pl-8 text-ui text-fg outline-none placeholder:text-fg-faint hover:border-line-active focus-visible:border-line-active focus-visible:ring-2 focus-visible:ring-focus/40 max-md:text-base [&::-webkit-search-cancel-button]:hidden"
+        className="h-8 w-full rounded-md border border-line-strong bg-app pr-2.5 pl-8 text-ui text-fg outline-none placeholder:text-fg-faint hover:border-line-active focus-visible:border-fg-subtle max-md:text-base [&::-webkit-search-cancel-button]:hidden"
       />
     </div>
   );
