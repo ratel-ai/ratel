@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
  * Embeddings for a test search, through the embedding-provider port. Session-authenticated and
@@ -52,8 +53,7 @@ export function embeddingsConfigured(provider: EmbeddingProviderPort): boolean {
 
 /** Clip to the input cap. The engine ranks on the head of a description anyway. */
 export function clipInput(text: string): string {
-  const trimmed = text.trim();
-  return trimmed.length <= MAX_INPUT_CHARS ? trimmed : trimmed.slice(0, MAX_INPUT_CHARS);
+  return sliceWellFormed(text.trim(), MAX_INPUT_CHARS);
 }
 
 function cacheKey(text: string): string {

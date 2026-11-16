@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import {
   claimNextQueuedJob,
+  oldestQueuedJobAgeQuery,
   readJobQueueClock,
   readOldestQueuedJobAgeMs,
 } from "@/lib/jobs/queries";
@@ -67,9 +69,84 @@ test("a job queued after the bound is not claimed; one queued before it is", asy
 
 test("the oldest queued job's age is measured on the database clock, and null once nothing waits", async () => {
   const db = await setup();
+  await db.execute(sql`update jobs set kind = 'build_trace_turns' where id = ${JOB_OLD}`);
   const age = await readOldestQueuedJobAgeMs(db);
   assert.ok(age !== null && age >= 59_000 && age < 120_000, `about a minute, got ${age}`);
 
   await claimNextQueuedJob(PROJ, undefined, db);
   assert.equal(await readOldestQueuedJobAgeMs(db), null, "a running job is not queue lag");
 });
+
+test("queue lag leaves out the jobs that wait on purpose: tier 2 sweeps, kinds it does not know, and imports", async () => {
+  const db = await setup(); // explore_tool_usage (tier 2), a minute old.
+  await db.execute(sql`
+    insert into jobs (project_id, kind, status, created_at) values
+      (${PROJ}, 'categorize_queries', 'queued', now() - interval '3 hours'),
+      (${PROJ}, 'kind_of_a_newer_deploy', 'queued', now() - interval '3 hours'),
+      (${PROJ}, 'run_import', 'queued', now() - interval '3 hours')`);
+  assert.equal(await readOldestQueuedJobAgeMs(db), null);
+
+  await db.execute(
+    sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'draft_fix', 'queued', now() - interval '2 minutes')`,
+  );
+  const tier0 = await readOldestQueuedJobAgeMs(db);
+  assert.ok(
+    tier0 !== null && tier0 >= 119_000 && tier0 < 180_000,
+    `tier 0, about two minutes, got ${tier0}`,
+  );
+
+  await db.execute(
+    sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'build_trace_turns', 'queued', now() - interval '5 minutes')`,
+  );
+  const tier1 = await readOldestQueuedJobAgeMs(db);
+  assert.ok(
+    tier1 !== null && tier1 >= 299_000 && tier1 < 360_000,
+    `tier 1, about five minutes, got ${tier1}`,
+  );
+});
+
+test("queue lag still counts a job that a per-project cap holds back: no column says why a job waits", async () => {
+  const db = await setup();
+  await db.execute(sql`
+    insert into jobs (project_id, kind, status, started_at, created_at) values (${PROJ}, 'score_tasks', 'running', now(), now());
+    `);
+  await db.execute(
+    sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'assign_topics', 'queued', now() - interval '4 minutes')`,
+  );
+  assert.equal(
+    await claimNextQueuedJob(PROJ, undefined, db, { runningPerProject: 1 }),
+    null,
+    "the cap holds it",
+  );
+  const age = await readOldestQueuedJobAgeMs(db);
+  assert.ok(age !== null && age >= 239_000, `the held job counts, got ${age}`);
+});
+
+// The planner picks the index from the table statistics: the same query reads
+// `jobs_status_created_idx` at the first size and `jobs_project_status_idx` at the
+// second. So the test pins what stays true, and no planner setting is forced.
+for (const finished of [20_000, 100_000]) {
+  test(`the queue lag read reaches the queued rows through an index on status, with ${finished} finished jobs and no planner setting forced`, async () => {
+    const db = await setup();
+    await db.execute(sql`
+      insert into jobs (project_id, kind, status, created_at)
+      select ${PROJ}, 'explore_tool_usage', 'done', now() - (g || ' seconds')::interval from generate_series(1, ${finished}::int) g`);
+    await db.execute(sql`
+      insert into jobs (project_id, kind, status, created_at)
+      select ${PROJ}, 'categorize_queries', 'queued', now() - (g || ' seconds')::interval from generate_series(1, 3000) g`);
+    await db.execute(
+      sql`insert into jobs (project_id, kind, status, created_at) values (${PROJ}, 'score_tasks', 'queued', now() - interval '1 minute')`,
+    );
+    await db.execute(sql`analyze jobs`);
+
+    const plan = await db.execute(sql`explain ${oldestQueuedJobAgeQuery()}`);
+    const text = (plan.rows as Array<{ "QUERY PLAN": string }>)
+      .map((row) => row["QUERY PLAN"])
+      .join("\n");
+
+    assert.doesNotMatch(text, /Seq Scan/);
+    assert.match(text, /Index Scan (on|using) jobs_(project_status|status_created)_idx/);
+    assert.match(text, /Index Cond: \(status = 'queued'::text\)/);
+    assert.match(text, /Filter: \(kind = ANY/, "no index holds the kind");
+  });
+}

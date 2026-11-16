@@ -28,8 +28,8 @@ export interface WorkerHandle {
 }
 
 /**
- * The worker's loop (RC-32): one step at a time, so a worker process never
- * runs two drains at once. A step is a sweep when one is due, otherwise a
+ * The worker's loop (RC-32): one step at a time per lane. A sweep with no job
+ * progress for its time limit returns and can still run behind the loop (see `timedDrain`). A step is a sweep when one is due, otherwise a
  * drain. After a drain that ran something it goes again at once, so a backlog
  * is worked through; after an empty one it waits a few seconds. A failing step
  * is logged and the loop keeps going.

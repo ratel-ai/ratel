@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
 import type { ModelUsage } from "@/lib/views/eval-gate/models";
 import { anthropicKey, mockModelsEnabled } from "@/lib/views/eval-gate/models";
@@ -80,16 +81,18 @@ export function draftModelFromEnv(
       const message = await trackModelCall(
         { provider: "anthropic", model, feature: DRAFT_FEATURE },
         () =>
-          client.messages.create({
-            model,
-            max_tokens: maxTokens,
-            system,
-            messages: [{ role: "user", content: user }],
-            output_config: {
-              format: { type: "json_schema", schema: ANALYST_SCHEMA },
-              effort: "low",
-            },
-          }),
+          client.messages.create(
+            wellFormedJson({
+              model,
+              max_tokens: maxTokens,
+              system,
+              messages: [{ role: "user", content: user }],
+              output_config: {
+                format: { type: "json_schema", schema: ANALYST_SCHEMA },
+                effort: "low",
+              },
+            }),
+          ),
         anthropicUsage,
       );
       if (message.stop_reason === "refusal")

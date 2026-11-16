@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { type AnalystContext, buildAnalystPrompt } from "./context";
 import type { AnalystDiagnosis, AnalystProposal, AnalystResult } from "./types";
 
@@ -221,16 +222,18 @@ export function anthropicAnalystDeps(model: string): AnalystDeps {
   return {
     model,
     complete: async (system, user) => {
-      const stream = client.messages.stream({
-        model,
-        max_tokens: ANALYST_MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: user }],
-        output_config: {
-          format: { type: "json_schema", schema: ANALYST_SCHEMA },
-          effort: ANALYST_EFFORT,
-        },
-      });
+      const stream = client.messages.stream(
+        wellFormedJson({
+          model,
+          max_tokens: ANALYST_MAX_TOKENS,
+          system,
+          messages: [{ role: "user", content: user }],
+          output_config: {
+            format: { type: "json_schema", schema: ANALYST_SCHEMA },
+            effort: ANALYST_EFFORT,
+          },
+        }),
+      );
       const msg = await stream.finalMessage();
       // Named at the point they happen, so a failed run says why instead of
       // surfacing an inscrutable JSON syntax error downstream.

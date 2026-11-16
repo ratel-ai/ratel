@@ -11,7 +11,7 @@ turns, never from raw events, so a 90-day window survives the 30-day event prune
 | `types.ts`, `constants.ts` | the turn and step shapes; the boundary thresholds (`TRACE_TURNS_*` env), `TURN_EVENT_TYPES` re-exported from the ingest kick |
 | `hash.ts` | salted hashes of a query and an end user; the ledger stores neither in the clear (`TRACE_SIGNALS_HASH_SALT`) |
 | `same-ask.ts` | whether two searches ask for the same thing: the retry, detour and first-try rules |
-| `turns/` | the pure pipeline (`normalize` → `segment` → `attribute` → `aggregate`, driven by `build-turn`), its queries, and `build-job` |
+| `turns/` | the pure pipeline (`normalize` → `segment` → `attribute` → `aggregate`, driven by `build-turn`), its queries, and `build-job`; test data: `real-fixtures.ts` (recorded OTLP exports) and `tool-count-fixtures.ts` (the trace shapes the tool-count tests ingest) |
 | `closed-turns.ts`, `turn-pages.ts` | the reader the readings use: closed turns paged by `(ended_at, id)` with their steps, under a time budget |
 | `run-trigger.ts` | why a signal run was asked for; a queued build may carry such a request |
 | `register.ts` | the `build_trace_turns` job and the `trace_turns_build_enqueue` before-step |

@@ -1,4 +1,9 @@
-import type { CloudEvent, CloudMessage, CloudToolDef } from "@/lib/ingest/cloud-schema";
+import type {
+  CloudEvent,
+  CloudMessage,
+  CloudToolDef,
+  ToolCallBlock,
+} from "@/lib/ingest/cloud-schema";
 import type { ContextSource } from "@/lib/ingest/context";
 import { INVOKE_TOOL_ID, innerToolId } from "@/lib/ingest/gateway-tools";
 
@@ -54,9 +59,9 @@ export type ToolsByName = Record<string, ToolStat>;
 
 /**
  * Which assistant `tool_call` blocks count as calls of this event.
- * - `all`: every block in `messages` (SDK events, and OTLP with flag
- *   `cloud-otlp-produced-tool-calls` off).
- * - `produced`: only the blocks this model call produced, the trailing
+ * - `all`: every block in `messages`. Only for rows that are not OTLP: SDK
+ *   events and seed data. See `lib/metrics-backfill.ts`.
+ * - `produced`: every OTLP call. Only the blocks this model call produced, the trailing
  *   assistant messages (see {@link producedMessages}). A multi-step turn re-sends
  *   earlier tool calls in each later call's input; `all` counts them again.
  *   Used vs unused still reads every block: a tool the turn already called
@@ -202,7 +207,10 @@ export function categorize(event: CloudEvent, options: CategorizeOptions = {}): 
   // name* (a tool defined twice shouldn't inflate the "N of M tools" counts).
   const callCounts = toolCallCounts(messages);
   // How many calls this event adds to the Tools tab (see ToolCallScope).
-  const counted = options.toolCallScope === "produced" ? producedMessages(messages) : messages;
+  const counted =
+    options.toolCallScope === "produced"
+      ? producedMessages(messages, event.input_message_count)
+      : messages;
   const producedCounts = counted === messages ? callCounts : toolCallCounts(counted);
   const tools = event.tools ?? [];
   const toolSizes = tools.map(estTool);
@@ -314,19 +322,28 @@ export function categorize(event: CloudEvent, options: CategorizeOptions = {}): 
 }
 
 /**
- * The messages this model call produced: the assistant messages after the last
- * user or tool message. OTLP content is input then output, and an input ends
- * with the user's ask or a tool result, so this is the output plus any
- * synthetic tool calls ingest appends. The rule reads only `messages`, so a
- * stored payload gives the same answer as ingest.
+ * The messages this model call produced. With `inputCount` (the event's
+ * `input_message_count`), they are the assistant messages after the input.
+ * A row stored without it has only the rule "the assistant messages after the
+ * last user or tool message": OTLP content is input then output, and an input
+ * usually ends with the user's ask or a tool result. A result that mapping
+ * dropped (`lib/otlp/content.ts`) puts the last input call in that tail, and
+ * `backfill:tool-counts` finds that call by its id in the trace.
  */
-export function producedMessages(messages: CloudMessage[]): CloudMessage[] {
+export function producedMessages(messages: CloudMessage[], inputCount?: number): CloudMessage[] {
+  if (inputCount !== undefined)
+    return messages.slice(inputCount).filter((m) => m.role === "assistant");
   let start = messages.length;
   while (start > 0 && messages[start - 1].role === "assistant") start--;
   return messages.slice(start);
 }
 
-/** Names of the tools this model call called (see {@link producedMessages}). */
-export function producedToolCallNames(messages: CloudMessage[]): Set<string> {
-  return new Set(toolCallCounts(producedMessages(messages)).keys());
+/** Every assistant `tool_call` block in `messages`, in order. */
+export function toolCallBlocks(messages: CloudMessage[]): ToolCallBlock[] {
+  const blocks: ToolCallBlock[] = [];
+  for (const m of messages) {
+    if (m.role !== "assistant" || typeof m.content === "string") continue;
+    for (const b of m.content) if (b.type === "tool_call") blocks.push(b);
+  }
+  return blocks;
 }

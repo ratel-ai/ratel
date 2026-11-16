@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { serializeSkill } from "@/lib/catalog/http";
 import type { Skill } from "@/lib/catalog/schema";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
  * Response-shaping rules for MCP results.
@@ -54,7 +55,7 @@ export function truncateText(
 ): TruncatedText {
   if (!value) return { text: "", truncated: false };
   if (value.length <= max) return { text: value, truncated: false };
-  return { text: `${value.slice(0, max)}…`, truncated: true };
+  return { text: `${sliceWellFormed(value, max)}…`, truncated: true };
 }
 
 /** Accumulates truncation across a multi-part result. */

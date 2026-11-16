@@ -19,6 +19,7 @@ import type {
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import {
   chooseAsks,
@@ -221,13 +222,15 @@ export function anthropicTopicNamer(
   const client = new Anthropic({ apiKey });
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
-    const message = await client.messages.create({
-      model,
-      max_tokens: NAME_MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
-    });
+    const message = await client.messages.create(
+      wellFormedJson({
+        model,
+        max_tokens: NAME_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
+      }),
+    );
     if (message.stop_reason === "refusal")
       throw new Error("topic names declined by the model's safety filter");
     if (message.stop_reason === "max_tokens")

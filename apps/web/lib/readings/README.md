@@ -10,7 +10,7 @@ explorer; match quality follows.
 | Module | Holds | Job / steps |
 |---|---|---|
 | `intent-types/` | `wire.ts`, the intent graph's wire format (SDK push/pull, validation, ETags, caps); `engine-types.ts`, the engine's cluster, level and assignment shapes | — |
-| `text/` | `cluster.ts`, the symmetric-BM25 clusterer the query intents and the engine share; `well-formed.ts`, a cut that never leaves half an emoji in text sent to a model | — |
+| `text/` | `cluster.ts`, the symmetric-BM25 clusterer the query intents and the engine share; `well-formed.ts`, a cut that never leaves half an emoji in text sent to a model, and `wellFormedJson`, which every Anthropic request in `lib/` goes through (`provider-guards.test.ts` fails on one that does not) | — |
 | `decisions/` | `openai.ts`, the OpenAI Decisions client; `engine.ts`, which engine answers closed-set questions (OpenAI only here); `judge.ts`, the judge contract and helpers the readings share (cases, verdicts, corpus entries, option narrowing); `openai-judge.ts`, the one judge engine | — |
 | `model-defaults.ts` | `DEFAULT_LABEL_MODEL`, the naming model when the operator sets none | — |
 | `stats.ts` | `wilsonInterval`, `CONFIDENT_SCORE_RATIO`: the two statistics the detectors share with the quality meter (L5) | — |
