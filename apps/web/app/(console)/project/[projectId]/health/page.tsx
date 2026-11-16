@@ -1,6 +1,7 @@
 import {
   type SummaryImports,
   SummaryNoDatabase,
+  type SummaryShare,
   SummaryView,
 } from "@/components/console/health/v2/SummaryView";
 import { composition } from "@/lib/composition";
@@ -40,7 +41,7 @@ export const metadata = { title: "Agent health" };
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits from the entitlements port.
- * No share link or plan to pick here; the importer is the edition's.
+ * No plan to pick here; the importer and the share dialog are the edition's.
  */
 export default async function AgentHealthPage({
   params,
@@ -58,8 +59,9 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
-  const importsSlot = (await composition.ui?.())?.HealthImports;
-  const [loaded, imports, tasks, fixes, corrections] = await Promise.all([
+  const editionUi = await composition.ui?.();
+  const importsSlot = editionUi?.HealthImports;
+  const [loaded, imports, share, tasks, fixes, corrections] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
       distinctId,
@@ -71,6 +73,7 @@ export default async function AgentHealthPage({
         }),
     }),
     loadImportState(project.id, importsSlot),
+    loadShareState(project.id, editionUi?.HealthShare),
     loadOrFallback<TaskListModel | null>({
       operation: "agent_health_tasks",
       distinctId,
@@ -130,8 +133,26 @@ export default async function AgentHealthPage({
       corrections={corrections}
       reportHref={healthReportHref(project.id, windowDays)}
       imports={imports}
+      share={share}
     />
   );
+}
+
+/** The project's public link. A failed read hides sharing, not the page. */
+async function loadShareState(
+  projectId: string,
+  slot: EditionUi["HealthShare"],
+): Promise<SummaryShare | null> {
+  if (!slot) return null;
+  return loadOrFallback<SummaryShare | null>({
+    operation: "agent_health_share_state",
+    distinctId: `project:${projectId}`,
+    fallback: null,
+    load: async () => {
+      const state = await slot.load(projectId);
+      return state && { ...state, Dialog: slot.Dialog };
+    },
+  });
 }
 
 /** The project's recent imports. A failed read hides the importer, not the page. */

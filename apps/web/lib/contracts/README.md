@@ -39,6 +39,13 @@ edition, which is unchanged.
 is mounted once (the list under a state block, or only the dialog the page menu opens with
 `openHealthImport`). Without it the page offers no import.
 
+`HealthShare` is Agent health's public share link. `load` reads a project's live link and whether
+the reader may manage it (null when sharing is not offered to this reader); `Dialog` is mounted once on the page and opens from the page menu
+(`openHealthShare`); `resolve` turns a public token into its link, project and organization, and
+`recordView` counts a view. The two public pages (`/share/health/<token>` and its `/report`) are
+the core's and show the redacted report; without the slot they answer 404 and the page offers no
+sharing.
+
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from
 `composition.projectNav`. The open-source edition has neither.

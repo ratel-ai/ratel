@@ -9,8 +9,9 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import { applyPlanLimits, parseWindowDays } from "@/lib/readings/trace-signals/view";
-import { loadHealthPageModel, workflowLabelsFor } from "@/lib/views/health/page-model";
-import { publicHealthModel, publicWorkflowLabels } from "@/lib/views/health/public-model";
+import { loadHealthPageModel } from "@/lib/views/health/page-model";
+import { publicHealthModel } from "@/lib/views/health/public-model";
+import { publicLoadOverrides } from "@/lib/views/health/shared-load";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Agent health report" };
@@ -21,7 +22,7 @@ export const metadata: Metadata = { title: "Agent health report" };
  * example runs or user requests, whoever exports it.
  *
  * Owned (ADR-0030): the project comes from the console scope; the redacted model and its load
- * overrides are the ones upstream shares with its public link, which is not part of this edition.
+ * overrides are the ones the public share link uses (`views/health/shared-load`).
  */
 export default async function HealthReportPage({
   params,
@@ -39,12 +40,8 @@ export default async function HealthReportPage({
   const loaded = await loadHealthPageModel(
     { projectId: project.id, windowDays },
     process.env.NODE_ENV,
-    {
-      // No example turns, model-written task names without their descriptions, no ask insights.
-      getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
-      getLabels: async (id) => publicWorkflowLabels(await workflowLabelsFor(id)),
-      getInsights: async () => null,
-    },
+    // No example turns, model-written task names without their descriptions, no ask insights.
+    publicLoadOverrides(limits),
   );
   const model = publicHealthModel(
     applyPlanLimits(loaded, { ...limits, agentHealthEvidenceTurns: 0 }),

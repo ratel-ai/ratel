@@ -9,7 +9,7 @@ port implementations is mounted; a missing port stops the process at startup
   the pages it puts in place of the open-source defaults (the rail switcher, `/organizations`,
   `/org/<slug>/team`, `/org/<slug>/billing`, the organization's General and Danger zone settings, `/` itself), the project pages at `/project/<id>/models/<key>` (`ProjectPages`, a 404 for a key it lacks), the bar above the console and
   the boundary around each page, and the access gate around the console and `/onboarding`, which
-  decides before the shell resolves its data, and the Agent health importer (`HealthImports`). A loader, so the boot path never imports it. Absent
+  decides before the shell resolves its data, and the Agent health importer (`HealthImports`) and public share link (`HealthShare`). A loader, so the boot path never imports it. Absent
   in the open-source edition.
 - `connect`, optional on a composition: `instrumentation.node.ts` calls it at startup with the
   core services (`CoreServices`: `toolCorpus`, `importedRuns`, `onboarding`), so the edition reads
