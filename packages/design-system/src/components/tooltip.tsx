@@ -27,8 +27,6 @@ export type TooltipProps = {
   disabled?: boolean;
   /** Merged over the popup's surface. */
   className?: string;
-  /** Draws the arrow pointing at the trigger. */
-  arrow?: boolean;
 };
 
 export function Tooltip({
@@ -38,7 +36,6 @@ export function Tooltip({
   side = "top",
   disabled,
   className,
-  arrow = false,
 }: TooltipProps) {
   if (disabled) return children;
   return (
@@ -55,15 +52,6 @@ export function Tooltip({
               className,
             )}
           >
-            {arrow ? (
-              <BaseTooltip.Arrow className="text-line">
-                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative; the popup carries the text. */}
-                <svg width="10" height="5" viewBox="0 0 10 5" aria-hidden>
-                  <path d="M0 5 L5 0 L10 5 Z" fill="var(--color-base-deep)" />
-                  <path d="M0 5 L5 0 L10 5" fill="none" stroke="currentColor" strokeWidth="1" />
-                </svg>
-              </BaseTooltip.Arrow>
-            ) : null}
             <span>{content}</span>
             {shortcut ? <Kbd>{shortcut}</Kbd> : null}
           </BaseTooltip.Popup>

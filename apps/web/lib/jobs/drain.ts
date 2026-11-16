@@ -1,6 +1,7 @@
 import { drainSteps } from "@/lib/composition/registry";
 import type { DrainStep } from "@/lib/contracts/registry";
 import { type DrainObserverDeps, defaultDrainObserverDeps, observeDrain } from "./drain-observer";
+import { RUN_IMPORT_JOB } from "./kinds";
 import {
   type BackgroundObservability,
   type BackgroundObservabilityDeps,
@@ -52,7 +53,12 @@ export function dataRetentionEnabled(
 
 const defaultDeps = (): DrainCronDeps => ({
   steps: drainSteps(),
-  drainProjectJobs: (onJobFinished) => drainProjectJobs(undefined, undefined, { onJobFinished }),
+  // Imports have their own lane in the worker (RC-40): the cron drain never waits behind one.
+  drainProjectJobs: (onJobFinished) =>
+    drainProjectJobs(undefined, undefined, {
+      kinds: { except: [RUN_IMPORT_JOB] },
+      onJobFinished,
+    }),
   retentionEnabled: dataRetentionEnabled(),
   observability: defaultBackgroundObservabilityDeps,
 });

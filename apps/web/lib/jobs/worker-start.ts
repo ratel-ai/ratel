@@ -1,7 +1,10 @@
 import { runDrainTick } from "@/lib/jobs/drain";
 import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
+import { RUN_IMPORT_JOB } from "@/lib/jobs/kinds";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { startWorker, type WorkerDeps, type WorkerHandle } from "@/lib/jobs/worker";
+import { getDb } from "@/lib/platform/db/client";
+import { loadTopQueries, resetQueryStats } from "@/lib/platform/db/top-queries";
 import { getLogger } from "@/lib/platform/logger";
 
 const logger = getLogger("jobs/worker");
@@ -9,7 +12,12 @@ const logger = getLogger("jobs/worker");
 const GLOBAL_KEY = Symbol.for("ratel.platform.worker");
 
 export interface BackgroundWorkerDeps {
+  /** The analysis lane: every queued kind but imports. */
   drain: WorkerDeps["drain"];
+  /** The import lane (RC-40): `run_import` only, so a long import never holds analysis back. */
+  drainImports?: WorkerDeps["drainImports"];
+  /** The day's most expensive statements, logged once a day (`reportTopQueries`). */
+  reportTopQueries?: () => Promise<void>;
   /** One cron tick (`runDrainTick`): the sweeps and safety nets, plus a drain. */
   tick: () => Promise<{ ok: boolean; error?: string }>;
   startWorker: typeof startWorker;
@@ -19,7 +27,9 @@ export interface BackgroundWorkerDeps {
 }
 
 const defaultDeps = (): BackgroundWorkerDeps => ({
-  drain: () => drainProjectJobs(),
+  drain: () => drainProjectJobs(undefined, undefined, { kinds: { except: [RUN_IMPORT_JOB] } }),
+  drainImports: () => drainProjectJobs(undefined, undefined, { kinds: { only: [RUN_IMPORT_JOB] } }),
+  reportTopQueries: () => reportTopQueries(),
   tick: workerTick(),
   startWorker,
   on: (signal, listener) => process.on(signal, listener),
@@ -39,6 +49,10 @@ const defaultDeps = (): BackgroundWorkerDeps => ({
  * first. A job cut short is marked as an error by the reaper
  * (`reapStaleRunningJobs`); the cron safety nets queue its work again.
  *
+ * Two lanes, as upstream: analysis drains every kind but imports, and imports (`run_import`,
+ * which can take many minutes) drain in a lane of their own. Once a day it logs the database's
+ * most expensive statements (`reportTopQueries`).
+ *
  * `beforeExit` runs between the last step and the exit: the self-telemetry flush, when this
  * process exports its own traces and logs. A failure there never keeps the process alive.
  */
@@ -49,8 +63,10 @@ export function startBackgroundWorker(
   const globals = globalThis as Record<symbol, WorkerHandle | undefined>;
   const existing = globals[GLOBAL_KEY];
   if (existing) return existing;
+  const drainImports = deps.drainImports;
   const handle = deps.startWorker({
     drain: () => deps.drain(),
+    ...(drainImports ? { drainImports: () => drainImports() } : {}),
     sweep: async () => {
       const tick = await deps.tick();
       if (!tick.ok) deps.warn({ error: tick.error }, "worker sweep finished with an error");
@@ -59,10 +75,14 @@ export function startBackgroundWorker(
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   });
   globals[GLOBAL_KEY] = handle;
+  const topQueries = deps.reportTopQueries;
+  const report = topQueries ? setInterval(() => void topQueries(), TOP_QUERIES_EVERY_MS) : null;
+  report?.unref();
   let stopping = false;
   const stop = () => {
     if (stopping) return deps.exit(1);
     stopping = true;
+    if (report) clearInterval(report);
     void handle
       .stop()
       .then(async () => {
@@ -77,6 +97,34 @@ export function startBackgroundWorker(
   deps.on("SIGTERM", stop);
   deps.on("SIGINT", stop);
   return handle;
+}
+
+/** Once a day per worker (one in each environment): see reportTopQueries. */
+export const TOP_QUERIES_EVERY_MS = 24 * 60 * 60_000;
+
+/**
+ * The day's most expensive statements as `db_top_query` lines (RC-214), then a reset so
+ * tomorrow's lines cover tomorrow. Read in Datadog by @total_ms and @disk_reads; the query text
+ * is Postgres's normalized form ($1 for values). Without `pg_stat_statements` it warns once a
+ * day and does nothing; it never throws.
+ */
+export async function reportTopQueries(
+  db: Parameters<typeof loadTopQueries>[0] = getDb(),
+  log: Pick<ReturnType<typeof getLogger>, "info" | "warn" | "error"> = logger,
+): Promise<void> {
+  try {
+    const top = await loadTopQueries(db);
+    if (!top) {
+      log.warn({}, "pg_stat_statements is not available");
+      return;
+    }
+    for (const [index, query] of top.entries()) {
+      log.info({ rank: index + 1, ...query }, "db_top_query");
+    }
+    await resetQueryStats(db);
+  } catch (err) {
+    log.error({ err }, "top queries report failed");
+  }
 }
 
 /**

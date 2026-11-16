@@ -65,7 +65,10 @@ const defaultDeps = (): DrainProjectJobsDeps => ({
 export async function drainProjectJobs(
   projectId?: string,
   deps: DrainProjectJobsDeps = defaultDeps(),
-  options: { onJobFinished?: () => void } = {},
+  options: {
+    kinds?: { only?: readonly string[]; except?: readonly string[] };
+    onJobFinished?: () => void;
+  } = {},
 ): Promise<{ done: number; failed: number }> {
   const observability = createBackgroundObservability(deps.observability);
   try {
@@ -81,6 +84,7 @@ export async function drainProjectJobs(
   return deps.drainJobs(deps.jobStore, deps.jobHandlers(), {
     projectId,
     observer: observability,
+    ...(options.kinds ? { kinds: options.kinds } : {}),
     ...(options.onJobFinished ? { onJobFinished: options.onJobFinished } : {}),
   });
 }

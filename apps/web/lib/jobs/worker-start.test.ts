@@ -4,6 +4,7 @@ import { DEFAULT_DRAIN_TIMEOUT_MS, drainTimeoutMs } from "./drain-observer";
 import type { WorkerDeps } from "./worker";
 import {
   type BackgroundWorkerDeps,
+  reportTopQueries,
   startBackgroundWorker,
   stopBackgroundWorker,
   workerTick,
@@ -77,9 +78,71 @@ test("the loop drains every project's jobs and sweeps with the cron tick, in thi
   assert.deepEqual(await loop.drain(), { done: 2, failed: 1 });
   await loop.sweep();
   assert.deepEqual(h.calls, ["drain", "tick"]);
-  assert.equal(loop.drainImports, undefined, "no import lane in this edition");
+  assert.equal(loop.drainImports, undefined, "no import lane unless one is given");
   assert.equal(h.warnings.length, 0);
   h.finishStep();
+});
+
+test("imports drain in a lane of their own, so a long import never holds analysis back", async () => {
+  const h = harness({
+    drainImports: async () => {
+      h.calls.push("imports");
+      return { done: 1, failed: 0 };
+    },
+  });
+  startBackgroundWorker(h.deps);
+  const loop = h.wired.loop;
+  assert.ok(loop?.drainImports);
+  assert.deepEqual(await loop.drainImports(), { done: 1, failed: 0 });
+  assert.deepEqual(await loop.drain(), { done: 2, failed: 1 });
+  assert.deepEqual(h.calls, ["imports", "drain"]);
+  h.finishStep();
+});
+
+test("the daily report logs the most expensive statements by rank, then resets the counts", async () => {
+  const logged: Array<{ level: string; message: string; fields: Record<string, unknown> }> = [];
+  const log = {
+    info: (fields: Record<string, unknown>, message: string) =>
+      logged.push({ level: "info", message, fields }),
+    warn: (fields: Record<string, unknown>, message: string) =>
+      logged.push({ level: "warn", message, fields }),
+    error: (fields: Record<string, unknown>, message: string) =>
+      logged.push({ level: "error", message, fields }),
+  } as unknown as Parameters<typeof reportTopQueries>[1];
+  const executed: string[] = [];
+  const db = {
+    execute: async (query: { queryChunks?: unknown[] }) => {
+      const text = JSON.stringify(query.queryChunks ?? query);
+      executed.push(text.includes("pg_stat_statements_reset") ? "reset" : "read");
+      if (text.includes("pg_stat_statements_reset")) return { rows: [] };
+      if (text.includes("pg_extension")) return { rows: [{ installed: true }] };
+      return {
+        rows: [
+          { calls: 10, total_ms: 900, mean_ms: 90, rows: 10, disk_reads: 3, query: "select $1" },
+          { calls: 2, total_ms: 400, mean_ms: 200, rows: 1, disk_reads: 0, query: "update $1" },
+        ],
+      };
+    },
+  } as unknown as Parameters<typeof reportTopQueries>[0];
+  await reportTopQueries(db, log);
+  const lines = logged.filter((line) => line.message === "db_top_query");
+  assert.deepEqual(
+    lines.map((line) => line.fields.rank),
+    [1, 2],
+  );
+  assert.equal(executed.at(-1), "reset", "the counts reset after the report");
+
+  logged.length = 0;
+  const failing = {
+    execute: async () => {
+      throw new Error("database gone");
+    },
+  } as unknown as Parameters<typeof reportTopQueries>[0];
+  await reportTopQueries(failing, log);
+  assert.deepEqual(
+    logged.map((line) => [line.level, line.message]),
+    [["error", "top queries report failed"]],
+  );
 });
 
 test("a tick that finished with an error is a warning, never a failed step", async () => {
