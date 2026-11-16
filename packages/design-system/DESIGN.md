@@ -358,14 +358,11 @@ Variants for Micro screens, not for ordinary pages:
 
 | Component | Addition |
 |---|---|
-| `Button` | `variant="inverse"`, `variant="outline"`, `size="xs"` |
-| `SegmentedControl` | `variant="inverse"`, `disabled` and `title` on an option |
-| `Tooltip` | `className`, `arrow` |
-| `MenuGroup` | `labelClassName` |
-| `DialogContent` | `titleClassName` |
+| `Button` | `variant="outline"` |
+| `SegmentedControl` | `disabled` and `title` on an option |
+| `Tooltip` | `className` |
 
-`src/ratel.css` holds its palette mapping, global classes and animations: `description-split-enter`, `action-reveal-enter`,
-`bench-swap-left`, `bench-swap-right`, `bench-settle`, `analyze-scan-fill`.
+`src/ratel.css` holds its palette mapping and global classes.
 
 ## Where things live
 

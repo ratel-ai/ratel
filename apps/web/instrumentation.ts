@@ -11,12 +11,16 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { assertComposition, bootBackground, registerNodeInstrumentation } = await import(
-      "./instrumentation.node"
-    );
+    const {
+      assertComposition,
+      bootBackground,
+      registerNodeInstrumentation,
+      startProcessStatsIfExported,
+    } = await import("./instrumentation.node");
     const flushTelemetry = await registerNodeInstrumentation(process.env, {
       deploymentEnvironment: process.env.APP_ENV,
     });
+    await startProcessStatsIfExported();
     await assertComposition();
     await bootBackground(flushTelemetry);
   }

@@ -149,6 +149,12 @@ export function oldestQueuedJobAgeQuery(): SQL {
   `;
 }
 
+/** Which job kinds a claim may take: only some, or all but some. */
+export interface JobKindFilter {
+  only?: readonly string[];
+  except?: readonly string[];
+}
+
 /** Running jobs one project may have at once, across every drain. 0 turns the cap off. */
 export function jobsRunningPerProject(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -169,12 +175,19 @@ export function jobsRunningPerProject(
  * cap: two drains claiming at the same instant can each pass it), and the projects in
  * `avoidProjects` (the ones this drain just served) go last within a tier. Ordering, not a
  * filter: if only they have work, it still runs. Tiers come from `lib/jobs/policy.ts`.
+ *
+ * `kinds` keeps a claim to some kinds or away from them: the worker's import lane takes only
+ * `run_import`, its analysis lane and the cron drain everything else (RC-40).
  */
 export async function claimNextQueuedJob(
   projectId?: string,
   createdBefore?: Date,
   db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
-  options: { avoidProjects?: readonly string[]; runningPerProject?: number } = {},
+  options: {
+    avoidProjects?: readonly string[];
+    runningPerProject?: number;
+    kinds?: JobKindFilter;
+  } = {},
 ): Promise<{
   id: string;
   projectId: string;
@@ -186,10 +199,25 @@ export async function claimNextQueuedJob(
   const createdFilter = createdBefore
     ? sql`and q.created_at <= ${createdBefore.toISOString()}`
     : sql``;
+  const kindFilter = options.kinds?.only
+    ? sql`and q.kind = any(array[${sql.join(
+        options.kinds.only.map((kind) => sql`${kind}`),
+        sql`, `,
+      )}]::text[])`
+    : options.kinds?.except
+      ? sql`and q.kind <> all(array[${sql.join(
+          options.kinds.except.map((kind) => sql`${kind}`),
+          sql`, `,
+        )}]::text[])`
+      : sql``;
   const cap = options.runningPerProject ?? jobsRunningPerProject();
+  // Imports (run_import, RC-40) have their own lane in the worker and can take many minutes. A
+  // running one does not count, or it would hold back the project's analysis (including the
+  // build the import itself asks for), and the cap does not hold one back either: a project runs
+  // one import at most.
   const capFilter =
     cap > 0
-      ? sql`and (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running') < ${cap}`
+      ? sql`and (q.kind = 'run_import' or (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running' and r.kind <> 'run_import') < ${cap})`
       : sql``;
   const avoid = options.avoidProjects ?? [];
   const tier = jobTierSql(sql`q.kind`);
@@ -204,7 +232,7 @@ export async function claimNextQueuedJob(
     .update(jobs)
     .set({ status: "running", startedAt: new Date() })
     .where(
-      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
+      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
     )
     .returning({
       id: jobs.id,

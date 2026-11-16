@@ -35,7 +35,10 @@ export interface JobStore {
   claimNextQueued(
     projectId?: string,
     createdBefore?: Date,
-    options?: { avoidProjects?: readonly string[] },
+    options?: {
+      avoidProjects?: readonly string[];
+      kinds?: { only?: readonly string[]; except?: readonly string[] };
+    },
   ): Promise<JobRecord | null>;
   /** The instant a drain starts, on the clock the queue stamps `created_at` with. */
   queueClock?(): Promise<Date>;
@@ -50,6 +53,8 @@ export interface DrainJobsOptions {
   observability?: BackgroundObservabilityDeps;
   /** Called after each finished job, done or failed: the sign that the drain makes progress. */
   onJobFinished?: () => void;
+  /** Only these kinds, or all but these (the worker's import lane, RC-40). */
+  kinds?: { only?: readonly string[]; except?: readonly string[] };
 }
 
 const logger = getLogger("jobs/runner");
@@ -77,8 +82,15 @@ export async function drainJobs(
 
   for (let i = 0; i < max; i++) {
     const job = opts.projectId
-      ? await store.claimNextQueued(opts.projectId, createdBefore)
-      : await store.claimNextQueued(undefined, createdBefore, { avoidProjects: served });
+      ? await store.claimNextQueued(
+          opts.projectId,
+          createdBefore,
+          opts.kinds ? { kinds: opts.kinds } : undefined,
+        )
+      : await store.claimNextQueued(undefined, createdBefore, {
+          avoidProjects: served,
+          ...(opts.kinds ? { kinds: opts.kinds } : {}),
+        });
     if (!job) break;
     if (!opts.projectId) {
       const at = served.indexOf(job.projectId);
