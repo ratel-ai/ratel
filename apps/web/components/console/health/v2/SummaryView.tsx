@@ -7,9 +7,10 @@ import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBu
 import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
 import { CallOrderSection } from "@/components/console/health/v2/CallOrderSection";
 import { GapBlock } from "@/components/console/health/v2/GapBlock";
+import { HealthScore, type ScoreFix } from "@/components/console/health/v2/HealthScore";
 import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
 import { IssuesSection } from "@/components/console/health/v2/IssuesSection";
-import { issueRows, issuesLine } from "@/components/console/health/v2/issue-rows";
+import { type IssueRow, issueRows, issuesLine } from "@/components/console/health/v2/issue-rows";
 import { Readings } from "@/components/console/health/v2/Readings";
 import { readingViews } from "@/components/console/health/v2/reading-views";
 import { SelfCorrectionsRow } from "@/components/console/health/v2/SelfCorrectionsRow";
@@ -38,6 +39,7 @@ import {
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
+import { earlyReadingCopy } from "@/lib/views/health/page-state-copy";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
@@ -81,6 +83,8 @@ export interface SummaryViewProps {
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
   imports: SummaryImports | null;
+  /** `cloud-health-score` (RC-225): the Health score leads the page and the issues say what each is worth. */
+  scoreLeads?: boolean;
   now?: Date;
 }
 
@@ -177,7 +181,16 @@ function NotReady({
   );
 }
 
-function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryViewProps) {
+function Ready({
+  projectId,
+  model,
+  state,
+  tasks,
+  fixes,
+  corrections,
+  imports,
+  scoreLeads = false,
+}: SummaryViewProps) {
   const gap = pageGap(model);
   const lane = model.sourceMode === "otel" ? "otel" : "sdk";
   const runLabel = runWindowLabel(model);
@@ -187,6 +200,8 @@ function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryVi
     : { unlocks: model.captureUnlocks, captureLevel: model.captureLevel, mode: model.sourceMode };
   const signals = signalsForGap(model.signals, gap);
   const taskSteps = taskLookups(tasks, model.workflows);
+  // A gap in the data hides the run-based issues, so a score over them would claim too much.
+  const score = scoreLeads && !gap ? (model.score ?? null) : null;
   const rows = issueRows({
     projectId,
     signals,
@@ -194,7 +209,21 @@ function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryVi
     folding: chainFolding(model.workflows),
     tasks: taskSteps,
     fixes: fixLookups(fixes),
+    score,
   });
+  const issues = (
+    <IssuesSection
+      projectId={projectId}
+      rows={rows}
+      line={issuesLine(rows, signals)}
+      windowLabel={runLabel}
+      examplesAllowed={model.evidenceTurnsPerSignal > 0}
+      lockedCount={model.lockedCount}
+      upgradeHref={null}
+      dismissed={model.dismissed ?? []}
+      calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
+    />
+  );
   const workflows = model.workflows;
   const asksKey = asksMissing(model.setup)
     ? lane === "otel"
@@ -204,6 +233,22 @@ function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryVi
   return (
     <>
       {state?.kind === "ready" && state.updating ? <RefreshWhileBuilding /> : null}
+      {score ? (
+        <HealthScore
+          score={score}
+          next={scoreFixes(rows)}
+          early={!!model.earlyReading}
+          progress={model.earlyProgress ?? null}
+        />
+      ) : null}
+      {/* With the score leading, its ring and the issues say "still calculating" without a paragraph. */}
+      {model.earlyReading && !score ? (
+        <EarlyReadingNotice
+          signalWindowDays={model.signalWindowDays}
+          importing={(imports?.list ?? []).some((item) => item.status === "running")}
+          updating={state?.kind === "ready" && !!state.updating}
+        />
+      ) : null}
       {card || nudgeShown(nudge) ? (
         <SetupCallout projectId={projectId} card={card} nudge={nudge} />
       ) : null}
@@ -213,18 +258,11 @@ function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryVi
         nudge={nudge}
         captureLevel={model.captureLevel}
       />
+      {/* With the score leading, what moves it comes right under it. */}
+      {score ? issues : null}
       <Readings readings={readingViews(tilesForGap(model.tiles, gap))} />
       {gap ? null : <ShapesSection shapes={model.shapes} turns={model.turns} vocabulary={lane} />}
-      <IssuesSection
-        projectId={projectId}
-        rows={rows}
-        line={issuesLine(rows, signals)}
-        windowLabel={runLabel}
-        examplesAllowed={model.evidenceTurnsPerSignal > 0}
-        lockedCount={model.lockedCount}
-        upgradeHref={null}
-        dismissed={model.dismissed ?? []}
-      />
+      {score ? null : issues}
       <SelfCorrectionsRow model={corrections} />
       {gap ? (
         <GapBlock gap={gap} lane={lane} />
@@ -253,6 +291,31 @@ function Ready({ projectId, model, state, tasks, fixes, corrections }: SummaryVi
       )}
     </>
   );
+}
+
+/**
+ * An early reading's note (RC-224): this is a first look, still being
+ * processed, and what the page shows will grow and may change.
+ */
+function EarlyReadingNotice(props: {
+  signalWindowDays: number | null;
+  importing: boolean;
+  updating: boolean;
+}) {
+  const copy = earlyReadingCopy(props);
+  return (
+    <div data-health-early-reading={props.updating ? "updating" : "waiting"}>
+      <Callout title={copy.title}>{copy.body}</Callout>
+    </div>
+  );
+}
+
+/** The three fixes worth the most points, as the score lists them; the rows already go most points first. */
+function scoreFixes(rows: readonly IssueRow[]): ScoreFix[] {
+  return rows
+    .filter((row) => (row.points ?? 0) >= 1)
+    .slice(0, 3)
+    .map((row) => ({ peek: row.peek, title: row.title, kind: row.kind, points: row.points ?? 0 }));
 }
 
 /** The page when no database is connected: the header and one notice. */

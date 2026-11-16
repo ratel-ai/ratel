@@ -27,13 +27,18 @@ Ingest kicks the fold and the engine, paced (one run per project per five minute
 kick that was lost. The engine reads the fold's rows (`listFoldableTraceEvents`) and the
 graph's compaction; the graph never imports the engine.
 
-**Seams.** The ledger's `ledgerSeams` (`enqueueReading`, `onBacklogDrained`) are filled by
+**Seams.** The ledger's `ledgerSeams` (`enqueueReading`, `onBacklogDrained`, `onBacklogProgress`) are filled by
 `trace-signals/register.ts` when the registry loads. `trace-signals/signals/compute-job.ts`
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 `enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id) and
 `enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
 behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 `views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
+Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
+its summary, so the page can show the change. `trace-signals/signals/early-reading.ts` is the
+quick first reading (RC-224), behind `FF_QUICK_FIRST_READING`: a new project's first run reads
+a week, is marked early, and queues the `full_reading` run; a reading made while an import runs
+(`composition.importRunning`, the edition's) stays early too.
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading
 of the explorer's reading, so its registration fills the seam when it lands; unset, a completed
 explorer run queues nothing. `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two

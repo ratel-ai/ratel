@@ -38,6 +38,11 @@ const DEPLOYMENT_SWITCHES = [
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
   { key: "FF_SESSION_REPLAY", note: "the session timeline and What-if" },
   { key: "FF_MCP_LOOP", note: "the improvement-loop tools on this server" },
+  { key: "FF_HEALTH_SCORE", note: "Agent health's Summary leads with the Health score" },
+  {
+    key: "FF_QUICK_FIRST_READING",
+    note: "a new project's first Agent health reading reads a week first, marked early",
+  },
 ] as const;
 
 export interface AccountOperationDeps {

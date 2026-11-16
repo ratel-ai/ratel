@@ -23,7 +23,14 @@ import type { SignalKind, TurnSourceMix } from "@/lib/readings/trace-signals/vie
 export type SignalsQueryDb = ReturnType<typeof getDb>;
 
 /** data_fixed: enough fixed data (turn ids, tool calls, users' messages) arrived after a reading that lacked it. */
-export const RUN_TRIGGERS = ["scheduled", "manual", "first_build", "data_fixed"] as const;
+/** `full_reading`: the full-window run that follows an early reading (RC-224). */
+export const RUN_TRIGGERS = [
+  "scheduled",
+  "manual",
+  "first_build",
+  "data_fixed",
+  "full_reading",
+] as const;
 export type RunTrigger = (typeof RUN_TRIGGERS)[number];
 export const COMPUTE_JOB_KIND = "compute_trace_signals";
 
@@ -151,6 +158,43 @@ export async function failSignalRun(
     .update(traceSignalRuns)
     .set({ status: "failed", error: error.slice(0, 2_000), finishedAt: now })
     .where(eq(traceSignalRuns.id, runId));
+}
+
+/**
+ * Store a reading's Health score in its summary (`summary.healthScore`,
+ * RC-225), written once its signals are persisted so it reads exactly the
+ * open issues the page reads.
+ */
+export async function setRunHealthScore(
+  runId: string,
+  score: { version: number; value: number },
+  db: Pick<SignalsQueryDb, "update"> = getDb(),
+): Promise<void> {
+  await db
+    .update(traceSignalRuns)
+    .set({
+      summary: sql`coalesce(${traceSignalRuns.summary}, '{}'::jsonb) || ${JSON.stringify({ healthScore: score })}::jsonb`,
+    })
+    .where(eq(traceSignalRuns.id, runId));
+}
+
+/**
+ * The stored Health scores of a project's completed readings before the
+ * latest one, newest first: the page's change and trend (RC-225). Readings
+ * stored before the score read as null.
+ */
+export async function listEarlierHealthScores(
+  projectId: string,
+  limit: number,
+  db: Pick<SignalsQueryDb, "select"> = getDb(),
+): Promise<unknown[]> {
+  const rows = await db
+    .select({ score: sql<unknown>`${traceSignalRuns.summary} -> 'healthScore'` })
+    .from(traceSignalRuns)
+    .where(and(eq(traceSignalRuns.projectId, projectId), eq(traceSignalRuns.status, "completed")))
+    .orderBy(desc(traceSignalRuns.createdAt))
+    .limit(limit + 1);
+  return rows.slice(1).map((row) => row.score);
 }
 
 /** The project's latest run of any status, or of the given one. */

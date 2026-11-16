@@ -114,6 +114,13 @@ export interface RunSummary {
    */
   unbuiltAtStart?: number;
   /**
+   * True on a reading made before the project's full one (RC-224,
+   * `early-reading.ts`): the quick first week, a backlog still being built, or
+   * an import still running. The page says it is early and asks for the full
+   * one. Set by the compute job; absent means a full reading.
+   */
+  earlyReading?: boolean;
+  /**
    * What the run's self-correction reading read (`self-corrections/run.ts`):
    * its trust, turns read, turns with captured replies and rows written. Set
    * by the compute job; absent on runs stored before it, or when that reading

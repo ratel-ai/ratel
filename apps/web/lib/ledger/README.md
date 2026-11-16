@@ -26,6 +26,7 @@ clock is receipt time, not the event's own time, so right after a seed or a back
 half the turns stay open until that window passes (`TRACE_TURNS_IDLE_CLOSE_MS` shortens it).
 
 **Seams the trace-signals reading fills.** `build-job.ts` exports `ledgerSeams`: `enqueueReading`
-(the signal run a request asked for) and `onBacklogDrained` (the first-reading enqueue once
-the ledger has enough closed turns). `readings/trace-signals/register.ts` sets them when the
+(the signal run a request asked for), `onBacklogDrained` (the first-reading enqueue once
+the ledger has enough closed turns) and `onBacklogProgress` (with the quick first reading on, a
+first reading from the last week while an older backlog still builds). `readings/trace-signals/register.ts` sets them when the
 registry loads; the ledger never imports L4. Owned files and why are listed in `lib/README.md`.

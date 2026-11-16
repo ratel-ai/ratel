@@ -127,6 +127,12 @@ export type CompositionPorts = {
   connect?: (core: CoreServices) => void;
   /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
   ui?: () => Promise<EditionUi>;
+  /**
+   * Whether an import of past runs is storing runs for the project right now; an Agent health
+   * reading made meanwhile is marked early. Absent in the open-source edition, which has no
+   * importer, so no import is ever running.
+   */
+  importRunning?: (projectId: string) => Promise<boolean>;
 };
 
 export const PORT_NAMES = [

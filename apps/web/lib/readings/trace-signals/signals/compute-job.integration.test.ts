@@ -16,6 +16,11 @@ import {
   loadReloadableTurns,
   writeTurnPage,
 } from "@/lib/ledger/turns/queries";
+import {
+  HEALTH_SCORE_VERSION,
+  healthScore,
+  scoredIssues,
+} from "@/lib/readings/trace-signals/health-score";
 import { countFixesSince } from "@/lib/readings/trace-signals/signals/analysis-context";
 import {
   computeProjectTraceSignals,
@@ -34,14 +39,17 @@ import {
 import {
   enqueueComputeJob,
   latestSignalRun,
+  listEarlierHealthScores,
   listOpenSignals,
   persistSignalRun,
   type RunTrigger,
+  setRunHealthScore,
   startSignalRun,
 } from "@/lib/readings/trace-signals/signals/queries";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import type { DetectedSignal } from "@/lib/readings/trace-signals/signals/types";
 import { loadHealthPageModel } from "@/lib/views/health/page-model";
+import { toSignalRecord } from "@/lib/views/health/signals/page-view";
 
 const NOW = new Date("2026-09-02T00:00:00Z");
 
@@ -467,6 +475,7 @@ function buildDeps(
       enqueueBuildTraceTurnsJob(p, db, request),
     enqueueReading: (p: string, trigger: RunTrigger) => enqueueComputeJob(p, trigger, db),
     onBacklogDrained,
+    onBacklogProgress: async () => false,
     observability: { trackSystemEvent: async () => undefined },
     salt: "test-salt",
   };
@@ -564,4 +573,206 @@ test("a completed run queues fix drafts through the seam, and a failed enqueue n
     }),
   );
   assert.equal(failing.outcome, "completed");
+});
+
+test("with the quick first reading on, the first run reads a week, says it is early and queues the full one (RC-224)", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  const queued: string[] = [];
+  const stored: string[] = [];
+  const quick = (over: Parameters<typeof jobDeps>[3] = {}) =>
+    jobDeps(db, NOW, [], {
+      quickFirstReading: async () => true,
+      storeHealthScore: async (_p, runId) => {
+        stored.push(runId);
+      },
+      enqueueFullReading: async (p) => {
+        queued.push(p);
+        return null;
+      },
+      ...over,
+    });
+
+  const first = await computeProjectTraceSignals(PROJECT_ID, { trigger: "first_build" }, quick());
+  assert.equal(first.outcome, "completed");
+  assert.equal(first.windowDays, 7, "a week first, not the Pro plan's 90 days");
+  const early = await latestSignalRun(PROJECT_ID, db);
+  const earlySummary = early?.summary as { earlyReading?: boolean; windowShrunk?: boolean };
+  assert.equal(earlySummary.earlyReading, true);
+  assert.equal(earlySummary.windowShrunk, undefined, "a chosen week is not a shrunk window");
+  assert.deepEqual(queued, [PROJECT_ID], "the full reading is queued as soon as the week lands");
+  assert.deepEqual(
+    stored,
+    [],
+    "an early reading stores no score: its change would compare a week with a full window",
+  );
+  const earlyModel = await loadHealthPageModel(
+    { projectId: PROJECT_ID, windowDays: 7 },
+    "production",
+    {
+      db,
+      getLimits: async () => ({
+        agentHealthSignalsShown: Infinity,
+        agentHealthEvidenceTurns: 0,
+        agentHealthWindowDays: 90,
+      }),
+      now: () => NOW,
+    },
+  );
+  assert.equal(earlyModel.earlyReading, true);
+  assert.equal(earlyModel.earlyProgress?.read, first.turnsScanned, "the week's runs read");
+  assert.ok(
+    (earlyModel.earlyProgress?.total ?? 0) >= first.turnsScanned,
+    "of every run in the plan's window",
+  );
+
+  const full = await computeProjectTraceSignals(PROJECT_ID, { trigger: "full_reading" }, quick());
+  assert.equal(full.windowDays, 90, "the follow-up reads the plan's whole window");
+  const fullRun = await latestSignalRun(PROJECT_ID, db);
+  assert.equal(fullRun?.trigger, "full_reading");
+  assert.equal(
+    (fullRun?.summary as { earlyReading?: boolean }).earlyReading,
+    undefined,
+    "the full reading is not early",
+  );
+  assert.deepEqual(stored, [fullRun?.id], "the full reading stores its score");
+  assert.deepEqual(queued, [PROJECT_ID], "and queues nothing more");
+
+  // Past the full reading the flag changes nothing: the next run is a usual one.
+  const next = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "scheduled" },
+    quick({ importRunning: async () => true }),
+  );
+  assert.equal(next.windowDays, 90);
+  assert.equal(
+    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
+    undefined,
+  );
+});
+
+test("a full-window reading made while an import still runs stays early, and waits for the import (RC-224)", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  const queued: string[] = [];
+  const deps = jobDeps(db, NOW, [], {
+    quickFirstReading: async () => true,
+    importRunning: async () => true,
+    enqueueFullReading: async (p) => {
+      queued.push(p);
+      return null;
+    },
+  });
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "first_build" }, deps);
+  const full = await computeProjectTraceSignals(PROJECT_ID, { trigger: "full_reading" }, deps);
+  assert.equal(full.windowDays, 90);
+  assert.equal(
+    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
+    true,
+  );
+  assert.deepEqual(
+    queued,
+    [PROJECT_ID],
+    "only the quick week queues a follow-up; the import's end asks for the next",
+  );
+});
+
+test("with the flag off the first run reads the plan's window and is never early", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  const first = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "first_build" },
+    jobDeps(db, NOW, [], { importRunning: async () => true }),
+  );
+  assert.equal(first.windowDays, 90);
+  assert.equal(
+    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
+    undefined,
+  );
+});
+
+test("a caught-up build asks for the full reading once an early one has stood ten minutes", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "first_build" },
+    jobDeps(db, NOW, [], { quickFirstReading: async () => true }),
+  );
+  const drained = (minutes: number) =>
+    enqueueFirstSignalRun(PROJECT_ID, {
+      latestRun: (id) => latestSignalRun(id, db),
+      enqueue: (id, trigger) => enqueueComputeJob(id, trigger, db),
+      countClosed: (id, from, to) => countClosedTurns(id, from, to, db),
+      countFixes: async () => ({}),
+      now: () => new Date(NOW.getTime() + minutes * 60_000),
+    });
+
+  assert.equal(await drained(1), false, "too soon after the early reading");
+  assert.equal(await drained(11), true);
+  const payloads = await client.query<{ payload: unknown }>(
+    `select payload from jobs where kind = 'compute_trace_signals' and status = 'queued'`,
+  );
+  assert.deepEqual(
+    payloads.rows.map((r) => r.payload),
+    [{ trigger: "full_reading" }],
+  );
+});
+
+test("each reading stores its Health score, and the page reads it with the change since the last one (RC-225)", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, problemFixtures());
+  const storeHealthScore = async (projectId: string, runId: string, turnsRead: number) => {
+    const records = (await listOpenSignals(projectId, db))
+      .map(toSignalRecord)
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    await setRunHealthScore(
+      runId,
+      { version: HEALTH_SCORE_VERSION, value: healthScore(scoredIssues(records), turnsRead) },
+      db,
+    );
+  };
+  await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "manual" },
+    jobDeps(db, NOW, [], { storeHealthScore }),
+  );
+  const first = await latestSignalRun(PROJECT_ID, db);
+  const stored = (first?.summary as { healthScore?: { version: number; value: number } })
+    .healthScore;
+  assert.equal(stored?.version, HEALTH_SCORE_VERSION);
+  assert.ok(stored && stored.value > 0 && stored.value < 100, "the problem fixtures cost points");
+
+  // A later reading: the page's score is live, its change is against the stored one before it.
+  await client.exec(
+    `update trace_signal_runs set summary = summary || '{"healthScore": {"version": ${HEALTH_SCORE_VERSION}, "value": ${stored!.value - 5}}}'::jsonb`,
+  );
+  await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "scheduled" },
+    jobDeps(db, new Date(NOW.getTime() + 60_000), [], { storeHealthScore }),
+  );
+  assert.deepEqual(await listEarlierHealthScores(PROJECT_ID, 7, db), [
+    { version: HEALTH_SCORE_VERSION, value: stored!.value - 5 },
+  ]);
+
+  // A plan that names only two issues: the rest still cost points.
+  const model = await loadHealthPageModel({ projectId: PROJECT_ID, windowDays: 30 }, "production", {
+    db,
+    getLimits: async () => ({
+      agentHealthSignalsShown: 2,
+      agentHealthEvidenceTurns: 0,
+      agentHealthWindowDays: 30,
+    }),
+    now: () => NOW,
+  });
+  assert.equal(model.score?.value, stored!.value, "the same open issues, the same score");
+  assert.equal(model.score?.change, 5);
+  assert.deepEqual(model.score?.trend, [stored!.value - 5, stored!.value]);
+  assert.equal(
+    Object.keys(model.score?.parts ?? {}).length,
+    (await listOpenSignals(PROJECT_ID, db)).length,
+    "every open issue counts, before the plan cuts the list",
+  );
 });
