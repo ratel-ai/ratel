@@ -52,6 +52,30 @@ test("explore lands on the skills catalog, its retired tabs on Fixes with their 
   );
 });
 
+test("the old organization pages land under the session's organization, the query kept", async () => {
+  assert.equal(
+    await legacyRouteHref("/billing", { checkout: "success" }, scope),
+    "/org/acme-org/billing?checkout=success",
+  );
+  assert.equal(await legacyRouteHref("/members", {}, scope), "/org/acme-org/team");
+});
+
+test("an old organization page with no organization to land in is nobody's", async () => {
+  assert.equal(await legacyRouteHref("/billing", {}, null), null);
+  assert.equal(
+    await legacyRouteHref("/members", {}, { projects: [], organizationSlug: undefined }),
+    null,
+  );
+});
+
+test("/embeddings lands on the project's embeddings page, the sentinel without a project", async () => {
+  assert.equal(
+    await legacyRouteHref("/embeddings", { project: "acme" }, scope),
+    `/project/${PROJECT}/models/embeddings`,
+  );
+  assert.equal(await legacyRouteHref("/embeddings", {}, scope), "/project/_/models/embeddings");
+});
+
 test("an address no rule knows is nobody's", async () => {
   assert.equal(await legacyRouteHref("/somewhere", {}, scope), null);
 });
