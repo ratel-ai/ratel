@@ -96,7 +96,7 @@ export async function loadDescriptions({
  * as rewrites are applied one by one. Model-free; null when there is nothing
  * pending, nothing to replay, or the read fails.
  */
-async function loadProjection(
+export async function loadProjection(
   projectId: string,
   run: MatchQualityRunRow | null,
   proposals: readonly MatchQualityProposalRow[],
@@ -134,7 +134,7 @@ async function loadProjection(
 }
 
 /** The tool a link asked for, as the catalog describes it now, with its searches in this window. */
-async function loadToolCard(
+export async function loadToolCard(
   projectId: string,
   toolId: string,
   evidence: QualityEvidence | null,

@@ -15,6 +15,7 @@
     { "from": "@/lib/auth-user", "to": "@/lib/platform/session", "exact": true },
     { "from": "@/lib/admin/support/guard", "to": "@/lib/platform/support-session", "exact": true },
     { "from": "@/lib/flags-org", "to": "@/lib/views/session-replay/gate", "exact": true },
+    { "from": "@/lib/trace-signals/flag", "to": "@/lib/views/health/agent-health-flag", "exact": true },
     { "from": "@/lib/session-replay/actions", "to": "@/app/(console)/(session-replay)/session-replay-actions", "exact": true },
     { "from": "@/lib/entitlements", "to": "@/lib/platform/entitlements", "exact": true },
     { "from": "@/lib/analytics/track-server", "to": "@/lib/platform/telemetry", "exact": true },
@@ -457,7 +458,11 @@
       "symbols": {
         "capabilityCatalogHref": "@/lib/views/intents/hrefs",
         "relativeTimeLabel": "@/lib/views/intents/adaptive-view",
-        "CloudGraphState": "@/lib/views/intents/adaptive-view"
+        "CloudGraphState": "@/lib/views/intents/adaptive-view",
+        "buildClusterTableRows": "@/lib/views/intents/adaptive-view",
+        "cloudGraphState": "@/lib/views/intents/adaptive-view",
+        "formatBytes": "@/lib/views/intents/adaptive-view",
+        "modelLabel": "@/lib/views/intents/adaptive-view"
       }
     },
     "@/lib/match-quality/judge": {

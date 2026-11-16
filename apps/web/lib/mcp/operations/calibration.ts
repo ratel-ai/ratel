@@ -11,9 +11,11 @@ import {
 } from "@/lib/synthesis/experiments/calibration-service";
 import type {
   ArmPairAgreementSummary,
+  ArmSideStats,
   RankingComparisonRowView,
 } from "@/lib/synthesis/experiments/calibration-types";
 import { createExperimentService } from "@/lib/synthesis/experiments/service";
+import type { ExperimentLifecycleArmMetrics } from "@/lib/synthesis/experiments/types";
 import { COMPARISON_FACETS } from "@/lib/synthesis/traces/calibration-view";
 import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
 
@@ -64,6 +66,17 @@ function rate(part: number, whole: number): number | null {
   return whole === 0 ? null : round(part / whole, 4);
 }
 
+function sideStats(side: ArmSideStats | undefined) {
+  if (!side) return null;
+  return {
+    outcomes: side.outcomes,
+    errorRate: round(side.errorRate),
+    averageDurationMs: round(side.averageDurationMs, 1),
+    p50DurationMs: round(side.p50DurationMs, 1),
+    p95DurationMs: round(side.p95DurationMs, 1),
+  };
+}
+
 function summarizePair(pair: ArmPairAgreementSummary) {
   return {
     servedArm: pair.servedArm,
@@ -74,6 +87,27 @@ function summarizePair(pair: ArmPairAgreementSummary) {
     top1Rate: round(pair.top1Rate),
     exactOrderRate: round(pair.exactOrderRate),
     averageMatchScore: round(pair.averageJaccardAtK),
+    // Each side's latency and outcomes on the same compared selections.
+    served: sideStats(pair.served),
+    shadow: sideStats(pair.shadow),
+  };
+}
+
+/** The shadow arm's reliability funnel: how often it ran, and how often it was skipped, fell back or was dropped. */
+function summarizeLifecycle(arm: ExperimentLifecycleArmMetrics) {
+  return {
+    arm: arm.arm,
+    role: arm.role,
+    comparisonCount: arm.comparisonCount,
+    top1Rate: round(arm.top1Rate),
+    exactOrderRate: round(arm.exactOrderRate),
+    averageMatchScore: round(arm.averageJaccardAtK),
+    k: arm.agreementK,
+    skipped: arm.skipCount,
+    fellBack: arm.fallbackCount,
+    dropped: arm.dropCount,
+    dropsByReason: arm.dropsByReason,
+    coverage: round(arm.shadowCoverage),
   };
 }
 
@@ -147,9 +181,21 @@ export function calibrationOperations(
             return {
               name: experiment.name,
               kind: summary?.kind ?? "generic",
+              mode: experiment.mode,
+              baselineArm: experiment.baselineArm,
               comparisonCount,
               mismatchCount,
               mismatchRate: rate(mismatchCount, comparisonCount),
+              // Sampled traces per arm, as the experiments list shows them;
+              // the comparison counts above are the census.
+              traceCount: experiment.traceCount,
+              multiArmTraceCount: experiment.multiArmTraceCount,
+              arms: experiment.arms.map((arm) => ({
+                arm: arm.arm,
+                traceCount: arm.traceCount,
+                traceShare: round(arm.traceShare),
+              })),
+              firstSeenAt: experiment.firstSeenAt.toISOString(),
               lastSeenAt: experiment.lastSeenAt.toISOString(),
             };
           })
@@ -163,7 +209,7 @@ export function calibrationOperations(
           truncated: page.truncated,
           window: window.toJSON(),
           hint: comparable
-            ? "Open one with get_calibration, then list_calibration_mismatches for the individual queries that disagreed."
+            ? "Open one with get_calibration (or get_experiment for per-arm latency, cost and issues), then list_calibration_mismatches for the individual queries that disagreed."
             : "No experiment here exports ranking comparisons, so there is nothing to calibrate against yet.",
         };
       },
@@ -173,7 +219,7 @@ export function calibrationOperations(
       domain: "observability",
       title: "Calibration detail",
       description:
-        "How two arms of one experiment agreed over a window: per-arm-pair comparison counts, mismatch counts, top-1 and exact-order agreement rates, and a sample of recent comparisons. Use list_calibration_mismatches to see only the ones that disagreed.",
+        "How two arms of one experiment agreed over a window: per-arm-pair comparison and mismatch counts, top-1 and exact-order agreement, each side's latency and outcomes, the shadow's reliability, and recent comparisons. Use list_calibration_mismatches to see only the ones that disagreed.",
       keywords: ["calibration", "agreement", "arms", "top1", "parity", "experiment"],
       scope: "project",
       mutates: false,
@@ -209,7 +255,11 @@ export function calibrationOperations(
             comparisonCount: view.totalComparisonCount,
             mismatchCount: view.mismatchCount,
             mismatchRate: rate(view.mismatchCount, view.totalComparisonCount),
+            // Comparisons matching the browser's default filter across the
+            // whole window, of which recentComparisons is the first page.
+            filteredComparisonCount: view.filteredComparisonCount,
             armPairs: view.pairs.map(summarizePair),
+            lifecycle: view.lifecycle.map(summarizeLifecycle),
             arms: view.arms.map((arm) => ({
               arm: arm.arm,
               servingCount: arm.servingCount,
@@ -250,6 +300,10 @@ export function calibrationOperations(
           .max(COMPARISON_FACETS.length)
           .optional()
           .describe("Narrow to particular kinds of disagreement."),
+        match: z
+          .enum(["any", "all"])
+          .default("any")
+          .describe("How several facets combine: any matches one of them, all needs every one."),
         includeAgreements: z
           .boolean()
           .default(false)
@@ -263,7 +317,7 @@ export function calibrationOperations(
           selection: {
             scope: params.includeAgreements ? "all" : "mismatch",
             facets: params.facets ? [...params.facets] : [],
-            match: "any",
+            match: params.match,
           },
           limit: params.limit,
           offset: params.offset,

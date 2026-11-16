@@ -18,8 +18,9 @@ Each tool reads or changes one thing about a project. Call whoami first to learn
 which project this credential reaches; most tools default to it.
 
 Results are summarized with row caps. When one sets "truncated": true, narrow the
-time window or filters rather than paging blindly. Every surface is on for every
-organization, so an empty result means empty, not switched off.
+time window or filters, or follow the cursor a list returns. An empty result
+means empty; a surface that is switched off for this caller refuses with
+"forbidden" and says which, and get_flag_status lists what is on.
 
 Metrics come from two pipelines and each result names its own "source". Ask the
 span tools about latency, errors and individual requests; ask get_cost_by_day and

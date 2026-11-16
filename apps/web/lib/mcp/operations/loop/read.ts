@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { figureCaption, signalTitle } from "@/lib/readings/trace-signals/claims";
 import { type TraceSignalRow, traceSignals } from "@/lib/readings/trace-signals/schema";
@@ -11,6 +12,7 @@ import { loadWorkflowLabels } from "@/lib/readings/trace-signals/workflows/label
 import { issueHref } from "@/lib/views/fixes/href";
 import { loadFixes } from "@/lib/views/fixes/load";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import { agentHealthEnabled, toIngestFlagOrganization } from "@/lib/views/health/agent-health-flag";
 import { claimModel } from "@/lib/views/health/signals/claims-model";
 import { parseRunSummary, toSignalRecord } from "@/lib/views/health/signals/page-view";
 import { metricRef, traceRef, withHref } from "@/lib/views/lineage/refs";
@@ -119,8 +121,36 @@ export async function toInsights(
   });
 }
 
+/**
+ * The open rows Agent health shows on this plan, worst first: none when Agent
+ * health is off for the project, and only the first `agentHealthSignalsShown`
+ * of the rows the page can put in words, the same cut and order as the page
+ * (`applyPlanLimits`) and its example route (`readIssueExamples`). A project
+ * without an organization reads as the free plan, as the page model does.
+ */
+export async function shownOpenSignals(
+  projectId: string,
+  deps: {
+    getOrganization: typeof getOrganizationByProjectId;
+    enabled: typeof agentHealthEnabled;
+    listOpen: (projectId: string) => Promise<TraceSignalRow[]>;
+  } = {
+    getOrganization: getOrganizationByProjectId,
+    enabled: agentHealthEnabled,
+    listOpen: (id) => listOpenSignals(id),
+  },
+): Promise<TraceSignalRow[]> {
+  const organization = await deps.getOrganization(projectId);
+  if (!(await deps.enabled(projectId, toIngestFlagOrganization(organization)))) return [];
+  // Owned: plans are the edition's, so an unknown organization reads the edition's default
+  // limits (upstream reads its Free plan's).
+  const shown = getAgentHealthLimits(organization ?? { id: "" }).agentHealthSignalsShown;
+  const rows = (await deps.listOpen(projectId)).filter((row) => toSignalRecord(row) !== null);
+  return Number.isFinite(shown) ? rows.slice(0, Math.max(0, Math.floor(shown))) : rows;
+}
+
 export async function loadOpenInsights(projectId: string): Promise<InsightView[]> {
-  return toInsights(projectId, await listOpenSignals(projectId));
+  return toInsights(projectId, await shownOpenSignals(projectId));
 }
 
 /** One insight by id, whatever its status; null when the project has no such insight. */

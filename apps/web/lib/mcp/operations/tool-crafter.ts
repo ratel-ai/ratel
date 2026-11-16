@@ -4,7 +4,7 @@ import {
   findInFlightJob as findInFlightJobFn,
 } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { APP_NAME } from "@/lib/platform/app-config";
@@ -135,7 +135,7 @@ export function toolCrafterOperations(
       keywords: ["tool craft", "crafted definition", "drafted definition", "tool stub", "tool"],
       scope: "project",
       mutates: false,
-      params: z.object({ ...projectScoped, craftId: z.string().uuid() }),
+      params: z.object({ ...projectScoped, craftId: uuidParam() }),
       async execute(ctx, params) {
         const row = await deps.getProposal(ctx.projectId, params.craftId);
         if (!row) throw notFound("drafted fix");

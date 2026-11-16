@@ -7,14 +7,21 @@ import {
 } from "@/lib/mcp/auth";
 import { clientAddress } from "@/lib/mcp/client-address";
 import { type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
+import { mcpLaunchAccess } from "@/lib/mcp/launch-access";
 import { mcpLoopEnabled } from "@/lib/mcp/loop-flag";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
 import { loopReadOperations, loopWriteOperations } from "@/lib/mcp/operations/loop";
+import {
+  loopEvalSetReadOperations,
+  loopEvalSetWriteOperations,
+} from "@/lib/mcp/operations/loop/eval-sets";
+import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
 import { TOOL_STAGES } from "@/lib/mcp/stages";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { currentLogContext, getLogger, setLogContext } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
@@ -66,7 +73,14 @@ let loopToolIds: ReadonlySet<string> | null = null;
 /** Whether a tool is one of the improvement-loop tools (`FF_MCP_LOOP`), for the logs. */
 export function isLoopTool(operationId: string): boolean {
   loopToolIds ??= new Set(
-    [...loopReadOperations(), ...loopWriteOperations()].map((operation) => operation.id),
+    [
+      ...loopReadOperations(),
+      ...loopWriteOperations(),
+      ...loopTaskReadOperations(),
+      ...loopTaskWriteOperations(),
+      ...loopEvalSetReadOperations(),
+      ...loopEvalSetWriteOperations(),
+    ].map((operation) => operation.id),
   );
   return loopToolIds.has(operationId);
 }
@@ -83,6 +97,11 @@ export interface McpRouteDeps {
   trackServerEvent: typeof trackServerEvent;
   /** Whether the improvement-loop tools are listed for this caller (`FF_MCP_LOOP`). */
   loopEnabled?: (auth: McpAuthContext) => Promise<boolean>;
+  /**
+   * Whether the caller may use the app at all, as the console decides it. Without it the request
+   * is refused with 403.
+   */
+  launchAccess?: (auth: McpAuthContext) => Promise<boolean>;
   now?: () => number;
 }
 
@@ -93,6 +112,7 @@ export const defaultRouteDeps: McpRouteDeps = {
   globalLimiter: createTokenBucketRateLimiter(GLOBAL_LIMIT),
   trackServerEvent,
   loopEnabled: mcpLoopEnabled,
+  launchAccess: mcpLaunchAccess,
 };
 
 /**
@@ -246,6 +266,21 @@ export function createMcpRouteHandler(deps: McpRouteDeps = defaultRouteDeps) {
           request,
         );
       }
+    }
+
+    // The app's own allowlist: someone who cannot open the console cannot use
+    // it through an agent either (RC-234).
+    if (!(await (deps.launchAccess ?? mcpLaunchAccess)(auth.auth))) {
+      trackTransportDenial(deps, auth.auth, "forbidden", { reason: "no_launch_access" });
+      return errorResponse(
+        new McpOperationError(
+          "forbidden",
+          `This account does not have access to ${APP_NAME} yet. Ask a teammate who has access to invite you from Members, then retry.`,
+          { reason: "no_launch_access" },
+        ),
+        403,
+        request,
+      );
     }
 
     const body = await readBodyWithCap(request, MAX_BODY_BYTES);
