@@ -1,5 +1,6 @@
 import type { InvokeOutcome, StepDraft, TurnEndedBy, TurnSource } from "@/lib/ledger/types";
 import { tokenize } from "@/lib/readings/text/cluster";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 import { isRetryRequest } from "@/lib/readings/topics/sentiment";
 import type { AskSourceKind } from "@/lib/readings/topics/types";
 import {
@@ -80,7 +81,7 @@ const SOURCE: Record<AskSource, AskSourceKind> = {
 
 function clip(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > MAX_ASK_CHARS ? flat.slice(0, MAX_ASK_CHARS) : flat;
+  return sliceWellFormed(flat, MAX_ASK_CHARS);
 }
 
 /**

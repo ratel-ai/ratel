@@ -351,7 +351,7 @@
         "reapStaleRunningJobs": "@/lib/jobs/queries",
         "enqueueJob": "@/lib/jobs/queries",
         "findInFlightJob": "@/lib/jobs/queries",
-        "readJobQueueClock": "@/lib/jobs/queries",
+        "readJobQueueClock": "@/lib/jobs/queries", "readOldestQueuedJobAgeMs": "@/lib/jobs/queries",
         "claimNextQueuedJob": "@/lib/jobs/queries",
         "jobsRunningPerProject": "@/lib/jobs/queries",
         "markJobDone": "@/lib/jobs/queries",

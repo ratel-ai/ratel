@@ -6,6 +6,7 @@ import type {
   JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
 import { clusterQueries } from "@/lib/readings/text/cluster";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 import {
   type WorkflowLabels,
   workflowDescription,
@@ -187,7 +188,7 @@ export function decisionCases(
 ): JudgeCase[] {
   return groups.map((g) => ({
     id: askHash(g),
-    query: g.ask.slice(0, MAX_ASK_CHARS),
+    query: sliceWellFormed(g.ask, MAX_ASK_CHARS),
     shortlist: [...shortlist],
     assumed: "",
     stratum: "control",

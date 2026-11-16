@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 import { MAX_NAMED_PER_RUN } from "@/lib/readings/topics/types";
 
 /**
@@ -83,7 +84,7 @@ const SYSTEM = [
 
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  return flat.length > max ? `${sliceWellFormed(flat, max - 1)}…` : sliceWellFormed(flat, max);
 }
 
 /** The system and user messages for one naming call. */

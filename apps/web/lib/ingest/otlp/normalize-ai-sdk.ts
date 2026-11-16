@@ -29,6 +29,10 @@ import type { AttrMap, AttrValue, DecodedSpan } from "./types";
  *    survives without it — the assistant's tool calls reappear in the next
  *    step's input messages, and `ai.toolCall` spans carry them. Revisit if the
  *    categorizer ever splits input from output budgets.
+ *    Exception, `outputToolCalls` (flag `cloud-otlp-produced-tool-calls`): the
+ *    call's own `ai.response.toolCalls`, and no text, become
+ *    `gen_ai.output.messages`. That flag counts only the tool calls a model
+ *    call produced, so the next step's input no longer attributes them.
  *
  * SCOPE — only the AI SDK's leaf text/object spans are translated:
  * - `ai.toolCall` → an `execute_tool` span.
@@ -62,7 +66,13 @@ const AI = {
   toolCallId: "ai.toolCall.id",
   toolCallArgs: "ai.toolCall.args",
   toolCallResult: "ai.toolCall.result",
+  responseToolCalls: "ai.response.toolCalls",
 } as const;
+
+export interface NormalizeAiSdkOptions {
+  /** Map `ai.response.toolCalls` to `gen_ai.output.messages` (contract 4 exception). */
+  outputToolCalls?: boolean;
+}
 
 /** The AI SDK's tool-invocation span. */
 const TOOL_CALL_SPAN = "ai.toolCall";
@@ -239,7 +249,7 @@ function normalizeToolSpan(a: AttrMap): void {
 }
 
 /** An AI SDK model call → an LLM anchor carrying its content on span attributes. */
-function normalizeModelSpan(a: AttrMap): void {
+function normalizeModelSpan(a: AttrMap, options: NormalizeAiSdkOptions): void {
   if (!hasAiSdkAttributes(a)) return;
   // `chat` puts the span on the primary anchor path rather than the
   // "has a usage attribute" fallback it would otherwise limp in on.
@@ -250,6 +260,24 @@ function normalizeModelSpan(a: AttrMap): void {
   setIfAbsent(a, GEN_AI.systemInstructions, systemInstructions);
   setIfAbsent(a, GEN_AI.inputMessages, inputMessages);
   setIfAbsent(a, GEN_AI.toolDefinitions, toToolDefinitions(a[AI.promptTools]));
+  if (options.outputToolCalls) {
+    setIfAbsent(a, GEN_AI.outputMessages, toOutputToolCalls(a[AI.responseToolCalls]));
+  }
+}
+
+/**
+ * `ai.response.toolCalls` → a one-message `gen_ai.output.messages` of
+ * `tool_call` parts. AI SDK 4 spells the arguments `args` (a JSON string),
+ * AI SDK 5 spells them `input`; `content.ts` parses either.
+ */
+export function toOutputToolCalls(raw: AttrValue | undefined): string | undefined {
+  const parsed = asJson(raw);
+  if (!Array.isArray(parsed)) return undefined;
+  const parts = parsed
+    .map((call) => toSemconvPart({ ...(call as JsonRecord), type: "tool-call" }))
+    .filter((p): p is JsonRecord => p !== null && typeof p.name === "string" && p.name !== "");
+  if (parts.length === 0) return undefined;
+  return JSON.stringify([{ role: "assistant", parts }]);
 }
 
 /**
@@ -261,9 +289,12 @@ function normalizeModelSpan(a: AttrMap): void {
  * Mutation is safe here: the spans are freshly decoded and wholly owned by this
  * request.
  */
-export function normalizeAiSdkSpans(spans: DecodedSpan[]): void {
+export function normalizeAiSdkSpans(
+  spans: DecodedSpan[],
+  options: NormalizeAiSdkOptions = {},
+): void {
   for (const span of spans) {
     if (span.name === TOOL_CALL_SPAN) normalizeToolSpan(span.attributes);
-    else if (isModelSpan(span.name)) normalizeModelSpan(span.attributes);
+    else if (isModelSpan(span.name)) normalizeModelSpan(span.attributes, options);
   }
 }

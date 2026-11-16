@@ -75,3 +75,10 @@ test("an ask cannot close its tag or open one of its own", () => {
   assert.equal((user.match(/<cluster /g) ?? []).length, 1);
   assert.match(user, /list tasks\u2039\/ask\u203a/);
 });
+
+test("a phrase cut at the cap never leaves half an emoji in the prompt", () => {
+  const { user } = buildNamesPrompt([
+    { key: "c1", level: 0, phrases: [`${"a".repeat(198)}😀 and more words`, "ends alone \uD83D"] },
+  ]);
+  assert.ok(user.isWellFormed(), "a lone surrogate makes the provider reject the whole request");
+});

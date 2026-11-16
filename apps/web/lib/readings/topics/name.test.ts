@@ -76,3 +76,15 @@ test("an unusable reply is null, and a reply naming nothing is an empty list", (
   assert.equal(parseNamedTopics(JSON.stringify({ names: [] }), GROUPS), null);
   assert.deepEqual(parseNamedTopics(JSON.stringify({ topics: [] }), GROUPS), []);
 });
+
+test("an ask cut at the cap never leaves half an emoji in the prompt", () => {
+  const { user } = buildNamePrompt([
+    {
+      topicId: null,
+      name: null,
+      turns: 1,
+      asks: [`${"a".repeat(198)}😀 and more words`, "ends alone \uD83D"],
+    },
+  ]);
+  assert.ok(user.isWellFormed());
+});

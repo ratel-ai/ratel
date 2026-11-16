@@ -15,9 +15,10 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 | `role.ts` | `APP_ROLE`: `all` (the default) also drains after a response; `api` only queues; `worker` runs the job loop |
 | `boot-plan.ts` | what a process does at boot, from `APP_ROLE` and `RATEL_CRON`: whether it migrates, and who runs its tick |
 | `drain.ts` | one cron tick: `before` steps, the drain, `after` steps (retention-only ones gated by `DATA_RETENTION_ENABLED=1`); `GET /api/cron/drain`, which an API-only process answers with 202 and no tick |
+| `drain-observer.ts` | the drain's outcome in the logs for the deployment's Datadog drain monitors (owned port of upstream's `observeDrain`): `drain_started`, `drain_completed` with the oldest queued job's age (`readOldestQueuedJobAgeMs`), `job_queue_lagging` past 10 minutes, `drain_failed`; the cron route and the worker's sweep both report through it |
 | `scheduler.ts` | the in-process timer an all-in-one process runs the tick with (`RATEL_CRON=inprocess`, the OSS default); Cloud uses an external caller |
 | `worker.ts` | the worker's loop: one step at a time, the tick every 60 s, a drain otherwise, a 3 s wait when nothing is queued |
-| `worker-start.ts` | the loop wired to `drainProjectJobs` and `runDrainTick`, started once per process; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
+| `worker-start.ts` | the loop wired to `drainProjectJobs` and `runDrainTick` (observed, `workerTick`), started once per process; on SIGTERM it finishes the step in flight, flushes the self-telemetry when that is on, then exits |
 
 ## Roles
 

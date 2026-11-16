@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 import {
   WORKFLOW_ICON_KEYS,
   WORKFLOW_ICONS,
@@ -69,7 +70,7 @@ const SYSTEM = [
 
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  return flat.length > max ? `${sliceWellFormed(flat, max - 1)}…` : sliceWellFormed(flat, max);
 }
 
 function toolLine(id: string, tools: ReadonlyMap<string, LabelTool>): string {

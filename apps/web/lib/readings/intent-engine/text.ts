@@ -5,6 +5,7 @@ import {
   stem,
   tokenizeForRelevance,
 } from "@/lib/readings/query-intents/relevance";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
  * The text rules every part of the intent engine shares: one tokenizer, one
@@ -31,7 +32,7 @@ export function cleanAskText(text: string, max: number = ASK_TEXT_MAX): string {
     .replace(/\s+/g, " ")
     .trim();
   if (!/[\p{L}\p{N}]/u.test(flat)) return "";
-  return flat.length <= max ? flat : flat.slice(0, max).trimEnd();
+  return sliceWellFormed(flat, max).trimEnd();
 }
 
 /* clauses */

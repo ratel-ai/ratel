@@ -207,3 +207,14 @@ test("stored items parse defensively and names prefer a label", () => {
   assert.equal(workflowDescription({ id: "a" }, labels), "Plans the next sprint.");
   assert.equal(workflowDescription({ id: "b" }, labels), null);
 });
+
+test("an ask cut at the cap never leaves half an emoji in the prompt", () => {
+  const { user } = buildLabelPrompt({
+    workflowId: "w1",
+    typicalOrder: [],
+    optionalTools: [],
+    tools: [],
+    asks: [`${"a".repeat(298)}😀 and more words`, "ends alone \uD83D"],
+  });
+  assert.ok(user.isWellFormed());
+});
