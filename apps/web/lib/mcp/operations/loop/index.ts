@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import { fixesSummary } from "@/lib/mcp/operations/loop/eval-sets";
 import {
   experimentRef,
   fixRef,
@@ -22,15 +23,27 @@ import {
   type SimulationOutcome,
 } from "@/lib/mcp/operations/loop/simulation";
 import { latestTaskSimulations, taskEvalData } from "@/lib/mcp/operations/loop/task-simulation";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import {
+  loadTaskListModel,
+  loadTaskPage,
+  type TaskPageRead,
+  taskDetailView,
+  taskListView,
+} from "@/lib/mcp/operations/loop/tasks";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { hasEffect, changeOf as simulationChangeOf } from "@/lib/views/eval-gate/change";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
+import { listEvalBadges } from "@/lib/views/eval-gate/service";
+import type { EvalBadge } from "@/lib/views/eval-gate/types";
 import type { FixDraftRow } from "@/lib/views/fix-drafts/schema";
 import { latestFixDraft } from "@/lib/views/fix-drafts/store";
+import { FIX_KINDS } from "@/lib/views/fixes/kinds";
+import { loadFixes } from "@/lib/views/fixes/load";
 import {
   createFixExperiment,
   createFixShipment,
@@ -41,16 +54,16 @@ import {
   type ShippedFixRow,
 } from "@/lib/views/fixes/loop-queries";
 import type { FixExperimentRow, FixShipmentRow } from "@/lib/views/fixes/schema";
-import { findFix } from "@/lib/views/fixes/select";
+import { filterFixes, findFix } from "@/lib/views/fixes/select";
 import { type FixShipped, shippedByFix, shippedFor } from "@/lib/views/fixes/shipped";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
 import { fixSourceRef } from "@/lib/views/lineage/refs";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import { taskEvalViewFor } from "@/lib/views/task-evals/store";
 import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
-import { buildTaskList, type TaskRow } from "@/lib/views/tasks/model";
-import { loadTasksInputs } from "@/lib/views/tasks/page-model";
+import type { TaskListModel } from "@/lib/views/tasks/model";
 import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 // The shipment record of the task loop (`fixSeams.recordShipment`): mark_fix_shipped queues
 // the post-ship measures with the eval gate on.
@@ -72,21 +85,32 @@ import "@/lib/views/task-evals/ship";
  * listed. `run_eval` and `get_eval` also need `FF_EVAL_GATE`; off, they refuse
  * with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): the gates are env flags. `list_tasks` and `get_task` read
- * the project's tasks; a task's scorers, scores and eval set only with
- * `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
+ * Owned (ADR-0030): the gates are env flags (upstream retired its loop flag in
+ * RC-234 and lists these for everyone with app access). `list_tasks` and
+ * `get_task` read the Tasks page's model and one task's page; a task's scorers,
+ * scores, eval set and shipments only with `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
  * eval set (`lib/views/task-evals`); other fixes on their own eval set.
  * A fix's `draft` is its newest fix draft while the eval gate is on
  * (`FF_EVAL_GATE`), else null.
  */
 export interface LoopOperationDeps {
-  loadTasks: (projectId: string) => Promise<TaskRow[]>;
+  /** The Tasks page's model, fix counts included (`buildTaskList` with Fixes' open fixes). */
+  loadTaskList: (projectId: string) => Promise<TaskListModel>;
+  /** One task as the Task page reads it; null when the latest reading has no such task. */
+  loadTaskPage: (projectId: string, taskId: string) => Promise<TaskPageRead | null>;
+  /** A task's shipment markers and post-ship results, shown with its scores (eval gate on). */
+  taskShipmentsFor: (projectId: string, taskId: string) => ReturnType<typeof taskShipmentsFor>;
+  latestFixDraft: (projectId: string, fixId: string) => ReturnType<typeof latestFixDraft>;
   scorersFor: (projectId: string, taskId: string) => ReturnType<typeof scorersFor>;
   dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
   taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
   loadInsight: (projectId: string, insightId: string) => Promise<InsightView | null>;
   loadProjectFixes: (projectId: string) => Promise<FixesModel | null>;
+  /** The fixes with the intents each serves, as Fixes reads them, for list_fixes' intent filter. */
+  loadProjectFixesWithIntents: (projectId: string) => Promise<FixesModel | null>;
+  /** Each simulated fix's eval badge, by fix id, as Fixes shows it (eval gate on). */
+  listEvalBadges: (projectId: string) => Promise<Record<string, EvalBadge>>;
   runSimulation: typeof runSimulation;
   runTaskSimulation: typeof runTaskSimulation;
   latestTaskSimulations: (
@@ -99,13 +123,12 @@ export interface LoopOperationDeps {
     fix: Pick<Fix, "id" | "short">,
   ) => Promise<SimulationOutcome | null>;
   /**
-   * `cloud-eval-gate` for the caller in the project's organization
+   * `FF_EVAL_GATE` for the caller in the project's organization
    * (`evalGateEnabledForActor`): an OAuth user as the console decides them, an
    * API key as `project:<id>` with the organization's properties.
    */
   evalGateEnabled: (projectId: string, actor: string) => Promise<boolean>;
   /** The fix's newest draft (`lib/views/fix-drafts`), read only while the eval gate is on. */
-  latestFixDraft: (projectId: string, fixId: string) => ReturnType<typeof latestFixDraft>;
   recordLineage: typeof recordLineage;
   createFixExperiment: typeof createFixExperiment;
   getFixExperiment: typeof getFixExperiment;
@@ -118,19 +141,26 @@ export interface LoopOperationDeps {
 }
 
 export const defaultLoopDeps: LoopOperationDeps = {
-  loadTasks: async (projectId) => buildTaskList(await loadTasksInputs(projectId)).rows,
+  loadTaskList: loadTaskListModel,
+  loadTaskPage,
+  taskShipmentsFor: (projectId, taskId) => taskShipmentsFor(projectId, taskId),
+  latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
   scorersFor: (projectId, taskId) => scorersFor(projectId, taskId),
   dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
   taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
   loadInsight,
   loadProjectFixes,
+  loadProjectFixesWithIntents: async (projectId) => {
+    const organization = await getOrganizationByProjectId(projectId);
+    return organization ? loadFixes({ projectId, organization }) : null;
+  },
+  listEvalBadges: (projectId) => listEvalBadges(projectId),
   runSimulation,
   runTaskSimulation,
   latestTaskSimulations: (projectId, fixId) => latestTaskSimulations(projectId, fixId),
   latestEval: (projectId, fix) => latestEvalOutcome(projectId, fix),
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
-  latestFixDraft: (projectId, fixId) => latestFixDraft(projectId, fixId),
   recordLineage,
   createFixExperiment,
   getFixExperiment,
@@ -149,7 +179,7 @@ const fixIdParam = z
     "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>.",
   );
 
-const insightIdParam = z.string().uuid().describe("An insight id from list_insights.");
+const insightIdParam = uuidParam().describe("An insight id from list_insights.");
 
 const ARM = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 const EXPERIMENT_NAME = /^[a-z0-9][a-z0-9._-]{1,79}$/;
@@ -200,6 +230,27 @@ async function readProjectShipments(
       operation: "mcp_fix_shipments",
     });
     return [];
+  }
+}
+
+/**
+ * Each fix's eval badge, or none when the read fails: like `shipped`, the
+ * badge is extra to a fix, as on Fixes, where a failed read shows every fix
+ * as not simulated.
+ */
+async function readEvalBadges(
+  deps: LoopOperationDeps,
+  projectId: string,
+): Promise<Record<string, EvalBadge>> {
+  try {
+    return await deps.listEvalBadges(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "fix eval badges read failed");
+    reportServerException(err, `project:${projectId}`, {
+      project_id: projectId,
+      operation: "mcp_fix_eval_badges",
+    });
+    return {};
   }
 }
 
@@ -446,25 +497,21 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "observability",
       title: "List tasks",
       description:
-        "List the project's tasks with their run counts, status and completion rate. Call get_task with a taskId for its scorers, score series and eval set.",
+        "List the project's tasks with their runs, status, finish rate and fix counts, plus the reading's totals, its state and the asks no task serves. Call get_task with a taskId for its steps, issues, scorers and eval set.",
       keywords: ["list tasks", "workflows", "task scores"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped, limit: limitParam }),
       async execute(ctx, params) {
         const tracker = new TruncationTracker();
-        const tasks = await deps.loadTasks(ctx.projectId);
-        const page = tracker.take(capRows(tasks, params.limit));
+        const model = await deps.loadTaskList(ctx.projectId);
         return {
-          data: {
-            count: tasks.length,
-            tasks: page.map((task) => ({
-              ...task,
-              href: topLevelTasksHref(ctx.projectId, task.id),
-            })),
-          },
+          data: taskListView(ctx.projectId, model, params.limit, tracker),
           truncated: tracker.value,
-          hint: "Call get_task with a taskId to read its scorers, score series and eval set.",
+          hint:
+            model.state === "ready"
+              ? "Call get_task with a taskId to read its steps, issues, scorers and eval set."
+              : "No tasks to show yet: tasks are read from closed runs by the Agent health analysis.",
         };
       },
     }),
@@ -473,7 +520,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "observability",
       title: "Get task",
       description:
-        "Read one task with its scorers, daily score series and eval set. Scoring fields are empty when FF_EVAL_GATE is off. Use list_fixes to find fixes for the task.",
+        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with FF_EVAL_GATE on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
       keywords: ["get task", "task scorers", "task eval set"],
       scope: "project",
       mutates: false,
@@ -482,19 +529,19 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
         taskId: z.string().min(1).max(200).describe("A task id from list_tasks."),
       }),
       async execute(ctx, params) {
-        const task = (await deps.loadTasks(ctx.projectId)).find(
-          (task) => task.id === params.taskId,
-        );
-        if (!task) throw notFound("task");
+        const read = await deps.loadTaskPage(ctx.projectId, params.taskId);
+        if (!read) throw notFound("task");
+        const task = read.row;
         const tracker = new TruncationTracker();
         const enabled = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
-        const [scorers, scores, evalSet] = enabled
+        const [scorers, scores, evalSet, shipments] = enabled
           ? await Promise.all([
               deps.scorersFor(ctx.projectId, task.id),
               deps.dailyScoresFor(ctx.projectId, task.id),
               deps.taskEvalViewFor(ctx.projectId, task.id),
+              deps.taskShipmentsFor(ctx.projectId, task.id),
             ])
-          : [[], [], null];
+          : [[], [], null, null];
         return {
           data: {
             task: {
@@ -509,9 +556,17 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
                     rows: tracker.take(capRows(evalSet.rows, 50)),
                   }
                 : null,
+              ...taskDetailView(read, tracker),
+              shipments: shipments
+                ? tracker.take(capRows(shipments, 10)).map((shipment) => ({
+                    ...shipment,
+                    notes: shipment.notes === null ? null : tracker.text(shipment.notes, 300),
+                  }))
+                : null,
             },
           },
           truncated: tracker.value,
+          hint: "change_task_scorer and change_task_eval_set edit how the task is scored and tested; list_task_simulations shows its fixes' simulations.",
         };
       },
     }),
@@ -554,7 +609,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "improvement",
       title: "List fixes",
       description:
-        "List proposed fixes with their effect, insightIds, taskIds, draft, source and shipped version. Filter by insightId or taskId. The draft is null when the eval gate is off. Call get_fix to read the change.",
+        "List proposed fixes with their effect, insightIds, taskIds, draft, eval badge and shipped version, and the Fixes page's counts and potential savings per day, week or month. Filter by insightId, taskId, kind, tool or intent. Call get_fix to read the change.",
       keywords: ["list fixes", "proposed changes", "fixes"],
       scope: "project",
       mutates: false,
@@ -567,13 +622,37 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
           .max(200)
           .optional()
           .describe("Only fixes that affect this task id."),
+        kind: z.enum(FIX_KINDS).optional().describe("Only fixes of this kind."),
+        tool: z
+          .string()
+          .min(1)
+          .max(500)
+          .optional()
+          .describe("Only fixes that change this catalog tool id."),
+        intent: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Only fixes that serve this intent id."),
         status: z.enum(["open", "applied", "all"]).default("open"),
+        period: z
+          .enum(["day", "week", "month"])
+          .default("month")
+          .describe("The period savings are scaled to."),
         limit: limitParam,
       }),
       async execute(ctx, params) {
         const tracker = new TruncationTracker();
+        // Intents are read only when filtered on: without them a fix loses a link, not its place.
+        const loadModel = params.intent
+          ? deps.loadProjectFixesWithIntents(ctx.projectId).then((found) => {
+              if (!found) throw notFound("project");
+              return found;
+            })
+          : requireFixes(deps, ctx.projectId);
         const [model, shipments] = await Promise.all([
-          requireFixes(deps, ctx.projectId),
+          loadModel,
           readProjectShipments(deps, ctx.projectId),
         ]);
         const shipped = shippedByFix(ctx.projectId, shipments);
@@ -583,31 +662,34 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
             : params.status === "applied"
               ? model.applied
               : [...model.open, ...model.applied];
-        const matching = pool.filter(
-          (fix) =>
-            (!params.insightId || fix.issues.some((issue) => issue.id === params.insightId)) &&
-            (!params.taskId || fix.subject.tasks.some((task) => task.id === params.taskId)),
+        const matching = filterFixes(pool, {
+          kind: params.kind ?? null,
+          task: params.taskId ?? null,
+          tool: params.tool ?? null,
+          topic: params.intent ?? null,
+        }).filter(
+          (fix) => !params.insightId || fix.issues.some((issue) => issue.id === params.insightId),
         );
         const page = tracker.take(capRows(matching, params.limit));
-        const draftsEnabled = await deps.evalGateEnabled(
-          ctx.projectId,
-          actorOf(ctx.auth, ctx.projectId),
-        );
+        const gateOn = await deps.evalGateEnabled(ctx.projectId, actorOf(ctx.auth, ctx.projectId));
+        const badges = gateOn ? await readEvalBadges(deps, ctx.projectId) : null;
         const fixes = await Promise.all(
-          page.map(async (fix) =>
-            fixRow(
+          page.map(async (fix) => ({
+            ...fixRow(
               ctx.projectId,
               fix,
               tracker,
               shippedFor(shipped, fix),
-              draftsEnabled ? await deps.latestFixDraft(ctx.projectId, fix.id) : null,
+              gateOn ? await deps.latestFixDraft(ctx.projectId, fix.id) : null,
             ),
-          ),
+            evalBadge: badges ? (badges[fix.id] ?? { state: "none" }) : null,
+          })),
         );
         return {
           data: {
             count: matching.length,
             fixes,
+            summary: fixesSummary(model.stats, params.period, tracker),
             ...(model.failed.length > 0 ? { sourcesNotRead: model.failed } : {}),
           },
           truncated: tracker.value,
@@ -914,9 +996,7 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
           .describe(
             "The agent version or release that carries the fix, e.g. v1.4.2 or a commit sha.",
           ),
-        experimentId: z
-          .string()
-          .uuid()
+        experimentId: uuidParam()
           .optional()
           .describe("The experiment from create_experiment that tested it."),
         notes: z.string().max(1_000).optional(),

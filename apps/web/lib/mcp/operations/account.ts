@@ -5,8 +5,13 @@ import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
-import { APP_NAME } from "@/lib/platform/app-config";
-import { checkQuota, getLimits, type QuotaKey } from "@/lib/platform/entitlements";
+import {
+  billableProjectCount,
+  checkQuota,
+  getLimits,
+  type QuotaKey,
+} from "@/lib/platform/entitlements";
+import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 
@@ -22,6 +27,19 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
  * Upstream also answers `get_embedding_usage` here; the Embedding API and its
  * credit ledger are not part of this edition, so the tool is not registered.
  */
+/**
+ * The deployment's switches, as `get_flag_status` reports them. Owned (ADR-0030): upstream
+ * evaluates its flag service per organization and person; here each surface is one `FF_*`
+ * environment switch for the deployment (in the open-source edition also
+ * `RATEL_EXPERIMENTAL_FEATURES`).
+ */
+const DEPLOYMENT_SWITCHES = [
+  { key: "FF_STAGE_SPINE", note: "the rail grouped into stages, Tasks, Ship and lineage links" },
+  { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
+  { key: "FF_SESSION_REPLAY", note: "the session timeline and What-if" },
+  { key: "FF_MCP_LOOP", note: "the improvement-loop tools on this server" },
+] as const;
+
 export interface AccountOperationDeps {
   getOrganizationByProjectId: typeof getOrganizationByProjectId;
   countSkills: typeof countSkills;
@@ -48,15 +66,21 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       id: "get_flag_status",
       domain: "account",
       title: "Feature flag status",
-      description: `Kept for agents that call it: every ${APP_NAME} surface is on for every organization, so this always returns an empty list. An empty result from any other tool means there is no data, not a switched-off surface.`,
+      description:
+        "The deployment's feature switches and whether each is on: the stage spine (Tasks and Ship), the eval gate, session replay and the improvement-loop tools. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
       keywords: ["flags", "enabled", "disabled", "feature access"],
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute() {
+        const flags = DEPLOYMENT_SWITCHES.map(({ key, note }) => ({
+          key,
+          enabled: experimentalFeatureEnabled(key),
+          note,
+        }));
         return {
-          data: { count: 0, flags: [] },
-          hint: "Nothing is behind a flag: every surface is on for every organization.",
+          data: { count: flags.length, flags },
+          hint: "A switch is set for the whole deployment by its operator, not per organization.",
         };
       },
     }),
@@ -65,7 +89,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       domain: "account",
       title: "Plan limits",
       description:
-        "The organization's plan, its numeric limits (projects, skills per project, members), and current usage against each. Explains quota_exceeded errors on writes.",
+        "The organization's plan, its numeric limits (projects, skills per project, members), and usage against each quota counted as the console counts it (the sample project is free). Explains quota_exceeded errors on writes.",
       keywords: ["plan limit", "quota", "plan", "tier", "near the limit"],
       scope: "organization",
       mutates: false,
@@ -80,8 +104,11 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
           deps.listProjectsForOrganization(organization.id),
         ]);
         const limits = getLimits(organization);
+        // The sample project does not count against maxProjects, exactly as on the Projects page.
+        const billable = billableProjectCount(projects);
+        const hasSampleProject = projects.some((project) => project.isDemo);
         const counts: Record<QuotaKey, number> = {
-          maxProjects: projects.length,
+          maxProjects: billable,
           maxSkillsPerProject: skills,
           maxMembers: members,
         };
@@ -92,11 +119,16 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
             limits,
             quotas: QUOTA_KEYS.map((key) => {
               const result = checkQuota(organization, key, counts[key]);
+              const unlimited = !Number.isFinite(limits[key]);
               return {
                 quota: key,
                 current: counts[key],
-                limit: limits[key],
+                limit: unlimited ? null : limits[key],
+                unlimited,
                 withinLimit: result.ok,
+                ...(key === "maxProjects" && hasSampleProject
+                  ? { note: "The demo project does not count toward this limit." }
+                  : {}),
                 ...(result.ok ? {} : { message: result.message }),
               };
             }),

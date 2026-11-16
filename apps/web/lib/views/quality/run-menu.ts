@@ -1,5 +1,7 @@
+import type { FeatureAccess } from "@/lib/platform/entitlements";
 import type { MatchQualityRunRow } from "@/lib/synthesis/match-quality/schema";
 import { formatGap, nextScheduledRun, runStatus } from "@/lib/synthesis/match-quality/view";
+import { nextBillingPeriodStart } from "@/lib/synthesis/match-quality/window";
 import { plural } from "./model";
 
 /**
@@ -12,6 +14,14 @@ import { plural } from "./model";
 export type RunBudget =
   | { spent: false; remaining: number }
   | { spent: true; limit: number; resetsAt: Date };
+
+/** The allowance from match quality's plan check: spent until the next period, or what is left. */
+export function runBudgetOf(access: FeatureAccess | null, now: Date): RunBudget {
+  if (access && !access.ok && access.reason === "exhausted") {
+    return { spent: true, limit: access.limit, resetsAt: nextBillingPeriodStart(now) };
+  }
+  return { spent: false, remaining: access?.ok ? access.remaining : 0 };
+}
 
 export interface RunWindowOption {
   days: number;

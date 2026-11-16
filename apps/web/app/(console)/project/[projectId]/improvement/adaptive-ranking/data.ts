@@ -6,7 +6,6 @@ import type {
 } from "@/components/console/adaptive-ranking/RankingDetails";
 import type { RankingGraphView } from "@/components/console/adaptive-ranking/RankingView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
-import { APP_NAME } from "@/lib/platform/app-config";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   getIntentGraphDetail,
@@ -34,15 +33,16 @@ import {
   rankingCurve,
   rankingHeadline,
   rankingMetrics,
+  rankingVerdict,
+  rankingWarnings,
   servingState,
+  toChecklistInput,
+  WAITING_STEPS,
 } from "@/lib/views/adaptive-ranking/ranking";
 import {
-  buildBoostWarning,
   buildGraphSteps,
   buildLiveRecall,
   buildProjectSteps,
-  type SetupStep,
-  STALE_GRAPH_MS,
 } from "@/lib/views/adaptive-ranking/setup";
 import {
   buildClusterTableRows,
@@ -63,41 +63,6 @@ import {
 const ONLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** Ask groups listed under Details; Intents lists every one. */
 const DETAIL_CLUSTERS = 50;
-
-const STEP_TITLES: Record<SetupStep["key"], string> = {
-  events: "Send searches and tool calls",
-  building: `${APP_NAME} builds the intent map`,
-  connected: "Rank from the graph in your runtime",
-  following: "Keep up with new revisions",
-};
-
-/** The v1 steps in the v2 words: titles as actions, and "ask groups" for clusters. */
-function toChecklistInput(step: SetupStep) {
-  return {
-    key: step.key,
-    label: STEP_TITLES[step.key],
-    detail: step.detail.replace(/\bquery (groups?)\b/g, "ask $1"),
-    state: step.state,
-    ...(step.snippet ? { snippet: step.snippet } : {}),
-  };
-}
-
-/** Before any graph exists the last two steps have nothing to check yet. */
-const WAITING_STEPS: SetupStep[] = [
-  {
-    key: "connected",
-    label: STEP_TITLES.connected,
-    state: "pending",
-    detail:
-      "Once the intent map exists, a few lines where your runtime starts make it rank from it. They appear here.",
-  },
-  {
-    key: "following",
-    label: STEP_TITLES.following,
-    state: "pending",
-    detail: `${APP_NAME} then checks that your runtime adopts each new revision as the map learns.`,
-  },
-];
 
 /**
  * Owned (ADR-0030): the project comes from the console scope, a 404 otherwise.
@@ -226,32 +191,17 @@ export async function loadRanking(input: {
         })
       : null;
 
-  const warnings: string[] = [];
-  const missingTools = [...detail.missingCapabilities]
-    .filter((key) => key.startsWith("tool:"))
-    .map((key) => key.slice(5));
-  if (missingTools.length > 0) {
-    warnings.push(
-      `It lifts ${missingTools.length === 1 ? "a tool that is" : `${missingTools.length} tools that are`} no longer in your catalog (${missingTools.join(", ")}). The agent cannot call ${missingTools.length === 1 ? "it" : "them"}; they leave the graph as new traffic replaces them.`,
-    );
-  }
   const lastEventAt = sources.reduce<Date | null>(
     (latest, source) => (latest === null || source.lastAt > latest ? source.lastAt : latest),
     null,
   );
-  if (
-    detail.graph.producer === "cloud" &&
-    lastEventAt !== null &&
-    lastEventAt.getTime() - detail.graph.updatedAt.getTime() > STALE_GRAPH_MS
-  ) {
-    warnings.push(
-      "The graph has not caught up with recent searches. Events are arriving but it stopped updating; tell us if this persists.",
-    );
-  }
-  const boostWarning = buildBoostWarning(
-    boost.online.fromTurn !== null ? boost.phases["ndcg@5"].online.verdict : boost.verdict,
-  );
-  if (boostWarning) warnings.push(boostWarning);
+  const warnings = rankingWarnings({
+    producer: detail.graph.producer,
+    updatedAt: detail.graph.updatedAt,
+    missingCapabilities: detail.missingCapabilities,
+    lastEventAt,
+    view: boost,
+  });
 
   const liveRecall = outcomes === null ? null : buildLiveRecall(outcomes);
   const rows = buildClusterTableRows(detail.clusters, detail.edges, detail.missingCapabilities);
@@ -267,7 +217,7 @@ export async function loadRanking(input: {
     searches: headline.searches,
     estimated: boost.estimated,
     metrics: metricRows(boost),
-    verdict: boost.online.fromTurn !== null ? boost.phases["ndcg@5"].online.verdict : boost.verdict,
+    verdict: rankingVerdict(boost),
     liveRecall: liveRecall ? { before: liveRecall.before, after: liveRecall.after } : null,
     facts: [
       { label: "Revision", value: detail.graph.rev.toLocaleString("en-US") },

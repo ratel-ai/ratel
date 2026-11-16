@@ -2,11 +2,30 @@ import { z } from "zod";
 import { isGatewayTool } from "@/lib/ingest/gateway-tools";
 import { getDailyAggregates, getToolMetrics } from "@/lib/ingest/otlp/queries";
 import { notFound } from "@/lib/mcp/errors";
+import {
+  type ContentAccessDeps,
+  contentHint,
+  mayReadContent,
+  readContentOptIn,
+  withheldMarker,
+} from "@/lib/mcp/operations/content-access";
 import { projectScoped } from "@/lib/mcp/operations/params";
+import {
+  cursorParam,
+  encodePageCursor,
+  recordSortParams,
+  requireCursor,
+  resolvePagedWindow,
+  resolveRunListQuery,
+  runFilterParams,
+  spanFacetParams,
+  spanFacts,
+  traceFilters,
+  traceIdParam,
+} from "@/lib/mcp/operations/runs";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, WINDOW_PRESETS, windowParams } from "@/lib/mcp/windows";
-import { APP_NAME } from "@/lib/platform/app-config";
 import {
   getSpanAggregates,
   getTraceDailyAggregates,
@@ -16,7 +35,11 @@ import {
   getTracesIngestDiagnostics,
   listOperations as listTraceOperations,
   listTraces,
+  type TraceFacets,
 } from "@/lib/synthesis/traces/queries";
+import { listRunAsks, listRunTools } from "@/lib/synthesis/traces/run-details";
+import { runStatus } from "@/lib/synthesis/traces/v2/runs";
+import { parseTraceCursor, serializeTraceCursor } from "@/lib/synthesis/traces/view";
 
 /**
  * Observability reads.
@@ -41,10 +64,19 @@ import {
  * prompt and response payloads: returning them verbatim would hand an agent
  * tens of thousands of tokens to answer a question about latency, which is the
  * exact waste this product measures. Spans are therefore projected down to
- * name, timing, status, and token counts, and `get_trace` caps the count on top
- * of the query's own limit.
+ * name, timing, status, tokens and the few facts the step inspector shows, and
+ * `get_trace` caps the count on top of the query's own limit. The payloads are
+ * one call further away, previewed, in `runs.ts` (`get_span`,
+ * `get_trace_conversation`). A run's ask and a search's words are captured
+ * text, returned only to a caller that may read it (`mayReadContent`).
  */
 const SPAN_CAP = 200;
+
+/** The Runs list keeps this much of an ask; get_run_summary has a longer preview. */
+const RUN_ASK_CHARS = 240;
+const RUN_TOOL_CAP = 15;
+/** Facet values per dimension; the query itself allows up to 50. */
+const FACET_VALUE_CAP = 20;
 
 /**
  * Which pipeline produced the numbers in a response.
@@ -57,7 +89,7 @@ const SPAN_CAP = 200;
 const SPAN_SOURCE = "spans" as const;
 const METRICS_SOURCE = "event_metrics" as const;
 
-export interface ObservabilityOperationDeps {
+export interface ObservabilityOperationDeps extends ContentAccessDeps {
   listTraces: typeof listTraces;
   getTraceKpis: typeof getTraceKpis;
   getTraceDailyAggregates: typeof getTraceDailyAggregates;
@@ -68,6 +100,8 @@ export interface ObservabilityOperationDeps {
   getTracesIngestDiagnostics: typeof getTracesIngestDiagnostics;
   getDailyAggregates: typeof getDailyAggregates;
   getToolMetrics: typeof getToolMetrics;
+  listRunTools: typeof listRunTools;
+  listRunAsks: typeof listRunAsks;
 }
 
 export const defaultObservabilityDeps: ObservabilityOperationDeps = {
@@ -81,14 +115,9 @@ export const defaultObservabilityDeps: ObservabilityOperationDeps = {
   getTracesIngestDiagnostics,
   getDailyAggregates,
   getToolMetrics,
-};
-
-/** Filters the trace queries share; kept in one place so they stay consistent. */
-const traceFilters = {
-  model: z.string().max(200).optional(),
-  tool: z.string().max(200).optional(),
-  errorOnly: z.boolean().optional().describe("Only traces containing an error span."),
-  experiment: z.string().max(200).optional(),
+  listRunTools,
+  listRunAsks,
+  contentOptIn: readContentOptIn,
 };
 
 export function observabilityOperations(
@@ -147,41 +176,84 @@ export function observabilityOperations(
       domain: "observability",
       title: "List traces",
       description:
-        "Recent traces with duration, status, span count, token usage and cost. Filter by model, tool, experiment, or errors only. Use get_trace to open one.",
-      keywords: ["traces", "requests", "runs", "recent", "browse requests"],
+        "Runs (traces) as the Runs page lists them: duration, status, spans, tokens, cost, variant. Filter by name, model, tool, experiment, variant, status, service, environment or duration, token and cost ranges; sort and page with cursor. includeDetails adds each run's ask and tools. get_run_summary opens one; get_run_stats totals the same filters.",
+      keywords: [
+        "traces",
+        "requests",
+        "runs",
+        "recent",
+        "browse requests",
+        "slowest runs",
+        "failed runs",
+      ],
       scope: "project",
       mutates: false,
       params: z.object({
         ...projectScoped,
         ...windowParams,
         ...traceFilters,
+        ...runFilterParams,
+        ...spanFacetParams,
+        ...recordSortParams,
+        cursor: cursorParam,
         limit: limitParam,
         includeFacets: z
           .boolean()
           .default(false)
           .describe("Also return the available filter values for this window."),
+        includeDetails: z
+          .boolean()
+          .default(false)
+          .describe(
+            "Also return each run's ask (when content is captured), tools called, and status.",
+          ),
       }),
       async execute(ctx, params) {
-        const window = resolveWindow(params, WINDOW_PRESETS.traces);
-        const filters = {
-          since: window.since,
-          until: window.until,
-          model: params.model,
-          tool: params.tool,
-          errorOnly: params.errorOnly,
-          experiment: params.experiment,
-        };
+        const { window, token } = resolvePagedWindow(params, WINDOW_PRESETS.traces);
+        const query = resolveRunListQuery(ctx.projectId, params, window);
+        const cursor = requireCursor(token, (raw) => parseTraceCursor(raw, query.filters));
         const [page, facets] = await Promise.all([
-          deps.listTraces(ctx.projectId, { ...filters, limit: params.limit }),
+          deps.listTraces(ctx.projectId, {
+            ...query.queryOptions,
+            ...(cursor ? { cursor } : {}),
+            limit: params.limit,
+          }),
           params.includeFacets
-            ? deps.getTraceFacets(ctx.projectId, filters)
+            ? deps.getTraceFacets(ctx.projectId, query.facetOptions)
             : Promise.resolve(undefined),
         ]);
+
+        // The Runs page's two extra columns, read for this page's runs only.
+        const traceIds = page.items.map((trace) => trace.traceId);
+        const details = params.includeDetails && traceIds.length > 0;
+        const content = details ? await mayReadContent(ctx, deps) : true;
+        const [tools, asks] = details
+          ? await Promise.all([
+              deps.listRunTools(ctx.projectId, traceIds),
+              deps.listRunAsks(ctx.projectId, traceIds),
+            ])
+          : [undefined, undefined];
+
+        const tracker = new TruncationTracker();
+        tracker.mark(page.hasMore);
+        const runDetails = (traceId: string, statusCode: number, errorCount: number) => {
+          if (!params.includeDetails) return {};
+          const ask = asks?.get(traceId);
+          return {
+            status: runStatus(statusCode, errorCount, ask?.hasRoot ?? true),
+            ask: content && ask?.prompt ? tracker.text(ask.prompt, RUN_ASK_CHARS) : null,
+            tools: tracker.take(capRows(tools?.get(traceId) ?? [], RUN_TOOL_CAP)),
+          };
+        };
 
         return {
           data: {
             count: page.items.length,
             hasMore: page.hasMore,
+            nextCursor:
+              page.hasMore && page.nextCursor
+                ? encodePageCursor(window, serializeTraceCursor(page.nextCursor, query.filters))
+                : null,
             traces: page.items.map((trace) => ({
               traceId: trace.traceId,
               rootName: trace.rootName,
@@ -195,12 +267,19 @@ export function observabilityOperations(
               costUsd: round(trace.costUsd, 6),
               experimentName: trace.experimentName,
               experimentArm: trace.experimentArm,
+              ...runDetails(trace.traceId, trace.statusCode, trace.errorCount),
             })),
-            ...(facets ? { facets } : {}),
+            ...(facets ? { facets: capFacets(facets, tracker) } : {}),
+            ...withheldMarker(content),
           },
-          truncated: page.hasMore,
+          truncated: tracker.value,
           window: window.toJSON(),
-          hint: "get_trace opens one trace's span tree. list_span_groups aggregates across traces instead.",
+          hint: contentHint(
+            content,
+            page.hasMore
+              ? "Pass nextCursor as cursor, with the same filters, for the next page. get_run_summary opens one run."
+              : "get_run_summary tells one run as a conversation; get_trace lists its spans. list_span_groups aggregates across runs.",
+          ),
         };
       },
     }),
@@ -209,18 +288,21 @@ export function observabilityOperations(
       domain: "observability",
       title: "Get trace",
       description:
-        "The span breakdown for one trace: each span's name, kind, status, duration and token counts. Span payload bodies are deliberately not returned.",
-      keywords: ["trace", "one trace", "span tree", "waterfall", "single request"],
+        "The span breakdown for one trace: each span's name, kind, status, duration, tokens, and where they apply its step kind, model, tool, cost, error type and search. Payload bodies are not returned: get_span opens one span in full, get_trace_conversation shows the messages.",
+      keywords: ["trace", "one trace", "span tree", "waterfall", "single request", "timeline"],
       scope: "project",
       mutates: false,
       params: z.object({
         ...projectScoped,
-        traceId: z.string().min(1).max(64),
+        traceId: traceIdParam,
         limit: z.number().int().min(1).max(SPAN_CAP).default(SPAN_CAP),
       }),
       async execute(ctx, params) {
-        const load = await deps.getTraceSpansWithTruncation(ctx.projectId, params.traceId);
+        // Ingest stores ids lowercase; the console lowercases a pasted id too.
+        const traceId = params.traceId.trim().toLowerCase();
+        const load = await deps.getTraceSpansWithTruncation(ctx.projectId, traceId);
         if (load.spans.length === 0) throw notFound("trace");
+        const content = await mayReadContent(ctx, deps);
 
         const tracker = new TruncationTracker();
         tracker.mark(load.truncated);
@@ -228,7 +310,7 @@ export function observabilityOperations(
 
         return {
           data: {
-            traceId: params.traceId,
+            traceId,
             spanCount: load.spans.length,
             spans: spans.map((span) => ({
               spanId: span.spanId,
@@ -241,10 +323,17 @@ export function observabilityOperations(
               serviceName: span.serviceName,
               inputTokens: span.inputTokens,
               outputTokens: span.outputTokens,
+              ...spanFacts(span, tracker, content),
             })),
+            ...withheldMarker(content),
           },
           truncated: tracker.value,
-          hint: `Span attributes and payload bodies are not exposed through MCP. Open the trace in the ${APP_NAME} console to inspect them.`,
+          hint: content
+            ? "get_span opens one span with its attributes and tool payloads; get_run_summary tells the run as a conversation; get_trace_conversation shows its messages; get_trace_ranking lists its experiment records."
+            : contentHint(
+                false,
+                "Search queries are left out here. get_span opens one span's timing, model, tokens, status and error type, without its attributes or tool payloads; get_run_summary lists the run's steps; get_trace_ranking lists its experiment records.",
+              ),
         };
       },
     }),
@@ -378,7 +467,7 @@ export function observabilityOperations(
       domain: "observability",
       title: "Trace ingest diagnostics",
       description:
-        "What the ingest endpoint has actually received for this project, and why spans may have been dropped. The first thing to check when a project appears to have no telemetry.",
+        "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Call it first when a project looks empty. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
       keywords: ["traces not arriving", "ingest", "dropped spans", "no telemetry"],
       scope: "project",
       mutates: false,
@@ -389,4 +478,14 @@ export function observabilityOperations(
       },
     }),
   ];
+}
+
+/** Facet values capped per dimension, most frequent first as the query ranks them. */
+function capFacets(facets: TraceFacets, tracker: TruncationTracker): TraceFacets {
+  return Object.fromEntries(
+    Object.entries(facets).map(([key, values]) => [
+      key,
+      tracker.take(capRows(values, FACET_VALUE_CAP)),
+    ]),
+  ) as TraceFacets;
 }

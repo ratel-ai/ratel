@@ -22,6 +22,9 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   get_flag_status: null,
   get_quota_status: null,
   get_job_status: null,
+  get_analysis_freshness: null,
+  list_api_keys: null,
+  get_sdk_setup: null,
 
   // Monitor: what the agent did, and whether data is arriving.
   list_tasks: "monitor",
@@ -38,6 +41,18 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   list_declared_tools: "monitor",
   list_invoked_tools: "monitor",
   get_catalog_status: "monitor",
+  get_run_summary: "monitor",
+  get_run_stats: "monitor",
+  get_span: "monitor",
+  get_trace_conversation: "monitor",
+  get_trace_ranking: "monitor",
+  list_spans: "monitor",
+  list_logs: "monitor",
+  compare_traces: "monitor",
+  get_turn: "monitor",
+  get_session: "monitor",
+  list_sdk_events: "monitor",
+  get_sdk_event: "monitor",
 
   // Insights: what the data says is wrong or worth changing.
   list_insights: "insights",
@@ -46,6 +61,14 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   list_tool_cousage: "insights",
   list_tool_transitions: "insights",
   list_intent_tool_usage: "insights",
+  get_agent_health: "insights",
+  list_issue_examples: "insights",
+  get_self_corrections: "insights",
+  list_intents: "insights",
+  get_intent: "insights",
+  get_quality: "insights",
+  set_health_signal_hidden: "insights",
+  request_analysis: "insights",
 
   // Improve: the proposed changes, and checking them before they ship.
   list_fixes: "improve",
@@ -69,11 +92,29 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   update_skill: "improve",
   archive_skill: "improve",
   import_skills: "improve",
+  list_runtime_catalog: "improve",
+  list_description_rewrites: "improve",
+  run_quality_analysis: "improve",
+  list_ranking_graphs: "improve",
+  get_ranking_graph: "improve",
+  get_experiment: "improve",
+  get_selection: "improve",
+  list_task_simulations: "improve",
+  get_fix_eval_set: "improve",
+  change_task_scorer: "improve",
+  change_task_eval_set: "improve",
+  draft_task_test: "improve",
+  change_task_simulation: "improve",
+  change_fix_eval_set: "improve",
+  dismiss_fix: "improve",
 
   // Ship: changes that go live, and the record that they did.
   set_catalog_override: "ship",
   publish_skill: "ship",
   mark_fix_shipped: "ship",
+  review_description_rewrite: "ship",
+  list_shipments: "ship",
+  get_lineage: "ship",
 };
 
 export const STAGE_META_KEY = "sh.ratel/stage";

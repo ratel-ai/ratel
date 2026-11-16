@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { McpOperationError } from "@/lib/mcp/errors";
@@ -36,6 +36,7 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
     loopEnabled: async () => true,
+    launchAccess: async () => true,
     ...overrides,
   };
 }
@@ -97,84 +98,76 @@ test("tools/list exposes every operation as its own tool, plus whoami", async ()
   assert.ok(!names.includes("execute_operation"), "the gateway façade is gone");
 });
 
-/**
- * The tools/list surface before the improvement-loop tools, captured from this build's route
- * handler. With the loop off, nothing a client sees may differ: same tools, same names, titles,
- * descriptions, schemas and annotations, and no `_meta`.
- */
-const TOOLS_BEFORE_LOOP: Array<Record<string, unknown> & { name: string }> = JSON.parse(
-  readFileSync(new URL("./__fixtures__/tools-list-before-loop.json", import.meta.url), "utf8"),
-);
-
-test("with the loop off, the loop tools are not listed", async () => {
-  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
-  const body = await (await handler(rpc("tools/list"))).json();
+test("every tool the console offers is listed for anyone with app access, loop tools included", async () => {
+  const { body } = await call("tools/list");
   const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
-  for (const hidden of [
+
+  for (const expected of [
     "list_insights",
     "get_fix",
     "run_eval",
     "create_experiment",
     "mark_fix_shipped",
+    "change_task_eval_set",
   ]) {
-    assert.ok(!names.includes(hidden), `${hidden} should be hidden without the flag`);
+    assert.ok(names.includes(expected), `${expected} should be listed`);
   }
-  assert.ok(names.includes("list_traces"));
 });
 
-test("with the loop off, every tool definition is exactly what it was before the loop", async () => {
-  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
-  const body = await (await handler(rpc("tools/list"))).json();
+test("a signed-in person without app access is refused at the door with 403", async () => {
+  const handler = createMcpRouteHandler(
+    deps({
+      authenticate: async () => ({
+        ok: true,
+        auth: { kind: "oauth", externalUserId: "user_no_access", userId: "row-1", memberships: [] },
+      }),
+      launchAccess: async () => false,
+    }),
+  );
+  const response = await handler(rpc("tools/list"));
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "forbidden");
+  assert.equal(body.reason, "no_launch_access");
+});
+
+/**
+ * The tools/list surface: every tool's name, title, description, schema,
+ * annotations and stage `_meta`, pinned so a change to what a client sees is a
+ * reviewed diff, never a side effect. First captured before RC-43; re-cut for
+ * UI parity (RC-234). Regenerate deliberately with
+ * `UPDATE_MCP_TOOLS_FIXTURE=1 pnpm test` and review the JSON diff.
+ */
+const TOOLS_FIXTURE = new URL("./__fixtures__/tools-list.json", import.meta.url);
+const PINNED_TOOLS: Array<Record<string, unknown> & { name: string }> = JSON.parse(
+  readFileSync(TOOLS_FIXTURE, "utf8"),
+);
+
+test("every tool definition is exactly what the fixture pins", async () => {
+  const { body } = await call("tools/list");
   const tools: Array<Record<string, unknown> & { name: string }> = body.result.tools;
-
-  assert.deepEqual(
-    tools.filter((tool) => "_meta" in tool).map((tool) => tool.name),
-    [],
-    "no tool publishes _meta with the flag off",
-  );
-  assert.deepEqual(tools, TOOLS_BEFORE_LOOP, "the whole flag-off list, order included");
-});
-
-test("each tool in the loop publishes its stage as metadata", async () => {
-  const { body } = await call("tools/list");
-  const tools: Array<{ name: string; _meta?: Record<string, unknown> }> = body.result.tools;
-
-  assert.equal(
-    tools.find((tool) => tool.name === "list_traces")?._meta?.["sh.ratel/stage"],
-    "monitor",
-  );
-  assert.equal(
-    tools.find((tool) => tool.name === "list_insights")?._meta?.["sh.ratel/stage"],
-    "insights",
-  );
-  assert.equal(
-    tools.find((tool) => tool.name === "run_eval")?._meta?.["sh.ratel/stage"],
-    "improve",
-  );
-  assert.equal(
-    tools.find((tool) => tool.name === "mark_fix_shipped")?._meta?.["sh.ratel/stage"],
-    "ship",
-  );
-});
-
-test("with the loop on, an existing tool changes only by its stage _meta", async () => {
-  const { body } = await call("tools/list");
-  const listed = new Map<string, Record<string, unknown>>(
-    body.result.tools.map((tool: Record<string, unknown> & { name: string }) => [tool.name, tool]),
-  );
-  let staged = 0;
-  for (const before of TOOLS_BEFORE_LOOP) {
-    const { _meta, ...rest } = listed.get(before.name) ?? {};
-    assert.deepEqual(rest, before, `${before.name} keeps its definition`);
-    const stage = TOOL_STAGES[before.name];
-    assert.deepEqual(
-      _meta,
-      stage ? { [STAGE_META_KEY]: stage } : undefined,
-      `${before.name} publishes its stage, and only that`,
-    );
-    if (stage) staged++;
+  if (process.env.UPDATE_MCP_TOOLS_FIXTURE === "1") {
+    writeFileSync(TOOLS_FIXTURE, `${JSON.stringify(tools, null, 2)}\n`);
+    return;
   }
-  assert.ok(staged > 0, "existing tools carry a stage with the flag on");
+
+  const listed = new Map(tools.map((tool) => [tool.name, tool]));
+  for (const pinned of PINNED_TOOLS) {
+    assert.deepEqual(listed.get(pinned.name), pinned, `${pinned.name} must be listed unchanged`);
+  }
+  assert.deepEqual(tools, PINNED_TOOLS, "the whole list, order included");
+});
+
+test("each staged tool publishes its stage, and only that, as _meta", async () => {
+  const { body } = await call("tools/list");
+  for (const tool of body.result.tools as Array<{
+    name: string;
+    _meta?: Record<string, unknown>;
+  }>) {
+    const stage = TOOL_STAGES[tool.name];
+    assert.deepEqual(tool._meta, stage ? { [STAGE_META_KEY]: stage } : undefined, `${tool.name}`);
+  }
 });
 
 test("each tool publishes a schema and a read-only or mutating annotation", async () => {
@@ -269,13 +262,16 @@ test("every authenticated caller reaches the endpoint, with no flag to switch it
  * holds it in its cached tool list (compatibility.test.ts pins the name). The
  * answer is now fixed, and it must stay an answer rather than an error.
  */
-test("get_flag_status still answers, and says nothing is behind a flag", async () => {
+test("get_flag_status lists every live flag, and still answers when one cannot be decided", async () => {
   const { response, body } = await call("tools/call", { name: "get_flag_status", arguments: {} });
 
   assert.equal(response.status, 200);
-  assert.ok(!body.result.isError, "an old client asking must not be told it failed");
-  assert.deepEqual(body.result.structuredContent.data, { count: 0, flags: [] });
-  assert.match(body.result.structuredContent.hint, /[Nn]othing is behind a flag/);
+  assert.ok(!body.result.isError, "an undecidable flag reads null; the tool must not fail");
+  const keys = body.result.structuredContent.data.flags
+    .map((flag: { key: string }) => flag.key)
+    .sort();
+  // Owned: the deployment's FF_* switches, not upstream's flag service.
+  assert.deepEqual(keys, ["FF_EVAL_GATE", "FF_MCP_LOOP", "FF_SESSION_REPLAY", "FF_STAGE_SPINE"]);
 });
 
 test("an exhausted rate limit returns 429 with Retry-After", async () => {
@@ -489,4 +485,24 @@ test("an unconfigured database does not spend the caller's failure budget", asyn
 
   assert.equal(second.status, 503);
   assert.equal((await second.json()).error, "unavailable");
+});
+
+test("with the loop off (FF_MCP_LOOP), the loop tools are not listed and the rest is unchanged", async () => {
+  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
+  const body = await (await handler(rpc("tools/list"))).json();
+  const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
+  for (const hidden of [
+    "list_insights",
+    "get_fix",
+    "run_eval",
+    "create_experiment",
+    "mark_fix_shipped",
+    "list_tasks",
+    "change_task_scorer",
+    "change_fix_eval_set",
+  ]) {
+    assert.ok(!names.includes(hidden), `${hidden} should be hidden without the flag`);
+  }
+  assert.ok(names.includes("list_traces"));
+  assert.ok(names.includes("get_agent_health"), "the other surfaces are not loop tools");
 });

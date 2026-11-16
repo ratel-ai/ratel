@@ -13,6 +13,7 @@ import {
 import type { InsightView } from "@/lib/mcp/operations/loop/read";
 import { EvalGateError, type SimulationOutcome } from "@/lib/mcp/operations/loop/simulation";
 import { latestTaskSimulations } from "@/lib/mcp/operations/loop/task-simulation";
+import type { TaskPageRead } from "@/lib/mcp/operations/loop/tasks";
 import { buildRegistry } from "@/lib/mcp/registry";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -30,7 +31,7 @@ import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import { taskEvalViewFor } from "@/lib/views/task-evals/store";
 import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
 import { dailyScoresFor, scorersFor } from "@/lib/views/task-scorers/store";
-import type { TaskRow } from "@/lib/views/tasks/model";
+import type { TaskDetailModel, TaskListModel, TaskRow } from "@/lib/views/tasks/model";
 
 /**
  * The loop tools against injected reads: each result names its source one step
@@ -162,6 +163,168 @@ const fix: Fix = {
   appliedAt: null,
 };
 
+const task: TaskRow = {
+  id: "book-flight",
+  name: "Book a flight",
+  description: "Reserve a seat",
+  icon: "workflow",
+  color: null,
+  status: "healthy",
+  runs: 42,
+  share: 0.7,
+  finishRate: 0.9,
+  weakest: null,
+  correctionsPer100: 2,
+  topics: [],
+  issues: 1,
+  fixes: 1,
+  fixesHref: "/fixes",
+};
+
+function taskList(rows: TaskRow[]): TaskListModel {
+  return {
+    state: "ready",
+    blocked: null,
+    windowDays: 30,
+    readAt: new Date("2026-11-01T00:00:00Z"),
+    stats: {
+      tasks: rows.length,
+      runsInTasks: 42,
+      allRuns: 60,
+      finishRate: 0.9,
+      correctionsPer100: 2,
+      correctionsRecorded: true,
+    },
+    rows,
+    unserved: {
+      measured: true,
+      asks: [
+        {
+          title: "Refund a ticket",
+          others: ["refund please"],
+          runs: 3,
+          reason: "no_tool",
+          traces: [],
+        } as unknown as TaskListModel["unserved"]["asks"][number],
+      ],
+      runs: 3,
+    },
+    readingSince: null,
+    excludedRuns: 0,
+  };
+}
+
+const step = {
+  toolId: "find_flight",
+  label: "find_flight",
+  role: "core" as const,
+  position: 1,
+  runs: 42,
+  runShare: 1,
+  calls: 50,
+  failures: 5,
+  failureShare: 0.1,
+  retries: 2,
+  switches: 0,
+  gaveUp: 0,
+  medianMs: 300,
+  handoffMs: 20,
+  next: [
+    { toolId: "hold_fare", label: "hold_fare", share: 0.9 },
+    { toolId: null, label: "Run ends", share: 0.1 },
+  ],
+  mark: "failing" as const,
+};
+
+const detail: TaskDetailModel = {
+  id: task.id,
+  name: task.name,
+  description: task.description,
+  icon: task.icon,
+  color: null,
+  status: "watch" as TaskDetailModel["status"],
+  watch: "step",
+  statusLine: "find_flight fails 10% of its calls.",
+  windowDays: 30,
+  readAt: new Date("2026-11-01T00:00:00Z"),
+  runs: 42,
+  share: 0.7,
+  finishRate: 0.9,
+  finishedRuns: 38,
+  askedNoTool: 1,
+  recoveredRuns: 3,
+  medianMs: 2_400,
+  correctionsPer100: 2,
+  callsPerRun: 2.5,
+  cost: { kind: "measured", perRun: 0.02, total: 0.84, runs: 42, modelCalls: 3 },
+  hasReading: true,
+  order: { stability: 0.95, fixed: true },
+  steps: [step],
+  sideSteps: [],
+  flow: {
+    edges: [{ a: "find_flight", b: "hold_fare", n: 38, na: 42 }],
+    tools: [{ toolId: "find_flight", n: 42 }],
+  },
+  topics: [{ id: "topic-1", name: "Booking", runs: 40 }],
+  corrections: {
+    source: "recorded",
+    rows: [{ kind: "retry_after_error", label: "Retried", count: 2, per100: 4.8 }],
+    total: 2,
+    per100: 4.8,
+  },
+  issues: [
+    {
+      id: INSIGHT,
+      kind: "tool_errors",
+      family: "errors" as TaskDetailModel["issues"][number]["family"],
+      title: "Tool keeps failing",
+      figure: { display: "10%", caption: "of calls" },
+      claim: "x".repeat(600),
+      fix: "Retry it.",
+      tools: [{ id: "find_flight", label: "find_flight" }],
+      onTask: false,
+      action: null,
+      aliases: [],
+    },
+  ],
+  fixes: [
+    {
+      id: `issue:${INSIGHT}`,
+      kind: "reliability" as TaskDetailModel["fixes"][number]["kind"],
+      kindLabel: "Reliability",
+      title: "Retry",
+      tools: [],
+      href: "/fixes",
+    },
+  ],
+  allFixesHref: "/fixes?task=book-flight",
+  examples: [{ turnId: "77777777-7777-4777-8777-777777777777", focusEventId: null, why: "failed" }],
+  focusTools: ["find_flight"],
+};
+
+function taskPage(row: TaskRow = task): TaskPageRead {
+  return {
+    row,
+    detail,
+    examples: new Map([
+      [
+        "77777777-7777-4777-8777-777777777777",
+        {
+          turnId: "77777777-7777-4777-8777-777777777777",
+          sessionId: "s-1",
+          startedAt: new Date("2026-11-01T10:00:00Z"),
+          endedAt: new Date("2026-11-01T10:00:05Z"),
+          calls: 3,
+          failures: 1,
+          steps: [],
+          status: "failed" as never,
+          ask: { text: "Book me a flight to Lisbon on Friday", source: "user" as never },
+        },
+      ],
+    ]),
+  };
+}
+
 const model: FixesModel = {
   projectId: PROJECT,
   open: [fix],
@@ -203,27 +366,14 @@ interface Tracked {
   properties: Record<string, unknown>;
 }
 
-const task: TaskRow = {
-  id: "book-flight",
-  name: "Book a flight",
-  description: "Reserve a seat",
-  icon: "workflow",
-  color: null,
-  status: "healthy",
-  runs: 42,
-  share: 0.7,
-  finishRate: 0.9,
-  weakest: null,
-  correctionsPer100: 2,
-  topics: [],
-  issues: 1,
-  fixes: 1,
-  fixesHref: "/fixes",
-};
-
 function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOperationDeps {
   return {
-    loadTasks: async () => [task],
+    loadTaskList: async () => taskList([task]),
+    loadTaskPage: async (_projectId, taskId) => (taskId === task.id ? taskPage() : null),
+    taskShipmentsFor: async () => [],
+    loadProjectFixesWithIntents: async () => model,
+    listEvalBadges: async () => ({}),
+    latestFixDraft: async () => null,
     scorersFor: async () => [{ kind: "ends_well", enabled: true, source: "default", version: 1 }],
     dailyScoresFor: async () => [],
     taskEvalViewFor: async () => ({
@@ -240,7 +390,6 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     latestTaskSimulations: async () => [],
     latestEval: async (_projectId, f) => simulated(f.id),
     evalGateEnabled: async () => true,
-    latestFixDraft: async () => null,
     recordLineage: async (input) => input.object,
     createFixExperiment: async (input) => ({ row: experimentRow({ ...input }) }),
     getFixExperiment: async (_projectId, id) => (id === EXPERIMENT ? experimentRow() : null),
@@ -901,9 +1050,9 @@ const TASK = task;
 test("list_tasks returns project tasks with a bounded page and task links", async () => {
   const projects: string[] = [];
   const result = await run("list_tasks", { limit: 1 }, [], {
-    loadTasks: async (projectId) => {
+    loadTaskList: async (projectId) => {
       projects.push(projectId);
-      return [task, { ...task, id: "cancel-flight", name: "Cancel a flight" }];
+      return taskList([task, { ...task, id: "cancel-flight", name: "Cancel a flight" }]);
     },
   });
   const out = data<{
@@ -1211,6 +1360,7 @@ test("MCP task reads, simulations and shipments use the existing stores without 
       scorersFor: (projectId, taskId) => scorersFor(projectId, taskId, db),
       dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId, db),
       taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId, db),
+      taskShipmentsFor: (projectId, taskId) => taskShipmentsFor(projectId, taskId, db),
       runTaskSimulation: (fixId, options) =>
         runTaskSimulation(fixId, { ...options, deps: taskDeps }),
       latestTaskSimulations: (projectId, fixId) => latestTaskSimulations(projectId, fixId, db),
@@ -1284,4 +1434,269 @@ test("MCP task reads, simulations and shipments use the existing stores without 
   } finally {
     await client.close();
   }
+});
+
+test("run_eval refuses an unsupported task fix with its reason before queuing", async () => {
+  const result = await run("run_eval", { fixId: fix.id }, [], {
+    loadProjectFixes: async () => ({ ...model, open: [{ ...taskFix(), kind: "split" }] }),
+    runTaskSimulation: async () => {
+      throw new Error("An unsupported fix must not queue a simulation.");
+    },
+  });
+  assert.equal((result as { error: string }).error, "conflict");
+  assert.equal((result as { reason: string }).reason, "nothing_to_simulate");
+  assert.match((result as { message: string }).message, /Splitting a tool/);
+});
+
+test("get_eval hides task comparisons when the replay is unreliable", async () => {
+  const out = data<{
+    eval: {
+      simulated: boolean;
+      tasks: { before: unknown; after: unknown; breakdown: unknown; fidelity: unknown }[];
+    };
+  }>(
+    await run("get_eval", { fixId: fix.id }, [], {
+      loadProjectFixes: async () => ({ ...model, open: [taskFix()] }),
+      latestTaskSimulations: async () => [
+        taskRun({
+          status: "completed",
+          verdict: "unreliable",
+          before: { passRate: 0.5 },
+          after: { passRate: 1 },
+          breakdown: { task: "untrusted" },
+          methods: { replay: 20, rerank: 0, fidelity: { matched: 0, total: 20 } },
+        }),
+      ],
+    }),
+  );
+  assert.equal(out.eval.simulated, false);
+  assert.equal(out.eval.tasks[0]!.before, null);
+  assert.equal(out.eval.tasks[0]!.after, null);
+  assert.equal(out.eval.tasks[0]!.breakdown, null);
+  assert.deepEqual(out.eval.tasks[0]!.fidelity, { matched: 0, total: 20 });
+});
+
+test("list_tasks returns the Tasks page's state, totals and unserved asks beside the rows", async () => {
+  const out = data<{
+    state: string;
+    windowDays: number;
+    readAt: string;
+    stats: { tasks: number; allRuns: number };
+    unserved: {
+      measured: boolean;
+      runs: number;
+      asks: { title: string; runs: number; others: number }[];
+    };
+  }>(await run("list_tasks", {}));
+  assert.equal(out.state, "ready");
+  assert.equal(out.windowDays, 30);
+  assert.equal(out.readAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(out.stats.allRuns, 60);
+  assert.deepEqual(out.unserved.asks, [
+    { title: "Refund a ticket", runs: 3, reason: "no_tool", others: 1 },
+  ]);
+});
+
+test("get_task returns the Task page's detail: steps, flow, order, corrections, issues, cost and example runs, keeping the row's counts", async () => {
+  const result = await run("get_task", { taskId: task.id });
+  const out = data<{
+    task: {
+      issues: number;
+      fixes: number;
+      runs: number;
+      watch: string;
+      medianMs: number;
+      callsPerRun: number;
+      cost: { kind: string };
+      order: { stability: number };
+      steps: { toolId: string; next: unknown[] }[];
+      flow: { edges: unknown[] };
+      corrections: { total: number };
+      issueList: { id: string; claim: string }[];
+      fixList: { id: string }[];
+      exampleRuns: { runId: string; ask: string; status: string; startedAt: string }[];
+      shipments: unknown[];
+    };
+  }>(result);
+  assert.equal(out.task.issues, 1, "the row's issue count stays");
+  assert.equal(out.task.fixes, 1);
+  assert.equal(out.task.watch, "step");
+  assert.equal(out.task.medianMs, 2_400);
+  assert.equal(out.task.callsPerRun, 2.5);
+  assert.equal(out.task.cost.kind, "measured");
+  assert.equal(out.task.order.stability, 0.95);
+  assert.equal(out.task.steps[0]!.toolId, "find_flight");
+  assert.equal(out.task.steps[0]!.next.length, 2);
+  assert.equal(out.task.flow.edges.length, 1);
+  assert.equal(out.task.corrections.total, 2);
+  assert.equal(out.task.issueList[0]!.id, INSIGHT);
+  assert.equal(out.task.issueList[0]!.claim.length, 401, "a long claim is cut");
+  assert.equal(out.task.fixList[0]!.id, `issue:${INSIGHT}`);
+  assert.deepEqual(out.task.exampleRuns, [
+    {
+      runId: "77777777-7777-4777-8777-777777777777",
+      why: "failed",
+      status: "failed",
+      startedAt: "2026-11-01T10:00:00.000Z",
+      calls: 3,
+      failures: 1,
+      ask: "Book me a flight to Lisbon on Friday",
+    },
+  ]);
+  assert.deepEqual(out.task.shipments, []);
+  assert.equal((result as DispatchSuccess).truncated, true);
+});
+
+test("get_task reads shipments with post-ship results only when the eval gate is on", async () => {
+  const shipment = {
+    id: SHIPMENT,
+    fixId: fix.id,
+    version: "v3",
+    shippedAt: "2026-11-02T00:00:00.000Z",
+    notes: null,
+    status: "completed" as const,
+    nRuns: 20,
+    error: null,
+    comparison: {
+      ends_well: {
+        baseline: null,
+        predicted: null,
+        actual: { passed: 18, total: 20, passRate: 0.9, score: 0.9 },
+      },
+    },
+  };
+  const on = data<{ task: { shipments: { version: string; comparison: unknown }[] } }>(
+    await run("get_task", { taskId: task.id }, [], { taskShipmentsFor: async () => [shipment] }),
+  );
+  assert.equal(on.task.shipments[0]!.version, "v3");
+  assert.deepEqual(on.task.shipments[0]!.comparison, shipment.comparison);
+  const off = data<{ task: { shipments: null; steps: unknown[] } }>(
+    await run("get_task", { taskId: task.id }, [], {
+      evalGateEnabled: async () => false,
+      taskShipmentsFor: async () => {
+        throw new Error("The read must not run.");
+      },
+    }),
+  );
+  assert.equal(off.task.shipments, null);
+  assert.equal(off.task.steps.length, 1, "the task's own reading needs no gate");
+});
+
+test("list_fixes filters by kind, tool and intent as Fixes does, reading intents only when filtered on", async () => {
+  const failClearly: Fix = { ...fix, kind: "fail-clearly" };
+  const intentFix: Fix = {
+    ...fix,
+    id: "intent:topic-1",
+    kind: "skill",
+    subject: {
+      tools: [],
+      tasks: [],
+      topics: [{ id: "topic-1", label: "Booking", href: "/intents" }],
+    },
+  };
+  let intentReads = 0;
+  const over: Partial<LoopOperationDeps> = {
+    loadProjectFixes: async () => ({ ...model, open: [failClearly] }),
+    loadProjectFixesWithIntents: async () => {
+      intentReads += 1;
+      return { ...model, open: [failClearly, intentFix] };
+    },
+  };
+  assert.equal(
+    data<{ count: number }>(await run("list_fixes", { kind: "fail-clearly" }, [], over)).count,
+    1,
+  );
+  assert.equal(
+    data<{ count: number }>(await run("list_fixes", { kind: "merge" }, [], over)).count,
+    0,
+  );
+  assert.equal(
+    data<{ count: number }>(await run("list_fixes", { tool: "hold_fare" }, [], over)).count,
+    1,
+  );
+  assert.equal(
+    data<{ count: number }>(await run("list_fixes", { tool: "other_tool" }, [], over)).count,
+    0,
+  );
+  assert.equal(intentReads, 0);
+  const byIntent = data<{ count: number; fixes: { id: string }[] }>(
+    await run("list_fixes", { intent: "topic-1" }, [], over),
+  );
+  assert.equal(intentReads, 1);
+  assert.deepEqual(
+    byIntent.fixes.map((row) => row.id),
+    ["intent:topic-1"],
+  );
+  assert.equal(
+    ((await run("list_fixes", { kind: "not-a-kind" })) as { error: string }).error,
+    "invalid_params",
+  );
+});
+
+test("list_fixes returns the Fixes page's savings scaled to the period, and each fix's eval badge when the gate is on", async () => {
+  const savings: FixesModel["stats"]["savings"] = {
+    total: {
+      windowDays: 1,
+      absolute: { tokens: 1_000, usd: 0.5, ms: null },
+      relative: { tokens: 0.1, usd: null, ms: null },
+    },
+    tasks: [
+      {
+        task: { id: task.id, label: task.name, color: null, href: "/tasks" },
+        windowDays: 1,
+        absolute: { tokens: 1_000, usd: null, ms: null },
+        relative: { tokens: null, usd: null, ms: null },
+      },
+    ],
+  };
+  const badge = { state: "pending" as const, runs: 20 };
+  const over: Partial<LoopOperationDeps> = {
+    loadProjectFixes: async () => ({ ...model, stats: { ...model.stats, savings } }),
+    listEvalBadges: async () => ({ [fix.id]: badge }),
+  };
+  const week = data<{
+    fixes: { evalBadge: unknown }[];
+    summary: {
+      open: number;
+      savings: {
+        period: string;
+        periodLabel: string;
+        total: { saved: { tokens: number; usd: number; ms: null } };
+        byTask: { taskId: string; saved: { tokens: number } }[];
+      };
+    };
+  }>(await run("list_fixes", { period: "week" }, [], over));
+  assert.equal(week.summary.open, 1);
+  assert.equal(week.summary.savings.period, "week");
+  assert.equal(week.summary.savings.periodLabel, "per week");
+  assert.deepEqual(week.summary.savings.total.saved, { tokens: 7_000, usd: 3.5, ms: null });
+  assert.equal(week.summary.savings.byTask[0]!.taskId, task.id);
+  assert.equal(week.summary.savings.byTask[0]!.saved.tokens, 7_000);
+  assert.deepEqual(week.fixes[0]!.evalBadge, badge);
+  const month = data<{ summary: { savings: { total: { saved: { tokens: number } } } } }>(
+    await run("list_fixes", {}, [], over),
+  );
+  assert.equal(month.summary.savings.total.saved.tokens, 30_000, "a month is 30 days by default");
+
+  const none = data<{ fixes: { evalBadge: unknown }[] }>(await run("list_fixes", {}));
+  assert.deepEqual(none.fixes[0]!.evalBadge, { state: "none" });
+  const off = data<{ fixes: { evalBadge: unknown }[] }>(
+    await run("list_fixes", {}, [], {
+      evalGateEnabled: async () => false,
+      listEvalBadges: async () => {
+        throw new Error("The badges must not be read.");
+      },
+    }),
+  );
+  assert.equal(off.fixes[0]!.evalBadge, null);
+  const failing = data<{ fixes: { evalBadge: unknown }[] }>(
+    await run("list_fixes", {}, [], {
+      listEvalBadges: async () => Promise.reject(new Error("timeout")),
+    }),
+  );
+  assert.deepEqual(
+    failing.fixes[0]!.evalBadge,
+    { state: "none" },
+    "a failed read costs the badge, never the tool",
+  );
 });

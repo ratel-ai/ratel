@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import {
@@ -258,9 +258,7 @@ export function toolExplorerOperations(
       params: z.object({
         ...projectScoped,
         scope: scopeParam,
-        intentId: z
-          .string()
-          .uuid()
+        intentId: uuidParam()
           .optional()
           .describe("Only this intent: an intentId from an earlier page of this list."),
         minUnits: z

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { notFound } from "@/lib/mcp/errors";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { getLatestRun, listProposals, listRuns } from "@/lib/synthesis/match-quality/queries";
@@ -68,7 +68,7 @@ export function improvementOperations(
       domain: "improvement",
       title: "Get match quality run",
       description:
-        "One match quality analysis in full: what the run could see, what it concluded, and the searchable-description rewrites it proposed. Omit runId for the most recent run. Apply a proposal with set_catalog_override.",
+        "One match quality analysis in full: what the run could see, what it concluded, and the searchable-description rewrites it proposed. Omit runId for the most recent run. Apply, dismiss or revert a proposal with review_description_rewrite.",
       keywords: [
         "match quality",
         "why did search miss",
@@ -80,7 +80,7 @@ export function improvementOperations(
       mutates: false,
       params: z.object({
         ...projectScoped,
-        runId: z.string().uuid().optional(),
+        runId: uuidParam().optional(),
         status: z.enum(PROPOSAL_STATUSES).optional(),
       }),
       async execute(ctx, params) {

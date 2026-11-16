@@ -20,6 +20,11 @@ import {
   type BoostTurn,
   type BoostView,
 } from "@/lib/views/adaptive-ranking/boost-view";
+import {
+  buildBoostWarning,
+  type SetupStep,
+  STALE_GRAPH_MS,
+} from "@/lib/views/adaptive-ranking/setup";
 import type { CloudGraphState } from "@/lib/views/intents/adaptive-view";
 
 /** A share is shown, and a difference claimed, only from this many matched searches. */
@@ -388,3 +393,82 @@ export function graphGrowth(input: {
     usedLabel: `${input.clusterCount.toLocaleString("en-US")} of ${MAX_INTENT_GRAPH_CLUSTERS.toLocaleString("en-US")} ask groups`,
   };
 }
+
+/** The nDCG verdict the page reads: the online phase's once a runtime serves the graph, every turn's before. */
+export function rankingVerdict(view: BoostView): { better: number; worse: number; same: number } {
+  return view.online.fromTurn !== null ? view.phases["ndcg@5"].online.verdict : view.verdict;
+}
+
+/**
+ * What is wrong with one graph, in sentences: tools it lifts that left the
+ * catalog, a Cloud graph that stopped keeping up with arriving events, and a
+ * comparison that says it hurts too often. Shared by the page and MCP.
+ */
+export function rankingWarnings(input: {
+  producer: IntentGraphProducer;
+  updatedAt: Date;
+  /** `kind:capabilityId` of edges with no catalog entry. */
+  missingCapabilities: ReadonlySet<string>;
+  /** The newest learning event from any source, or null. */
+  lastEventAt: Date | null;
+  view: BoostView;
+}): string[] {
+  const warnings: string[] = [];
+  const missingTools = [...input.missingCapabilities]
+    .filter((key) => key.startsWith("tool:"))
+    .map((key) => key.slice(5));
+  if (missingTools.length > 0) {
+    warnings.push(
+      `It lifts ${missingTools.length === 1 ? "a tool that is" : `${missingTools.length} tools that are`} no longer in your catalog (${missingTools.join(", ")}). The agent cannot call ${missingTools.length === 1 ? "it" : "them"}; they leave the graph as new traffic replaces them.`,
+    );
+  }
+  if (
+    input.producer === "cloud" &&
+    input.lastEventAt !== null &&
+    input.lastEventAt.getTime() - input.updatedAt.getTime() > STALE_GRAPH_MS
+  ) {
+    warnings.push(
+      "The graph has not caught up with recent searches. Events are arriving but it stopped updating; tell us if this persists.",
+    );
+  }
+  const boostWarning = buildBoostWarning(rankingVerdict(input.view));
+  if (boostWarning) warnings.push(boostWarning);
+  return warnings;
+}
+
+/* - Setup checklist, in the page's words ------------------------------------ */
+
+export const STEP_TITLES: Record<SetupStep["key"], string> = {
+  events: "Send searches and tool calls",
+  building: `${APP_NAME} builds the intent map`,
+  connected: "Rank from the graph in your runtime",
+  following: "Keep up with new revisions",
+};
+
+/** The v1 steps in the v2 words: titles as actions, and "ask groups" for clusters. */
+export function toChecklistInput(step: SetupStep) {
+  return {
+    key: step.key,
+    label: STEP_TITLES[step.key],
+    detail: step.detail.replace(/\bquery (groups?)\b/g, "ask $1"),
+    state: step.state,
+    ...(step.snippet ? { snippet: step.snippet } : {}),
+  };
+}
+
+/** Before any graph exists the last two steps have nothing to check yet. */
+export const WAITING_STEPS: SetupStep[] = [
+  {
+    key: "connected",
+    label: STEP_TITLES.connected,
+    state: "pending",
+    detail:
+      "Once the intent map exists, a few lines where your runtime starts make it rank from it. They appear here.",
+  },
+  {
+    key: "following",
+    label: STEP_TITLES.following,
+    state: "pending",
+    detail: `${APP_NAME} then checks that your runtime adopts each new revision as the map learns.`,
+  },
+];

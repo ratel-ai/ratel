@@ -42,7 +42,7 @@ export function runtimeWriteOperations(
       domain: "writes",
       title: "Override a catalog entry's searchable description",
       description:
-        "Replace the searchable description of one runtime-synced catalog entry, which is the text retrieval matches against. Use it to make a tool findable when the runtime's own description is thin or absent. Pass null to clear the override and fall back to what the runtime reported. Does not change the description the agent reads.",
+        "Replace the searchable description (the text retrieval matches against) of one runtime-synced tool or skill. Take kind and entryId from list_runtime_catalog. Pass null to clear the override and fall back to the runtime's text. Does not change the description the agent reads.",
       keywords: ["override", "override tool description", "make findable", "tool"],
       scope: "project",
       mutates: true,
@@ -50,8 +50,14 @@ export function runtimeWriteOperations(
         ...projectScoped,
         kind: z
           .enum(["tool", "skill", "fact"])
-          .describe("Which catalog the entry belongs to, as reported by list_declared_tools."),
-        entryId: z.string().min(1).max(512),
+          .describe("Which catalog the entry belongs to, as reported by list_runtime_catalog."),
+        entryId: z
+          .string()
+          .min(1)
+          .max(512)
+          .describe(
+            "The entry's entryId from list_runtime_catalog. A tool's name is not always its entryId.",
+          ),
         searchableDescription: z
           .string()
           .max(MAX_DESCRIPTION)

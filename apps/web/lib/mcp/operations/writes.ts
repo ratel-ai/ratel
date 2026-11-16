@@ -11,7 +11,7 @@ import {
 } from "@/lib/catalog/queries";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { throwMutationFailure } from "@/lib/mcp/operations/mutation-errors";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { detailSkill } from "@/lib/mcp/serialize";
 import { checkQuota } from "@/lib/platform/entitlements";
@@ -115,7 +115,7 @@ export function writeOperations(deps: WriteOperationDeps = defaultWriteDeps): Mc
       mutates: true,
       params: z.object({
         ...projectScoped,
-        skillId: z.string().uuid(),
+        skillId: uuidParam(),
         patch: editSkillInput,
       }),
       async execute(ctx, params) {
@@ -140,7 +140,7 @@ export function writeOperations(deps: WriteOperationDeps = defaultWriteDeps): Mc
       mutates: true,
       params: z.object({
         ...projectScoped,
-        skillId: z.string().uuid(),
+        skillId: uuidParam(),
         ...statusTransitionInput.shape,
       }),
       async execute(ctx, params) {
@@ -161,7 +161,7 @@ export function writeOperations(deps: WriteOperationDeps = defaultWriteDeps): Mc
       mutates: true,
       params: z.object({
         ...projectScoped,
-        skillId: z.string().uuid(),
+        skillId: uuidParam(),
         ...statusTransitionInput.shape,
       }),
       async execute(ctx, params) {

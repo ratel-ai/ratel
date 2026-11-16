@@ -9,14 +9,10 @@ import {
   isSearchTelemetry,
   resolveEvidenceSource,
 } from "@/lib/synthesis/match-quality/search-source";
-import {
-  nextBillingPeriodStart,
-  RUN_WINDOW_OPTIONS,
-  resolveRunWindow,
-} from "@/lib/synthesis/match-quality/window";
+import { RUN_WINDOW_OPTIONS, resolveRunWindow } from "@/lib/synthesis/match-quality/window";
 import { countComparisonsPerWindow } from "@/lib/synthesis/quality/queries";
 import { entitled, type QualityContext } from "./context";
-import { type RunBudget, type RunMenuModel, runMenuModel } from "./run-menu";
+import { type RunBudget, type RunMenuModel, runBudgetOf, runMenuModel } from "./run-menu";
 
 /**
  * Match quality's side of the page: the latest run (for the header's menu)
@@ -75,11 +71,7 @@ export async function loadRunState(context: QualityContext): Promise<QualityRunS
 }
 
 function runBudget(context: QualityContext): RunBudget {
-  const access = context.access;
-  if (access && !access.ok && access.reason === "exhausted") {
-    return { spent: true, limit: access.limit, resetsAt: nextBillingPeriodStart(context.now) };
-  }
-  return { spent: false, remaining: access?.ok ? access.remaining : 0 };
+  return runBudgetOf(context.access, context.now);
 }
 
 /** Searches per run window, from the same source a run would read (the v1 page's rule). */
