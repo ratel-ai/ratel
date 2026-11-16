@@ -140,8 +140,12 @@ describe("createComposition", () => {
       enqueueJob: async () => ({ id: "j" }),
       scheduleDrain: () => {},
     };
-    cloud.connect?.({ toolCorpus, importedRuns });
-    assert.deepEqual(lent, [{ toolCorpus, importedRuns }]);
+    const onboarding = {
+      createFirstProject: async () => ({ ok: false as const, error: "no" }),
+      ensureSampleProject: async () => {},
+    };
+    cloud.connect?.({ toolCorpus, importedRuns, onboarding });
+    assert.deepEqual(lent, [{ toolCorpus, importedRuns, onboarding }]);
     assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
   });
 

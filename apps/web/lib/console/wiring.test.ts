@@ -131,6 +131,10 @@ test("every job that works on one project runs in the project log context", () =
   ]);
 });
 
+test("startup lends the edition the onboarding service with the other core services", () => {
+  assert.match(source("instrumentation.node.ts"), /\bonboarding: createOnboardingService\(\)/);
+});
+
 test('the playground page is headed "Playground"', () => {
   const heading = source("components/console/playground/PlaygroundWorkbench.tsx").match(
     /<h1[^>]*>\s*([^<{]+?)\s*<\/h1>/,

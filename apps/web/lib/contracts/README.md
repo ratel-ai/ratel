@@ -17,6 +17,13 @@ job; its optional `registerSourceIds` names the source ids the importer stores r
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
+`CoreServices.onboarding` (`onboarding.ts`) is project creation for a page the edition owns, such
+as Cloud's invitation page: `createFirstProject` takes a name, the organization and the person,
+runs the core's own onboarding (name rules, the plan's project cap, the project, its first key,
+the product events) and answers with the key once and the send-your-first-trace snippets as data;
+`ensureSampleProject` gives an empty organization its sample project. The edition resolves the
+session and refuses a support session before it calls either.
+
 `mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to
