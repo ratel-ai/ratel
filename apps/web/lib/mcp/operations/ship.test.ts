@@ -171,11 +171,10 @@ function harness(
   const calls: Calls = { actors: [], trails: 0, resolve: [], sessionText: [] };
   const deps: ShipOperationDeps = {
     getOrganization: async () => org,
-    stageSpineEnabled: async (_projectId, actor) => {
+    evalGateEnabled: async (_projectId, actor) => {
       calls.actors.push(actor);
-      return true;
+      return false;
     },
-    evalGateEnabled: async () => false,
     loadShipments: async () => Array.from({ length: 7 }, (_, i) => shipment(i + 1)),
     shipmentTrail: async (row) => {
       calls.trails += 1;
@@ -244,17 +243,15 @@ test("list_shipments with a shipmentId returns that one, or not found", async ()
   assert.equal(missing.ok === false && missing.error, "not_found");
 });
 
-test("Ship and lineage are forbidden with cloud-stage-spine off, decided for the OAuth user", async () => {
-  const { run, calls } = harness(
-    { stageSpineEnabled: async (_projectId, actor) => (calls.actors.push(actor), false) },
-    oauth,
+test("Ship and lineage work for an OAuth user with no stage flag, deciding only the eval step for them", async () => {
+  const { run, calls } = harness({}, oauth);
+  const shipments = data<{ count: number }>(await run("list_shipments", { projectId: PROJECT }));
+  assert.equal(shipments.count, 7);
+  const lineage = data<{ source: LineageRef }>(
+    await run("get_lineage", { projectId: PROJECT, kind: "insight", id: "x" }),
   );
-  for (const id of ["list_shipments", "get_lineage"]) {
-    const result = await run(id, { projectId: PROJECT, kind: "insight", id: "x" });
-    assert.equal(result.ok === false && result.error, "forbidden");
-    assert.equal(result.ok === false && result.reason, "stage_spine_off");
-  }
-  assert.deepEqual(calls.actors, ["user_abc", "user_abc"]);
+  assert.equal(lineage.source.kind, "metric");
+  assert.deepEqual(calls.actors, ["user_abc"]);
 });
 
 test("get_lineage resolves one step back, with the plan deciding whether an insight names its run", async () => {

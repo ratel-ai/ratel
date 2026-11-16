@@ -160,7 +160,6 @@ function deps(events: Tracked[], over: Partial<TaskOperationDeps> = {}): TaskOpe
   return {
     ...defaultTaskDeps,
     evalGateEnabled: async () => true,
-    stageSpineEnabled: async () => true,
     loadProjectFixes: async () => model,
     taskSimulationListFor: async () => [
       {
@@ -224,7 +223,7 @@ const WRITES: [string, Record<string, unknown>][] = [
   ],
 ];
 
-test("every task tool refuses with eval_gate_off, then stage_spine_off, and calls nothing", async () => {
+test("every task tool refuses with eval_gate_off and calls nothing", async () => {
   const touched: string[] = [];
   const spy = (name: string) => async (): Promise<never> => {
     touched.push(name);
@@ -247,24 +246,17 @@ test("every task tool refuses with eval_gate_off, then stage_spine_off, and call
       await run(id, params, events, { ...quiet, evalGateEnabled: async () => false }),
     );
     assert.deepEqual([gateOff.error, gateOff.reason], ["forbidden", "eval_gate_off"], id);
-    const spineOff = error(
-      await run(id, params, events, { ...quiet, stageSpineEnabled: async () => false }),
-    );
-    assert.deepEqual([spineOff.error, spineOff.reason], ["forbidden", "stage_spine_off"], id);
     assert.equal(events.length, 0, id);
   }
   assert.deepEqual(touched, []);
 });
 
-test("the gates are asked for the caller in the project", async () => {
+test("the eval gate is asked for the caller in the project", async () => {
   const asked: string[] = [];
   await run("list_task_simulations", { taskId: TASK }, [], {
     evalGateEnabled: async (projectId, actor) => (asked.push(`gate ${projectId} ${actor}`), true),
-    stageSpineEnabled: async (projectId, actor) => (
-      asked.push(`spine ${projectId} ${actor}`), true
-    ),
   });
-  assert.deepEqual(asked.sort(), [`gate ${PROJECT} ${ACTOR}`, `spine ${PROJECT} ${ACTOR}`]);
+  assert.deepEqual(asked, [`gate ${PROJECT} ${ACTOR}`]);
 });
 
 test("list_task_simulations lists each fix's latest simulation with stale and a link, cutting long text", async () => {

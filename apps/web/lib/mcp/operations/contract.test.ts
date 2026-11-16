@@ -75,39 +75,6 @@ test("write operations are exactly those declaring mutates", () => {
   );
 });
 
-test("without the loop flag, the loop tools are absent and nothing else changes", () => {
-  const withoutLoop = assembleOperations({ includeLoop: false }).map((operation) => operation.id);
-  const loop = [
-    "list_tasks",
-    "get_task",
-    "list_task_simulations",
-    "change_task_scorer",
-    "change_task_eval_set",
-    "draft_task_test",
-    "change_task_simulation",
-    "get_fix_eval_set",
-    "change_fix_eval_set",
-    "dismiss_fix",
-    "list_insights",
-    "list_fixes",
-    "get_fix",
-    "get_eval",
-    "run_eval",
-    "create_experiment",
-    "mark_fix_shipped",
-  ];
-
-  for (const id of loop)
-    assert.ok(!withoutLoop.includes(id), `${id} must be hidden without FF_MCP_LOOP`);
-  assert.deepEqual(
-    withoutLoop.sort(),
-    operations
-      .map((operation) => operation.id)
-      .filter((id) => !loop.includes(id))
-      .sort(),
-  );
-});
-
 test("read-only assembly drops every mutating operation", () => {
   const readOnly = assembleOperations({ includeWrites: false });
 
@@ -200,7 +167,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["request_analysis", true],
   ["review_description_rewrite", true],
   ["run_quality_analysis", true],
-  // The improvement loop (RC-43), behind FF_MCP_LOOP. run_eval mutates: the
+  // The improvement loop (RC-43). run_eval mutates: the
   // eval gate (RC-46) records each simulation it runs.
   ["list_tasks", false],
   ["get_task", false],

@@ -15,7 +15,6 @@ export interface LineageQuery {
 }
 
 export interface LineageRouteDeps {
-  enabled: () => Promise<boolean>;
   dbConfigured: () => boolean;
   getSession: () => Promise<{ userId: string } | null>;
   findProject: (
@@ -56,7 +55,6 @@ export async function lineageResponse(
   query: LineageQuery,
   deps: LineageRouteDeps,
 ): Promise<Response> {
-  if (!(await deps.enabled())) return fail(404, "Not found.");
   if (!deps.dbConfigured()) return fail(404, "Lineage isn't available yet.");
   const session = await deps.getSession();
   if (!session) return fail(401, "Sign in to see where this came from.");

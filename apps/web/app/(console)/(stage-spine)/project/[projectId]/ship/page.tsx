@@ -4,7 +4,6 @@ import { Section } from "@ratel/design-system/section";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Rocket } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { type OpenedShipment, ShipmentsTable } from "@/components/console/lineage/ShipmentsTable";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
@@ -17,18 +16,15 @@ import { lineageShowsTraces } from "@/lib/views/lineage/plan";
 import { loadShipments, type ShipmentRow } from "@/lib/views/lineage/shipments";
 import { shipmentTrail } from "@/lib/views/lineage/trail";
 import type { LineageRef } from "@/lib/views/lineage/types";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ship" };
 
 /**
- * Ship, the fourth stage (RC-45, behind `FF_STAGE_SPINE`): what went live,
+ * Ship, the fourth stage (RC-45): what went live,
  * each with the fix it came from. Today that is applied description rewrites
- * and shipments recorded through lineage; RC-53 brings releases. With the flag
- * off the page does not exist, like its rail item. Owned (ADR-0030): the
- * project comes from the console scope, and the flags are read from the
- * environment.
+ * and shipments recorded through lineage; RC-53 brings releases. Owned (ADR-0030): the
+ * project comes from the console scope, and the eval gate is read from the environment.
  */
 export default async function ShipPage({
   params,
@@ -37,7 +33,6 @@ export default async function ShipPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!stageSpineEnabled()) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Ship">

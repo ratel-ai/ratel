@@ -18,7 +18,6 @@ function deps(
   return {
     calls,
     errors,
-    enabled: async () => true,
     dbConfigured: () => true,
     getSession: async () => ({ userId: "u1" }),
     findProject: async (id) =>
@@ -66,12 +65,7 @@ test("chain=1 answers with the whole way back", async () => {
   );
 });
 
-test("off, signed out, someone else's project, or a bad ref: no answer", async () => {
-  assert.equal(
-    (await lineageResponse("p1", Q, deps({ enabled: async () => false }))).status,
-    404,
-    "the flag hides it",
-  );
+test("signed out, someone else's project, or a bad ref: no answer", async () => {
   assert.equal(
     (await lineageResponse("p1", Q, deps({ getSession: async () => null }))).status,
     401,

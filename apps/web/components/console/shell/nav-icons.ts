@@ -10,6 +10,7 @@ import {
   FolderKanban,
   HeartPulse,
   House,
+  ListChecks,
   Orbit,
   Rocket,
   Settings,
@@ -22,6 +23,7 @@ import type { NavIconName } from "@/lib/console/navigation";
 export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   overview: House,
   health: HeartPulse,
+  tasks: ListChecks,
   intents: Orbit,
   improvements: Sparkles,
   catalog: BookOpen,

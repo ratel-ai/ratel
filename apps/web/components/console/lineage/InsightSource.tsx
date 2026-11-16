@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import type { LineageResponseBody } from "@/lib/views/lineage/route";
 import type { LineageRef } from "@/lib/views/lineage/types";
 import { SourceLink } from "./SourceLink";
-import { useStageSpine } from "./stage-spine-context";
 
 type State =
   | { status: "loading" }
@@ -20,13 +19,12 @@ export function lineageUrl(projectId: string, kind: string, id: string): string 
 }
 
 /**
- * "From trace …" (or "From metric …") on an insight's panel, behind
- * `cloud-stage-spine`. The source is read when the panel opens, since naming
- * the run means reading the insight's sampled turns. A failed read shows
- * nothing: the panel is about the insight, not its source.
+ * "From trace …" (or "From metric …") on an insight's panel. The source is
+ * read when the panel opens, since naming the run means reading the insight's
+ * sampled turns. A failed read shows nothing: the panel is about the insight,
+ * not its source.
  */
 export function InsightSource({ projectId, signalId }: { projectId: string; signalId: string }) {
-  const on = useStageSpine();
   const key = `${projectId}:${signalId}`;
   const [state, setState] = useState<State>(() =>
     cache.has(key) ? { status: "ready", source: cache.get(key) ?? null } : { status: "loading" },
@@ -40,7 +38,7 @@ export function InsightSource({ projectId, signalId }: { projectId: string; sign
   }
 
   useEffect(() => {
-    if (!on || cache.has(key)) return;
+    if (cache.has(key)) return;
     const controller = new AbortController();
     fetch(lineageUrl(projectId, "insight", signalId), {
       signal: controller.signal,
@@ -59,9 +57,9 @@ export function InsightSource({ projectId, signalId }: { projectId: string; sign
         if ((error as { name?: string })?.name !== "AbortError") setState({ status: "error" });
       });
     return () => controller.abort();
-  }, [on, key, projectId, signalId]);
+  }, [key, projectId, signalId]);
 
-  if (!on || state.status === "error") return null;
+  if (state.status === "error") return null;
   if (state.status === "loading") return <Skeleton className="h-6 w-56" />;
   return <SourceLink source={state.source} projectId={projectId} />;
 }

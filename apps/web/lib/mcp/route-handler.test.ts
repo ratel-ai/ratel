@@ -35,7 +35,6 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     perKeyLimiter: createTokenBucketRateLimiter({ limitPerMinute: 60, burst: 120 }),
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
-    loopEnabled: async () => true,
     launchAccess: async () => true,
     ...overrides,
   };
@@ -301,10 +300,8 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "FF_EVAL_GATE",
     "FF_HEALTH_IMPORT_FIRST_READING",
     "FF_HEALTH_SCORE",
-    "FF_MCP_LOOP",
     "FF_QUICK_FIRST_READING",
     "FF_SESSION_REPLAY",
-    "FF_STAGE_SPINE",
   ]);
 });
 
@@ -519,24 +516,4 @@ test("an unconfigured database does not spend the caller's failure budget", asyn
 
   assert.equal(second.status, 503);
   assert.equal((await second.json()).error, "unavailable");
-});
-
-test("with the loop off (FF_MCP_LOOP), the loop tools are not listed and the rest is unchanged", async () => {
-  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
-  const body = await (await handler(rpc("tools/list"))).json();
-  const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
-  for (const hidden of [
-    "list_insights",
-    "get_fix",
-    "run_eval",
-    "create_experiment",
-    "mark_fix_shipped",
-    "list_tasks",
-    "change_task_scorer",
-    "change_fix_eval_set",
-  ]) {
-    assert.ok(!names.includes(hidden), `${hidden} should be hidden without the flag`);
-  }
-  assert.ok(names.includes("list_traces"));
-  assert.ok(names.includes("get_agent_health"), "the other surfaces are not loop tools");
 });

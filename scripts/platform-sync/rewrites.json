@@ -6,6 +6,7 @@
     { "from": "@/components/ds/dot-loader", "to": "@ratel/design-system/dot-matrix", "exact": true },
     { "from": "@/components/intents/v2/", "to": "@/components/console/intents/" },
     { "from": "@/components/intent-map/", "to": "@/components/console/intent-map/" },
+    { "from": "@/components/shell/nav-icons", "to": "@/components/console/shell/nav-icons", "exact": true },
     { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/db/index", "to": "@/lib/platform/db/client", "exact": true },
