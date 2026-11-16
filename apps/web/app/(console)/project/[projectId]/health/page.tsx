@@ -60,6 +60,7 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
+  const holdEmptyEarlyReading = experimentalFeatureEnabled("FF_HEALTH_IMPORT_FIRST_READING");
   const scoreLeads = experimentalFeatureEnabled("FF_HEALTH_SCORE");
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
@@ -70,9 +71,11 @@ export default async function AgentHealthPage({
       fallback: fallbackModel,
       // Example turns are not read with the page: an issue reads its own when opened.
       load: () =>
-        loadHealthPageModel({ projectId: project.id, windowDays }, process.env.NODE_ENV, {
-          getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
-        }),
+        loadHealthPageModel(
+          { projectId: project.id, windowDays, holdEmptyEarlyReading },
+          process.env.NODE_ENV,
+          { getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }) },
+        ),
     }),
     loadImportState(project.id, importsSlot),
     loadShareState(project.id, editionUi?.HealthShare),

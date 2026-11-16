@@ -102,6 +102,109 @@ test("a page whose reading has enough turns reads nothing more", async () => {
   assert.deepEqual(calls, { facts: [], runs: 0, requests: [] });
 });
 
+const EMPTY_EARLY: Model = {
+  windowDays: 30,
+  turns: 73,
+  floor: 50,
+  computedAt: READ_AT,
+  earlyReading: true,
+  emptyEarlyReading: true,
+};
+const IMPORTED_OLD = (runs: Partial<RunFacts> = {}) =>
+  ledgerFacts({
+    rows: [{ day: "2026-09-28", closed: 73, open: 0, idleOpen: 0, imported: 73 }],
+    newestClosedAt: new Date("2026-09-28T10:00:00Z"),
+    runs: {
+      ...NO_RUNS,
+      lastRunAt: READ_AT,
+      lastRunStatus: "completed",
+      lastCompletedAt: READ_AT,
+      ...runs,
+    },
+    now: NOW,
+  });
+
+test("an early reading that read none of the imported runs is no reading: building, and the next one is asked for (RC-255)", async () => {
+  const { calls, fakes } = deps({ loadFacts: async () => IMPORTED_OLD() });
+  const state = await loadHealthPageState(input({ model: EMPTY_EARLY }), fakes);
+  assert.deepEqual(state, {
+    kind: "building",
+    phase: "computing",
+    turns: 73,
+    imported: true,
+    source: null,
+    working: true,
+  });
+  assert.deepEqual(calls.requests, ["imported_runs_unread"]);
+});
+
+test("while the next reading runs the page watches it, and a failed one says so (RC-255)", async () => {
+  const running = deps({ loadFacts: async () => IMPORTED_OLD({ working: true }) });
+  assert.deepEqual(await loadHealthPageState(input({ model: EMPTY_EARLY }), running.fakes), {
+    kind: "building",
+    phase: "computing",
+    turns: 73,
+    imported: true,
+    source: null,
+    working: true,
+  });
+  assert.deepEqual(running.calls.requests, []);
+  const failed = deps({
+    loadFacts: async () => IMPORTED_OLD({ lastRunStatus: "failed", failedRuns: 1 }),
+  });
+  assert.equal(
+    ((await loadHealthPageState(input({ model: EMPTY_EARLY }), failed.fakes)) as { phase?: string })
+      .phase,
+    "stalled",
+  );
+});
+
+test("an import still storing runs says that, not the reading (RC-255)", async () => {
+  const { fakes } = deps({ loadFacts: async () => IMPORTED_OLD() });
+  const state = await loadHealthPageState(
+    input({ model: EMPTY_EARLY, imports: [{ ...IMPORT, status: "running" }] }),
+    fakes,
+  );
+  assert.equal((state as { phase?: string }).phase, "importing");
+});
+
+test("a live project keeps its page: the mark holds back imported runs only (RC-255)", async () => {
+  const live = ledgerFacts({
+    rows: [{ day: "2026-09-28", closed: 73, open: 0, idleOpen: 0, imported: 0 }],
+    newestClosedAt: new Date("2026-09-28T10:00:00Z"),
+    runs: { ...NO_RUNS, lastRunAt: READ_AT, lastRunStatus: "completed", lastCompletedAt: READ_AT },
+    now: NOW,
+  });
+  const marked = deps({ loadFacts: async () => live });
+  const unmarked = deps({ loadFacts: async () => live });
+  const { emptyEarlyReading: _mark, ...withoutMark } = EMPTY_EARLY;
+  const state = await loadHealthPageState(input({ model: EMPTY_EARLY, imports: [] }), marked.fakes);
+  assert.deepEqual(
+    state,
+    await loadHealthPageState(input({ model: withoutMark, imports: [] }), unmarked.fakes),
+  );
+  assert.deepEqual(state, { kind: "ready", updating: true });
+  assert.deepEqual(marked.calls.requests, unmarked.calls.requests);
+});
+
+test("without the mark nothing changes: a reading with enough turns reads no ledger (RC-255)", async () => {
+  const { calls, fakes } = deps();
+  const { emptyEarlyReading: _mark, ...withoutMark } = EMPTY_EARLY;
+  assert.deepEqual(await loadHealthPageState(input({ model: withoutMark }), fakes), {
+    kind: "ready",
+    updating: true,
+  });
+  assert.deepEqual(calls.facts, []);
+});
+
+test("with the mark and an unreadable ledger, the page is what it would be without the mark (RC-255)", async () => {
+  const { fakes } = deps({ loadFacts: async () => null });
+  assert.deepEqual(await loadHealthPageState(input({ model: EMPTY_EARLY }), fakes), {
+    kind: "ready",
+    updating: true,
+  });
+});
+
 test("a live turn count with no computed reading is not a reading: it is being built, and watched", async () => {
   // Before a first run the model counts closed turns live: 60 of them, and no tiles.
   const { calls, fakes } = deps({

@@ -1,3 +1,4 @@
+import { existingToolStanding } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type { SignalKind } from "@/lib/readings/trace-signals/view";
 
 /**
@@ -96,16 +97,36 @@ export const ISSUE_HARM: Readonly<Record<SignalKind, IssueHarm>> = {
   cooccurring_intents: "tidies",
 };
 
-/** The issues of a project's open signal records (`SignalRecord` or `SignalView`-shaped). */
+/**
+ * The issues of a project's open signal records (`SignalRecord` or `SignalView`-shaped).
+ * An `unknown_tool` whose calls ran is a gap in the captured tool list, not a
+ * failing turn, so it costs no points. One only the catalog vouches for has no
+ * ok call, so its turns still count.
+ */
 export function scoredIssues(
-  records: readonly { id: string; kind: SignalKind; severity: number; totalTurns: number }[],
+  records: readonly {
+    id: string;
+    kind: SignalKind;
+    severity: number;
+    totalTurns: number;
+    metrics?: Readonly<Record<string, unknown>>;
+  }[],
 ): ScoredIssue[] {
-  return records.map((record) => ({
-    id: record.id,
-    kind: record.kind,
-    severity: record.severity,
-    turns: record.totalTurns,
-  }));
+  return records
+    .filter(
+      (record) =>
+        !(
+          record.kind === "unknown_tool" &&
+          record.metrics &&
+          existingToolStanding(record.metrics) === "succeeded"
+        ),
+    )
+    .map((record) => ({
+      id: record.id,
+      kind: record.kind,
+      severity: record.severity,
+      turns: record.totalTurns,
+    }));
 }
 
 /** What the score reads of one open issue. */

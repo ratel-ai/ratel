@@ -17,6 +17,7 @@ import {
   issueHarm,
   parseStoredHealthScore,
   type ScoredIssue,
+  scoredIssues,
   scoreGain,
 } from "@/lib/readings/trace-signals/health-score";
 import { SIGNAL_KINDS } from "@/lib/readings/trace-signals/view";
@@ -287,4 +288,24 @@ test("the missing points split by level and add up to exactly what is missing", 
     wastes: 0,
     tidies: 0,
   });
+});
+
+test("an unknown_tool whose calls ran is not a failing turn; one the catalog alone vouches for still is", () => {
+  const record = (id: string, kind: ScoredIssue["kind"], metrics: Record<string, unknown>) => ({
+    id,
+    kind,
+    severity: 0.5,
+    totalTurns: 10,
+    metrics,
+  });
+  const issues = scoredIssues([
+    record("ran", "unknown_tool", { toolStanding: "succeeded" }),
+    record("catalog", "unknown_tool", { toolStanding: "in_catalog" }),
+    record("missing", "unknown_tool", {}),
+    record("other", "error_loop", { toolStanding: "succeeded" }),
+  ]);
+  assert.deepEqual(
+    issues.map((i) => i.id),
+    ["catalog", "missing", "other"],
+  );
 });

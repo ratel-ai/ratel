@@ -163,6 +163,25 @@ export function resultFailureOf(value: unknown): string | null {
     .join(":");
 }
 
+/** Opens a framework's plain-text answer to a tool name it does not know. Anchored: "User not found" is a tool's own answer. */
+const NO_SUCH_TOOL =
+  /^\s*(?:error:?\s*)?(?:(?:tool|function)\s+['"`]?[\w.:/-]+['"`]?\s+(?:not found|does not exist|is not available)|unknown (?:tool|function)\b|no such (?:tool|function)\b|['"`]?[\w.:/-]+['"`]?\s+is not a valid tool\b)/i;
+
+/**
+ * Whether a captured plain-text result says the called tool does not exist.
+ * Recorded beside the call's outcome and never changing it: only the
+ * `unknown_tool` guard reads it, so that such a call does not vouch for the name.
+ */
+function resultSaysNoSuchTool(span: DecodedSpan): boolean {
+  for (const key of RESULT_KEYS) {
+    if (key in span.attributes) {
+      const value = span.attributes[key];
+      return typeof value === "string" && NO_SUCH_TOOL.test(value);
+    }
+  }
+  return false;
+}
+
 function argumentHash(span: DecodedSpan): string | null {
   for (const key of ARGUMENT_KEYS) {
     const raw = span.attributes[key];
@@ -340,6 +359,7 @@ function toolRow(
       ...(agent ? { agent } : {}),
       ...(errorType ? { error_type: errorType } : {}),
       ...(empty !== null ? { result_empty: empty } : {}),
+      ...(!errorType && resultSaysNoSuchTool(span) ? { result_no_such_tool: true } : {}),
       ...(argHash ? { arg_hash: argHash } : {}),
       ...(tookMs !== null ? { took_ms: tookMs } : {}),
       ...(ask ? { prompt: ask } : {}),

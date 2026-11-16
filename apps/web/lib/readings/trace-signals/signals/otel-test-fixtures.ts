@@ -26,6 +26,8 @@ export interface OtelCall {
   error?: string;
   /** The captured result was empty (true) or not (false); omitted when not captured. */
   empty?: boolean;
+  /** The captured result said in plain text that the tool does not exist. */
+  noSuchTool?: boolean;
   /** The captured arguments' hash; omitted when not captured. */
   args?: string;
   /** How long the call took. */
@@ -88,7 +90,11 @@ function stepRows(spec: OtelTraceSpec, t: SignalTurn): OtelFactRow[] {
     const step = invokes[i];
     if (
       !step ||
-      (!c.error && c.empty === undefined && c.args === undefined && c.agent === undefined)
+      (!c.error &&
+        c.empty === undefined &&
+        c.noSuchTool === undefined &&
+        c.args === undefined &&
+        c.agent === undefined)
     )
       return [];
     return [
@@ -98,6 +104,7 @@ function stepRows(spec: OtelTraceSpec, t: SignalTurn): OtelFactRow[] {
         traceId: t.turnKey?.slice("otlp:".length) ?? null,
         errorType: c.error ?? null,
         resultEmpty: c.error ? null : (c.empty ?? null),
+        ...(c.noSuchTool ? { resultNoSuchTool: true } : {}),
         argHash: c.args ?? null,
         agent: c.agent ?? null,
         inputTokens: null,

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { turn } from "@/lib/ledger/test-support";
 import type { AgentHealthLimits } from "@/lib/platform/entitlements";
+import { loadSucceededTools } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
   type Db,
@@ -133,4 +134,61 @@ test("a broken label read never fails the page: names fall back to the tools", a
   await client.exec("drop table trace_workflow_labels");
   const model = await load(db);
   assert.equal(model.workflows?.items[0]?.name, "find_pr > link_pr > notify");
+});
+
+test("a stored unknown_tool about an existing tool is told as such, stays on the page and costs no points", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, otelRuns());
+  await client.exec(
+    `update trace_events set ingest_source = 'otlp', payload = '{"derived_from":"otlp"}'::jsonb`,
+  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  const seen = NOW.toISOString();
+  const seed = (toolId: string) =>
+    client.query(
+      `insert into trace_signals (project_id, kind, subject_kind, subject_key, subject, status, severity, impact, n, metrics, evidence, first_seen_at, last_seen_at)
+       values ($1, 'unknown_tool', 'tool', $2, $3::jsonb, 'open', 0.3, 8, 8, '{"route":"show_turns","unknown":8,"calls":8,"byError":0,"byMenu":8,"share":1,"low":0.6,"high":1}', '{"totalTurns":8}', $4, $4)`,
+      [PROJECT_ID, toolId, JSON.stringify({ ids: [toolId], entryKind: "tool" }), seen],
+    );
+  const before = (await load(db)).score?.value;
+
+  await seed("lookup");
+  assert.equal((await load(db)).score?.value, before, "a tool whose calls ran costs no points");
+  await seed("ghost_tool");
+  const model = await load(db);
+  assert.ok(model.score!.value < before!, "a tool nothing vouches for still costs points");
+
+  const signals = new Map(
+    model.signals
+      .filter((signal) => signal.kind === "unknown_tool")
+      .map((signal) => [signal.subject.key, signal]),
+  );
+  assert.equal(
+    signals.get("lookup")?.claim,
+    "lookup returned without an error but was missing from the captured tool list.",
+  );
+  assert.equal(signals.get("lookup")?.toolStanding, "succeeded");
+  assert.equal(
+    signals.get("ghost_tool")?.claim,
+    "The agent calls ghost_tool, a tool that was not in the list it was given.",
+  );
+  assert.equal(signals.get("ghost_tool")?.toolStanding, undefined);
+  await client.close();
+});
+
+test("an ok call whose result says the tool does not exist does not vouch for it", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(client, db, otelRuns());
+  await client.exec(
+    `update trace_events set ingest_source = 'otlp', payload = '{"derived_from":"otlp"}'::jsonb`,
+  );
+  await client.exec(
+    `update trace_events set payload = '{"derived_from":"otlp","result_no_such_tool":true}'::jsonb where tool_id = 'lookup'`,
+  );
+  const window = { windowStart: new Date(NOW.getTime() - 30 * 86_400_000), windowEnd: NOW };
+  assert.deepEqual(
+    [...(await loadSucceededTools(PROJECT_ID, ["lookup", "find_pr"], window, db))],
+    ["find_pr"],
+  );
+  await client.close();
 });

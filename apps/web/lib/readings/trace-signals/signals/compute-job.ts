@@ -17,7 +17,7 @@ import { configured, decisionEngineConfigured } from "@/lib/readings/decisions/e
 import {
   HEALTH_SCORE_VERSION,
   healthScore,
-  type ScoredIssue,
+  scoredIssues,
 } from "@/lib/readings/trace-signals/health-score";
 import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
 import type {
@@ -73,6 +73,7 @@ import {
   setRunHealthScore as setRunHealthScoreFn,
   startSignalRun as startSignalRunFn,
 } from "@/lib/readings/trace-signals/signals/queries";
+import { withStoredToolStandings } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import {
   FIRST_READING_FLOOR,
   SIGNAL_KINDS,
@@ -212,10 +213,10 @@ function defaultDeps(env: Env): ComputeJobDeps {
     importRunning: async (projectId) => (await composition.importRunning?.(projectId)) ?? false,
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
     storeHealthScore: async (projectId, runId, turnsRead) => {
-      const issues = (await listOpenSignalsFn(projectId)).flatMap(scoredIssueOf);
+      const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
       await setRunHealthScoreFn(runId, {
         version: HEALTH_SCORE_VERSION,
-        value: healthScore(issues, turnsRead),
+        value: healthScore(scoredIssues(withStoredToolStandings(records)), turnsRead),
       });
     },
     now: () => new Date(),
@@ -227,23 +228,37 @@ const SCORED_KINDS: ReadonlySet<string> = new Set(SIGNAL_KINDS);
 
 /**
  * One open issue as the Health score reads it. Owned: upstream reads the rows through the
- * page's `toSignalRecord` (`lib/views`, a layer above this one); the score needs only these
- * four fields, read the same way.
+ * page's `toSignalRecord` (`lib/views`, a layer above this one); the score and the tool
+ * standings need only these fields, read the same way.
  */
-function scoredIssueOf(row: TraceSignalRow): ScoredIssue[] {
+function scoredRecordOf(row: TraceSignalRow): ScoredRecord[] {
   if (!SCORED_KINDS.has(row.kind)) return [];
   const evidence =
     row.evidence && typeof row.evidence === "object"
       ? (row.evidence as Record<string, unknown>)
       : {};
+  const metrics =
+    row.metrics && typeof row.metrics === "object" ? (row.metrics as Record<string, unknown>) : {};
   return [
     {
       id: row.id,
       kind: row.kind as SignalKind,
+      subjectKey: row.subjectKey,
       severity: row.severity,
-      turns: typeof evidence.totalTurns === "number" ? evidence.totalTurns : 0,
+      totalTurns: typeof evidence.totalTurns === "number" ? evidence.totalTurns : 0,
+      metrics,
     },
   ];
+}
+
+/** What the Health score and the tool standings read of one open issue. */
+interface ScoredRecord {
+  id: string;
+  kind: SignalKind;
+  subjectKey: string;
+  severity: number;
+  totalTurns: number;
+  metrics: Readonly<Record<string, unknown>>;
 }
 
 export type ComputeJobOutcome = "completed" | "time_budget" | "busy";

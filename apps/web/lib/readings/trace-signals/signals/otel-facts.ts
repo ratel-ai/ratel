@@ -22,6 +22,8 @@ export interface OtelStepFact {
   errorType: string | null;
   /** Null when the customer does not capture results. */
   resultEmpty: boolean | null;
+  /** An ok call whose captured result said the tool does not exist. */
+  resultNoSuchTool?: boolean;
   /** Null when the customer does not capture arguments. */
   argHash: string | null;
   /** The agent or subagent that made the call, when the spans name it. */
@@ -59,6 +61,8 @@ export interface OtelFactRow {
   traceId: string | null;
   errorType: string | null;
   resultEmpty: boolean | null;
+  /** On an ok tool call: its captured result said the tool does not exist. */
+  resultNoSuchTool?: boolean | null;
   argHash: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -111,13 +115,20 @@ export function createOtelFactsBuilder(): OtelFactsBuilder {
 function addStepFact(facts: OtelFacts, row: OtelFactRow): void {
   const errorType = row.type === "invoke_error" ? (row.errorType ?? "error") : null;
   const agent = row.agent ?? null;
-  if (errorType === null && row.resultEmpty === null && row.argHash === null && agent === null)
+  if (
+    errorType === null &&
+    row.resultEmpty === null &&
+    !row.resultNoSuchTool &&
+    row.argHash === null &&
+    agent === null
+  )
     return;
   facts.stepFacts.set(row.id, {
     errorType,
     resultEmpty: row.resultEmpty,
     argHash: row.argHash,
     agent,
+    ...(row.resultNoSuchTool ? { resultNoSuchTool: true } : {}),
   });
 }
 

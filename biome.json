@@ -417,6 +417,8 @@
         "apps/web/lib/readings/trace-signals/signals/workflow-run.ts",
         "apps/web/lib/readings/trace-signals/signals/workflow-run.test.ts",
         "apps/web/lib/readings/trace-signals/signals/workflow-stored.ts",
+        "apps/web/lib/readings/trace-signals/signals/unknown-tool-standing.ts",
+        "apps/web/lib/readings/trace-signals/signals/unknown-tool-standing.test.ts",
         "apps/web/lib/readings/trace-signals/signals/early-reading.test.ts",
         "apps/web/lib/readings/trace-signals/signals/linked-runs.integration.test.ts",
         "apps/web/lib/readings/trace-signals/workflows/assign.ts",

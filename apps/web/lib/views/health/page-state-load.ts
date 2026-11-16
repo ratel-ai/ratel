@@ -26,6 +26,10 @@ import { requestHealthReading } from "@/lib/views/health/reading-request";
  * about to say a reading is being built while nothing is on its way, asks for
  * one. Never inside an admin support session, which only looks.
  *
+ * An early reading that read none of the imported runs it counts
+ * (`model.emptyEarlyReading`, RC-255) is not ready: the ledger says whether
+ * the runs are imported, and the page says the reading is being built.
+ *
  * A turn count without a computed run (`computedAt` null: the live count
  * before a first reading) is not a reading. A read that failed is never taken
  * for an empty project: a reading that did not load is `unavailable` (and
@@ -76,6 +80,7 @@ export interface PageStateInput {
     | "computedAt"
     | "unbuiltAtReading"
     | "earlyReading"
+    | "emptyEarlyReading"
   >;
   /** The model is the empty fallback of a failed read, not the project's reading. */
   modelUnavailable?: boolean;
@@ -98,7 +103,8 @@ export async function loadHealthPageState(
   if (input.modelUnavailable) return UNAVAILABLE;
   const now = deps.now();
   const hasReading = input.model.computedAt !== null;
-  if (hasReading && healthReadiness(input.model) === "ready") return readyState(input, deps, now);
+  const readingReady = hasReading && healthReadiness(input.model) === "ready";
+  if (readingReady && !input.model.emptyEarlyReading) return readyState(input, deps, now);
 
   const imports = input.imports;
   const countImported = (imports ?? []).some(
@@ -109,6 +115,7 @@ export async function loadHealthPageState(
     countImported,
     windowDays: input.model.windowDays,
   });
+  if (!ledger && readingReady) return readyState(input, deps, now);
   // Unreadable: the model's own "collecting" meter is still true; nothing else can be said.
   if (!ledger)
     return input.model.turns > 0 && input.model.turns < input.model.floor ? null : UNAVAILABLE;
@@ -120,7 +127,10 @@ export async function loadHealthPageState(
     imports,
     planWindowDays: input.planWindowDays,
     waitingOn: input.model.waitingOn,
+    emptyEarlyReading: input.model.emptyEarlyReading,
   });
+  // Only a reading with an empty mark gets here ready: its runs are not imported, so it is the page as usual.
+  if (state.kind === "ready") return readyState(input, deps, now);
   if (input.readOnly || state.kind !== "building" || !readingRequestDue(state, ledger, now))
     return state;
   const requested = await deps.requestReading({

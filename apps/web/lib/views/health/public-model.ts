@@ -80,6 +80,7 @@ const MODEL_RULES: Rules<HealthPageModel> = {
   // Whether the reading is still early: the member page says so and asks for the full one.
   earlyReading: () => undefined,
   earlyProgress: () => undefined,
+  emptyEarlyReading: () => undefined,
   // The score is the member page's: the report has its own readings.
   score: () => undefined,
 };
@@ -87,6 +88,8 @@ const MODEL_RULES: Rules<HealthPageModel> = {
 const SIGNAL_RULES: Rules<SignalView> = {
   id: same("id"),
   kind: same("kind"),
+  // Says only what the claim beside it says, and keeps the row's title in step.
+  toolStanding: same("toolStanding"),
   tier: same("tier"),
   status: same("status"),
   subject: same("subject"),

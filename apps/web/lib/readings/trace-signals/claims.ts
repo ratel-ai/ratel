@@ -527,6 +527,21 @@ export function signalTitle(kind: SignalKind): string {
   return SIGNAL_KIND_TITLES[kind];
 }
 
+/** The headline of `unknown_tool` when every signal under it is about a tool that exists, whichever path raised it. */
+export const EXISTING_TOOL_TITLE = "Known tool flagged as missing";
+
+/** A row's headline from the signals under it: its kind's, unless they say otherwise. */
+export function signalsTitle(
+  kind: SignalKind,
+  signals: readonly { toolStanding?: unknown }[],
+): string {
+  return kind === "unknown_tool" &&
+    signals.length > 0 &&
+    signals.every((signal) => signal.toolStanding)
+    ? EXISTING_TOOL_TITLE
+    : signalTitle(kind);
+}
+
 /** The unit under a row's figure: the figure's own caption, else its kind's. */
 export function figureCaption(kind: SignalKind, figure: Pick<SignalFigure, "caption">): string {
   return figure.caption ?? SIGNAL_FIGURE_CAPTIONS[kind];

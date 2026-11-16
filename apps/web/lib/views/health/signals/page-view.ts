@@ -21,6 +21,7 @@ import {
   windowDays,
 } from "@/lib/readings/trace-signals/signals/project-metrics";
 import { signalKey } from "@/lib/readings/trace-signals/signals/types";
+import { existingToolStanding } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type {
   CaptureLevel,
   CaptureUnlock,
@@ -165,6 +166,8 @@ export interface PageInputs {
   floor?: number;
   /** Earlier readings' stored Health scores, newest first (`listEarlierHealthScores`). */
   scoreHistory?: readonly unknown[];
+  /** `cloud-health-import-first-reading`: mark an early reading that read no turns (`emptyEarlyReading`). */
+  holdEmptyEarlyReading?: boolean;
 }
 
 function toSignalView(
@@ -175,9 +178,11 @@ function toSignalView(
   labels?: WorkflowLabels,
 ): SignalView {
   const claim = claimModel(record, names, evidenceDays, labels);
+  const toolStanding = existingToolStanding(record.metrics);
   return {
     id: record.id,
     kind: record.kind,
+    ...(toolStanding ? { toolStanding } : {}),
     tier: record.tier,
     status: record.status,
     subject: claim.subject,
@@ -321,6 +326,12 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
       ? { unbuiltAtReading: summary.unbuiltAtStart }
       : {}),
     ...(summary.earlyReading === true ? { earlyReading: true as const } : {}),
+    ...(inputs.holdEmptyEarlyReading &&
+    summary.earlyReading === true &&
+    inputs.run.turnsScanned === 0 &&
+    total.turns > 0
+      ? { emptyEarlyReading: true as const }
+      : {}),
     score: scoreFor(inputs),
   };
 }
