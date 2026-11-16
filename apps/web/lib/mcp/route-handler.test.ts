@@ -271,7 +271,14 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     .map((flag: { key: string }) => flag.key)
     .sort();
   // Owned: the deployment's FF_* switches, not upstream's flag service.
-  assert.deepEqual(keys, ["FF_EVAL_GATE", "FF_MCP_LOOP", "FF_SESSION_REPLAY", "FF_STAGE_SPINE"]);
+  assert.deepEqual(keys, [
+    "FF_EVAL_GATE",
+    "FF_HEALTH_SCORE",
+    "FF_MCP_LOOP",
+    "FF_QUICK_FIRST_READING",
+    "FF_SESSION_REPLAY",
+    "FF_STAGE_SPINE",
+  ]);
 });
 
 test("an exhausted rate limit returns 429 with Retry-After", async () => {

@@ -190,6 +190,32 @@ test("a reading that started while turns were still being built asks for one tha
   });
 });
 
+test("an early reading (RC-224) asks for the full one and watches, like a partial one", async () => {
+  const early: Model = { ...READING, earlyReading: true };
+  const asked = deps();
+  assert.deepEqual(await loadHealthPageState(input({ model: early }), asked.fakes), {
+    kind: "ready",
+    updating: true,
+  });
+  assert.deepEqual(asked.calls.requests, ["reading_early"]);
+
+  const working = deps({}, { ...NO_RUNS, working: true, lastRunAt: NOW.toISOString() });
+  assert.deepEqual(await loadHealthPageState(input({ model: early }), working.fakes), {
+    kind: "ready",
+    updating: true,
+  });
+  assert.deepEqual(working.calls.requests, []);
+
+  const recent = deps(
+    {},
+    { ...NO_RUNS, lastRunAt: new Date(NOW.getTime() - MINUTE).toISOString() },
+  );
+  assert.deepEqual(await loadHealthPageState(input({ model: early }), recent.fakes), {
+    kind: "ready",
+  });
+  assert.deepEqual(recent.calls.requests, []);
+});
+
 test("an admin support session decides the same state but never asks for work", async () => {
   const { calls, fakes } = deps();
   const state = await loadHealthPageState(input({ readOnly: true }), fakes);

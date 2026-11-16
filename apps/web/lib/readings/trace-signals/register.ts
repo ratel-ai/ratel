@@ -4,6 +4,7 @@ import { ledgerSeams } from "@/lib/ledger/turns/build-job";
 import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import {
   computeProjectTraceSignals,
+  enqueueEarlyFirstReading,
   enqueueFirstSignalRun,
   parseComputePayload,
 } from "./signals/compute-job";
@@ -22,15 +23,18 @@ type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackS
  * under upstream's heartbeat key.
  *
  * Loading this module also fills the ledger's seams: the turn build enqueues a run when a
- * page asked for one, and kicks the first reading once enough turns have closed. Only the
+ * page asked for one, kicks the first reading once enough turns have closed, and, with the
+ * quick first reading on, starts it from the last week while an older backlog still builds. Only the
  * job runner builds turns, and it loads the registry first, so the seams are set before
  * any build runs.
  */
 
-/** The ledger's two hooks into the signal runs, as this reading fills them. */
+/** The ledger's hooks into the signal runs, as this reading fills them. */
 export const ledgerSeamFills: Required<typeof ledgerSeams> = {
   enqueueReading: (projectId, trigger) => enqueueComputeJob(projectId, trigger),
   onBacklogDrained: (projectId) => enqueueFirstSignalRun(projectId),
+  // The quick first reading's switch is the deployment's, so no organization is read for it.
+  onBacklogProgress: (projectId) => enqueueEarlyFirstReading(projectId, null),
 };
 
 export function fillLedgerSeams(seams: Partial<typeof ledgerSeams> = ledgerSeams): void {

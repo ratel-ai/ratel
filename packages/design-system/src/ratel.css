@@ -247,3 +247,57 @@
     animation: onboarding-dissolve 0.34s cubic-bezier(0.4, 0, 0.2, 1) 0.72s both;
   }
 }
+
+/* The Health score while a reading is early (RC-225): the score's tip beats
+ * like a pulse, and a wave runs round the rest of the ring, so "still
+ * calculating" reads without a word. The one ambient motion DESIGN.md keeps
+ * means work in progress; this is that. Reduced motion: both rest. */
+@keyframes score-beat {
+  0%, 40%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  10% {
+    transform: scale(1.45);
+  }
+  20% {
+    transform: scale(1.05);
+  }
+  28% {
+    transform: scale(1.3);
+    opacity: 0.85;
+  }
+}
+
+@keyframes score-wave {
+  0%, 60%, 100% {
+    opacity: 0.18;
+  }
+  20% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes live-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .score-beat {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: score-beat 1.4s ease-in-out infinite;
+  }
+  .score-wave {
+    animation: score-wave 1.8s ease-in-out infinite;
+    animation-delay: var(--wave-delay, 0ms);
+  }
+  .live-dot {
+    animation: live-dot 1.4s ease-in-out infinite;
+  }
+}

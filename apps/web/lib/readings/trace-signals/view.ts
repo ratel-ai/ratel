@@ -1,7 +1,9 @@
 import type { PlanLimits } from "@/lib/platform/entitlements";
 import { formatSharePercent } from "@/lib/readings/trace-signals/claims";
 import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
+import type { HealthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { StoredSetup } from "@/lib/readings/trace-signals/setup-facts";
+import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
 import type { WorkflowsView } from "@/lib/readings/trace-signals/view-workflows";
 
 /**
@@ -595,6 +597,21 @@ export interface HealthPageModel {
    * on a complete reading and before the first run.
    */
   unbuiltAtReading?: number;
+  /**
+   * The reading is early (RC-224, `summary.earlyReading`): made before the
+   * project's full one, from the last week, a backlog still being built or an
+   * import still running. The page says it is not final and asks for the full
+   * one. Absent on a full reading and before the first run.
+   */
+  earlyReading?: true;
+  /** How far the early reading has got: runs read of the runs there are. Set only with `earlyReading`. */
+  earlyProgress?: EarlyProgress;
+  /**
+   * The Health score (RC-225, `health-score.ts`): 0 to 100 from the reading's
+   * open issues, with its change since the previous reading and what fixing
+   * each issue would win back. Null before the first run; absent on fixtures.
+   */
+  score?: HealthScoreView | null;
 }
 
 /** The header's words for a window: "this week", "in the last 30 days". */

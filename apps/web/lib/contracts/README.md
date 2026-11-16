@@ -17,6 +17,10 @@ job; its optional `registerSourceIds` names the source ids the importer stores r
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
+The optional `importRunning` port answers whether an import is storing runs for a project right
+now, so an Agent health reading made meanwhile is marked early; the open-source edition has no
+importer and leaves it out.
+
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source
