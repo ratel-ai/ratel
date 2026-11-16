@@ -77,6 +77,11 @@ const MODEL_RULES: Rules<HealthPageModel> = {
   workflows: (m) => (m.workflows ? pick(m.workflows, WORKFLOWS_RULES) : null),
   // How the team's ingest was keeping up when the reading ran: the member page's business.
   unbuiltAtReading: () => undefined,
+  // Whether the reading is still early: the member page says so and asks for the full one.
+  earlyReading: () => undefined,
+  earlyProgress: () => undefined,
+  // The score is the member page's: the report has its own readings.
+  score: () => undefined,
 };
 
 const SIGNAL_RULES: Rules<SignalView> = {

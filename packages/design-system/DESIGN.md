@@ -306,7 +306,8 @@ A headline is a stat, a trend is a line or bars, a share is a `ShareBar`. No pie
 WCAG 2.2 AA.
 
 - Every flow works by keyboard. Focus rings use `ring-focus` (2 px, 2 px offset) on
-  `:focus-visible`.
+  `:focus-visible`. Text fields are the exception: the caret already says where you are, so their
+  border brightens to `fg-subtle` (5.8:1) and nothing coral rings them.
 - Hit targets at least 24 px, 44 px on touch.
 - Text contrast at least 4.5:1, large text and marks 3:1 (the color table above is measured
   against `bg-app`).
@@ -343,7 +344,6 @@ It is still built from this package's components, with its look passed through v
 | Screen | Status |
 |---|---|
 | Error pages, trace comparison | Here |
-| Test a search (`/playground`) | Here |
 | Experiment detail, mismatches, selection (`/calibration/...`) | To port |
 
 | Rule set aside | What a Micro screen does |
@@ -358,14 +358,11 @@ Variants for Micro screens, not for ordinary pages:
 
 | Component | Addition |
 |---|---|
-| `Button` | `variant="inverse"`, `variant="outline"`, `size="xs"` |
-| `SegmentedControl` | `variant="inverse"`, `disabled` and `title` on an option |
-| `Tooltip` | `className`, `arrow` |
-| `MenuGroup` | `labelClassName` |
-| `DialogContent` | `titleClassName` |
+| `Button` | `variant="outline"` |
+| `SegmentedControl` | `disabled` and `title` on an option |
+| `Tooltip` | `className` |
 
-`src/ratel.css` holds its palette mapping, global classes and animations: `description-split-enter`, `action-reveal-enter`,
-`bench-swap-left`, `bench-swap-right`, `bench-settle`, `analyze-scan-fill`.
+`src/ratel.css` holds its palette mapping and global classes.
 
 ## Where things live
 

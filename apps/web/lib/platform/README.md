@@ -11,6 +11,8 @@ npm packages.
 | `db/migrations/` | the migrations: one baseline file per schema fragment, then one file per change (`pnpm db:generate`, checked by `pnpm db:check`) |
 | `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from the environment; `apiUrl()` builds `/api/v1` URLs |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
+| `db/top-queries.ts` | the statements that cost the database most since the last reset (`pg_stat_statements`; null where it is not installed or not preloaded), which the worker logs once a day |
+| `process-stats.ts` | `process_stats` once a minute from every process (memory, event loop delay), started where this process exports its own telemetry (`instrumentation.node.ts`) |
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
 | `db/tenant-scope.test.ts` | upstream's source check, a copy: every read of a big telemetry table names a project, or says why not with a `// cross-project:` comment |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |
@@ -27,6 +29,7 @@ npm packages.
 | `experimental-features.ts` | `experimentalFeatureEnabled(flag)`: a feature's own `FF_*` flag, or `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition (the composition's edition; Cloud ignores it). Every experimental flag reads through it |
 | `environment.ts` | `APP_ENV` as the one public runtime value; local-environment allowlist |
 | `logger.ts`, `request-log.ts`, `request-log-labels.ts`, `rate-limit.ts`, `http/`, `otel/` | pino with error redaction, per-request logging (with the organization and project slugs), token buckets, body caps, self-telemetry: the platform's own traces and logs, registered at boot by `instrumentation.node.ts` only when both `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` are set, and flushed on a stop |
+| `support-session.ts` | upstream's `isRestrictedBySupportSession` over the session port's `actingAs`, for copied actions that refuse writes in a support session |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions; refused in a support session |
 | `organization.ts`, `api-keys.ts`, `api-keys-observability.ts` | pure helpers: slugs and roles, key generation and hashing, expired-key reporting |
 | `api-key-bearer.ts` | `resolveProjectFromBearer`: the project a `/api/v1/*` bearer key belongs to |

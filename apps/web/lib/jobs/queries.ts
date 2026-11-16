@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, sql } from "drizzle-orm";
-import { jobTierSql } from "@/lib/jobs/policy";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
 
@@ -7,7 +7,10 @@ import { getDb } from "@/lib/platform/db/client";
 
 export type JobsDb = Pick<ReturnType<typeof getDb>, "select" | "insert">;
 
-/** A `running` job older than this with no result recorded is a zombie: the reaper fails it. */
+/**
+ * A `running` job older than this with no result recorded is a zombie: the reaper fails it. It
+ * matches the worker sweep's default time limit (`DEFAULT_DRAIN_TIMEOUT_MS`).
+ */
 export const STALE_JOB_MS = 10 * 60 * 1000;
 
 /**
@@ -118,6 +121,40 @@ export async function readJobQueueClock(
   return new Date((result.rows[0] as { now: string | Date }).now);
 }
 
+/**
+ * How long the oldest queued job of tier 0 or 1 has waited, in ms, on the database's clock; null
+ * when none is queued. Tier 2 sweeps and imports wait on purpose (`QUEUE_LAG_KINDS`). A job a
+ * per-project cap holds back still counts, because no column says why a job waits. An index on
+ * `status` finds the queued rows, and no index holds the kind, so the kinds are a filter; the
+ * read's cost depends on the queue, and no plan is guaranteed.
+ */
+export async function readOldestQueuedJobAgeMs(
+  db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
+): Promise<number | null> {
+  const result = await db.execute(oldestQueuedJobAgeQuery());
+  const age = (result.rows[0] as { age_ms: string | number | null } | undefined)?.age_ms;
+  return age === null || age === undefined ? null : Number(age);
+}
+
+/** The query of {@link readOldestQueuedJobAgeMs}. */
+export function oldestQueuedJobAgeQuery(): SQL {
+  const kinds = sql.join(
+    QUEUE_LAG_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
+  return sql`
+    select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
+    from ${jobs}
+    where ${jobs.status} = 'queued' and ${jobs.kind} = any(array[${kinds}]::text[])
+  `;
+}
+
+/** Which job kinds a claim may take: only some, or all but some. */
+export interface JobKindFilter {
+  only?: readonly string[];
+  except?: readonly string[];
+}
+
 /** Running jobs one project may have at once, across every drain. 0 turns the cap off. */
 export function jobsRunningPerProject(
   env: Readonly<Record<string, string | undefined>> = process.env,
@@ -138,12 +175,19 @@ export function jobsRunningPerProject(
  * cap: two drains claiming at the same instant can each pass it), and the projects in
  * `avoidProjects` (the ones this drain just served) go last within a tier. Ordering, not a
  * filter: if only they have work, it still runs. Tiers come from `lib/jobs/policy.ts`.
+ *
+ * `kinds` keeps a claim to some kinds or away from them: the worker's import lane takes only
+ * `run_import`, its analysis lane and the cron drain everything else (RC-40).
  */
 export async function claimNextQueuedJob(
   projectId?: string,
   createdBefore?: Date,
   db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
-  options: { avoidProjects?: readonly string[]; runningPerProject?: number } = {},
+  options: {
+    avoidProjects?: readonly string[];
+    runningPerProject?: number;
+    kinds?: JobKindFilter;
+  } = {},
 ): Promise<{
   id: string;
   projectId: string;
@@ -155,10 +199,25 @@ export async function claimNextQueuedJob(
   const createdFilter = createdBefore
     ? sql`and q.created_at <= ${createdBefore.toISOString()}`
     : sql``;
+  const kindFilter = options.kinds?.only
+    ? sql`and q.kind = any(array[${sql.join(
+        options.kinds.only.map((kind) => sql`${kind}`),
+        sql`, `,
+      )}]::text[])`
+    : options.kinds?.except
+      ? sql`and q.kind <> all(array[${sql.join(
+          options.kinds.except.map((kind) => sql`${kind}`),
+          sql`, `,
+        )}]::text[])`
+      : sql``;
   const cap = options.runningPerProject ?? jobsRunningPerProject();
+  // Imports (run_import, RC-40) have their own lane in the worker and can take many minutes. A
+  // running one does not count, or it would hold back the project's analysis (including the
+  // build the import itself asks for), and the cap does not hold one back either: a project runs
+  // one import at most.
   const capFilter =
     cap > 0
-      ? sql`and (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running') < ${cap}`
+      ? sql`and (q.kind = 'run_import' or (select count(*) from ${jobs} r where r.project_id = q.project_id and r.status = 'running' and r.kind <> 'run_import') < ${cap})`
       : sql``;
   const avoid = options.avoidProjects ?? [];
   const tier = jobTierSql(sql`q.kind`);
@@ -173,7 +232,7 @@ export async function claimNextQueuedJob(
     .update(jobs)
     .set({ status: "running", startedAt: new Date() })
     .where(
-      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
+      sql`${jobs.id} = (select q.id from ${jobs} q where q.status = 'queued' ${projectFilter} ${createdFilter} ${kindFilter} ${capFilter} ${order} for update of q skip locked limit 1)`,
     )
     .returning({
       id: jobs.id,

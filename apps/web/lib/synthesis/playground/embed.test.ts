@@ -168,3 +168,16 @@ test("clipped text is what gets sent", async () => {
   assert.equal(calls[0][0].length, MAX_INPUT_CHARS);
   assert.equal(calls[0][0].endsWith("TAIL"), false);
 });
+
+test("clipInput does not cut an emoji in half at the input cap", () => {
+  const clipped = clipInput(`${"a".repeat(1_999)}😀 tail`);
+  assert.equal(clipped, "a".repeat(1_999));
+  assert.ok(clipped.isWellFormed());
+});
+
+test("embedTexts sends no lone surrogate upstream", async () => {
+  const { provider, calls } = fakeProvider();
+  await embedTexts(["short \uD83D text"], { provider, cache: new Map() });
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0]?.[0]?.isWellFormed());
+});

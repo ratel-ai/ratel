@@ -97,6 +97,8 @@ function deps(db: Db, over: Partial<IntentEngineJobDeps> = {}): Partial<IntentEn
     trackServerEvent: async () => {},
     // Past the hold grace: a search nobody acted on is folded as it is.
     now: () => new Date(Date.now() + 5 * 60_000),
+    // These tests read a few asks per run; batching has its own tests below.
+    minBatch: 0,
     ...over,
   };
 }
@@ -622,6 +624,7 @@ test("a run that finds another one holding the project's lock stops at once: bus
     loadCatalogTools: async () => [],
     trackServerEvent: async () => {},
     enqueueClusterIntentsJob: async () => null,
+    minBatch: 0,
   });
   assert.equal(result.outcome, "busy");
   assert.equal(result.busy, true);
@@ -766,4 +769,37 @@ test("retention: idle clusters and their assignments expire, under the lock, a b
     1,
     "its assignment went with it",
   );
+});
+
+test("batching (RC-213): a few new events wait for more, a full batch or an old enough ask runs, a first run never waits", async () => {
+  const { client, db } = await setup();
+  // Each turn here is two events (the search and its call): a batch is three turns.
+  const batch = (over: Partial<IntentEngineJobDeps> = {}) =>
+    deps(db, { minBatch: 6, maxWaitMs: 15 * 60_000, ...over });
+  await ingest(db, [...turn("assign this task to emp-1", "assign_task")]);
+  const first = await runIntentEngine(PROJECT_ID, batch());
+  assert.equal(first.outcome, "clustered", "the first run reads whatever there is");
+
+  await ingest(db, [...turn("create task", "create_task")]);
+  const waited = await runIntentEngine(PROJECT_ID, batch());
+  assert.equal(waited.outcome, "waiting");
+  assert.equal(waited.waitingEvents, 2);
+  assert.equal(waited.pages, 0, "no page read, no cluster loaded");
+  assert.equal(await count(client, "select count(*)::int as n from intent_cluster_assignments"), 1);
+
+  const late = await runIntentEngine(
+    PROJECT_ID,
+    batch({ now: () => new Date(Date.now() + 20 * 60_000) }),
+  );
+  assert.equal(late.outcome, "clustered", "the oldest waiting ask is past the wait");
+  assert.equal(late.asks, 1);
+
+  await ingest(db, [
+    ...turn("update task", "update_task"),
+    ...turn("cancel task", "cancel_task"),
+    ...turn("close task", "close_task"),
+  ]);
+  const full = await runIntentEngine(PROJECT_ID, batch());
+  assert.equal(full.outcome, "clustered", "a full batch runs at once");
+  assert.equal(full.asks, 3);
 });

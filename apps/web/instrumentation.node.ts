@@ -123,6 +123,20 @@ export async function registerNodeInstrumentation(
 }
 
 /**
+ * Memory and event loop once a minute from every process (upstream's RC-216), where this
+ * process exports its own telemetry: the deployments whose logs reach a dashboard. Upstream keys
+ * it on its production and staging environments, which are the ones that export.
+ */
+export async function startProcessStatsIfExported(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<void> {
+  const { selfTelemetryEnabled } = await import("@/lib/platform/otel/config");
+  if (!selfTelemetryEnabled(env)) return;
+  const { startProcessStats } = await import("@/lib/platform/process-stats");
+  startProcessStats(env);
+}
+
+/**
  * Node-only boot. Kept out of instrumentation.ts so the Edge bundle never sees process.exit
  * (Next analyzes that file for both runtimes).
  *

@@ -234,3 +234,145 @@ test("every calibration read answers, with no flag to switch it on", async () =>
     assert.equal(result.ok, true, `${id} must answer without any flag set`);
   }
 });
+
+test("the calibration list keeps each experiment's per-arm traffic", async () => {
+  const result = await run(
+    "list_calibrations",
+    {},
+    {
+      listExperiments: (async () => [
+        {
+          ...experiment("noisy-experiment"),
+          arms: [
+            { arm: "control", traceCount: 6, traceShare: 0.6 },
+            { arm: "candidate", traceCount: 4, traceShare: 0.4 },
+          ],
+        },
+      ]) as unknown as CalibrationOperationDeps["listExperiments"],
+    },
+  );
+
+  const [row] = (result as { data: { calibrations: Array<Record<string, unknown>> } }).data
+    .calibrations;
+  assert.equal(row.mode, "shadow");
+  assert.equal(row.baselineArm, "control");
+  assert.equal(row.traceCount, 10);
+  assert.deepEqual(row.arms, [
+    { arm: "control", traceCount: 6, traceShare: 0.6 },
+    { arm: "candidate", traceCount: 4, traceShare: 0.4 },
+  ]);
+});
+
+test("calibration detail carries each side's latency, the shadow's reliability, and the filtered count", async () => {
+  const base = deps();
+  const result = await run(
+    "get_calibration",
+    { experimentName: "noisy-experiment" },
+    {
+      getRankingCalibration: (async (
+        ...args: Parameters<CalibrationOperationDeps["getRankingCalibration"]>
+      ) => {
+        const view = await base.getRankingCalibration(...args);
+        return {
+          ...view!,
+          pairs: view!.pairs.map((pair) => ({
+            ...pair,
+            served: {
+              outcomes: { ok: 80 },
+              errorRate: 0,
+              averageDurationMs: 40.123,
+              p50DurationMs: 38,
+              p95DurationMs: 90,
+            },
+            shadow: {
+              outcomes: { ok: 78, timeout: 2 },
+              errorRate: 0.025,
+              averageDurationMs: 55,
+              p50DurationMs: 50,
+              p95DurationMs: 120,
+            },
+          })),
+          lifecycle: [
+            {
+              arm: "candidate",
+              role: "shadow",
+              comparisonCount: 80,
+              top1Rate: 0.5,
+              exactOrderRate: 0.25,
+              averageJaccardAtK: 0.6,
+              agreementK: 5,
+              skipCount: 2,
+              fallbackCount: 1,
+              dropCount: 3,
+              dropsByReason: { timeout: 3 },
+              shadowCoverage: 0.95,
+            },
+          ],
+        };
+      }) as unknown as CalibrationOperationDeps["getRankingCalibration"],
+    },
+  );
+
+  const data = (
+    result as {
+      data: {
+        filteredComparisonCount: number;
+        armPairs: Array<{
+          served: { averageDurationMs: number };
+          shadow: { outcomes: Record<string, number> };
+        }>;
+        lifecycle: Array<{
+          arm: string;
+          dropped: number;
+          coverage: number;
+          dropsByReason: Record<string, number>;
+        }>;
+      };
+    }
+  ).data;
+  assert.equal(data.filteredComparisonCount, 40);
+  assert.equal(data.armPairs[0].served.averageDurationMs, 40.1);
+  assert.deepEqual(data.armPairs[0].shadow.outcomes, { ok: 78, timeout: 2 });
+  assert.deepEqual(data.lifecycle[0], {
+    arm: "candidate",
+    role: "shadow",
+    comparisonCount: 80,
+    top1Rate: 0.5,
+    exactOrderRate: 0.25,
+    averageMatchScore: 0.6,
+    k: 5,
+    skipped: 2,
+    fellBack: 1,
+    dropped: 3,
+    dropsByReason: { timeout: 3 },
+    coverage: 0.95,
+  });
+});
+
+test("mismatch facets combine with any by default, and all on request", async () => {
+  const seen: string[] = [];
+  const capture = {
+    listComparisonPage: (async (
+      _projectId: string,
+      _name: string,
+      _window: unknown,
+      options: { selection?: { match: string } },
+    ) => {
+      seen.push(options.selection?.match ?? "none");
+      return { rows: [], total: 0 };
+    }) as unknown as CalibrationOperationDeps["listComparisonPage"],
+  };
+
+  await run(
+    "list_calibration_mismatches",
+    { experimentName: "e", facets: ["top1", "missing"] },
+    capture,
+  );
+  await run(
+    "list_calibration_mismatches",
+    { experimentName: "e", facets: ["top1", "missing"], match: "all" },
+    capture,
+  );
+
+  assert.deepEqual(seen, ["any", "all"]);
+});

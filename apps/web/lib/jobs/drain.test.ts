@@ -242,6 +242,32 @@ test("a failed tick answers 500 so an external scheduler can alert on it", async
   }
 });
 
+test("a tick the route runs logs its outcome for the drain monitors; an API-only answer logs nothing", async () => {
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "s3cret";
+  const codes: string[] = [];
+  const observer = {
+    oldestQueuedJobAgeMs: async () => 0,
+    log: (_level: string, _fields: unknown, code: string) => codes.push(code),
+    reportException: () => {},
+  };
+  const authorized = () =>
+    new Request("http://localhost/api/cron/drain", {
+      headers: { authorization: "Bearer s3cret" },
+    });
+  const deps = tick([], { observability: observability().deps });
+  try {
+    assert.equal((await drainCron(authorized(), deps, "all", observer)).status, 200);
+    assert.deepEqual(codes, ["drain_started", "drain_completed"]);
+    codes.length = 0;
+    assert.equal((await drainCron(authorized(), deps, "api", observer)).status, 202);
+    assert.deepEqual(codes, []);
+  } finally {
+    if (previous === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = previous;
+  }
+});
+
 test("data retention is opt-in", () => {
   assert.equal(dataRetentionEnabled({}), false);
   assert.equal(dataRetentionEnabled({ DATA_RETENTION_ENABLED: "0" }), false);

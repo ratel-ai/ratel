@@ -9,6 +9,7 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import {
@@ -59,6 +60,7 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
+  const scoreLeads = experimentalFeatureEnabled("FF_HEALTH_SCORE");
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
   const [loaded, imports, share, tasks, fixes, corrections] = await Promise.all([
@@ -134,6 +136,7 @@ export default async function AgentHealthPage({
       reportHref={healthReportHref(project.id, windowDays)}
       imports={imports}
       share={share}
+      scoreLeads={scoreLeads}
     />
   );
 }

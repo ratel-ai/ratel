@@ -150,3 +150,12 @@ test('a short "try again" right after the user\'s last turn is a retry of it', (
     "only in the user's own words",
   );
 });
+
+test("an ask cut at the cap never leaves half an emoji", () => {
+  const asks = chooseAsks(
+    new Map([
+      ["t1", { text: `${"a".repeat(499)}😀 and more words`, source: "user_message" as const }],
+    ]),
+  );
+  assert.equal(asks.get("t1")?.text, "a".repeat(499));
+});

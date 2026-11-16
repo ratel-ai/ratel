@@ -315,3 +315,11 @@ test("a long ask is clipped for the question but keeps its full-text id", () => 
     "read the pricing FAQ",
   );
 });
+
+test("a long ask with an emoji at the cut never leaves half of it in the question", () => {
+  const ask = `${"a".repeat(MAX_ASK_CHARS - 1)}😀 and more words`;
+  const [row] = decisionCases([{ ask, turns: [] }]);
+  assert.ok(row?.query.isWellFormed());
+  assert.equal(row?.query, "a".repeat(MAX_ASK_CHARS - 1));
+  assert.equal(row?.id, askHash({ ask }));
+});

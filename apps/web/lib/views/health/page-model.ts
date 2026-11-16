@@ -10,9 +10,16 @@ import {
   type DismissedSignal,
   isDismissable,
 } from "@/lib/readings/trace-signals/dismiss";
+import { SCORE_TREND_READINGS } from "@/lib/readings/trace-signals/health-score";
 import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
+import { targetWindowDays } from "@/lib/readings/trace-signals/signals/compute";
+import {
+  type EarlyProgress,
+  earlyProgress,
+} from "@/lib/readings/trace-signals/signals/early-reading";
 import {
   latestSignalRun,
+  listEarlierHealthScores,
   listMutedSignals,
   listOpenSignals,
 } from "@/lib/readings/trace-signals/signals/queries";
@@ -129,6 +136,35 @@ async function insightsFor(
   }
 }
 
+/**
+ * How far an early reading has got: the turns it read of the closed turns in
+ * the plan's whole window now. Supplementary: a failed count shows no
+ * percentage, never a wrong one.
+ */
+async function earlyProgressFor(
+  projectId: string,
+  read: number,
+  planDays: number,
+  now: Date,
+  db: PageModelDeps["db"],
+): Promise<EarlyProgress | null> {
+  try {
+    const total = await countClosedTurns(
+      projectId,
+      new Date(now.getTime() - targetWindowDays(planDays) * DAY_MS),
+      now,
+      db,
+    );
+    return earlyProgress(read, total);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "early reading progress unreadable");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "agent_health_early_progress",
+    });
+    return null;
+  }
+}
+
 async function limitsFor(projectId: string): Promise<AgentHealthLimits> {
   const organization = await getOrganizationByProjectId(projectId);
   return organization ? getAgentHealthLimits(organization) : NO_ORGANIZATION_LIMITS;
@@ -180,13 +216,14 @@ export async function loadHealthPageModel(
     );
   }
 
-  const [limits, rows, names, labels, insights, muted] = await Promise.all([
+  const [limits, rows, names, labels, insights, muted, scoreHistory] = await Promise.all([
     deps.getLimits(projectId),
     listOpenSignals(projectId, deps.db),
     loadCatalogNames(projectId, deps.db),
     deps.getLabels(projectId),
     deps.getInsights(projectId),
     listMutedSignals(projectId, DISMISSABLE_KINDS, deps.db),
+    listEarlierHealthScores(projectId, SCORE_TREND_READINGS - 1, deps.db),
   ]);
   const records = rows.map(toSignalRecord).filter((r): r is SignalRecord => r !== null);
   const shown = Number.isFinite(limits.agentHealthSignalsShown)
@@ -210,6 +247,7 @@ export async function loadHealthPageModel(
     finishedAt: run.finishedAt,
     summary,
     turnSourceMix: mixOf(run.turnSourceMix),
+    turnsScanned: run.turnsScanned,
   };
   const model = buildHealthPageModel(
     {
@@ -221,10 +259,24 @@ export async function loadHealthPageModel(
       names,
       labels,
       insights,
+      scoreHistory,
     },
     now,
   );
-  return { ...model, dismissed: dismissedOf(muted, names) };
+  const progress = model.earlyReading
+    ? await earlyProgressFor(
+        projectId,
+        run.turnsScanned,
+        limits.agentHealthWindowDays,
+        now,
+        deps.db,
+      )
+    : null;
+  return {
+    ...model,
+    dismissed: dismissedOf(muted, names),
+    ...(progress ? { earlyProgress: progress } : {}),
+  };
 }
 
 /** Hidden slow-tool signals, named for the "Show again" line. */

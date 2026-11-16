@@ -33,7 +33,7 @@ export const traceSignalRuns = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    // "scheduled" | "manual" | "first_build" | "data_fixed".
+    // "scheduled" | "manual" | "first_build" | "data_fixed" | "full_reading".
     trigger: text("trigger").notNull(),
     // "queued" | "running" | "completed" | "failed".
     status: text("status").notNull().default("queued"),

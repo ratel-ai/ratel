@@ -41,6 +41,7 @@ export function methodForKind(kind: string): SimMethod {
 export const CANT_SIMULATE = {
   noModel: "Needs model replay: no model is configured",
   noPrompts: "Needs stored prompts: this run's model calls weren't captured",
+  noSearch: "Nothing to re-rank: this step made no tool search, and its prompts can't be replayed",
   noDefinition: "No drafted tool definition to offer the model",
   budget: "The replay budget ran out before this run",
   dailyBudget: "Daily simulation budget reached",

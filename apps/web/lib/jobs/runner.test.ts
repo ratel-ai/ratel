@@ -167,6 +167,30 @@ test("a throwing job logs, captures through the telemetry port, and emits a time
   ]);
 });
 
+test("it reports each finished job, done or failed, as the job finishes", async () => {
+  const seen: string[] = [];
+  const { store } = fakeStore([
+    job({ id: "a" }),
+    job({ id: "b", kind: "fold_intent_graph" }),
+    job({ id: "c" }),
+  ]);
+  const handlers: Record<string, JobHandler> = {
+    match_quality_run: async (j) => {
+      seen.push(`run ${j.id}`);
+    },
+    fold_intent_graph: async (j) => {
+      seen.push(`run ${j.id}`);
+      throw new Error("boom");
+    },
+  };
+  await drainJobs(store, handlers, {
+    observer: undefined,
+    observability: observability().deps,
+    onJobFinished: () => seen.push("finished"),
+  });
+  assert.deepEqual(seen, ["run a", "finished", "run b", "finished", "run c", "finished"]);
+});
+
 test("stops cleanly when the queue is empty", async () => {
   const { store } = fakeStore([]);
   const res = await drainJobs(store, noopHandlers);

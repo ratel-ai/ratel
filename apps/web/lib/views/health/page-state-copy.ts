@@ -216,3 +216,36 @@ export function healthStateCopy(state: HealthPageState, context: StateCopyContex
     }
   }
 }
+
+export interface EarlyReadingCopyInput {
+  /** Days the reading's issues come from (`model.signalWindowDays`). */
+  signalWindowDays: number | null;
+  /** An import is still storing runs. */
+  importing: boolean;
+  /** The full reading is queued or running, and the page watches for it. */
+  updating: boolean;
+}
+
+/**
+ * The note an early reading carries (RC-224): this is a first look, not the
+ * project's Agent health yet. It says where the first look comes from, that
+ * the rest is still being worked through, and that what the reader sees will
+ * grow and may change, so a later visit that shows more reads as expected.
+ */
+export function earlyReadingCopy(input: EarlyReadingCopyInput): StateCopy {
+  const days = input.signalWindowDays;
+  const from =
+    days !== null && days > 0 && days <= 7
+      ? `your most recent runs (the last ${days === 1 ? "day" : `${days} days`})`
+      : "the runs we have processed so far";
+  const rest = input.importing
+    ? "the rest of your import as it comes in"
+    : "the rest of your history";
+  const next = input.updating
+    ? "The full reading is being built now, and this page updates on its own."
+    : "The full reading follows within minutes. Come back soon to see it.";
+  return {
+    title: "Early reading: we are still processing",
+    body: `This first look comes from ${from}. We are still working through ${rest}, so issues, numbers and tasks will fill in and may change. ${next}`,
+  };
+}

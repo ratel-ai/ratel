@@ -30,4 +30,11 @@ export type McpOAuthVerdict =
 export type McpOAuthPort = {
   /** A throw is logged by the route handler and answered as a 401, like any bad credential. */
   verifyAccessToken(token: string): Promise<McpOAuthVerdict>;
+  /**
+   * Whether this person may use the app, decided as the console decides its signed-in reader
+   * (the edition's allowlist, invitations, admins), by the identity provider's id. The core
+   * caches a grant for five minutes and refuses on a throw. Absent, every signed-in caller is
+   * refused: the MCP server never lets in someone the console would not.
+   */
+  launchAccess?(externalUserId: string): Promise<boolean>;
 };

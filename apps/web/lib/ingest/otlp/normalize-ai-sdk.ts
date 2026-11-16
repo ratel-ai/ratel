@@ -29,6 +29,9 @@ import type { AttrMap, AttrValue, DecodedSpan } from "./types";
  *    survives without it — the assistant's tool calls reappear in the next
  *    step's input messages, and `ai.toolCall` spans carry them. Revisit if the
  *    categorizer ever splits input from output budgets.
+ *    Exception: the call's own `ai.response.toolCalls`, and no text, become
+ *    `gen_ai.output.messages`. OTLP ingest counts only the tool calls a model
+ *    call produced, so the next step's input no longer attributes them.
  *
  * SCOPE — only the AI SDK's leaf text/object spans are translated:
  * - `ai.toolCall` → an `execute_tool` span.
@@ -62,6 +65,7 @@ const AI = {
   toolCallId: "ai.toolCall.id",
   toolCallArgs: "ai.toolCall.args",
   toolCallResult: "ai.toolCall.result",
+  responseToolCalls: "ai.response.toolCalls",
 } as const;
 
 /** The AI SDK's tool-invocation span. */
@@ -250,6 +254,22 @@ function normalizeModelSpan(a: AttrMap): void {
   setIfAbsent(a, GEN_AI.systemInstructions, systemInstructions);
   setIfAbsent(a, GEN_AI.inputMessages, inputMessages);
   setIfAbsent(a, GEN_AI.toolDefinitions, toToolDefinitions(a[AI.promptTools]));
+  setIfAbsent(a, GEN_AI.outputMessages, toOutputToolCalls(a[AI.responseToolCalls]));
+}
+
+/**
+ * `ai.response.toolCalls` → a one-message `gen_ai.output.messages` of
+ * `tool_call` parts. AI SDK 4 spells the arguments `args` (a JSON string),
+ * AI SDK 5 spells them `input`; `content.ts` parses either.
+ */
+export function toOutputToolCalls(raw: AttrValue | undefined): string | undefined {
+  const parsed = asJson(raw);
+  if (!Array.isArray(parsed)) return undefined;
+  const parts = parsed
+    .map((call) => toSemconvPart({ ...(call as JsonRecord), type: "tool-call" }))
+    .filter((p): p is JsonRecord => p !== null && typeof p.name === "string" && p.name !== "");
+  if (parts.length === 0) return undefined;
+  return JSON.stringify([{ role: "assistant", parts }]);
 }
 
 /**

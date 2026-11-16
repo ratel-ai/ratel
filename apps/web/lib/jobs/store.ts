@@ -65,6 +65,10 @@ const defaultDeps = (): DrainProjectJobsDeps => ({
 export async function drainProjectJobs(
   projectId?: string,
   deps: DrainProjectJobsDeps = defaultDeps(),
+  options: {
+    kinds?: { only?: readonly string[]; except?: readonly string[] };
+    onJobFinished?: () => void;
+  } = {},
 ): Promise<{ done: number; failed: number }> {
   const observability = createBackgroundObservability(deps.observability);
   try {
@@ -77,5 +81,10 @@ export async function drainProjectJobs(
   }
   // Bounded: a drain claims only jobs queued before it started, so a job a handler queues
   // mid-drain waits for the next drain instead of looping.
-  return deps.drainJobs(deps.jobStore, deps.jobHandlers(), { projectId, observer: observability });
+  return deps.drainJobs(deps.jobStore, deps.jobHandlers(), {
+    projectId,
+    observer: observability,
+    ...(options.kinds ? { kinds: options.kinds } : {}),
+    ...(options.onJobFinished ? { onJobFinished: options.onJobFinished } : {}),
+  });
 }

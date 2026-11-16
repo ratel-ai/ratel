@@ -266,3 +266,35 @@ export type OtelSpan = typeof otelSpans.$inferSelect;
 export type NewOtelSpan = typeof otelSpans.$inferInsert;
 export type OtelLog = typeof otelLogs.$inferSelect;
 export type NewOtelLog = typeof otelLogs.$inferInsert;
+
+/**
+ * The rows upstream's `scripts/backfill-tool-counts.ts --apply` changed, as they were before,
+ * keyed by run id, so `--rollback <runId>` restores them exactly. One row per (run, event):
+ * `event_row` and `metric_row` are `to_jsonb` of the `events` and `event_metrics` rows, and
+ * `jsonb_populate_record` restores them. `action` is `update` (payload and metrics recomputed)
+ * or `delete` (an agent wrapper event that the agent-span dedupe does not count as a model call).
+ *
+ * The script is an upstream operations tool and is not part of this edition; the table is, so the
+ * schema matches the production database it migrates from (upstream migration `0087`).
+ */
+export const toolCountBackfillBackups = pgTable(
+  "tool_count_backfill_backups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: text("run_id").notNull(),
+    // No FK: a `delete` backup outlives its event row, so rollback can restore it.
+    eventId: uuid("event_id").notNull(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    action: text("action").$type<"update" | "delete">().notNull(),
+    eventRow: jsonb("event_row").$type<Record<string, unknown>>().notNull(),
+    metricRow: jsonb("metric_row").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    restoredAt: timestamp("restored_at", { withTimezone: true }),
+  },
+  (t) => [
+    // One backup per event per run: re-running a run id never overwrites the original values.
+    uniqueIndex("tool_count_backfill_backups_run_event_idx").on(t.runId, t.eventId),
+  ],
+);

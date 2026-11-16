@@ -151,6 +151,11 @@ export function jobDeps(
     enqueueTopics: async () => null,
     enqueueTaskScores: async () => null,
     enqueueExplore: async () => null,
+    // The quick first reading (RC-224) is off unless a test turns it on; it never reaches a real database.
+    quickFirstReading: async () => false,
+    importRunning: async () => false,
+    enqueueFullReading: async () => null,
+    storeHealthScore: async () => undefined,
     observability: {
       trackSystemEvent: async (event, _id, properties) => {
         tracked.push({ event, properties });

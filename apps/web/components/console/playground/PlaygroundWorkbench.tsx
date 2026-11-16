@@ -1,6 +1,13 @@
 "use client";
 
+import { Badge } from "@ratel/design-system/badge";
+import { buttonVariants } from "@ratel/design-system/button-variants";
+import { PageBody } from "@ratel/design-system/page-header";
+import { usePeek } from "@ratel/design-system/panel";
+import { isTypingTarget } from "@ratel/design-system/peek";
+import { EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -11,20 +18,33 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
-import { editSkill } from "@/lib/console/explore/client";
-import { explainMutationError } from "@/lib/console/explore/errors";
-import { updateRuntimeCatalogOverride } from "@/lib/ingest/runtime-catalog/override-client";
+import { CapabilityPanel } from "@/components/console/playground/CapabilityPanel";
+import { ChangesBar } from "@/components/console/playground/ChangesBar";
+import {
+  ExperimentNotice,
+  type SelectionContext,
+} from "@/components/console/playground/ExperimentNotice";
+import { FirstRun } from "@/components/console/playground/FirstRun";
+import { ResultSection, type ResultView } from "@/components/console/playground/ResultSection";
+import { ResultsSkeleton } from "@/components/console/playground/ResultsSkeleton";
+import { SearchForm } from "@/components/console/playground/SearchForm";
+import { useCatalogSave } from "@/components/console/playground/useCatalogSave";
 import { applySkillDraft, skillIsEdited, toolIsEdited } from "@/lib/synthesis/playground/bench";
 import {
   buildSkillEntries,
   buildToolEntries,
   ranksById,
+  saveAffordance,
 } from "@/lib/synthesis/playground/bench-view";
-import type { KindById } from "@/lib/synthesis/playground/calibration-compare";
-import { sameQuery } from "@/lib/synthesis/playground/calibration-compare";
+import {
+  comparisonColumns,
+  type KindById,
+  reproducesShadow,
+  sameQuery,
+} from "@/lib/synthesis/playground/calibration-compare";
 import type { Bench } from "@/lib/synthesis/playground/catalog";
 import { rankPlayground } from "@/lib/synthesis/playground/client";
-import type { RankResponse } from "@/lib/synthesis/playground/contract";
+import { MAX_BENCH_CAPABILITIES, type RankResponse } from "@/lib/synthesis/playground/contract";
 import { resolveSearchableDescription } from "@/lib/synthesis/playground/descriptions";
 import { createDraftStore } from "@/lib/synthesis/playground/draft-store";
 import {
@@ -35,32 +55,20 @@ import {
 } from "@/lib/synthesis/playground/drafts";
 import { collectEdits } from "@/lib/synthesis/playground/export";
 import { playgroundHref } from "@/lib/synthesis/playground/links";
+import { askTerms, sharedWords } from "@/lib/synthesis/playground/matched-words";
 import type { SuggestedPrompt } from "@/lib/synthesis/playground/prompts";
+import {
+  changeSummary,
+  emptyReason,
+  resultList,
+  verdict,
+} from "@/lib/synthesis/playground/result-view";
 import type {
   CapabilityKind,
   DraftsByKind,
   RankMode,
   RankOptions,
 } from "@/lib/synthesis/playground/types";
-import type { SelectionContext } from "./CalibrationBanner";
-import { CapabilityBench } from "./CapabilityBench";
-import { PromptPanel } from "./PromptPanel";
-import { ResultsPanel } from "./ResultsPanel";
-
-/**
- * Strip the params the Calibration link added, shallowly.
- *
- * `history.replaceState` rather than the router: this is a correction to the
- * address bar, not a navigation, and re-running the server component would
- * refetch the selection we have just decided to forget.
- */
-function forgetDeepLink(): void {
-  const url = new URL(window.location.href);
-  for (const param of ["selection", "experiment", "q"]) {
-    url.searchParams.delete(param);
-  }
-  window.history.replaceState(null, "", url.toString());
-}
 
 const DEFAULT_OPTIONS: RankOptions = {
   mode: "bm25",
@@ -69,105 +77,114 @@ const DEFAULT_OPTIONS: RankOptions = {
   embeddingWeight: 0.5,
 };
 
+/** Tools first: a project has a handful of skills and many tools. */
+const KIND_ORDER: readonly CapabilityKind[] = ["tool", "skill"];
+
+/** `kind:id`, the form the open Panel and the expected pick take in the URL. */
+function parseRef(value: string | null): { kind: CapabilityKind; id: string } | null {
+  if (!value) return null;
+  const at = value.indexOf(":");
+  const kind = value.slice(0, at);
+  if (at < 0 || (kind !== "tool" && kind !== "skill")) return null;
+  return { kind, id: value.slice(at + 1) };
+}
+
+/**
+ * Rewrites the address in place: what is searched and what is expected live in
+ * the URL (DESIGN.md, Everything is a URL), so refresh and a shared link land on
+ * the same search. `replaceState` rather than the router: this is a correction
+ * to the address, not a navigation.
+ */
+function replaceParams(update: Record<string, string | null>) {
+  const url = new URL(window.location.href);
+  for (const [key, value] of Object.entries(update)) {
+    if (value === null || value === "") url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  }
+  window.history.replaceState(null, "", url.toString());
+}
+
 type PlaygroundWorkbenchProps = {
   projectId: string;
   projectSlug: string;
   bench: Bench;
   initialQuery: string;
+  /** `kind:id` of the capability the reader expects first, from the URL. */
+  initialExpected: string | null;
+  /** List or Compare, when the reader chose one (the URL's `view`). */
+  initialView: ResultView | null;
   suggestions: SuggestedPrompt[];
   embeddingsEnabled: boolean;
-  /**
-   * Whether a managed entry's searchable description can be SAVED here, not just
-   * tested. Decided on the server with the same gate the Catalogs page uses;
-   * the endpoint re-checks it regardless, so this only decides what is offered.
-   */
+  /** Whether a managed tool's searchable description can be saved here. The endpoint re-checks. */
   canSaveSearchableDescription: boolean;
   selectionContext: SelectionContext | null;
 };
 
 /**
- * Test a search. State lives here rather than in the URL: a prompt plus half-written descriptions
- * is a scratchpad. What is shareable (the prompt and the recorded selection) arrives as search
- * params from the links that open this page.
+ * Catalog › Test a search. One question: which tools would my agent find for
+ * this ask, in what order, and would a different description fix it?
+ *
+ * Changes to descriptions are a scratchpad kept in this browser (the draft
+ * store), so a search can rank them beside the saved catalog without anything
+ * leaving the page until the reader saves.
  */
 export function PlaygroundWorkbench({
   projectId,
   projectSlug,
   bench,
   initialQuery,
+  initialExpected,
+  initialView,
   suggestions,
   embeddingsEnabled,
   canSaveSearchableDescription,
   selectionContext,
 }: PlaygroundWorkbenchProps) {
   const router = useRouter();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [query, setQuery] = useState(initialQuery);
   const [options, setOptions] = useState<RankOptions>(DEFAULT_OPTIONS);
-  // The result is stored WITH the mode that produced it. Reading the current
-  // control state instead would label a finished BM25 run with whatever the
-  // user has since selected, and render blend components it never computed.
+  // A result keeps the settings that produced it, so changing a setting never
+  // relabels a finished search.
   const [result, setResult] = useState<{
     response: RankResponse;
     mode: RankMode;
     query: string;
+    top: number;
   } | null>(null);
   const [running, setRunning] = useState(false);
-  // Navigating to another mismatch re-renders on the server, which takes a
-  // moment. Without this the menu closed and nothing moved until the new page
-  // arrived, so a slow pick was indistinguishable from a dead button.
   const [navigating, startNavigation] = useTransition();
   const pending = running || navigating;
-  const [savingId, setSavingId] = useState<string | null>(null);
-  // Only the newest run may write results: a slow run must not land on top of
-  // the one the user kicked off after it.
+  // Only the newest search may land: a slow one must not overwrite the next.
   const runToken = useRef(0);
+  const [context, setContext] = useState(selectionContext);
+  const [expected, setExpected] = useState(initialExpected);
+  // Null follows the data: Compare when there is a before to show, else the list.
+  const [view, setView] = useState<ResultView | null>(initialView);
+  const peek = usePeek();
 
   const store = useMemo(() => createDraftStore(draftsStorageKey(projectId)), [projectId]);
   const drafts = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
   const persist = useCallback((next: DraftsByKind) => store.set(next), [store]);
+  const { savingId, saveSkill, saveTool } = useCatalogSave({
+    projectId,
+    bench,
+    getDrafts: store.getSnapshot,
+  });
 
-  // The variants ranked one query: a run for anything else drops the context and the deep link.
-  const [context, setContext] = useState(selectionContext);
-
-  const skillRanks = ranksById(result?.response.run.drafted.skills ?? []);
-  const toolRanks = ranksById(result?.response.run.drafted.tools ?? []);
-  const skillEntries = buildSkillEntries(bench.skills, drafts, skillRanks);
-  const toolEntries = buildToolEntries(bench.tools, drafts, toolRanks);
-  // One list of what changed, shared by the count on the run button, the
-  // exports and the discard control, so the three can never disagree.
+  const run = result?.response.run ?? null;
+  const skillEntries = buildSkillEntries(
+    bench.skills,
+    drafts,
+    ranksById(run?.drafted.skills ?? []),
+  );
+  const toolEntries = buildToolEntries(bench.tools, drafts, ranksById(run?.drafted.tools ?? []));
+  const entriesOf = (kind: CapabilityKind) => (kind === "skill" ? skillEntries : toolEntries);
   const edits = useMemo(() => collectEdits(bench.skills, bench.tools, drafts), [bench, drafts]);
-  const editCount = edits.length;
-
-  /**
-   * The stored MATCH text by id, for the struck-out "saved" line on an edited
-   * row. It has to be the searchable description rather than the agent one:
-   * the row edits what retrieval reads, so a "was" line quoting a different
-   * field would show a diff nobody made.
-   */
-  const savedDescriptions = useMemo(
-    () =>
-      new Map<string, string>([
-        ...bench.skills.map((skill) => [skill.name, resolveSearchableDescription(skill)] as const),
-        ...bench.tools.map((tool) => [tool.name, resolveSearchableDescription(tool)] as const),
-      ]),
-    [bench],
+  const editedIds = useMemo(() => new Set(edits.map((edit) => edit.id)), [edits]);
+  const kinds = KIND_ORDER.filter(
+    (kind) => (kind === "skill" ? bench.skills.length : bench.tools.length) > 0,
   );
-  const tagsById = useMemo(
-    () =>
-      new Map(
-        bench.skills.map((skill) => [
-          skill.name,
-          applySkillDraft(skill, drafts.skill[skill.name]).tags,
-        ]),
-      ),
-    [bench.skills, drafts],
-  );
-
-  /**
-   * Every catalog id's kind, over the WHOLE catalog rather than a run's hits.
-   * A recorded arm can name a capability nothing ranked today, and it still has
-   * to land in the right bucket instead of vanishing.
-   */
   const kindById: KindById = useMemo(
     () =>
       new Map<string, CapabilityKind>([
@@ -176,33 +193,20 @@ export function PlaygroundWorkbench({
       ]),
     [bench],
   );
-
-  /**
-   * Whether the catalog is folded away.
-   *
-   * Starts folded. Opening on a list of several hundred rows gives the reader
-   * a wall of names and no idea which end to start at, when what they came for
-   * is the ranking. The bar says what is behind it and how much of it you have
-   * changed; reaching for a capability from a result row opens it in place.
-   */
-  const [benchCollapsed, setBenchCollapsed] = useState(true);
-
-  const [focus, setFocus] = useState<{
-    id: string;
-    kind: CapabilityKind;
-    nonce: number;
-  } | null>(null);
-  const focusNonce = useRef(0);
-  const focusCapability = useCallback(
-    (id: string) => {
-      const kind = kindById.get(id);
-      if (!kind) return;
-      setFocus({ id, kind, nonce: ++focusNonce.current });
-    },
-    [kindById],
+  const savedDescriptions = useMemo(
+    () =>
+      new Map<string, string>([
+        ...bench.skills.map(
+          (skill) => [`skill:${skill.name}`, resolveSearchableDescription(skill)] as const,
+        ),
+        ...bench.tools.map(
+          (tool) => [`tool:${tool.name}`, resolveSearchableDescription(tool)] as const,
+        ),
+      ]),
+    [bench],
   );
 
-  const run = useCallback(
+  const search = useCallback(
     async (withQuery: string) => {
       const trimmed = withQuery.trim();
       if (trimmed === "") return;
@@ -216,265 +220,322 @@ export function PlaygroundWorkbench({
       });
       if (token !== runToken.current) return;
       setRunning(false);
-      if (outcome.ok) {
-        setResult({ response: outcome.data, mode: options.mode, query: trimmed });
-        // Dropped alongside the result it stops describing, not while the reader
-        // is still typing: the comparison remains true for what is on screen
-        // right up to the moment new results replace it.
-        if (context && !sameQuery(trimmed, context.query)) {
-          setContext(null);
-          forgetDeepLink();
-        }
+      if (!outcome.ok) {
+        toast({ title: outcome.error, tone: "danger" });
         return;
       }
-      toast({ title: outcome.error, tone: "danger" });
+      setResult({
+        response: outcome.data,
+        mode: options.mode,
+        query: trimmed,
+        top: options.topKTools,
+      });
+      replaceParams({ q: trimmed });
+      // The experiment's variants ranked ONE ask. A search for anything else
+      // ends that comparison, here and in the address.
+      if (context && !sameQuery(trimmed, context.query)) {
+        setContext(null);
+        replaceParams({ selection: null, experiment: null });
+      }
     },
     [context, options, projectId, store],
   );
 
-  /**
-   * Take a prompt from the picker.
-   *
-   * A prompt offered under "Variants disagreed on these" carries the disagreement
-   * it came from, and picking it navigates to that selection rather than
-   * running the text on its own. Otherwise the menu promised a comparison and
-   * the page then had none, and the same query reached two different screens
-   * depending on which door you came through.
-   */
-  const pickSuggestion = useCallback(
-    (suggestion: SuggestedPrompt) => {
-      if (suggestion.selectionId) {
-        startNavigation(() => {
-          router.push(
-            playgroundHref(projectId, {
-              query: suggestion.text,
-              selectionId: suggestion.selectionId,
-              experimentName: suggestion.experimentName,
-            }),
-          );
-        });
-        return;
-      }
-      setQuery(suggestion.text);
-      void run(suggestion.text);
-    },
-    [projectId, router, run],
-  );
-
-  // Arriving from a Calibration mismatch means the query is already decided, so
-  // running it is not a decision the reader needs to make again. The point of
-  // the link is to see the comparison. Guarded by a ref rather than a dependency
-  // list so it fires once per mount and never re-fires when options change.
+  // Arriving with an ask (from Quality, an experiment or a shared link) means
+  // the search is already decided: run it once, on mount.
   const autoRan = useRef(false);
   useEffect(() => {
-    if (autoRan.current || !selectionContext || initialQuery.trim() === "") {
+    if (autoRan.current || initialQuery.trim() === "") return;
+    autoRan.current = true;
+    void search(initialQuery);
+  }, [initialQuery, search]);
+
+  // "/" jumps to the search field from anywhere on the page, as in any search.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isTypingTarget(event.target) || peek.id) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [peek.id]);
+
+  /** Searches again for what is on screen, so a change is seen the moment it is made. */
+  const searchAgain = () => {
+    const current = result?.query ?? query;
+    if (current.trim() !== "") void search(current);
+  };
+
+  const pickSuggestion = (suggestion: SuggestedPrompt) => {
+    // An ask the variants disagreed on opens that comparison, not a plain search.
+    if (suggestion.selectionId) {
+      startNavigation(() => {
+        router.push(
+          playgroundHref(projectId, {
+            query: suggestion.text,
+            selectionId: suggestion.selectionId,
+            experimentName: suggestion.experimentName,
+          }),
+        );
+      });
       return;
     }
-    autoRan.current = true;
-    void run(initialQuery);
-  }, [initialQuery, run, selectionContext]);
+    setQuery(suggestion.text);
+    void search(suggestion.text);
+  };
 
-  /**
-   * Commit one row's editor buffer.
-   *
-   * Fired by Save, never while typing. A buffer identical to what is already
-   * stored clears the draft instead of writing one: a row that has been opened,
-   * looked at and saved unchanged is not an edited row, and leaving an
-   * equal-to-saved draft behind would mark it as one forever.
-   */
-  function handleCommit(
-    kind: CapabilityKind,
-    id: string,
-    description: string,
-    tags: string[] | null,
-  ) {
+  /** Keeps a changed description for the next search; an unchanged one clears its draft. */
+  function test(kind: CapabilityKind, id: string, description: string, tags: string[] | null) {
     let next = setDraftField(drafts, kind, id, "description", description);
-    if (tags !== null) {
-      next = setDraftField(next, kind, id, "tags", tags);
-    }
-
-    const skill = kind === "skill" ? bench.skills.find((s) => s.name === id) : null;
-    const tool = kind === "tool" ? bench.tools.find((t) => t.name === id) : null;
+    if (tags !== null) next = setDraftField(next, kind, id, "tags", tags);
+    const skill = kind === "skill" ? bench.skills.find((candidate) => candidate.name === id) : null;
+    const tool = kind === "tool" ? bench.tools.find((candidate) => candidate.name === id) : null;
     const unchanged = skill
       ? !skillIsEdited(skill, next.skill[id])
       : tool
         ? !toolIsEdited(tool, next.tool[id])
         : false;
-
     persist(unchanged ? clearDraft(drafts, kind, id) : next);
+    searchAgain();
   }
 
-  /**
-   * Write a skill edit to the catalog, through the existing catalog route: the
-   * same optimistic-concurrency PATCH the Catalogs page uses, version guard
-   * included. On success the draft is cleared: it has become the saved text,
-   * and leaving it would show the row as "edited" against itself.
-   *
-   * This does NOT publish. A draft skill stays a draft. Publishing decides what
-   * every agent retrieves, and this page is where you rehearse a wording,
-   * not where that call belongs; Catalogs owns it and shows the whole skill.
-   */
-  async function handleSaveSkill(skillName: string, description: string | null) {
-    const skill = bench.skills.find((candidate) => candidate.name === skillName);
-    if (!skill) return;
-    const drafted = applySkillDraft(skill, drafts.skill[skillName]);
-    setSavingId(skillName);
+  function discard(kind: CapabilityKind, id: string) {
+    persist(clearDraft(store.getSnapshot(), kind, id));
+    searchAgain();
+  }
 
-    const edited = await editSkill(skill.id, {
-      expectedVersion: skill.version,
-      // Whichever field retrieval reads for this skill, the one the row was editing. Null clears
-      // a searchable description, so retrieval falls back to the description.
-      ...(skill.searchableDescription === null
-        ? { description: (description ?? "").trim() }
-        : { searchableDescription: description === null ? null : description.trim() }),
-      tags: drafted.tags,
-    });
-    if (!edited.ok) {
-      setSavingId(null);
-      toast({
-        title:
-          edited.reason === "version_conflict"
-            ? `“${skillName}” changed since this page loaded. Reload and re-apply your edit.`
-            : explainMutationError(edited.status, edited.reason),
-        tone: "danger",
-      });
-      return;
-    }
-
-    setSavingId(null);
-    // Read the store rather than this render's `drafts`: the editor commits
-    // immediately before firing a save, so the closed-over value is one edit
-    // behind and clearing from it would resurrect the draft we just wrote.
-    persist(clearDraft(store.getSnapshot(), "skill", skillName));
+  function discardAll() {
+    const previous = store.getSnapshot();
+    const count = edits.length;
+    persist(emptyDraftsByKind());
+    searchAgain();
     toast({
-      title:
-        skill.status === "draft"
-          ? `Saved “${skillName}” to the catalog. It is still a draft`
-          : `Saved “${skillName}” to the catalog`,
-      tone: "success",
+      title: `Discarded ${count} change${count === 1 ? "" : "s"}`,
+      action: {
+        label: "Undo",
+        onClick: () => {
+          persist(previous);
+          searchAgain();
+        },
+      },
     });
-    router.refresh();
   }
 
-  /**
-   * Write a managed tool's RETRIEVAL description to the catalog.
-   *
-   * The agent description is deliberately not writable: `tool_definitions` and
-   * `catalog_tool_definitions` belong to whoever runs the agent, and no route
-   * writes them. What this product does own is the
-   * per-project override on the runtime catalog entry, and that endpoint
-   * already exists; this only wires the bench to it.
-   *
-   * There is nothing to invalidate afterwards. This page embeds per run,
-   * in-request, so the next run picks the saved text up for free; `router
-   * .refresh()` is only here to re-read the bench so the row stops calling
-   * itself edited against its own saved value.
-   */
-  async function handleSaveSearchableDescription(toolName: string, description: string | null) {
-    const tool = bench.tools.find((candidate) => candidate.name === toolName);
-    if (!tool || tool.entryId === null) return;
-    setSavingId(toolName);
-
-    const result = await updateRuntimeCatalogOverride(fetch, {
-      projectId,
-      kind: "tool",
-      // Null is the documented way to CLEAR the override, which is what an
-      // emptied field means. Sending "" instead would store an override that
-      // matches on nothing.
-      searchableDescription: description === null ? null : description.trim(),
-      entryId: tool.entryId,
-    });
-    setSavingId(null);
-    if (!result.ok) {
-      // The draft is deliberately left in place: the reader's wording is the
-      // only copy, and dropping it on a failed request would lose their work.
-      toast({ title: result.error, tone: "danger" });
-      return;
-    }
-
-    persist(clearDraft(store.getSnapshot(), "tool", toolName));
-    toast({
-      title:
-        description === null
-          ? `Removed the override for “${toolName}”. Its runtime text applies again`
-          : `Saved the searchable description for “${toolName}”`,
-      tone: "success",
-    });
+  async function save(kind: CapabilityKind, id: string, description: string | null) {
+    const saved =
+      kind === "skill" ? await saveSkill(id, description) : await saveTool(id, description);
+    if (!saved) return;
+    persist(clearDraft(store.getSnapshot(), kind, id));
+    // The bench re-reads, and the search runs on the saved catalog.
     router.refresh();
+    searchAgain();
   }
+
+  function expect(kind: CapabilityKind, id: string | null) {
+    const value = id === null ? null : `${kind}:${id}`;
+    setExpected(value);
+    replaceParams({ expect: value });
+    if (id === null || !run) return;
+    // Naming a tool that is not first is asking "how do I get it there?": open it.
+    const rank = resultList(run, kind).rows.find((row) => row.hit.id === id)?.rank;
+    if (rank !== 1) peek.open(`${kind}:${id}`);
+  }
+
+  // The open Panel.
+  const opened = parseRef(peek.id);
+  // Kept while the Panel closes, so it does not blank during its exit.
+  const [lastOpened, setLastOpened] = useState(opened);
+  if (opened && (opened.kind !== lastOpened?.kind || opened.id !== lastOpened?.id))
+    setLastOpened(opened);
+  const shown = opened ?? lastOpened;
+  const shownEntry = shown
+    ? (entriesOf(shown.kind).find((entry) => entry.id === shown.id) ?? null)
+    : null;
+  const shownList = shown && run ? resultList(run, shown.kind) : null;
+  const shownIndex = shownList?.rows.findIndex((row) => row.hit.id === shown?.id) ?? -1;
+  const step = (direction: 1 | -1) => {
+    const next = shownList?.rows[shownIndex + direction];
+    if (next && shown) peek.open(`${shown.kind}:${next.hit.id}`);
+  };
+  const expectedRef = parseRef(expected);
+  // Decided once over the whole recording, so both kinds get the same columns:
+  // a comparison variant identical to today is the same list twice.
+  const collapseShadow =
+    context && run ? reproducesShadow(context.arms, run.baseline)?.sameOrder === true : false;
+  const terms = askTerms(result?.query ?? "");
+
+  const calibrationBackHref = context?.experimentName
+    ? `/project/${projectId}/calibration/${encodeURIComponent(context.experimentName)}/selection/${encodeURIComponent(context.selectionId)}`
+    : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[100rem] flex-col gap-4">
-      <header className="card-enter flex flex-wrap items-baseline gap-x-2">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-cream">
-          Playground
-        </h1>
-        <span className="font-mono text-xs text-warm-muted">{projectSlug}</span>
-      </header>
-
-      <PromptPanel
-        query={query}
-        onQueryChange={setQuery}
-        suggestions={suggestions}
-        options={options}
-        onOptionsChange={setOptions}
-        onRun={(next) => void run(next)}
-        onPickSuggestion={pickSuggestion}
-        pending={pending}
-        embeddingsEnabled={embeddingsEnabled}
-        editCount={editCount}
-      />
-
-      <div className="flex min-h-0 flex-col gap-4">
-        <ResultsPanel
-          response={result?.response ?? null}
-          mode={result?.mode ?? options.mode}
-          population={{
-            skills: bench.skills.length,
-            tools: bench.tools.length,
-          }}
-          pending={pending}
-          hasEdits={editCount > 0}
-          selectionContext={context}
+    <PageBody>
+      {context ? (
+        <ExperimentNotice
+          context={context}
+          saved={run?.baseline ?? null}
           kindById={kindById}
-          onEdit={focusCapability}
-          backHref={
-            context?.experimentName
-              ? `/project/${projectId}/calibration/${encodeURIComponent(
-                  context.experimentName,
-                )}/selection/${encodeURIComponent(context.selectionId)}`
-              : null
-          }
+          backHref={calibrationBackHref}
         />
-        <CapabilityBench
-          skills={skillEntries}
-          tools={toolEntries}
-          savedDescriptions={savedDescriptions}
-          tagsById={tagsById}
-          savingId={savingId}
-          truncated={bench.truncated}
-          focus={focus}
-          collapsed={benchCollapsed}
-          onCollapsedChange={setBenchCollapsed}
+      ) : null}
+
+      <div className="flex flex-col gap-3">
+        <SearchForm
+          query={query}
+          onQueryChange={setQuery}
+          onSearch={(next) => void search(next)}
+          suggestions={kinds.length > 0 ? suggestions : []}
+          onPickSuggestion={pickSuggestion}
+          pending={pending}
+          options={options}
+          onOptionsChange={setOptions}
+          embeddingsEnabled={embeddingsEnabled}
+          inputRef={inputRef}
+          compact={result !== null}
+        />
+        <ChangesBar
           edits={edits}
           projectSlug={projectSlug}
-          onDiscardAll={() => {
-            persist(emptyDraftsByKind());
-            toast({
-              title: `Discarded ${edits.length} unsaved edit${edits.length === 1 ? "" : "s"}`,
-              tone: "success",
-            });
-          }}
-          onCommit={handleCommit}
-          onRevert={(kind, id) => {
-            persist(clearDraft(drafts, kind, id));
-            toast({ title: `Discarded your edit to “${id}”`, tone: "success" });
-          }}
-          onSaveSkill={handleSaveSkill}
-          onSaveSearchableDescription={handleSaveSearchableDescription}
-          canSaveSearchableDescription={canSaveSearchableDescription}
+          onOpen={(id) => peek.open(`${kindById.get(id) ?? "tool"}:${id}`)}
+          onDiscardAll={discardAll}
         />
       </div>
-    </div>
+
+      {kinds.length === 0 ? (
+        <EmptyState
+          emblem
+          title="Nothing to search yet"
+          description="Tools show up once your agent calls them or your runtime registers them. Skills appear once you create them."
+          action={
+            <Link
+              href={`/project/${projectId}/catalogs`}
+              className={buttonVariants({ variant: "secondary" })}
+            >
+              Open Catalog
+            </Link>
+          }
+        />
+      ) : pending ? (
+        <ResultsSkeleton rows={Math.min(options.topKTools, 8)} label="Searching your catalog…" />
+      ) : !result || !run ? (
+        <FirstRun />
+      ) : (
+        <>
+          {result.response.embedding?.local ? (
+            <p className="flex items-center gap-2 text-xs text-fg-subtle">
+              <Badge tone="warning">Local stand-in</Badge>
+              Meaning scores come from a rough local stand-in, not the real model. Development only.
+            </p>
+          ) : null}
+          {kinds.map((kind) => {
+            const list = resultList(run, kind);
+            // The same search side by side: the experiment's variants while the
+            // ask is theirs, then the saved catalog, then the changes.
+            const columns = comparisonColumns({
+              arms: context && sameQuery(result.query, context.query) ? context.arms : [],
+              saved: run.baseline,
+              edited: run.hasEdits ? run.drafted : null,
+              kind,
+              kindById,
+              collapseShadow,
+            });
+            const compare = columns.length > 1 ? columns : null;
+            const entries = entriesOf(kind);
+            const expectedId = expectedRef?.kind === kind ? expectedRef.id : null;
+            const expectedEntry = expectedId
+              ? entries.find((entry) => entry.id === expectedId)
+              : null;
+            return (
+              <ResultSection
+                key={kind}
+                list={list}
+                catalogSize={entries.length}
+                terms={terms}
+                verdict={verdict({
+                  list,
+                  expected: expectedEntry ? expectedId : null,
+                  top: result.top,
+                  sharesWords: expectedEntry
+                    ? sharedWords(result.query, [expectedEntry.id, expectedEntry.description])
+                        .length > 0
+                    : true,
+                })}
+                changes={changeSummary(list, editedIds, expectedEntry ? expectedId : null)}
+                emptyReason={emptyReason(list, entries.length, result.mode, embeddingsEnabled)}
+                expected={expectedEntry ? expectedId : null}
+                onExpect={(id) => expect(kind, id)}
+                catalogItems={entries.map((entry) => ({
+                  id: entry.id,
+                  label: entry.id,
+                  hint: entry.rank !== null ? `#${entry.rank}` : undefined,
+                  keywords: [entry.description],
+                }))}
+                onOpen={(id) => {
+                  if (kindById.has(id)) peek.open(`${kind}:${id}`);
+                }}
+                openId={opened?.kind === kind ? opened.id : null}
+                compare={compare}
+                // Compare whenever there is a before to show, unless the reader chose the list.
+                view={compare ? (view ?? "compare") : "list"}
+                onViewChange={(next) => {
+                  setView(next);
+                  replaceParams({ view: next });
+                }}
+              />
+            );
+          })}
+          {bench.truncated.tools || bench.truncated.skills ? (
+            <p className="text-xs text-fg-subtle">
+              Your catalog is larger than {MAX_BENCH_CAPABILITIES} per kind; this search covers the
+              first {MAX_BENCH_CAPABILITIES}.
+            </p>
+          ) : null}
+        </>
+      )}
+
+      <CapabilityPanel
+        open={opened !== null}
+        onOpenChange={(open) => {
+          if (!open) peek.close();
+        }}
+        entry={shownEntry}
+        savedDescription={shown ? (savedDescriptions.get(`${shown.kind}:${shown.id}`) ?? "") : ""}
+        savedTags={
+          shown?.kind === "skill"
+            ? (() => {
+                const skill = bench.skills.find((candidate) => candidate.name === shown.id);
+                return skill ? applySkillDraft(skill, drafts.skill[skill.name]).tags : [];
+              })()
+            : null
+        }
+        search={
+          result && shown
+            ? {
+                query: result.query,
+                mode: result.mode,
+                top: result.top,
+                row: shownList?.rows[shownIndex] ?? null,
+              }
+            : null
+        }
+        saveAffordance={
+          shownEntry
+            ? saveAffordance(shownEntry, { canSaveSearchableDescription })
+            : { kind: "blocked", reason: "" }
+        }
+        saving={shown !== null && savingId === shown.id}
+        onTest={(description, tags) => shown && test(shown.kind, shown.id, description, tags)}
+        onDiscard={() => shown && discard(shown.kind, shown.id)}
+        onSave={(description) => shown && void save(shown.kind, shown.id, description)}
+        onPrevious={shownIndex > 0 ? () => step(-1) : undefined}
+        onNext={
+          shownIndex >= 0 && shownList && shownIndex < shownList.rows.length - 1
+            ? () => step(1)
+            : undefined
+        }
+      />
+    </PageBody>
   );
 }

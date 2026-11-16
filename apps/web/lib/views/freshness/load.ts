@@ -14,6 +14,13 @@ const LOOKBACK = "30 days";
 export const PENDING_WINDOW = "6 hours";
 
 /**
+ * A run that found too few new events and left them for a fuller one
+ * (lib/intent-graph/batching.ts) changed nothing, so it never counts as an
+ * update: the page would otherwise refresh for nothing every few minutes.
+ */
+const CHANGED_SOMETHING = sql`coalesce(result->>'outcome', '') <> 'waiting'`;
+
+/**
  * A project's analysis freshness: its latest finished job, and whether any are
  * queued or running (and not stuck). Two small reads on the project's slice of
  * jobs_project_status_idx. Owned (ADR-0030): this edition has no health
@@ -27,7 +34,7 @@ export async function loadAnalysisFreshness(
     await db.execute(sql`
       select
         (select max(finished_at) from jobs
-          where project_id = ${projectId} and status = 'done'
+          where project_id = ${projectId} and status = 'done' and ${CHANGED_SOMETHING}
             and finished_at > now() - ${LOOKBACK}::interval) as updated_at,
         exists (select 1 from jobs
           where project_id = ${projectId} and status in ('queued', 'running')
@@ -68,7 +75,7 @@ export async function loadSectionProgress(
         (select max(newest.finished_at) from unnest(array[${kindList}]::text[]) as k(kind)
           cross join lateral (
             select finished_at from jobs
-            where project_id = ${projectId} and kind = k.kind and status = 'done'
+            where project_id = ${projectId} and kind = k.kind and status = 'done' and ${CHANGED_SOMETHING}
             order by finished_at desc limit 1
           ) as newest) as last_done_at,
         (select count(*)::int from jobs

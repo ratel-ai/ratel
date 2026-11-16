@@ -1,5 +1,7 @@
 import { drainSteps } from "@/lib/composition/registry";
 import type { DrainStep } from "@/lib/contracts/registry";
+import { type DrainObserverDeps, defaultDrainObserverDeps, observeDrain } from "./drain-observer";
+import { RUN_IMPORT_JOB } from "./kinds";
 import {
   type BackgroundObservability,
   type BackgroundObservabilityDeps,
@@ -24,7 +26,8 @@ import { drainProjectJobs } from "./store";
  */
 export interface DrainCronDeps {
   steps: DrainStep[];
-  drainProjectJobs: () => Promise<{ done: number; failed: number }>;
+  /** `onJobFinished` runs after each finished job: the sign the worker's watchdog reads. */
+  drainProjectJobs: (onJobFinished?: () => void) => Promise<{ done: number; failed: number }>;
   /** Whether this tick may delete anything. Steps marked `retentionOnly` are skipped otherwise. */
   retentionEnabled?: boolean;
   observability?: BackgroundObservabilityDeps;
@@ -50,13 +53,24 @@ export function dataRetentionEnabled(
 
 const defaultDeps = (): DrainCronDeps => ({
   steps: drainSteps(),
-  drainProjectJobs: () => drainProjectJobs(),
+  // Imports have their own lane in the worker (RC-40): the cron drain never waits behind one.
+  drainProjectJobs: (onJobFinished) =>
+    drainProjectJobs(undefined, undefined, {
+      kinds: { except: [RUN_IMPORT_JOB] },
+      onJobFinished,
+    }),
   retentionEnabled: dataRetentionEnabled(),
   observability: defaultBackgroundObservabilityDeps,
 });
 
-/** Run one tick and return its summary; the HTTP route and the in-process scheduler both call this. */
-export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise<DrainSummary> {
+/**
+ * Run one tick and return its summary; the HTTP route and the in-process scheduler both call this.
+ * `onJobFinished` runs after each job the tick's drain finishes (the worker's watchdog).
+ */
+export async function runDrainTick(
+  deps: DrainCronDeps = defaultDeps(),
+  onJobFinished?: () => void,
+): Promise<DrainSummary> {
   const observability = createBackgroundObservability(
     deps.observability ?? defaultBackgroundObservabilityDeps,
   );
@@ -72,7 +86,7 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
     for (const step of deps.steps.filter((s) => s.phase === "before")) {
       summary[step.name] = await isolated(step, observability, errors);
     }
-    ({ done, failed } = await deps.drainProjectJobs());
+    ({ done, failed } = await deps.drainProjectJobs(onJobFinished));
     for (const step of deps.steps.filter((s) => s.phase === "after")) {
       if (step.retentionOnly && !retention) {
         summary[step.name] = "skipped";
@@ -111,12 +125,15 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
  * GET /api/cron/drain: one tick for an external scheduler. Closed unless `CRON_SECRET` is set
  * and presented as a bearer: an open route would let any caller drive background work,
  * including jobs that spend the operator's model keys. The open-source edition never needs
- * the route, its scheduler runs the tick in process.
+ * the route, its scheduler runs the tick in process. A tick it runs logs its outcome for the
+ * deployment's drain monitors (`drain-observer.ts`); an API-only process logs nothing, its
+ * worker's sweep does.
  */
 export async function drainCron(
   req: Request,
   deps?: DrainCronDeps,
   role: AppRole = appRole(),
+  observer: DrainObserverDeps = defaultDrainObserverDeps,
 ): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return new Response("CRON_SECRET is not configured", { status: 401 });
@@ -126,7 +143,8 @@ export async function drainCron(
   // An API-only task leaves the sweeps and the drain to the worker, which runs
   // them on its own timer.
   if (role === "api") return Response.json({ ok: true, skipped: "worker" }, { status: 202 });
-  const summary = await runDrainTick(deps);
+  const summary = await observeDrain(() => runDrainTick(deps), observer);
+  if (!summary) return Response.json({ ok: false, error: "drain threw" }, { status: 500 });
   return Response.json(summary, { status: summary.ok ? 200 : 500 });
 }
 

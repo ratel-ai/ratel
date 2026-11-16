@@ -98,3 +98,16 @@ test("work queued for longer than the pending window is stuck, not on its way", 
   assert.equal((await loadSectionProgress(db, PROJ, ["craft_tools"])).pending, 0);
   assert.equal((await loadAnalysisFreshness(db, PROJ)).working, false);
 });
+
+test("a run that only waited for more events is not an update (RC-213)", async () => {
+  const db = await setup(`
+    insert into jobs (project_id, kind, status, created_at, finished_at, result) values
+      ('${PROJ}', 'cluster_intents', 'done', now() - interval '30 minutes', now() - interval '20 minutes', '{"outcome": "clustered"}'),
+      ('${PROJ}', 'cluster_intents', 'done', now() - interval '3 minutes', now() - interval '2 minutes', '{"outcome": "waiting"}');
+  `);
+  const progress = await loadSectionProgress(db, PROJ, ["cluster_intents"]);
+  const age = Date.now() - Date.parse(progress.lastDoneAt!);
+  assert.ok(age > 19 * 60_000 && age < 21 * 60_000, "the last run that changed something");
+  const freshness = await loadAnalysisFreshness(db, PROJ);
+  assert.ok(Date.now() - Date.parse(freshness.updatedAt!) > 19 * 60_000);
+});

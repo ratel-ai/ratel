@@ -80,3 +80,7 @@ test("actionHeads counts the actions an ask asks for", async () => {
   ];
   for (const [text, n] of cases) assert.equal(actionHeads(text, v), n, text);
 });
+
+test("cleanAskText never cuts an emoji in half", () => {
+  assert.equal(cleanAskText(`${"a".repeat(9)}😀 tail`, 10), "a".repeat(9));
+});

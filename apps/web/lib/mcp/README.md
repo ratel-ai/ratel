@@ -17,9 +17,12 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status`, `get_quota_status` (the entitlements port), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches), `get_quota_status` (the entitlements port; the sample project is free), `get_job_status` (owned) |
+| `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
+| `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
+| `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
-| `operations/loop/` | the improvement loop as tools, behind `FF_MCP_LOOP` (`loop-flag.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
+| `operations/loop/` | the improvement loop as tools, behind `FF_MCP_LOOP` (`loop-flag.ts`), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]` while the loop is on |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
 | `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real (owned snippets, see below) |
@@ -51,11 +54,22 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   so with `FF_EVAL_GATE` on it queues the post-ship measures. `list_fixes` and
   `get_fix` return a fix's newest draft (`lib/views/fix-drafts`) while `FF_EVAL_GATE` is on, null
   otherwise, and a ready draft supplies `get_fix`'s change. `run-eval-gate.integration.test.ts`: the gate is the env
-  switch. `stages.ts`: no stage for the tools this build does not have (the embedding usage tool). `operations/index.ts`,
-  `route-handler.ts` and `server.ts` wire the loop as upstream does.
-  `__fixtures__/tools-list-before-loop.json` is this build's tool list before the loop:
-  `route-handler.test.ts` checks that with the loop off it is listed exactly as before, and with it on
-  an existing tool changes only by its stage `_meta`.
+  switch. `stages.ts`: no stage for the tools this build does not have (embedding and Tool Picker
+  usage). `operations/index.ts`, `route-handler.ts` and `server.ts` keep the loop behind
+  `FF_MCP_LOOP` (upstream retired its flag in RC-234 and lists every tool for anyone with app
+  access); the loop's tasks and eval sets are behind it too. `__fixtures__/tools-list.json` is this
+  build's tool list with the loop on, regenerated with `UPDATE_MCP_TOOLS_FIXTURE=1`;
+  `route-handler.test.ts` pins it, and checks that with the loop off the loop tools are not listed.
+- `launch-access.ts` (with its test): upstream asks its identity provider and flag service whether
+  a signed-in caller may use the app; here a project key passes and a signed-in caller is the
+  edition's decision, refused until one is wired.
+- `operations/developer.ts` (with its test): no `get_tool_picker_usage`; the Tool Picker and its
+  ledger stay private. `operations/health.ts`: imports come from the edition
+  (`EditionUi.HealthImports`). `operations/loop/read.ts`: an unknown organization reads the
+  entitlements port's default limits. `operations/ranking.ts`: the Boost reads come from
+  `views/adaptive-ranking/queries.ts`. `operations/ship.ts` and `operations/loop/tasks.ts`: the
+  stage spine is `FF_STAGE_SPINE`. Upstream's `account.test.ts` (its flag service, wallets and
+  embedding usage) is not here.
 - `connect/snippets.ts` and `snippets.test.ts`: every client carries the project key (Claude
   Code through `--header`, Cursor and VS Code through `${env:RATEL_API_KEY}` in `mcp.json`,
   Claude Desktop through the `mcp-remote` bridge in its config, CI as upstream), because there is

@@ -183,6 +183,12 @@ export type CompositionPorts = {
   /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
   ui?: () => Promise<EditionUi>;
   /**
+   * Whether an import of past runs is storing runs for the project right now; an Agent health
+   * reading made meanwhile is marked early. Absent in the open-source edition, which has no
+   * importer, so no import is ever running.
+   */
+  importRunning?: (projectId: string) => Promise<boolean>;
+  /**
    * Absent in the open-source edition, where the MCP endpoint takes project API keys only. With
    * it, an MCP client may sign in through a browser and send the identity provider's token.
    */

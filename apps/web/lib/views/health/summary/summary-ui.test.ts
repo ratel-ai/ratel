@@ -15,6 +15,12 @@ import {
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { findDsViolations } from "@/eslint-rules/ds-tokens.mjs";
+import type { ImportSummary } from "@/lib/contracts/imported-runs";
+import {
+  HEALTH_SCORE_VERSION,
+  healthScoreView,
+  scoredIssues,
+} from "@/lib/readings/trace-signals/health-score";
 import type { StoredSetup } from "@/lib/readings/trace-signals/setup-facts";
 import {
   type FlowJourney,
@@ -280,6 +286,30 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     now: NOW,
     ...over,
   };
+}
+
+function anImport(over: Partial<ImportSummary> = {}): ImportSummary {
+  return {
+    id: "imp-1",
+    source: "langfuse",
+    status: "completed",
+    label: "cloud.langfuse.com",
+    windowDays: 7,
+    itemsRead: 180,
+    runsImported: 60,
+    truncated: false,
+    failure: null,
+    failureDetail: null,
+    startedAt: "2026-10-20T11:24:39.188Z",
+    finishedAt: "2026-10-20T11:24:51.416Z",
+    relay: false,
+    ...over,
+  };
+}
+
+/** An edition's importer, as the page receives it; the Importer itself renders nothing here. */
+function importsOf(list: ImportSummary[]): NonNullable<SummaryViewProps["imports"]> {
+  return { list, contactUrl: null, sourceLabel: {}, Importer: () => null };
 }
 
 function page(over: Partial<SummaryViewProps> = {}, search = ""): string {
@@ -829,6 +859,115 @@ test("runs mixed together: the run-based sections give way to one block that say
 
 test("a newer reading on its way: the page watches for it", () => {
   assert.match(page({ state: { kind: "ready", updating: true } }), /data-health-watching=""/);
+});
+
+test("an early reading says it is a first look, still being processed, and that more will come (RC-224)", () => {
+  const early = page({
+    model: { ...READY_MODEL, earlyReading: true, signalWindowDays: 7 },
+    state: { kind: "ready", updating: true },
+  });
+  assertHouseStyle(early, "early reading");
+  assert.match(early, /data-health-early-reading="updating"/);
+  const text = visibleText(early);
+  assert.match(text, /Early reading: we are still processing/);
+  assert.match(text, /your most recent runs \(the last 7 days\)/);
+  assert.match(text, /will fill in and may change/);
+  assert.match(early, /data-health-watching=""/, "and the page watches for the full reading");
+  assert.ok(
+    text.indexOf("Early reading") < text.indexOf("Issues"),
+    "the note sits above the reading",
+  );
+
+  const importing = page({
+    model: { ...READY_MODEL, earlyReading: true },
+    imports: importsOf([anImport({ status: "running" })]),
+  });
+  assert.match(importing, /data-health-early-reading="waiting"/);
+  assert.match(visibleText(importing), /the rest of your import as it comes in/);
+
+  // A full reading carries no note.
+  assert.doesNotMatch(page(), /data-health-early-reading/);
+});
+
+test("with the Health score on, the page leads with it and each issue says what fixing it wins back (RC-225)", () => {
+  const issues = scoredIssues(
+    READY_MODEL.signals.map((signal) => ({
+      id: signal.id,
+      kind: signal.kind,
+      severity: signal.severity,
+      totalTurns: signal.evidence.totalTurns,
+    })),
+  );
+  const base = healthScoreView(issues, READY_MODEL.turns);
+  const score = healthScoreView(issues, READY_MODEL.turns, [
+    { version: HEALTH_SCORE_VERSION, value: base.value - 4 },
+    { version: HEALTH_SCORE_VERSION, value: base.value - 9 },
+  ]);
+  const html = page({ model: { ...READY_MODEL, score }, scoreLeads: true });
+  assertHouseStyle(html, "health score");
+  const text = visibleText(html);
+  assert.match(html, new RegExp(`data-health-score="${score.value}"`));
+  assert.match(text, /Health score/);
+  assert.match(text, new RegExp(`${score.value}\\s*of 100`));
+  assert.match(text, /\+4 since the last reading/);
+  assert.match(text, /most points first/);
+  assert.match(text, /costs points by how many turns it touches and how much it hurts them/);
+  assert.match(text, new RegExp(`Fix the top 3 issues to reach ${score.value + score.topGain}`));
+  assert.match(html, /data-health-score-ring=""/);
+  assert.match(text, /Raise it next/);
+  const fixes = [...html.matchAll(/data-score-fix-points="(\d+)"/g)].map((m) => Number(m[1]));
+  assert.ok(fixes.length > 0 && fixes.length <= 3, "the three fixes worth the most");
+  assert.ok(
+    text.indexOf("Health score") < text.indexOf("Issues") &&
+      text.indexOf("Issues") < text.indexOf("First try"),
+    "score, then what moves it, then the readings",
+  );
+  assert.match(text, /If fixed/);
+  const points = [...html.matchAll(/data-issue-points="(\d+)"/g)].map((m) => Number(m[1]));
+  assert.ok(points.length > 0, "rows carry their points");
+  assert.deepEqual(
+    points,
+    [...points].sort((a, b) => b - a),
+    "most points first",
+  );
+
+  // An early reading says "still calculating" without a paragraph: the ring beats, a pill counts, the issues say more may come.
+  const early = page({
+    model: {
+      ...READY_MODEL,
+      score,
+      earlyReading: true,
+      earlyProgress: { read: 1_055, total: 5_315, percent: 19 },
+    },
+    scoreLeads: true,
+  });
+  assertHouseStyle(early, "early score");
+  assert.match(early, /data-calculating=""/);
+  assert.match(early, /class="[^"]*score-beat/);
+  assert.match(early, /class="[^"]*score-wave/);
+  assert.match(early, /data-health-calculating="19"/);
+  assert.match(visibleText(early), /Calculating\s*19%/);
+  assert.match(early, /data-health-still-reading=""/);
+  assert.match(visibleText(early), /More issues may appear as we read the rest/);
+  assert.match(visibleText(early), /1,055 of 5,315 runs read/);
+  assert.doesNotMatch(
+    early,
+    /data-health-early-reading/,
+    "no paragraph-long notice when the score leads",
+  );
+  assert.doesNotMatch(
+    visibleText(early),
+    /since the last reading|Your first reading with a score/,
+    "a provisional score claims no change",
+  );
+  // A full reading neither beats nor counts.
+  assert.doesNotMatch(
+    html,
+    /score-beat|score-wave|data-health-calculating|data-health-still-reading/,
+  );
+  // Off: the page is as before, even with a score in the model.
+  const off = page({ model: { ...READY_MODEL, score } });
+  assert.doesNotMatch(off, /data-health-score|If fixed/);
 });
 
 test("reads that failed cost their part, not the page", () => {

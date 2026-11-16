@@ -2,40 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
-import { enqueueForProjectId } from "@/lib/jobs/route-helpers";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
-import { checkMeteredFeature } from "@/lib/platform/entitlements";
-import { getLogger } from "@/lib/platform/logger";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import {
-  type ApplyDeps,
   applyProposal,
   applyProposals,
   dismissProposal,
   revertProposal,
 } from "@/lib/synthesis/match-quality/apply";
-import { JUDGE_BUDGET_USD } from "@/lib/synthesis/match-quality/judge";
+import { applyFailureMessage, liveApplyDeps } from "@/lib/synthesis/match-quality/apply-deps";
 import {
-  countRunsSince,
   getProposal,
   lastCorpusChangeAt,
   listProposals,
-  startRun,
-  swapRuntimeOverride,
-  transitionProposal,
 } from "@/lib/synthesis/match-quality/queries";
 import type { MatchQualityProposalRow } from "@/lib/synthesis/match-quality/schema";
-import { resolveEvidenceSource } from "@/lib/synthesis/match-quality/search-source";
+import { startManualRun } from "@/lib/synthesis/match-quality/start-run";
 import { proposalFailures, proposalImpact } from "@/lib/synthesis/match-quality/view";
-import {
-  isRunWindowSupported,
-  parseRunWindowDays,
-  resolveRunWindow,
-  startOfBillingPeriod,
-  windowSinceLastChange,
-} from "@/lib/synthesis/match-quality/window";
+import { windowSinceLastChange } from "@/lib/synthesis/match-quality/window";
 
 /**
  * The write surface for match quality.
@@ -44,8 +30,6 @@ import {
  * budget server-side. Nothing the client posts is trusted beyond the ids, which
  * is the same discipline the calibration actions follow.
  */
-
-const logger = getLogger("match-quality/actions");
 
 export interface ActionResult {
   ok: boolean;
@@ -75,16 +59,6 @@ async function authorize(projectId: string) {
   return { ok: true as const, session: { user: scope.user }, scope };
 }
 
-/** The apply collaborators, all real. */
-function applyDeps(): ApplyDeps {
-  return {
-    getProposal,
-    swapOverride: swapRuntimeOverride,
-    transitionProposal: (proposalId, from, to, extra) =>
-      transitionProposal(proposalId, from, to, extra),
-  };
-}
-
 /** Queue a manual run over a chosen window. */
 export async function runMatchQualityAction(
   projectId: string,
@@ -94,77 +68,15 @@ export async function runMatchQualityAction(
   if (!auth.ok) return auth;
   const { scope, session } = auth;
 
-  const windowDays = parseRunWindowDays(windowDaysRaw);
-  if (!isRunWindowSupported(windowDays)) {
-    return { ok: false, message: "That window is longer than the telemetry we keep." };
-  }
-
-  const now = new Date();
-  const used = await countRunsSince(scope.project.id, startOfBillingPeriod(now));
-  const access = checkMeteredFeature(
-    scope.organization,
-    "matchQualityRunsPerMonth",
-    used,
-    "Match quality",
-  );
-  if (!access.ok) return { ok: false, message: access.message };
-
-  const window = resolveRunWindow(windowDays, now);
-  // A calibration when there is one, plain search telemetry otherwise.
-  const source = await resolveEvidenceSource(scope.project.id, window);
-  if (!source) {
-    return {
-      ok: false,
-      message:
-        "No searches with their query text were recorded in this window, so there is nothing to analyse.",
-    };
-  }
-
-  const run = await startRun(
-    {
-      projectId: scope.project.id,
-      experimentName: source.experimentName,
-      trigger: "manual",
-      windowDays,
-      windowStart: window.since,
-      windowEnd: window.until,
-    },
-    undefined,
-    now,
-  );
-  // Null means the partial unique index refused: a run is already live. That is
-  // the correct answer to a double click, not an error to surface as a failure.
-  if (!run) return { ok: true, message: "A run is already in progress." };
-
-  // The already-authorized variant: this action resolved and checked the project
-  // itself, so re-resolving it from a slug against the session's CURRENT
-  // organization would both duplicate the work and disagree with the scope we just
-  // authorized against. It also schedules the post-response drain, so a manual run
-  // starts now rather than on the next cron tick.
-  const enqueued = await enqueueForProjectId(scope.project.id, "match_quality_run", {
-    runId: run.id,
-    projectId: scope.project.id,
-    projectName: scope.project.name,
-    experimentName: source.experimentName,
-    windowStart: window.since.toISOString(),
-    windowEnd: window.until.toISOString(),
-    // `authorize()` already proved `cloud-match-quality` for this project, and
-    // the judge shares that key.
-    judge: true,
-    // Same key again: `authorize()` proved `cloud-match-quality`, and the
-    // backtest rides on it for the same reason the judge does.
-    backtest: true,
-    // Someone pressed a button: judge the new requests since the last sweep,
-    // not the whole window. The weekly sweep has the bigger budget.
-    judgeBudgetUsd: JUDGE_BUDGET_USD.manual,
+  // The plan budget, the evidence source, the live-run slot and the job: one
+  // path shared with the MCP `run_quality_analysis` tool.
+  const outcome = await startManualRun({
+    project: scope.project,
+    organization: scope.organization,
+    windowDaysRaw,
   });
-  if (enqueued.status >= 400) {
-    logger.error(
-      { project_id: scope.project.id, status: enqueued.status },
-      "match quality run enqueue rejected",
-    );
-    return { ok: false, message: "Could not queue the run." };
-  }
+  if (!outcome.ok) return { ok: false, message: outcome.message };
+  if (outcome.status === "already_running") return { ok: true, message: outcome.message };
 
   await trackServerEvent(
     "match_quality_run_started",
@@ -173,7 +85,11 @@ export async function runMatchQualityAction(
       orgId: scope.organization.id,
       projectId: scope.project.id,
     },
-    { object_action: "match_quality_run_started", trigger: "manual", window_days: windowDays },
+    {
+      object_action: "match_quality_run_started",
+      trigger: "manual",
+      window_days: outcome.windowDays,
+    },
   );
   revalidateRewrites(scope.project.id);
   return { ok: true };
@@ -200,7 +116,7 @@ export async function applyProposalAction(
     scope.project.id,
     proposalId,
     session.user.externalId,
-    applyDeps(),
+    liveApplyDeps(),
   );
   if (!outcome.ok) return { ok: false, message: applyFailureMessage(outcome.reason) };
 
@@ -243,7 +159,7 @@ export async function applyAllProposalsAction(
     scope.project.id,
     pending.map((row) => row.id),
     session.user.externalId,
-    applyDeps(),
+    liveApplyDeps(),
   );
 
   await trackServerEvent(
@@ -326,7 +242,7 @@ export async function dismissProposalAction(
   if (!auth.ok) return auth;
   const { scope, session } = auth;
 
-  const outcome = await dismissProposal(scope.project.id, proposalId, applyDeps());
+  const outcome = await dismissProposal(scope.project.id, proposalId, liveApplyDeps());
   if (!outcome.ok) return { ok: false, message: applyFailureMessage(outcome.reason) };
 
   await trackServerEvent(
@@ -355,7 +271,7 @@ export async function revertProposalAction(
   if (!auth.ok) return auth;
   const { scope, session } = auth;
 
-  const outcome = await revertProposal(scope.project.id, proposalId, applyDeps());
+  const outcome = await revertProposal(scope.project.id, proposalId, liveApplyDeps());
   if (!outcome.ok) return { ok: false, message: applyFailureMessage(outcome.reason) };
 
   await trackServerEvent(
@@ -373,14 +289,4 @@ export async function revertProposalAction(
   );
   revalidateRewrites(scope.project.id);
   return { ok: true };
-}
-
-function applyFailureMessage(reason: string): string {
-  if (reason === "entry_gone") {
-    return "That tool is no longer in the catalog, so the edit could not be written.";
-  }
-  if (reason === "not_pending") {
-    return "That proposal has already been acted on.";
-  }
-  return "That proposal no longer exists.";
 }

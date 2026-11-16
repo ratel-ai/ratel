@@ -7,6 +7,7 @@ import {
   reportServerException,
   trackServerEvent as trackServerEventFn,
 } from "@/lib/platform/telemetry";
+import { DEFAULT_BATCH_POLICY, eventsToWaitFor } from "@/lib/readings/intent-graph/batching";
 import { type CompactionOptions, compactIntentGraph } from "@/lib/readings/intent-graph/compact";
 import {
   type FoldShadow,
@@ -90,6 +91,9 @@ export interface FoldJobDeps {
   now: () => Date;
   pageLimit: number;
   maxPages: number;
+  /** Batching by backlog (./batching.ts); minBatch 0 folds any backlog. */
+  minBatch: number;
+  maxWaitMs: number;
   /** How far behind now() the reader stays; see FOLD_COMMIT_LAG_MS. Tests set 0. */
   commitLagMs?: number;
   /** The store's byte cap on one graph document; see MAX_INTENT_GRAPH_BYTES. Tests shrink it. */
@@ -112,6 +116,8 @@ const defaultDeps: FoldJobDeps = {
   now: () => new Date(),
   pageLimit: FOLD_PAGE_LIMIT,
   maxPages: MAX_PAGES_PER_JOB,
+  minBatch: DEFAULT_BATCH_POLICY.minBatch,
+  maxWaitMs: DEFAULT_BATCH_POLICY.maxWaitMs,
 };
 
 /**
@@ -121,7 +127,7 @@ const defaultDeps: FoldJobDeps = {
  */
 export const foldSeams: Pick<FoldJobDeps, "loadShadow"> = {};
 
-export type FoldJobOutcome = "folded" | "caught_up";
+export type FoldJobOutcome = "folded" | "caught_up" | "waiting";
 
 export interface FoldJobResult {
   outcome: FoldJobOutcome;
@@ -144,6 +150,8 @@ export interface FoldJobResult {
   clustersMerged: number;
   /** True when a follow-up job was enqueued for remaining backlog. */
   continued: boolean;
+  /** New events a `waiting` run left for a fuller one (./batching.ts). */
+  waitingEvents: number;
 }
 
 /** Thrown when the folded graph no longer fits the store: the cursor is left
@@ -176,6 +184,8 @@ export async function foldProjectIntentGraph(
   let clustersMerged = 0;
   let continued = false;
   let eventsHeld = 0;
+  // A few new events wait for a fuller run; a project's first fold never waits.
+  const waitingEvents = await foldBacklogToWaitFor(projectId, deps, db);
   // Built on first use and reused across pages and graphs: registering the
   // catalog is the expensive part, and the graph is attached per fold.
   let shadow: FoldShadow | null | undefined;
@@ -203,7 +213,7 @@ export async function foldProjectIntentGraph(
       graphBySource.set(status.sourceId, status.graphKey);
   }
 
-  while (pages < deps.maxPages) {
+  while (waitingEvents === 0 && pages < deps.maxPages) {
     // One page per transaction, under a per-project advisory lock, so a
     // second fold job for the same project (a burst of ingest batches can
     // queue one while another runs) waits here and then reads the advanced
@@ -380,7 +390,8 @@ export async function foldProjectIntentGraph(
     continued = (await deps.enqueueFoldIntentGraphJob(projectId)) !== null;
   }
 
-  const outcome: FoldJobOutcome = pages === 0 ? "caught_up" : "folded";
+  const outcome: FoldJobOutcome =
+    waitingEvents > 0 ? "waiting" : pages === 0 ? "caught_up" : "folded";
   const durationMs = Math.max(0, deps.now().getTime() - startedAt.getTime());
   logger.info(
     {
@@ -399,6 +410,7 @@ export async function foldProjectIntentGraph(
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
       continued,
+      waiting_events: waitingEvents,
       duration_ms: durationMs,
     },
     "intent graph fold completed",
@@ -423,6 +435,7 @@ export async function foldProjectIntentGraph(
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
       continued,
+      waiting_events: waitingEvents,
       duration_ms: durationMs,
     },
   );
@@ -441,7 +454,28 @@ export async function foldProjectIntentGraph(
     clustersBeforeCompaction,
     clustersMerged,
     continued,
+    waitingEvents,
   };
+}
+
+/**
+ * How many new events wait for a fuller fold (./batching.ts), else 0. One
+ * indexed read of at most `minBatch` rows past the cursor, before any graph
+ * is loaded. A project's first fold (no cursor yet) never waits.
+ */
+async function foldBacklogToWaitFor(
+  projectId: string,
+  deps: FoldJobDeps,
+  db: () => NonNullable<FoldJobDeps["db"]>,
+): Promise<number> {
+  if (deps.minBatch <= 0) return 0;
+  const ahead = await db().transaction(async (tx) => {
+    const cursor = await deps.getCursor(projectId, tx);
+    return cursor === null
+      ? null
+      : deps.listEvents(projectId, cursor, tx, deps.minBatch, deps.commitLagMs);
+  });
+  return ahead === null ? 0 : eventsToWaitFor(ahead, deps, deps.now().getTime());
 }
 
 /**

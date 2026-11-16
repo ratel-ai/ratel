@@ -64,7 +64,9 @@ FROM source AS build-oss
 ARG RATEL_COMPOSITION=oss
 ENV RATEL_COMPOSITION=${RATEL_COMPOSITION}
 RUN rm -rf "apps/web/app/(ee)"
-RUN pnpm --filter @ratel/platform build
+# NODE_OPTIONS raises the heap to 4 GB, as upstream's image does: the Next type-check worker
+# needs more than the default.
+RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 
 # --- build-cloud: bring in commercial modules -----------------------------
 FROM source AS build-cloud
@@ -73,7 +75,7 @@ ENV RATEL_COMPOSITION=${RATEL_COMPOSITION}
 # node_modules is dockerignored, so this merges the source in beside the links
 # the deps stage already created for @ratel/ee.
 COPY ee ee
-RUN pnpm --filter @ratel/platform build
+RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
 RUN node ee/src/db/bundle-migrator.mjs /app/migrator
 

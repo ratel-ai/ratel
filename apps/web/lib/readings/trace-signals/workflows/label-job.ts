@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import {
   type DecideDeps,
   type DecideResult,
@@ -69,13 +70,15 @@ export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] 
   if (!apiKey || apiKey === "REPLACE_ME") return null;
   const client = new Anthropic({ apiKey });
   return async (system, user) => {
-    const msg = await client.messages.create({
-      model,
-      max_tokens: LABEL_MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
-    });
+    const msg = await client.messages.create(
+      wellFormedJson({
+        model,
+        max_tokens: LABEL_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
+      }),
+    );
     if (msg.stop_reason === "refusal")
       throw new Error("workflow label declined by the model's safety filter");
     return msg.content

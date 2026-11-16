@@ -5,9 +5,10 @@ import { Button } from "@ratel/design-system/button";
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
+import { DotLoader } from "@ratel/design-system/dot-matrix";
 import { Panel, usePeek } from "@ratel/design-system/panel";
 import { Section } from "@ratel/design-system/section";
-import { EmptyState } from "@ratel/design-system/states";
+import { EmptyState, Skeleton } from "@ratel/design-system/states";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ArrowUpRight, CircleCheck, PenLine, RotateCcw } from "lucide-react";
 import Link from "next/link";
@@ -15,6 +16,7 @@ import { useEffect, useState, useTransition } from "react";
 import { restoreSignalAction } from "@/app/(console)/project/[projectId]/health/signal-actions";
 import { SIGNAL_OPEN_EVENT, signalAnchorFromHash } from "@/components/console/health/anchors";
 import { SIGNAL_KIND_ICONS } from "@/components/console/health/kinds";
+import { Calculating, ReadProgress } from "@/components/console/health/v2/Calculating";
 import { IssueDetail } from "@/components/console/health/v2/IssueDetail";
 import type { ExamplesCache } from "@/components/console/health/v2/IssueExamples";
 import {
@@ -28,6 +30,7 @@ import {
 } from "@/components/console/health/v2/issue-rows";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
+import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
 import { DESCRIPTION_FIX_LABEL } from "@/lib/views/health/summary/fix-links";
 
 /**
@@ -63,6 +66,8 @@ export interface IssuesSectionProps {
   upgradeHref: string | null;
   /** Slow tools hidden as slow by design, each with "Show again". */
   dismissed: readonly DismissedSignal[];
+  /** The reading is early (RC-225): the list is as of now, more may come. */
+  calculating?: { progress: EarlyProgress | null } | null;
 }
 
 export function IssuesSection({
@@ -74,6 +79,7 @@ export function IssuesSection({
   lockedCount,
   upgradeHref,
   dismissed,
+  calculating = null,
 }: IssuesSectionProps) {
   const peek = usePeek();
   const openPeek = peek.open;
@@ -145,6 +151,19 @@ export function IssuesSection({
         />
       ),
     },
+    ...(rows.some((row) => row.points !== undefined)
+      ? [
+          {
+            id: "points",
+            header: "If fixed",
+            width: "5.5rem",
+            align: "right" as const,
+            className: "max-sm:hidden",
+            headerClassName: "max-sm:hidden",
+            cell: (row: IssueRow) => <PointsCell points={row.points} />,
+          },
+        ]
+      : []),
     {
       id: "measure",
       header: <span className="sr-only">Measure</span>,
@@ -167,11 +186,16 @@ export function IssuesSection({
           {windowLabel ? (
             <span className="text-fg-subtle"> Read over the {windowLabel}.</span>
           ) : null}
+          {calculating ? (
+            <Calculating progress={calculating.progress} className="ml-2 align-middle" />
+          ) : null}
         </>
       }
     >
       <div data-health-issues={rows.length}>
-        {rows.length === 0 ? (
+        {rows.length === 0 && calculating ? (
+          <StillReading progress={calculating.progress} empty />
+        ) : rows.length === 0 ? (
           <div className="rounded-lg border border-line">
             <EmptyState
               icon={CircleCheck}
@@ -182,7 +206,11 @@ export function IssuesSection({
         ) : (
           <>
             <DataTable
-              caption="Issues, worst first"
+              caption={
+                rows.some((row) => row.points !== undefined)
+                  ? "Issues, most points first"
+                  : "Issues, worst first"
+              }
               columns={columns}
               rows={visible}
               rowKey={(row) => row.key}
@@ -213,6 +241,7 @@ export function IssuesSection({
                   : `Show all ${rows.length} issues`}
               </Button>
             ) : null}
+            {calculating ? <StillReading progress={calculating.progress} /> : null}
           </>
         )}
         {lockedCount > 0 ? <Locked count={lockedCount} upgradeHref={upgradeHref} /> : null}
@@ -274,12 +303,19 @@ function IssueCell({ row }: { row: IssueRow }) {
       />
       <span className="flex min-w-0 flex-col">
         <span className="truncate font-medium text-fg">{row.title}</span>
-        {/* The status column folds away on a phone; the word moves here. */}
-        <StatusDot
-          tone={TONE[row.tone]}
-          label={ISSUE_TONE_LABEL[row.tone]}
-          className="text-xs whitespace-nowrap md:hidden"
-        />
+        {/* The status and points columns fold away on a phone; they move here. */}
+        <span className="flex items-center gap-2 md:hidden">
+          <StatusDot
+            tone={TONE[row.tone]}
+            label={ISSUE_TONE_LABEL[row.tone]}
+            className="text-xs whitespace-nowrap"
+          />
+          {row.points !== undefined && row.points >= 1 ? (
+            <span className="text-xs text-fg-subtle tabular-nums sm:hidden">
+              +{row.points}&nbsp;pts
+            </span>
+          ) : null}
+        </span>
       </span>
     </span>
   );
@@ -387,6 +423,62 @@ function Dismissed({
           {error}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/** What fixing the row wins back on the Health score; under a point reads as a dash. */
+function PointsCell({ points }: { points: number | undefined }) {
+  if (points === undefined) return null;
+  if (points < 1)
+    return (
+      <span className="text-ui text-fg-faint tabular-nums" title="Less than a point">
+        -
+      </span>
+    );
+  return (
+    <span
+      className="text-ui whitespace-nowrap text-fg-muted tabular-nums"
+      data-issue-points={points}
+    >
+      +{points}&nbsp;pts
+    </span>
+  );
+}
+
+/**
+ * Under an early reading's list (RC-225): faint rows where more issues may
+ * land, the loader that means work is in progress, and how far the reading
+ * has got. The list above is as of now.
+ */
+function StillReading({
+  progress,
+  empty = false,
+}: {
+  progress: EarlyProgress | null;
+  empty?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3",
+        empty ? "rounded-lg border border-line p-4" : "mt-3 border-t border-line pt-4",
+      )}
+      data-health-still-reading=""
+    >
+      <div aria-hidden className="flex flex-col gap-2 px-4 opacity-60">
+        <Skeleton className="h-4 w-2/5" />
+        <Skeleton className="h-4 w-1/4" />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4">
+        <span className="inline-flex items-center gap-2 text-ui text-fg-muted">
+          <DotLoader size="sm" label="Reading the rest of your runs" />
+          {empty
+            ? "Nothing stands out yet. Still reading the rest of your runs."
+            : "More issues may appear as we read the rest."}
+        </span>
+        {progress ? <ReadProgress progress={progress} /> : null}
+      </div>
     </div>
   );
 }

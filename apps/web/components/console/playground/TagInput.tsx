@@ -1,19 +1,26 @@
 "use client";
 
-import { Button } from "@ratel/design-system/button";
-import { Input } from "@ratel/design-system/input";
 import { X } from "lucide-react";
 import { type KeyboardEvent, useState } from "react";
 
-/** Tags as chips, not as a comma-separated string in a text field. */
+/**
+ * Tags as chips, not as a comma-separated string in a text field.
+ *
+ * Tags are indexed for ranking, so "is this one tag or two?" is a question with
+ * a scoring consequence, and a plain text field leaves the reader guessing where
+ * the boundaries fell. Committing on comma or Enter makes each tag a visible
+ * object before it affects a search.
+ */
 export function TagInput({
   tags,
   onChange,
   label,
+  id,
 }: {
   tags: readonly string[];
   onChange: (tags: string[]) => void;
   label: string;
+  id?: string;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -33,33 +40,36 @@ export function TagInput({
       commit(draft);
       return;
     }
+    // Backspace on an empty field removes the last chip: the standard gesture,
+    // and the only way to fix a typo'd tag without reaching for the mouse.
     if (event.key === "Backspace" && draft === "" && tags.length > 0) {
       onChange(tags.slice(0, -1));
     }
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 rounded-lg border border-forest-300 bg-base-deep/40 px-2 py-1.5 focus-within:border-cream/45">
+    <div className="flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-line-strong bg-app px-1.5 py-1 transition-[border-color] duration-120 focus-within:border-fg-subtle">
       {tags.map((tag) => (
         <span
           key={tag}
-          className="inline-flex items-center gap-1 rounded-md border border-forest-300 bg-forest/50 py-0.5 pr-1 pl-1.5 font-mono text-[10px] text-cream-dim"
+          className="inline-flex h-6 items-center gap-1 rounded-md border border-line bg-raised pr-0.5 pl-1.5 font-mono text-xs text-fg-muted"
         >
           {tag}
-          <Button
-            variant="ghost"
+          <button
+            type="button"
             aria-label={`Remove tag ${tag}`}
             onClick={() => onChange(tags.filter((candidate) => candidate !== tag))}
-            className="size-auto rounded border-0 p-0 text-warm-muted transition-colors hover:bg-transparent hover:text-coral focus-visible:ring-1 focus-visible:ring-offset-0"
+            className="inline-flex size-5 items-center justify-center rounded text-fg-subtle outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
           >
-            <X className="size-3" aria-hidden />
-          </Button>
+            <X aria-hidden strokeWidth={1.5} className="size-3" />
+          </button>
         </span>
       ))}
-      <Input
+      <input
+        id={id}
         value={draft}
         aria-label={label}
-        placeholder={tags.length === 0 ? "add a tag…" : ""}
+        placeholder={tags.length === 0 ? "Add a tag…" : ""}
         onChange={(event) => {
           // Paste of "a, b, c" should become three chips, not one long tag.
           if (event.target.value.includes(",")) {
@@ -72,7 +82,7 @@ export function TagInput({
         }}
         onKeyDown={handleKeyDown}
         onBlur={() => commit(draft)}
-        className="h-auto w-auto min-w-24 flex-1 rounded-none border-0 bg-transparent px-0 py-0.5 font-mono text-[11px] text-cream placeholder:text-warm-muted/50 focus-visible:ring-0 max-md:text-[11px]"
+        className="h-6 min-w-24 flex-1 bg-transparent px-1 font-mono text-xs text-fg outline-none placeholder:text-fg-faint focus-visible:outline-none max-md:text-base"
       />
     </div>
   );

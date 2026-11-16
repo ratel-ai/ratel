@@ -66,10 +66,10 @@ export const sessionReplayRuns = pgTable(
       before: Record<string, number>;
       after: Record<string, number>;
     }>(),
-    /** `{ before: { input, output }, after: { input, output } }`. */
+    /** `{ before: { input, output, costUsd }, after: { input, output, costUsd } }`, totals over the k samples; `costUsd` is null when the model has no price. */
     tokens: jsonb("tokens").$type<{
-      before: { input: number; output: number };
-      after: { input: number; output: number };
+      before: { input: number; output: number; costUsd?: number | null };
+      after: { input: number; output: number; costUsd?: number | null };
     }>(),
     /** What the run spent (or holds while it is live): counted in the organization's daily budget. */
     spend: jsonb("spend").$type<{ usd: number; reserved: boolean; capUsd: number }>().notNull(),

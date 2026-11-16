@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm";
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { events } from "@/lib/ingest/otlp/schema";
 import { jobs } from "@/lib/jobs/schema";
@@ -403,6 +403,37 @@ export async function enqueueAssignTopicsJob(
   `);
   const row = result.rows[0] as { id?: string } | undefined;
   return row?.id ? { id: row.id } : null;
+}
+
+/** How long a reading asked for over MCP waits after the last one: each reading names intents with a model. */
+export const TOPIC_READING_COOLDOWN_MS = 10 * 60_000;
+
+/**
+ * The latest time an `assign_topics` job of this project was queued or
+ * finished at or after `since`; null when none was. Whatever queued it (the
+ * signal run, "Read now", MCP) counts.
+ */
+export async function lastTopicReadingActivity(
+  projectId: string,
+  since: Date,
+  db: ReadDb = getDb(),
+): Promise<Date | null> {
+  const rows = await db
+    .select({ createdAt: jobs.createdAt, finishedAt: jobs.finishedAt })
+    .from(jobs)
+    .where(
+      and(
+        eq(jobs.projectId, projectId),
+        eq(jobs.kind, ASSIGN_TOPICS_JOB_KIND),
+        or(gte(jobs.createdAt, since), gte(jobs.finishedAt, since)),
+      ),
+    )
+    .orderBy(desc(jobs.createdAt))
+    .limit(5);
+  const times = rows
+    .flatMap((row) => [row.createdAt, row.finishedAt])
+    .filter((at): at is Date => at !== null);
+  return times.length === 0 ? null : new Date(Math.max(...times.map((at) => at.getTime())));
 }
 
 /** Whether a reading is queued or running now (fresh rows only, as `listInFlightJobs` reads them). */

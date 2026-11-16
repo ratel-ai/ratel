@@ -19,7 +19,9 @@ import { requestHealthReading } from "@/lib/views/health/reading-request";
  * The Agent health route's state, end to end. A page whose reading has
  * enough turns is `ready`; it reads nothing more unless that reading started
  * while turns were still being built (`model.unbuiltAtReading`), in which
- * case it asks for one that reads them and watches for it. Any other page
+ * case it asks for one that reads them and watches for it, or it is early
+ * (`model.earlyReading`, RC-224), in which case it asks for the full one the
+ * same way. Any other page
  * reads the ledger, decides what is true (`healthPageState`), and, when it is
  * about to say a reading is being built while nothing is on its way, asks for
  * one. Never inside an admin support session, which only looks.
@@ -67,7 +69,13 @@ export interface PageStateInput {
   organizationId: string;
   model: Pick<
     HealthPageModel,
-    "windowDays" | "turns" | "floor" | "waitingOn" | "computedAt" | "unbuiltAtReading"
+    | "windowDays"
+    | "turns"
+    | "floor"
+    | "waitingOn"
+    | "computedAt"
+    | "unbuiltAtReading"
+    | "earlyReading"
   >;
   /** The model is the empty fallback of a failed read, not the project's reading. */
   modelUnavailable?: boolean;
@@ -125,15 +133,15 @@ export async function loadHealthPageState(
 
 /**
  * A reading with enough turns is the page. One that started while turns were
- * still being built missed them: ask for a reading that reads them (once the
- * cooldown allows) and watch for it.
+ * still being built missed them, and an early one is not the full reading:
+ * ask for one that reads everything (once the cooldown allows) and watch for it.
  */
 async function readyState(
   input: PageStateInput,
   deps: PageStateDeps,
   now: Date,
 ): Promise<HealthPageState> {
-  if (!input.model.unbuiltAtReading) return READY;
+  if (!input.model.unbuiltAtReading && !input.model.earlyReading) return READY;
   const runs = await deps.loadRuns(input.projectId, now);
   if (!runs) return READY;
   if (runs.working) return { kind: "ready", updating: true };
@@ -141,7 +149,7 @@ async function readyState(
   const requested = await deps.requestReading({
     projectId: input.projectId,
     organizationId: input.organizationId,
-    reason: "reading_partial",
+    reason: input.model.earlyReading ? "reading_early" : "reading_partial",
   });
   return requested ? { kind: "ready", updating: true } : READY;
 }

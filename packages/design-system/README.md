@@ -33,7 +33,7 @@ The rules for using them, and for any UI in the platform, are in [`DESIGN.md`](D
 | Path | Contents |
 |---|---|
 | `src/styles.css` | tokens, utilities, focus styles |
-| `src/ratel.css` | the brand's palette and type names (`canvas`, `cream`, `forest`, ...) on the semantic tokens, and the global classes `.eyebrow`, `.card-enter`, `.tabular` (also on `.font-mono`), `.pixel-header` and `.dot-field`, the Micro style's animations (`DESIGN.md`, Declared exceptions) and the onboarding exit (`.onboarding-settle`, `.onboarding-dissolve`) |
+| `src/ratel.css` | the brand's palette and type names (`canvas`, `cream`, `forest`, ...) on the semantic tokens, and the global classes `.eyebrow`, `.card-enter`, `.tabular` (also on `.font-mono`), `.pixel-header` and `.dot-field`, the onboarding exit (`.onboarding-settle`, `.onboarding-dissolve`) and the Health score's early-reading motion (`.score-beat`, `.score-wave`, `.live-dot`) |
 | `src/cn.ts` | `clsx` plus a `tailwind-merge` that knows the custom scale |
 | `src/components/*.tsx` | primitives |
 | `src/components/*.ts` | pure logic: keyboard, sorting, tree, peek URL state, the task colors (`task-colors.ts`), the reduced-motion hook |

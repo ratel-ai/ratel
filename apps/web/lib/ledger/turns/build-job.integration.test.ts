@@ -7,6 +7,8 @@ import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { enqueueEarlyFirstReading } from "@/lib/readings/trace-signals/signals/compute-job";
+import { latestSignalRun } from "@/lib/readings/trace-signals/signals/queries";
 import { countClosedTurns } from "../closed-turns";
 import type { RunTrigger } from "../run-trigger";
 import {
@@ -30,7 +32,8 @@ import {
 /**
  * The build job against real PGlite. Owned (ADR-0030): the signal-run enqueues the
  * readings supply are stand-ins here (a coalesced `compute_trace_signals` insert and a
- * recorded callback), so the test proves the seams without importing L4.
+ * recorded callback), so the test proves the seams without importing L4. The quick first
+ * reading's case (RC-224) runs the readings' own enqueue over this database instead.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -133,6 +136,8 @@ function deps(
     closeIdle: (p, before, now) => closeIdleTraceTurns(p, before, now, db),
     enqueueBuild: (p, request) => enqueueBuildTraceTurnsJob(p, db, request),
     enqueueReading: (p, trigger) => enqueueComputeJob(p, trigger, db),
+    // Off unless a test turns the quick first reading on (RC-224).
+    onBacklogProgress: (p) => earlyFirstReading(db, p, false),
     observability: {
       trackSystemEvent: async (event, _distinctId, properties) => {
         tracked.push({ event, properties });
@@ -141,6 +146,16 @@ function deps(
     salt: "test-salt",
     ...over,
   };
+}
+
+function earlyFirstReading(db: Db, projectId: string, enabled: boolean, floor?: number) {
+  return enqueueEarlyFirstReading(projectId, null, {
+    ...(floor === undefined ? {} : { floor }),
+    quickFirstReading: async () => enabled,
+    latestRun: (id) => latestSignalRun(id, db),
+    enqueue: (id, trigger) => enqueueComputeJob(id, trigger, db),
+    countClosed: (id, from, to) => countClosedTurns(id, from, to, db),
+  });
 }
 
 async function count(client: PGlite, sql: string): Promise<number> {
@@ -584,6 +599,43 @@ test("a build asked for a reading enqueues the run once it has caught up, and it
     },
   );
   assert.equal(unwired.readingQueued, false);
+});
+
+test("with the quick first reading on, a first reading starts while the backlog is still being built (RC-224)", async () => {
+  // Four imported runs, each closed as soon as it is built; two pages of two events build two of them.
+  const halfBuilt = async (on: boolean) => {
+    const { client, db } = await setup();
+    for (const session of ["run-1", "run-2", "run-3", "run-4"]) {
+      const { valid } = parseTraceEvents(
+        invocation("gh_run_list", {
+          source_id: "langfuse-import",
+          session_id: session,
+          trace_id: session,
+        }),
+      );
+      await insertTraceEvents(
+        PROJECT_ID,
+        valid.map((e) => ({ ...e, ingestSource: "otlp" as const })),
+        db,
+      );
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    const result = await buildProjectTraceTurns(
+      PROJECT_ID,
+      deps(db, [], {
+        pageLimit: 2,
+        maxPages: 2,
+        onBacklogProgress: (p) => earlyFirstReading(db, p, on, 2),
+      }),
+    );
+    assert.equal(result.continued, true);
+    return queuedPayloads(client, "compute_trace_signals");
+  };
+
+  // Off: half a backlog asks for nothing, as before.
+  assert.deepEqual(await halfBuilt(false), []);
+  // On: the last week already holds the floor's worth of closed runs, so the first reading starts now.
+  assert.deepEqual(await halfBuilt(true), [{ trigger: "first_build" }]);
 });
 
 test("an ask for a reading is never dropped: it merges into the build already queued", async () => {

@@ -17,6 +17,10 @@ job; its optional `registerSourceIds` names the source ids the importer stores r
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
+The optional `importRunning` port answers whether an import is storing runs for a project right
+now, so an Agent health reading made meanwhile is marked early; the open-source edition has no
+importer and leaves it out.
+
 `CoreServices.onboarding` (`onboarding.ts`) is project creation for a page the edition owns, such
 as Cloud's invitation page: `createFirstProject` takes a name, the organization and the person,
 runs the core's own onboarding (name rules, the plan's project cap, the project, its first key,
@@ -27,7 +31,7 @@ session and refuses a support session before it calls either.
 `mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to
-nobody with an account. The open-source edition has no such port and accepts project keys only.
+nobody with an account. Its optional `launchAccess` is the console's allowlist for a person by their provider id; the MCP server asks it for every signed-in caller and refuses without it. The open-source edition has no such port and accepts project keys only.
 
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the

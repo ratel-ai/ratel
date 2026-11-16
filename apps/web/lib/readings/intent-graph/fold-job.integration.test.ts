@@ -138,6 +138,8 @@ function deps(db: Db, over: Partial<FoldJobDeps> = {}): Partial<FoldJobDeps> {
     trackServerEvent: async (...args) => {
       tracked.push(args);
     },
+    // These tests fold a few events per pass; batching has its own test.
+    minBatch: 0,
     ...over,
   };
 }
@@ -971,4 +973,30 @@ test("a fragment the fold just observed is not absorbed until it has settled", a
 
   assert.equal(result.clusterCount, 5);
   assert.equal(result.clustersMerged, 0);
+});
+
+test("batching (RC-213): a few new events wait for a fuller fold, and the graph is left alone until then", async () => {
+  const { db } = await setup();
+  await ingest(db, turn("why is the build broken", "gh_run_list"));
+  const first = await foldProjectIntentGraph(PROJECT_ID, deps(db, { minBatch: 6 }));
+  assert.equal(first.outcome, "folded", "the first fold reads whatever there is");
+  const cursor = await getIntentGraphFoldCursor(PROJECT_ID, db);
+
+  await ingest(db, turn("rerun the failed job", "gh_run_rerun"));
+  const waited = await foldProjectIntentGraph(PROJECT_ID, deps(db, { minBatch: 6 }));
+  assert.equal(waited.outcome, "waiting");
+  assert.ok(waited.waitingEvents > 0);
+  assert.equal(waited.pages, 0);
+  assert.equal(
+    (await getIntentGraph(PROJECT_ID, CLOUD_INTENT_GRAPH_KEY, db))?.rev,
+    first.rev,
+    "the graph is not rewritten",
+  );
+  assert.equal(await getIntentGraphFoldCursor(PROJECT_ID, db), cursor);
+
+  const late = await foldProjectIntentGraph(
+    PROJECT_ID,
+    deps(db, { minBatch: 6, now: () => new Date(Date.now() + 20 * 60_000) }),
+  );
+  assert.equal(late.outcome, "folded", "the oldest waiting event is past the wait");
 });

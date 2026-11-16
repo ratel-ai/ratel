@@ -266,3 +266,122 @@ test("without usage, budget falls back to the estimate (all in user_input)", () 
   assert.equal(m.tokensByCategory.tools, 0);
   assert.equal(sumCategories(m.tokensByCategory), m.tokensByCategory.user_input);
 });
+
+/* --- toolCallScope: count only the calls this model call produced ----------- */
+
+const turnCall = (id: string, name: string, args: Record<string, unknown> = {}) => ({
+  role: "assistant" as const,
+  content: [{ type: "tool_call" as const, id, name, arguments: args }],
+});
+const turnResult = (id: string) => ({ role: "tool" as const, tool_call_id: id, content: "ok" });
+const turnEvent = (messages: unknown[], tools = [{ name: "search", parameters: {} }]) =>
+  parse({ provider: "openai", model: "gpt-5.5", ts: "2026-10-20T10:00:00Z", tools, messages });
+const callsOf = (ev: CloudEvent, scope: "all" | "produced") =>
+  Object.fromEntries(
+    Object.entries(categorize(ev, { toolCallScope: scope }).toolsByName).map(([n, s]) => [
+      n,
+      s.calls,
+    ]),
+  );
+
+test("produced scope: history tool calls are not counted again", () => {
+  const ev = turnEvent(
+    [
+      { role: "user", content: "go" },
+      turnCall("c1", "search"),
+      turnResult("c1"),
+      turnCall("c2", "fetch"),
+    ],
+    [
+      { name: "search", parameters: {} },
+      { name: "fetch", parameters: {} },
+    ],
+  );
+  assert.deepEqual(callsOf(ev, "all"), { search: 1, fetch: 1 });
+  assert.deepEqual(callsOf(ev, "produced"), { search: 0, fetch: 1 });
+});
+
+test("produced scope: a tool the turn already called still counts as used", () => {
+  const ev = turnEvent([
+    { role: "user", content: "go" },
+    turnCall("c1", "search"),
+    turnResult("c1"),
+  ]);
+  const m = categorize(ev, { toolCallScope: "produced" });
+  assert.equal(m.toolsByName.search.calls, 0);
+  assert.equal(m.toolsUsedCount, 1);
+  assert.deepEqual(m.splits, categorize(ev).splits);
+  assert.deepEqual(m.tokensByCategory, categorize(ev).tokensByCategory);
+});
+
+test("produced scope: tool calls without ids count once", () => {
+  const ev = turnEvent([
+    { role: "user", content: "go" },
+    turnCall("", "search", { q: "a" }),
+    turnResult(""),
+    turnCall("", "search", { q: "a" }),
+  ]);
+  assert.deepEqual(callsOf(ev, "all"), { search: 2 });
+  assert.deepEqual(callsOf(ev, "produced"), { search: 1 });
+});
+
+test("produced scope: the same tool called again with a new id counts again", () => {
+  const step1 = [{ role: "user", content: "go" }, turnCall("c1", "search")];
+  const step2 = [...step1, turnResult("c1"), turnCall("c2", "search")];
+  const total =
+    callsOf(turnEvent(step1), "produced").search + callsOf(turnEvent(step2), "produced").search;
+  assert.equal(total, 2);
+});
+
+test("produced scope: parallel tool calls in one output all count", () => {
+  const ev = turnEvent([
+    { role: "user", content: "go" },
+    {
+      role: "assistant",
+      content: [
+        { type: "tool_call", id: "c1", name: "search", arguments: { q: "a" } },
+        { type: "tool_call", id: "c2", name: "search", arguments: { q: "b" } },
+      ],
+    },
+  ]);
+  assert.deepEqual(callsOf(ev, "produced"), { search: 2 });
+});
+
+test("produced scope: a single model call counts as before", () => {
+  const ev = turnEvent([{ role: "user", content: "go" }, turnCall("c1", "search")]);
+  assert.deepEqual(categorize(ev, { toolCallScope: "produced" }), categorize(ev));
+});
+
+test("produced scope: with the input length known, a history call right before the output is not counted", () => {
+  const messages = [
+    { role: "user", content: "go" },
+    turnCall("c1", "search"),
+    turnCall("c2", "fetch"),
+  ];
+  const ev = {
+    ...turnEvent(messages, [
+      { name: "search", parameters: {} },
+      { name: "fetch", parameters: {} },
+    ]),
+    input_message_count: 2,
+  };
+  assert.deepEqual(callsOf(ev, "produced"), { search: 0, fetch: 1 });
+});
+
+test("produced scope: with no output after the input, nothing is counted", () => {
+  const ev = {
+    ...turnEvent([{ role: "user", content: "go" }, turnCall("c1", "search")]),
+    input_message_count: 2,
+  };
+  assert.deepEqual(callsOf(ev, "produced"), { search: 0 });
+});
+
+test("produced scope: gateway invoke_tool in history is not counted again", () => {
+  const invoke = (id: string) => turnCall(id, "invoke_tool", { toolId: "crm.lookup", args: {} });
+  const ev = turnEvent(
+    [{ role: "user", content: "go" }, invoke("c1"), turnResult("c1"), invoke("c2")],
+    [],
+  );
+  assert.equal(categorize(ev).toolsByName["crm.lookup"].calls, 2);
+  assert.equal(categorize(ev, { toolCallScope: "produced" }).toolsByName["crm.lookup"].calls, 1);
+});

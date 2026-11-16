@@ -68,3 +68,9 @@ test("the tracker latches truncation across parts of one result", () => {
   tracker.take(capRows([1, 2, 3], 1));
   assert.equal(tracker.value, true);
 });
+
+test("truncateText does not cut an emoji in half", () => {
+  assert.deepEqual(truncateText("ab😀cd", 3), { text: "ab…", truncated: true });
+  assert.deepEqual(truncateText("ab😀cd", 4), { text: "ab😀…", truncated: true });
+  assert.deepEqual(truncateText("abc", 10), { text: "abc", truncated: false });
+});

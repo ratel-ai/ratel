@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { emptyChange } from "@/lib/views/eval-gate/change";
 import type { TaskEvalCaseRow, TaskEvalRunRow } from "@/lib/views/task-evals/schema";
+import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
 import { simulationInputKey, taskReplayRuns, taskSimulationState } from "./simulation-view";
 
 test("draft and test edits make a run stale even when it finishes after the edit", () => {
@@ -153,4 +154,81 @@ test("RC-76: the task page lists what the replay did for each replayed run of th
   assert.equal(rows[0]!.paths.doesTheWork, false);
   assert.deepEqual(rows[0]!.paths.after, ["seat_map_then_select"]);
   assert.deepEqual(taskReplayRuns(null, "project"), []);
+});
+
+/* - a scorer that moved while the verdict didn't say so ------------------------- */
+
+const tally = (passRate: number | null) => ({ passRate, passed: 0, total: 10 });
+const verdictRun = (
+  verdict: string,
+  task: Record<string, { before: ReturnType<typeof tally>; after: ReturnType<typeof tally> }>,
+) =>
+  ({
+    status: "completed",
+    verdict,
+    scorerVersion: SCORER_VERSION,
+    change: { inputKey: "key" },
+    breakdown: { task },
+    createdAt: new Date(0),
+    startedAt: null,
+  }) as unknown as TaskEvalRunRow;
+
+test("no overall change with a scorer down 20 pts says which scorer moved", () => {
+  const state = taskSimulationState(
+    verdictRun("same", {
+      ends_well: { before: tally(0.8), after: tally(0.6) },
+      expected_tool: { before: tally(0.5), after: tally(0.5) },
+    }),
+    "key",
+  );
+  assert.equal(state.state, "same");
+  assert.deepEqual(state.moved, [{ kind: "ends_well", delta: -20 }]);
+});
+
+test("a move under the threshold, or an unmeasured side, stays quiet", () => {
+  const state = taskSimulationState(
+    verdictRun("same", {
+      ends_well: { before: tally(0.8), after: tally(0.75) },
+      expected_tool: { before: tally(null), after: tally(0.2) },
+    }),
+    "key",
+  );
+  assert.equal(state.moved, undefined);
+});
+
+test("a move at exactly the threshold counts", () => {
+  assert.deepEqual(
+    taskSimulationState(
+      verdictRun("same", { expected_tool: { before: tally(0.5), after: tally(0.6) } }),
+      "key",
+    ).moved,
+    [{ kind: "expected_tool", delta: 10 }],
+  );
+});
+
+test("better flags only the scorers that fell, worse only the ones that rose", () => {
+  const moves = {
+    ends_well: { before: tally(0.8), after: tally(0.6) },
+    expected_tool: { before: tally(0.4), after: tally(0.7) },
+  };
+  assert.deepEqual(taskSimulationState(verdictRun("better", moves), "key").moved, [
+    { kind: "ends_well", delta: -20 },
+  ]);
+  assert.deepEqual(taskSimulationState(verdictRun("worse", moves), "key").moved, [
+    { kind: "expected_tool", delta: 30 },
+  ]);
+});
+
+test("the fix-specific tests don't count, and a running simulation has no moves", () => {
+  const run = {
+    ...verdictRun("same", {}),
+    breakdown: { task: {}, fix: { expected_tool: { before: tally(0.1), after: tally(0.9) } } },
+  } as unknown as TaskEvalRunRow;
+  assert.equal(taskSimulationState(run, "key").moved, undefined);
+  const running = {
+    ...verdictRun("same", { expected_tool: { before: tally(0.1), after: tally(0.9) } }),
+    status: "running",
+    createdAt: new Date(),
+  } as unknown as TaskEvalRunRow;
+  assert.equal(taskSimulationState(running, "key").moved, undefined);
 });

@@ -51,7 +51,7 @@ import {
  * text, no end-user ids.
  *
  * Owned (ADR-0030): no feature-flag gate (the Agent health gate is retired, always on),
- * and the two seams into the signal runs above (`enqueueReading`, `onBacklogDrained`)
+ * and the seams into the signal runs above (`enqueueReading`, `onBacklogDrained`, `onBacklogProgress`)
  * are optional dependencies the readings register, not imports from L4.
  */
 
@@ -102,6 +102,13 @@ export interface BuildJobDeps {
    * readings supply the first-signal-run enqueue here; it must never throw.
    */
   onBacklogDrained?: (projectId: string) => Promise<unknown>;
+  /**
+   * Called when a run built pages but did NOT catch up (RC-224): with the
+   * quick first reading on, a project's first reading can start from the
+   * last week while the older backlog is still being built
+   * (`enqueueEarlyFirstReading`). Never throws.
+   */
+  onBacklogProgress?: (projectId: string) => Promise<unknown>;
   observability: Pick<BackgroundObservability, "trackSystemEvent">;
   now: () => Date;
   /** Null in a deployed environment without a configured salt: the run skips. */
@@ -118,7 +125,10 @@ export interface BuildJobDeps {
  * The seams the readings fill in once they land: the job registry sets them from the
  * trace-signals registration, so the ledger never imports L4.
  */
-export const ledgerSeams: Pick<BuildJobDeps, "enqueueReading" | "onBacklogDrained"> = {};
+export const ledgerSeams: Pick<
+  BuildJobDeps,
+  "enqueueReading" | "onBacklogDrained" | "onBacklogProgress"
+> = {};
 
 function defaultDeps(): BuildJobDeps {
   return {
@@ -132,6 +142,7 @@ function defaultDeps(): BuildJobDeps {
       enqueueBuildTraceTurnsJobFn(projectId, undefined, request),
     enqueueReading: ledgerSeams.enqueueReading,
     onBacklogDrained: ledgerSeams.onBacklogDrained,
+    onBacklogProgress: ledgerSeams.onBacklogProgress,
     observability: createBackgroundObservability(),
     now: () => new Date(),
     salt: traceSignalsHashSalt(),
@@ -255,6 +266,7 @@ export async function buildProjectTraceTurns(
   // Idle close is how most turns of a quiet project close, so a run that only closed
   // turns can be the one that reaches the first reading's floor.
   if (caughtUp && (pages > 0 || idleClosed > 0)) await deps.onBacklogDrained?.(projectId);
+  if (!caughtUp && pages > 0) await deps.onBacklogProgress?.(projectId);
   const readingQueued =
     caughtUp && request.reading && deps.enqueueReading
       ? (await deps.enqueueReading(projectId, request.reading)) !== null

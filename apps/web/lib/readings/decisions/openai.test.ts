@@ -433,3 +433,19 @@ test("mergeRerank: re-read options keep their scores, the rest rank strictly bel
   assert.equal(merged.probabilities.b, 0.7);
   assert.ok(merged.probabilities.c! < 0.3 && merged.probabilities.d! < merged.probabilities.c!);
 });
+
+test("a lone surrogate in a query or an option never reaches the provider", async () => {
+  const { fetchImpl } = scriptedFetch([choiceResponse("a", { a: 0.9, b: 0.1 }, 1)]);
+  let body = "";
+  const spy = (async (url: string, init: RequestInit) => {
+    body = String(init.body);
+    return fetchImpl(url, init);
+  }) as unknown as typeof fetch;
+  await decisionClient({ apiKey: "k", fetchImpl: spy, sleep: noSleep }).decideChoice(
+    "find \uD83D",
+    TWO,
+    FRAMING,
+  );
+  assert.ok(body.includes("find"));
+  assert.doesNotMatch(body, /\\ud[89ab-f]/i);
+});

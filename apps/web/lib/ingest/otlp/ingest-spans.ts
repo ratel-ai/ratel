@@ -21,7 +21,7 @@ import { attrString } from "./anyvalue";
 import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
-import { toRow } from "./reconstruct";
+import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
@@ -110,7 +110,7 @@ export async function persistDecodedSpans(
 
   // Group into LLM calls, reconstruct rows, and persist under the project.
   const calls = groupSpans(spans, dedupe);
-  const rows = calls.map((c) => toRow(projectId, c));
+  const rows = toRows(projectId, calls);
 
   let accepted = 0;
   if (rows.length > 0) {

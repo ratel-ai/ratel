@@ -12,6 +12,7 @@ import {
   rowTools,
   toolCount,
 } from "@/components/console/health/problem-groups";
+import { gainOf, type HealthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { SignalKind, SignalView } from "@/lib/readings/trace-signals/view";
 import { productWords } from "@/lib/views/fixes/copy";
 import { fixHref } from "@/lib/views/fixes/href";
@@ -150,6 +151,8 @@ export interface IssueRow {
   action: IssueAction;
   /** Turns behind it, for "See turns". */
   turns: number;
+  /** Health score points fixing it would win back (RC-225); absent when the page shows no score. */
+  points?: number;
   group: ProblemGroup;
 }
 
@@ -163,6 +166,8 @@ export interface IssueRowsInput {
   tasks: readonly TaskLookup[];
   /** Null when Fixes could not be read: no row then claims a fix. */
   fixes: readonly FixLookup[] | null;
+  /** The Health score, when it leads the page: each row then says what it is worth, and the rows go most points first. */
+  score?: Pick<HealthScoreView, "value" | "parts"> | null;
 }
 
 export const ISSUE_PEEK_PREFIX = "issue:";
@@ -272,6 +277,14 @@ function rowOf(group: ProblemGroup, input: IssueRowsInput, early: boolean): Issu
         ? { kind: "turns" }
         : { kind: "details" },
     turns,
+    ...(input.score && !early
+      ? {
+          points: gainOf(
+            input.score,
+            group.members.map((member) => member.id),
+          ),
+        }
+      : {}),
     group,
   };
 }
@@ -297,10 +310,12 @@ export function withoutExampleTurns(signals: readonly SignalView[]): SignalView[
 
 /** Every row: the issues worst first, then the ones too early to call. */
 export function issueRows(input: IssueRowsInput): IssueRow[] {
+  const rows = groupByKind(withoutExampleTurns(input.signals), input.folding).map((group) =>
+    rowOf(group, input, false),
+  );
   return [
-    ...groupByKind(withoutExampleTurns(input.signals), input.folding).map((group) =>
-      rowOf(group, input, false),
-    ),
+    // With a score, the most points first; a tie keeps the worst-first order.
+    ...(input.score ? [...rows].sort((a, b) => (b.points ?? 0) - (a.points ?? 0)) : rows),
     ...groupByKind(withoutExampleTurns(input.tooEarly)).map((group) => rowOf(group, input, true)),
   ];
 }
@@ -317,5 +332,6 @@ export function issuesLine(rows: readonly IssueRow[], signals: readonly SignalVi
     early > 0
       ? ` ${early.toLocaleString("en-US")} more ${early === 1 ? "is" : "are"} too early to call.`
       : "";
-  return `${issues}${across}, worst first.${later}`;
+  const order = rows.some((row) => row.points !== undefined) ? "most points first" : "worst first";
+  return `${issues}${across}, ${order}.${later}`;
 }

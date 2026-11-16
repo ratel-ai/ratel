@@ -1,3 +1,10 @@
+import {
+  type HealthScoreView,
+  healthScoreView,
+  parseStoredHealthScore,
+  type StoredHealthScore,
+  scoredIssues,
+} from "@/lib/readings/trace-signals/health-score";
 import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
 import { parseStoredSetup } from "@/lib/readings/trace-signals/setup-facts";
 import type { RunSummary } from "@/lib/readings/trace-signals/signals/analyze";
@@ -138,6 +145,8 @@ export interface CompletedRun {
   summary: RunSummary;
   /** The run's turn counts by source (`trace_signal_runs.turn_source_mix`); absent falls back to the buckets'. */
   turnSourceMix?: TurnSourceMix;
+  /** Closed turns the run read: what an issue's reach is a share of. Absent, the page has no Health score. */
+  turnsScanned?: number;
 }
 
 export interface PageInputs {
@@ -154,6 +163,8 @@ export interface PageInputs {
   insights?: WorkflowInsights | null;
   /** Defaults to `FIRST_READING_FLOOR`. */
   floor?: number;
+  /** Earlier readings' stored Health scores, newest first (`listEarlierHealthScores`). */
+  scoreHistory?: readonly unknown[];
 }
 
 function toSignalView(
@@ -309,5 +320,20 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
     ...(typeof summary.unbuiltAtStart === "number" && summary.unbuiltAtStart > 0
       ? { unbuiltAtReading: summary.unbuiltAtStart }
       : {}),
+    ...(summary.earlyReading === true ? { earlyReading: true as const } : {}),
+    score: scoreFor(inputs),
   };
+}
+
+/**
+ * The reading's Health score (RC-225), from every open issue before the plan
+ * cuts the list: a locked issue still costs points, it is only not named.
+ */
+function scoreFor(inputs: PageInputs): HealthScoreView | null {
+  const turnsRead = inputs.run?.turnsScanned;
+  if (turnsRead === undefined) return null;
+  const history = (inputs.scoreHistory ?? [])
+    .map(parseStoredHealthScore)
+    .filter((s): s is StoredHealthScore => s !== null);
+  return healthScoreView(scoredIssues(inputs.signals), turnsRead, history);
 }
