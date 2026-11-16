@@ -186,6 +186,32 @@ test("each tool publishes a schema and a read-only or mutating annotation", asyn
   assert.equal(write?.annotations?.readOnlyHint, false, "writes must not claim to be read-only");
 });
 
+test("each tool carries the annotations the Claude directory reviews", async () => {
+  const { body } = await call("tools/list");
+  const tools: Array<{
+    name: string;
+    title?: string;
+    annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean };
+  }> = body.result.tools;
+
+  for (const tool of tools) {
+    assert.ok(tool.annotations?.title, `${tool.name} needs an annotations title`);
+    assert.equal(tool.annotations?.title, tool.title, `${tool.name} has one title`);
+    assert.equal(
+      tool.annotations?.destructiveHint,
+      tool.annotations?.readOnlyHint ? undefined : true,
+      `${tool.name}: every write prompts, a read does not claim the hint`,
+    );
+  }
+});
+
+test("no tool description tells the model what to do first", async () => {
+  const { body } = await call("tools/list");
+  for (const tool of body.result.tools as Array<{ name: string; description: string }>) {
+    assert.doesNotMatch(tool.description, /\bcall (this|it) first\b/i, tool.name);
+  }
+});
+
 test("calling a tool runs its operation and reports failures in-band", async () => {
   const { response, body } = await call("tools/call", {
     name: "get_skill",

@@ -487,6 +487,7 @@
     { "from": "apps/web/lib/trace-signals/signals/unknown-tool-standing.ts", "to": "apps/web/lib/readings/trace-signals/signals/unknown-tool-standing.ts", "mode": "copy" },
     { "from": "apps/web/lib/trace-signals/signals/unknown-tool-standing.test.ts", "to": "apps/web/lib/readings/trace-signals/signals/unknown-tool-standing.test.ts", "mode": "copy" },
     { "from": "apps/web/components/health/imports/import-form.ts", "mode": "excluded", "$why": "the importer's form model, ratel-platform's (health/ui/imports)" },
+    { "from": "apps/web/app/oauth-consent", "mode": "excluded", "$why": "the MCP OAuth consent page renders the identity provider's consent component: ratel-platform's (identity/oauth-consent)" },
     { "from": "apps/web/lib/trace-signals/signals/early-reading.test.ts", "to": "apps/web/lib/readings/trace-signals/signals/early-reading.test.ts", "mode": "copy" },
     {"from": "apps/web/lib/trace-signals/signals/compute-job.integration.test.ts", "to": "apps/web/lib/readings/trace-signals/signals/compute-job.integration.test.ts", "mode": "owned", "$why": "no flag case: the gate is always on in this edition; adds the fix-draft seam case"},
     {"from": "apps/web/lib/trace-signals/signals/integration-support.ts", "to": "apps/web/lib/readings/trace-signals/signals/integration-support.ts", "mode": "owned", "$why": "organizations carry no plan column here; deps without the flag or the explorer"},

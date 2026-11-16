@@ -467,7 +467,7 @@ export function observabilityOperations(
       domain: "observability",
       title: "Trace ingest diagnostics",
       description:
-        "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Call it first when a project looks empty. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
+        "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Answers whether a project that looks empty has received data at all. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
       keywords: ["traces not arriving", "ingest", "dropped spans", "no telemetry"],
       scope: "project",
       mutates: false,
