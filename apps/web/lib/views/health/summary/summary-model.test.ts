@@ -346,7 +346,13 @@ test("the older capture nudge, in the product's words", () => {
 });
 
 test("the header menu is named for what it holds", () => {
-  // Owned: no share link in this edition; the importer is the edition's.
+  // Owned: the importer and the share dialog are the edition's, absent without one.
+  assert.equal(
+    menuLabel({ canImport: true, report: true, share: true }),
+    "Import, download and share",
+  );
+  assert.equal(menuLabel({ canImport: false, report: true, share: true }), "Download and share");
+  assert.equal(menuLabel({ canImport: false, report: false, share: true }), "Share");
   assert.equal(menuLabel({ canImport: false, report: true }), "Download");
   assert.equal(menuLabel({ canImport: true, report: true }), "Import and download");
   assert.equal(menuLabel({ canImport: true, report: false }), "Import");

@@ -1,3 +1,5 @@
+import { composition } from "@/lib/composition/ports";
+import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { getLogger } from "@/lib/platform/logger";
 
@@ -13,8 +15,8 @@ import { getLogger } from "@/lib/platform/logger";
  *
  * Owned (ADR-0030): upstream decides a person through its identity provider and flag service,
  * which are the edition's. This file keeps the caching and the fail-closed rule; the decision for
- * a signed-in caller comes from the edition that supplies MCP sign-in. Without one, the open-source
- * edition, every caller is a project key.
+ * a signed-in caller comes from the edition that supplies MCP sign-in (`mcpOAuth.launchAccess`).
+ * Without one, the open-source edition, every caller is a project key.
  */
 export interface LaunchAccessDeps {
   /** Whether the person behind a signed-in caller may use the app. */
@@ -25,10 +27,16 @@ export interface LaunchAccessDeps {
 const CACHE_MS = 5 * 60_000;
 const logger = getLogger("mcp/launch-access");
 
+/** The edition's decision, through its MCP sign-in port; without one, refused. */
+export function editionLaunchDecision(
+  port: McpOAuthPort | undefined,
+): (externalUserId: string) => Promise<boolean> {
+  return async (externalUserId) => (port?.launchAccess ? port.launchAccess(externalUserId) : false);
+}
+
 export const defaultLaunchAccessDeps: LaunchAccessDeps = {
-  // No edition decision is wired yet: a signed-in caller is refused, closed as the console's
-  // check is. Project keys never reach this.
-  decide: async () => false,
+  // Read per call, so a composition connected after this module loads is the one asked.
+  decide: (externalUserId) => editionLaunchDecision(composition.mcpOAuth)(externalUserId),
   now: () => Date.now(),
 };
 

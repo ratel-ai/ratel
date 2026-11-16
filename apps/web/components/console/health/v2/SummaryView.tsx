@@ -30,7 +30,11 @@ import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLoo
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
-import type { HealthImporterProps } from "@/lib/contracts/composition";
+import type {
+  HealthImporterProps,
+  HealthShareLink,
+  HealthShareProps,
+} from "@/lib/contracts/composition";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   type HealthPageModel,
@@ -66,6 +70,12 @@ export interface SummaryImports {
   Importer: ComponentType<HealthImporterProps>;
 }
 
+export interface SummaryShare {
+  link: HealthShareLink | null;
+  canManage: boolean;
+  Dialog: ComponentType<HealthShareProps>;
+}
+
 export interface SummaryViewProps {
   projectId: string;
   projectName: string;
@@ -83,6 +93,8 @@ export interface SummaryViewProps {
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
   imports: SummaryImports | null;
+  /** Null when sharing is not offered (no edition dialog, or its read failed). */
+  share?: SummaryShare | null;
   /** `cloud-health-score` (RC-225): the Health score leads the page and the issues say what each is worth. */
   scoreLeads?: boolean;
   now?: Date;
@@ -90,6 +102,7 @@ export interface SummaryViewProps {
 
 export function SummaryView(props: SummaryViewProps) {
   const { projectId, projectName, model, imports } = props;
+  const share = props.share ?? null;
   const state = summaryState(props.state, model);
   const ready = state.kind === "ready";
   const reading = ready && model.computedAt !== null;
@@ -132,7 +145,16 @@ export function SummaryView(props: SummaryViewProps) {
             <SummaryMenu
               reportHref={ready ? props.reportHref : null}
               canImport={ready && canImport}
+              share={share ? { linkOn: share.link !== null } : null}
             />
+            {share ? (
+              <share.Dialog
+                projectId={projectId}
+                windowDays={model.windowDays}
+                initialLink={share.link}
+                canManage={share.canManage}
+              />
+            ) : null}
           </>
         }
       />

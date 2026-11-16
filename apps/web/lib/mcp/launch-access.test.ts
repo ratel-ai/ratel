@@ -3,6 +3,7 @@ import { beforeEach, test } from "node:test";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import {
   defaultLaunchAccessDeps,
+  editionLaunchDecision,
   type LaunchAccessDeps,
   mcpLaunchAccess,
   resetLaunchAccessCache,
@@ -88,4 +89,22 @@ test("a failed decision refuses, as the console's check does", async () => {
 test("with no edition decision wired, a signed-in caller is refused and a key still passes", async () => {
   assert.equal(await mcpLaunchAccess(person("user_e"), defaultLaunchAccessDeps), false);
   assert.equal(await mcpLaunchAccess(KEY, defaultLaunchAccessDeps), true);
+});
+
+test("the edition decides through its MCP sign-in port, and without the decision refuses", async () => {
+  const asked: string[] = [];
+  const port = {
+    verifyAccessToken: async () => ({ ok: false as const, reason: "invalid" as const }),
+    launchAccess: async (externalUserId: string) => {
+      asked.push(externalUserId);
+      return externalUserId === "user_in";
+    },
+  };
+  assert.equal(await editionLaunchDecision(port)("user_in"), true);
+  assert.equal(await editionLaunchDecision(port)("user_out"), false);
+  assert.deepEqual(asked, ["user_in", "user_out"]);
+
+  const { launchAccess: _, ...withoutDecision } = port;
+  assert.equal(await editionLaunchDecision(withoutDecision)("user_in"), false);
+  assert.equal(await editionLaunchDecision(undefined)("user_in"), false);
 });

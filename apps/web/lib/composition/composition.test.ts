@@ -140,9 +140,22 @@ describe("createComposition", () => {
       enqueueJob: async () => ({ id: "j" }),
       scheduleDrain: () => {},
     };
-    cloud.connect?.({ toolCorpus, importedRuns });
-    assert.deepEqual(lent, [{ toolCorpus, importedRuns }]);
+    const onboarding = {
+      createFirstProject: async () => ({ ok: false as const, error: "no" }),
+      ensureSampleProject: async () => {},
+    };
+    cloud.connect?.({ toolCorpus, importedRuns, onboarding });
+    assert.deepEqual(lent, [{ toolCorpus, importedRuns, onboarding }]);
     assert.equal(createComposition("oss", { eeComposition: null }).connect, undefined);
+  });
+
+  it("hands the edition's MCP sign-in verifier over, and the open-source edition has none", async () => {
+    const mcpOAuth = {
+      verifyAccessToken: async () => ({ ok: false as const, reason: "invalid" as const }),
+    };
+    const cloud = createComposition("cloud", { eeComposition: { ...cloudPorts, mcpOAuth } });
+    assert.equal(cloud.mcpOAuth, mcpOAuth);
+    assert.equal(createComposition("oss", { eeComposition: null }).mcpOAuth, undefined);
   });
 
   it("throws when a port is missing or the edition key is unknown", () => {

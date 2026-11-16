@@ -7,7 +7,7 @@ identical.
 
 | Path | Holds |
 |---|---|
-| `auth.ts` | who is calling: a project API key (`rtl_…`) resolved to its project and organization; the OAuth arm is declared for the tool contract and refused here (owned) |
+| `auth.ts` | who is calling: a project API key (`rtl_…`) resolved to its project and organization, or, in an edition that supplies the `mcpOAuth` port, a person who signed in through a browser, with their organizations; without the port any other bearer is refused (owned). `auth-edition.test.ts` pins that seam |
 | `route-handler.ts`, `transport.ts`, `server.ts` | the POST handler (credential and per-key rate limits, body and batch caps, the JSON-RPC envelope), the single-message transport, and the `McpServer` that registers every operation as a tool |
 | `dispatch.ts` | one pipeline for every call: scope resolution (a key's project, or an explicit `projectId`), params validation, the outcome event; internal failures never reach the client |
 | `registry.ts`, `operations/index.ts` | `defineOperation`, the domains, and `assembleOperations` (writes can be left out) |
@@ -31,12 +31,15 @@ identical.
 
 The rest mirror upstream (`scripts/platform-sync/map.json`).
 
-- `auth.ts`: project keys only. The `oauth` arm of `McpAuthContext` stays declared (the identity
-  provider's id is `externalUserId`) so every project-scoped tool keeps its explicit `projectId`
-  and the copied dispatch, route handler and tests compile unchanged; the default verifier
-  refuses any bearer that is not a key, with no provider call. The organization on the context is
-  `McpOrganization` (id, slug, the plan from the entitlements port) in place of upstream's flag
-  identity.
+- `auth.ts`: upstream verifies an OAuth token with its identity provider here. This file hands a
+  bearer that is not a key to `composition.mcpOAuth` (`lib/contracts/mcp-oauth.ts`) and builds
+  the `oauth` arm of `McpAuthContext` from the answer (the provider's id is `externalUserId`),
+  with upstream's two refusals: an invalid token, and an identity with no account yet. The
+  open-source edition has no such port, so the default verifier refuses any bearer that is not a
+  key, with no provider call. The arm stays declared either way, so every project-scoped tool
+  keeps its explicit `projectId` and the copied dispatch, route handler and tests compile
+  unchanged. The organization on the context is `McpOrganization` (id, slug, the plan from the
+  entitlements port) in place of upstream's flag identity.
 - `naming.ts`: one entry of `INTERNAL_PRODUCT_NAMES` is a confidential word and is left out, and
   no routing keyword points at `get_embedding_usage`.
 - `operations/account.ts`: no `get_embedding_usage`; the Embedding API and its credit ledger stay
@@ -74,4 +77,5 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 
 Not here, with a `$why` in the map: `oauth-metadata.ts` and the `.well-known/oauth-*` routes
 (OAuth discovery needs the private identity provider). The copied 401 still advertises the
-protected-resource metadata URL in `WWW-Authenticate`; nothing serves it in this edition.
+protected-resource metadata URL in `WWW-Authenticate`; the Cloud edition serves it from its own
+routes, and nothing serves it in the open-source edition.

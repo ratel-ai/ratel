@@ -100,10 +100,13 @@ owned set stays small.
 **What stays private**, handled in `ratel-platform` (out of this repository's scope): billing
 (Stripe, wallets, pricing), identity (Clerk; the organizations, users and memberships tables, which the core
 never reads and migration `0020` drops from the open-source schema; invitations, platform
-invites, MCP OAuth), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
+invites, whose landing page creates the invitee's first project through the onboarding service
+the core lends at startup, MCP OAuth: the token verifier and the discovery routes, reached through the optional
+`mcpOAuth` port, while the MCP endpoint and its `oauth` caller shape are the core's), the Tool Picker and Embedding APIs and their guide pages, the access waitlist and the
 one remaining feature flag, PostHog, the admin console and support sessions, the "held for us"
 review path of Agent health imports and the importer itself, the public share links of Agent
-health, the private decision-engine clients, the customer replay seed, and all infrastructure
+health (the table, the tokens, who may manage a link and the dialog; the two public pages a link
+opens are the core's, show the redacted report and answer 404 without the edition), the private decision-engine clients, the customer replay seed, and all infrastructure
 (Terraform, Helm, deploy workflows).
 
 **Model use in the open-source edition** is server-side, environment-keyed and opt-in:
