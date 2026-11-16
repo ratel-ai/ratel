@@ -2,13 +2,14 @@
   {
     "name": "whoami",
     "title": "Who am I",
-    "description": "Identify the credential calling this server: which project and organization it can reach. Call this first, since most tools act on a project and this tells you which one you have.",
+    "description": "Identify the credential calling this server: which project and organization it can reach. Most tools act on a project, and this tells you which one you have.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
       "properties": {}
     },
     "annotations": {
+      "title": "Who am I",
       "readOnlyHint": true
     },
     "execution": {
@@ -25,6 +26,7 @@
       "properties": {}
     },
     "annotations": {
+      "title": "List projects",
       "readOnlyHint": true
     },
     "execution": {
@@ -60,6 +62,7 @@
       }
     },
     "annotations": {
+      "title": "Project overview",
       "readOnlyHint": true
     },
     "execution": {
@@ -137,6 +140,7 @@
       }
     },
     "annotations": {
+      "title": "List skills",
       "readOnlyHint": true
     },
     "execution": {
@@ -171,6 +175,7 @@
       ]
     },
     "annotations": {
+      "title": "Get skill",
       "readOnlyHint": true
     },
     "execution": {
@@ -197,6 +202,7 @@
       }
     },
     "annotations": {
+      "title": "Catalog status",
       "readOnlyHint": true
     },
     "execution": {
@@ -234,6 +240,7 @@
       }
     },
     "annotations": {
+      "title": "Tools the runtime declares",
       "readOnlyHint": true
     },
     "execution": {
@@ -267,6 +274,7 @@
       }
     },
     "annotations": {
+      "title": "Tools telemetry has seen called",
       "readOnlyHint": true
     },
     "execution": {
@@ -300,6 +308,7 @@
       }
     },
     "annotations": {
+      "title": "List retrieval-description overrides",
       "readOnlyHint": true
     },
     "execution": {
@@ -386,6 +395,7 @@
       }
     },
     "annotations": {
+      "title": "Catalog tools and skills",
       "readOnlyHint": true
     },
     "execution": {
@@ -429,6 +439,7 @@
       }
     },
     "annotations": {
+      "title": "Latency and error rate",
       "readOnlyHint": true
     },
     "execution": {
@@ -599,6 +610,7 @@
       }
     },
     "annotations": {
+      "title": "List traces",
       "readOnlyHint": true
     },
     "execution": {
@@ -640,6 +652,7 @@
       ]
     },
     "annotations": {
+      "title": "Get trace",
       "readOnlyHint": true
     },
     "execution": {
@@ -710,6 +723,7 @@
       }
     },
     "annotations": {
+      "title": "Spans grouped by model, tool or operation",
       "readOnlyHint": true
     },
     "execution": {
@@ -764,6 +778,7 @@
       }
     },
     "annotations": {
+      "title": "Span totals for a filtered slice",
       "readOnlyHint": true
     },
     "execution": {
@@ -802,6 +817,7 @@
       }
     },
     "annotations": {
+      "title": "Cost and tokens per day",
       "readOnlyHint": true
     },
     "execution": {
@@ -847,6 +863,7 @@
       }
     },
     "annotations": {
+      "title": "Cost and tokens per tool",
       "readOnlyHint": true
     },
     "execution": {
@@ -859,7 +876,7 @@
   {
     "name": "get_traces_ingest_diagnostics",
     "title": "Trace ingest diagnostics",
-    "description": "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Call it first when a project looks empty. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
+    "description": "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Answers whether a project that looks empty has received data at all. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -873,6 +890,7 @@
       }
     },
     "annotations": {
+      "title": "Trace ingest diagnostics",
       "readOnlyHint": true
     },
     "execution": {
@@ -915,6 +933,7 @@
       ]
     },
     "annotations": {
+      "title": "Run as a conversation",
       "readOnlyHint": true
     },
     "execution": {
@@ -963,6 +982,7 @@
       ]
     },
     "annotations": {
+      "title": "Get span",
       "readOnlyHint": true
     },
     "execution": {
@@ -1023,6 +1043,7 @@
       ]
     },
     "annotations": {
+      "title": "Trace conversation",
       "readOnlyHint": true
     },
     "execution": {
@@ -1187,6 +1208,7 @@
       }
     },
     "annotations": {
+      "title": "List spans",
       "readOnlyHint": true
     },
     "execution": {
@@ -1253,6 +1275,7 @@
       }
     },
     "annotations": {
+      "title": "List logs",
       "readOnlyHint": true
     },
     "execution": {
@@ -1295,6 +1318,7 @@
       ]
     },
     "annotations": {
+      "title": "Compare two traces",
       "readOnlyHint": true
     },
     "execution": {
@@ -1337,6 +1361,7 @@
       ]
     },
     "annotations": {
+      "title": "Trace ranking records",
       "readOnlyHint": true
     },
     "execution": {
@@ -1379,6 +1404,7 @@
       ]
     },
     "annotations": {
+      "title": "Get turn",
       "readOnlyHint": true
     },
     "execution": {
@@ -1517,6 +1543,7 @@
       }
     },
     "annotations": {
+      "title": "Run totals for a filtered set",
       "readOnlyHint": true
     },
     "execution": {
@@ -1568,6 +1595,7 @@
       }
     },
     "annotations": {
+      "title": "Get agent health",
       "readOnlyHint": true
     },
     "execution": {
@@ -1608,6 +1636,7 @@
       ]
     },
     "annotations": {
+      "title": "List issue examples",
       "readOnlyHint": true
     },
     "execution": {
@@ -1648,8 +1677,9 @@
       ]
     },
     "annotations": {
+      "title": "Hide or show a slow tool issue",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -1687,8 +1717,9 @@
       ]
     },
     "annotations": {
+      "title": "Request a fresh reading",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -1758,6 +1789,7 @@
       }
     },
     "annotations": {
+      "title": "Get self-corrections",
       "readOnlyHint": true
     },
     "execution": {
@@ -1807,6 +1839,7 @@
       }
     },
     "annotations": {
+      "title": "List intents",
       "readOnlyHint": true
     },
     "execution": {
@@ -1849,6 +1882,7 @@
       ]
     },
     "annotations": {
+      "title": "Get intent",
       "readOnlyHint": true
     },
     "execution": {
@@ -1894,6 +1928,7 @@
       }
     },
     "annotations": {
+      "title": "List calibrations",
       "readOnlyHint": true
     },
     "execution": {
@@ -1948,6 +1983,7 @@
       ]
     },
     "annotations": {
+      "title": "Calibration detail",
       "readOnlyHint": true
     },
     "execution": {
@@ -2036,6 +2072,7 @@
       ]
     },
     "annotations": {
+      "title": "Calibration mismatches",
       "readOnlyHint": true
     },
     "execution": {
@@ -2083,6 +2120,7 @@
       ]
     },
     "annotations": {
+      "title": "Experiment detail",
       "readOnlyHint": true
     },
     "execution": {
@@ -2118,6 +2156,7 @@
       ]
     },
     "annotations": {
+      "title": "Selection inspector",
       "readOnlyHint": true
     },
     "execution": {
@@ -2151,6 +2190,7 @@
       }
     },
     "annotations": {
+      "title": "List match quality runs",
       "readOnlyHint": true
     },
     "execution": {
@@ -2192,6 +2232,7 @@
       }
     },
     "annotations": {
+      "title": "Get match quality run",
       "readOnlyHint": true
     },
     "execution": {
@@ -2251,6 +2292,7 @@
       }
     },
     "annotations": {
+      "title": "Quality: misses",
       "readOnlyHint": true
     },
     "execution": {
@@ -2308,6 +2350,7 @@
       }
     },
     "annotations": {
+      "title": "Quality: description rewrites",
       "readOnlyHint": true
     },
     "execution": {
@@ -2352,8 +2395,9 @@
       ]
     },
     "annotations": {
+      "title": "Apply, dismiss or revert a description rewrite",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -2387,8 +2431,9 @@
       }
     },
     "annotations": {
+      "title": "Start a quality analysis",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -2415,6 +2460,7 @@
       }
     },
     "annotations": {
+      "title": "Adaptive ranking: graphs",
       "readOnlyHint": true
     },
     "execution": {
@@ -2447,6 +2493,7 @@
       }
     },
     "annotations": {
+      "title": "Adaptive ranking: one graph",
       "readOnlyHint": true
     },
     "execution": {
@@ -2512,6 +2559,7 @@
       }
     },
     "annotations": {
+      "title": "List tool co-usage",
       "readOnlyHint": true
     },
     "execution": {
@@ -2579,6 +2627,7 @@
       }
     },
     "annotations": {
+      "title": "List tool transitions",
       "readOnlyHint": true
     },
     "execution": {
@@ -2632,6 +2681,7 @@
       }
     },
     "annotations": {
+      "title": "List intent tool usage",
       "readOnlyHint": true
     },
     "execution": {
@@ -2673,6 +2723,7 @@
       }
     },
     "annotations": {
+      "title": "List drafted fixes",
       "readOnlyHint": true
     },
     "execution": {
@@ -2707,6 +2758,7 @@
       ]
     },
     "annotations": {
+      "title": "Get a drafted fix",
       "readOnlyHint": true
     },
     "execution": {
@@ -2733,6 +2785,7 @@
       }
     },
     "annotations": {
+      "title": "Feature flag status",
       "readOnlyHint": true
     },
     "execution": {
@@ -2756,6 +2809,7 @@
       }
     },
     "annotations": {
+      "title": "Plan limits",
       "readOnlyHint": true
     },
     "execution": {
@@ -2785,6 +2839,7 @@
       }
     },
     "annotations": {
+      "title": "Background job status",
       "readOnlyHint": true
     },
     "execution": {
@@ -2847,6 +2902,7 @@
       }
     },
     "annotations": {
+      "title": "SDK events",
       "readOnlyHint": true
     },
     "execution": {
@@ -2882,6 +2938,7 @@
       ]
     },
     "annotations": {
+      "title": "SDK event payload",
       "readOnlyHint": true
     },
     "execution": {
@@ -2908,6 +2965,7 @@
       }
     },
     "annotations": {
+      "title": "API keys",
       "readOnlyHint": true
     },
     "execution": {
@@ -2936,6 +2994,7 @@
       }
     },
     "annotations": {
+      "title": "SDK setup",
       "readOnlyHint": true
     },
     "execution": {
@@ -2984,6 +3043,7 @@
       }
     },
     "annotations": {
+      "title": "What to fix",
       "readOnlyHint": true
     },
     "execution": {
@@ -3032,6 +3092,7 @@
       ]
     },
     "annotations": {
+      "title": "Queries that retrieved a skill",
       "readOnlyHint": true
     },
     "execution": {
@@ -3167,6 +3228,7 @@
       ]
     },
     "annotations": {
+      "title": "Test retrieval against the live catalog",
       "readOnlyHint": true
     },
     "execution": {
@@ -3206,6 +3268,7 @@
       }
     },
     "annotations": {
+      "title": "List shipments",
       "readOnlyHint": true
     },
     "execution": {
@@ -3262,6 +3325,7 @@
       ]
     },
     "annotations": {
+      "title": "Get lineage",
       "readOnlyHint": true
     },
     "execution": {
@@ -3300,6 +3364,7 @@
       }
     },
     "annotations": {
+      "title": "Get analysis freshness",
       "readOnlyHint": true
     },
     "execution": {
@@ -3351,6 +3416,7 @@
       ]
     },
     "annotations": {
+      "title": "Get session replay",
       "readOnlyHint": true
     },
     "execution": {
@@ -3384,6 +3450,7 @@
       }
     },
     "annotations": {
+      "title": "List tasks",
       "readOnlyHint": true
     },
     "execution": {
@@ -3419,6 +3486,7 @@
       ]
     },
     "annotations": {
+      "title": "Get task",
       "readOnlyHint": true
     },
     "execution": {
@@ -3458,6 +3526,7 @@
       }
     },
     "annotations": {
+      "title": "List insights",
       "readOnlyHint": true
     },
     "execution": {
@@ -3556,6 +3625,7 @@
       }
     },
     "annotations": {
+      "title": "List fixes",
       "readOnlyHint": true
     },
     "execution": {
@@ -3594,6 +3664,7 @@
       }
     },
     "annotations": {
+      "title": "Get fix",
       "readOnlyHint": true
     },
     "execution": {
@@ -3629,6 +3700,7 @@
       ]
     },
     "annotations": {
+      "title": "Get eval of a fix",
       "readOnlyHint": true
     },
     "execution": {
@@ -3677,6 +3749,7 @@
       ]
     },
     "annotations": {
+      "title": "List a task's simulations",
       "readOnlyHint": true
     },
     "execution": {
@@ -3718,6 +3791,7 @@
       ]
     },
     "annotations": {
+      "title": "Get a fix's eval set",
       "readOnlyHint": true
     },
     "execution": {
@@ -3838,8 +3912,9 @@
       ]
     },
     "annotations": {
+      "title": "Create skill",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -3958,8 +4033,9 @@
       ]
     },
     "annotations": {
+      "title": "Update skill",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -3999,8 +4075,9 @@
       ]
     },
     "annotations": {
+      "title": "Publish skill",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4040,8 +4117,9 @@
       ]
     },
     "annotations": {
+      "title": "Archive skill",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4167,8 +4245,9 @@
       ]
     },
     "annotations": {
+      "title": "Import skills",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4227,8 +4306,9 @@
       ]
     },
     "annotations": {
+      "title": "Override a catalog entry's searchable description",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4255,8 +4335,9 @@
       }
     },
     "annotations": {
+      "title": "Draft fixes",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4292,8 +4373,9 @@
       ]
     },
     "annotations": {
+      "title": "Run eval on a fix",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4351,8 +4433,9 @@
       ]
     },
     "annotations": {
+      "title": "Create experiment for a fix",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4405,8 +4488,9 @@
       ]
     },
     "annotations": {
+      "title": "Mark fix shipped",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4485,8 +4569,9 @@
       ]
     },
     "annotations": {
+      "title": "Change a task scorer",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4646,8 +4731,9 @@
       ]
     },
     "annotations": {
+      "title": "Change a task's eval set",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4690,8 +4776,9 @@
       ]
     },
     "annotations": {
+      "title": "Draft a task test from a run",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -4879,8 +4966,9 @@
       ]
     },
     "annotations": {
+      "title": "Change a task simulation",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -5051,8 +5139,9 @@
       ]
     },
     "annotations": {
+      "title": "Change a fix's eval set",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
@@ -5087,8 +5176,9 @@
       ]
     },
     "annotations": {
+      "title": "Dismiss a drafted fix",
       "readOnlyHint": false,
-      "destructiveHint": false,
+      "destructiveHint": true,
       "idempotentHint": false
     },
     "execution": {
