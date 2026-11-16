@@ -194,7 +194,7 @@ export function SimulationDetail({ model }: { model: TaskSimulationDetail }) {
                     })}{" "}
                     UTC
                   </time>
-                  <SimulationStatus state={run.state} stale={run.stale} />
+                  <SimulationStatus state={run.state} stale={run.stale} moved={run.moved} />
                 </span>
               }
               hint={`${run.caseCount} task ${run.caseCount === 1 ? "run" : "runs"} · ${run.fixCaseCount} fix ${run.fixCaseCount === 1 ? "test" : "tests"}`}

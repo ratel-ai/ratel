@@ -153,8 +153,16 @@ async function complete(
       afterTool: sample.after.choice,
       distribution: { before: sample.before.distribution, after: sample.after.distribution },
       tokens: {
-        before: { input: sample.before.inputTokens, output: sample.before.outputTokens },
-        after: { input: sample.after.inputTokens, output: sample.after.outputTokens },
+        before: {
+          input: sample.before.inputTokens,
+          output: sample.before.outputTokens,
+          costUsd: sample.before.costUsd,
+        },
+        after: {
+          input: sample.after.inputTokens,
+          output: sample.after.outputTokens,
+          costUsd: sample.after.costUsd,
+        },
       },
       spend: { usd, reserved: false, capUsd: run.spend.capUsd },
       finishedAt: new Date(),

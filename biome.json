@@ -1082,6 +1082,8 @@
         "!apps/web/lib/views/session-replay/gate.ts",
         "!apps/web/lib/views/session-replay/gate.test.ts",
         "!apps/web/lib/views/session-replay/runs.test.ts",
+        "!apps/web/lib/views/session-replay/settings.test.ts",
+        "!apps/web/lib/views/session-replay/what-if.test.ts",
         "!apps/web/lib/views/session-replay/runs.integration.test.ts",
         "!apps/web/lib/views/session-replay/schema.ts",
         "!apps/web/lib/views/session-replay/no-outbound-without-key.test.ts",

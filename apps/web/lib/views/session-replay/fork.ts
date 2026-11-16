@@ -1,3 +1,4 @@
+import type { CloudEvent } from "@/lib/ingest/cloud-schema";
 import { costFor, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "@/lib/views/eval-gate/calls";
@@ -24,6 +25,7 @@ import type {
   FixChange,
   InvokeStep,
   RunRecord,
+  RunStep,
   SearchStep,
   ToolDef,
 } from "@/lib/views/eval-gate/types";
@@ -53,8 +55,8 @@ export const MAX_K = 10;
 const RERANK_NOTE =
   "No captured content for this step: re-ranked its recorded search without the model.";
 const NOT_AFFECTED = "Nothing the change touches in what this step's model saw";
-/** How deep a re-rank reads its lists: only the top hit counts as the choice. */
-const RERANK_DEPTH = 5;
+/** How deep a re-rank reads its lists: deep enough to find the served tools anywhere in the catalog. */
+const RERANK_CATALOG_DEPTH = 1_000;
 
 const logger = getLogger("session-replay/fork");
 
@@ -108,7 +110,7 @@ export async function sampleStep(
   deps: SampleDeps,
 ): Promise<StepSample> {
   const step = recordingAt(calls, n, run);
-  if (!step) return rerankStep(run, n, variant, deps);
+  if (!step) return rerankStep(run, calls, n, variant, deps);
   const control = replayInput(step.recording, null, deps.toolDefs);
   const forked = forkInput(step.recording, variant, deps.toolDefs);
   if (!forked.touched) return { ok: false, reason: NOT_AFFECTED, notAffected: true };
@@ -142,7 +144,7 @@ export function recordingAt(
 ): StepRecording | null {
   const call = calls[n];
   const messages = call?.payload?.messages;
-  if (!call || !messages || messages.length === 0) return null;
+  if (!call || !messages || messages.length === 0 || !carriesText(call.payload!)) return null;
   const window = calls.slice(n);
   // A run whose steps start where call N does, so a recorded failure lines up with its call.
   const done = toReplayMessages(messages.slice(0, -1)).filter(
@@ -168,6 +170,21 @@ export function recordingAt(
       ? (output.calls[0]?.name ?? null)
       : (recording.calls[0]?.name ?? null);
   return { recording, recorded };
+}
+
+/**
+ * Whether a model call's payload holds text: without it a replay would ask the
+ * model about an empty conversation. The same check as `HAS_CONTENT` in
+ * `load.ts`, which gives the timeline its coverage badge.
+ */
+export function carriesText(payload: CloudEvent): boolean {
+  if (payload.system) return true;
+  return (payload.messages ?? []).some((message) =>
+    typeof message.content === "string"
+      ? message.content !== ""
+      : Array.isArray(message.content) &&
+        message.content.some((part) => part.type === "text" && !!part.text),
+  );
 }
 
 /**
@@ -287,40 +304,117 @@ async function sampleSide(
 
 /**
  * The step without captured content: its recorded search ranked again with
- * and without the change, the top hit as each side's choice. Deterministic,
- * so one sample per side, and no model is called.
+ * and without the change. The baseline is the run: "before" is the tool it
+ * recorded, and "after" differs only when the change moves the ranker's top
+ * hit among the tools the agent was served, or removes the recorded tool. The
+ * ranker alone can't tell what the agent would pick, so the gap between its top
+ * hit and the recorded tool is not a result of the change. Deterministic, so
+ * one sample per side, and no model is called.
  */
-function rerankStep(run: RunRecord, n: number, variant: Variant, deps: SampleDeps): StepSample {
-  const invokes = run.steps.filter((item): item is InvokeStep => item.kind === "invoke");
-  const at = invokes[n]?.ordinal ?? Number.POSITIVE_INFINITY;
-  const search = run.steps
-    .filter(
-      (item): item is SearchStep =>
-        item.kind === "search" &&
-        item.ordinal < at &&
-        !!item.query &&
-        (item.searchType ?? "tool_search") !== "skill_search",
-    )
-    .pop();
-  const ranker = search && deps.rank ? deps.rank(rerankChange(variant)) : null;
-  if (!search?.query || !ranker) return { ok: false, reason: CANT_SIMULATE.noPrompts };
+function rerankStep(
+  run: RunRecord,
+  calls: readonly ModelCall[],
+  n: number,
+  variant: Variant,
+  deps: SampleDeps,
+): StepSample {
+  const fork = forkPoint(run, calls, n);
+  const searches = run.steps.filter(
+    (item): item is SearchStep =>
+      item.kind === "search" &&
+      !!item.query &&
+      (item.searchType ?? "tool_search") !== "skill_search",
+  );
+  const search = searches.filter(fork.follows).pop() ?? searches.find(fork.within);
+  const ranker = deps.rank ? deps.rank(rerankChange(variant)) : null;
+  if (!ranker) return { ok: false, reason: CANT_SIMULATE.noPrompts };
+  if (!search?.query) return { ok: false, reason: CANT_SIMULATE.noSearch };
   logger.info(variantBuiltFields(variant, "rerank"), "what_if_variant_built");
-  const side = (hits: string[]): SideSample => ({
-    ...distributionOf([hits[0] ?? NO_TOOL]),
+  const side = (choice: string | null): SideSample => ({
+    ...distributionOf([choice ?? NO_TOOL]),
     inputTokens: 0,
     outputTokens: 0,
     costUsd: 0,
   });
-  const depth = Math.max(RERANK_DEPTH, search.topK ?? 0);
+  const ranked = rerankedChoices(ranker, search, fork.recorded, rerankChange(variant).hide);
   return {
     ok: true,
     method: "rerank",
     k: 1,
-    recorded: invokes[n]?.targetId ?? null,
-    before: side(ranker.before(search.query, depth)),
-    after: side(ranker.after(search.query, depth)),
+    recorded: fork.recorded,
+    before: side(ranked.before),
+    after: side(ranked.after),
     note: RERANK_NOTE,
   };
+}
+
+/** Each side's choice of a re-rank, read against what the run did (see `rerankStep`). */
+function rerankedChoices(
+  ranker: Ranker,
+  search: SearchStep,
+  recorded: string | null,
+  hidden: readonly string[],
+): { before: string | null; after: string | null } {
+  const query = search.query!;
+  const beforeHits = ranker.before(query, RERANK_CATALOG_DEPTH);
+  const afterHits = ranker.after(query, RERANK_CATALOG_DEPTH);
+  // What the agent could pick: the list it was served, and whatever the change adds. No list: the whole catalog.
+  const served = search.hitIds?.length
+    ? new Set([...search.hitIds, ...(recorded ? [recorded] : [])])
+    : null;
+  const known = new Set(beforeHits);
+  const canPick = (id: string) => !served || served.has(id) || !known.has(id);
+  const topBefore = beforeHits.find(canPick) ?? null;
+  const topAfter = afterHits.find(canPick) ?? null;
+  if (!recorded) return { before: topBefore, after: topAfter };
+  const removed =
+    hidden.includes(recorded) || (known.has(recorded) && !afterHits.includes(recorded));
+  return { before: recorded, after: removed || topAfter !== topBefore ? topAfter : recorded };
+}
+
+/**
+ * Where model call `n` forks a run without captured content: the tool it
+ * recorded, the searches the fork follows, and the searches the call itself
+ * made (for a call whose first tool call came before any search). By time,
+ * since one model call can make several tool calls or none: its tool calls are
+ * those between it and the next model call. A run or call without times falls
+ * back to the n-th tool call of the run.
+ */
+function forkPoint(
+  run: RunRecord,
+  calls: readonly ModelCall[],
+  n: number,
+): {
+  recorded: string | null;
+  follows: (search: SearchStep) => boolean;
+  within: (search: SearchStep) => boolean;
+} {
+  const invokes = run.steps.filter((item): item is InvokeStep => item.kind === "invoke");
+  const call = calls[n];
+  if (!call || !run.steps.every((item) => Number.isFinite(stepTime(item)))) {
+    const at = invokes[n]?.ordinal ?? Number.POSITIVE_INFINITY;
+    return {
+      recorded: invokes[n]?.targetId ?? null,
+      follows: (search) => search.ordinal < at,
+      within: () => false,
+    };
+  }
+  const from = call.occurredAt.getTime();
+  const until = calls[n + 1]?.occurredAt.getTime() ?? Number.POSITIVE_INFINITY;
+  const within = (step: RunStep) => stepTime(step) >= from && stepTime(step) < until;
+  const invoke = invokes.find(within);
+  if (invoke)
+    return {
+      recorded: invoke.targetId,
+      follows: (search) => search.ordinal < invoke.ordinal,
+      within,
+    };
+  return { recorded: null, follows: (search) => stepTime(search) < until, within };
+}
+
+/** A step's time in ms; NaN when it has none. */
+function stepTime(step: RunStep): number {
+  return Date.parse(step.occurredAt ?? "");
 }
 
 function distributionOf(picks: readonly string[]): Pick<SideSample, "choice" | "distribution"> {

@@ -5,12 +5,18 @@ import { STALE_EVAL_RUN_MS } from "@/lib/views/eval-gate/store";
 import type { CaseResult, FixChange } from "@/lib/views/eval-gate/types";
 import type { TaskEvalCaseRow, TaskEvalRunRow } from "@/lib/views/task-evals/schema";
 import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
-import type { Scorer } from "@/lib/views/task-scorers/types";
+import { SCORER_KINDS, type Scorer, type ScorerKind } from "@/lib/views/task-scorers/types";
 
+/** A scorer that moved past `MOVED_PTS` on the task set while the verdict doesn't say so. */
+export type ScorerMove = { kind: ScorerKind; delta: number };
 export type TaskSimulationState = {
   state: "none" | "running" | "better" | "worse" | "same" | "unreliable";
   stale: boolean;
+  moved?: ScorerMove[];
 };
+
+/** How far a scorer's pass rate moves, in points, before the verdict has to mention it. */
+const MOVED_PTS = 10;
 
 /** Compare against queued inputs, including edits made while a run was active. */
 export function taskSimulationState(
@@ -30,14 +36,44 @@ export function taskSimulationState(
     };
   }
   const verdict = run.verdict;
-  return {
-    state:
-      run.status === "completed" &&
-      (verdict === "better" || verdict === "worse" || verdict === "same")
-        ? verdict
-        : "unreliable",
-    stale,
-  };
+  if (
+    run.status !== "completed" ||
+    (verdict !== "better" && verdict !== "worse" && verdict !== "same")
+  )
+    return { state: "unreliable", stale };
+  const moved = scorerMoves(run.breakdown, verdict);
+  return moved.length > 0 ? { state: verdict, stale, moved } : { state: verdict, stale };
+}
+
+/**
+ * The verdict reads the overall pass rate only, so one scorer can fall while
+ * it says "no overall change". Moves against the verdict: any for `same`, falls
+ * for `better`, rises for `worse`. The stored verdict doesn't change.
+ */
+function scorerMoves(
+  breakdown: TaskEvalRunRow["breakdown"],
+  verdict: "better" | "worse" | "same",
+): ScorerMove[] {
+  const task = (
+    breakdown as {
+      task?: Partial<
+        Record<
+          ScorerKind,
+          { before: { passRate: number | null }; after: { passRate: number | null } }
+        >
+      >;
+    } | null
+  )?.task;
+  if (!task) return [];
+  return SCORER_KINDS.flatMap((kind): ScorerMove[] => {
+    const before = task[kind]?.before.passRate;
+    const after = task[kind]?.after.passRate;
+    if (before === null || before === undefined || after === null || after === undefined) return [];
+    const delta = Math.round((after - before) * 100);
+    if (Math.abs(delta) < MOVED_PTS) return [];
+    if ((verdict === "better" && delta > 0) || (verdict === "worse" && delta < 0)) return [];
+    return [{ kind, delta }];
+  });
 }
 
 /** RC-76: one replayed run of a task simulation, as "What the replay did" lists it. */

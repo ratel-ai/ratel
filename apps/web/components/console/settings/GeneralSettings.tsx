@@ -1,11 +1,12 @@
 import { PageBody } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { notFound } from "next/navigation";
+import { ContentOptInSection } from "@/components/console/session-replay/ContentOptInSection";
 import { findProject } from "@/lib/console/navigation";
 import { getConsoleScope } from "@/lib/console/shell-data";
 import { ProjectNameForm } from "./ProjectNameForm";
 
-/** Settings > General: the project's name, and nothing else. */
+/** Settings > General: the project's name, and the session replay content opt-in when that flag is on. */
 export async function GeneralSettings({ projectId }: { projectId: string }) {
   const scope = await getConsoleScope();
   const project = findProject(scope?.projects ?? [], projectId);
@@ -19,6 +20,7 @@ export async function GeneralSettings({ projectId }: { projectId: string }) {
           canRename={scope.role === "admin"}
         />
       </Section>
+      <ContentOptInSection projectId={project.id} role={scope.role} />
     </PageBody>
   );
 }

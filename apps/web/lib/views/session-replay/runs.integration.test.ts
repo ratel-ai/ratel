@@ -384,10 +384,18 @@ test("the job samples the step, saves numbers only and settles the spend", async
       before: { find_booking: 2, quote_fare: 1 },
       after: { find_booking: 2, quote_fare: 1 },
     });
-    assert.deepEqual(saved!.tokens, {
-      before: { input: 3_000, output: 60 },
-      after: { input: 3_000, output: 60 },
-    });
+    assert.deepEqual(
+      {
+        before: { ...saved!.tokens!.before, costUsd: undefined },
+        after: { ...saved!.tokens!.after, costUsd: undefined },
+      },
+      {
+        before: { input: 3_000, output: 60, costUsd: undefined },
+        after: { input: 3_000, output: 60, costUsd: undefined },
+      },
+    );
+    assert.ok((saved!.tokens!.before.costUsd ?? 0) > 0, "each side keeps what its samples cost");
+    assert.equal(saved!.tokens!.before.costUsd, saved!.tokens!.after.costUsd);
     assert.equal(saved!.spend.reserved, false);
     assert.ok(saved!.spend.usd > 0 && saved!.spend.usd <= WHAT_IF_RUN_CAP_USD);
     assert.ok(saved!.finishedAt);
