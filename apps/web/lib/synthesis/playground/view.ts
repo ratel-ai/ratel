@@ -59,9 +59,10 @@ export function droppedIds(entries: readonly RankingDiffEntry[]): string[] {
   return entries.filter((entry) => entry.change === "dropped").map((entry) => entry.id);
 }
 
+/** The glossary's names (DESIGN.md): engines stay out of the default view. */
 const MODE_LABEL: Record<RankMode, string> = {
-  bm25: "BM25",
-  embeddings: "Embeddings",
+  bm25: "Keyword match",
+  embeddings: "Semantic match",
   hybrid: "Hybrid",
 };
 
@@ -80,11 +81,11 @@ export function modeLabel(mode: RankMode): string {
 export function modeHint(mode: RankMode): string {
   switch (mode) {
     case "bm25":
-      return "Matches words. The index the agent really uses, so a capability that shares no word with the prompt cannot be found at all.";
+      return "Matches words, the way your agent searches. A tool that shares no word with the ask can't be found.";
     case "embeddings":
-      return "Matches meaning. Everything gets a score, so the last result is the least related rather than a non-match.";
+      return "Matches meaning, so different words for the same thing still match.";
     case "hybrid":
-      return "Both, mixed by the slider beside it.";
+      return "Both at once, mixed by the slider below.";
   }
 }
 

@@ -242,7 +242,7 @@ function AddFilter({
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 placeholder={`Find a ${field.label.toLowerCase()}…`}
                 aria-label={`Find a ${field.label.toLowerCase()}`}
-                className="mx-1 mb-1 h-8 rounded-md border border-line-strong bg-app px-2.5 text-ui text-fg outline-none placeholder:text-fg-faint focus-visible:border-line-active focus-visible:ring-2 focus-visible:ring-focus/40 max-md:text-base"
+                className="mx-1 mb-1 h-8 rounded-md border border-line-strong bg-app px-2.5 text-ui text-fg outline-none placeholder:text-fg-faint focus-visible:border-fg-subtle max-md:text-base"
               />
             ) : null}
             <ul aria-label={`${field.label} values`} className="max-h-72 overflow-y-auto">

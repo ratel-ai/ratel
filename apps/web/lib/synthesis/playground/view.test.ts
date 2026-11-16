@@ -86,6 +86,7 @@ test("mode hints stay short and never quote the live weight", () => {
   assert.match(modeHint("bm25"), /Matches words/);
   assert.match(modeHint("embeddings"), /Matches meaning/);
   assert.match(modeHint("hybrid"), /mixed by the slider/);
+  assert.equal(modeLabel("bm25"), "Keyword match");
   for (const mode of ["bm25", "embeddings", "hybrid"] as const) {
     // A percentage here would go stale the moment the slider moves, and these
     // have to fit a tooltip.

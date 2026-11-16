@@ -1,5 +1,5 @@
+import { Page, PageHeader } from "@ratel/design-system/page-header";
 import { notFound } from "next/navigation";
-import type { SelectionContext } from "@/components/console/playground/CalibrationBanner";
 import { PlaygroundWorkbench } from "@/components/console/playground/PlaygroundWorkbench";
 import { requireProjectScope } from "@/components/console/settings/project-scope";
 import { composition } from "@/lib/composition/ports";
@@ -17,13 +17,17 @@ import { embeddingsConfigured } from "@/lib/synthesis/playground/embed";
 import { loadSuggestedPrompts, type SuggestedPrompt } from "@/lib/synthesis/playground/prompts";
 import { getSelectionDetail } from "@/lib/synthesis/traces/experiment-calibration-queries";
 
-export const metadata = { title: "Playground" };
+export const metadata = { title: "Test a search" };
 
 type SearchParams = {
   q?: string | string[];
   /** A recorded selection to carry in as context. */
   selection?: string | string[];
   experiment?: string | string[];
+  /** `kind:id` of the tool or skill the reader expects first. */
+  expect?: string | string[];
+  /** `list` or `compare`, when the reader chose one. */
+  view?: string | string[];
 };
 
 function first(value: string | string[] | undefined): string | undefined {
@@ -37,8 +41,9 @@ function suggestionWindow(): { since: Date; until: Date } {
 }
 
 /**
- * Re-rank a prompt against this project's live catalog with the SDK's own engine, with what-if
- * edits to skill and tool descriptions.
+ * Catalog › Test a search (the route keeps its old name, `playground`): search this project's
+ * live catalog with the SDK's own engine, and test rewritten descriptions before saving them.
+ * Arriving from an experiment carries that search's ask and both variants' recorded results in.
  */
 export default async function TestSearchPage({
   params,
@@ -100,29 +105,41 @@ export default async function TestSearchPage({
   // The recorded query is what the variants belong to; `q` only prefills the box.
   const recordedQuery = selection ? (selectionQuery(selection.records) ?? "") : "";
   const carriedQuery = first(query.q) ?? recordedQuery;
-  const selectionContext: SelectionContext | null =
-    selection && selectionId
-      ? {
-          selectionId,
-          experimentName: first(query.experiment) ?? null,
-          query: recordedQuery || carriedQuery,
-          arms,
-          exactOrder: ranking?.exactOrder ?? null,
-        }
-      : null;
-
+  const view = first(query.view);
+  const root = `/project/${encodeURIComponent(project.id)}`;
   return (
-    <PlaygroundWorkbench
-      // The workbench seeds its state from these props on mount; a new deep link starts it over.
-      key={`${selectionId ?? ""} ${carriedQuery}`}
-      projectId={project.id}
-      projectSlug={project.slug}
-      bench={bench}
-      initialQuery={carriedQuery}
-      suggestions={suggestions}
-      embeddingsEnabled={embeddingsConfigured(composition.embeddingProvider)}
-      canSaveSearchableDescription
-      selectionContext={selectionContext}
-    />
+    <Page>
+      <PageHeader
+        crumbs={[{ label: "Catalog", href: `${root}/catalogs` }]}
+        title="Test a search"
+        description="See which tools your agent finds for an ask, and why."
+      />
+      <PlaygroundWorkbench
+        // Remount when the experiment changes: the workbench seeds its ask, its experiment and its
+        // auto-run on mount. Keyed on the selection only: it writes `q` itself as you search, and
+        // the refresh after a save must not restart the page.
+        key={selectionId ?? ""}
+        projectId={project.id}
+        projectSlug={project.slug}
+        bench={bench}
+        initialQuery={carriedQuery}
+        initialExpected={first(query.expect) ?? null}
+        initialView={view === "list" ? "list" : view === "compare" ? "compare" : null}
+        suggestions={suggestions}
+        embeddingsEnabled={embeddingsConfigured(composition.embeddingProvider)}
+        canSaveSearchableDescription
+        selectionContext={
+          selection && selectionId
+            ? {
+                selectionId,
+                experimentName: first(query.experiment) ?? null,
+                query: recordedQuery || carriedQuery,
+                arms,
+                exactOrder: ranking?.exactOrder ?? null,
+              }
+            : null
+        }
+      />
+    </Page>
   );
 }

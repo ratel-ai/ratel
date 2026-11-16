@@ -57,6 +57,7 @@ import {
   tryEngineLock,
 } from "@/lib/readings/intent-engine/store";
 import { VerbLexicon } from "@/lib/readings/intent-engine/text";
+import { DEFAULT_BATCH_POLICY, eventsToWaitFor } from "@/lib/readings/intent-graph/batching";
 import { foldablePrefix, turnKey } from "@/lib/readings/intent-graph/fold";
 import {
   type FoldableEventRow,
@@ -105,6 +106,7 @@ export const MAX_PAGES_PER_JOB = 50;
 /** Paging stops after this long; the next run continues. */
 export const TIME_BUDGET_MS = 2 * 60_000;
 const SEED_QUERY_INTENTS = 5_000;
+
 const SYSTEM_DISTINCT_ID = "system:intent-engine";
 const logger = getLogger("intent-engine/job");
 
@@ -154,6 +156,9 @@ export interface IntentEngineJobDeps {
   maxPages: number;
   timeBudgetMs: number;
   clusterLimit: number;
+  /** Batching by backlog (lib/intent-graph/batching.ts); minBatch 0 runs on any backlog. */
+  minBatch: number;
+  maxWaitMs: number;
   commitLagMs?: number;
   thresholds?: MatchThresholds;
   compactionOptions?: EngineCompactionOptions;
@@ -175,9 +180,11 @@ const defaultDeps = (): IntentEngineJobDeps => ({
   maxPages: MAX_PAGES_PER_JOB,
   timeBudgetMs: TIME_BUDGET_MS,
   clusterLimit: CLUSTER_LOAD_LIMIT,
+  minBatch: DEFAULT_BATCH_POLICY.minBatch,
+  maxWaitMs: DEFAULT_BATCH_POLICY.maxWaitMs,
 });
 
-export type IntentEngineOutcome = "clustered" | "caught_up" | "busy";
+export type IntentEngineOutcome = "clustered" | "caught_up" | "busy" | "waiting";
 
 export interface IntentEngineJobResult {
   outcome: IntentEngineOutcome;
@@ -203,6 +210,8 @@ export interface IntentEngineJobResult {
   naming: NameJobResult;
   /** Whether the page budget or the time budget stopped the run and a follow-up was queued. */
   continued: boolean;
+  /** New events a `waiting` run left for a fuller one. */
+  waitingEvents: number;
 }
 
 export async function runIntentEngine(
@@ -231,6 +240,7 @@ export async function runIntentEngine(
     keys: deps.llmKeys,
     naming: emptyNameResult(),
     continued: false,
+    waitingEvents: 0,
   };
   try {
     await run(projectId, deps, db, result, startedAt);
@@ -258,6 +268,7 @@ export async function runIntentEngine(
     keys: result.keys,
     named: result.naming.named,
     continued: result.continued,
+    waiting_events: result.waitingEvents,
     duration_ms: Math.max(0, deps.now().getTime() - startedAt.getTime()),
   };
   logger.info(fields, "intent engine run completed");
@@ -267,6 +278,25 @@ export async function runIntentEngine(
     { object_action: "intent_engine_clustered", ...fields },
   );
   return result;
+}
+
+/**
+ * How many new events wait for a fuller run (lib/intent-graph/batching.ts),
+ * else 0. One indexed read of at most `minBatch` rows past the cursor, before
+ * any cluster is loaded. A project's first run never waits.
+ */
+async function smallBacklog(
+  projectId: string,
+  deps: IntentEngineJobDeps,
+  db: () => EngineDb,
+): Promise<number> {
+  if (deps.minBatch <= 0) return 0;
+  const state = await getEngineState(projectId, db());
+  if (!state?.seededAt) return 0;
+  const since: Date | string =
+    state.cursor ?? new Date(deps.now().getTime() - RUNTIME_EVENT_RETENTION_DAYS * 86_400_000);
+  const ahead = await deps.listEvents(projectId, since, db(), deps.minBatch, deps.commitLagMs);
+  return eventsToWaitFor(ahead, deps, deps.now().getTime());
 }
 
 /** Bound the transaction and take the project's lock; false when another run holds it. */
@@ -285,6 +315,12 @@ async function run(
   result: IntentEngineJobResult,
   startedAt: Date,
 ): Promise<void> {
+  const waiting = await smallBacklog(projectId, deps, db);
+  if (waiting > 0) {
+    result.outcome = "waiting";
+    result.waitingEvents = waiting;
+    return;
+  }
   // Once per run: the catalog changes far more slowly than a job runs.
   const catalog = await deps.loadCatalogTools(projectId);
   const catalogIds = catalog.map((t) => t.name);

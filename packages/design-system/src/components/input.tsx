@@ -2,7 +2,7 @@ import { type ComponentProps, type ReactNode, useId } from "react";
 import { cn } from "../cn";
 
 const CONTROL =
-  "w-full min-w-0 rounded-md border border-line-strong bg-app text-ui text-fg placeholder:text-fg-faint outline-none transition-[border-color,box-shadow] duration-120 hover:border-line-active focus-visible:border-line-active focus-visible:ring-2 focus-visible:ring-focus/40 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger aria-invalid:focus-visible:ring-danger/30";
+  "w-full min-w-0 rounded-md border border-line-strong bg-app text-ui text-fg placeholder:text-fg-faint outline-none transition-[border-color] duration-120 hover:border-line-active focus-visible:border-fg-subtle disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-danger";
 
 /** A text input. 32 px tall, 16 px on touch screens so iOS never zooms. */
 export function Input({ className, type = "text", ...props }: ComponentProps<"input">) {
