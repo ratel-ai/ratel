@@ -27,6 +27,7 @@ import type {
   EngineState,
   SourceSlice,
 } from "@/lib/readings/intent-types/engine-types";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
  * The intent engine's fold: place each ask of a page of events in a cluster,
@@ -154,7 +155,7 @@ export function foldAsks(input: FoldAsksInput): FoldAsksOutput {
   let nextRank = clusters.length;
 
   const create = (text: string, at: number): EngineCluster => {
-    const member = text.slice(0, MEMBER_TEXT_MAX);
+    const member = sliceWellFormed(text, MEMBER_TEXT_MAX);
     const cluster: EngineCluster = {
       uuid: randomUUID(),
       id: `intent_${nextGraphN++}`,
@@ -291,8 +292,8 @@ export function foldAsks(input: FoldAsksInput): FoldAsksOutput {
         member:
           frame.synthetic && cluster.members.length > 0
             ? null
-            : frame.text.slice(0, MEMBER_TEXT_MAX),
-        servedMember: served ? ask.text.slice(0, MEMBER_TEXT_MAX) : null,
+            : sliceWellFormed(frame.text, MEMBER_TEXT_MAX),
+        servedMember: served ? sliceWellFormed(ask.text, MEMBER_TEXT_MAX) : null,
         served: served ? own : null,
         usage: split[i],
         surfaced: served ? surfaced : [],
@@ -328,7 +329,7 @@ export function foldAsks(input: FoldAsksInput): FoldAsksOutput {
           const cluster = byUuid.get(part.key)!;
           credit(cluster, ask, i, {
             text: part.text,
-            member: part.synthetic ? null : part.text.slice(0, MEMBER_TEXT_MAX),
+            member: part.synthetic ? null : sliceWellFormed(part.text, MEMBER_TEXT_MAX),
             served: own ? split[i] : null,
             usage: split[i],
             surfaced: [],
@@ -361,7 +362,7 @@ export function foldAsks(input: FoldAsksInput): FoldAsksOutput {
       }
       const cluster = result.kind === "join" ? byUuid.get(result.key)! : create(ask.text, ask.at);
       if (result.kind === "join") stats.joined += 1;
-      const member = ask.text.slice(0, MEMBER_TEXT_MAX);
+      const member = sliceWellFormed(ask.text, MEMBER_TEXT_MAX);
       // An ask holding several actions that joined a cluster whole counts there,
       // and a runtime is still served it as the search it was, but it never widens
       // the cluster's wording: as a member it would bridge the cluster to every

@@ -118,6 +118,23 @@ export async function readJobQueueClock(
   return new Date((result.rows[0] as { now: string | Date }).now);
 }
 
+/**
+ * How long the oldest `queued` job has waited, in ms, on the database's clock; null when nothing
+ * is queued. One index-only read of `jobs_status_created_idx`, so the drain can report queue lag
+ * after every run.
+ */
+export async function readOldestQueuedJobAgeMs(
+  db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
+): Promise<number | null> {
+  const result = await db.execute(sql`
+    select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
+    from ${jobs}
+    where ${jobs.status} = 'queued'
+  `);
+  const age = (result.rows[0] as { age_ms: string | number | null } | undefined)?.age_ms;
+  return age === null || age === undefined ? null : Number(age);
+}
+
 /** Running jobs one project may have at once, across every drain. 0 turns the cap off. */
 export function jobsRunningPerProject(
   env: Readonly<Record<string, string | undefined>> = process.env,

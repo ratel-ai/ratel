@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import { centralPhrases } from "@/lib/readings/intent-engine/naming";
+import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
  * Model-written names for the engine's intents (level 1, "What they ask for")
@@ -106,7 +107,7 @@ function keyedSystem(vocabulary: NameVocabulary): string {
 /** One line, capped, and unable to close or open a tag of the prompt: an ask is quoted data. */
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").replace(/</g, "\u2039").replace(/>/g, "\u203a").trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+  return flat.length > max ? `${sliceWellFormed(flat, max - 1)}…` : sliceWellFormed(flat, max);
 }
 
 /** The phrases a cluster is named from, the same on every run for the same members. */

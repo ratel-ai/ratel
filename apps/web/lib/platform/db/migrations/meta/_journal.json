@@ -225,6 +225,13 @@
       "when": 1794239987446,
       "tag": "0031_otel_autovacuum",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794850321704,
+      "tag": "0032_tool_count_backfill_backups",
+      "breakpoints": true
     }
   ]
 }

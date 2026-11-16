@@ -1,4 +1,5 @@
 import { runDrainTick } from "@/lib/jobs/drain";
+import { type DrainObserverDeps, observeDrain } from "@/lib/jobs/drain-observer";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { startWorker, type WorkerDeps, type WorkerHandle } from "@/lib/jobs/worker";
 import { getLogger } from "@/lib/platform/logger";
@@ -19,7 +20,7 @@ export interface BackgroundWorkerDeps {
 
 const defaultDeps = (): BackgroundWorkerDeps => ({
   drain: () => drainProjectJobs(),
-  tick: () => runDrainTick(),
+  tick: workerTick(),
   startWorker,
   on: (signal, listener) => process.on(signal, listener),
   exit: (code) => process.exit(code),
@@ -76,6 +77,18 @@ export function startBackgroundWorker(
   deps.on("SIGTERM", stop);
   deps.on("SIGINT", stop);
   return handle;
+}
+
+/**
+ * The worker's sweep: the cron tick, observed like the route's tick (`drain-observer.ts`), so it
+ * logs the `drain_completed` heartbeat and `job_queue_lagging` the deployment's monitors read.
+ * Upstream's `workerSweep`. A tick that throws reads as a failed one.
+ */
+export function workerTick(
+  run: () => Promise<{ ok: boolean; error?: string }> = () => runDrainTick(),
+  observer?: DrainObserverDeps,
+): () => Promise<{ ok: boolean; error?: string }> {
+  return async () => (await observeDrain(run, observer)) ?? { ok: false, error: "drain threw" };
 }
 
 /** Stop the worker started here, after its step in flight, and forget it. */

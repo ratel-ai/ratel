@@ -28,7 +28,7 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import { persistDecodedSpans } from "./ingest-spans";
+import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 
@@ -102,6 +102,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe; absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** Whether a model call counts only the tool calls it produced; absent, off. */
+  isProducedToolCallsEnabled?: PersistSpansDeps["isProducedToolCallsEnabled"];
 }
 
 export async function handleTracesRequest(

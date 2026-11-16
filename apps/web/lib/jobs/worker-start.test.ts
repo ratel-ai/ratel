@@ -5,6 +5,7 @@ import {
   type BackgroundWorkerDeps,
   startBackgroundWorker,
   stopBackgroundWorker,
+  workerTick,
 } from "./worker-start";
 
 /** A worker whose loop is a recording: what it was wired to, its signals, its exits. */
@@ -154,4 +155,22 @@ test("starting twice in one process keeps the first worker", () => {
   assert.equal(second.started(), 0);
   assert.equal(second.listeners.SIGTERM, undefined);
   first.finishStep();
+});
+
+test("the worker's tick logs the drain heartbeat the monitors read, and a throw is a failed tick", async () => {
+  const codes: string[] = [];
+  const observer = {
+    oldestQueuedJobAgeMs: async () => 0,
+    log: (_level: string, _fields: unknown, code: string) => codes.push(code),
+    reportException: () => {},
+  };
+  assert.deepEqual(await workerTick(async () => ({ ok: true }), observer)(), { ok: true });
+  assert.deepEqual(codes, ["drain_started", "drain_completed"]);
+
+  codes.length = 0;
+  const failed = await workerTick(async () => {
+    throw new Error("gone");
+  }, observer)();
+  assert.deepEqual(failed, { ok: false, error: "drain threw" });
+  assert.deepEqual(codes, ["drain_started", "drain_failed"]);
 });

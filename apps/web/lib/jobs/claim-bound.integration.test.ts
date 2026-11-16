@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
-import { claimNextQueuedJob, readJobQueueClock } from "@/lib/jobs/queries";
+import {
+  claimNextQueuedJob,
+  readJobQueueClock,
+  readOldestQueuedJobAgeMs,
+} from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -59,4 +63,13 @@ test("a job queued after the bound is not claimed; one queued before it is", asy
   );
   const unbounded = await claimNextQueuedJob(PROJ, undefined, db, noCap);
   assert.equal(unbounded?.id, JOB_NEW, "without a bound it is claimed");
+});
+
+test("the oldest queued job's age is measured on the database clock, and null once nothing waits", async () => {
+  const db = await setup();
+  const age = await readOldestQueuedJobAgeMs(db);
+  assert.ok(age !== null && age >= 59_000 && age < 120_000, `about a minute, got ${age}`);
+
+  await claimNextQueuedJob(PROJ, undefined, db);
+  assert.equal(await readOldestQueuedJobAgeMs(db), null, "a running job is not queue lag");
 });

@@ -52,6 +52,20 @@ export type ToolStat = { calls: number; tokens: number };
 /** Every tool this event offered (or called), keyed by tool name. */
 export type ToolsByName = Record<string, ToolStat>;
 
+/**
+ * Which assistant `tool_call` blocks count as calls of this event.
+ * - `all`: every block in `messages` (SDK events, and OTLP with flag
+ *   `cloud-otlp-produced-tool-calls` off).
+ * - `produced`: only the blocks this model call produced, the trailing
+ *   assistant messages (see {@link producedMessages}). A multi-step turn re-sends
+ *   earlier tool calls in each later call's input; `all` counts them again.
+ *   Used vs unused still reads every block: a tool the turn already called
+ *   is a used tool.
+ */
+export type ToolCallScope = "all" | "produced";
+
+export type CategorizeOptions = { toolCallScope?: ToolCallScope };
+
 export type EventMetrics = {
   /** Input tokens attributed to each source; sums to `usage.input_tokens`. */
   tokensByCategory: Record<ContextSource, number>;
@@ -89,7 +103,7 @@ function estTool(t: CloudToolDef): number {
 }
 
 /** How many times each tool was invoked, from assistant `tool_call` blocks. */
-function toolCallCounts(messages: CloudMessage[]): Map<string, number> {
+export function toolCallCounts(messages: CloudMessage[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const m of messages) {
     if (m.role !== "assistant" || typeof m.content === "string") continue;
@@ -181,12 +195,15 @@ function allocate(weights: number[], total: number): number[] {
 
 const SOURCE_ORDER: ContextSource[] = ["skills", "tools", "history", "memory", "user_input"];
 
-export function categorize(event: CloudEvent): EventMetrics {
+export function categorize(event: CloudEvent, options: CategorizeOptions = {}): EventMetrics {
   const messages = event.messages;
 
   // Tools: used vs unused by whether the model called them. Count by *distinct
   // name* (a tool defined twice shouldn't inflate the "N of M tools" counts).
   const callCounts = toolCallCounts(messages);
+  // How many calls this event adds to the Tools tab (see ToolCallScope).
+  const counted = options.toolCallScope === "produced" ? producedMessages(messages) : messages;
+  const producedCounts = counted === messages ? callCounts : toolCallCounts(counted);
   const tools = event.tools ?? [];
   const toolSizes = tools.map(estTool);
   let toolsUsedEst = 0;
@@ -248,13 +265,13 @@ export function categorize(event: CloudEvent): EventMetrics {
   const toolTokens = allocate(toolSizes, tokensByCategory.tools);
   const toolsByName: ToolsByName = {};
   tools.forEach((t, i) => {
-    const e = toolsByName[t.name] ?? { calls: callCounts.get(t.name) ?? 0, tokens: 0 };
+    const e = toolsByName[t.name] ?? { calls: producedCounts.get(t.name) ?? 0, tokens: 0 };
     e.tokens += toolTokens[i]; // sum duplicate defs sharing a name
     toolsByName[t.name] = e;
   });
   // Tools called but not defined this event (defined elsewhere) still count as used.
-  for (const [name, calls] of callCounts) {
-    if (!toolsByName[name]) toolsByName[name] = { calls, tokens: 0 };
+  for (const name of callCounts.keys()) {
+    if (!toolsByName[name]) toolsByName[name] = { calls: producedCounts.get(name) ?? 0, tokens: 0 };
   }
 
   // Ratel gateway: surface the tools the agent actually ran via `invoke_tool` (the
@@ -264,7 +281,7 @@ export function categorize(event: CloudEvent): EventMetrics {
   // footprint and don't perturb the used/unused token split. The `invoke_tool`
   // wrapper itself stays in the map as its real def overhead; the Tools tab hides
   // the gateway meta-tools by default.
-  for (const [name, calls] of innerToolCallCounts(messages)) {
+  for (const [name, calls] of innerToolCallCounts(counted)) {
     const e = toolsByName[name] ?? { calls: 0, tokens: 0 };
     e.calls += calls;
     toolsByName[name] = e;
@@ -294,4 +311,22 @@ export function categorize(event: CloudEvent): EventMetrics {
     toolsUsedCount: usedNames.size,
     categorizerVersion: CATEGORIZER_VERSION,
   };
+}
+
+/**
+ * The messages this model call produced: the assistant messages after the last
+ * user or tool message. OTLP content is input then output, and an input ends
+ * with the user's ask or a tool result, so this is the output plus any
+ * synthetic tool calls ingest appends. The rule reads only `messages`, so a
+ * stored payload gives the same answer as ingest.
+ */
+export function producedMessages(messages: CloudMessage[]): CloudMessage[] {
+  let start = messages.length;
+  while (start > 0 && messages[start - 1].role === "assistant") start--;
+  return messages.slice(start);
+}
+
+/** Names of the tools this model call called (see {@link producedMessages}). */
+export function producedToolCallNames(messages: CloudMessage[]): Set<string> {
+  return new Set(toolCallCounts(producedMessages(messages)).keys());
 }

@@ -1,5 +1,6 @@
 import { drainSteps } from "@/lib/composition/registry";
 import type { DrainStep } from "@/lib/contracts/registry";
+import { type DrainObserverDeps, defaultDrainObserverDeps, observeDrain } from "./drain-observer";
 import {
   type BackgroundObservability,
   type BackgroundObservabilityDeps,
@@ -111,12 +112,15 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
  * GET /api/cron/drain: one tick for an external scheduler. Closed unless `CRON_SECRET` is set
  * and presented as a bearer: an open route would let any caller drive background work,
  * including jobs that spend the operator's model keys. The open-source edition never needs
- * the route, its scheduler runs the tick in process.
+ * the route, its scheduler runs the tick in process. A tick it runs logs its outcome for the
+ * deployment's drain monitors (`drain-observer.ts`); an API-only process logs nothing, its
+ * worker's sweep does.
  */
 export async function drainCron(
   req: Request,
   deps?: DrainCronDeps,
   role: AppRole = appRole(),
+  observer: DrainObserverDeps = defaultDrainObserverDeps,
 ): Promise<Response> {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) return new Response("CRON_SECRET is not configured", { status: 401 });
@@ -126,7 +130,8 @@ export async function drainCron(
   // An API-only task leaves the sweeps and the drain to the worker, which runs
   // them on its own timer.
   if (role === "api") return Response.json({ ok: true, skipped: "worker" }, { status: 202 });
-  const summary = await runDrainTick(deps);
+  const summary = await observeDrain(() => runDrainTick(deps), observer);
+  if (!summary) return Response.json({ ok: false, error: "drain threw" }, { status: 500 });
   return Response.json(summary, { status: summary.ok ? 200 : 500 });
 }
 

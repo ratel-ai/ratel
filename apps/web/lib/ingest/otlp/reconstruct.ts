@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto";
-import { categorize } from "@/lib/ingest/categorize";
+import {
+  categorize,
+  producedMessages,
+  producedToolCallNames,
+  type ToolCallScope,
+} from "@/lib/ingest/categorize";
 import type { CloudEvent, CloudMessage, CloudToolDef, CloudUsage } from "@/lib/ingest/cloud-schema";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
 import { costFor } from "@/lib/ingest/pricing";
@@ -82,6 +87,12 @@ function mapFinishReason(a: AttrMap): CloudEvent["finish_reason"] {
   return VALID_FINISH.has(mapped) ? (mapped as CloudEvent["finish_reason"]) : undefined;
 }
 
+/** How a call's tool calls are counted (flag `cloud-otlp-produced-tool-calls`). */
+export interface ReconstructOptions {
+  /** Default `all`: every assistant tool call in the content, as before the flag. */
+  toolCallScope?: ToolCallScope;
+}
+
 /** Tool names actually invoked, from the sibling `execute_tool` spans. */
 function toolSpanNames(toolSpans: DecodedSpan[]): string[] {
   const names: string[] = [];
@@ -90,6 +101,17 @@ function toolSpanNames(toolSpans: DecodedSpan[]): string[] {
     if (name) names.push(name);
   }
   return names;
+}
+
+/** The tool-call ids in one call's messages, or none when the call has no output. */
+function countedToolCallIds(messages: CloudMessage[]): Set<string> {
+  const ids = new Set<string>();
+  if (producedMessages(messages).length === 0) return ids;
+  for (const m of messages) {
+    if (m.role !== "assistant" || typeof m.content === "string") continue;
+    for (const b of m.content) if (b.type === "tool_call" && b.id) ids.add(b.id);
+  }
+  return ids;
 }
 
 /**
@@ -110,32 +132,44 @@ function toolSpanArguments(span: DecodedSpan): Record<string, unknown> {
  * - otherwise synthesize a def per *called* tool (from content + execute_tool
  *   spans); all are "used", tools_unused = 0 (the honest answer without a catalog).
  * Called tools not represented in `messages` get a synthetic assistant tool_call
- * so `categorize()`'s call-count scan sees them.
+ * so `categorize()`'s call-count scan sees them. With scope `produced`, see
+ * {@link uncountedToolSpans}: a name only in the input history is an earlier
+ * call's, so this call's span for it still counts, unless the span has the id of
+ * that earlier call. A tool span can group under a later call than the one that
+ * produced it, and that producer can be in an earlier batch, so the check reads
+ * the ids in this call's own input. A call with no output is the exception: its
+ * emitter did not capture output, so no earlier call counted the history ids.
  */
 function assembleTools(
   toolDefsRaw: ReturnType<typeof attrStructured>,
   toolSpans: DecodedSpan[],
   messages: CloudMessage[],
   contentCalled: Set<string>,
+  toolCallScope: ToolCallScope,
 ): CloudToolDef[] {
   const catalog = mapToolDefinitions(toolDefsRaw);
   const spanNames = toolSpanNames(toolSpans);
+  const produced = toolCallScope === "produced";
+  const missing = produced
+    ? uncountedToolSpans(toolSpans, producedToolCallNames(messages), countedToolCallIds(messages))
+    : toolSpans.filter((t) => !contentCalled.has(attrString(t.attributes, GEN_AI.toolName) ?? ""));
 
   // Tools called via execute_tool spans but absent from the captured messages get a
   // synthetic assistant tool_call so the categorizer counts them as used. The span
   // carries the real arguments when the emitter captures content on spans.
-  const extra = toolSpans
-    .map((t) => ({ name: attrString(t.attributes, GEN_AI.toolName), args: toolSpanArguments(t) }))
-    .filter(
-      (t): t is { name: string; args: Record<string, unknown> } =>
-        !!t.name && !contentCalled.has(t.name),
-    );
+  const extra = missing
+    .map((t) => ({
+      name: attrString(t.attributes, GEN_AI.toolName),
+      id: produced ? (attrString(t.attributes, GEN_AI.toolCallId) ?? "") : "",
+      args: toolSpanArguments(t),
+    }))
+    .filter((t): t is { name: string; id: string; args: Record<string, unknown> } => !!t.name);
   if (extra.length > 0) {
     messages.push({
       role: "assistant",
-      content: extra.map(({ name, args }) => ({
+      content: extra.map(({ name, id, args }) => ({
         type: "tool_call" as const,
-        id: "",
+        id,
         name,
         arguments: args,
       })),
@@ -149,8 +183,28 @@ function assembleTools(
   return [...called].map((name) => ({ name, parameters: {} }));
 }
 
+/**
+ * The tool-count rule of scope `produced`, shared by ingest and
+ * `backfill:tool-counts`: the tool spans whose call no content counts yet. A span
+ * adds nothing when its name is in the output of the call that owns it, or when
+ * its id is in `countedIds`. Each id it adds joins `countedIds`, so it adds once.
+ */
+export function uncountedToolSpans(
+  toolSpans: DecodedSpan[],
+  producedNames: ReadonlySet<string>,
+  countedIds: Set<string>,
+): DecodedSpan[] {
+  return toolSpans.filter((span) => {
+    const name = attrString(span.attributes, GEN_AI.toolName);
+    const id = attrString(span.attributes, GEN_AI.toolCallId);
+    if (!name || producedNames.has(name) || (id && countedIds.has(id))) return false;
+    if (id) countedIds.add(id);
+    return true;
+  });
+}
+
 /** Reconstruct a `CloudEvent` from a grouped OTLP call. */
-export function toCloudEvent(call: GroupedCall): CloudEvent {
+export function toCloudEvent(call: GroupedCall, options: ReconstructOptions = {}): CloudEvent {
   const a = call.anchor.attributes;
   const details = call.detailsEvent?.attributes ?? {};
 
@@ -173,7 +227,13 @@ export function toCloudEvent(call: GroupedCall): CloudEvent {
   // The offered tool catalog may ride the anchor span or the details event.
   const toolDefsRaw =
     attrStructured(a, GEN_AI.toolDefinitions) ?? attrStructured(details, GEN_AI.toolDefinitions);
-  const tools = assembleTools(toolDefsRaw, call.toolSpans, messages, content.calledNames);
+  const tools = assembleTools(
+    toolDefsRaw,
+    call.toolSpans,
+    messages,
+    content.calledNames,
+    options.toolCallScope ?? "all",
+  );
 
   // The categorizer needs at least one message (its "current turn" anchor); a
   // content-absent call gets an empty placeholder so all input folds to user_input.
@@ -230,8 +290,12 @@ export function plausibleOccurredAt(startUnixMs: number): Date | null {
  * that once it is keyed on `gen_ai.response.id`. An empty id (a span the
  * exporter sent without one) is stored as null, never as "".
  */
-export function toRow(projectId: string, call: GroupedCall): EventWithMetric {
-  const e = toCloudEvent(call);
+export function toRow(
+  projectId: string,
+  call: GroupedCall,
+  options: ReconstructOptions = {},
+): EventWithMetric {
+  const e = toCloudEvent(call, options);
   const occurredAt = plausibleOccurredAt(call.anchor.startUnixMs);
   const eventTime = occurredAt ?? new Date();
 
@@ -248,7 +312,7 @@ export function toRow(projectId: string, call: GroupedCall): EventWithMetric {
   );
   const costUsd = cost != null ? cost.toString() : null;
 
-  const m = categorize(e);
+  const m = categorize(e, { toolCallScope: options.toolCallScope });
 
   return {
     event: {
