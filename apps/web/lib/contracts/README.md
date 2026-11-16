@@ -17,6 +17,18 @@ job; its optional `registerSourceIds` names the source ids the importer stores r
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
+`CoreServices.onboarding` (`onboarding.ts`) is project creation for a page the edition owns, such
+as Cloud's invitation page: `createFirstProject` takes a name, the organization and the person,
+runs the core's own onboarding (name rules, the plan's project cap, the project, its first key,
+the product events) and answers with the key once and the send-your-first-trace snippets as data;
+`ensureSampleProject` gives an empty organization its sample project. The edition resolves the
+session and refuses a support session before it calls either.
+
+`mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
+clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
+answers with the person and their organizations, or says the token is invalid or belongs to
+nobody with an account. The open-source edition has no such port and accepts project keys only.
+
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source
@@ -26,6 +38,13 @@ edition, which is unchanged.
 (the page state reads them), `sourceLabel` names each source in the page's copy, and `Importer`
 is mounted once (the list under a state block, or only the dialog the page menu opens with
 `openHealthImport`). Without it the page offers no import.
+
+`HealthShare` is Agent health's public share link. `load` reads a project's live link and whether
+the reader may manage it (null when sharing is not offered to this reader); `Dialog` is mounted once on the page and opens from the page menu
+(`openHealthShare`); `resolve` turns a public token into its link, project and organization, and
+`recordView` counts a view. The two public pages (`/share/health/<token>` and its `/report`) are
+the core's and show the redacted report; without the slot they answer 404 and the page offers no
+sharing.
 
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from

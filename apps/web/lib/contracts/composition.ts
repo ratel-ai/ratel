@@ -6,8 +6,10 @@ import type {
   ImportSummary,
   ImportWindowOption,
 } from "@/lib/contracts/imported-runs";
+import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
+import type { OnboardingPort } from "@/lib/contracts/onboarding";
 import type { RegistryPort } from "@/lib/contracts/registry";
-import type { SessionPort } from "@/lib/contracts/session";
+import type { Organization, SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
 
@@ -40,6 +42,36 @@ export type HealthImporterProps = {
   contactUrl: string | null;
   /** A reading is being built right now from imported runs. */
   readingBuilding: boolean;
+};
+
+/** A project's live public share link, as the member's dialog shows it. */
+export type HealthShareLink = {
+  token: string;
+  windowDays: number;
+  createdAt: string;
+  viewCount: number;
+  lastViewedAt: string | null;
+};
+
+/** What the Agent health page hands an edition's share dialog. */
+export type HealthShareProps = {
+  projectId: string;
+  /** The window the page shows now; a new link opens on it. */
+  windowDays: number;
+  /** The live link, or null when sharing is off. */
+  initialLink: HealthShareLink | null;
+  /** Whether this reader may turn the link on or off. */
+  canManage: boolean;
+};
+
+/** What a live public token opens: the link, its project and the project's organization. */
+export type SharedHealthLink = {
+  linkId: string;
+  /** The window chosen when the link was made. */
+  windowDays: number;
+  project: { id: string; name: string };
+  /** The edition may pass its wider row: the entitlements port reads the plan from it. */
+  organization: Organization;
 };
 
 /**
@@ -106,12 +138,35 @@ export type EditionUi = {
     sourceLabel: Readonly<Record<string, string>>;
     Importer: ComponentType<HealthImporterProps>;
   };
+  /**
+   * Public share links for Agent health, absent otherwise: the page then offers no sharing and
+   * `/share/health/<token>` answers 404. The link, its token and who may manage it are the
+   * edition's; the public pages and the redacted report they show are the core's.
+   */
+  HealthShare?: {
+    /**
+     * The project's live link, and whether the signed-in reader may manage it. Null when sharing
+     * must not be offered to this reader (Cloud: inside an admin support session).
+     */
+    load(projectId: string): Promise<{ link: HealthShareLink | null; canManage: boolean } | null>;
+    /** Mounted once on the page; it opens when the page menu asks (`openHealthShare`). */
+    Dialog: ComponentType<HealthShareProps>;
+    /** The live link behind a token; null for malformed, unknown and revoked tokens alike. */
+    resolve(token: string): Promise<SharedHealthLink | null>;
+    /** Counts one view of the public page. */
+    recordView(linkId: string): Promise<void>;
+  };
 };
 
 /** What the core lends an edition: capabilities over core data that only the core implements. */
 export type CoreServices = {
   toolCorpus: ToolCorpusPort;
   importedRuns: ImportedRunsPort;
+  /**
+   * Project creation for a page the edition owns. Optional so an edition built against an older
+   * core still type-checks; the core always lends it.
+   */
+  onboarding?: OnboardingPort;
 };
 
 export type CompositionPorts = {
@@ -127,6 +182,11 @@ export type CompositionPorts = {
   connect?: (core: CoreServices) => void;
   /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
   ui?: () => Promise<EditionUi>;
+  /**
+   * Absent in the open-source edition, where the MCP endpoint takes project API keys only. With
+   * it, an MCP client may sign in through a browser and send the identity provider's token.
+   */
+  mcpOAuth?: McpOAuthPort;
 };
 
 export const PORT_NAMES = [

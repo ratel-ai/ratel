@@ -1,5 +1,8 @@
+import { composition } from "@/lib/composition";
+import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
 import { McpOperationError } from "@/lib/mcp/errors";
 import { hashApiKey } from "@/lib/platform/api-keys";
+import { APP_NAME } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { resolvePlanId } from "@/lib/platform/entitlements";
 import type { Organization } from "@/lib/platform/organizations";
@@ -9,13 +12,14 @@ import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/que
 /**
  * Who is calling the MCP endpoint.
  *
- * Two credential kinds, one shape for everything downstream. This edition ships
- * the `api-key` arm only; the `oauth` arm is declared because the *tool
- * schemas* depend on it: an OAuth user may reach many projects, so every
- * project-scoped operation takes an explicit `projectId`. Keeping the shape
- * means an edition that adds browser sign-in changes no tool contract, which is
- * the difference between a compatible upgrade and a breaking one for every
- * agent that has already learned this surface.
+ * Two credential kinds, one shape for everything downstream. The open-source
+ * edition answers the `api-key` arm only; the `oauth` arm is filled by an
+ * edition that supplies the `mcpOAuth` port (`lib/contracts/mcp-oauth.ts`). The
+ * *tool schemas* depend on that arm either way: an OAuth user may reach many
+ * projects, so every project-scoped operation takes an explicit `projectId`.
+ * Keeping the shape means an edition that adds browser sign-in changes no tool
+ * contract, which is the difference between a compatible upgrade and a breaking
+ * one for every agent that has already learned this surface.
  */
 
 /**
@@ -72,7 +76,7 @@ export interface McpAuthDeps {
   findActiveApiKeyByHash: typeof findActiveApiKeyByHash;
   touchApiKey: typeof touchApiKey;
   getOrganizationByProjectId: typeof getOrganizationByProjectId;
-  /** Injected so an edition with browser sign-in can supply its verifier. */
+  /** The edition's verifier by default; injected in tests. */
   verifyOAuthToken: (token: string) => Promise<McpAuthResult>;
 }
 
@@ -81,21 +85,60 @@ export const defaultAuthDeps: McpAuthDeps = {
   findActiveApiKeyByHash,
   touchApiKey,
   getOrganizationByProjectId,
-  verifyOAuthToken: refuseOAuthToken,
+  // Read at call time: the composition is the edition's, and a test may swap the port.
+  verifyOAuthToken: (token) => editionOAuthVerifier(composition.mcpOAuth)(token),
 };
 
+function refused(message: string): McpAuthResult {
+  return { ok: false, error: new McpOperationError("unauthorized", message) };
+}
+
 /**
- * There is no browser sign-in in this edition, so a bearer that is not a
- * project key is refused outright: no identity provider is asked, no network
- * call is made. The message says what to send instead.
+ * The verifier for a bearer that is not a project key.
+ *
+ * Without the edition's port there is no browser sign-in, so the bearer is
+ * refused outright: no identity provider is asked, no network call is made, and
+ * the message says what to send instead. With it, the edition says who the
+ * token belongs to and the core builds the `oauth` context: each organization
+ * with its plan resolved through the entitlements port. Both refusals are 401s,
+ * so the client re-authenticates; they differ only in what the person is told.
  */
-async function refuseOAuthToken(): Promise<McpAuthResult> {
-  return {
-    ok: false,
-    error: new McpOperationError(
-      "unauthorized",
-      "Only project API keys are accepted here. Send `Authorization: Bearer rtl_...` with a key from the project's settings.",
-    ),
+export function editionOAuthVerifier(
+  port: McpOAuthPort | undefined,
+): (token: string) => Promise<McpAuthResult> {
+  if (!port) {
+    return async () =>
+      refused(
+        "Only project API keys are accepted here. Send `Authorization: Bearer rtl_...` with a key from the project's settings.",
+      );
+  }
+  return async (token) => {
+    const verdict = await port.verifyAccessToken(token);
+    if (!verdict.ok) {
+      return refused(
+        verdict.reason === "unlinked"
+          ? `No ${APP_NAME} account is linked to this identity. Sign in to the console once, then retry.`
+          : "Invalid or expired credential. Re-authenticate with your MCP client.",
+      );
+    }
+    const { caller } = verdict;
+    return {
+      ok: true,
+      auth: {
+        kind: "oauth",
+        externalUserId: caller.externalUserId,
+        userId: caller.userId,
+        memberships: caller.memberships.map(({ organization, role }) => ({
+          organizationId: organization.id,
+          role,
+          organization: {
+            id: organization.id,
+            slug: organization.slug,
+            effectivePlan: resolvePlanId(organization),
+          },
+        })),
+      },
+    };
   };
 }
 
