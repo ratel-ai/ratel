@@ -7,6 +7,7 @@ import type {
   ImportWindowOption,
 } from "@/lib/contracts/imported-runs";
 import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
+import type { OnboardingPort } from "@/lib/contracts/onboarding";
 import type { RegistryPort } from "@/lib/contracts/registry";
 import type { SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
@@ -113,6 +114,11 @@ export type EditionUi = {
 export type CoreServices = {
   toolCorpus: ToolCorpusPort;
   importedRuns: ImportedRunsPort;
+  /**
+   * Project creation for a page the edition owns. Optional so an edition built against an older
+   * core still type-checks; the core always lends it.
+   */
+  onboarding?: OnboardingPort;
 };
 
 export type CompositionPorts = {

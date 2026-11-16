@@ -12,8 +12,9 @@ port implementations is mounted; a missing port stops the process at startup
   decides before the shell resolves its data, and the Agent health importer (`HealthImports`). A loader, so the boot path never imports it. Absent
   in the open-source edition.
 - `connect`, optional on a composition: `instrumentation.node.ts` calls it at startup with the
-  core services (`CoreServices`: `toolCorpus`, `importedRuns`), so the edition reads core data and
-  stores imported runs without importing a core module.
+  core services (`CoreServices`: `toolCorpus`, `importedRuns`, `onboarding`), so the edition reads
+  core data, stores imported runs and creates a project from its own page without importing a core
+  module.
   Absent in the open-source edition.
 - `organizationNav`: the organization pages an edition adds to the rail (Cloud: Members, Billing). The edition's optional `hiddenOrganizationNav(slug)` names paths to hide for one organization; the shell filters with it, and nothing is hidden without it. An item of any of the three nav slots may carry `keywords` (other words ⌘K finds it by); an organization or project item may carry a `shortcut` (the key after `g`).
 - `projectNav`: named groups of edition project pages, between the core pages and Settings in the project rail (Cloud: APIs, with Embeddings). Empty in the open-source edition, whose rail is unchanged.
