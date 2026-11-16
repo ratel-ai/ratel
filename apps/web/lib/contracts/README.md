@@ -17,6 +17,11 @@ job; its optional `registerSourceIds` names the source ids the importer stores r
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the
 ingest types.
 
+`mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
+clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
+answers with the person and their organizations, or says the token is invalid or belongs to
+nobody with an account. The open-source edition has no such port and accepts project keys only.
+
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source

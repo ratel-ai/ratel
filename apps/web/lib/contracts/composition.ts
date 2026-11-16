@@ -6,6 +6,7 @@ import type {
   ImportSummary,
   ImportWindowOption,
 } from "@/lib/contracts/imported-runs";
+import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
 import type { RegistryPort } from "@/lib/contracts/registry";
 import type { SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
@@ -127,6 +128,11 @@ export type CompositionPorts = {
   connect?: (core: CoreServices) => void;
   /** Absent in the open-source edition. A loader, so the boot path never imports the UI. */
   ui?: () => Promise<EditionUi>;
+  /**
+   * Absent in the open-source edition, where the MCP endpoint takes project API keys only. With
+   * it, an MCP client may sign in through a browser and send the identity provider's token.
+   */
+  mcpOAuth?: McpOAuthPort;
 };
 
 export const PORT_NAMES = [
