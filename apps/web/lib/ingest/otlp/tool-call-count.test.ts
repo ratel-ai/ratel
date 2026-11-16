@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { groupSpans, modelCallTraceIds } from "@/lib/ingest/otlp/group";
+import { type PersistSpansDeps, persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
+import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
-import { groupSpans, modelCallTraceIds } from "./group";
-import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
-import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
-import { toRow } from "./reconstruct";
-import type { AttrMap, AttrValue, DecodedSpan } from "./types";
+import { toRow } from "@/lib/ingest/otlp/reconstruct";
+import type { AttrMap, AttrValue, DecodedSpan } from "@/lib/ingest/otlp/types";
+import {
+  aiSdkHistoryTrace,
+  aiSdkToolSpanTrace,
+  laterTurnTrace,
+  TOOL_COUNT_SHAPES,
+} from "@/lib/ledger/turns/tool-count-fixtures";
 
 /**
  * Tool calls count once per call the model made, not once per model call
@@ -169,12 +175,12 @@ function aiSdkTrace(): DecodedSpan[] {
 }
 
 /** Ingest the trace the way `/v1/traces` does and sum `tools_by_name.calls`. */
-function catalogCalls(spans: DecodedSpan[], flagOn = true): Record<string, number> {
-  normalizeAiSdkSpans(spans, { outputToolCalls: flagOn });
+function catalogCalls(spans: DecodedSpan[]): Record<string, number> {
+  normalizeAiSdkSpans(spans);
   const calls = groupSpans(spans, { modelCallTraces: modelCallTraceIds(spans) });
   const totals: Record<string, number> = {};
   for (const call of calls) {
-    const row = toRow(PROJECT, call, { toolCallScope: flagOn ? "produced" : "all" });
+    const row = toRow(PROJECT, call);
     for (const [name, stat] of Object.entries(row.metric.toolsByName ?? {})) {
       totals[name] = (totals[name] ?? 0) + stat.calls;
     }
@@ -196,13 +202,8 @@ test("multi-step turn: AI SDK content counts each tool call once", () => {
   assert.deepEqual(catalogCalls(aiSdkTrace()), TRUTH);
 });
 
-test("flag off: counting is unchanged (history re-counted)", () => {
-  assert.deepEqual(catalogCalls(detailsEventTrace(), false), { search: 3, fetch: 2 });
-  assert.deepEqual(catalogCalls(aiSdkTrace(), false), { search: 2, fetch: 1 });
-});
-
-/** `/v1/traces` persistence with the flag read returning `flag` (or throwing). */
-async function persistedCalls(spans: DecodedSpan[], flag?: boolean | Error) {
+/** `/v1/traces` persistence: the rows' `tools_by_name.calls` and the logged errors. */
+async function persistedCalls(spans: DecodedSpan[]) {
   const totals: Record<string, number> = {};
   const errors: string[] = [];
   const deps = {
@@ -218,12 +219,6 @@ async function persistedCalls(spans: DecodedSpan[], flag?: boolean | Error) {
     insertOtelSpans: async (_projectId: string, rows: unknown[]) => ({ accepted: rows.length }),
     logError: (message: string) => errors.push(message),
     captureFailure: () => {},
-    ...(flag !== undefined && {
-      isProducedToolCallsEnabled: async () => {
-        if (flag instanceof Error) throw flag;
-        return flag;
-      },
-    }),
   } as unknown as PersistSpansDeps;
   const result = await persistDecodedSpans(
     spans,
@@ -234,18 +229,11 @@ async function persistedCalls(spans: DecodedSpan[], flag?: boolean | Error) {
   return { totals, errors };
 }
 
-test("persist: the flag on counts each tool call once", async () => {
-  assert.deepEqual((await persistedCalls(detailsEventTrace(), true)).totals, TRUTH);
-  assert.deepEqual((await persistedCalls(aiSdkTrace(), true)).totals, TRUTH);
-});
-
-test("persist: the flag off, absent or unreadable keeps the old counting", async () => {
-  const old = { search: 3, fetch: 2 };
-  assert.deepEqual((await persistedCalls(detailsEventTrace(), false)).totals, old);
-  assert.deepEqual((await persistedCalls(detailsEventTrace())).totals, old);
-  const failed = await persistedCalls(detailsEventTrace(), new Error("telemetry down"));
-  assert.deepEqual(failed.totals, old);
-  assert.deepEqual(failed.errors, ["produced tool calls flag read failed"]);
+test("persist: every OTLP batch counts each tool call once, with no flag read", async () => {
+  const semconv = await persistedCalls(detailsEventTrace());
+  assert.deepEqual(semconv.totals, TRUTH);
+  assert.deepEqual(semconv.errors, []);
+  assert.deepEqual((await persistedCalls(aiSdkTrace())).totals, TRUTH);
 });
 
 test("produced scope: a tool span whose name is only in the input history still counts", () => {
@@ -263,8 +251,7 @@ test("produced scope: a tool span whose name is only in the input history still 
   tool.parentSpanId = anchor.spanId;
   const [call] = groupSpans([anchor, tool]);
 
-  assert.equal(toRow(PROJECT, call).metric.toolsByName?.search.calls, 1); // the history call
-  const row = toRow(PROJECT, call, { toolCallScope: "produced" });
+  const row = toRow(PROJECT, call);
   assert.equal(row.metric.toolsByName?.search.calls, 1); // the span call
   const last = row.event.payload!.messages.at(-1)!;
   assert.deepEqual(last, {
@@ -298,7 +285,7 @@ function lateToolSpanTrace(): { call1: DecodedSpan; call2: DecodedSpan; lateTool
 
 test("produced scope: a tool span of an earlier call's id, under a later call, adds no call", async () => {
   const { call1, call2, lateTool } = lateToolSpanTrace();
-  assert.deepEqual((await persistedCalls([call1, call2, lateTool], true)).totals, TRUTH);
+  assert.deepEqual((await persistedCalls([call1, call2, lateTool])).totals, TRUTH);
 });
 
 test("produced scope: with no output captured, a tool span of a history id still counts", async () => {
@@ -306,19 +293,111 @@ test("produced scope: with no output captured, a tool span of a history id still
   // the tool span is its only record. The backfill counts this shape the same way.
   const { call1, call2, lateTool } = lateToolSpanTrace();
   for (const call of [call1, call2]) delete call.attributes["gen_ai.output.messages"];
-  const row = (await persistedCalls([call1, call2, lateTool], true)).totals;
+  const row = (await persistedCalls([call1, call2, lateTool])).totals;
   assert.deepEqual(row, { search: 1 });
 });
 
 test("batch split: the producing call in an earlier batch, the tool span with the later call, adds no call", async () => {
   const { call1, call2, lateTool } = lateToolSpanTrace();
-  const first = await persistedCalls([call1], true);
-  const second = await persistedCalls([call2, lateTool], true);
+  const first = await persistedCalls([call1]);
+  const second = await persistedCalls([call2, lateTool]);
   assert.deepEqual(first.totals, { search: 1 });
   assert.deepEqual(second.totals, { search: 0, fetch: 1 });
 });
 
-test("AI SDK: response tool calls map to output messages only when asked", () => {
+for (const shape of TOOL_COUNT_SHAPES) {
+  test(`ingest shape: ${shape.name}`, async () => {
+    const { totals } = await persistedCalls(shape.spans());
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(totals).filter(([, n]) => n > 0)),
+      shape.truth,
+    );
+  });
+}
+
+test("known limit: a span in an earlier batch than its producer counts twice, because the fix needs a cross-batch read", async () => {
+  const { call1, lateTool } = lateToolSpanTrace();
+  const owner = span(
+    "4000000000000054",
+    "chat gpt-5.5",
+    { ...chatAttrs, "gen_ai.input.messages": JSON.stringify([user]) },
+    500,
+  );
+  lateTool.parentSpanId = owner.spanId;
+  const first = await persistedCalls([owner, lateTool]);
+  const second = await persistedCalls([call1]);
+  assert.equal(first.totals.search + second.totals.search, 2);
+});
+
+const positive = (totals: Record<string, number>) =>
+  Object.fromEntries(Object.entries(totals).filter(([, n]) => n > 0));
+
+const NO_OUTPUT_SHAPES: {
+  name: string;
+  spans: () => DecodedSpan[];
+  truth: Record<string, number>;
+}[] = [
+  { name: "no output and no tool span", spans: () => aiSdkHistoryTrace(), truth: TRUTH },
+  {
+    name: "no output and tool spans no call owns",
+    spans: () => aiSdkToolSpanTrace(),
+    truth: TRUTH,
+  },
+  {
+    name: "a later turn, with ids: the first call's history is an earlier trace's",
+    spans: () => laterTurnTrace(true),
+    truth: { fetch: 1 },
+  },
+  { name: "a later turn, with no ids", spans: () => laterTurnTrace(false), truth: { fetch: 1 } },
+];
+
+for (const shape of NO_OUTPUT_SHAPES) {
+  test(`AI SDK with no output, in one batch: ${shape.name}: ingest gives the true count`, async () => {
+    assert.deepEqual(positive((await persistedCalls(shape.spans())).totals), shape.truth);
+  });
+}
+
+test("an owned tool span of a history id counts once, not again as a recovered call", async () => {
+  const { call1, call2, lateTool } = lateToolSpanTrace();
+  const call3 = span(
+    "4000000000000055",
+    "chat gpt-5.5",
+    { ...chatAttrs, "gen_ai.input.messages": JSON.stringify(STEPS[2].input) },
+    3_000,
+  );
+  for (const call of [call1, call2]) delete call.attributes["gen_ai.output.messages"];
+  assert.deepEqual(positive((await persistedCalls([call1, call2, lateTool, call3])).totals), TRUTH);
+});
+
+test("a history id of a call with output in another batch stays presumed counted: no double count", async () => {
+  // Out of order: call 2 (it produced `fetch`) is in another batch. The call just before
+  // the one that first shows `fetch` has output, so `fetch` is not this emitter's blind spot.
+  const content = (step: (typeof STEPS)[number]) => ({
+    ...chatAttrs,
+    "gen_ai.input.messages": JSON.stringify(step.input),
+    "gen_ai.output.messages": JSON.stringify(step.output),
+  });
+  const call1 = span("4000000000000061", "chat gpt-5.5", content(STEPS[0]), 1_000);
+  const call2 = span("4000000000000062", "chat gpt-5.5", content(STEPS[1]), 2_000);
+  const call3 = span("4000000000000063", "chat gpt-5.5", content(STEPS[2]), 3_000);
+  const first = await persistedCalls([call1, call3]);
+  const second = await persistedCalls([call2]);
+  assert.deepEqual(positive(first.totals), { search: 1 });
+  assert.deepEqual(positive(second.totals), { fetch: 1 });
+});
+
+test("known limit: with no output, a batch's first call shows history from an earlier batch, so ingest does not count those calls until the backfill runs", async () => {
+  const [root, step1, step2, step3] = aiSdkHistoryTrace();
+  const batch1 = await persistedCalls([{ ...root }, step1]);
+  const batch2 = await persistedCalls([{ ...root }, step2]);
+  const batch3 = await persistedCalls([{ ...root }, step3]);
+  assert.deepEqual(
+    [batch1, batch2, batch3].map((b) => positive(b.totals)),
+    [{}, {}, {}],
+  );
+});
+
+test("AI SDK: response tool calls map to output messages", () => {
   const attrs = (): AttrMap => ({
     "ai.operationId": "ai.generateText.doGenerate",
     "ai.response.toolCalls": JSON.stringify([
@@ -326,12 +405,8 @@ test("AI SDK: response tool calls map to output messages only when asked", () =>
       { toolCallId: "c2", toolName: "fetch", input: { url: "u" } },
     ]),
   });
-  const off = [span("4000000000000051", "ai.generateText.doGenerate", attrs())];
-  normalizeAiSdkSpans(off);
-  assert.equal(off[0].attributes["gen_ai.output.messages"], undefined);
-
   const on = [span("4000000000000052", "ai.generateText.doGenerate", attrs())];
-  normalizeAiSdkSpans(on, { outputToolCalls: true });
+  normalizeAiSdkSpans(on);
   assert.deepEqual(JSON.parse(on[0].attributes["gen_ai.output.messages"] as string), [
     {
       role: "assistant",

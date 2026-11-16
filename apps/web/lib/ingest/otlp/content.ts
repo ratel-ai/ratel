@@ -64,6 +64,12 @@ export function systemFromInstructions(v: AttrValue | undefined): string | undef
 
 export interface MappedContent {
   messages: CloudMessage[];
+  /**
+   * How many leading `messages` came from the input. Mapping can drop a message,
+   * such as an empty tool message or a user `tool_result` part, so the roles alone
+   * do not show where the input ends.
+   */
+  inputCount: number;
   /** Extra system text found inside a `system` role message (rare; folded in). */
   system?: string;
   /** Tool names that appeared as assistant `tool_call` parts (drives tools_used). */
@@ -180,20 +186,24 @@ export function mapMessages(
   const messages: CloudMessage[] = [];
   const calledNames = new Set<string>();
   const systemParts: string[] = [];
+  let inputCount = 0;
 
   for (const arr of [input, output]) {
-    if (!Array.isArray(arr)) continue;
-    for (const raw of arr) {
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
-      const mapped = mapMessage(raw as RawMessage);
-      messages.push(...mapped.messages);
-      mapped.called.forEach((n) => calledNames.add(n));
-      if (mapped.system) systemParts.push(mapped.system);
+    if (Array.isArray(arr)) {
+      for (const raw of arr) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+        const mapped = mapMessage(raw as RawMessage);
+        messages.push(...mapped.messages);
+        mapped.called.forEach((n) => calledNames.add(n));
+        if (mapped.system) systemParts.push(mapped.system);
+      }
     }
+    if (arr === input) inputCount = messages.length;
   }
 
   return {
     messages,
+    inputCount,
     system: systemParts.length > 0 ? systemParts.join("\n") : undefined,
     calledNames,
   };

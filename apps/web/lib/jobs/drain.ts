@@ -25,7 +25,8 @@ import { drainProjectJobs } from "./store";
  */
 export interface DrainCronDeps {
   steps: DrainStep[];
-  drainProjectJobs: () => Promise<{ done: number; failed: number }>;
+  /** `onJobFinished` runs after each finished job: the sign the worker's watchdog reads. */
+  drainProjectJobs: (onJobFinished?: () => void) => Promise<{ done: number; failed: number }>;
   /** Whether this tick may delete anything. Steps marked `retentionOnly` are skipped otherwise. */
   retentionEnabled?: boolean;
   observability?: BackgroundObservabilityDeps;
@@ -51,13 +52,19 @@ export function dataRetentionEnabled(
 
 const defaultDeps = (): DrainCronDeps => ({
   steps: drainSteps(),
-  drainProjectJobs: () => drainProjectJobs(),
+  drainProjectJobs: (onJobFinished) => drainProjectJobs(undefined, undefined, { onJobFinished }),
   retentionEnabled: dataRetentionEnabled(),
   observability: defaultBackgroundObservabilityDeps,
 });
 
-/** Run one tick and return its summary; the HTTP route and the in-process scheduler both call this. */
-export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise<DrainSummary> {
+/**
+ * Run one tick and return its summary; the HTTP route and the in-process scheduler both call this.
+ * `onJobFinished` runs after each job the tick's drain finishes (the worker's watchdog).
+ */
+export async function runDrainTick(
+  deps: DrainCronDeps = defaultDeps(),
+  onJobFinished?: () => void,
+): Promise<DrainSummary> {
   const observability = createBackgroundObservability(
     deps.observability ?? defaultBackgroundObservabilityDeps,
   );
@@ -73,7 +80,7 @@ export async function runDrainTick(deps: DrainCronDeps = defaultDeps()): Promise
     for (const step of deps.steps.filter((s) => s.phase === "before")) {
       summary[step.name] = await isolated(step, observability, errors);
     }
-    ({ done, failed } = await deps.drainProjectJobs());
+    ({ done, failed } = await deps.drainProjectJobs(onJobFinished));
     for (const step of deps.steps.filter((s) => s.phase === "after")) {
       if (step.retentionOnly && !retention) {
         summary[step.name] = "skipped";

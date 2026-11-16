@@ -1,5 +1,5 @@
 import { runDrainTick } from "@/lib/jobs/drain";
-import { type DrainObserverDeps, observeDrain } from "@/lib/jobs/drain-observer";
+import { type DrainObserverDeps, drainTimeoutMs, timedDrain } from "@/lib/jobs/drain-observer";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { startWorker, type WorkerDeps, type WorkerHandle } from "@/lib/jobs/worker";
 import { getLogger } from "@/lib/platform/logger";
@@ -82,13 +82,18 @@ export function startBackgroundWorker(
 /**
  * The worker's sweep: the cron tick, observed like the route's tick (`drain-observer.ts`), so it
  * logs the `drain_completed` heartbeat and `job_queue_lagging` the deployment's monitors read.
- * Upstream's `workerSweep`. A tick that throws reads as a failed one.
+ * Upstream's `workerSweep`. A tick that hangs would stop the analysis lane, so it has a limit
+ * that restarts on each finished job (`CRON_DRAIN_TIMEOUT_MS`, see `timedDrain`). A tick that
+ * throws, times out or is skipped reads as a failed one.
  */
 export function workerTick(
-  run: () => Promise<{ ok: boolean; error?: string }> = () => runDrainTick(),
+  run: (onProgress: () => void) => Promise<{ ok: boolean; error?: string }> = (onProgress) =>
+    runDrainTick(undefined, onProgress),
   observer?: DrainObserverDeps,
+  timeoutMs: number = drainTimeoutMs(),
 ): () => Promise<{ ok: boolean; error?: string }> {
-  return async () => (await observeDrain(run, observer)) ?? { ok: false, error: "drain threw" };
+  const tick = timedDrain(run, timeoutMs, observer);
+  return async () => (await tick()) ?? { ok: false, error: "drain did not finish" };
 }
 
 /** Stop the worker started here, after its step in flight, and forget it. */

@@ -48,6 +48,8 @@ export interface DrainJobsOptions {
   max?: number;
   observer?: BackgroundObservability;
   observability?: BackgroundObservabilityDeps;
+  /** Called after each finished job, done or failed: the sign that the drain makes progress. */
+  onJobFinished?: () => void;
 }
 
 const logger = getLogger("jobs/runner");
@@ -118,6 +120,7 @@ export async function drainJobs(
       logJobFinished(job, "error", durationMs, waitMs);
       failed++;
     }
+    opts.onJobFinished?.();
   }
 
   return { done, failed };

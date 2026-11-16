@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, sql } from "drizzle-orm";
-import { jobTierSql } from "@/lib/jobs/policy";
+import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, type SQL, sql } from "drizzle-orm";
+import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
 
@@ -7,7 +7,10 @@ import { getDb } from "@/lib/platform/db/client";
 
 export type JobsDb = Pick<ReturnType<typeof getDb>, "select" | "insert">;
 
-/** A `running` job older than this with no result recorded is a zombie: the reaper fails it. */
+/**
+ * A `running` job older than this with no result recorded is a zombie: the reaper fails it. It
+ * matches the worker sweep's default time limit (`DEFAULT_DRAIN_TIMEOUT_MS`).
+ */
 export const STALE_JOB_MS = 10 * 60 * 1000;
 
 /**
@@ -119,20 +122,31 @@ export async function readJobQueueClock(
 }
 
 /**
- * How long the oldest `queued` job has waited, in ms, on the database's clock; null when nothing
- * is queued. One index-only read of `jobs_status_created_idx`, so the drain can report queue lag
- * after every run.
+ * How long the oldest queued job of tier 0 or 1 has waited, in ms, on the database's clock; null
+ * when none is queued. Tier 2 sweeps and imports wait on purpose (`QUEUE_LAG_KINDS`). A job a
+ * per-project cap holds back still counts, because no column says why a job waits. An index on
+ * `status` finds the queued rows, and no index holds the kind, so the kinds are a filter; the
+ * read's cost depends on the queue, and no plan is guaranteed.
  */
 export async function readOldestQueuedJobAgeMs(
   db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
 ): Promise<number | null> {
-  const result = await db.execute(sql`
-    select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
-    from ${jobs}
-    where ${jobs.status} = 'queued'
-  `);
+  const result = await db.execute(oldestQueuedJobAgeQuery());
   const age = (result.rows[0] as { age_ms: string | number | null } | undefined)?.age_ms;
   return age === null || age === undefined ? null : Number(age);
+}
+
+/** The query of {@link readOldestQueuedJobAgeMs}. */
+export function oldestQueuedJobAgeQuery(): SQL {
+  const kinds = sql.join(
+    QUEUE_LAG_KINDS.map((kind) => sql`${kind}`),
+    sql`, `,
+  );
+  return sql`
+    select floor(extract(epoch from now() - min(${jobs.createdAt})) * 1000) as age_ms
+    from ${jobs}
+    where ${jobs.status} = 'queued' and ${jobs.kind} = any(array[${kinds}]::text[])
+  `;
 }
 
 /** Running jobs one project may have at once, across every drain. 0 turns the cap off. */

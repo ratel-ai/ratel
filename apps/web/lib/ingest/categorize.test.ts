@@ -352,6 +352,30 @@ test("produced scope: a single model call counts as before", () => {
   assert.deepEqual(categorize(ev, { toolCallScope: "produced" }), categorize(ev));
 });
 
+test("produced scope: with the input length known, a history call right before the output is not counted", () => {
+  const messages = [
+    { role: "user", content: "go" },
+    turnCall("c1", "search"),
+    turnCall("c2", "fetch"),
+  ];
+  const ev = {
+    ...turnEvent(messages, [
+      { name: "search", parameters: {} },
+      { name: "fetch", parameters: {} },
+    ]),
+    input_message_count: 2,
+  };
+  assert.deepEqual(callsOf(ev, "produced"), { search: 0, fetch: 1 });
+});
+
+test("produced scope: with no output after the input, nothing is counted", () => {
+  const ev = {
+    ...turnEvent([{ role: "user", content: "go" }, turnCall("c1", "search")]),
+    input_message_count: 2,
+  };
+  assert.deepEqual(callsOf(ev, "produced"), { search: 0 });
+});
+
 test("produced scope: gateway invoke_tool in history is not counted again", () => {
   const invoke = (id: string) => turnCall(id, "invoke_tool", { toolId: "crm.lookup", args: {} });
   const ev = turnEvent(

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { type EngineEventRow, foldAsks, MEMBER_CAP } from "@/lib/readings/intent-engine/engine";
+import { MEMBER_TEXT_MAX } from "@/lib/readings/intent-engine/text";
 import type { EngineState } from "@/lib/readings/intent-types/engine-types";
 
 let seq = 0;
@@ -276,4 +277,80 @@ test("frames off folds as before", () => {
   });
   assert.equal(out.assignments.length, 1);
   assert.equal(out.state.clusters.length, 1);
+});
+
+/* a cut at MEMBER_TEXT_MAX never leaves half an emoji */
+
+/** `text`, padded with its own words, so that an emoji starts at the last unit a member can hold. */
+function withEmojiAtCut(words: string): string {
+  let text = words;
+  while (text.length + words.length + 1 < MEMBER_TEXT_MAX - 1) text += ` ${words}`;
+  return `${text} ${"x".repeat(MEMBER_TEXT_MAX - 2 - text.length)}😀 tail`;
+}
+
+function assertNoHalfEmoji(state: EngineState, expected: string): void {
+  const strings = state.clusters.flatMap((c) => [c.label, ...c.members, ...c.servedMembers]);
+  assert.ok(
+    strings.includes(expected),
+    `expected ${JSON.stringify(expected)} in ${JSON.stringify(strings)}`,
+  );
+  for (const text of strings) {
+    assert.ok(text.isWellFormed(), `half an emoji: ${JSON.stringify(text)}`);
+    assert.ok(text.length <= MEMBER_TEXT_MAX);
+  }
+}
+
+test("the member a new cluster seeds never holds half an emoji", () => {
+  const ask = withEmojiAtCut("deploy service alpha staging");
+  const out = fold(turn(ask));
+  assert.equal(ask.indexOf("😀"), MEMBER_TEXT_MAX - 1);
+  assertNoHalfEmoji(out.state, ask.slice(0, MEMBER_TEXT_MAX - 1));
+});
+
+test("the member an ask adds to a cluster it joins never holds half an emoji", () => {
+  const ask = withEmojiAtCut("deploy service alpha staging");
+  const first = fold(turn(ask));
+  const out = fold(turn(ask), first.state);
+  assert.equal(out.stats.joined, 1);
+  assertNoHalfEmoji(out.state, ask.slice(0, MEMBER_TEXT_MAX - 1));
+});
+
+test("with frames, the member a frame adds and the raw search it serves never hold half an emoji", () => {
+  const long = withEmojiAtCut("create task");
+  const ask = `${long} comment on task`;
+  const out = foldFrames(turn(ask, "create_task"));
+  assert.ok(out.stats.split >= 1);
+  assertNoHalfEmoji(out.state, ask.slice(0, MEMBER_TEXT_MAX - 1));
+});
+
+test("with frames, a long frame adds a member with no half emoji", () => {
+  const start = "create task ";
+  const frame = `${start}${"report".repeat(60).slice(0, MEMBER_TEXT_MAX - 1 - start.length)}😀 tail`;
+  const out = foldFrames(turn(`${frame} comment on task`, "create_task"));
+  assert.ok(out.stats.split >= 1);
+  assertNoHalfEmoji(out.state, frame.slice(0, MEMBER_TEXT_MAX - 1));
+  // Again, as a join, so the frame's own member is added once the cluster exists.
+  const again = foldFrames(turn(`${frame} comment on task`, "create_task"), out.state);
+  assert.ok(again.stats.joined >= 1);
+  assertNoHalfEmoji(again.state, frame.slice(0, MEMBER_TEXT_MAX - 1));
+});
+
+test("the member a split part adds never holds half an emoji", () => {
+  const seeded = fold([
+    ...turn("check the CI tests", "ci_status"),
+    ...turn("fix the CI tests", "ci_fix"),
+  ]);
+  const padding = "report".repeat(60);
+  const start = "check the CI tests ";
+  const part = `${start}${padding.slice(0, MEMBER_TEXT_MAX - 1 - start.length)}😀 tail`;
+  const out = fold(
+    [
+      row({ type: "search", query: `${part} and fix the failed ones`, turnId: "x" }),
+      row({ type: "invoke_start", toolId: "ci_status", turnId: "x" }),
+      row({ type: "invoke_start", toolId: "ci_fix", turnId: "x" }),
+    ],
+    seeded.state,
+  );
+  assert.equal(out.stats.split, 1);
+  assertNoHalfEmoji(out.state, part.slice(0, MEMBER_TEXT_MAX - 1));
 });

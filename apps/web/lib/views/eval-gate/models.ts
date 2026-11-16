@@ -4,6 +4,7 @@ import { envNumber } from "@/lib/platform/env-number";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { configured } from "@/lib/readings/decisions/engine";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import type { ToolDef } from "@/lib/views/eval-gate/types";
 
 /**
@@ -361,12 +362,14 @@ export function resolveTestDraftModel(
     async draft(input) {
       const message = await guarded(() =>
         tracked(model, "eval_gate_task_test_draft", () =>
-          client.messages.create({
-            model,
-            max_tokens: SMALL_MAX_TOKENS,
-            system: TEST_DRAFT_PROMPT,
-            messages: [{ role: "user", content: input }],
-          }),
+          client.messages.create(
+            wellFormedJson({
+              model,
+              max_tokens: SMALL_MAX_TOKENS,
+              system: TEST_DRAFT_PROMPT,
+              messages: [{ role: "user", content: input }],
+            }),
+          ),
         ),
       );
       return { text: textOf(message), usage: usageOf(message) };
@@ -576,23 +579,27 @@ export function anthropicAgent(
     guarded(async () => {
       try {
         return await tracked(current, feature, () =>
-          client.messages.create({
-            ...params,
-            model: current,
-            ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
-            ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
-          }),
+          client.messages.create(
+            wellFormedJson({
+              ...params,
+              model: current,
+              ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
+              ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
+            }),
+          ),
         );
       } catch (err) {
         if (!(err instanceof Anthropic.NotFoundError) || current === fallback) throw err;
         current = fallback;
         return tracked(current, feature, () =>
-          client.messages.create({
-            ...params,
-            model: current,
-            ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
-            ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
-          }),
+          client.messages.create(
+            wellFormedJson({
+              ...params,
+              model: current,
+              ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
+              ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
+            }),
+          ),
         );
       }
     });
@@ -656,13 +663,15 @@ export function anthropicToolStandIn(client: Anthropic, model: string): ToolStan
         .join("\n");
       const message = await guarded(() =>
         tracked(model, "eval_gate_stand_in", () =>
-          client.messages.create({
-            model,
-            max_tokens: SMALL_MAX_TOKENS,
-            system: STAND_IN_SYSTEM,
-            messages: [{ role: "user", content: user }],
-            ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
-          }),
+          client.messages.create(
+            wellFormedJson({
+              model,
+              max_tokens: SMALL_MAX_TOKENS,
+              system: STAND_IN_SYSTEM,
+              messages: [{ role: "user", content: user }],
+              ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
+            }),
+          ),
         ),
       );
       const content = textOf(message).trim() || "{}";
@@ -695,16 +704,18 @@ export function anthropicJudge(
     async judge({ criteria, run }) {
       const message = await guarded(() =>
         tracked(model, feature, () =>
-          client.messages.create({
-            model,
-            max_tokens: SMALL_MAX_TOKENS,
-            system: JUDGE_SYSTEM,
-            messages: [{ role: "user", content: `Criteria:\n${criteria}\n\nThe run:\n${run}` }],
-            output_config: {
-              format: { type: "json_schema", schema: JUDGE_SCHEMA },
-              ...(takesEffort(model) ? { effort: "low" as const } : {}),
-            },
-          }),
+          client.messages.create(
+            wellFormedJson({
+              model,
+              max_tokens: SMALL_MAX_TOKENS,
+              system: JUDGE_SYSTEM,
+              messages: [{ role: "user", content: `Criteria:\n${criteria}\n\nThe run:\n${run}` }],
+              output_config: {
+                format: { type: "json_schema", schema: JUDGE_SCHEMA },
+                ...(takesEffort(model) ? { effort: "low" as const } : {}),
+              },
+            }),
+          ),
         ),
       );
       if (message.stop_reason === "refusal") throw new Error("the judge declined the request");

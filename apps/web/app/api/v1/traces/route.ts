@@ -67,8 +67,5 @@ async function handlePost(req: Request) {
       findTracesWithModelCalls: (projectId, traceIds) =>
         findTracesWithModelCalls(projectId, traceIds),
     },
-    // A model call counts only the tool calls it produced, not its input history's. Upstream
-    // rolled this out behind a flag and then made it the only behaviour; here it is on for all.
-    isProducedToolCallsEnabled: async () => true,
   });
 }

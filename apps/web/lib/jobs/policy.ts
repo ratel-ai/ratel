@@ -72,6 +72,14 @@ export function jobBudgetMs(kind: string): number {
   return (JOB_BUDGET_MS as Record<string, number>)[kind] ?? 5 * 60_000;
 }
 
+/**
+ * The kinds whose wait is queue lag: tiers 0 and 1. Tier 2 waits behind them on
+ * purpose, and an import waits for its own lane.
+ */
+export const QUEUE_LAG_KINDS: readonly string[] = (Object.keys(JOB_TIER) as JobKind[]).filter(
+  (kind) => JOB_TIER[kind] < 2 && kind !== "run_import",
+);
+
 /** The tier as a SQL expression over a jobs row's `kind`, for the claim's order. */
 export function jobTierSql(kindColumn: SQL): SQL {
   const tiers = Object.entries(JOB_TIER).filter(([, tier]) => tier !== 2);

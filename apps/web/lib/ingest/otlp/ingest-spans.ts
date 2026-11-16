@@ -21,7 +21,7 @@ import { attrString } from "./anyvalue";
 import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
-import { toRow } from "./reconstruct";
+import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
@@ -64,15 +64,6 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe. Absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
-  /**
-   * Whether a model call counts only the tool calls it produced (upstream's
-   * `cloud-otlp-produced-tool-calls`). Absent, off; the traces route turns it on, as upstream did
-   * for everyone before retiring the switch.
-   */
-  isProducedToolCallsEnabled?: (
-    projectId: string,
-    organization: Organization | null,
-  ) => Promise<boolean>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -89,7 +80,6 @@ export async function persistDecodedSpans(
   deps: PersistSpansDeps,
 ): Promise<PersistSpansResult> {
   const { logError } = deps;
-  const producedToolCalls = await resolveProducedToolCalls(projectId, organization, deps);
   // Speak one vocabulary downstream: additively re-key Vercel AI SDK `ai.*`
   // content onto the `gen_ai.*` semconv every consumer below already reads. A
   // no-op for spans that arrive translated (or never carried `ai.*` at all).
@@ -97,9 +87,7 @@ export async function persistDecodedSpans(
   // batch the exporter then retries forever. Degrading to untranslated spans
   // costs content segmentation, not the events themselves.
   try {
-    (deps.normalizeAiSdkSpans ?? normalizeAiSdkSpans)(spans, {
-      outputToolCalls: producedToolCalls,
-    });
+    (deps.normalizeAiSdkSpans ?? normalizeAiSdkSpans)(spans);
   } catch (err) {
     logError("ai sdk normalization failed", err, {
       project_id: projectId,
@@ -122,8 +110,7 @@ export async function persistDecodedSpans(
 
   // Group into LLM calls, reconstruct rows, and persist under the project.
   const calls = groupSpans(spans, dedupe);
-  const toolCallScope = producedToolCalls ? "produced" : "all";
-  const rows = calls.map((c) => toRow(projectId, c, { toolCallScope }));
+  const rows = toRows(projectId, calls);
 
   let accepted = 0;
   if (rows.length > 0) {
@@ -230,20 +217,4 @@ export async function persistDecodedSpans(
   }
 
   return { ok: true, accepted, calls: calls.length };
-}
-
-/** The switch's decision for this batch. A failed read keeps the old counting. */
-async function resolveProducedToolCalls(
-  projectId: string,
-  organization: Organization | null,
-  deps: PersistSpansDeps,
-): Promise<boolean> {
-  if (!deps.isProducedToolCallsEnabled) return false;
-  try {
-    return await deps.isProducedToolCallsEnabled(projectId, organization);
-  } catch (err) {
-    deps.logError("produced tool calls flag read failed", err, { project_id: projectId });
-    deps.captureFailure(err);
-    return false;
-  }
 }

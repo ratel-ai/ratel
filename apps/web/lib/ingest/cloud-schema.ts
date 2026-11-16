@@ -97,6 +97,12 @@ export interface CloudEvent {
   system?: string;
   tools?: CloudToolDef[];
   messages: CloudMessage[];
+  /**
+   * How many leading `messages` are the call's input. OTLP ingest stores it, and
+   * the messages after it are the call's output plus any tool calls ingest added.
+   * Rows stored earlier do not have it.
+   */
+  input_message_count?: number;
   params?: CloudParams;
   usage?: CloudUsage;
   finish_reason?: FinishReason;

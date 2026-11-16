@@ -1,3 +1,4 @@
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 /**
  * One closed-set decision ("which of these tools does this query want"),
  * answered by OpenAI's Decisions API (`POST /v1/decisions`, a `choice` question).
@@ -243,7 +244,7 @@ export function decisionClient(config: DecisionClientConfig) {
 
   /** One HTTP question. Throws `DecisionCallError`; a refusal is an answer, not an error. */
   async function ask(request: ChoiceRequest): Promise<{ answer: RawAnswer; inputTokens: number }> {
-    const body = JSON.stringify(buildDecisionRequest(request, model));
+    const body = JSON.stringify(wellFormedJson(buildDecisionRequest(request, model)));
     let lastFailure: DecisionCallError | null = null;
 
     for (let attempt = 0; attempt < attempts; attempt += 1) {

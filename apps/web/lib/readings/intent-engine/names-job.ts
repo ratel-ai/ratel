@@ -21,6 +21,7 @@ import { intentClusters } from "@/lib/readings/intent-engine/schema";
 import { boundEngineTransaction, type EngineDb } from "@/lib/readings/intent-engine/store";
 import type { EngineCluster, LevelTree } from "@/lib/readings/intent-types/engine-types";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
 /**
  * The model-naming step of an engine run: "What they ask for" (level 1) gets a
@@ -147,16 +148,18 @@ export function anthropicNamesComplete(
   if (!apiKey) return null;
   const client = new Anthropic({ apiKey, timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES });
   return async (system, user, keyed) => {
-    const message = await client.messages.create({
-      model,
-      max_tokens: NAME_MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA },
-      },
-    });
+    const message = await client.messages.create(
+      wellFormedJson({
+        model,
+        max_tokens: NAME_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: {
+          effort: "low",
+          format: { type: "json_schema", schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA },
+        },
+      }),
+    );
     if (message.stop_reason === "refusal") throw new NamesDeclinedError();
     if (message.stop_reason === "max_tokens") throw new NamesCutOffError();
     return message.content
