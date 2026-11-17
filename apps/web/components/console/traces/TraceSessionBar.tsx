@@ -4,7 +4,7 @@ import Link from "next/link";
 import type { TraceSession } from "@/lib/views/session-chat/trace-session";
 
 /**
- * On a turn's trace page (RC-472, `cloud-trace-views-v3`): the session it is
+ * On a turn's trace page (RC-472): the session it is
  * part of, as a link to the session's chat, and the session's turns on top,
  * each opening its own trace. A turn with no trace shows dashed and opens the
  * session's Trace view at that turn instead.

@@ -98,7 +98,11 @@ export type IntentGraphEdgeKind = "tool" | "skill";
 
 /** Body cap for `PUT /api/v1/intent-graph`, matching the catalog snapshot route. */
 export const MAX_INTENT_GRAPH_BYTES = 4_000_000;
-/** Cluster cap per graph. The runtime evicts stale clusters, so a healthy graph is far below this. */
+/**
+ * Cluster cap per graph. A runtime evicts stale clusters; a Cloud-built graph
+ * is held under it by the fold (`./bound.ts`), since its clusters only expire
+ * with event retention.
+ */
 export const MAX_INTENT_GRAPH_CLUSTERS = 5_000;
 /** `source_id` cap, matching the catalog snapshot route. */
 export const MAX_INTENT_GRAPH_SOURCE_ID_LENGTH = 512;
@@ -127,8 +131,17 @@ function isStringArray(value: unknown): value is string[] {
  * Messages name a path and a rule, never a value: members are raw user text
  * and a rejected body must not leak into logs or error responses. On success
  * the same object reference is returned, so unknown fields are preserved.
+ *
+ * `maxClusters: null` checks the structure without the cluster cap: the Cloud
+ * fold does, before it compacts and trims the graph to the cap itself
+ * (`./bound.ts`).
  */
-export function validateIntentGraph(input: unknown): IntentGraphValidation {
+export function validateIntentGraph(
+  input: unknown,
+  options: { maxClusters?: number | null } = {},
+): IntentGraphValidation {
+  const maxClusters =
+    options.maxClusters === undefined ? MAX_INTENT_GRAPH_CLUSTERS : options.maxClusters;
   const details: string[] = [];
   if (!isRecord(input)) {
     return { ok: false, details: ["graph: must be an object"] };
@@ -149,8 +162,8 @@ export function validateIntentGraph(input: unknown): IntentGraphValidation {
     details.push("graph.intents: must be an array");
     return { ok: false, details };
   }
-  if (input.intents.length > MAX_INTENT_GRAPH_CLUSTERS) {
-    details.push(`graph.intents: exceeds ${MAX_INTENT_GRAPH_CLUSTERS} clusters`);
+  if (maxClusters !== null && input.intents.length > maxClusters) {
+    details.push(`graph.intents: exceeds ${maxClusters} clusters`);
   }
   const seenIds = new Set<string>();
   input.intents.forEach((intent, i) => {

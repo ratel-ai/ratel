@@ -9,8 +9,10 @@ import { CallOrderSection } from "@/components/console/health/v2/CallOrderSectio
 import { GapBlock } from "@/components/console/health/v2/GapBlock";
 import { HealthScore, type ScoreFix } from "@/components/console/health/v2/HealthScore";
 import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
+import { InferredToolsCallout } from "@/components/console/health/v2/InferredToolsCallout";
 import { IssuesSection } from "@/components/console/health/v2/IssuesSection";
 import { type IssueRow, issueRows, issuesLine } from "@/components/console/health/v2/issue-rows";
+import { PartialReading } from "@/components/console/health/v2/PartialReading";
 import { Readings } from "@/components/console/health/v2/Readings";
 import { readingViews } from "@/components/console/health/v2/reading-views";
 import { SelfCorrectionsRow } from "@/components/console/health/v2/SelfCorrectionsRow";
@@ -36,6 +38,7 @@ import type {
   HealthShareProps,
 } from "@/lib/contracts/composition";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
+import type { PartialReading as PartialReadingModel } from "@/lib/readings/trace-signals/partial-reading";
 import {
   type HealthPageModel,
   runWindowLabel,
@@ -97,6 +100,16 @@ export interface SummaryViewProps {
   share?: SummaryShare | null;
   /** `cloud-health-score` (RC-225): the Health score leads the page and the issues say what each is worth. */
   scoreLeads?: boolean;
+  /**
+   * What the stored spans of imported runs with no tool calls say, drawn in
+   * place of the `imported_no_tools` block. Null when the read failed.
+   */
+  partial?: PartialReadingModel | null;
+  /**
+   * The reading's tool calls were inferred
+   * from the shape of imported spans and no content came with them.
+   */
+  inferredTools?: boolean;
   now?: Date;
 }
 
@@ -183,13 +196,16 @@ function NotReady({
   state,
   canImport,
   imports,
+  partial = null,
 }: SummaryViewProps & { state: HealthPageState; canImport: boolean }) {
   const collecting = stateReadiness(state) === "collecting";
   return (
     <>
       {state.kind === "tool_spans" ? (
         <ToolSpansBlock />
-      ) : state.kind === "ready" ? null : (
+      ) : state.kind === "ready" ? null : state.kind === "imported_no_tools" && partial ? (
+        <PartialReading reading={partial} source={state.source} canImport={canImport} />
+      ) : (
         <HealthStateV2
           projectId={projectId}
           state={state}
@@ -212,6 +228,7 @@ function Ready({
   corrections,
   imports,
   scoreLeads = false,
+  inferredTools = false,
 }: SummaryViewProps) {
   const gap = pageGap(model);
   const lane = model.sourceMode === "otel" ? "otel" : "sdk";
@@ -247,20 +264,22 @@ function Ready({
     />
   );
   const workflows = model.workflows;
-  const asksKey = asksMissing(model.setup)
-    ? lane === "otel"
-      ? "otel_content"
-      : "sdk_user_messages"
-    : null;
+  const asksLaneKey = lane === "otel" ? "otel_content" : "sdk_user_messages";
+  // Inferred tool calls come without content: the asks say why they are empty, even with no task mined yet.
+  const asksShowSetup =
+    inferredTools || (!!workflows && workflows.items.length > 0 && asksMissing(model.setup));
+  const asksSetupKey = asksShowSetup ? asksLaneKey : null;
   return (
     <>
       {state?.kind === "ready" && state.updating ? <RefreshWhileBuilding /> : null}
+      {inferredTools ? <InferredToolsCallout /> : null}
       {score ? (
         <HealthScore
           score={score}
           next={scoreFixes(rows)}
           early={!!model.earlyReading}
           progress={model.earlyProgress ?? null}
+          inferredTools={inferredTools}
         />
       ) : null}
       {/* With the score leading, its ring and the issues say "still calculating" without a paragraph. */}
@@ -306,7 +325,8 @@ function Ready({
               projectId={projectId}
               asks={workflows.unserved}
               asksFrom={workflows.asksFrom}
-              asksSetupKey={workflows.items.length > 0 ? asksKey : null}
+              asksSetupKey={asksSetupKey}
+              contentNotCaptured={inferredTools}
             />
           ) : null}
         </>

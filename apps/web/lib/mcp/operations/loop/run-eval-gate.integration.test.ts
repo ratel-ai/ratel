@@ -145,6 +145,7 @@ const auth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: ORG, slug: "acme", effectivePlan: "pro" },
 };
 

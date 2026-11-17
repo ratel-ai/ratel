@@ -20,6 +20,7 @@ const apiKey: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -74,4 +75,52 @@ test("the marker, the hint and the experiment query follow the decision", () => 
   const attrs = { "ratel.experiment.query": "refund my order", "ratel.experiment.arm": "ratel" };
   assert.equal(experimentAttributesFor(attrs, true), attrs);
   assert.deepEqual(experimentAttributesFor(attrs, false), { "ratel.experiment.arm": "ratel" });
+});
+
+test("an API key without the content scope never reads captured text, even with the opt-in on (RC-585)", async () => {
+  const optedIn = { contentOptIn: async () => true };
+  for (const scopes of [
+    ["mcp:read"],
+    ["mcp:read", "mcp:write"],
+    ["ingest:traces", "ingest:logs", "ingest:events"],
+  ]) {
+    assert.equal(
+      await mayReadContent({ auth: { ...apiKey, scopes }, projectId: PROJECT }, optedIn),
+      false,
+      scopes.join(","),
+    );
+  }
+  assert.equal(
+    await mayReadContent(
+      { auth: { ...apiKey, scopes: ["mcp:read", "content:read"] }, projectId: PROJECT },
+      optedIn,
+    ),
+    true,
+  );
+});
+
+test("every MCP tool module that reads the content opt-in also asks the credential rule (RC-585)", async () => {
+  const { readdirSync, readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const walk = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory()
+        ? walk(path)
+        : path.endsWith(".ts") && !path.endsWith(".test.ts")
+          ? [path]
+          : [];
+    });
+  const offenders = walk(import.meta.dirname)
+    .filter((file) => !file.endsWith("content-access.ts"))
+    .filter((file) => {
+      const source = readFileSync(file, "utf8");
+      const readsOptIn = /\bcontentOptIn\(|\breadContentOptIn\b/.test(source);
+      return readsOptIn && !/\bmayReadContent\(|\bcredentialMayReadContent\(/.test(source);
+    });
+  assert.deepEqual(
+    offenders,
+    [],
+    "gate captured text with mayReadContent or credentialMayReadContent",
+  );
 });

@@ -1,6 +1,7 @@
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
 import Anthropic from "@anthropic-ai/sdk";
-import { configured } from "@/lib/readings/decisions/engine";
+import { asModelNotEnabled } from "@/lib/platform/anthropic-errors";
+import { configured } from "@/lib/platform/env-configured";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
 /**
@@ -20,7 +21,18 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * and only the request carries the Bedrock id. The SDK's own OpenTelemetry spans
  * stay off: `trackModelCall` already records each call, and these spans would
  * go to the self-telemetry exporter with no decision about their contents.
+ *
+ * On Bedrock a call retries a 503 or a throttle at least `BEDROCK_MIN_RETRIES`
+ * times, whatever the caller asked for: those errors are the shared EU
+ * profiles' capacity, not the request. The API path keeps the caller's setting.
+ *
+ * On Bedrock a 403 for a model whose AWS Marketplace agreement is not accepted
+ * comes back as `ModelNotEnabledError` (a `PermissionDeniedError`). A streamed
+ * call keeps the SDK's own error.
  */
+
+export { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
+export { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 
 /** What the call sites use of a client. Both backends provide it. */
 export type AnthropicClient = {
@@ -34,6 +46,9 @@ export type AnthropicClientOptions = {
 };
 
 type Env = Record<string, string | undefined>;
+
+/** The fewest retries a Bedrock call gets for a 429, a 5xx or a timeout (the SDK's default). */
+export const BEDROCK_MIN_RETRIES = 2;
 
 /** The Region that signs the call. From here the `eu.` profiles stay in EU member states (London and Zurich excluded). */
 const BEDROCK_REGION = "eu-central-1";
@@ -82,6 +97,7 @@ export function anthropicConfigured(env: Env = process.env): boolean {
 function euBedrockClient(options: AnthropicClientOptions): AnthropicClient {
   const client = new AnthropicBedrock({
     ...options,
+    maxRetries: Math.max(options.maxRetries ?? BEDROCK_MIN_RETRIES, BEDROCK_MIN_RETRIES),
     openTelemetry: false,
     awsRegion: BEDROCK_REGION,
     baseURL: `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com`,
@@ -89,11 +105,17 @@ function euBedrockClient(options: AnthropicClientOptions): AnthropicClient {
   const create = async (
     params: Anthropic.MessageCreateParams,
     requestOptions?: Anthropic.RequestOptions,
-  ) =>
-    client.messages.create(
-      wellFormedJson({ ...params, model: euProfile(params.model) }),
-      requestOptions,
-    );
+  ) => {
+    const profile = euProfile(params.model);
+    try {
+      return await client.messages.create(
+        wellFormedJson({ ...params, model: profile }),
+        requestOptions,
+      );
+    } catch (err) {
+      throw asModelNotEnabled(err, params.model, profile);
+    }
+  };
   const stream = (
     params: Anthropic.MessageStreamParams,
     requestOptions?: Anthropic.RequestOptions,

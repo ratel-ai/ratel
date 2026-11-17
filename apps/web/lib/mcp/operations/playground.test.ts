@@ -22,6 +22,7 @@ const auth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -29,6 +30,7 @@ const otherAuth: McpAuthContext = {
   kind: "api-key",
   projectId: "22222222-2222-4222-8222-222222222222",
   apiKeyId: "key-2",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -260,4 +262,18 @@ test("drafting only tools works the same way round", async () => {
   });
 
   assert.equal(result.ok, true);
+});
+
+test("a read-only key ranks with bm25 but needs the embeddings scope for the paid modes (RC-585)", async () => {
+  const readOnly: McpAuthContext = {
+    ...auth,
+    ...(auth.kind === "api-key" ? { scopes: ["mcp:read"] } : {}),
+  } as McpAuthContext;
+  assert.equal((await run({ query: "a" }, {}, { auth: readOnly })).ok, true);
+  for (const mode of ["embeddings", "hybrid"]) {
+    const refused = await run({ query: "a", mode }, {}, { auth: readOnly });
+    assert.equal(refused.ok === false && refused.error, "forbidden", mode);
+  }
+  const withEmbeddings = { ...readOnly, scopes: ["mcp:read", "embeddings"] } as McpAuthContext;
+  assert.equal((await run({ query: "a", mode: "hybrid" }, {}, { auth: withEmbeddings })).ok, true);
 });

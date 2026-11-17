@@ -7,6 +7,10 @@ import { Field, Input } from "@ratel/design-system/input";
 import { Select } from "@ratel/design-system/select";
 import { type FormEvent, useId, useState, useTransition } from "react";
 import { createApiKeyAction } from "@/app/(console)/project/[projectId]/settings/api-keys/actions";
+import {
+  type ApiKeyAccessChoice,
+  ApiKeyAccessPicker,
+} from "@/components/console/settings/ApiKeyAccessPicker";
 import { newKeyCloseDecision } from "@/lib/console/settings/api-keys";
 import {
   API_KEY_EXPIRY_CHOICES,
@@ -14,6 +18,7 @@ import {
   type ApiKeyExpiryPreset,
   DEFAULT_API_KEY_EXPIRY,
 } from "@/lib/platform/api-keys";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 
 const EXPIRY_OPTIONS = API_KEY_EXPIRY_CHOICES.map((choice) => ({
   value: choice.value,
@@ -42,8 +47,14 @@ export function CreateApiKeyDialog({
   const formId = useId();
   const [name, setName] = useState("");
   const [expiresIn, setExpiresIn] = useState<ApiKeyExpiryPreset>(DEFAULT_API_KEY_EXPIRY);
+  const [access, setAccess] = useState<ApiKeyAccessChoice>("full");
+  const [scopes, setScopes] = useState<ApiKeyScope[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ plaintext: string; label: string } | null>(null);
+  const [created, setCreated] = useState<{
+    plaintext: string;
+    label: string;
+    publishable: boolean;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const [asking, setAsking] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -53,12 +64,19 @@ export function CreateApiKeyDialog({
     if (pending) return;
     setError(null);
     startTransition(async () => {
-      const result = await createApiKeyAction({ projectSlug, name, expiresIn }, organizationId);
+      const result = await createApiKeyAction(
+        { projectSlug, name, expiresIn, access, scopes },
+        organizationId,
+      );
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      setCreated({ plaintext: result.plaintext, label: result.key.name ?? "New API key" });
+      setCreated({
+        plaintext: result.plaintext,
+        label: result.key.name ?? "New API key",
+        publishable: result.key.publishable,
+      });
     });
   }
 
@@ -117,10 +135,17 @@ export function CreateApiKeyDialog({
             label={created.label}
             onCopy={() => setCopied(true)}
           />
-          <p className="text-xs text-fg-subtle">
-            Set it as <code className="font-mono text-fg-muted">RATEL_API_KEY</code> where your
-            agent runs.
-          </p>
+          {created.publishable ? (
+            <p className="text-xs text-fg-subtle">
+              Safe to ship inside your app: it can only send traces, logs and events to this
+              project.
+            </p>
+          ) : (
+            <p className="text-xs text-fg-subtle">
+              Set it as <code className="font-mono text-fg-muted">RATEL_API_KEY</code> where your
+              agent runs. Keep it secret.
+            </p>
+          )}
         </DialogContent>
       ) : (
         <DialogContent
@@ -164,6 +189,14 @@ export function CreateApiKeyDialog({
                 />
               )}
             </Field>
+            <ApiKeyAccessPicker
+              name={`${formId}-access`}
+              choice={access}
+              scopes={scopes}
+              disabled={pending}
+              onChoiceChange={setAccess}
+              onScopesChange={setScopes}
+            />
             {error ? (
               <p role="alert" className="text-xs text-danger">
                 {error}

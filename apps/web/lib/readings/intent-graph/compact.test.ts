@@ -8,6 +8,7 @@ import {
   compactIntentGraph,
   EDGE_AGREEMENT,
   MEMBER_CAP,
+  PRESSURE_PASSES,
   passesCompactionGates,
   SUPPORT_FULL,
 } from "@/lib/readings/intent-graph/compact";
@@ -379,4 +380,77 @@ test("invariant: every absorbed cluster passes both gates directly against its s
       }
     }
   }
+});
+
+/** The shape that hit the cap in production (RC-659): one report kind per tool, each ask naming a different person and site, all observed this fold. */
+function pressuredGraph(): IntentGraphDocument {
+  return graph([
+    cluster(
+      "intent_1",
+      ["log worker hours for Rossi at site Alpha"],
+      { log_hours: 3 },
+      { support: 3, last_ts: BUILT },
+    ),
+    cluster(
+      "intent_2",
+      ["log worker hours for Bianchi at site Beta"],
+      { log_hours: 4 },
+      { support: 4, last_ts: BUILT },
+    ),
+    cluster(
+      "intent_3",
+      ["log worker hours Verdi site Gamma"],
+      { log_hours: 1 },
+      { last_ts: BUILT },
+    ),
+    cluster("intent_4", ["save the attached files"], { attach_file: 1 }, { last_ts: BUILT }),
+    cluster("intent_5", ["failing tests on main"], { log_hours: 1 }, { last_ts: BUILT }),
+    cluster(
+      "intent_6",
+      ["log worker hours report detail"],
+      { read_report: 5, log_hours: 1 },
+      { support: 6, last_ts: BUILT },
+    ),
+  ]);
+}
+
+test("pressure: fresh fragments and mature clusters that agree merge at once; the gates still keep the rest apart", () => {
+  const doc = pressuredGraph();
+  // Without pressure nothing here has settled, and two mature clusters never merge.
+  assert.equal(compactIntentGraph(doc).graph, doc);
+
+  const { graph: out, report } = compactIntentGraph(doc, { pressure: true });
+  assert.deepEqual(report.groups, [
+    { survivor: "intent_2", absorbed: ["intent_1", "intent_3"], capability: "tool:log_hours" },
+  ]);
+  const survivor = out.intents.find((it) => it.id === "intent_2")!;
+  assert.equal(survivor.support, 8, "the mature cluster's support joins the survivor's");
+  assert.deepEqual(survivor.tools, { log_hours: 8 });
+  // No shared wording, and edges pointing mostly at another tool: both stay.
+  assert.deepEqual(
+    out.intents.map((it) => it.id),
+    ["intent_2", "intent_4", "intent_5", "intent_6"],
+  );
+  const validation = validateIntentGraph(out);
+  assert.ok(validation.ok, validation.ok ? "" : validation.details.join("; "));
+  assert.equal(IntentGraph.fromJson(JSON.stringify(out)).clusterCount, 4);
+});
+
+test("pressure: a later pass merges two survivors that a merged fragment's wording now bridges", () => {
+  const doc = graph([
+    cluster("intent_1", ["alpha beta"], { pick_project: 5 }, { support: 5, last_ts: BUILT }),
+    cluster("intent_2", ["gamma delta"], { pick_project: 4 }, { support: 4, last_ts: BUILT }),
+    cluster("intent_3", ["alpha beta gamma delta"], { pick_project: 1 }, { last_ts: BUILT }),
+  ]);
+  assert.ok(PRESSURE_PASSES >= 2);
+  const { graph: out, report } = compactIntentGraph(doc, { pressure: true });
+  // Pass 1: intent_1 absorbs intent_3; intent_2 shares no wording with intent_1 yet.
+  // Pass 2: intent_1 now carries "gamma delta", so it absorbs intent_2.
+  assert.deepEqual(report.groups, [
+    { survivor: "intent_1", absorbed: ["intent_3"], capability: "tool:pick_project" },
+    { survivor: "intent_1", absorbed: ["intent_2"], capability: "tool:pick_project" },
+  ]);
+  assert.equal(report.merged, 2);
+  assert.equal(report.after, 1);
+  assert.equal(out.intents[0]!.support, 10);
 });

@@ -25,6 +25,8 @@ const KEY: ApiKey = {
   lastUsedAt: new Date(),
   revokedAt: null,
   expiresAt: null,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
 };
 
 const START_NS = "1759233600000000000";
@@ -99,6 +101,7 @@ function setup(over: { invokes?: readonly RuntimeInvoke[] | Error; withTurns?: b
   const enqueued: string[] = [];
   const drained: string[] = [];
   const deps: TracesHandlerDeps = {
+    scope: "ingest:traces",
     isDbConfigured: () => true,
     hashApiKey: (s) => `hashed:${s}`,
     findActiveApiKeyByHash: async () => KEY,

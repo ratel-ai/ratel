@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
-import { repriceProjectModel } from "@/lib/ingest/model-pricing/reprice";
 import {
   type ModelPricingDeps,
   type ModelPricingResult,
@@ -15,6 +14,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
+import { repriceProjectModel } from "@/lib/synthesis/model-pricing/reprice";
 
 /**
  * Server actions for Settings > General > Model pricing (RC-482). The checks

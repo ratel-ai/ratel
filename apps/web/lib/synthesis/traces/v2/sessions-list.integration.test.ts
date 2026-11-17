@@ -134,6 +134,21 @@ test("the Failed filter finds the failed sessions once per page, not once per wa
   assert.doesNotMatch(text, /f\.session_id = t\.session_id/);
 });
 
+test("a property filter matches a session by its OTLP turns and by its runtime-lane turns' traces", async () => {
+  const { client, db } = await seeded();
+  try {
+    // Over $0.0015 and clean: trace 1 (session-a, OTLP) and trace 6 (session-b, runtime lane). Not trace 3 (session-live).
+    const page = await listSessionList(
+      PROJECT_ID,
+      { filter: "all", now: NOW, traces: { status: "ok", minCostUsd: 0.0015 } },
+      db,
+    );
+    assert.deepEqual(page.items.map((row) => row.id).sort(), ["session-a", "session-b"]);
+  } finally {
+    await client.close();
+  }
+});
+
 test("the page query reads only the turn ledger and the trace rollup", () => {
   const text = JSON.stringify(
     sessionListPageQuery(PROJECT_ID, "failed", { at: iso(0).replace("Z", "000Z"), id: "x" }, 51),

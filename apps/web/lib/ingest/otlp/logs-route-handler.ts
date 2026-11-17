@@ -1,3 +1,8 @@
+import {
+  ingestRateLimitedResponse,
+  type PublishableIngestLimits,
+  publishableIngestLimits,
+} from "@/lib/ingest/ingest-limits";
 import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queries";
 import { inflateBody, isGzipEncoding, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
 import {
@@ -7,6 +12,8 @@ import {
 import { distinctSpanKeys } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
 import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
+import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
@@ -39,6 +46,10 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   hashApiKey: typeof hashApiKeyFn;
   findActiveApiKeyByHash: typeof findActiveApiKeyByHashFn;
   touchApiKey: typeof touchApiKeyFn;
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
+  /** Shared-key abuse limits for ingest-only keys; the process-wide budget when absent. */
+  publishableLimits?: PublishableIngestLimits;
   insertOtelLogs: typeof insertOtelLogsFn;
   reportServerException?: typeof reportServerException;
   // Resolved for request-log context and analytics; retained log records are
@@ -46,7 +57,7 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
   setRequestLogContext?: typeof setRequestLogContextFn;
-  /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
+  /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
   genAiLogJoin?: GenAiLogJoinDeps;
@@ -101,14 +112,41 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
     );
   }
 
-  const apiKey = await deps.findActiveApiKeyByHash(deps.hashApiKey(match[1].trim()));
-  if (!apiKey) {
+  const auth = await authenticateApiKey(req.headers.get("authorization"), deps.scope, deps);
+  if (!auth.ok) {
     return rejectLogsRequest(
-      json({ error: "Invalid or revoked API key." }, 401),
-      "invalid_key",
+      json(
+        auth.reason === "forbidden"
+          ? {
+              error: "forbidden",
+              reason: "missing_scope",
+              scope: deps.scope,
+              message: auth.message,
+            }
+          : { error: auth.message },
+        auth.status,
+      ),
+      auth.reason === "forbidden"
+        ? "missing_scope"
+        : auth.reason === "unavailable"
+          ? "unavailable"
+          : "invalid_key",
       startedAt,
       deps,
     );
+  }
+  const apiKey = auth.apiKey;
+  if (auth.policy.sharedKeyLimits) {
+    const limit = (deps.publishableLimits ?? publishableIngestLimits).check(req, apiKey);
+    if (!limit.allowed) {
+      return rejectLogsRequest(
+        ingestRateLimitedResponse(limit),
+        "rate_limited",
+        startedAt,
+        deps,
+        apiKey.projectId,
+      );
+    }
   }
 
   // Resolve the org for request-log context. Unlike /v1/traces, retained log
@@ -189,11 +227,34 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
     );
   }
 
+  // An ingest-only key's budget counts log records too, not only requests (RC-585).
+  if (auth.policy.sharedKeyLimits) {
+    const items = (deps.publishableLimits ?? publishableIngestLimits).chargeItems(
+      req,
+      apiKey,
+      records.length,
+    );
+    if (!items.allowed) {
+      return rejectLogsRequest(
+        ingestRateLimitedResponse(items),
+        "rate_limited",
+        startedAt,
+        deps,
+        apiKey.projectId,
+        organization?.id,
+      );
+    }
+  }
+
   const { rows, dropped } = toOtelLogRows(apiKey.projectId, records);
+  // An append-only key (RC-590) stores its records as logs, but they never
+  // rewrite the project's runtime catalog definitions.
+  const appendOnly = auth.policy.appendOnlyIngest;
+  const stored = appendOnly ? rows.map(({ catalogDefinition: _definition, ...row }) => row) : rows;
   let accepted = 0;
-  if (rows.length > 0) {
+  if (stored.length > 0) {
     try {
-      ({ accepted } = await deps.insertOtelLogs(apiKey.projectId, rows));
+      ({ accepted } = await deps.insertOtelLogs(apiKey.projectId, stored));
     } catch (error) {
       logError("log record insert failed", error, { project_id: apiKey.projectId });
       captureInsertFailure(error, apiKey.projectId, deps);
@@ -210,7 +271,8 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
 
   // Spans before logs: restate the model calls these records belong to.
   // Fails open: the logs are stored, and a retry of the export joins again.
-  if (deps.genAiLogJoin) {
+  // An append-only key never restates a stored call (RC-590).
+  if (deps.genAiLogJoin && !appendOnly) {
     const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
     try {
       await rejoinStoredModelCalls(apiKey.projectId, organization, keys, {

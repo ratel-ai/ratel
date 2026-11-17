@@ -6,7 +6,7 @@ import { type Column, DataTable, type DataTableProps } from "@ratel/design-syste
 export const SHORT_ID_CHARS = 8;
 
 /**
- * The one list layout of the Traces tabs with `cloud-trace-views-v3`
+ * The one list layout of the Traces tabs
  * (RC-503, decision sessions-first): Sessions and Turns are the same table,
  * the ID column first, then the tab's own columns. A row opens its Panel.
  */

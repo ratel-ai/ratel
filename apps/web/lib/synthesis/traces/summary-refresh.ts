@@ -11,7 +11,10 @@ export type TraceSummaryRefreshDb = Pick<ReturnType<typeof getDb>, "transaction"
 
 type SweepTransaction = Parameters<Parameters<TraceSummaryRefreshDb["transaction"]>[0]>[0];
 
-interface ChangedTrace {
+/** Runs a recompute: the sweep's transaction, or a writer's own (re-pricing). */
+export type TraceSummaryExecutor = Pick<SweepTransaction, "execute">;
+
+export interface ChangedTrace {
   projectId: string;
   traceId: string;
 }
@@ -61,6 +64,16 @@ export const TRACE_SUMMARY_VISIBILITY_LAG_MS = 5_000;
 const TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE = 500;
 /** Arbitrary but stable; only this sweep takes it. */
 const TRACE_SUMMARY_ADVISORY_LOCK_KEY = 823_100_023;
+/**
+ * A tool span's tool name, as the runs list shows it (`listRunTools` with
+ * `toolNameFromSpanName`): `gen_ai.tool.name`, else the span name without its
+ * "execute_tool " operation prefix or "tool." namespace.
+ */
+const TOOL_NAME = sql.raw(`btrim(regexp_replace(regexp_replace(
+  btrim(case when left(s.name, 13) = 'execute_tool ' then s.name
+    else coalesce(nullif(btrim(s.attributes ->> 'gen_ai.tool.name'), ''), s.name) end),
+  '^(?:chat|text_completion|generate_content|embeddings|execute_tool|invoke_agent|create_agent)\\s+(\\S.*)$', '\\1'),
+  '^tool\\.(.+)$', '\\1'))`);
 const EPOCH = "1970-01-01 00:00:00+00";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_INTERVAL_MS = 2_000_000_000;
@@ -119,6 +132,26 @@ export async function refreshTraceSummaries(
   return result;
 }
 
+/**
+ * Recompute the summaries of these traces in full, a chunk per statement, and
+ * return how many distinct traces that was. The sweep only sees spans by
+ * `received_at`, so a writer that changes stored spans in place (re-pricing)
+ * calls this itself, on the transaction of its write.
+ */
+export async function recomputeTraceSummaries(
+  db: TraceSummaryExecutor,
+  traces: ReadonlyArray<ChangedTrace>,
+): Promise<number> {
+  const changed = distinctTraces(traces);
+  for (let offset = 0; offset < changed.length; offset += TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE) {
+    await recomputeSummaries(
+      db,
+      changed.slice(offset, offset + TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE),
+    );
+  }
+  return changed.length;
+}
+
 /** One transaction: claim the lock, read a span slice, recompute, advance. */
 async function sweepOneBatch(
   tx: SweepTransaction,
@@ -148,17 +181,11 @@ async function sweepOneBatch(
     .limit(batchSize);
   if (spans.length === 0) return { spansScanned: 0, tracesRecomputed: 0 };
 
-  const changed = distinctTraces(spans);
-  for (let offset = 0; offset < changed.length; offset += TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE) {
-    await recomputeSummaries(
-      tx,
-      changed.slice(offset, offset + TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE),
-    );
-  }
+  const changed = await recomputeTraceSummaries(tx, spans);
   const last = spans[spans.length - 1]!;
   await advanceCursor(tx, { receivedAt: last.receivedAt, spanRowId: last.id });
 
-  return { spansScanned: spans.length, tracesRecomputed: changed.length };
+  return { spansScanned: spans.length, tracesRecomputed: changed };
 }
 
 /**
@@ -166,7 +193,7 @@ async function sweepOneBatch(
  * canonical whole-trace representative (riding
  * `otel_spans_project_trace_root_idx`) joined to that trace's own aggregates.
  */
-async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]): Promise<void> {
+async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace[]): Promise<void> {
   const changed = sql.join(
     traces.map((trace) => sql`(${trace.projectId}::uuid, ${trace.traceId}::text)`),
     sql`, `,
@@ -175,7 +202,12 @@ async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]):
     with changed (project_id, trace_id) as (values ${changed}),
     representatives as (
       select distinct on (s.project_id, s.trace_id)
-        s.project_id, s.trace_id, s.started_at, s.duration_ms
+        s.project_id, s.trace_id, s.started_at, s.duration_ms,
+        nullif(btrim(s.service_name), '') as service_name,
+        nullif(btrim(coalesce(
+          s.attributes ->> 'deployment.environment.name',
+          s.attributes ->> 'deployment.environment'
+        )), '') as environment
       from otel_spans s
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
@@ -194,7 +226,17 @@ async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]):
         coalesce(sum(s.input_tokens), 0)::bigint as input_tokens,
         coalesce(sum(s.output_tokens), 0)::bigint as output_tokens,
         coalesce(sum(s.cost_usd), 0)::numeric(18, 6) as cost_usd,
-        max(s.received_at) as spans_max_received_at
+        max(s.received_at) as spans_max_received_at,
+        coalesce(
+          array_agg(distinct btrim(s.model) order by btrim(s.model))
+            filter (where btrim(s.model) <> ''),
+          '{}'
+        ) as models,
+        coalesce(
+          array_agg(distinct ${TOOL_NAME} order by ${TOOL_NAME})
+            filter (where s.span_class = 'tool' and ${TOOL_NAME} <> ''),
+          '{}'
+        ) as tools
       from otel_spans s
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
@@ -202,7 +244,8 @@ async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]):
     )
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
-      input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at
+      input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
+      models, tools, service_name, environment
     )
     select
       r.project_id,
@@ -214,7 +257,11 @@ async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]):
       a.output_tokens,
       a.cost_usd,
       a.spans_max_received_at,
-      now()
+      now(),
+      a.models,
+      a.tools,
+      r.service_name,
+      r.environment
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
@@ -226,7 +273,11 @@ async function recomputeSummaries(tx: SweepTransaction, traces: ChangedTrace[]):
       output_tokens = excluded.output_tokens,
       cost_usd = excluded.cost_usd,
       spans_max_received_at = excluded.spans_max_received_at,
-      updated_at = excluded.updated_at
+      updated_at = excluded.updated_at,
+      models = excluded.models,
+      tools = excluded.tools,
+      service_name = excluded.service_name,
+      environment = excluded.environment
   `);
 }
 

@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
   // Telemetry paths end in a slash (/ingest/flags/); without this Next answers them with a 308
   // before the Cloud proxy sees them.
   skipTrailingSlashRedirect: true,
+  // RC-526: version skew. The image build sets NEXT_DEPLOYMENT_ID to the image tag (the
+  // deploy workflow), so a tab from an older deploy does a hard reload on its next navigation
+  // instead of calling server actions the new server does not know (lib/console/stale-build.ts
+  // covers calls made before that). Unset in local dev and plain local builds.
+  deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
   // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.

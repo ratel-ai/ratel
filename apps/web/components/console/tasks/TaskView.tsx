@@ -46,7 +46,6 @@ export function TaskView({
   listHref,
   scoring,
   testRuns,
-  sessionReplay = false,
 }: {
   projectId: string;
   task: TaskDetailModel;
@@ -55,8 +54,6 @@ export function TaskView({
   listHref?: string;
   scoring?: ReactNode;
   testRuns?: readonly string[];
-  /** `cloud-session-replay` is on: example runs link their session replay. */
-  sessionReplay?: boolean;
 }) {
   const names = Object.fromEntries(
     [...task.steps, ...task.sideSteps].map((step) => [step.toolId, step.label]),
@@ -119,7 +116,6 @@ export function TaskView({
           focusTools={task.focusTools}
           now={now}
           testRuns={testRuns}
-          sessionReplay={sessionReplay}
         />
         <TaskPanels
           projectId={projectId}

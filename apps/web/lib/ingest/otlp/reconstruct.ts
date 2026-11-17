@@ -39,9 +39,9 @@ const FUTURE_SKEW_MS = 2 * 86_400_000; // tolerate ~2 days of clock skew
 
 /**
  * What a call's payload keeps beyond the categorizer's input. `captureReply`
- * is flag `cloud-session-replay` (RC-280): the call's own reply as `output` and
- * its request settings as `settings`, only on a call that carries content.
- * Off, the payload is exactly as before.
+ * (RC-280, on at ingest): the call's own reply as `output` and its request
+ * settings as `settings`, only on a call that carries content. Off, the
+ * payload is exactly as before.
  */
 export interface PayloadCapture {
   captureReply?: boolean;

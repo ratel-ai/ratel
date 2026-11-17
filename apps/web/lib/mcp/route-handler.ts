@@ -5,7 +5,6 @@ import {
   authOrganizationId,
   type McpAuthContext,
 } from "@/lib/mcp/auth";
-import { clientAddress } from "@/lib/mcp/client-address";
 import { type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
 import { mcpLaunchAccess } from "@/lib/mcp/launch-access";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
@@ -21,6 +20,7 @@ import { createRatelMcpServer } from "@/lib/mcp/server";
 import { TOOL_STAGES } from "@/lib/mcp/stages";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
 import { APP_NAME } from "@/lib/platform/app-config";
+import { clientAddress } from "@/lib/platform/http/client-address";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { currentLogContext, getLogger, setLogContext } from "@/lib/platform/logger";
 import { getProjectById } from "@/lib/platform/projects/queries";
@@ -155,6 +155,7 @@ function errorResponse(error: McpOperationError, status: number, request?: Reque
 
 const STATUS_BY_CODE: Partial<Record<McpOperationError["code"], number>> = {
   unauthorized: 401,
+  forbidden: 403,
   rate_limited: 429,
   unavailable: 503,
   not_found: 404,

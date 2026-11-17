@@ -14,6 +14,13 @@ import { createHash, randomBytes } from "node:crypto";
 
 const KEY_PREFIX = "rtl_";
 
+/**
+ * The prefix an ingest-only key carries (RC-585), so people and secret scanners
+ * can tell a key that is safe to ship in an app from one that must stay secret.
+ * A label only: access is decided by the key's stored scopes, never by this.
+ */
+export const PUBLISHABLE_KEY_PREFIX = "rtl_pub_";
+
 /** Names are display-only labels ("Staging", "CI"), so a short cap is plenty. */
 export const API_KEY_NAME_MAX_LEN = 64;
 
@@ -66,11 +73,14 @@ export type ApiKeyLifecycle = {
 
 export type ApiKeyStatus = "active" | "expired" | "revoked";
 
-export function generateApiKey(): GeneratedApiKey {
-  const plaintext = `${KEY_PREFIX}${randomBytes(24).toString("base64url")}`;
+export type ApiKeyKind = "secret" | "publishable";
+
+export function generateApiKey(kind: ApiKeyKind = "secret"): GeneratedApiKey {
+  const keyPrefix = kind === "publishable" ? PUBLISHABLE_KEY_PREFIX : KEY_PREFIX;
+  const plaintext = `${keyPrefix}${randomBytes(24).toString("base64url")}`;
   return {
     plaintext,
-    prefix: plaintext.slice(0, KEY_PREFIX.length + 8),
+    prefix: plaintext.slice(0, keyPrefix.length + 8),
     hash: hashApiKey(plaintext),
   };
 }

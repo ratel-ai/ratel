@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { getTableColumns } from "drizzle-orm";
 import { MIGRATIONS_DIR } from "@/lib/platform/db/test-support";
+import { notEnabledReason } from "@/lib/views/eval-gate/method";
 import { errorCodeOf } from "@/lib/views/session-replay/runs";
 import { sessionReplayRuns, sessionReplaySettings } from "@/lib/views/session-replay/schema";
 
@@ -46,5 +47,6 @@ test("a failure reason is stored as a code, never the words", () => {
     errorCodeOf("Needs stored prompts: this run's model calls weren't captured"),
     "noPrompts",
   );
+  assert.equal(errorCodeOf(notEnabledReason("claude-sonnet-4-6")), "notEnabled");
   assert.equal(errorCodeOf("anything else"), "failed");
 });

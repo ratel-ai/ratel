@@ -90,12 +90,12 @@ test("the Trace view shows the chosen turn's full trace, inside the session page
 test("a turn with several runs lists them, the shown one current", () => {
   const html = render({ turnIndex: 2, traceId: TRACE_B, trace: traceProps({ traceId: TRACE_B }) });
   assert.match(html, /data-turn-runs/);
-  assert.match(html, /2 runs in this turn/);
+  assert.match(html, /2 traces in this turn/);
   assert.match(
     html,
     new RegExp(`href="/project/p1/sessions/s1\\?view=trace&amp;turn=2&amp;trace=${TRACE_A}"`),
   );
-  assert.match(html, /aria-current="page"[^>]*>Run 2 · bbbbbbbb/);
+  assert.match(html, /aria-current="page"[^>]*>Trace 2 · bbbbbbbb/);
 });
 
 test("a turn without a trace says so", () => {

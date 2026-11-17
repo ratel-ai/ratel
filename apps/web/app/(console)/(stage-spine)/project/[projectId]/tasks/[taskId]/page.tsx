@@ -10,7 +10,6 @@ import { TaskView } from "@/components/console/tasks/TaskView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
-import { sessionReplayEnabled } from "@/lib/views/session-replay-flag";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { buildTaskDetail, taskNames } from "@/lib/views/tasks/model";
 import { loadTaskExamples, loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
@@ -46,10 +45,7 @@ export default async function TaskPage({
         listHref={listHref}
       />
     );
-  const [evalGate, sessionReplay] = await Promise.all([
-    evalGateEnabledFor(organization),
-    sessionReplayEnabled(),
-  ]);
+  const evalGate = await evalGateEnabledFor(organization);
   const examples = await loadTaskExamples(project.id, task, {}, inputs.names);
   const testRuns = evalGate
     ? (await taskEvalSetFor(project.id, taskId)).cases
@@ -63,7 +59,6 @@ export default async function TaskPage({
       task={task}
       examples={examples}
       testRuns={testRuns}
-      sessionReplay={sessionReplay}
       now={now}
       listHref={listHref}
       scoring={

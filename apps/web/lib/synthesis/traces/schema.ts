@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
@@ -49,6 +50,13 @@ export const otelTraceSummaries = pgTable(
     inputTokens: bigint("input_tokens", { mode: "number" }).notNull(),
     outputTokens: bigint("output_tokens", { mode: "number" }).notNull(),
     costUsd: numeric("cost_usd", { precision: 18, scale: 6 }).notNull(),
+    // RC-505: what the Sessions and Turns filters match on, so a filtered list
+    // never scans spans. Distinct values over the whole trace.
+    models: text("models").array().notNull().default(sql`'{}'::text[]`),
+    tools: text("tools").array().notNull().default(sql`'{}'::text[]`),
+    // The canonical representative's service and deployment environment.
+    serviceName: text("service_name"),
+    environment: text("environment"),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -63,6 +71,9 @@ export const otelTraceSummaries = pgTable(
     index("otel_trace_summaries_project_started_idx").on(t.projectId, t.startedAt),
     // The retention sweep's bounded batch.
     index("otel_trace_summaries_spans_max_received_idx").on(t.spansMaxReceivedAt),
+    // The model and tool filters (`models && $1`).
+    index("otel_trace_summaries_models_idx").using("gin", t.models),
+    index("otel_trace_summaries_tools_idx").using("gin", t.tools),
   ],
 );
 

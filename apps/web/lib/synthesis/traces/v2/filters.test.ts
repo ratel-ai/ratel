@@ -9,6 +9,7 @@ import {
   hasFilters,
   searchText,
   tabSearch,
+  traceFilterFromSearch,
   withFilterToggled,
   withoutChip,
   withoutFilters,
@@ -201,5 +202,77 @@ test("grouped Spans apply the variant and top-level filters their chips show", (
     ),
     ["Variant is candidate", "Showing top-level steps only"],
     "and those are exactly the chips the bar shows",
+  );
+});
+
+test("traceFilterFromSearch reads the rollup filters from the URL (RC-505)", () => {
+  assert.deepEqual(
+    traceFilterFromSearch(
+      "?facetModel=gpt-4o&facetModel=claude&facetTool=refund&facetService=api&facetEnvironment=prod&errorOnly=1&minCostUsd=0.5&minTokens=1000&cursor=x",
+    ),
+    {
+      models: ["gpt-4o", "claude"],
+      tools: ["refund"],
+      services: ["api"],
+      environments: ["prod"],
+      status: "failed",
+      minCostUsd: 0.5,
+      minTokens: 1000,
+    },
+  );
+  assert.deepEqual(traceFilterFromSearch("?status=ok"), { status: "ok" });
+  assert.deepEqual(traceFilterFromSearch("?minTokens=-3&minCostUsd=abc&facetModel=%20"), {});
+  assert.deepEqual(traceFilterFromSearch(""), {});
+});
+
+const ROLLUP_FACETS = {
+  model: [{ value: "gpt-4o", count: 3 }],
+  tool: [{ value: "refund", count: 2 }],
+  service: [{ value: "api", count: 5 }],
+  environment: [],
+};
+
+test("rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip", () => {
+  let search = withFilterToggled("rollup", "?range=7d&cursor=abc", "model", "gpt-4o");
+  search = withFilterToggled("rollup", search, "tool", "refund");
+  search = withFilterToggled("rollup", search, "status", "ok");
+  search = withFilterToggled("rollup", search, "cost", "0.1");
+  search = withFilterToggled("rollup", search, "tokens", "10000");
+  assert.equal(
+    search,
+    "?range=7d&facetModel=gpt-4o&facetTool=refund&status=ok&minCostUsd=0.1&minTokens=10000",
+  );
+  assert.deepEqual(
+    filterChips("rollup", search).map((chip) => `${chip.field} ${chip.value}`),
+    ["Status is OK", "Model is gpt-4o", "Tool is refund", "Cost over $0.10", "Tokens over 10,000"],
+  );
+  assert.equal(hasFilters("rollup", search), true);
+  assert.equal(withoutFilters("rollup", search), "?range=7d");
+  // Toggling the same value again removes it; failed replaces ok.
+  assert.equal(withFilterToggled("rollup", "?facetTool=refund", "tool", "refund"), "");
+  assert.equal(withFilterToggled("rollup", "?status=ok", "status", "failed"), "?status=failed");
+  assert.equal(withFilterToggled("rollup", "?errorOnly=1", "status", "failed"), "");
+});
+
+test("rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds", () => {
+  const fields = filterFields("rollup", "?facetTool=refund", ROLLUP_FACETS);
+  assert.deepEqual(
+    fields.map((field) => field.id),
+    ["status", "model", "tool", "service", "cost", "tokens"],
+  );
+  assert.deepEqual(
+    fields.find((field) => field.id === "status")?.options.map((option) => option.label),
+    ["Failed", "OK"],
+  );
+  assert.deepEqual(fields.find((field) => field.id === "tool")?.options, [
+    { value: "refund", label: "refund", count: 2, selected: true },
+  ]);
+  assert.deepEqual(
+    fields.find((field) => field.id === "cost")?.options.map((option) => option.label),
+    ["Over $0.01", "Over $0.10", "Over $1.00"],
+  );
+  assert.deepEqual(
+    fields.find((field) => field.id === "tokens")?.options.map((option) => option.label),
+    ["Over 1,000", "Over 10,000", "Over 100,000"],
   );
 });

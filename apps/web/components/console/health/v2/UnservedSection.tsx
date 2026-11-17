@@ -50,6 +50,7 @@ export function UnservedSection({
   asks,
   asksFrom,
   asksSetupKey,
+  contentNotCaptured = false,
 }: {
   projectId: string;
   asks: readonly UnservedAskView[];
@@ -57,6 +58,8 @@ export function UnservedSection({
   asksFrom: "user" | "search" | "mixed" | null;
   /** Set when no request text arrives at all: the guide that sends it. */
   asksSetupKey: SetupKey | null;
+  /** The runs came without message content (tool calls inferred from span shape): say so when no ask arrived. */
+  contentNotCaptured?: boolean;
 }) {
   const [all, setAll] = useState(false);
   if (asks.length === 0 && !asksSetupKey) return null;
@@ -71,10 +74,17 @@ export function UnservedSection({
       }
     >
       {asks.length === 0 && asksSetupKey ? (
-        <div className="rounded-lg border border-line" data-unserved="no_asks">
+        <div
+          className="rounded-lg border border-line"
+          data-unserved={contentNotCaptured ? "content_not_captured" : "no_asks"}
+        >
           <EmptyState
-            title="No asks captured"
-            description="Send what people ask to see the asks no task or tool handles."
+            title={contentNotCaptured ? "Empty: content not captured" : "No asks captured"}
+            description={
+              contentNotCaptured
+                ? "These runs arrived without message content, so what people asked is not known. Send it to see the asks no task or tool handles."
+                : "Send what people ask to see the asks no task or tool handles."
+            }
             action={
               <PeekLink
                 peek={setupPeek(asksSetupKey)}

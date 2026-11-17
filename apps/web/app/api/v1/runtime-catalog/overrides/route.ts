@@ -1,29 +1,25 @@
-import { resolveProjectById } from "@/lib/catalog/http";
-import {
-  handleRuntimeCatalogOverridesGet,
-  type RuntimeCatalogOverrideHandlerDeps,
-} from "@/lib/ingest/runtime-catalog/override-handler";
 import {
   listRuntimeCatalogOverrides,
-  setRuntimeCatalogOverride,
   touchRuntimeCatalogOverridesPull,
 } from "@/lib/ingest/runtime-catalog/override-queries";
+import {
+  handleRuntimeCatalogOverridesGet,
+  type RuntimeCatalogOverridesGetDeps,
+} from "@/lib/ingest/runtime-catalog/overrides-get-handler";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
-import { trackServerEvent } from "@/lib/platform/telemetry";
 
 export const runtime = "nodejs";
 
-const deps: RuntimeCatalogOverrideHandlerDeps = {
-  resolveProjectById,
+const deps: RuntimeCatalogOverridesGetDeps = {
+  scope: BEARER_ROUTE_SCOPES["GET /api/v1/runtime-catalog/overrides"],
   resolveProjectFromBearer,
   getOrganizationByProjectId,
-  setRuntimeCatalogOverride,
   listRuntimeCatalogOverrides,
   touchRuntimeCatalogOverridesPull,
   setRequestLogContext,
-  trackServerEvent,
 };
 
 export const GET = withRequestLog((request: Request) =>

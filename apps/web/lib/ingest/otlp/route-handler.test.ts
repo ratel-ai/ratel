@@ -38,6 +38,8 @@ const FAKE_KEY: ApiKey = {
   lastUsedAt: null,
   revokedAt: null,
   expiresAt: null,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
 };
 
 const protoRoot = protobuf.Root.fromJSON(descriptor as protobuf.INamespace);
@@ -53,6 +55,7 @@ function makeDeps(over: Partial<TracesHandlerDeps> = {}): {
   const derived: unknown[][] = [];
   const storedSpans: Array<Array<{ projectId: string; spanId: string }>> = [];
   const deps: TracesHandlerDeps = {
+    scope: "ingest:traces",
     isDbConfigured: () => true,
     hashApiKey: (s) => `hashed:${s}`,
     findActiveApiKeyByHash: async () => FAKE_KEY,
@@ -1055,10 +1058,9 @@ test("nothing is counted without a quota gate, or when nothing was stored", asyn
   assert.deepEqual(increments, []);
 });
 
-function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
+function rawCapture(store?: OtlpRawStore["store"]) {
   const stored: OtlpRawExportInput[] = [];
   const capture: OtlpRawCaptureDeps = {
-    isEnabled: async () => enabled,
     store: {
       store:
         store ??
@@ -1071,17 +1073,8 @@ function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
   return { capture, stored };
 }
 
-test("raw capture off: no store call and the same response", async () => {
-  const { capture, stored } = rawCapture(false);
-  const { deps } = makeDeps({ otlpRawCapture: capture });
-  const res = await handleTracesRequest(req(otlpJson(2), auth), deps);
-  assert.equal(res.status, 202);
-  assert.deepEqual(await res.json(), { accepted: 2, calls: 2, spans: 2 });
-  assert.equal(stored.length, 0);
-});
-
 test("raw capture on: one stored export whose body decodes back to the same spans", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });
   const wire = gzipSync(otlpProto(3));
   const res = await handleTracesRequest(
@@ -1104,7 +1097,7 @@ test("raw capture on: one stored export whose body decodes back to the same span
 });
 
 test("raw capture is not attempted for a rejected export", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });
   assert.equal((await handleTracesRequest(req("{not json", auth), deps)).status, 400);
   assert.equal(stored.length, 0);
@@ -1112,7 +1105,7 @@ test("raw capture is not attempted for a rejected export", async () => {
 
 test("a throwing raw store still returns the same 202 and logs sizes, not the body", async () => {
   const logged: Array<{ message: string; fields: unknown }> = [];
-  const { capture } = rawCapture(true, async () => {
+  const { capture } = rawCapture(async () => {
     throw new Error("raw store down");
   });
   const { deps } = makeDeps({
@@ -1129,4 +1122,49 @@ test("a throwing raw store still returns the same 202 and logs sizes, not the bo
       fields: { project_id: "proj-1", signal: "traces", raw_bytes: Buffer.byteLength(body) },
     },
   ]);
+});
+
+// RC-585: scoped keys on trace ingest.
+
+const INGEST_KEY = {
+  ...FAKE_KEY,
+  keyPrefix: "rtl_pub_abcdefgh",
+  scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+};
+
+test("an ingest-only key sends traces", async () => {
+  const { deps, inserted } = makeDeps({ findActiveApiKeyByHash: async () => INGEST_KEY });
+  const res = await handleTracesRequest(req(otlpJson(1), auth), deps);
+  assert.equal(res.status, 202);
+  assert.equal(inserted.length, 1);
+});
+
+test("a key without ingest:traces gets 403 with the missing scope, and nothing is stored", async () => {
+  const { deps, inserted } = makeDeps({
+    findActiveApiKeyByHash: async () => ({ ...FAKE_KEY, scopes: ["catalog:read", "ingest:logs"] }),
+  });
+  const res = await handleTracesRequest(req(otlpJson(1), auth), deps);
+  assert.equal(res.status, 403);
+  const body = await res.json();
+  assert.equal(body.reason, "missing_scope");
+  assert.equal(body.scope, "ingest:traces");
+  assert.equal(inserted.length, 0);
+});
+
+test("an ingest-only key over its shared-key budget gets 429 with Retry-After; a secret key never meets that budget", async () => {
+  const exhausted = {
+    check: () => ({ allowed: false as const, retryAfterSeconds: 9, limit: "per_source" as const }),
+    chargeItems: () => ({ allowed: true as const }),
+  };
+  const { deps, inserted } = makeDeps({
+    findActiveApiKeyByHash: async () => INGEST_KEY,
+    publishableLimits: exhausted,
+  });
+  const res = await handleTracesRequest(req(otlpJson(1), auth), deps);
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "9");
+  assert.equal(inserted.length, 0);
+
+  const secret = makeDeps({ publishableLimits: exhausted });
+  assert.equal((await handleTracesRequest(req(otlpJson(1), auth), secret.deps)).status, 202);
 });

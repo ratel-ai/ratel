@@ -1,4 +1,5 @@
 import type { OperationContext } from "@/lib/mcp/registry";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -30,7 +31,7 @@ export interface ContentAccessDeps {
 }
 
 export const CONTENT_WITHHELD_HINT =
-  "Captured text is shown to signed-in members, or to API keys once content reading is turned on in project Settings.";
+  "Captured text is shown to signed-in members, or to API keys with the content permission once content reading is turned on in project Settings.";
 
 /** The opt-in read under the short supplementary timeout: it gates text, it is never the answer. */
 export function readContentOptIn(projectId: string): Promise<boolean> {
@@ -43,6 +44,16 @@ export function readContentOptIn(projectId: string): Promise<boolean> {
 export const defaultContentAccessDeps: ContentAccessDeps = { contentOptIn: readContentOptIn };
 
 /**
+ * The credential half of the rule (RC-585): a signed-in member always passes,
+ * an API key only with its own `content:read` scope, so a read-only key never
+ * sees end-user text unless it was given that too. A tool with its own
+ * opt-in rule (the session page's, in `ship.ts`) still asks this first.
+ */
+export function credentialMayReadContent(auth: OperationContext["auth"]): boolean {
+  return auth.kind === "oauth" || apiKeyPolicy(auth.scopes).allows("content:read");
+}
+
+/**
  * Whether this caller may read captured text in this project. A failed opt-in
  * read is logged and withholds the text: the call still answers, without it.
  */
@@ -51,6 +62,7 @@ export async function mayReadContent(
   deps: ContentAccessDeps,
 ): Promise<boolean> {
   if (ctx.auth.kind === "oauth") return true;
+  if (!credentialMayReadContent(ctx.auth)) return false;
   try {
     return await deps.contentOptIn(ctx.projectId);
   } catch (err) {

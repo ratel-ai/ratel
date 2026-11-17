@@ -434,3 +434,85 @@ test("a search step: its ranked results", () => {
   assert.ok(html.includes("data-search-step"));
   assert.ok(html.includes("Ranked results"));
 });
+
+/* --- RC-524: one replay, the inspector open by default ------------------------ */
+
+function renderV3(search: string, extra: Partial<SessionChat> = {}, whatIf = false): string {
+  const timeline = buildSessionTimeline({
+    sessionId: "s1",
+    turns: TURNS,
+    modelCalls: CALLS,
+    selfCorrections: [],
+  });
+  const chat = { ...buildSessionChat({ timeline, turns: TURNS, texts: null }), ...extra };
+  const setup = whatIf
+    ? {
+        projectId: "p1",
+        runs: [],
+        options: {
+          fixes: [],
+          tools: [{ name: "get_seat_map", description: "Seats", searchable: "get_seat_map Seats" }],
+        },
+        readContent: false,
+      }
+    : undefined;
+  return renderToStaticMarkup(
+    inRouter(
+      search,
+      createElement(SessionChatView, {
+        projectId: "p1",
+        chat,
+        settingsHref: "/project/p1/settings",
+        synced: true,
+        whatIf: setup,
+      }),
+    ),
+  );
+}
+
+test("views v3: no ?peek= opens the inspector on the first model call, following the playhead", () => {
+  const html = renderV3("");
+  assert.ok(html.includes('data-chat-panel="step"'));
+  assert.ok(html.includes("Model call 1 of 3"));
+  assert.match(html, /<input[^>]*checked=""[^>]*>|data-state="checked"|aria-checked="true"/);
+});
+
+test("views v3: an explicit ?peek= wins over the default inspector", () => {
+  assert.ok(renderV3("?peek=reply:1").includes('data-chat-panel="reply"'));
+  const call = renderV3("?peek=step:7");
+  assert.ok(call.includes("Model call 2 of 3"));
+});
+
+test("views v3: a model call offers What if… at its fork; a tool step shows its tool-choice verdicts", () => {
+  const forks = {
+    2: { turnId: "t1", call: 0 },
+    7: { turnId: "t1", call: 1 },
+    10: { turnId: "t2", call: 0 },
+  };
+  const verdicts = {
+    5: [{ tone: "bad" as const, text: "At step 5 the call to get_seat_map failed." }],
+  };
+  const call = renderV3("", { forks, verdicts }, true);
+  assert.ok(call.includes("data-call-what-if"));
+  assert.ok(call.includes("What if…"));
+  assert.equal(call.includes("data-step-verdicts"), false);
+  const tool = renderV3("?peek=step:5", { forks, verdicts }, true);
+  assert.ok(tool.includes("data-step-verdicts"));
+  assert.ok(tool.includes('data-decision-chip="bad"'));
+  assert.ok(tool.includes("At step 5 the call to get_seat_map failed."));
+  assert.equal(renderV3("", { forks, verdicts }).includes("data-call-what-if"), false);
+});
+
+test("views v3: no ?t= plays from the first message; an explicit ?t= wins; flag off starts at the end", () => {
+  const start = renderV3("");
+  assert.ok(start.includes('aria-valuenow="0"'));
+  assert.equal(count(start, 'data-chat-bubble="person"'), 1);
+  assert.equal(count(start, "data-work-line="), 0);
+  const mid = renderV3("?t=3500");
+  assert.ok(mid.includes('aria-valuenow="3500"'));
+  assert.ok(
+    render("").includes(
+      `aria-valuenow="${buildSessionChat({ timeline: buildSessionTimeline({ sessionId: "s1", turns: TURNS, modelCalls: CALLS, selfCorrections: [] }), turns: TURNS, texts: TEXTS }).trackTotalMs}"`,
+    ),
+  );
+});

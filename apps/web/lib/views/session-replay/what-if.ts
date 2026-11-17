@@ -5,13 +5,8 @@ import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
 import type { FixChange, ToolDef } from "@/lib/views/eval-gate/types";
-import {
-  defaultOrganizationFlagDeps,
-  type OrganizationFlagDeps,
-} from "@/lib/views/session-replay/gate";
 import { type SessionReplayRunRow, sessionReplayRuns } from "@/lib/views/session-replay/schema";
 import { DEFAULT_K, MAX_K } from "./fork";
-import { sessionReplayEnabledForActor } from "./gate";
 import { type RequestWhatIfDeps, requestWhatIf, WhatIfError } from "./runs";
 import type { SessionTimeline } from "./timeline";
 import type { Variant } from "./variant";
@@ -20,7 +15,7 @@ import type { Variant } from "./variant";
  * The What-if panel's server side (RC-178): what a person may fork a step
  * with, queue a run, read it back while it runs, and add its run to the
  * task's eval set. Every call checks that the caller is a member of the
- * project and that `cloud-session-replay` is on for them; `requestWhatIf`
+ * project; `requestWhatIf`
  * checks the content opt-in (a model replay needs it, else it re-ranks).
  *
  * The client names a change (a fix id, a catalog tool and its text); the
@@ -76,7 +71,6 @@ export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: strin
 
 export interface WhatIfDeps {
   db?: ReturnType<typeof getDb>;
-  flagDeps?: OrganizationFlagDeps;
   getSession: () => Promise<{ user: { id: string; externalId: string } } | null>;
   findProjectScope: (
     projectId: string,
@@ -89,7 +83,7 @@ export interface WhatIfDeps {
     actor: string,
   ) => Promise<{ change: FixChange; craft: boolean } | { error: string } | null>;
   /** Passed through to `requestWhatIf` (the queue, the budget, the clock). */
-  request?: Omit<RequestWhatIfDeps, "db" | "flagDeps">;
+  request?: Omit<RequestWhatIfDeps, "db">;
   /** Add a run to its task's eval set. */
   addToEvalSet?: (input: {
     projectId: string;
@@ -146,7 +140,7 @@ export async function submitWhatIf(
         variant: built.value.variant,
         variantRef: built.value.ref,
       },
-      { ...deps.request, db, flagDeps: deps.flagDeps },
+      { ...deps.request, db },
     );
     if (created) {
       logger.info(
@@ -366,16 +360,6 @@ async function member(
     : null;
   if (!scope) return { ok: false, error: "No project you belong to has that ID." };
   const actor = session.user.externalId;
-  if (
-    !(await sessionReplayEnabledForActor(
-      scope.project.id,
-      actor,
-      deps.db ?? getDb(),
-      deps.flagDeps ?? defaultOrganizationFlagDeps,
-    ))
-  ) {
-    return { ok: false, error: "Session replay is off for this organization." };
-  }
   return { ok: true, value: { actor, organizationId: scope.organization.id } };
 }
 

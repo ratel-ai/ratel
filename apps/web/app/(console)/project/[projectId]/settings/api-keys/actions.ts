@@ -46,7 +46,12 @@ const apiKeyActionDeps: ApiKeyActionDeps = {
     await trackProductEvent(
       "api_key_created",
       { externalId: ctx.user.externalId, orgId: ctx.organization.id, projectId },
-      { key_prefix: details.keyPrefix, named: details.named, expires_in: details.expiresIn },
+      {
+        key_prefix: details.keyPrefix,
+        named: details.named,
+        expires_in: details.expiresIn,
+        access: details.access,
+      },
     );
   },
   trackApiKeyRevoked: async (ctx, projectId, details) => {

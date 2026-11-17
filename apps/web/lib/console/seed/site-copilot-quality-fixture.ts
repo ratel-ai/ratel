@@ -4,7 +4,7 @@ import type { CapturedRun } from "@/lib/console/seed/site-copilot-quality";
  * The analyst's answers for the Site Copilot quality seed, captured once from a
  * real analysis of the seeded searches (claude-opus-5) and replayed on every later
  * run, so the seed stays deterministic and spends nothing. Regenerate with
- * `make seed-site-copilot-quality CAPTURE=1` (needs ANTHROPIC_API_KEY).
+ * `make seed-site-copilot-quality CAPTURE=1` (needs a Claude backend: ANTHROPIC_BACKEND=bedrock or ANTHROPIC_API_KEY).
  */
 export const SITE_QUALITY_CAPTURED: { earlier: CapturedRun; latest: CapturedRun } = {
   earlier: {

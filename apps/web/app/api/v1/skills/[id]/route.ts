@@ -2,6 +2,7 @@ import { serializeSkill } from "@/lib/catalog/http";
 import { editSkillInput } from "@/lib/catalog/manage";
 import { getSkillById, updateSkill } from "@/lib/catalog/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { v1MutationErrorResponse } from "@/lib/platform/v1-errors";
 
@@ -18,7 +19,10 @@ export const runtime = "nodejs";
 export const GET = withRequestLog(handleGet);
 
 async function handleGet(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(
+    req,
+    BEARER_ROUTE_SCOPES["GET /api/v1/skills/[id]"],
+  );
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
   const { id } = await params;
@@ -31,7 +35,10 @@ async function handleGet(req: Request, { params }: { params: Promise<{ id: strin
 export const PATCH = withRequestLog(handlePatch);
 
 async function handlePatch(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(
+    req,
+    BEARER_ROUTE_SCOPES["PATCH /api/v1/skills/[id]"],
+  );
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
   const { id } = await params;

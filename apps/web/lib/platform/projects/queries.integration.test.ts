@@ -152,3 +152,60 @@ test("a key is only found through the project that owns it, and malformed ids ne
   assert.equal(await findApiKeyForProject(OTHER_PROJECT_ID, mine.id, keys), null);
   assert.equal(await findApiKeyForProject(PROJECT_ID, "not-a-uuid", keys), null);
 });
+
+// RC-585: scopes (upstream's api-keys.integration.test.ts).
+
+test("a key created without scopes gets Full ('*'), as every key issued before the column existed did", async () => {
+  const { db } = await seed();
+  const created = await createApiKey(key("rtl_full_aaaaaaaa"), db as unknown as ApiKeyDb);
+  assert.deepEqual(created.scopes, ["*"]);
+  assert.equal(created.rateLimitPerMinute, null);
+  const found = await findActiveApiKeyByHash(created.keyHash, never, db as unknown as ApiKeyDb);
+  assert.deepEqual(found?.scopes, ["*"]);
+});
+
+test("a scoped key's scopes and ceiling come back from the auth lookup", async () => {
+  const { db } = await seed();
+  const created = await createApiKey(
+    key("rtl_pub_bbbbbbbb", {
+      scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+      rateLimitPerMinute: 20_000,
+    }),
+    db as unknown as ApiKeyDb,
+  );
+  const found = await findActiveApiKeyByHash(created.keyHash, never, db as unknown as ApiKeyDb);
+  assert.deepEqual(found?.scopes, ["ingest:traces", "ingest:logs", "ingest:events"]);
+  assert.equal(found?.rateLimitPerMinute, 20_000);
+});
+
+test("the primary key is a Full key even when a newer scoped key exists", async () => {
+  const { db } = await seed();
+  await createApiKey(
+    key("rtl_full_cccccccc", { name: "Full", createdAt: new Date("2026-11-01T00:00:00Z") }),
+    db as unknown as ApiKeyDb,
+  );
+  await createApiKey(
+    key("rtl_pub_dddddddd", {
+      name: "Beluga",
+      scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+      createdAt: new Date("2026-11-10T00:00:00Z"),
+    }),
+    db as unknown as ApiKeyDb,
+  );
+  assert.equal(
+    (await getPrimaryApiKeyForProject(PROJECT_ID, db as unknown as ApiKeyDb))?.name,
+    "Full",
+  );
+});
+
+test("with only scoped keys, the newest one is still the primary", async () => {
+  const { db } = await seed();
+  await createApiKey(
+    key("rtl_pub_eeeeeeee", { name: "Only", scopes: ["ingest:traces"] }),
+    db as unknown as ApiKeyDb,
+  );
+  assert.equal(
+    (await getPrimaryApiKeyForProject(PROJECT_ID, db as unknown as ApiKeyDb))?.name,
+    "Only",
+  );
+});

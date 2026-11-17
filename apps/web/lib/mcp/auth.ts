@@ -2,6 +2,7 @@ import { composition } from "@/lib/composition";
 import type { McpOAuthPort } from "@/lib/contracts/mcp-oauth";
 import { McpOperationError } from "@/lib/mcp/errors";
 import { hashApiKey } from "@/lib/platform/api-keys";
+import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
 import { APP_NAME } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { resolvePlanId } from "@/lib/platform/entitlements";
@@ -50,6 +51,8 @@ export type McpAuthContext =
       /** The single project this key may act on. */
       projectId: string;
       apiKeyId: string;
+      /** What the key may do (RC-585); each tool checks its own scope in dispatch. */
+      scopes: readonly string[];
       organization: McpOrganization | null;
     }
   | {
@@ -186,13 +189,34 @@ export async function authenticateMcpRequest(
     return deps.verifyOAuthToken(token);
   }
 
-  const apiKey = await deps.findActiveApiKeyByHash(hashApiKey(token));
-  if (!apiKey) {
+  // The shared bearer decision (RC-585): a key without any MCP scope (an
+  // ingest-only key, say) is refused here with 403, before any tool runs.
+  const result = await authenticateApiKey(
+    req.headers.get("authorization"),
+    ["mcp:read", "mcp:write"],
+    {
+      isDbConfigured: deps.isDbConfigured,
+      hashApiKey,
+      findActiveApiKeyByHash: (hash) => deps.findActiveApiKeyByHash(hash),
+    },
+  );
+  if (!result.ok) {
+    if (result.reason === "forbidden") {
+      return {
+        ok: false,
+        error: new McpOperationError(
+          "forbidden",
+          "This API key cannot use MCP tools. Use a key with MCP access, or create one in project Settings > API keys.",
+          { reason: "missing_scope" },
+        ),
+      };
+    }
     return {
       ok: false,
       error: new McpOperationError("unauthorized", "Invalid, expired, or revoked API key."),
     };
   }
+  const apiKey = result.apiKey;
   await deps.touchApiKey(apiKey.id);
 
   const organization = await deps.getOrganizationByProjectId(apiKey.projectId);
@@ -202,6 +226,7 @@ export async function authenticateMcpRequest(
       kind: "api-key",
       projectId: apiKey.projectId,
       apiKeyId: apiKey.id,
+      scopes: apiKey.scopes,
       organization: toMcpOrganization(organization),
     },
   };

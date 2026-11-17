@@ -77,3 +77,12 @@ test("peek reports availability without spending a token", () => {
 
   assert.deepEqual(limiter.peek("key-1"), { allowed: false, retryAfterSeconds: 1 });
 });
+
+test("a cost takes that many tokens, and a cost above the burst is charged as the burst", () => {
+  const limiter = createTokenBucketRateLimiter({ limitPerMinute: 60, burst: 10, now: () => 0 });
+  assert.ok(limiter.consume("a", 6).allowed);
+  assert.equal(limiter.consume("a", 6).allowed, false);
+  assert.ok(limiter.consume("a", 4).allowed);
+  assert.ok(limiter.consume("b", 1_000).allowed, "a full bucket admits one oversized batch");
+  assert.equal(limiter.consume("b", 1).allowed, false);
+});

@@ -111,6 +111,12 @@ export interface ChatCall {
   costUsd: number | null;
 }
 
+/** One tool-choice verdict in words, as the step-by-step view's decision chip. */
+export interface ChatVerdict {
+  tone: "good" | "bad";
+  text: string;
+}
+
 /** A model call's context split (the RC-144 lens), by part, in tokens. */
 export interface CallSplit {
   inputTokens: number;
@@ -124,6 +130,10 @@ export interface SessionChat {
   calls: ChatCall[];
   /** By step index; set by the loader, absent where the lens has no row. */
   splits?: Record<number, CallSplit>;
+  /** By model call step index: the turn and 0-based call a What-if forks (RC-524); set by the loader. */
+  forks?: Record<number, { turnId: string; call: number }>;
+  /** By step index: why a tool choice was good or bad (RC-524); set by the loader, absent steps have none. */
+  verdicts?: Record<number, ChatVerdict[]>;
   segments: TrackSegment[];
   problems: ChatProblem[];
   trackTotalMs: number;

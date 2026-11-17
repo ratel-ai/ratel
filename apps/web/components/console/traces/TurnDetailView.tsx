@@ -41,7 +41,7 @@ export interface TurnDetailViewProps {
   turn: TurnDetail;
   /** The call to ring and scroll to (a `trace_events.id`). */
   focusEventId: string | null;
-  /** The session replay of this turn's session; null while `cloud-session-replay` is off. */
+  /** The session replay of this turn's session. */
   sessionHref?: string | null;
 }
 

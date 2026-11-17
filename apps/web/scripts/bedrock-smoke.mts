@@ -7,10 +7,13 @@
  *
  *   AWS_PROFILE=ratel-cloud-staging pnpm --filter @ratel/cloud bedrock:smoke [--models claude-haiku-5-5,claude-sonnet-5-5]
  *
- * Uses the AWS credential chain. Exits 1 when any call fails.
+ * Uses the AWS credential chain. Exits 1 when any call fails. Each `create`
+ * call also prints its `model_call` line, as the app logs it: `backend: bedrock`
+ * and a cost_usd with the EU premium.
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, type AnthropicClient } from "@/lib/readings/anthropic/client";
+import { anthropicUsage, setModelCallSink, trackModelCall } from "@/lib/platform/model-call";
 
 type Check = (client: AnthropicClient, model: string) => Promise<string>;
 
@@ -33,8 +36,14 @@ const WEATHER_TOOL: Anthropic.Tool = {
 
 const CHECKS: Record<string, Check> = { text, structured, stream, tools };
 
-const client = anthropicClient({ maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock", AWS_BEARER_TOKEN_BEDROCK: process.env.AWS_BEARER_TOKEN_BEDROCK });
-if (!client) throw new Error("No Bedrock client: unset AWS_BEARER_TOKEN_BEDROCK");
+process.env.ANTHROPIC_BACKEND = "bedrock";
+const bedrock = anthropicClient({ maxRetries: 0 });
+if (!bedrock) throw new Error("No Bedrock client: unset AWS_BEARER_TOKEN_BEDROCK");
+const client = tracked(bedrock);
+setModelCallSink({
+  info: (fields, message) => console.log(`      ${message} ${JSON.stringify(fields)}`),
+  warn: (fields, message) => console.log(`      ${message} ${JSON.stringify(fields)}`),
+});
 
 let failed = 0;
 for (const model of modelsFromArgs()) {
@@ -51,6 +60,13 @@ for (const model of modelsFromArgs()) {
 }
 console.log(failed === 0 ? "All calls passed." : `${failed} calls failed.`);
 process.exit(failed === 0 ? 0 : 1);
+
+/** The client with each `create` call recorded like the app's features do. */
+function tracked(api: AnthropicClient): AnthropicClient {
+  const create = (params: Anthropic.MessageCreateParamsNonStreaming) =>
+    trackModelCall({ provider: "anthropic", model: params.model, feature: "bedrock_smoke", payer: "ratel" }, () => api.messages.create(params), anthropicUsage);
+  return { messages: { create, stream: api.messages.stream } as unknown as AnthropicClient["messages"] };
+}
 
 function modelsFromArgs(): string[] {
   const index = process.argv.indexOf("--models");

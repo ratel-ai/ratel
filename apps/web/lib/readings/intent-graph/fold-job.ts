@@ -8,6 +8,7 @@ import {
   trackServerEvent as trackServerEventFn,
 } from "@/lib/platform/telemetry";
 import { DEFAULT_BATCH_POLICY, eventsToWaitFor } from "@/lib/readings/intent-graph/batching";
+import { COMPACT_PRESSURE_CLUSTERS, trimIntentGraph } from "@/lib/readings/intent-graph/bound";
 import { type CompactionOptions, compactIntentGraph } from "@/lib/readings/intent-graph/compact";
 import {
   type FoldShadow,
@@ -37,6 +38,7 @@ import {
   intentGraphContentHash,
   intentGraphEtag,
   MAX_INTENT_GRAPH_BYTES,
+  MAX_INTENT_GRAPH_CLUSTERS,
   validateIntentGraph,
 } from "@/lib/readings/intent-types/wire";
 
@@ -51,10 +53,14 @@ import {
  * single run outlives the stale-job reaper or the cron route's time budget.
  *
  * Guardrails: the scratch catalog's sink is discarded, so nothing folded is ever
- * re-ingested; a graph that fails validation or the byte cap is not written and
- * the cursor does not move, so the job errors visibly instead of silently
- * dropping evidence; logs carry counts and rev only, never query text. There is
- * no feature-flag gate: every project with foldable events is folded.
+ * re-ingested; a structurally invalid graph is not written and the cursor does not move, so the
+ * job errors visibly instead of silently dropping evidence; logs carry counts and rev only, never
+ * query text. There is no feature-flag gate: every project with foldable events is folded.
+ *
+ * A graph over a store cap is not an error (RC-659): past
+ * `COMPACT_PRESSURE_CLUSTERS` it is compacted under pressure, and whatever is
+ * still over a cap is trimmed to its strongest clusters (./bound.ts), so a
+ * busy project keeps learning.
  */
 
 const MAX_PAGES_PER_JOB = 10;
@@ -98,6 +104,10 @@ export interface FoldJobDeps {
   commitLagMs?: number;
   /** The store's byte cap on one graph document; see MAX_INTENT_GRAPH_BYTES. Tests shrink it. */
   maxGraphBytes?: number;
+  /** The store's cluster cap on one graph; see MAX_INTENT_GRAPH_CLUSTERS. Tests shrink it. */
+  maxGraphClusters?: number;
+  /** Clusters past which a graph is compacted under pressure; see COMPACT_PRESSURE_CLUSTERS. Tests shrink it. */
+  pressureClusters?: number;
 }
 
 const defaultDeps: FoldJobDeps = {
@@ -148,6 +158,8 @@ export interface FoldJobResult {
   clustersBeforeCompaction: number | null;
   /** Clusters absorbed by compaction across the job's pages. */
   clustersMerged: number;
+  /** Clusters cut to keep a graph inside the store's caps, across the job's pages and graphs. */
+  clustersDropped: number;
   /** True when a follow-up job was enqueued for remaining backlog. */
   continued: boolean;
   /** New events a `waiting` run left for a fuller one (./batching.ts). */
@@ -182,10 +194,14 @@ export async function foldProjectIntentGraph(
   let clusterCount: number | null = null;
   let clustersBeforeCompaction: number | null = null;
   let clustersMerged = 0;
+  let clustersDropped = 0;
   let continued = false;
   let eventsHeld = 0;
   // A few new events wait for a fuller run; a project's first fold never waits.
   const waitingEvents = await foldBacklogToWaitFor(projectId, deps, db);
+  const maxClusters = deps.maxGraphClusters ?? MAX_INTENT_GRAPH_CLUSTERS;
+  const maxBytes = deps.maxGraphBytes ?? MAX_INTENT_GRAPH_BYTES;
+  const pressureClusters = deps.pressureClusters ?? COMPACT_PRESSURE_CLUSTERS;
   // Built on first use and reused across pages and graphs: registering the
   // catalog is the expensive part, and the graph is attached per fold.
   let shadow: FoldShadow | null | undefined;
@@ -231,7 +247,8 @@ export async function foldProjectIntentGraph(
       // A search whose invoke has not arrived yet waits for the next run, so
       // the turn is folded whole. Nothing foldable: leave the cursor alone.
       const { fold: rows, held } = foldablePrefix(read, deps.now().getTime());
-      if (rows.length === 0) return { rowCount: read.length, held, merged: null, folded: false };
+      if (rows.length === 0)
+        return { rowCount: read.length, held, merged: null, dropped: 0, folded: false };
       const searchIds = rows
         .filter((r) => r.type === "search" || r.type === "skill_search")
         .map((r) => r.id);
@@ -278,6 +295,7 @@ export async function foldProjectIntentGraph(
         clustersBefore: number;
         clustersMerged: number;
       } | null = null;
+      let pageDropped = 0;
       for (const target of targets) {
         const current = await deps.getIntentGraph(projectId, target.key, tx);
         const baseJson = current ? JSON.stringify(current.document) : null;
@@ -290,15 +308,21 @@ export async function foldProjectIntentGraph(
           reports: { graphKey: target.key, graphBySource },
           priorAsks,
         });
-        const document = validateIntentGraph(JSON.parse(folded.json));
+        // Structure only: the cluster cap is applied after compaction, by the trim below.
+        const capOptions = { maxClusters: null };
+        const document = validateIntentGraph(JSON.parse(folded.json), capOptions);
         if (!document.ok) throw new IntentGraphCapExceededError(document.details);
         // Compaction is a bonus like the shadow comparison: a merge the SDK
         // rejects stores the page's graph as the learner produced it.
         let graph = document.graph;
         let mergedCount = 0;
+        const pressure = document.graph.intents.length > pressureClusters;
         try {
-          const compacted = compactIntentGraph(document.graph, deps.compactionOptions);
-          const revalidated = validateIntentGraph(compacted.graph);
+          const compacted = compactIntentGraph(document.graph, {
+            ...deps.compactionOptions,
+            pressure,
+          });
+          const revalidated = validateIntentGraph(compacted.graph, capOptions);
           if (!revalidated.ok)
             throw new Error(`compacted graph invalid: ${revalidated.details.join("; ")}`);
           graph = revalidated.graph;
@@ -314,9 +338,25 @@ export async function foldProjectIntentGraph(
             operation: "intent_graph_compact",
           });
         }
-        const json = graph === document.graph ? folded.json : JSON.stringify(graph);
+        const trimmed = trimIntentGraph(graph, { maxClusters, maxBytes });
+        if (trimmed.dropped > 0) {
+          logger.warn(
+            {
+              project_id: projectId,
+              graph_key: target.key,
+              clusters_dropped: trimmed.dropped,
+              cluster_count: trimmed.graph.intents.length,
+              compaction_pressure: pressure,
+            },
+            "intent graph trimmed to the store caps",
+          );
+        }
+        graph = trimmed.graph;
+        pageDropped += trimmed.dropped;
+        // As the trim measured it. Only a document whose shell alone is over
+        // the byte cap can still fail the check below.
+        const json = JSON.stringify(graph);
         const byteSize = Buffer.byteLength(json, "utf8");
-        const maxBytes = deps.maxGraphBytes ?? MAX_INTENT_GRAPH_BYTES;
         if (byteSize > maxBytes) {
           throw new IntentGraphCapExceededError([`byte_size: exceeds ${maxBytes}`]);
         }
@@ -364,12 +404,13 @@ export async function foldProjectIntentGraph(
       await deps.syncLive(projectId, tx);
       const last = rows[rows.length - 1];
       if (last) await deps.advanceCursor(projectId, last.receivedAtRaw, tx);
-      return { rowCount: read.length, held, merged, folded: true };
+      return { rowCount: read.length, held, merged, dropped: pageDropped, folded: true };
     });
     if (page === null) break;
     eventsHeld = page.held;
     if (!page.folded) break;
     pages += 1;
+    clustersDropped += page.dropped;
     if (page.merged) {
       eventsFolded += page.merged.recorded;
       eventsByLane.runtime += page.merged.recordedByLane.runtime;
@@ -409,6 +450,7 @@ export async function foldProjectIntentGraph(
       cluster_count: clusterCount,
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
+      clusters_dropped: clustersDropped,
       continued,
       waiting_events: waitingEvents,
       duration_ms: durationMs,
@@ -434,6 +476,7 @@ export async function foldProjectIntentGraph(
       cluster_count: clusterCount,
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
+      clusters_dropped: clustersDropped,
       continued,
       waiting_events: waitingEvents,
       duration_ms: durationMs,
@@ -453,6 +496,7 @@ export async function foldProjectIntentGraph(
     clusterCount,
     clustersBeforeCompaction,
     clustersMerged,
+    clustersDropped,
     continued,
     waitingEvents,
   };

@@ -24,12 +24,13 @@ export interface SessionTraceViewProps {
   traceId: string | null;
   /** The shown run's full trace; null when the turn has no run, or its spans are gone. */
   trace: TraceViewProps | null;
-  /**
-   * `cloud-trace-views-v3` (RC-413): a session's unit is the turn, so the
-   * runs inside one turn read as its traces, and Step by step as Replay.
-   */
-  viewsV3?: boolean;
 }
+
+/**
+ * RC-413: a session's unit is the turn, so the runs inside one turn read as its
+ * traces; the conversation is the one replay (RC-524).
+ */
+const PART = { one: "Trace", lower: "trace", many: "traces", views: "conversation view" } as const;
 
 /**
  * The session replay's Trace view (`?view=trace&turn=<n>`, RC-314): the full
@@ -43,12 +44,8 @@ export function SessionTraceView({
   turnIndex,
   traceId,
   trace,
-  viewsV3 = false,
 }: SessionTraceViewProps) {
   const turn = turns.find((candidate) => candidate.turnIndex === turnIndex) ?? null;
-  const part = viewsV3
-    ? { one: "Trace", lower: "trace", many: "traces", steps: "Replay" }
-    : { one: "Run", lower: "run", many: "runs", steps: "Step by step" };
   return (
     <div className="flex flex-col gap-6">
       <nav aria-label="Turns" className="flex flex-wrap items-center gap-1.5" data-turn-picker>
@@ -71,7 +68,7 @@ export function SessionTraceView({
             {candidate.turnIndex}
           </Link>
         ))}
-        {viewsV3 && traceId ? (
+        {traceId ? (
           // RC-472: the session links each turn to its own trace page, which links back here.
           <Link
             href={`/project/${encodeURIComponent(projectId)}/traces/${encodeURIComponent(traceId)}`}
@@ -85,12 +82,12 @@ export function SessionTraceView({
       </nav>
       {turn && turn.traceIds.length > 1 ? (
         <nav
-          aria-label={`${viewsV3 ? "Traces" : "Runs"} of turn ${turn.turnIndex}`}
+          aria-label={`Traces of turn ${turn.turnIndex}`}
           className="flex flex-wrap items-center gap-1.5"
           data-turn-runs
         >
           <span className="mr-1 text-ui text-fg-muted">
-            {turn.traceIds.length} {part.many} in this turn
+            {turn.traceIds.length} {PART.many} in this turn
           </span>
           {turn.traceIds.map((id, index) => (
             <Link
@@ -104,7 +101,7 @@ export function SessionTraceView({
                   : "border-line text-fg-muted hover:bg-hover",
               )}
             >
-              {part.one} {index + 1} · {id.slice(0, 8)}
+              {PART.one} {index + 1} · {id.slice(0, 8)}
             </Link>
           ))}
         </nav>
@@ -119,8 +116,8 @@ export function SessionTraceView({
             title={`Turn ${turn.turnIndex} has no trace`}
             description={
               turn.traceIds.length === 0
-                ? `This turn did not come with OpenTelemetry spans, so there is no waterfall to show. The chat and ${part.steps} views still show its steps.`
-                : `This ${part.lower}'s spans are no longer stored (raw telemetry expires after 30 days).`
+                ? `This turn did not come with OpenTelemetry spans, so there is no waterfall to show. The ${PART.views} still shows its steps.`
+                : `This ${PART.lower}'s spans are no longer stored (raw telemetry expires after 30 days).`
             }
           />
         </div>

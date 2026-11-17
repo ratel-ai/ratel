@@ -1,3 +1,4 @@
+import { configured } from "@/lib/platform/env-configured";
 import { getLogger } from "@/lib/platform/logger";
 import { OPENAI_DEFAULT_BASE_URL, OPENAI_USD_PER_INPUT_TOKEN } from "./openai";
 
@@ -18,19 +19,12 @@ export const DEFAULT_DECISION_ENGINE: DecisionEngineName = "openai";
 
 const KEY_VARIABLE = "OPENAI_API_KEY";
 
-/** A provisioning tool seeds every human-supplied secret with this until an operator sets it. */
-const SECRET_PLACEHOLDER = "REPLACE_ME";
-
 type Env = Record<string, string | undefined>;
 
 const logger = getLogger("decisions/engine");
 let warnedUnknown = false;
 
-/** A configured value: trimmed, and a placeholder seed counts as unset. */
-export function configured(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed && trimmed !== SECRET_PLACEHOLDER ? trimmed : undefined;
-}
+export { configured } from "@/lib/platform/env-configured";
 
 export interface ResolvedDecisionEngine {
   name: DecisionEngineName;

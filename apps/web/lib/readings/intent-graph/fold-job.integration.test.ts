@@ -209,16 +209,15 @@ test("new events after the cursor fold onto the stored graph and bump its rev un
   assert.equal(row?.rev, second.rev);
 });
 
-test("a graph over the store's byte cap errors the job before any write and leaves the cursor untouched", async () => {
+test("a graph whose shell alone is over the store's byte cap errors the job before any write and leaves the cursor untouched", async () => {
   const { db } = await setup();
   await ingest(db, turn("why is the build broken", "gh_run_list"));
 
-  // The real check, with the cap shrunk below what one learned turn serializes
-  // to. The validator's cluster cap is the other store cap the fold applies,
-  // but the SDK's learner bounds clusters itself when it loads a base graph,
-  // so a fold cannot reach it; the byte cap is the one a fold can cross.
+  // The real check, with the cap shrunk below an empty graph's own fields: the
+  // trim keeps no cluster and the shell still does not fit. A cap clusters can
+  // be cut to fit is trimmed instead (./bound.test.ts, and the cluster cap below).
   let puts = 0;
-  const shrunk = deps(db, { maxGraphBytes: 64 });
+  const shrunk = deps(db, { maxGraphBytes: 16 });
   const put = shrunk.putIntentGraph!;
   shrunk.putIntentGraph = (input, tx) => {
     puts += 1;
@@ -226,7 +225,7 @@ test("a graph over the store's byte cap errors the job before any write and leav
   };
   await assert.rejects(foldProjectIntentGraph(PROJECT_ID, shrunk), (error: unknown) => {
     assert.ok(error instanceof IntentGraphCapExceededError);
-    assert.match(error.message, /byte_size: exceeds 64/);
+    assert.match(error.message, /byte_size: exceeds 16/);
     return true;
   });
   assert.equal(puts, 0, "the cap is checked before the store is asked");
@@ -999,4 +998,74 @@ test("batching (RC-213): a few new events wait for a fuller fold, and the graph 
     deps(db, { minBatch: 6, now: () => new Date(Date.now() + 20 * 60_000) }),
   );
   assert.equal(late.outcome, "folded", "the oldest waiting event is past the wait");
+});
+
+/** Three asks for three different tools: three clusters compaction cannot merge, the first one asked twice. */
+function threeIntents() {
+  return [
+    ...turn("why is the build broken", "gh_run_list"),
+    ...turn("why is the build broken", "gh_run_list"),
+    ...turn("send the weekly report", "send_email"),
+    ...turn("book a meeting room", "book_room"),
+  ];
+}
+
+test("over the cluster cap (RC-659), the strongest clusters are stored and the cursor moves on", async () => {
+  const { client, db } = await setup();
+  await ingest(db, threeIntents());
+  const tracked: unknown[][] = [];
+
+  const result = await foldProjectIntentGraph(
+    PROJECT_ID,
+    deps(db, {
+      maxGraphClusters: 2,
+      trackServerEvent: async (...args) => {
+        tracked.push(args);
+      },
+    }),
+  );
+
+  assert.equal(result.outcome, "folded");
+  assert.equal(result.clustersBeforeCompaction, 3);
+  assert.equal(result.clusterCount, 2);
+  assert.equal(result.clustersDropped, 2, "one from each graph: the merged one and acme-app's");
+  const row = await getIntentGraph(PROJECT_ID, CLOUD_INTENT_GRAPH_KEY, db);
+  assert.equal(row?.clusterCount, 2);
+  assert.equal(
+    row?.document.intents.find((it) => it.tools.gh_run_list !== undefined)?.support,
+    2,
+    "the ask seen twice is the strongest cluster and stays",
+  );
+  assert.equal((await getIntentGraph(PROJECT_ID, "cloud/acme-app", db))?.clusterCount, 2);
+  const projection = await client.query<{ n: number }>(
+    `select count(*)::int as n from intent_graph_clusters where graph_key = '${CLOUD_INTENT_GRAPH_KEY}'`,
+  );
+  assert.equal(projection.rows[0]?.n, 2, "the projection holds only what was stored");
+  assert.notEqual(await getIntentGraphFoldCursor(PROJECT_ID, db), null);
+  const properties = tracked[0]?.[2] as Record<string, unknown> | undefined;
+  assert.equal(properties?.clusters_dropped, 2);
+});
+
+test("past the pressure threshold (RC-659), fresh fragments merge without waiting to settle", async () => {
+  const { db } = await setup();
+  await ingest(db, fragmentedTurns());
+
+  // Below the threshold the same graph keeps all five clusters (see "a fragment
+  // the fold just observed is not absorbed until it has settled").
+  const result = await foldProjectIntentGraph(PROJECT_ID, deps(db, { pressureClusters: 2 }));
+
+  assert.equal(result.clustersBeforeCompaction, 5);
+  assert.equal(result.clusterCount, 2, "four search_tasks fragments became one");
+  assert.equal(result.clustersMerged, 3);
+  assert.equal(result.clustersDropped, 0);
+});
+
+test("below the pressure threshold (RC-659), compaction keeps its settle-first gates", async () => {
+  const { db } = await setup();
+  await ingest(db, fragmentedTurns());
+
+  const result = await foldProjectIntentGraph(PROJECT_ID, deps(db));
+
+  assert.equal(result.clusterCount, 5);
+  assert.equal(result.clustersMerged, 0);
 });

@@ -41,10 +41,13 @@ const KEY: ApiKey = {
   lastUsedAt: new Date(),
   revokedAt: null,
   expiresAt: null,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
 };
 
 function routeDeps(db: Db): TracesHandlerDeps {
   return {
+    scope: "ingest:traces",
     isDbConfigured: () => true,
     hashApiKey: (s) => `hashed:${s}`,
     findActiveApiKeyByHash: async () => KEY,

@@ -6,10 +6,11 @@ import { fixesInput } from "@/lib/views/fixes/test-fixtures";
 import type { Scorer } from "@/lib/views/task-scorers/types";
 import type { ModelCall } from "./calls";
 import { changeOf, emptyChange } from "./change";
-import { CANT_SIMULATE } from "./method";
+import { CANT_SIMULATE, notEnabledReason } from "./method";
 import {
   type AgentModel,
   type EvalModels,
+  ModelNotEnabled,
   ModelRefused,
   SpendMeter,
   scriptedAgent,
@@ -21,6 +22,7 @@ import {
   answers,
   clearFailure,
   readRecording,
+  replayAsRecorded,
   replayRun,
   sameCall,
   ungroundedArgs,
@@ -539,6 +541,56 @@ test("a refused key stops the replay: the run says so, and the runs after it don
     reason: CANT_SIMULATE.refused,
   });
   assert.equal(asked, 1);
+});
+
+test("a model not enabled on Bedrock: the run names it, later runs on it don't call it, runs on other models go on", async () => {
+  const sonnet46 = recordedRun(
+    [{ name: "hold_fare", result: FAIL }],
+    ["hold_fare"],
+    "claude-sonnet-4-6",
+  );
+  const sonnet55 = recordedRun(
+    [{ name: "hold_fare", result: FAIL }],
+    ["hold_fare"],
+    "claude-sonnet-5-5",
+  );
+  const asked = { "claude-sonnet-4-6": 0, "claude-sonnet-5-5": 0 };
+  const agentFor = (model: "claude-sonnet-4-6" | "claude-sonnet-5-5"): AgentModel => ({
+    model,
+    standIn: false,
+    async next() {
+      asked[model] += 1;
+      if (model === "claude-sonnet-4-6")
+        throw new ModelNotEnabled(model, "eu.anthropic.claude-sonnet-4-6");
+      throw new Error("upstream down");
+    },
+  });
+  const halt = { reason: null as string | null };
+  const shared = {
+    ...deps({
+      ...standInModels(),
+      agent: ({ recordedModel }) =>
+        agentFor(recordedModel === "claude-sonnet-5-5" ? "claude-sonnet-5-5" : "claude-sonnet-4-6"),
+    }),
+    halt,
+  };
+  const reason = notEnabledReason("claude-sonnet-4-6");
+
+  assert.match(reason, /claude-sonnet-4-6 is not enabled/);
+  assert.deepEqual(
+    await replayRun(sonnet46.run, sonnet46.calls, failClearly("hold_fare"), shared),
+    { ok: false, reason },
+  );
+  assert.deepEqual(await replayAsRecorded(sonnet46.run, sonnet46.calls, shared), {
+    ok: false,
+    reason,
+  });
+  assert.deepEqual(
+    await replayRun(sonnet55.run, sonnet55.calls, failClearly("hold_fare"), shared),
+    { ok: false, reason: CANT_SIMULATE.failed },
+  );
+  assert.deepEqual(asked, { "claude-sonnet-4-6": 1, "claude-sonnet-5-5": 1 });
+  assert.equal(halt.reason, null, "the rest of the simulation is not stopped");
 });
 
 test("a skill goes into the system prompt and hands over its step tools", async () => {

@@ -2,13 +2,14 @@ import type { CloudMessage, ContentBlock } from "@/lib/ingest/cloud-schema";
 import { costFor, type PriceBook, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "./calls";
-import { CANT_SIMULATE } from "./method";
+import { CANT_SIMULATE, notEnabledReason } from "./method";
 import {
   AGENT_MAX_TOKENS,
   type AgentModel,
   type AgentReply,
   type EvalModels,
   estimateTokens,
+  ModelNotEnabled,
   ModelRefused,
   type ReplayCall,
   type ReplayMessage,
@@ -524,8 +525,12 @@ export interface ReplayDeps {
   maxSteps: number;
   /** Tool definitions seen in the project, for a skill's steps the run was never offered. */
   toolDefs: ReadonlyMap<string, ToolDef>;
-  /** Shared by every run of one simulation: once the key is refused, the rest stop without calling. */
-  halt?: { reason: string | null };
+  /**
+   * Shared by every run of one simulation: once the key is refused, the rest
+   * stop without calling. `notEnabled`: models not enabled on Bedrock, whose
+   * runs stop without calling while runs on other models go on.
+   */
+  halt?: { reason: string | null; notEnabled?: Set<string> };
   /** What a run says when the meter refuses a call (the organization's daily budget, when that is what bounds it). */
   budgetNote?: string;
   /** RC-288: return each side's trace. Text (args, results, transcript) only with `keepText`. Absent: today's output. */
@@ -887,6 +892,8 @@ export async function replayRun(
   const beforeAgent = deps.models.agent(context);
   const afterAgent = deps.models.agent(context);
   if (!beforeAgent || !afterAgent) return { ok: false, reason: CANT_SIMULATE.noModel };
+  if (deps.halt?.notEnabled?.has(beforeAgent.model))
+    return { ok: false, reason: notEnabledReason(beforeAgent.model) };
   const recordedPath = recording.calls.map((call) => call.name);
   // Only a merge changes the path the work takes; other fixes are read against the recorded one.
   const intended = fixed.merged.size > 0 ? intendedPath(recordedPath, fixed.merged) : null;
@@ -951,6 +958,8 @@ export async function replayRun(
   } catch (err) {
     if (err instanceof BudgetSpent)
       return traced({ ok: false, reason: deps.budgetNote ?? CANT_SIMULATE.budget });
+    if (err instanceof ModelNotEnabled)
+      return traced({ ok: false, reason: notEnabledStop(err, run.turnId, deps) });
     if (err instanceof ModelRefused) {
       logger.error({ err, turn_id: run.turnId }, "fix eval replay model key refused");
       if (deps.halt) deps.halt.reason = CANT_SIMULATE.refused;
@@ -992,6 +1001,8 @@ export async function replayAsRecorded(
     recorded: recording.calls.map(({ id, name, args }) => ({ id, name, args })),
   });
   if (!agent) return { ok: false, reason: CANT_SIMULATE.noModel };
+  if (deps.halt?.notEnabled?.has(agent.model))
+    return { ok: false, reason: notEnabledReason(agent.model) };
   let side: SideRun | null = null;
   const traced = <T extends RecordedReplayOutcome>(outcome: T): T =>
     deps.trace && side?.trace ? { ...outcome, trace: side.trace } : outcome;
@@ -1026,6 +1037,8 @@ export async function replayAsRecorded(
   } catch (err) {
     if (err instanceof BudgetSpent)
       return traced({ ok: false, reason: deps.budgetNote ?? CANT_SIMULATE.budget });
+    if (err instanceof ModelNotEnabled)
+      return traced({ ok: false, reason: notEnabledStop(err, run.turnId, deps) });
     if (err instanceof ModelRefused) {
       logger.error({ err, turn_id: run.turnId }, "eval replay model key refused");
       if (deps.halt) deps.halt.reason = CANT_SIMULATE.refused;
@@ -1034,6 +1047,16 @@ export async function replayAsRecorded(
     logger.error({ err, turn_id: run.turnId }, "eval replay failed");
     return traced({ ok: false, reason: CANT_SIMULATE.failed });
   }
+}
+
+/** A model not enabled on Bedrock: log it, stop later runs on that model only, and say which model. */
+function notEnabledStop(err: ModelNotEnabled, turnId: string, deps: ReplayDeps): string {
+  logger.error(
+    { model: err.model, bedrock_profile: err.bedrockProfile, turn_id: turnId },
+    "bedrock model not enabled",
+  );
+  if (deps.halt) (deps.halt.notEnabled ??= new Set()).add(err.model);
+  return notEnabledReason(err.model);
 }
 
 /**

@@ -9,10 +9,9 @@ test("the Sessions tab is off by default and on with FF_TRACES_SESSIONS", () => 
   assert.equal(tracesSessionsEnabled({ FF_TRACES_SESSIONS: "1" }), true);
 });
 
-test("the tabs layout and both routes read the switch, not upstream's flag service", () => {
+test("the tabs layout and the summary route read the switch, not upstream's flag service (the sessions list is on for everyone, as upstream reads it since #416)", () => {
   for (const file of [
     "../../app/(console)/project/[projectId]/traces/(tabs)/layout.tsx",
-    "../../app/api/projects/[projectId]/traces/sessions/route.ts",
     "../../app/api/projects/[projectId]/traces/summary/route.ts",
   ]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");

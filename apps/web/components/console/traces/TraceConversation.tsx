@@ -9,8 +9,8 @@ import type { TraceContentView, TraceMessageView } from "@/lib/synthesis/traces/
 import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import { conversationMessages, ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import { CONTENT_CAPTURE_DOCS } from "./RunPanel";
-import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
 
 /**
  * The run as it was spoken: each message once, in order, then the tool calls
@@ -18,13 +18,11 @@ import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
  * and still lists the tool calls it can see.
  */
 export function TraceConversation({ content }: { content: TraceContentView }) {
-  const noun = useRunNoun();
-  // RC-500: with the redesign on, what earlier turns sent again as history folds away.
-  const viewsV3 = useTraceViewsV3();
+  // RC-500: what earlier turns sent again as history folds away.
   const all = conversationMessages(content.messages);
-  const earlier = viewsV3 ? all.filter((message) => message.earlier) : [];
-  const messages = viewsV3 ? all.filter((message) => !message.earlier) : all;
-  const toolCalls = viewsV3 ? content.toolCalls.filter((call) => !call.earlier) : content.toolCalls;
+  const earlier = all.filter((message) => message.earlier);
+  const messages = all.filter((message) => !message.earlier);
+  const toolCalls = content.toolCalls.filter((call) => !call.earlier);
   return (
     <div className="flex max-w-3xl flex-col gap-8" data-conversation>
       {!content.contentCaptured ? (

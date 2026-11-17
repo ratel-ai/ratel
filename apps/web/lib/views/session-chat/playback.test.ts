@@ -15,6 +15,7 @@ import {
   nextProblem,
   parsePlayhead,
   parseZoom,
+  playheadParam,
   segmentAt,
   stepAt,
   zoomWindow,
@@ -191,6 +192,27 @@ test("the chat at the playhead: turns done, the live one with its steps so far, 
     chatStateAt(chat, 6_600).map((t) => t.phase),
     ["done", "done"],
   );
+});
+
+test("views v3 (RC-524): no ?t= starts at the first message; an explicit ?t= wins", () => {
+  assert.equal(parsePlayhead(undefined, 6_600, { fromStart: true }), 0);
+  assert.equal(parsePlayhead("", 6_600, { fromStart: true }), 0);
+  assert.equal(parsePlayhead("x", 6_600, { fromStart: true }), 0);
+  assert.equal(parsePlayhead("1500", 6_600, { fromStart: true }), 1_500);
+  assert.equal(parsePlayhead("99999", 6_600, { fromStart: true }), 6_600);
+  assert.equal(parsePlayhead(undefined, 6_600, { fromStart: false }), 6_600);
+});
+
+test("the playhead into the URL: the default is left out, so a reload lands where it was", () => {
+  assert.equal(playheadParam(6_600, 6_600), null);
+  assert.equal(playheadParam(1_499.6, 6_600), "1500");
+  assert.equal(playheadParam(0, 6_600), "0");
+  assert.equal(playheadParam(0, 6_600, { fromStart: true }), null);
+  assert.equal(playheadParam(6_600, 6_600, { fromStart: true }), "6600");
+  assert.equal(playheadParam(1_500, 6_600, { fromStart: true }), "1500");
+  for (const fromStart of [true, false])
+    for (const t of [0, 1_500, 6_600])
+      assert.equal(parsePlayhead(playheadParam(t, 6_600, { fromStart }), 6_600, { fromStart }), t);
 });
 
 test("the playhead and zoom from the URL", () => {

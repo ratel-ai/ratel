@@ -25,6 +25,7 @@ const auth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -301,11 +302,8 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "FF_EVAL_GATE",
     "FF_HEALTH_IMPORT_FIRST_READING",
     "FF_HEALTH_SCORE",
-    "FF_OTLP_RAW_CAPTURE",
     "FF_QUICK_FIRST_READING",
-    "FF_SESSION_REPLAY",
     "FF_TRACES_SESSIONS",
-    "FF_TRACE_VIEWS_V3",
   ]);
 });
 

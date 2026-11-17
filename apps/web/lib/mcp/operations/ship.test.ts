@@ -28,6 +28,7 @@ const keyAuth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "free" },
 };
 
@@ -190,10 +191,6 @@ function harness(
       freshness: { updatedAt: "2026-11-04T23:50:00.000Z", working: true, importing: null },
       progress: section ? { lastDoneAt: "2026-11-04T23:00:00.000Z", pending: 2 } : null,
     }),
-    sessionReplayEnabled: async (_projectId, actor) => {
-      calls.actors.push(actor);
-      return true;
-    },
     loadSession: async (_projectId, _sessionId, textWindow) => {
       calls.sessionText.push(textWindow);
       return loaded(true);
@@ -295,13 +292,6 @@ test("get_analysis_freshness rejects an unknown section", async () => {
   const { run } = harness();
   const result = await run("get_analysis_freshness", { section: "billing" });
   assert.equal(result.ok === false && result.error, "invalid_params");
-});
-
-test("get_session is forbidden when session replay is off for the caller", async () => {
-  const { run } = harness({ sessionReplayEnabled: async () => false });
-  const result = await run("get_session", { sessionId: "sess-1" });
-  assert.equal(result.ok === false && result.error, "forbidden");
-  assert.equal(result.ok === false && result.reason, "session_replay_off");
 });
 
 test("get_session returns the timeline without text unless asked", async () => {
@@ -409,4 +399,21 @@ test("textCallsInWindow reads only the window's model calls that kept their text
     [],
     "past the end reads nothing",
   );
+});
+
+test("get_session withholds message text from an API key without the content scope, even with the opt-in on (RC-585)", async () => {
+  const readOnly = { ...keyAuth, scopes: ["mcp:read"] };
+  const { run, calls } = harness({}, readOnly);
+  const out = data<{ steps: { text?: unknown }[]; contentWithheld?: boolean }>(
+    await run("get_session", { sessionId: "sess-1", includeText: true }),
+  );
+  assert.deepEqual(calls.sessionText, [null], "no text window is even read");
+  assert.equal(out.steps[1]!.text, undefined);
+  assert.equal(out.contentWithheld, true);
+
+  const withScope = harness({}, { ...keyAuth, scopes: ["mcp:read", "content:read"] });
+  const shown = data<{ steps: { text?: unknown }[] }>(
+    await withScope.run("get_session", { sessionId: "sess-1", includeText: true }),
+  );
+  assert.ok(shown.steps[1]!.text, "with content:read and the opt-in, text is shown");
 });

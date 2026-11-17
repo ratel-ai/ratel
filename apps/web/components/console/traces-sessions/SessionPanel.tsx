@@ -10,13 +10,13 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LoadRunSummary } from "@/components/console/traces/RunPanel";
-import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import {
   formatClock,
   formatDuration,
   formatInteger,
   formatMoney,
 } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import { SUMMARY_READ_DELAY_MS } from "@/lib/synthesis/traces/v2/run-panel";
 import type { RunSummaryResult } from "@/lib/synthesis/traces/v2/run-summary-route";
 import type { SessionRow } from "@/lib/synthesis/traces-sessions/sessions";
@@ -50,7 +50,6 @@ export function SessionPanel({
   onOpen: (key: string) => void;
   onClose: () => void;
 }) {
-  const viewsV3 = useTraceViewsV3();
   // Keep showing the last row while the Panel animates closed.
   const [lastKey, setLastKey] = useState(openKey);
   if (openKey && openKey !== lastKey) setLastKey(openKey);
@@ -89,7 +88,7 @@ export function SessionPanel({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={row ? sessionTitle(row, viewsV3).text : "Session"}
+      title={row ? sessionTitle(row).text : "Session"}
       subtitle={
         row ? `${formatClock(row.startedAt)} · ${formatDuration(row.durationMs)}` : undefined
       }
@@ -122,7 +121,7 @@ export function SessionPanelBody({
   result: RunSummaryResult | null | undefined;
   onRetry: (() => void) | null;
 }) {
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   return (
     <div className="flex flex-col gap-5" data-session-panel={row.kind}>
       {result === undefined ? (

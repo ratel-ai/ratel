@@ -28,6 +28,7 @@ import {
   formatPercent,
   shortId,
 } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import { STEP_KIND_LABEL, stepKind, stepTitle } from "@/lib/synthesis/traces/v2/span-kind";
 import type { SpanSummaryView } from "@/lib/synthesis/traces/view";
 import { RelativeTime, TruncatedText } from "./cells";
@@ -37,7 +38,6 @@ import { ListFooter } from "./RunsTable";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "./TracesEmpty";
 import { type TimeWindow, TracesHeader } from "./TracesHeader";
-import { useRunNoun } from "./views-v3-context";
 
 export type SpanSort = "started" | "duration" | "tokens" | "cost";
 export type OperationSortId = "key" | "count" | "errorRate" | "p50" | "p95" | "cost" | "tokens";
@@ -195,7 +195,7 @@ function SpansTable({
   sortHref: (id: SpanSort) => (direction: SortDirection) => string;
   onOpen: (row: SpanSummaryView) => void;
 }) {
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const columns: Column<SpanSummaryView>[] = [
     {
       id: "status",

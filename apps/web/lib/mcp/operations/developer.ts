@@ -393,7 +393,7 @@ export function developerOperations(
       domain: "account",
       title: "API keys",
       description:
-        "The project's API keys as Settings › API keys lists them: name, prefix, status, created, last used and expiry. Never the key itself. Keys are created and revoked in the console; get_sdk_setup shows how to use one.",
+        "The project's API keys as Settings › API keys lists them: name, prefix, access (full, read_only, ingest or custom, with its scopes; publishable keys are safe to ship in an app), status, created, last used and expiry. Never the key itself. Keys are created and revoked in the console; get_sdk_setup shows how to use one.",
       keywords: ["api keys", "keys", "credentials", "expired key", "last used", "rtl_"],
       scope: "project",
       mutates: false,
@@ -408,12 +408,15 @@ export function developerOperations(
           data: {
             count: page.length,
             keys: page.map((key) => {
-              // toApiKeySummary is the allowlist: id, name, prefix, dates, status. No hash or plaintext.
+              // toApiKeySummary is the allowlist: id, name, prefix, access, dates, status. No hash or plaintext.
               const summary = toApiKeySummary(key, now);
               return {
                 id: summary.id,
                 name: summary.name,
                 keyPrefix: summary.keyPrefix,
+                access: summary.access,
+                scopes: summary.scopes,
+                publishable: summary.publishable,
                 status: summary.status,
                 createdAt: summary.createdAt,
                 lastUsedAt: summary.lastUsedAt,

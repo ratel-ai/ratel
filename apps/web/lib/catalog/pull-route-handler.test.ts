@@ -8,7 +8,12 @@ const KEY = "rtl_test-key";
 const HASH = "hash-of-test-key";
 const PROJECT = "project-1";
 
-const apiKeyRow = { id: "key-1", projectId: PROJECT } as ApiKey;
+const apiKeyRow = {
+  id: "key-1",
+  projectId: PROJECT,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
+} as ApiKey;
 
 const wire = (over: Partial<WireSkill> & Pick<WireSkill, "name">): WireSkill => ({
   id: over.name,
@@ -40,6 +45,7 @@ const SUBJECT_SKILLS: Record<string, WireSkill[]> = {
 /** Fully-stubbed happy-path deps (stored hash consistent); override per test. */
 function deps(over: Partial<CatalogHandlerDeps> = {}): CatalogHandlerDeps {
   return {
+    scope: "catalog:read",
     isDbConfigured: () => true,
     hashApiKey: (k: string) => (k === KEY ? HASH : "wrong"),
     findActiveApiKeyByHash: async (h: string) => (h === HASH ? apiKeyRow : null),

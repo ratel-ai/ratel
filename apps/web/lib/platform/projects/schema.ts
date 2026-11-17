@@ -1,4 +1,14 @@
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
  * A project is one agent: the unit telemetry is ingested under, catalogs are published for,
@@ -64,6 +74,12 @@ export const apiKeys = pgTable(
     // Optional expiry. Null = never expires. The shared auth path rejects a key once this
     // instant has passed.
     expiresAt: timestamp("expires_at", { withTimezone: true }),
+    // What the key may do (RC-585, lib/platform/api-keys/scopes.ts). '*' = every scope,
+    // which is what every key issued before this column existed holds.
+    scopes: text("scopes").array().notNull().default(sql`'{*}'::text[]`),
+    // Optional requests-a-minute ceiling for an ingest-only key shared by many
+    // clients. Null = the default for its kind (lib/ingest/ingest-limits.ts).
+    rateLimitPerMinute: integer("rate_limit_per_minute"),
   },
   (t) => [
     uniqueIndex("api_keys_key_hash_idx").on(t.keyHash),

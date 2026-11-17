@@ -3,6 +3,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { listRunAsks } from "@/lib/synthesis/traces/run-details";
+import { type TraceFilter, traceFilterCondition } from "@/lib/synthesis/traces/trace-filters";
 import {
   decodeSessionsCursor,
   encodeSessionsCursor,
@@ -12,7 +13,7 @@ import {
 import type { SessionsFilter } from "@/lib/synthesis/traces-sessions/view";
 
 /**
- * The Sessions tab with `cloud-trace-views-v3` (RC-502, decisions
+ * The Sessions tab (RC-502, decisions
  * sessions-first and session-status): one row per session id, newest last
  * update first, paged by a cursor. A turn with no session id (OTLP ingest
  * keys it by its own trace id) is not a session and is not listed.
@@ -61,6 +62,8 @@ export interface ListSessionListOptions {
   limit?: number;
   /** The clock the Active status reads; tests pin it. */
   now?: Date;
+  /** RC-505 property filters: a session matches when any of its turns does. */
+  traces?: TraceFilter;
 }
 
 export const SESSION_LIST_PAGE_SIZE = 50;
@@ -87,6 +90,7 @@ export async function listSessionList(
         options.filter,
         decodeSessionsCursor(options.cursor),
         limit + 1,
+        options.traces,
       ),
     ),
   );
@@ -134,7 +138,9 @@ export function sessionListPageQuery(
   filter: SessionsFilter,
   cursor: SessionsCursor | null,
   limit: number,
+  traces?: TraceFilter,
 ): SQL {
+  const matches = traceFilterCondition(traces);
   // Failed sessions are found once per page: closed turns with an error step,
   // plus OTLP turns whose trace has an error span (by `otlp:<trace id>` on
   // `trace_turns_project_turn_key_idx`), not one lookup per walked turn.
@@ -148,6 +154,7 @@ export function sessionListPageQuery(
     )`;
   return sql`
     ${filter === "failed" ? failedSessions : sql``}
+    ${matches ? matchedSessions(projectId, matches, filter === "failed" ? sql`,` : sql`with`) : sql``}
     select t.session_id as id, to_char(t.ended_at at time zone 'UTC', ${AT_FORMAT}) as at
     from trace_turns t
     where t.project_id = ${projectId} and t.status = 'closed' and t.turn_key <> ${OTLP_KEY} || t.session_id
@@ -157,8 +164,30 @@ export function sessionListPageQuery(
         where n.project_id = t.project_id and n.session_id = t.session_id and n.status = 'closed' and (n.ended_at, n.id) > (t.ended_at, t.id)
       )
       ${filter === "failed" ? sql`and t.session_id in (select session_id from failed_sessions)` : sql``}
+      ${matches ? sql`and t.session_id in (select session_id from matched_sessions)` : sql``}
     order by t.ended_at desc, t.session_id collate "C" desc
     limit ${limit}`;
+}
+
+/**
+ * RC-505: the sessions with a closed turn whose trace matches the rollup
+ * condition (on `s`), found once per page like `failed_sessions`. A turn's
+ * trace is its `otlp:` key (on `trace_turns_project_turn_key_idx`), else a
+ * trace its steps' events carry (a runtime-lane turn), as in `loadRows`.
+ * `lead` opens the WITH, or continues it after `failed_sessions`.
+ */
+function matchedSessions(projectId: string, condition: SQL, lead: SQL): SQL {
+  return sql`${lead} matched_sessions as (
+      select m.session_id from otel_trace_summaries s
+      join trace_turns m on m.project_id = s.project_id and m.turn_key = ${OTLP_KEY} || s.trace_id
+      where s.project_id = ${projectId} and m.status = 'closed' and ${condition}
+      union
+      select m.session_id from trace_turns m
+      join trace_turn_steps st on st.project_id = m.project_id and st.turn_id = m.id
+      join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
+      join otel_trace_summaries s on s.project_id = e.project_id and s.trace_id = e.trace_id
+      where m.project_id = ${projectId} and m.status = 'closed' and ${condition}
+    )`;
 }
 
 /** The status of a session, per decision session-status. */

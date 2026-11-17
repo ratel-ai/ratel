@@ -11,7 +11,6 @@ import type { ModelCall } from "@/lib/views/eval-gate/calls";
 import type { AgentModel, EvalModels } from "@/lib/views/eval-gate/models";
 import { organizationModelSpendSince } from "@/lib/views/eval-gate/store";
 import type { RunRecord } from "@/lib/views/eval-gate/types";
-import type { OrganizationFlagDeps } from "@/lib/views/session-replay/gate";
 import { type WhatIfJobDeps, whatIfStepJob } from "@/lib/views/session-replay/job";
 import {
   pruneWhatIfRuns,
@@ -54,11 +53,6 @@ async function setup(options: { readContent?: boolean } = {}): Promise<{ client:
   return { client, db: drizzle(client, { schema }) as unknown as Db };
 }
 
-// Owned (ADR-0030): the flag is FF_SESSION_REPLAY in the environment the gate reads.
-function flags(on: boolean): OrganizationFlagDeps {
-  return on ? { FF_SESSION_REPLAY: "1" } : {};
-}
-
 const ADD: Variant = {
   kind: "add_tool",
   tool: {
@@ -75,7 +69,6 @@ function requestDeps(
   const queued: unknown[] = [];
   return {
     db,
-    flagDeps: flags(true),
     enqueue: async (_projectId, payload) => {
       queued.push(payload);
       return null;
@@ -136,23 +129,6 @@ test("requestWhatIf reserves the run's cap and queues what_if_step; the same liv
     assert.equal(again.run.id, run.id);
     assert.equal(deps.queued.length, 1);
     assert.equal(WHAT_IF_JOB, "what_if_step");
-  } finally {
-    await client.close();
-  }
-});
-
-test("requestWhatIf refuses when the flag is off for the actor", async () => {
-  const { client, db } = await setup({ readContent: true });
-  try {
-    assert.equal(
-      await refusal(
-        requestWhatIf(
-          { projectId: PROJECT, actor: "user_1", turnId: TURN, step: 0, variant: ADD },
-          requestDeps(db, { flagDeps: flags(false) }),
-        ),
-      ),
-      "flag_off",
-    );
   } finally {
     await client.close();
   }
@@ -348,7 +324,6 @@ function fakeModels(picks: (string | null)[]): EvalModels {
 function jobDeps(db: Db, over: Partial<WhatIfJobDeps> = {}): WhatIfJobDeps {
   return {
     db,
-    flagDeps: flags(true),
     models: fakeModels(["find_booking", "find_booking", "quote_fare"]),
     loadStep: async (_projectId, _turnId, withPayload) => recorded(withPayload),
     loadCorpus: async () => [],
@@ -404,30 +379,6 @@ test("the job samples the step, saves numbers only and settles the spend", async
       runId: run.id,
       status: "skipped",
     });
-  } finally {
-    await client.close();
-  }
-});
-
-test("the job fails the run when the flag was turned off after it was queued, and frees its hold", async () => {
-  const { client, db } = await setup({ readContent: true });
-  try {
-    const { run } = await requestWhatIf(
-      { projectId: PROJECT, actor: "user_1", turnId: TURN, step: 0, variant: ADD, replay: true },
-      requestDeps(db),
-    );
-    await whatIfStepJob(
-      PROJECT,
-      { runId: run.id, variant: ADD },
-      jobDeps(db, { flagDeps: flags(false) }),
-    );
-    const [saved] = await db
-      .select()
-      .from(sessionReplayRuns)
-      .where(eq(sessionReplayRuns.id, run.id));
-    assert.equal(saved!.status, "failed");
-    assert.equal(saved!.errorCode, "flag_off");
-    assert.deepEqual(saved!.spend, { usd: 0, reserved: false, capUsd: WHAT_IF_RUN_CAP_USD });
   } finally {
     await client.close();
   }

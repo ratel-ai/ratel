@@ -7,6 +7,7 @@ import { cn } from "@ratel/design-system/cn";
 import { Panel } from "@ratel/design-system/panel";
 import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, Skeleton } from "@ratel/design-system/states";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
@@ -15,6 +16,7 @@ import {
   formatInteger,
   formatRelativeTime,
 } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import {
   isFreshSummary,
   SUMMARY_READ_DELAY_MS,
@@ -25,7 +27,6 @@ import type { RunStep, RunSummary } from "@/lib/synthesis/traces/v2/run-summary"
 import type { RunSummaryResult } from "@/lib/synthesis/traces/v2/run-summary-route";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { KIND_DOT } from "./kind";
-import { useRunNoun } from "./views-v3-context";
 
 export const CONTENT_CAPTURE_DOCS = "https://docs.ratel.sh/observability#content-capture";
 
@@ -70,7 +71,6 @@ export function RunPanel({
   onOpen: (id: string) => void;
   onClose: () => void;
 }) {
-  const noun = useRunNoun();
   // Keep showing the last run while the Panel animates closed.
   const [lastId, setLastId] = useState(openId);
   if (openId && openId !== lastId) setLastId(openId);
@@ -129,48 +129,56 @@ export function RunPanel({
           </>
         ) : undefined
       }
-      actions={
-        shownId ? (
-          <Link
-            href={traceHref(shownId)}
-            className={buttonVariants({ variant: "secondary", size: "sm" })}
-          >
-            Open full trace
-          </Link>
-        ) : null
-      }
       onPrevious={index > 0 ? () => step(-1) : undefined}
       onNext={index >= 0 && index < rows.length - 1 ? () => step(1) : undefined}
     >
-      {!result ? (
-        <RunSummarySkeleton />
-      ) : result.ok ? (
-        <RunSummaryBody
-          summary={result.summary}
-          truncated={result.truncated}
-          fullTraceHref={shownId ? traceHref(shownId) : null}
-        />
-      ) : (
-        <Callout
-          tone="danger"
-          title={result.message}
-          action={
-            key ? (
-              <Button
-                size="sm"
-                onClick={() =>
-                  setEntries(
-                    (current) => new Map([...current].filter(([cached]) => cached !== key)),
-                  )
-                }
-              >
-                Try again
-              </Button>
-            ) : null
-          }
-        />
-      )}
+      <div className="flex flex-col gap-5">
+        {/* RC-527: the trace opens from the body, like the Sessions panel's replay. */}
+        {shownId ? <OpenFullTraceLink href={traceHref(shownId)} /> : null}
+        {!result ? (
+          <RunSummarySkeleton />
+        ) : result.ok ? (
+          <RunSummaryBody
+            summary={result.summary}
+            truncated={result.truncated}
+            fullTraceHref={shownId ? traceHref(shownId) : null}
+          />
+        ) : (
+          <Callout
+            tone="danger"
+            title={result.message}
+            action={
+              key ? (
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    setEntries(
+                      (current) => new Map([...current].filter(([cached]) => cached !== key)),
+                    )
+                  }
+                >
+                  Try again
+                </Button>
+              ) : null
+            }
+          />
+        )}
+      </div>
     </Panel>
+  );
+}
+
+/** RC-527: the body's first item with views v3 on, styled like the Sessions panel's "Open session replay". */
+function OpenFullTraceLink({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "self-start")}
+      data-open-full-trace
+    >
+      Open full trace
+      <ArrowRight aria-hidden />
+    </Link>
   );
 }
 
@@ -183,7 +191,6 @@ export function RunSummaryBody({
   truncated: boolean;
   fullTraceHref: string | null;
 }) {
-  const noun = useRunNoun();
   const stepCount = summary.steps.length + summary.hiddenStepCount;
   return (
     <div className="flex flex-col gap-5" data-run-summary>
@@ -318,7 +325,6 @@ function StepRow({ step, last }: { step: RunStep; last: boolean }) {
 }
 
 function RunSummarySkeleton() {
-  const noun = useRunNoun();
   return (
     <div className="flex flex-col gap-5" aria-busy="true">
       <span className="sr-only">Loading the {noun.lower}…</span>

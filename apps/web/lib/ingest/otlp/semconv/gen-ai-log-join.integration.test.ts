@@ -295,9 +295,11 @@ async function sendLogs(
       body: gzipSync(body),
     }),
     {
+      scope: "ingest:logs",
       isDbConfigured: () => true,
       hashApiKey: (key) => key,
-      findActiveApiKeyByHash: async () => ({ id: "key-1", projectId: PROJECT_ID }) as ApiKey,
+      findActiveApiKeyByHash: async () =>
+        ({ id: "key-1", projectId: PROJECT_ID, scopes: ["*"], rateLimitPerMinute: null }) as ApiKey,
       touchApiKey: async () => {},
       insertOtelLogs: (projectId, rows) => insertOtelLogs(projectId, rows, db as never),
       logError: (message, error) => {

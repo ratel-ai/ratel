@@ -26,8 +26,8 @@ identical.
 | `intents/map/` | the Map and Flows: membership, placement, geometry, names, outcomes, the tool network and globe, `queries` |
 | `home/` | the Overview: `load` (every read in one round, each degrading on its own, assembled into `OverviewData`), `glance` and `glance-queries` (intents, tasks, self-corrections and fixes, one tile each), `attention` (what needs a look now, from the issues, fixes, intents and context), `overview-model` (the window, change figures and context split as plain data) and `queries` (`getProjectHomeEntityCounts`: the skill and experiment counts the MCP project overview opens with) |
 | `traces/` | the turn page of Traces, where an Agent health example's "Open in Traces" lands: `turn-detail` (one turn's calls in ledger order, the live query and error text read by event id, a trace link only where Traces holds the trace, the session's neighbouring turns), `turn-detail-linked` (an SDK run's linked OpenTelemetry model calls), `turn-linked` (the linked text, pure) |
-| `session-replay/` | one session step by step, read-only: `timeline` (turns, model calls, searches and tool calls in order, with coverage), `load` (its reads), `composition` (what the context held at each model call), `annotations` and `annotations-load` (why each tool choice was good or bad), `view` (rows, decision chips, the page link). What-if, a step forked with one change and sampled before and after: `variant` (the change), `fork` (the engine, over the eval gate's replay), `runs` (`requestWhatIf` under the daily budget, the content opt-in, `pruneWhatIfRuns`), `job` and `register` (`what_if_step`, run by the worker, and the drain's `what_if_prune`, which runs with retention off so a timed-out run frees its hold), `spend` (its share of the budget), `schema` (`session_replay_runs`, `session_replay_settings`), `gate`, `what-if` (the panel's reads and the submit, read-back and add-to-eval-set behind its server actions, `app/(console)/(session-replay)/session-replay-actions.ts`) and `settings` (the content opt-in and the step texts it lets the page show). Behind `FF_SESSION_REPLAY`, read by `session-replay-flag.ts`; the What-if panel is on the session page and the content opt-in in Settings › General. With no `ANTHROPIC_API_KEY` a replay run fails with no model and nothing calls out; without the content opt-in (off unless set) a run re-ranks and calls no model |
-| `session-chat/` | the session replay as a chat (behind `FF_SESSION_REPLAY`): `model` (per turn the ask, the work line and the reply, plus the time-scaled track), `load` (its reads), `text` (a model call's ask and reply from its stored payload), `playback` (the playhead, "Next problem", zoom), `peek` (the side panel's `?peek=` id and the page's three views), `inspect` and `inspect-load` (one model call's context in sections, read only with the content opt-in), `turn-traces` (the runs behind each turn, for the Trace view), `actions` (the inspector's one server action) |
+| `session-replay/` | one session step by step, read-only: `timeline` (turns, model calls, searches and tool calls in order, with coverage), `load` (its reads), `composition` (what the context held at each model call), `annotations` and `annotations-load` (why each tool choice was good or bad), `view` (rows, decision chips, the page link). What-if, a step forked with one change and sampled before and after: `variant` (the change), `fork` (the engine, over the eval gate's replay), `runs` (`requestWhatIf` under the daily budget, the content opt-in, `pruneWhatIfRuns`), `job` and `register` (`what_if_step`, run by the worker, and the drain's `what_if_prune`, which runs with retention off so a timed-out run frees its hold), `spend` (its share of the budget), `schema` (`session_replay_runs`, `session_replay_settings`), `what-if` (the panel's reads and the submit, read-back and add-to-eval-set behind its server actions, `app/(console)/(session-replay)/session-replay-actions.ts`) and `settings` (the content opt-in and the step texts it lets the page show). On for every deployment (upstream retired its flag in #417); the What-if panel is on the session page and the content opt-in in Settings › General. With no `ANTHROPIC_API_KEY` a replay run fails with no model and nothing calls out; without the content opt-in (off unless set) a run re-ranks and calls no model |
+| `session-chat/` | the session replay as a chat: `model` (per turn the ask, the work line and the reply, plus the time-scaled track), `load` (its reads), `text` (a model call's ask and reply from its stored payload), `playback` (the playhead, "Next problem", zoom), `peek` (the side panel's `?peek=` id and the page's three views), `inspect` and `inspect-load` (one model call's context in sections, read only with the content opt-in), `turn-traces` (the runs behind each turn, for the Trace view), `actions` (the inspector's one server action), `panel-route` and `panel-client` (the Sessions side panel's chat and the inspector's text as GET routes, `/api/projects/<id>/sessions/<id>/chat` and `/session-steps`, so a read-only support session can read them: it refuses Server Actions) |
 
 ## Seams
 
@@ -79,8 +79,8 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   (with its PGlite test `loop-queries.integration.test.ts`); `createFixShipment` takes upstream's
   `deps` and hands them to the seam. `lineage/lineage.test.ts`: this
   edition has one plan, so only a limit override closes the run behind an insight.
-  `session-replay-flag.ts` and `eval-gate/gate.ts` read through `platform/experimental-features.ts`, so
-  `RATEL_EXPERIMENTAL_FEATURES` also turns them on in the open-source edition.
+  `eval-gate/gate.ts` reads through `platform/experimental-features.ts`, so
+  `RATEL_EXPERIMENTAL_FEATURES` also turns it on in the open-source edition.
 - `eval-gate/gate.ts` (one env switch in place of upstream's per-organization flag, with
   `gate.test.ts`), `models.ts` (calls reported through `platform/model-call`), `store.ts` and
   `service.ts`, `page-model.ts` (the two seams above), `seams.ts`, `register.ts` and
@@ -111,20 +111,18 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   (Agent health is always on, so its read runs with the rest), and the issue anchor spelled
   inline, since `lib/` never imports the UI.
 - `session-replay/load.test.ts` and `annotations-load.test.ts`: the organization fixture has no
-  plan column. `settings.test.ts` and `what-if.test.ts` likewise, and their flag is the
-  `FF_SESSION_REPLAY` value. The server actions (`actions.ts` upstream) live in the app layer as
+  plan column. `settings.test.ts` and `what-if.test.ts` likewise. The server actions (`actions.ts` upstream) live in the app layer as
   `app/(console)/(session-replay)/session-replay-actions.ts`, because they bind the task eval
-  action, which `lib/` may not import; a rewrite rule points the copied components there. `session-replay-flag.ts` (new) replaces upstream's organization flag gate.
-- `session-chat/actions.ts`: the project scope takes the project id only. The rest of
-  `session-chat/` is a copy.
+  action, which `lib/` may not import; a rewrite rule points the copied components there.
+- `session-chat/actions.ts`, `panel-route-deps.ts`: the project scope takes the project id only.
+  The rest of `session-chat/` is a copy.
 - The eval gate keeps its own pages. Upstream replaced the task Simulations pages and the task
   page's Evals section with its Evals area (eval suites, runs, scorers), which is not part of
   this port. So `eval-gate/store.ts` sums no Evals run spend, and the task pages, the Fixes list,
   the MCP task tools and the task-loop seed keep their links to the Simulations pages. The
   helpers upstream added for Evals in `eval-gate/` (`replay.ts`, `types.ts`, `gate.ts` `GateDb`,
   the person model in `models.ts`) are taken, so the eval gate's code stays upstream's.
-- `session-replay/gate.ts`: upstream's `sessionReplayEnabledForActor` over `FF_SESSION_REPLAY`,
-  with its test. `runs.ts` and `job.ts` take the gate's dependencies from it; `runs.ts` also
+- `session-replay/runs.ts`
   takes the budget lock as an advisory lock on the organization id (the edition owns
   `organizations`) and loads `spend.ts`. `spend.ts` (upstream's What-if term of
   `organizationModelSpendSince`), `register.ts` and `schema.ts` are this module's parts of

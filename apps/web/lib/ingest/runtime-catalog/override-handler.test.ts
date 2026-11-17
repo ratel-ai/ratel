@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import {
   handleRuntimeCatalogOverridePatch,
   handleRuntimeCatalogOverridesGet,
@@ -12,6 +13,7 @@ function deps(
   overrides: Partial<RuntimeCatalogOverrideHandlerDeps> = {},
 ): RuntimeCatalogOverrideHandlerDeps {
   return {
+    scope: "runtime_catalog:read",
     resolveProjectById: async () => ({
       ok: true,
       accountId: "org-1",
@@ -23,6 +25,8 @@ function deps(
       ok: true,
       projectId: PROJECT_ID,
       apiKeyId: "key-1",
+      policy: apiKeyPolicy(["*"]),
+      rateLimitPerMinute: null,
     }),
     getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
     touchRuntimeCatalogOverridesPull: async () => {},

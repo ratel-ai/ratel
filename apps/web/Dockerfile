@@ -58,6 +58,10 @@ COPY apps/web apps/web
 COPY packages/brand packages/brand
 COPY packages/design-system packages/design-system
 COPY scripts/link-ee.mjs scripts/
+# Next deploymentId (next.config.ts): CI passes the image tag, so each deploy has its own id and
+# tabs from an older deploy reload. Empty = unset (local). Both editions build from here.
+ARG NEXT_DEPLOYMENT_ID=
+ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
 
 # --- build-oss: strip commercial routes, never had ee/ source -------------
 FROM source AS build-oss

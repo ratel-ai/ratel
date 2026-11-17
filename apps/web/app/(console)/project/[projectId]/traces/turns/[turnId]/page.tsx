@@ -7,7 +7,7 @@ import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
-import { sessionReplayLink } from "@/lib/views/session-replay-flag";
+import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
 import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
 
@@ -18,8 +18,7 @@ export const metadata = { title: "Turn" };
  * One turn, call by call: where an Agent health example's "Open in Traces"
  * lands. `?focus=<event id>` rings the call the example is about; the link's
  * hash scrolls to it. Owned (ADR-0030): the project comes from the console
- * scope, Agent health is always on in this edition, so there is no gate, the
- * session replay link follows `FF_SESSION_REPLAY`, and "run to test" (a closed
+ * scope, Agent health is always on in this edition, so there is no gate, and "run to test" (a closed
  * turn's run into its task's eval set) follows `FF_EVAL_GATE`.
  */
 export default async function TurnTracePage({
@@ -72,6 +71,7 @@ export default async function TurnTracePage({
       )
     : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
+  const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (
     <>
       {testAction ? <div className="mb-4 flex justify-end">{testAction}</div> : null}
@@ -79,7 +79,7 @@ export default async function TurnTracePage({
         projectId={project.id}
         turn={turn}
         focusEventId={focus?.trim() || null}
-        sessionHref={sessionReplayLink(project.id, turn.sessionId)}
+        sessionHref={sessionHref}
       />
     </>
   );

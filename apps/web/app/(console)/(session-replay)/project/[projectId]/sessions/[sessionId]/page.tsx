@@ -1,25 +1,19 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
-import { StatRow } from "@ratel/design-system/stat-row";
-import { Callout } from "@ratel/design-system/states";
-import { ChartGantt, List, MessagesSquare } from "lucide-react";
+import { ChartGantt, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadTraceViewProps } from "@/app/(console)/project/[projectId]/traces/[traceId]/trace-v2";
 import { SessionChatView } from "@/components/console/session-chat/SessionChatView";
 import { SessionTraceView } from "@/components/console/session-chat/SessionTraceView";
-import {
-  SessionTimeline,
-  type WhatIfSetup,
-} from "@/components/console/session-replay/SessionTimeline";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
+import type { SessionChat } from "@/lib/views/session-chat/model";
 import {
   type SessionPageView,
   sessionPageView,
@@ -27,19 +21,12 @@ import {
   traceViewTurn,
 } from "@/lib/views/session-chat/peek";
 import { loadTurnTraceIds } from "@/lib/views/session-chat/turn-traces";
-import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
-import { loadSessionTimeline } from "@/lib/views/session-replay/load";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
-import { loadStepTexts, type StepText } from "@/lib/views/session-replay/settings";
-import { buildSessionView } from "@/lib/views/session-replay/view";
 import {
-  forkTargets,
   listWhatIfRuns,
   loadWhatIfOptions,
-  sessionTools,
   withSessionToolsFirst,
 } from "@/lib/views/session-replay/what-if";
-import { sessionReplayEnabled } from "@/lib/views/session-replay-flag";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Session replay" };
@@ -47,14 +34,15 @@ export const metadata = { title: "Session replay" };
 /**
  * One session step by step (RC-144): each turn, model call, search and tool
  * call in order, what the context held at each model call, and why each tool
- * choice was good or bad, with What-if forks of a model call. Message text shows
- * only for calls that kept it, and only when the project's content opt-in is
- * on; argument and query text never shows. Owned (ADR-0030): behind
- * `FF_SESSION_REPLAY`, off by default; without it the page does not exist.
+ * choice was good or bad. Read-only. Message text shows only for calls that
+ * kept it, and only when the project's content opt-in is on; argument and
+ * query text never shows.
  *
  * The page opens as a chat with its work lines and a side panel (RC-282);
- * "Step by step" (`?view=steps`) shows the view above, unchanged; "Trace"
- * (`?view=trace&turn=<n>`, RC-314) shows a turn's full trace waterfall.
+ * "Trace" (`?view=trace&turn=<n>`, RC-314) shows a turn's full trace
+ * waterfall. There is one replay (RC-524): the chat, its context inspector
+ * open at load with the verdicts and What if… of the old step-by-step view
+ * (`?view=steps` opens the chat).
  */
 export default async function SessionReplayPage({
   params,
@@ -70,24 +58,17 @@ export default async function SessionReplayPage({
   }>;
 }) {
   const { projectId, sessionId } = await params;
-  if (!sessionReplayEnabled() || !isDbConfigured()) notFound();
+  if (!isDbConfigured()) notFound();
   const { project, organization } = await requireProjectScope(projectId);
-  // RC-413: titled by the first ask, Step by step reads as Replay.
-  const viewsV3 = await traceViewsV3EnabledForActor(project.id, `project:${project.id}`);
+  // RC-413: titled by the first ask.
   const header = (asks: readonly (string | null)[]) => ({
-    title: viewsV3 ? (
-      sessionPageTitle(sessionId, asks, true)
-    ) : (
-      <span className="font-mono">{sessionId}</span>
-    ),
-    description: viewsV3 ? `Session ${sessionId}` : undefined,
+    title: sessionPageTitle(sessionId, asks),
+    description: `Session ${sessionId}`,
   });
   const projectHref = `/project/${encodeURIComponent(project.id)}`;
   const sessionHref = `${projectHref}/sessions/${encodeURIComponent(sessionId)}`;
-  // RC-472: with the redesign a session is opened from the Sessions tab, and goes back there.
-  const crumbs = viewsV3
-    ? [{ label: "Sessions", href: `${projectHref}/traces` }]
-    : [{ label: "Traces", href: `${projectHref}/traces` }];
+  // RC-472: a session is opened from the Sessions tab, and goes back there.
+  const crumbs = [{ label: "Sessions", href: `${projectHref}/traces` }];
   const query = await searchParams;
   const pageView = sessionPageView(query.view);
   if (pageView === "trace") {
@@ -127,11 +108,10 @@ export default async function SessionReplayPage({
     // The run reads with its own statement timeouts, outside the page's read.
     const trace = traceId
       ? await loadTraceViewProps(project.id, traceId, {
-          listHref: runsListPath(`${projectHref}/traces`, viewsV3),
-          compareHref: `${runsListPath(`${projectHref}/traces`, viewsV3)}?compare=${encodeURIComponent(traceId)}`,
+          listHref: runsListPath(`${projectHref}/traces`),
+          compareHref: `${runsListPath(`${projectHref}/traces`)}?compare=${encodeURIComponent(traceId)}`,
           tab: firstParam(query.tab),
           spanId: firstParam(query.span) ?? null,
-          actor: `project:${project.id}`,
         })
       : null;
     return (
@@ -144,7 +124,6 @@ export default async function SessionReplayPage({
               current="trace"
               sessionHref={sessionHref}
               traceHref={sessionTraceHref(project.id, sessionId, turnIndex ?? 1)}
-              viewsV3={viewsV3}
             />
           }
         />
@@ -156,174 +135,79 @@ export default async function SessionReplayPage({
             turnIndex={turnIndex}
             traceId={traceId}
             trace={trace}
-            viewsV3={viewsV3}
           />
         </PageBody>
       </Page>
     );
   }
-  if (pageView === "chat") {
-    const chat = await withStatementTimeout(
-      async (db) =>
-        loadSessionChat(
-          project.id,
-          sessionId,
-          { readContent: await contentOptIn(project.id, db) },
-          db,
-        ),
-      { operation: "session_chat_page" },
-    );
-    if (!chat) notFound();
-    const toCheck = chat.problems.length;
-    return (
-      <Page>
-        <PageHeader
-          {...header(chat.turns.map((turn) => turn.ask))}
-          crumbs={crumbs}
-          actions={
-            <>
-              <span className="text-ui text-fg-muted tabular-nums">
-                {toCheck > 0 ? `${toCheck} to check` : "Nothing to check"}
-              </span>
-              <ViewLinks
-                current="chat"
-                sessionHref={sessionHref}
-                traceHref={sessionTraceHref(
-                  project.id,
-                  sessionId,
-                  chat.turns.at(-1)?.turnIndex ?? 1,
-                )}
-                viewsV3={viewsV3}
-              />
-            </>
-          }
-        />
-        <PageBody wide>
-          <SessionChatView
-            projectId={project.id}
-            chat={chat}
-            settingsHref={`${projectHref}/settings`}
-          />
-        </PageBody>
-      </Page>
-    );
-  }
-
   const loaded = await withStatementTimeout(
     async (db) => {
-      const timeline = await loadSessionTimeline(project.id, sessionId, db);
-      if (!timeline) return null;
-      const view = buildSessionView(timeline, await loadSessionLens(project.id, timeline, db));
       const readContent = await contentOptIn(project.id, db);
-      const whatIf = {
-        targets: forkTargets(timeline),
-        tools: sessionTools(timeline),
-        runs: await listWhatIfRuns(project.id, sessionId, db),
-      };
-      // The title's first ask: the steps hold no message text, the chat does.
-      const asks = viewsV3
-        ? ((await loadSessionChat(project.id, sessionId, { readContent }, db))?.turns.map(
-            (turn) => turn.ask,
-          ) ?? [])
-        : [];
-      if (!readContent) return { view, readContent, texts: {}, whatIf, asks };
-      const calls = timeline.steps.flatMap((step) =>
-        step.kind === "model_call" && step.coverage === "content"
-          ? [{ index: step.index, eventId: step.eventId }]
-          : [],
-      );
-      const byEvent = await loadStepTexts(
-        project.id,
-        calls.map((call) => call.eventId),
-        db,
-      );
-      const texts: Record<number, StepText> = {};
-      for (const call of calls) {
-        const text = byEvent.get(call.eventId);
-        if (text) texts[call.index] = text;
-      }
-      return { view, readContent, texts, whatIf, asks };
+      const chat = await loadSessionChat(project.id, sessionId, { readContent }, db);
+      if (!chat) return null;
+      return { chat, readContent, runs: await listWhatIfRuns(project.id, sessionId, db) };
     },
-    { operation: "session_replay_page" },
+    { operation: "session_chat_page" },
   );
   if (!loaded) notFound();
-  const { view, readContent, texts } = loaded;
+  const { chat } = loaded;
   // Fixes read with their own statement timeouts, outside the page's read.
-  const options = await loadWhatIfOptions(
-    project.id,
-    async (id) => (await loadFixes({ projectId: id, organization, topics: false })).open,
-  );
-  const whatIf: WhatIfSetup = {
+  const whatIf = {
     projectId: project.id,
-    targets: loaded.whatIf.targets,
-    runs: loaded.whatIf.runs,
-    options: withSessionToolsFirst(options, loaded.whatIf.tools),
-    readContent,
+    runs: loaded.runs,
+    readContent: loaded.readContent,
+    options: withSessionToolsFirst(
+      await loadWhatIfOptions(
+        project.id,
+        async (id) => (await loadFixes({ projectId: id, organization, topics: false })).open,
+      ),
+      chatTools(chat),
+    ),
   };
-
-  const n = (value: number) => value.toLocaleString("en-US");
+  const toCheck = chat.problems.length;
   return (
     <Page>
       <PageHeader
-        {...header(loaded.asks)}
+        {...header(chat.turns.map((turn) => turn.ask))}
         crumbs={crumbs}
         actions={
-          <ViewLinks
-            current="steps"
-            sessionHref={sessionHref}
-            traceHref={`${sessionHref}?view=trace`}
-            viewsV3={viewsV3}
-          />
+          <>
+            <span className="text-ui text-fg-muted tabular-nums">
+              {toCheck > 0 ? `${toCheck} to check` : "Nothing to check"}
+            </span>
+            <ViewLinks
+              current="chat"
+              sessionHref={sessionHref}
+              traceHref={sessionTraceHref(project.id, sessionId, chat.turns.at(-1)?.turnIndex ?? 1)}
+            />
+          </>
         }
-        description="Each step of this session, what the context held at each model call, and why each tool choice was good or bad. Fork a model call with a change to see what the agent picks then."
       />
       <PageBody wide>
-        <Callout tone={view.coverage.tone} title={view.coverage.text}>
-          {readContent
-            ? "Message text shows for the model calls that kept it. Argument and query text is not shown."
-            : "Message, argument and query text is not shown here. A project admin can turn on content reading in Settings."}{" "}
-          Expired steps lost their source events after 30 days.
-        </Callout>
-        <StatRow
-          stats={[
-            { label: "Turns", value: n(view.totals.turns) },
-            { label: "Model calls", value: n(view.totals.modelCalls) },
-            { label: "Tool calls", value: n(view.totals.toolCalls) },
-            { label: "Input tokens", value: n(view.totals.inputTokens) },
-            { label: "Cost", value: `$${view.totals.costUsd.toFixed(4)}` },
-          ]}
+        <SessionChatView
+          projectId={project.id}
+          chat={chat}
+          settingsHref={`${projectHref}/settings`}
+          synced
+          whatIf={whatIf}
         />
-        <SessionTimeline view={view} texts={texts} whatIf={whatIf} />
       </PageBody>
     </Page>
   );
 }
 
-/** The page's three views; the current one is not a link. */
+/** The page's views; the current one is not a link. There is no step list (RC-524). */
 function ViewLinks({
   current,
   sessionHref,
   traceHref,
-  viewsV3,
 }: {
   current: SessionPageView;
   sessionHref: string;
   traceHref: string;
-  viewsV3: boolean;
 }) {
   const views = [
-    {
-      view: "chat",
-      label: viewsV3 ? "Conversation" : "Chat",
-      href: sessionHref,
-      icon: MessagesSquare,
-    },
-    {
-      view: "steps",
-      label: viewsV3 ? "Replay" : "Step by step",
-      href: `${sessionHref}?view=steps`,
-      icon: List,
-    },
+    { view: "chat", label: "Conversation", href: sessionHref, icon: MessagesSquare },
     { view: "trace", label: "Trace", href: traceHref, icon: ChartGantt },
   ] as const;
   return (
@@ -343,4 +227,14 @@ function ViewLinks({
         ))}
     </>
   );
+}
+
+/** The tools the session searched for or called, in the order it first met them: What if… offers them first. */
+function chatTools(chat: SessionChat): string[] {
+  const out = new Set<string>();
+  for (const segment of chat.segments) {
+    if (segment.kind === "search") for (const hit of segment.hits) out.add(hit);
+    if (segment.kind === "tool_call") out.add(segment.label);
+  }
+  return [...out];
 }

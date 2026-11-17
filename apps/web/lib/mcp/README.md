@@ -7,11 +7,11 @@ identical.
 
 | Path | Holds |
 |---|---|
-| `auth.ts` | who is calling: a project API key (`rtl_…`) resolved to its project and organization, or, in an edition that supplies the `mcpOAuth` port, a person who signed in through a browser, with their organizations; without the port any other bearer is refused (owned). `auth-edition.test.ts` pins that seam |
+| `auth.ts` | who is calling: a project API key (`rtl_…`) resolved to its project, organization and scopes (a key with no MCP scope is refused with 403; `dispatch.ts` asks `mcp:read` or `mcp:write` per tool), or, in an edition that supplies the `mcpOAuth` port, a person who signed in through a browser, with their organizations; without the port any other bearer is refused (owned). `auth-edition.test.ts` pins that seam |
 | `route-handler.ts`, `transport.ts`, `server.ts` | the POST handler (credential and per-key rate limits, body and batch caps, the JSON-RPC envelope), the single-message transport, and the `McpServer` that registers every operation as a tool |
 | `dispatch.ts` | one pipeline for every call: scope resolution (a key's project, or an explicit `projectId`), params validation, the outcome event; internal failures never reach the client |
 | `registry.ts`, `operations/index.ts` | `defineOperation`, the domains, and `assembleOperations` (writes can be left out) |
-| `errors.ts`, `serialize.ts`, `windows.ts`, `client-address.ts`, `public-origin.ts` | the error codes and bodies, row caps and truncation, time windows, the caller's address, the origin a client reached |
+| `errors.ts`, `serialize.ts`, `windows.ts`, `public-origin.ts` | the error codes and bodies, row caps and truncation, time windows, the origin a client reached (the caller's address is `platform/http/client-address.ts`, which ingest limits share) |
 | `naming.ts` | the routing and family keywords and the internal product names a tool id must not use (owned; `operations/naming.test.ts` enforces it) |
 | `operations/scope.ts` | `list_projects`, `get_project_overview`, `describeCaller` for `whoami` |
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |

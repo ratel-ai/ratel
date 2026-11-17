@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { isApiKeyExpired } from "@/lib/platform/api-keys";
 import {
@@ -129,7 +129,14 @@ export async function findApiKeyForProject(
   return row ?? null;
 }
 
-/** The project's newest usable key, or null; expired and revoked keys are skipped. */
+/**
+ * The project's primary (newest usable) key — what the Settings page reveals
+ * and what the quickstart snippets embed. Expired and revoked keys are skipped:
+ * presenting one as the project's key would hand out a credential that no
+ * longer authenticates. A Full key wins over a newer scoped one (RC-585), so a
+ * snippet never embeds an ingest-only key that cannot do what it shows.
+ * Returns null if the project has no usable key.
+ */
 export async function getPrimaryApiKeyForProject(
   projectId: string,
   db: ApiKeyDb = getDb(),
@@ -138,7 +145,7 @@ export async function getPrimaryApiKeyForProject(
     .select()
     .from(apiKeys)
     .where(and(eq(apiKeys.projectId, projectId), isNull(apiKeys.revokedAt), unexpired(new Date())))
-    .orderBy(desc(apiKeys.createdAt))
+    .orderBy(desc(sql`${apiKeys.scopes} @> '{*}'::text[]`), desc(apiKeys.createdAt))
     .limit(1);
   return row ?? null;
 }

@@ -5,7 +5,6 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 export const runtime = "nodejs";
@@ -35,7 +34,6 @@ async function handleGet(
       const scope = await findProjectScope(projectId);
       return scope ? { projectId: scope.project.id } : null;
     },
-    flagEnabled: traceViewsV3EnabledForActor,
     readContent: (projectId) =>
       withStatementTimeout((db) => contentOptIn(projectId, db), {
         operation: "trace_raw_read_content",
