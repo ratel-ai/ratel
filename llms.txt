@@ -12,7 +12,13 @@ This index is for AI coding agents and tools that consume `llms.txt` per the [ll
 
 ## Install
 
-Needs Docker with Compose 2.24 or later. There is no CLI, installer or setup step: do not invent one.
+Needs Docker with Compose 2.24 or later. There is no CLI. The one installer is `install.sh`: it clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets and starts the stack. Running it again upgrades. Its options go after `sh -s --`: `--ref`, `--dir`, `--yes`, `--demo`.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
+```
+
+By hand, the same without the secrets:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git

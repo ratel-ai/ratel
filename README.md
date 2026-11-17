@@ -36,7 +36,23 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 
 **You need** Docker with Compose 2.24 or later, network access to pull images and packages, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). The first build takes about 5 minutes.
 
+### One command
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
+```
+
+The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps your `.env` and stops if the checkout has local changes.
+
+Options, after `sh -s --`: `--ref <branch|tag|sha>` (default `main`), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
+```
+
 ### On your machine
+
+The manual steps:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
@@ -71,6 +87,8 @@ A fresh install seeds this sample project, Site Copilot, by itself the first tim
 ### On a server
 
 > **The console has no login.** Anyone who reaches it is an admin. Ratel binds to `127.0.0.1` only: keep it behind your own proxy with authentication and TLS.
+
+The [one-command installer](#one-command) does the steps below for you, with random secrets. Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git

@@ -1,0 +1,429 @@
+#!/bin/sh
+# Installs or upgrades the self-hosted Ratel Platform with Docker Compose.
+#
+#   curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
+#
+# Options (each also reads an environment variable):
+#   --ref <branch|tag|sha>  RATEL_REF   what to check out (default: main)
+#   --dir <path>            RATEL_DIR   where to put it (default: ~/ratel, or /opt/ratel as root)
+#   --yes, -y               RATEL_YES=1 answer yes to every question (for scripts)
+#   --demo                  RATEL_DEMO=1 load the demo data after the start
+#
+# Run it again to upgrade: it fetches the ref, rebuilds and restarts. It never touches an
+# existing .env and stops if the checkout has local changes. Ports stay on 127.0.0.1.
+set -eu
+
+RATEL_REPO="${RATEL_REPO:-https://github.com/ratel-ai/ratel.git}"
+RATEL_METADATA_URL="${RATEL_METADATA_URL:-http://169.254.169.254}"
+RATEL_DMI_DIR="${RATEL_DMI_DIR:-/sys/class/dmi/id}"
+README_SERVER_URL="https://github.com/ratel-ai/ratel#on-a-server"
+MIN_COMPOSE=2.24
+MIN_RAM_MB=4096
+MIN_DISK_MB=5120
+# The two secrets README.md "On a server" asks for, and the external scheduler's bearer.
+ENV_SECRETS="POSTGRES_PASSWORD TRACE_SIGNALS_HASH_SALT CRON_SECRET"
+SUDO=""
+
+main() {
+  parse_args "$@"
+  say "Ratel installer"
+
+  os=$(uname -s)
+  cloud=$(detect_cloud)
+  step "Environment"
+  info "Host:     $(describe_os "$os") ($(uname -m))"
+  info "Platform: $(describe_cloud "$cloud")"
+  info "Ref:      $REF"
+  info "Dir:      $INSTALL_DIR"
+
+  step "Prerequisites"
+  need curl
+  need git
+  ensure_docker "$os"
+  check_compose
+  check_resources
+
+  step "Source"
+  fetch_source
+
+  step "Configuration"
+  write_env "$INSTALL_DIR"
+
+  step "Start"
+  cd "$INSTALL_DIR"
+  info "Building and starting. The first build takes about 5 minutes."
+  dc compose up -d --build --wait
+  port=$(env_value RATEL_PORT 3000)
+  wait_healthy "http://127.0.0.1:$port/api/health"
+
+  if [ "$WITH_DEMO" = 1 ]; then
+    step "Demo data"
+    dc compose --profile demo run --rm demo
+  fi
+
+  print_summary "$cloud" "$port"
+}
+
+# --- Arguments ---------------------------------------------------------------------------------
+
+parse_args() {
+  REF="${RATEL_REF:-main}"
+  INSTALL_DIR="${RATEL_DIR:-}"
+  ASSUME_YES="${RATEL_YES:-0}"
+  WITH_DEMO="${RATEL_DEMO:-0}"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --ref) [ $# -ge 2 ] || usage_error "--ref needs a value"; REF="$2"; shift ;;
+      --ref=*) REF="${1#*=}" ;;
+      --dir) [ $# -ge 2 ] || usage_error "--dir needs a value"; INSTALL_DIR="$2"; shift ;;
+      --dir=*) INSTALL_DIR="${1#*=}" ;;
+      -y | --yes) ASSUME_YES=1 ;;
+      --demo) WITH_DEMO=1 ;;
+      -h | --help) usage; exit 0 ;;
+      *) usage_error "unknown option: $1" ;;
+    esac
+    shift
+  done
+  [ -n "$REF" ] || usage_error "--ref is empty"
+  [ -n "$INSTALL_DIR" ] || INSTALL_DIR=$(default_dir)
+}
+
+default_dir() {
+  if [ "$(id -u)" = 0 ]; then echo /opt/ratel; else echo "$HOME/ratel"; fi
+}
+
+usage() {
+  cat <<'EOF'
+Usage: install.sh [--ref <branch|tag|sha>] [--dir <path>] [--yes] [--demo]
+
+  --ref   what to check out (default: main)
+  --dir   where to put it (default: ~/ratel, or /opt/ratel as root)
+  --yes   answer yes to every question
+  --demo  load the demo data after the start
+EOF
+}
+
+usage_error() {
+  printf 'install.sh: %s\n' "$1" >&2
+  usage >&2
+  exit 2
+}
+
+# --- Environment -------------------------------------------------------------------------------
+
+# Prints aws, gcp, azure, digitalocean, hetzner, oracle or local. DMI answers without a network
+# call; the metadata services are the fallback, each with a 1 second limit.
+detect_cloud() {
+  dmi_cloud && return 0
+  if ! curl -s -o /dev/null --connect-timeout 1 --max-time 1 "$RATEL_METADATA_URL/" 2>/dev/null; then
+    echo local
+    return 0
+  fi
+  # Header-specific services first: a generic EC2-style service would answer the AWS probe.
+  if probe -H "Metadata-Flavor: Google" "$RATEL_METADATA_URL/computeMetadata/v1/instance/id"; then
+    echo gcp
+  elif probe -H "Metadata: true" "$RATEL_METADATA_URL/metadata/instance/compute/vmId?api-version=2021-02-01&format=text"; then
+    echo azure
+  elif probe -H "Authorization: Bearer Oracle" "$RATEL_METADATA_URL/opc/v2/instance/id"; then
+    echo oracle
+  elif probe "$RATEL_METADATA_URL/hetzner/v1/metadata/instance-id"; then
+    echo hetzner
+  elif probe "$RATEL_METADATA_URL/metadata/v1/id"; then
+    echo digitalocean
+  elif aws_get /latest/meta-data/instance-id >/dev/null; then
+    echo aws
+  else
+    echo local
+  fi
+}
+
+# Prints the VM's public IPv4 from its metadata service, or nothing.
+public_ip() {
+  case "$1" in
+    aws) aws_get /latest/meta-data/public-ipv4 ;;
+    gcp) fetch -H "Metadata-Flavor: Google" "$RATEL_METADATA_URL/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip" ;;
+    azure) fetch -H "Metadata: true" "$RATEL_METADATA_URL/metadata/instance/network/interface/0/ipv4/ipAddress/0/publicIpAddress?api-version=2021-02-01&format=text" ;;
+    digitalocean) fetch "$RATEL_METADATA_URL/metadata/v1/interfaces/public/0/ipv4/address" ;;
+    hetzner) fetch "$RATEL_METADATA_URL/hetzner/v1/metadata/public-ipv4" ;;
+  esac 2>/dev/null || true
+}
+
+dmi_cloud() {
+  vendor="$(dmi sys_vendor) $(dmi product_name) $(dmi bios_vendor) $(dmi product_version)"
+  tag=$(dmi chassis_asset_tag)
+  case "$vendor" in
+    *Amazon* | *amazon*) echo aws ;;
+    *Google*) echo gcp ;;
+    *DigitalOcean*) echo digitalocean ;;
+    *Hetzner*) echo hetzner ;;
+    *Microsoft*) [ "$tag" = 7783-7084-3265-9085-8269-3286-77 ] && echo azure ;;
+    *) [ "$tag" = OracleCloud.com ] && echo oracle ;;
+  esac
+}
+
+dmi() {
+  cat "$RATEL_DMI_DIR/$1" 2>/dev/null || true
+}
+
+probe() {
+  fetch "$@" >/dev/null 2>&1
+}
+
+fetch() {
+  curl -fsS --connect-timeout 1 --max-time 2 "$@"
+}
+
+# IMDSv2: a session token first, then the path with it.
+aws_get() {
+  token=$(fetch -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 60" "$RATEL_METADATA_URL/latest/api/token" 2>/dev/null) || return 1
+  fetch -H "X-aws-ec2-metadata-token: $token" "$RATEL_METADATA_URL$1" 2>/dev/null
+}
+
+describe_os() {
+  case "$1" in
+    Darwin) echo "macOS $(sw_vers -productVersion 2>/dev/null)" ;;
+    Linux)
+      if [ -r /etc/os-release ]; then
+        # shellcheck disable=SC1091
+        (. /etc/os-release && echo "${PRETTY_NAME:-Linux}")
+      else
+        echo Linux
+      fi
+      ;;
+    *) echo "$1" ;;
+  esac
+}
+
+describe_cloud() {
+  case "$1" in
+    aws) echo "AWS EC2" ;;
+    gcp) echo "Google Cloud" ;;
+    azure) echo "Microsoft Azure" ;;
+    digitalocean) echo "DigitalOcean" ;;
+    hetzner) echo "Hetzner Cloud" ;;
+    oracle) echo "Oracle Cloud" ;;
+    *) echo "local machine" ;;
+  esac
+}
+
+# --- Prerequisites -----------------------------------------------------------------------------
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || fail "$1 is required. Install it and run the installer again."
+  ok "$1"
+}
+
+# Sets SUDO to "sudo " when only root reaches the Docker daemon. dc runs docker with it.
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    if [ "$1" != Linux ]; then
+      warn "Docker is not installed."
+      info "Install Docker Desktop (https://docs.docker.com/get-docker/) or OrbStack (https://orbstack.dev),"
+      info "start it, and run the installer again."
+      exit 1
+    fi
+    confirm "Docker is not installed. Install it now with Docker's script from get.docker.com?" ||
+      fail "Docker is required. See https://docs.docker.com/engine/install/"
+    curl -fsSL https://get.docker.com | as_root sh
+  fi
+  if docker info >/dev/null 2>&1; then
+    SUDO=""
+  elif [ "$(id -u)" != 0 ] && command -v sudo >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
+    SUDO="sudo "
+    info "Your user cannot reach the Docker daemon, so the installer uses sudo."
+  else
+    fail "Docker is installed but its daemon does not answer. Start Docker and run the installer again."
+  fi
+  ok "Docker $(dc version --format '{{.Server.Version}}' 2>/dev/null)"
+}
+
+check_compose() {
+  version=$(dc compose version --short 2>/dev/null) ||
+    fail "Docker Compose v2 is required. See https://docs.docker.com/compose/install/"
+  version_ge "$version" "$MIN_COMPOSE" ||
+    fail "Docker Compose $MIN_COMPOSE or later is required (found $version)."
+  ok "Docker Compose $version"
+}
+
+# True when version $1 >= $2. Compares the numeric major, minor and patch; ignores a v prefix
+# and a suffix such as -desktop.1.
+version_ge() {
+  set -- "$(normalize_version "$1").0.0" "$(normalize_version "$2").0.0"
+  for i in 1 2 3; do
+    a=$(echo "$1" | cut -d. -f"$i")
+    b=$(echo "$2" | cut -d. -f"$i")
+    [ "${a:-0}" -gt "${b:-0}" ] && return 0
+    [ "${a:-0}" -lt "${b:-0}" ] && return 1
+  done
+  return 0
+}
+
+normalize_version() {
+  echo "$1" | sed -e 's/^v//' -e 's/[^0-9.].*$//'
+}
+
+# Docker's own view of memory: on macOS that is the VM, not the Mac.
+check_resources() {
+  mem=$(dc info --format '{{.MemTotal}}' 2>/dev/null || true)
+  mem_mb=$((${mem:-0} / 1024 / 1024))
+  if [ "$mem_mb" -gt 0 ] && [ "$mem_mb" -lt "$MIN_RAM_MB" ]; then
+    warn "Docker has ${mem_mb} MB of RAM. Ratel needs 4 GB (8 GB is comfortable)."
+  else
+    ok "RAM ${mem_mb} MB"
+  fi
+
+  disk_dir=$(dirname "$INSTALL_DIR")
+  while [ ! -d "$disk_dir" ]; do disk_dir=$(dirname "$disk_dir"); done
+  root_dir=$(dc info --format '{{.DockerRootDir}}' 2>/dev/null || true)
+  [ -n "$root_dir" ] && [ -d "$root_dir" ] && disk_dir="$root_dir"
+  free_mb=$(df -Pk "$disk_dir" 2>/dev/null | awk 'NR == 2 { print int($4 / 1024) }')
+  if [ "${free_mb:-0}" -lt "$MIN_DISK_MB" ]; then
+    warn "${free_mb:-0} MB free on $disk_dir. Ratel needs about 5 GB."
+  else
+    ok "Disk ${free_mb} MB free"
+  fi
+}
+
+# --- Source ------------------------------------------------------------------------------------
+
+# Clones on the first run. On a later run fetches and checks out the ref, fast-forward only, and
+# stops on local changes rather than discarding them.
+fetch_source() {
+  if [ -d "$INSTALL_DIR/.git" ]; then
+    cd "$INSTALL_DIR"
+    if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+      fail "$INSTALL_DIR has local changes. Commit or stash them, then run the installer again."
+    fi
+    info "Existing checkout found. Upgrading to $REF."
+    git fetch --quiet --tags origin
+  elif [ -e "$INSTALL_DIR" ] && [ -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+    fail "$INSTALL_DIR exists and is not a Ratel checkout. Choose another path with --dir."
+  else
+    mkdir -p "$(dirname "$INSTALL_DIR")"
+    git clone --quiet --filter=blob:none "$RATEL_REPO" "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+  fi
+
+  if git show-ref --verify --quiet "refs/remotes/origin/$REF"; then
+    if git show-ref --verify --quiet "refs/heads/$REF"; then
+      git checkout --quiet "$REF"
+      git merge --quiet --ff-only "origin/$REF" ||
+        fail "$REF has local commits that are not on origin. Resolve them, then run the installer again."
+    else
+      git checkout --quiet -b "$REF" "origin/$REF"
+    fi
+  else
+    git fetch --quiet origin "$REF" 2>/dev/null || true
+    git checkout --quiet --detach "$REF" 2>/dev/null ||
+      fail "$REF is not a branch, tag or commit of $RATEL_REPO."
+  fi
+  ok "$(git log -1 --format='%h %s' | cut -c1-72)"
+}
+
+# --- Configuration -----------------------------------------------------------------------------
+
+# Creates .env from .env.example with a random value for each secret. An existing .env is kept
+# as it is. The values are never printed.
+write_env() {
+  if [ -f "$1/.env" ]; then
+    ok ".env exists. Keeping it."
+    return 0
+  fi
+  tmp="$1/.env.tmp.$$"
+  cp "$1/.env.example" "$tmp"
+  chmod 600 "$tmp"
+  for name in $ENV_SECRETS; do
+    secret=$(random_hex)
+    if grep -q "^$name=" "$tmp"; then
+      sed "s/^$name=.*/$name=$secret/" "$tmp" >"$tmp.next" && mv "$tmp.next" "$tmp"
+    else
+      printf '\n%s=%s\n' "$name" "$secret" >>"$tmp"
+    fi
+  done
+  mv "$tmp" "$1/.env"
+  ok "Created .env with new random secrets ($(echo "$ENV_SECRETS" | sed 's/ /, /g'))."
+  info "Keep a copy of .env: a lost TRACE_SIGNALS_HASH_SALT splits old hashes from new."
+}
+
+random_hex() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    od -An -tx1 -N32 /dev/urandom | tr -d ' \n'
+    echo
+  fi
+}
+
+env_value() {
+  found=$(sed -n "s/^$1=//p" .env 2>/dev/null | tail -n 1)
+  echo "${found:-$2}"
+}
+
+# --- Start -------------------------------------------------------------------------------------
+
+wait_healthy() {
+  i=0
+  until curl -fsS --max-time 2 "$1" >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -lt 60 ] || fail "$1 did not answer in 2 minutes. Read: ${SUDO}docker compose logs db web worker"
+    sleep 2
+  done
+  ok "Healthy: $1"
+}
+
+print_summary() {
+  cloud=$1
+  port=$2
+  url=$(env_value BASE_URL "http://localhost:$port")
+  step "Ratel is running"
+  info "Open:     $url"
+  if [ "$cloud" != local ]; then
+    ip=$(public_ip "$cloud")
+    info ""
+    info "The console has no login, so it listens on 127.0.0.1 only. From your laptop, tunnel to it:"
+    info "  ssh -L $port:127.0.0.1:$port ${SUDO_USER:-$(id -un)}@${ip:-<public-ip>}"
+    info "then open http://localhost:$port"
+  fi
+  info ""
+  info "To expose it publicly, put it behind your own proxy with login and TLS:"
+  info "  $README_SERVER_URL"
+  info ""
+  info "Upgrade:  rerun the installer with the same --dir (and --ref)"
+  info "Backup:   cd $INSTALL_DIR && ${SUDO}docker compose exec -T db pg_dump -U ratel ratel > ratel.sql"
+  info "Logs:     cd $INSTALL_DIR && ${SUDO}docker compose logs -f web worker"
+  info "Stop:     cd $INSTALL_DIR && ${SUDO}docker compose down"
+}
+
+# --- Helpers -----------------------------------------------------------------------------------
+
+# Asks on the terminal, since stdin is the script under `curl | sh`. No terminal and no --yes
+# means no.
+confirm() {
+  [ "$ASSUME_YES" = 1 ] && return 0
+  (: </dev/tty) 2>/dev/null || { warn "$1 No terminal to ask on. Pass --yes to accept."; return 1; }
+  printf '%s [y/N] ' "$1" >/dev/tty
+  read -r answer </dev/tty || return 1
+  case "$answer" in y | Y | yes | YES) return 0 ;; *) return 1 ;; esac
+}
+
+dc() {
+  if [ -n "$SUDO" ]; then sudo docker "$@"; else docker "$@"; fi
+}
+
+as_root() {
+  if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi
+}
+
+say() { printf '\033[1m%s\033[0m\n' "$1"; }
+step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+info() { printf '    %s\n' "$1"; }
+ok() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+warn() { printf '  \033[33m!\033[0m %s\n' "$1" >&2; }
+fail() {
+  printf '  \033[31m✗\033[0m %s\n' "$1" >&2
+  exit 1
+}
+
+# Everything above only defines functions, so a download cut short runs nothing.
+[ "${RATEL_INSTALL_SOURCE_ONLY:-}" = 1 ] || main "$@"
