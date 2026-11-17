@@ -3,7 +3,11 @@ import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { envNumber } from "@/lib/platform/env-number";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
-import { type AnthropicClient, anthropicClient } from "@/lib/readings/anthropic/client";
+import {
+  type AnthropicClient,
+  anthropicClient,
+  ModelNotEnabledError,
+} from "@/lib/readings/anthropic/client";
 import { configured } from "@/lib/readings/decisions/engine";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import type { ToolDef } from "@/lib/views/eval-gate/types";
@@ -491,6 +495,22 @@ export class ModelRefused extends Error {
   }
 }
 
+/**
+ * The model is not enabled on Bedrock for this AWS account (its Marketplace
+ * agreement is not accepted). A refusal, so a caller that stops on a refused key
+ * stops; a replay names the model and stops only further calls to it.
+ */
+export class ModelNotEnabled extends ModelRefused {
+  constructor(
+    readonly model: string,
+    readonly bedrockProfile: string,
+  ) {
+    super();
+    this.message = `${model} is not enabled on Bedrock (${bedrockProfile})`;
+    this.name = "ModelNotEnabled";
+  }
+}
+
 /** The eval gate's model call features, as `model_call` logs them. */
 export type EvalGateFeature =
   | "eval_gate_replay"
@@ -559,11 +579,13 @@ export function recordNoModelKey(
   });
 }
 
-/** Calls through the Anthropic client, turning a refused key into `ModelRefused`. */
+/** Calls through the Anthropic client, turning a refused key into `ModelRefused` and a model not enabled on Bedrock into `ModelNotEnabled`. */
 async function guarded<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (err) {
+    if (err instanceof ModelNotEnabledError)
+      throw new ModelNotEnabled(err.model, err.bedrockProfile);
     if (
       err instanceof Anthropic.AuthenticationError ||
       err instanceof Anthropic.PermissionDeniedError

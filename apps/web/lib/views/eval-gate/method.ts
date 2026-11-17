@@ -47,11 +47,25 @@ export const CANT_SIMULATE = {
   dailyBudget: "Daily simulation budget reached",
   failed: "The model replay failed for this run",
   refused: "Needs model replay: the model key was refused",
+  /** The general form; a run's reason names its model (`notEnabledReason`). */
+  notEnabled: "Needs model replay: this run's model is not enabled on our EU model provider yet",
   ungrounded:
     "Can't be replayed: the run's first tool call uses values its recorded conversation never shows the model",
   noCalls: "Replay failed: the model made no tool calls where the run made some",
   drifted: "Replay failed: without the fix, the model took another path than the run",
 } as const;
+
+const NOT_ENABLED_TAIL = " is not enabled on our EU model provider yet";
+
+/** Why a run on `model` can't be replayed: the model is not enabled on Bedrock for this account. */
+export function notEnabledReason(model: string): string {
+  return `Needs model replay: ${model}${NOT_ENABLED_TAIL}`;
+}
+
+/** Whether `reason` is a `notEnabledReason`, whichever model it names. */
+export function isNotEnabledReason(reason: string): boolean {
+  return reason.startsWith("Needs model replay: ") && reason.endsWith(NOT_ENABLED_TAIL);
+}
 
 /**
  * Whether the change gives a replay anything to apply; null when it does,

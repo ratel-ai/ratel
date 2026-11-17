@@ -201,6 +201,9 @@ importers:
 
   ee:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.137.0
+        version: 0.137.0(zod@4.4.3)
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.9.0(@types/react@19.3.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

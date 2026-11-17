@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropicAgent } from "@/lib/views/eval-gate/models";
-import { anthropicBackend, anthropicClient, anthropicConfigured } from "./client";
+import { setModelCallExceptionReporter } from "@/lib/platform/model-call";
+import { anthropicAgent, ModelNotEnabled, ModelRefused } from "@/lib/views/eval-gate/models";
+import {
+  anthropicBackend,
+  anthropicClient,
+  anthropicConfigured,
+  ModelNotEnabledError,
+} from "./client";
 
 const message = {
   id: "msg_1",
@@ -140,6 +146,107 @@ test("a Bedrock refusal is the same error class the call sites catch", async () 
     client!.messages.create({ ...params, model: "claude-sonnet-5-5" }),
     Anthropic.PermissionDeniedError,
   );
+});
+
+/** Bedrock's answer for a model whose AWS Marketplace agreement was never accepted (staging, 2026-11-12). */
+const MARKETPLACE_DENIED =
+  "Model access is denied due to IAM user or service role is not authorized to perform the required AWS Marketplace actions " +
+  "(aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe) to enable access to this model.";
+
+/** A fake network that answers every request with one status and message. */
+function deniedFetch(status: number, text: string): typeof fetch {
+  return (async () =>
+    new Response(JSON.stringify({ message: text }), {
+      status,
+      headers: { "content-type": "application/json", "retry-after-ms": "1" },
+    })) as typeof fetch;
+}
+
+test("on Bedrock, a 403 for a missing Marketplace agreement is ModelNotEnabledError with the model and its EU profile", async () => {
+  const client = anthropicClient(
+    { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
+    { ANTHROPIC_BACKEND: "bedrock" },
+  );
+
+  const err = await client!.messages
+    .create({ ...params, model: "claude-sonnet-4-6" })
+    .catch((e: unknown) => e);
+
+  assert.ok(err instanceof ModelNotEnabledError);
+  assert.ok(
+    err instanceof Anthropic.PermissionDeniedError,
+    "call sites that catch a refusal still catch it",
+  );
+  assert.equal(err.model, "claude-sonnet-4-6");
+  assert.equal(err.bedrockProfile, "eu.anthropic.claude-sonnet-4-6");
+  assert.equal(err.errorType, "model_not_enabled");
+});
+
+test("on Bedrock, a replay agent on a model not enabled stops with ModelNotEnabled, which is a refusal too", async () => {
+  const client = anthropicClient(
+    { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
+    { ANTHROPIC_BACKEND: "bedrock" },
+  );
+  const restoreReporter = setModelCallExceptionReporter(() => {});
+  try {
+    const agent = anthropicAgent(client!, "claude-sonnet-4-6", "claude-opus-5-5");
+
+    const err = await agent
+      .next({ system: undefined, tools: [], messages: [{ role: "user", text: "hi" }] })
+      .catch((e: unknown) => e);
+
+    assert.ok(err instanceof ModelNotEnabled);
+    assert.ok(err instanceof ModelRefused);
+    assert.equal(err.model, "claude-sonnet-4-6");
+    assert.equal(err.bedrockProfile, "eu.anthropic.claude-sonnet-4-6");
+  } finally {
+    restoreReporter();
+  }
+});
+
+test("on Bedrock, another 403 stays a plain refusal", async () => {
+  const client = anthropicClient(
+    {
+      fetch: deniedFetch(403, "User is not authorized to perform: bedrock:InvokeModel"),
+      maxRetries: 0,
+    },
+    { ANTHROPIC_BACKEND: "bedrock" },
+  );
+
+  const err = await client!.messages
+    .create({ ...params, model: "claude-sonnet-5-5" })
+    .catch((e: unknown) => e);
+
+  assert.ok(err instanceof Anthropic.PermissionDeniedError);
+  assert.ok(!(err instanceof ModelNotEnabledError));
+});
+
+test("on Bedrock, a throttle that names Marketplace stays a rate limit", async () => {
+  const client = anthropicClient(
+    { fetch: deniedFetch(429, MARKETPLACE_DENIED), maxRetries: 0 },
+    { ANTHROPIC_BACKEND: "bedrock" },
+  );
+
+  const err = await client!.messages
+    .create({ ...params, model: "claude-sonnet-5-5" })
+    .catch((e: unknown) => e);
+
+  assert.ok(err instanceof Anthropic.RateLimitError);
+  assert.ok(!(err instanceof ModelNotEnabledError));
+});
+
+test("on the Anthropic API, a 403 with the same words stays a plain refusal", async () => {
+  const client = anthropicClient(
+    { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
+    { ANTHROPIC_API_KEY: "sk-test" },
+  );
+
+  const err = await client!.messages
+    .create({ ...params, model: "claude-sonnet-4-6" })
+    .catch((e: unknown) => e);
+
+  assert.ok(err instanceof Anthropic.PermissionDeniedError);
+  assert.ok(!(err instanceof ModelNotEnabledError));
 });
 
 test("on Bedrock, a streamed message reaches the EU profile", async () => {

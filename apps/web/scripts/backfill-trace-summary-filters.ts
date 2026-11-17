@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 /**
  * Fill the trace filter columns of trace summaries written before migration
- * 0038 (upstream 0097, RC-505): `models`, `tools`, `service_name` and `environment`.
+ * 0038 (`0038_trace_summary_filters`, upstream 0097, RC-505): `models`, `tools`,
+ * `service_name` and `environment`.
  *
  * The summary sweep fills them for every trace it touches after the deploy.
  * This recomputes the older rows in (project_id, trace_id) batches, without

@@ -20,7 +20,9 @@ import type { IntentGraphDocument, IntentGraphIntent } from "@/lib/readings/inte
  *
  * Only fragments below full weight that have gone quiet are absorbed (see
  * [`COMPACT_SETTLE_MS`]); a mature cluster is already ranked at full weight and
- * a fresh one may still be learning which tools its asks lead to.
+ * a fresh one may still be learning which tools its asks lead to. Under
+ * pressure (a graph near the store's cluster cap, `./bound.ts`) both limits
+ * are lifted and the gates alone decide; see [`CompactionOptions.pressure`].
  *
  * Nothing here calls a model or an embedder. Centroid-bearing clusters are
  * never touched: a dense boundary was drawn by a model Cloud does not have.
@@ -79,7 +81,23 @@ export interface CompactionOptions {
    * its own edges. Default [`COMPACT_SETTLE_MS`]; 0 absorbs at once.
    */
   settleMs?: number;
+  /**
+   * The graph is near the store's cluster cap (see `./bound.ts`). Every
+   * cluster without a centroid may absorb or be absorbed, fresh or mature, and
+   * passes repeat (at most [`PRESSURE_PASSES`]) while they still merge. The
+   * two gates are unchanged, so only clusters that agree on their edges and
+   * share wording merge: a mature cluster absorbed by another that agrees with
+   * it was already ranked at full weight, so the boost it gives is the same;
+   * what is lost is the absorbed members past [`MEMBER_CAP`].
+   */
+  pressure?: boolean;
 }
+
+/**
+ * Passes under pressure. A pass's survivors carry the merged wording and
+ * edges, so a later pass can merge two survivors the first could not.
+ */
+export const PRESSURE_PASSES = 3;
 
 /**
  * Merge immature clusters that agree on their edges and share wording. Returns
@@ -92,7 +110,19 @@ export function compactIntentGraph(
   options: CompactionOptions = {},
 ): CompactionResult {
   const intents = graph.intents;
-  const merged = compactIntents(intents, graph.built_from_ts, options);
+  const merged: CompactedIntents<IntentGraphIntent> = {
+    intents: [...intents],
+    groups: [],
+    absorbed: 0,
+  };
+  const passes = options.pressure === true ? PRESSURE_PASSES : 1;
+  for (let pass = 0; pass < passes; pass += 1) {
+    const next = compactIntents(merged.intents, graph.built_from_ts, options);
+    if (next.groups.length === 0) break;
+    merged.intents = next.intents;
+    merged.groups.push(...next.groups);
+    merged.absorbed += next.absorbed;
+  }
   if (merged.groups.length === 0) {
     return {
       graph,
@@ -148,8 +178,10 @@ export function compactIntents<T extends IntentGraphIntent>(
 ): CompactedIntents<T> {
   const settleMs = options.settleMs ?? COMPACT_SETTLE_MS;
   const settledBefore = builtFromTs - settleMs;
+  const pressure = options.pressure === true;
   const absorbable = (intent: IntentGraphIntent): boolean =>
-    intent.support < SUPPORT_FULL && (settleMs === 0 || (intent.last_ts ?? 0) <= settledBefore);
+    pressure ||
+    (intent.support < SUPPORT_FULL && (settleMs === 0 || (intent.last_ts ?? 0) <= settledBefore));
   const noop = (): CompactedIntents<T> => ({ intents: [...intents], groups: [], absorbed: 0 });
   if (intents.length < 2) return noop();
 

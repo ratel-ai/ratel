@@ -13,6 +13,13 @@ import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import {
+  type InferredToolShare,
+  loadInferredToolShare,
+  toolCallsInferred,
+} from "@/lib/readings/trace-signals/inferred-tools-query";
+import { type PartialReading, partialReading } from "@/lib/readings/trace-signals/partial-reading";
+import { loadPartialFacts } from "@/lib/readings/trace-signals/partial-reading-query";
+import {
   applyPlanLimits,
   hasSignals,
   parseWindowDays,
@@ -115,6 +122,36 @@ export default async function AgentHealthPage({
     readOnly: false,
   });
 
+  // Imported runs with no tool calls: read what their spans still say.
+  const partial =
+    state?.kind === "imported_no_tools"
+      ? await loadOrFallback<PartialReading | null>({
+          operation: "agent_health_partial_reading",
+          distinctId,
+          fallback: null,
+          load: async () =>
+            partialReading(
+              await loadPartialFacts(project.id, { now: new Date(), windowDays }),
+              windowDays,
+            ),
+        })
+      : null;
+
+  // Tool calls inferred from imported span shape: the Ready page says what was inferred and what is missing.
+  // Owned: upstream asks only a project with runs from the one importer that infers them; the
+  // edition names its sources, so here any project with imported runs is asked.
+  const inferredTools =
+    state?.kind === "ready" && (imports?.list.some((item) => item.runsImported > 0) ?? false)
+      ? toolCallsInferred(
+          await loadOrFallback<InferredToolShare | null>({
+            operation: "agent_health_inferred_tools",
+            distinctId,
+            fallback: null,
+            load: () => loadInferredToolShare(project.id, { now: new Date(), windowDays }),
+          }),
+        )
+      : false;
+
   // Best-effort analytics through the telemetry port; a failure never reaches the page.
   await trackProductEvent(
     "health_viewed",
@@ -123,6 +160,8 @@ export default async function AgentHealthPage({
       has_signals: hasSignals(model),
       capture_level: model.captureLevel,
       ...(state ? { page_state: state.kind } : {}),
+      ...(partial ? { partial_reading: true } : {}),
+      ...(inferredTools ? { inferred_tools: true } : {}),
     },
   );
 
@@ -140,6 +179,8 @@ export default async function AgentHealthPage({
       imports={imports}
       share={share}
       scoreLeads={scoreLeads}
+      partial={partial}
+      inferredTools={inferredTools}
     />
   );
 }
