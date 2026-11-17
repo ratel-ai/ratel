@@ -1057,7 +1057,7 @@
     {"from": "apps/web/lib/seed/site-copilot-quality.test.ts", "to": "apps/web/lib/console/seed/site-copilot-quality.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/seed/site-copilot-quality-fixture.ts", "to": "apps/web/lib/console/seed/site-copilot-quality-fixture.ts", "mode": "copy"},
     {"from": "apps/web/lib/seed/site-copilot-quality-store.ts", "to": "apps/web/lib/console/seed/site-copilot-quality-store.ts", "mode": "owned", "$why": "no plaintext key column: the seed creates its own key"},
-    {"from": "apps/web/scripts/seed-site-copilot-quality.mts", "to": "apps/web/scripts/seed-site-copilot-quality.mts", "mode": "owned", "$why": "no plaintext key column; the pnpm command in place of the Makefile"},
+    {"from": "apps/web/scripts/seed-site-copilot-quality.mts", "to": "apps/web/scripts/seed-site-copilot-quality.mts", "mode": "owned", "$why": "no plaintext key column; the pnpm command in place of the Makefile; passes the logs route's scope to the handler (upstream's seed passes none, which the scope check refuses)"},
     {"from": "apps/web/scripts/seed-quality-shadow.mts", "mode": "excluded", "$why": "seeds a customer-named demo for the private admin surfaces"},
     {"from": "apps/web/lib/match-quality/queries.integration.test.ts", "to": "apps/web/lib/synthesis/match-quality/queries.integration.test.ts", "mode": "owned", "$why": "no backfill cases: this edition starts from a fresh baseline"},
     {"from": "apps/web/lib/fixes/load.ts", "to": "apps/web/lib/views/quality/fix-rewrites.ts", "mode": "owned", "$why": "the rewrites half of upstream's Fixes load, filling fixSeams: the rewrites and, apart from them, the override adoption"},

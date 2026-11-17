@@ -67,6 +67,7 @@ import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getLogger } from "@/lib/platform/logger";
@@ -181,6 +182,8 @@ async function sendRecords(
       body: JSON.stringify(logsExport(records.slice(offset, offset + RECORDS_PER_EXPORT))),
     });
     const response = await handleLogsRequest(request, {
+      // The route's scope (RC-585): the handler checks the seed's Full key against it.
+      scope: BEARER_ROUTE_SCOPES["POST /api/v1/logs"],
       isDbConfigured,
       hashApiKey,
       findActiveApiKeyByHash,
