@@ -8,6 +8,7 @@ import {
 } from "@/lib/catalog/queries";
 import type { Catalog, WireSkill } from "@/lib/catalog/wire-v2";
 import { hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
@@ -18,6 +19,7 @@ export const GET = withRequestLog(handleGet);
 
 async function handleGet(req: Request): Promise<Response> {
   return handleCatalogV2Request(req, {
+    scope: BEARER_ROUTE_SCOPES["GET /api/v2/catalog"],
     isDbConfigured,
     hashApiKey,
     findActiveApiKeyByHash,

@@ -20,7 +20,14 @@ function request(headers: Record<string, string> = {}): Request {
 function deps(overrides: Partial<McpAuthDeps> = {}): McpAuthDeps {
   return {
     isDbConfigured: () => true,
-    findActiveApiKeyByHash: async () => ({ id: "key-1", projectId: PROJECT }) as never,
+    findActiveApiKeyByHash: async () =>
+      ({
+        id: "key-1",
+        projectId: PROJECT,
+        keyPrefix: "rtl_test",
+        scopes: ["*"],
+        rateLimitPerMinute: null,
+      }) as never,
     touchApiKey: async () => undefined as never,
     getOrganizationByProjectId: async () =>
       ({
@@ -174,8 +181,61 @@ test("analytics identity is the project, matching ingest", () => {
       kind: "api-key",
       projectId: PROJECT,
       apiKeyId: "key-1",
+      scopes: ["*"],
       organization: null,
     }),
     `project:${PROJECT}`,
   );
+});
+
+// RC-585: scoped keys.
+
+function scopedKeyDeps(scopes: string[]): McpAuthDeps {
+  return deps({
+    findActiveApiKeyByHash: async () =>
+      ({
+        id: "key-1",
+        projectId: PROJECT,
+        keyPrefix: "rtl_pub_test",
+        scopes,
+        rateLimitPerMinute: null,
+      }) as never,
+  });
+}
+
+test("an ingest-only key is refused at the door with 403 forbidden, not 401", async () => {
+  const key = generateApiKey("publishable");
+  const result = await authenticateMcpRequest(
+    request({ authorization: `Bearer ${key.plaintext}` }),
+    scopedKeyDeps(["ingest:traces", "ingest:logs", "ingest:events"]),
+  );
+
+  assert.ok(!result.ok);
+  assert.equal(result.error.code, "forbidden");
+  assert.equal(result.error.toBody().reason, "missing_scope");
+});
+
+test("a key with only MCP read access gets in, carrying its scopes for dispatch", async () => {
+  const key = generateApiKey();
+  const result = await authenticateMcpRequest(
+    request({ authorization: `Bearer ${key.plaintext}` }),
+    scopedKeyDeps(["mcp:read"]),
+  );
+
+  assert.ok(result.ok);
+  assert.deepEqual(result.auth.kind === "api-key" && result.auth.scopes, ["mcp:read"]);
+});
+
+test("a refused key is not stamped as used", async () => {
+  const touched: string[] = [];
+  const key = generateApiKey("publishable");
+  await authenticateMcpRequest(request({ authorization: `Bearer ${key.plaintext}` }), {
+    ...scopedKeyDeps(["ingest:traces"]),
+    touchApiKey: async (id: string) => {
+      touched.push(id);
+      return undefined as never;
+    },
+  });
+
+  assert.deepEqual(touched, []);
 });

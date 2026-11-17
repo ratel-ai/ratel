@@ -39,6 +39,14 @@ export type ConsolidateTraceEventsOptions = {
     projectId: string,
     tx: TraceTransaction | TraceEventIngestDb,
   ) => Promise<void>;
+  /**
+   * Only add rows (RC-590, `ApiKeyPolicy.appendOnlyIngest`): an event never
+   * deletes or replaces a stored row, never opens its source's facts era
+   * (which would hide that source's OTLP-derived rows), never merges into a
+   * stored log row and never writes the ranking status. What a shippable key
+   * sends is kept, and changes nothing else.
+   */
+  appendOnly?: boolean;
 };
 
 type TraceTransaction = Parameters<
@@ -133,7 +141,8 @@ export async function consolidateTraceEvents(
     );
     if (eligibleEvents.length === 0) return { accepted: 0 };
 
-    await deleteSupersededOtlpOverlaps(projectId, eligibleEvents, tx);
+    const appendOnly = options.appendOnly === true;
+    if (!appendOnly) await deleteSupersededOtlpOverlaps(projectId, eligibleEvents, tx);
 
     const byId = new Map<string, InsertedFact>();
     for (const event of eligibleEvents) {
@@ -149,15 +158,17 @@ export async function consolidateTraceEvents(
     const insertedIds = await insertParents(
       [...byId.values()].map(({ row }) => row),
       tx,
+      appendOnly,
     );
     const inserted = [...byId.values()].filter(({ row }) => insertedIds.has(row.id));
     const insertedFacts = inserted.filter(({ event }) => event.ingestSource === "runtime");
 
     await insertHits(projectId, inserted, tx);
-    await upsertSources(projectId, insertedFacts, tx);
+    if (!appendOnly) await upsertSources(projectId, insertedFacts, tx);
     await upsertToolCounters(projectId, insertedFacts, tx);
-    await upsertExperimentLogs(projectId, insertedFacts, tx);
+    await upsertExperimentLogs(projectId, insertedFacts, tx, appendOnly);
     if (
+      !appendOnly &&
       options.intentGraphRuntimeStatus === true &&
       (await upsertRuntimeRankingStatus(projectId, insertedFacts, tx))
     ) {
@@ -246,7 +257,11 @@ async function withoutSupersededOtlpEvents(
   });
 }
 
-async function insertParents(rows: NewTraceEvent[], db: TraceTransaction): Promise<Set<string>> {
+async function insertParents(
+  rows: NewTraceEvent[],
+  db: TraceTransaction,
+  appendOnly = false,
+): Promise<Set<string>> {
   const insertedIds = new Set<string>();
   const legacyOrOtlp = rows.filter((row) => row.ingestSource !== "runtime");
   const runtime = rows.filter((row) => row.ingestSource === "runtime");
@@ -259,9 +274,21 @@ async function insertParents(rows: NewTraceEvent[], db: TraceTransaction): Promi
     for (const { id } of inserted) insertedIds.add(id);
   }
   for (let offset = 0; offset < runtime.length; offset += PARENT_INSERT_CHUNK_SIZE) {
+    const chunk = runtime.slice(offset, offset + PARENT_INSERT_CHUNK_SIZE);
+    if (appendOnly) {
+      const added = await db
+        .insert(traceEvents)
+        .values(chunk)
+        .onConflictDoNothing()
+        .returning({ id: traceEvents.id });
+      added.forEach(({ id }) => {
+        insertedIds.add(id);
+      });
+      continue;
+    }
     const inserted = await db
       .insert(traceEvents)
-      .values(runtime.slice(offset, offset + PARENT_INSERT_CHUNK_SIZE))
+      .values(chunk)
       .onConflictDoUpdate({
         target: traceEvents.id,
         set: runtimeParentUpdate(),
@@ -416,6 +443,7 @@ async function upsertExperimentLogs(
   projectId: string,
   facts: InsertedFact[],
   db: TraceTransaction,
+  appendOnly = false,
 ): Promise<void> {
   const rows = facts
     .map(({ event }) => toExperimentLog(projectId, event))
@@ -424,10 +452,16 @@ async function upsertExperimentLogs(
     // Merge, don't replace: the same deterministic id may already hold the
     // richer OTLP-exported log row (e.g. per-item ratel.experiment.* attrs the
     // calibration drill-down renders). Runtime wins the fields it projects;
-    // keys and correlations it does not carry are preserved.
+    // keys and correlations it does not carry are preserved. An append-only
+    // batch adds its rows and leaves a stored one alone.
+    const chunk = rows.slice(offset, offset + EXPERIMENT_INSERT_CHUNK_SIZE);
+    if (appendOnly) {
+      await db.insert(otelLogs).values(chunk).onConflictDoNothing();
+      continue;
+    }
     await db
       .insert(otelLogs)
-      .values(rows.slice(offset, offset + EXPERIMENT_INSERT_CHUNK_SIZE))
+      .values(chunk)
       .onConflictDoUpdate({
         target: otelLogs.id,
         set: {

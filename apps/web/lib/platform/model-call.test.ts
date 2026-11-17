@@ -60,11 +60,41 @@ test("a sink gets one model_call line per call, with tokens, duration and outcom
           cache_write_tokens: 0,
           duration_ms: 250,
           outcome: "ok",
+          backend: "api",
         },
       },
     ]);
   } finally {
     restore();
+  }
+});
+
+test("on Bedrock, a Claude line says backend bedrock and keeps provider anthropic; other providers say api", async () => {
+  const saved = process.env.ANTHROPIC_BACKEND;
+  process.env.ANTHROPIC_BACKEND = "bedrock";
+  const { lines, restore } = capture();
+  try {
+    await trackModelCall(META, async () => 1);
+    recordModelCall({
+      ...META,
+      provider: "openai",
+      model: "gpt-6-luna",
+      outcome: "ok",
+      durationMs: 5,
+    });
+    recordModelCall({ ...META, outcome: "skipped_no_key", durationMs: 0 });
+    assert.deepEqual(
+      lines.map(({ fields }) => [fields.provider, fields.backend, fields.outcome]),
+      [
+        ["anthropic", "bedrock", "ok"],
+        ["openai", "api", "ok"],
+        ["anthropic", "bedrock", "skipped_no_key"],
+      ],
+    );
+  } finally {
+    restore();
+    if (saved === undefined) delete process.env.ANTHROPIC_BACKEND;
+    else process.env.ANTHROPIC_BACKEND = saved;
   }
 });
 

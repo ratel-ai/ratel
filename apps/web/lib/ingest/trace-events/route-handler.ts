@@ -1,4 +1,9 @@
 import {
+  ingestRateLimitedResponse,
+  type PublishableIngestLimits,
+  publishableIngestLimits,
+} from "@/lib/ingest/ingest-limits";
+import {
   FOLD_TRIGGER_TYPES,
   type IntentGraphFoldScheduleDeps,
   scheduleIntentGraphFold,
@@ -13,6 +18,7 @@ import {
   type TraceTurnsIngestDeps,
 } from "@/lib/ingest/trace-events/turns-schedule";
 import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/lib/platform/api-key-bearer";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { getLogger, type LogError } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
@@ -25,11 +31,15 @@ export const MAX_BODY_BYTES = 4_000_000;
 export const MAX_BATCH_EVENTS = 5_000;
 
 export interface RuntimeEventsHandlerDeps extends IntentGraphFoldScheduleDeps {
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
   resolveProjectFromBearer: typeof resolveProjectFromBearerFn;
   getOrganizationByProjectId: typeof getOrganizationByProjectIdFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertTraceEventRejects: typeof insertTraceEventRejectsFn;
   rateLimiter: TokenBucketRateLimiter;
+  /** Shared-key abuse limits for ingest-only keys; the process-wide budget when absent. */
+  publishableLimits?: PublishableIngestLimits;
   // The Agent health turn-ledger kick. Optional so existing callers and tests
   // are untouched; absent means no build is ever enqueued from ingest.
   traceTurns?: TraceTurnsIngestDeps;
@@ -56,7 +66,7 @@ export async function handleRuntimeEventsRequest(
     return tooLarge(`Request body too large (max ${MAX_BODY_BYTES} bytes).`);
   }
 
-  const resolved = await deps.resolveProjectFromBearer(request);
+  const resolved = await deps.resolveProjectFromBearer(request, deps.scope);
   if (!resolved.ok) return resolved.response;
 
   const organization = await deps.getOrganizationByProjectId(resolved.projectId);
@@ -64,7 +74,19 @@ export async function handleRuntimeEventsRequest(
     project_id: resolved.projectId,
     ...(organization ? { org_id: organization.id } : {}),
   });
-  const rateLimit = deps.rateLimiter.consume(resolved.apiKeyId);
+  // An ingest-only key is shared by every install of an app, so it gets the
+  // shared-key budget (higher per key, plus per source) instead of the
+  // per-client one a secret key has always had.
+  if (resolved.policy.sharedKeyLimits) {
+    const limit = (deps.publishableLimits ?? publishableIngestLimits).check(request, {
+      id: resolved.apiKeyId,
+      rateLimitPerMinute: resolved.rateLimitPerMinute,
+    });
+    if (!limit.allowed) return ingestRateLimitedResponse(limit);
+  }
+  const rateLimit = resolved.policy.sharedKeyLimits
+    ? { allowed: true as const }
+    : deps.rateLimiter.consume(resolved.apiKeyId);
   if (!rateLimit.allowed) {
     return Response.json(
       { error: "Rate limit exceeded." },
@@ -92,6 +114,15 @@ export async function handleRuntimeEventsRequest(
   }
   if (body.events.length > MAX_BATCH_EVENTS) {
     return tooLarge(`Too many events in one batch (max ${MAX_BATCH_EVENTS}).`);
+  }
+  // An ingest-only key's budget counts events too, not only requests (RC-585).
+  if (resolved.policy.sharedKeyLimits) {
+    const items = (deps.publishableLimits ?? publishableIngestLimits).chargeItems(
+      request,
+      { id: resolved.apiKeyId, rateLimitPerMinute: resolved.rateLimitPerMinute },
+      body.events.length,
+    );
+    if (!items.allowed) return ingestRateLimitedResponse(items);
   }
 
   const parsed = parseTraceEvents(body.events);
@@ -126,6 +157,8 @@ export async function handleRuntimeEventsRequest(
         intentGraphRuntimeStatus: parsed.valid.some(
           (event) => event.type === "usage_ranking_status",
         ),
+        // A shippable key only adds rows (RC-590): see ApiKeyPolicy.appendOnlyIngest.
+        appendOnly: resolved.policy.appendOnlyIngest,
       },
     );
     await deps.insertTraceEventRejects(resolved.projectId, rejectRows);

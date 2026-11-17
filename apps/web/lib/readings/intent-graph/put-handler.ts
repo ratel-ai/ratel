@@ -1,4 +1,5 @@
 import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/lib/platform/api-key-bearer";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { getLogger, type LogError } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
@@ -15,6 +16,8 @@ import {
 } from "@/lib/readings/intent-types/wire";
 
 export interface IntentGraphPutHandlerDeps {
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
   resolveProjectFromBearer: typeof resolveProjectFromBearerFn;
   getOrganizationByProjectId: typeof getOrganizationByProjectIdFn;
   putIntentGraph: typeof putIntentGraphFn;
@@ -48,7 +51,7 @@ export async function handleIntentGraphPut(
     return tooLarge();
   }
 
-  const resolved = await deps.resolveProjectFromBearer(request);
+  const resolved = await deps.resolveProjectFromBearer(request, deps.scope);
   if (!resolved.ok) return resolved.response;
   const organization = await deps.getOrganizationByProjectId(resolved.projectId);
   deps.setRequestLogContext?.(request, {

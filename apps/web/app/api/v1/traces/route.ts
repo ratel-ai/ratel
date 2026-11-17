@@ -14,6 +14,7 @@ import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { checkEventQuota, incrementEventUsage } from "@/lib/platform/entitlements";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
@@ -44,6 +45,7 @@ export const POST = withRequestLog(handlePost);
 
 async function handlePost(req: Request) {
   return handleTracesRequest(req, {
+    scope: BEARER_ROUTE_SCOPES["POST /api/v1/traces"],
     isDbConfigured,
     hashApiKey,
     findActiveApiKeyByHash,

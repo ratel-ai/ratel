@@ -6,7 +6,7 @@ import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 /**
  * Model-written names for the engine's intents (level 1, "What they ask for")
  * and, with model keys on, its query clusters (level 0). Only with
- * `ANTHROPIC_API_KEY` set and `INTENT_ENGINE_MAX_NAMES` above 0. Pure: phrases
+ * a Claude backend (`ANTHROPIC_BACKEND=bedrock` or `ANTHROPIC_API_KEY`) and `INTENT_ENGINE_MAX_NAMES` above 0. Pure: phrases
  * in, prompt and parsed names out; `./names-job.ts` does the I/O.
  *
  * A name is written from a cluster's few most central phrases and cached with

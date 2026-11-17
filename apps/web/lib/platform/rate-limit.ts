@@ -1,7 +1,8 @@
 export type RateLimitDecision = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 
 export interface TokenBucketRateLimiter {
-  consume(key: string): RateLimitDecision;
+  /** Take `cost` tokens (default 1); a cost above the burst is charged as the burst. */
+  consume(key: string, cost?: number): RateLimitDecision;
 }
 
 export interface LocalTokenBucketRateLimiter extends TokenBucketRateLimiter {
@@ -50,11 +51,11 @@ export function createTokenBucketRateLimiter(
     );
   }
 
-  function decide(tokens: number): RateLimitDecision {
-    if (tokens >= 1) return { allowed: true };
+  function decide(tokens: number, cost = 1): RateLimitDecision {
+    if (tokens >= cost) return { allowed: true };
     return {
       allowed: false,
-      retryAfterSeconds: Math.max(1, Math.ceil((1 - tokens) / tokensPerMs / 1_000)),
+      retryAfterSeconds: Math.max(1, Math.ceil((cost - tokens) / tokensPerMs / 1_000)),
     };
   }
 
@@ -65,15 +66,17 @@ export function createTokenBucketRateLimiter(
     peek(key) {
       return decide(tokensAt(key, now()));
     },
-    consume(key) {
+    consume(key, cost = 1) {
+      // A batch bigger than the burst could never pass, so it costs a full bucket.
+      const charge = Math.min(Math.max(1, cost), options.burst);
       const currentTime = now();
       if (!buckets.has(key) && buckets.size >= sweepThreshold) {
         sweepFullIdleBuckets(buckets, currentTime, options.burst, tokensPerMs);
       }
       const tokens = tokensAt(key, currentTime);
-      const decision = decide(tokens);
+      const decision = decide(tokens, charge);
       buckets.set(key, {
-        tokens: decision.allowed ? tokens - 1 : tokens,
+        tokens: decision.allowed ? tokens - charge : tokens,
         updatedAt: currentTime,
       });
       return decision;

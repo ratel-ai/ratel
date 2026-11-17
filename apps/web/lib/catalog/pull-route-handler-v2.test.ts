@@ -10,7 +10,12 @@ import type { ApiKey } from "@/lib/platform/projects/schema";
 const KEY = "rtl_test-key";
 const HASH = "hash-of-test-key";
 const PROJECT = "project-1";
-const apiKeyRow = { id: "key-1", projectId: PROJECT } as ApiKey;
+const apiKeyRow = {
+  id: "key-1",
+  projectId: PROJECT,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
+} as ApiKey;
 
 const wire = (over: Partial<WireSkill> & Pick<WireSkill, "name">): WireSkill => ({
   id: over.name,
@@ -34,6 +39,7 @@ const CURRENT = etagOf(SKILLS);
 
 function deps(over: Partial<CatalogV2HandlerDeps> = {}): CatalogV2HandlerDeps {
   return {
+    scope: "catalog:read",
     isDbConfigured: () => true,
     hashApiKey: (key: string) => (key === KEY ? HASH : "wrong"),
     findActiveApiKeyByHash: async (hash: string) => (hash === HASH ? apiKeyRow : null),

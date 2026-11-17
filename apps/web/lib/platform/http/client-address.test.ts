@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { clientAddress, UNKNOWN_CLIENT_ADDRESS } from "./client-address";
+import { clientAddress, UNKNOWN_CLIENT_ADDRESS } from "@/lib/platform/http/client-address";
 
 function requestFrom(forwardedFor?: string): Request {
   return new Request("https://cloud.ratel.sh/api/mcp", {

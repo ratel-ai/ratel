@@ -188,7 +188,7 @@ export type ProductEventProperties = {
   project_created: { project_slug: string };
   project_settings_updated: { field: "name" };
   project_deleted: { project_slug: string };
-  api_key_created: { key_prefix: string; named: boolean; expires_in: string };
+  api_key_created: { key_prefix: string; named: boolean; expires_in: string; access?: string };
   api_key_revoked: { key_prefix: string };
   api_key_expired: { key_prefix: string };
   api_key_regenerated: { key_prefix: string };

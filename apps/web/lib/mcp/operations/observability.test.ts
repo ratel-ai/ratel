@@ -53,7 +53,7 @@ test("every tool that reports tokens or cost names its own source", async () => 
 
     const result = await operation.execute(
       {
-        auth: { kind: "api-key", projectId: "p", apiKeyId: "k", organization: null },
+        auth: { kind: "api-key", projectId: "p", apiKeyId: "k", scopes: ["*"], organization: null },
         projectId: "p",
         organizationId: "o",
         logger: { info() {}, warn() {}, error() {} } as never,
@@ -98,6 +98,7 @@ const auth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 const TRACE_ROW: TraceSummary = {

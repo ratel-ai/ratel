@@ -4,6 +4,8 @@ import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/tele
 export type IngestEndpoint = "/v1/traces" | "/v1/logs";
 export type IngestRejectionReason =
   | "invalid_key"
+  | "missing_scope"
+  | "rate_limited"
   | "malformed"
   | "oversized"
   | "quota"

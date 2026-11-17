@@ -65,3 +65,20 @@ tab is a switch inside the page: off, Traces opens on Runs.
 
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise.
+
+## API keys and scopes
+
+Every project API key carries scopes (ratel-cloud #428, `lib/platform/api-keys/scopes.ts`), one
+per bearer surface, and every route checks its own. A key without the scope a route needs gets
+`403` with a plain reason (`{"error":"forbidden","reason":"missing_scope","scope":"catalog:read",…}`),
+never `401`. Settings › API keys offers Full access (stored as `*`; every key issued before scopes
+existed is Full, migration `0037_api_key_scopes`), Read-only, Ingest only and Custom. An ingest-only
+key starts with `rtl_pub_`: it can add telemetry to its own project and nothing else, so it is the one
+key safe to ship inside an app. Because one such key is shared by every install, its ingest gets
+shared-key limits on top (`lib/ingest/ingest-limits.ts`: per key, per caller address, and per span
+or record; `RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE`, `RATEL_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE`,
+`RATEL_PUBLISHABLE_KEY_ITEMS_PER_MINUTE`, `RATEL_PUBLISHABLE_SOURCE_ITEMS_PER_MINUTE`, or a key's own
+`rate_limit_per_minute`), and is append-only: it never replaces a stored row, opens a facts era,
+rewrites the runtime catalog or restates a stored model call. `apiKeyPolicy` (`policy.ts`) is the one
+place that reads a key's scopes, and `routes.test.ts` fails a bearer route that does not declare and
+pass its scope (`BEARER_ROUTE_SCOPES`). The quickstart snippets embed the newest Full key.

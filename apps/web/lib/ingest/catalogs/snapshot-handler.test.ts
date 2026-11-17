@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { chunkedCountingBody } from "@/lib/platform/http/test-support";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import {
@@ -26,10 +27,13 @@ function makeDeps(overrides: Partial<CatalogSnapshotHandlerDeps> = {}) {
   const contexts: Array<Record<string, unknown>> = [];
   const events: Array<Record<string, unknown>> = [];
   const deps: CatalogSnapshotHandlerDeps = {
+    scope: "catalog:write",
     resolveProjectFromBearer: async () => ({
       ok: true,
       projectId: PROJECT_ID,
       apiKeyId: "key-1",
+      policy: apiKeyPolicy(["*"]),
+      rateLimitPerMinute: null,
     }),
     getOrganizationByProjectId: async () => ({ id: "org-1", slug: "ratel", plan: "free" }) as never,
     replaceCatalogSnapshot: async (projectId, snapshot) => {
@@ -190,6 +194,8 @@ test("PUT rate limit capacity is isolated by API key, not project", async () => 
       ok: true,
       projectId: PROJECT_ID,
       apiKeyId: incomingRequest.headers.get("authorization") ?? "missing",
+      policy: apiKeyPolicy(["*"]),
+      rateLimitPerMinute: null,
     }),
     rateLimiter: limiter,
   });

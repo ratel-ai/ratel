@@ -3,6 +3,7 @@ import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-hand
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
@@ -31,6 +32,7 @@ export const POST = withRequestLog(handlePost);
 
 async function handlePost(request: Request): Promise<Response> {
   return handleRuntimeEventsRequest(request, {
+    scope: BEARER_ROUTE_SCOPES["POST /api/v1/events"],
     resolveProjectFromBearer,
     getOrganizationByProjectId,
     insertTraceEvents: (projectId, events, db, options) =>

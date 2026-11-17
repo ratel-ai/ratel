@@ -30,6 +30,8 @@ const FAKE_KEY: ApiKey = {
   lastUsedAt: null,
   revokedAt: null,
   expiresAt: null,
+  scopes: ["*"],
+  rateLimitPerMinute: null,
 };
 
 const protoRoot = protobuf.Root.fromJSON(descriptor as protobuf.INamespace);
@@ -37,6 +39,7 @@ const ProtoRequestType = protoRoot.lookupType("ratel.otlp.ExportLogsServiceReque
 
 function makeDeps(overrides: Partial<LogsHandlerDeps> = {}): LogsHandlerDeps {
   return {
+    scope: "ingest:logs",
     isDbConfigured: () => true,
     hashApiKey: (key) => `hashed:${key}`,
     findActiveApiKeyByHash: async () => FAKE_KEY,
@@ -769,4 +772,153 @@ test("gen_ai details records are stored with ids and content", async () => {
     (row.attributes as Record<string, unknown>)["gen_ai.input.messages"],
     '[{"role":"user","parts":[{"type":"text","content":"hi"}]}]',
   );
+});
+
+// RC-585: scoped keys on log ingest.
+
+test("an ingest-only key sends logs; a key without ingest:logs gets 403", async () => {
+  const ingest = makeDeps({
+    findActiveApiKeyByHash: async () => ({
+      ...FAKE_KEY,
+      keyPrefix: "rtl_pub_abcdefgh",
+      scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+    }),
+  });
+  const accepted = await handleLogsRequest(
+    request(otlpLogsJson(["evt"]), { Authorization: "Bearer rtl_pub_x" }),
+    ingest,
+  );
+  assert.equal(accepted.status, 202);
+
+  const readOnly = makeDeps({
+    findActiveApiKeyByHash: async () => ({ ...FAKE_KEY, scopes: ["catalog:read"] }),
+  });
+  const refused = await handleLogsRequest(
+    request(otlpLogsJson(["evt"]), { Authorization: "Bearer rtl_x" }),
+    readOnly,
+  );
+  assert.equal(refused.status, 403);
+  assert.equal((await refused.json()).scope, "ingest:logs");
+});
+
+test("an ingest-only key over its shared-key budget gets 429 with Retry-After", async () => {
+  const deps = makeDeps({
+    findActiveApiKeyByHash: async () => ({ ...FAKE_KEY, scopes: ["ingest:logs"] }),
+    publishableLimits: {
+      check: () => ({ allowed: false, retryAfterSeconds: 3, limit: "per_key" }),
+      chargeItems: () => ({ allowed: true as const }),
+    },
+  });
+  const response = await handleLogsRequest(
+    request(otlpLogsJson(["evt"]), { Authorization: "Bearer rtl_pub_x" }),
+    deps,
+  );
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "3");
+});
+
+// RC-590: an ingest-only key's logs are kept and change nothing else.
+
+function attr(key: string, value: unknown) {
+  if (typeof value === "boolean") return { key, value: { boolValue: value } };
+  if (Array.isArray(value)) return { key, value: { arrayValue: { values: [] } } };
+  return { key, value: { stringValue: String(value) } };
+}
+
+function catalogAndGenAiLogs(): string {
+  return JSON.stringify({
+    resourceLogs: [
+      {
+        scopeLogs: [
+          {
+            logRecords: [
+              {
+                timeUnixNano: "1751800000000000000",
+                eventName: "ratel.catalog.definition",
+                attributes: Object.entries({
+                  "ratel.catalog.kind": "tool",
+                  "ratel.catalog.id": "send_invoice",
+                  "ratel.catalog.name": "send_invoice",
+                  "ratel.catalog.description": "Forged description",
+                  "ratel.catalog.tags": [],
+                  "ratel.catalog.input_schema": "true",
+                  "ratel.catalog.output_schema": "true",
+                  "ratel.catalog.searchable_description": "Forged description",
+                  "ratel.catalog.searchable_description_overridden": false,
+                  "ratel.catalog.content_hash": "b".repeat(64),
+                }).map(([key, value]) => attr(key, value)),
+              },
+              {
+                timeUnixNano: "1751800000000000001",
+                eventName: "gen_ai.user.message",
+                traceId: "0af7651916cd43dd8448eb211c80319c",
+                spanId: "b7ad6b7169203331",
+                body: { stringValue: "forged content" },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function recordingDeps(scopes: string[]) {
+  const stored: Array<Array<{ catalogDefinition?: unknown }>> = [];
+  const storeCalls: string[] = [];
+  const store = new Proxy({} as never, {
+    get: (_target, property) => async () => {
+      storeCalls.push(String(property));
+      return [];
+    },
+  });
+  const deps = makeDeps({
+    findActiveApiKeyByHash: async () => ({ ...FAKE_KEY, scopes }),
+    insertOtelLogs: async (_projectId, rows) => {
+      stored.push(rows);
+      return { accepted: rows.length };
+    },
+    genAiLogJoin: { store },
+  });
+  return { deps, stored, storeCalls };
+}
+
+test("an ingest-only key's catalog definitions are stored as logs but never rewrite the runtime catalog", async () => {
+  const full = recordingDeps(["*"]);
+  await handleLogsRequest(
+    request(catalogAndGenAiLogs(), { Authorization: "Bearer rtl_x" }),
+    full.deps,
+  );
+  assert.ok(
+    full.stored[0]?.some((row) => row.catalogDefinition),
+    "a Full key upserts the definition",
+  );
+
+  const ingest = recordingDeps(["ingest:traces", "ingest:logs", "ingest:events"]);
+  const response = await handleLogsRequest(
+    request(catalogAndGenAiLogs(), { Authorization: "Bearer rtl_pub_x" }),
+    ingest.deps,
+  );
+  assert.equal(response.status, 202);
+  assert.equal(ingest.stored[0]?.length, 2, "both records are kept");
+  assert.ok(
+    ingest.stored[0]?.every((row) => !row.catalogDefinition),
+    "no definition reaches the runtime catalog",
+  );
+});
+
+test("an ingest-only key's gen_ai logs never restate a stored model call", async () => {
+  const full = recordingDeps(["*"]);
+  await handleLogsRequest(
+    request(catalogAndGenAiLogs(), { Authorization: "Bearer rtl_x" }),
+    full.deps,
+  );
+  assert.ok(full.storeCalls.includes("findSpans"), "a Full key looks for the calls to restate");
+
+  const ingest = recordingDeps(["ingest:logs"]);
+  await handleLogsRequest(
+    request(catalogAndGenAiLogs(), { Authorization: "Bearer rtl_pub_x" }),
+    ingest.deps,
+  );
+  assert.deepEqual(ingest.storeCalls, []);
 });

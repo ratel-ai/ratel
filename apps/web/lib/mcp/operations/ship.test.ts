@@ -28,6 +28,7 @@ const keyAuth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "free" },
 };
 
@@ -409,4 +410,21 @@ test("textCallsInWindow reads only the window's model calls that kept their text
     [],
     "past the end reads nothing",
   );
+});
+
+test("get_session withholds message text from an API key without the content scope, even with the opt-in on (RC-585)", async () => {
+  const readOnly = { ...keyAuth, scopes: ["mcp:read"] };
+  const { run, calls } = harness({}, readOnly);
+  const out = data<{ steps: { text?: unknown }[]; contentWithheld?: boolean }>(
+    await run("get_session", { sessionId: "sess-1", includeText: true }),
+  );
+  assert.deepEqual(calls.sessionText, [null], "no text window is even read");
+  assert.equal(out.steps[1]!.text, undefined);
+  assert.equal(out.contentWithheld, true);
+
+  const withScope = harness({}, { ...keyAuth, scopes: ["mcp:read", "content:read"] });
+  const shown = data<{ steps: { text?: unknown }[] }>(
+    await withScope.run("get_session", { sessionId: "sess-1", includeText: true }),
+  );
+  assert.ok(shown.steps[1]!.text, "with content:read and the opt-in, text is shown");
 });

@@ -543,6 +543,7 @@
     "upsertUserByClerkId": "upsertUserByExternalId",
     "getUserByClerkId": "getUserByExternalId",
     "clerkUserId": "externalUserId",
-    "JevFraming": "JudgeFraming"
+    "JevFraming": "JudgeFraming",
+    "__dirname": "import.meta.dirname"
   }
 }

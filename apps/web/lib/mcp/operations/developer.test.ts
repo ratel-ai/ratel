@@ -24,6 +24,7 @@ const auth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -338,6 +339,7 @@ function storedKey(patch: Partial<ApiKeyRecord> = {}) {
     lastUsedAt: new Date("2026-11-05T11:59:00.000Z"),
     revokedAt: null,
     expiresAt: null,
+    scopes: ["*"],
     ...patch,
   } as ApiKeyRecord;
 }
@@ -359,6 +361,9 @@ test("list_api_keys lists keys as the page does, never the hash or the key", asy
     id: "key-1",
     name: "production",
     keyPrefix: "rtl_live_s",
+    access: "full",
+    scopes: ["*"],
+    publishable: false,
     status: "active",
     createdAt: "2026-10-01T00:00:00.000Z",
     lastUsedAt: "2026-11-05T11:59:00.000Z",
@@ -366,6 +371,18 @@ test("list_api_keys lists keys as the page does, never the hash or the key", asy
     usedByThisSession: true,
   });
   assert.equal(keys[1]?.status, "expired");
+  const ingest = await run(
+    "list_api_keys",
+    {},
+    {
+      listApiKeysForProject: async () => [
+        storedKey({ scopes: ["ingest:traces", "ingest:logs", "ingest:events"] }),
+      ],
+    },
+  );
+  const ingestKey = (ingest.data.keys as Array<Record<string, unknown>>)[0];
+  assert.equal(ingestKey?.access, "ingest");
+  assert.equal(ingestKey?.publishable, true);
   assert.equal(keys[1]?.usedByThisSession, false);
 
   const text = JSON.stringify(data);

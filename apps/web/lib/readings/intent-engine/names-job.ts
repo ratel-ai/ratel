@@ -29,7 +29,8 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * written name, and with model keys on the query clusters (level 0) get a name
  * and a key in the same call.
  *
- * Spend is set by env and keys alone: no call without `ANTHROPIC_API_KEY`, at
+ * Spend is set by env and keys alone: no call without a Claude backend
+ * (`ANTHROPIC_BACKEND=bedrock` or `ANTHROPIC_API_KEY`), at
  * most `INTENT_ENGINE_MAX_NAMES` clusters per run (0 turns naming off), and one
  * naming pass per project per {@link NAME_INTERVAL_MS}. The default cap is one
  * batch, so a project costs at most one call an hour (two more when a batch is

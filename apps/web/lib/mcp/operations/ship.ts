@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import { credentialMayReadContent, withheldMarker } from "@/lib/mcp/operations/content-access";
 import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
@@ -476,10 +477,14 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
           );
         }
         const organization = await requireOrganization(deps, ctx.projectId);
+        // The key's own content scope first (RC-585), then the page's opt-in rule.
+        const credentialText = credentialMayReadContent(ctx.auth);
         const loaded = await deps.loadSession(
           ctx.projectId,
           params.sessionId,
-          params.includeText ? { offset: params.offset, steps: params.steps } : null,
+          params.includeText && credentialText
+            ? { offset: params.offset, steps: params.steps }
+            : null,
         );
         if (!loaded) throw notFound("session");
         const options = withSessionToolsFirst(
@@ -490,7 +495,8 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
         const { view } = loaded;
         const window = view.rows.slice(params.offset, params.offset + params.steps);
         tracker.mark(params.offset + window.length < view.rows.length);
-        const texts = loaded.readContent && params.includeText ? loaded.texts : {};
+        const texts =
+          loaded.readContent && credentialText && params.includeText ? loaded.texts : {};
         return {
           data: {
             sessionId: view.sessionId,
@@ -498,6 +504,7 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
             coverage: { counts: view.coverage.counts, text: view.coverage.text },
             gaps: view.gaps,
             contentOptIn: loaded.readContent,
+            ...(params.includeText && !credentialText ? withheldMarker(false) : {}),
             stepCount: view.rows.length,
             offset: params.offset,
             steps: window.map((row) => sessionRow(row, texts[row.index], tracker)),

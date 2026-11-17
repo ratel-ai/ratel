@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   API_KEY_STATUS,
+  apiKeyAccessView,
   apiKeyDisplayName,
   apiKeyRow,
   newKeyCloseDecision,
@@ -19,6 +20,9 @@ function key(overrides: Partial<ApiKeySummary> = {}): ApiKeySummary {
     lastUsedAt: "2026-10-18T11:55:00.000Z",
     expiresAt: "2026-10-22T09:00:00.000Z",
     status: "active",
+    scopes: ["*"],
+    access: "full",
+    publishable: false,
     ...overrides,
   };
 }
@@ -37,6 +41,12 @@ test("a key's row says everything in words and never carries a secret", () => {
     lastUsedTitle: "Oct 18, 2026, 11:55:00 UTC",
     expires: "Oct 22, 2026",
     status: { tone: "success", label: "Active" },
+    access: {
+      label: "Full access",
+      tone: "neutral",
+      detail: "Everything a key can do",
+      publishable: false,
+    },
   });
 });
 
@@ -69,4 +79,33 @@ test("a new key's dialog asks once before it lets go of an uncopied key", () => 
     "asked already: the second close is meant",
   );
   assert.equal(newKeyCloseDecision({ copied: true, asking: false }), "close");
+});
+
+test("a key's access reads as its preset, or as a count of permissions (RC-585)", () => {
+  assert.deepEqual(
+    apiKeyAccessView({
+      access: "ingest",
+      scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+      publishable: true,
+    }),
+    {
+      label: "Ingest only",
+      tone: "success",
+      detail: "Send traces, Send logs, Send runtime events",
+      publishable: true,
+    },
+  );
+  assert.equal(
+    apiKeyAccessView({ access: "read_only", scopes: ["catalog:read"], publishable: false }).label,
+    "Read-only",
+  );
+  assert.equal(
+    apiKeyAccessView({ access: "custom", scopes: ["skills:read", "jobs:read"], publishable: false })
+      .label,
+    "Custom (2 permissions)",
+  );
+  assert.equal(
+    apiKeyAccessView({ access: "custom", scopes: ["ingest:logs"], publishable: true }).label,
+    "Custom (1 permission)",
+  );
 });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import {
   handleIntentGraphPut,
   type IntentGraphPutHandlerDeps,
@@ -55,7 +56,14 @@ function makeDeps(
   const logs: Array<{ message: string; fields: unknown }> = [];
   const exceptions: unknown[] = [];
   const deps: IntentGraphPutHandlerDeps = {
-    resolveProjectFromBearer: async () => ({ ok: true, projectId: PROJECT_ID, apiKeyId: "key-1" }),
+    scope: "intent_graph:write",
+    resolveProjectFromBearer: async () => ({
+      ok: true,
+      projectId: PROJECT_ID,
+      apiKeyId: "key-1",
+      policy: apiKeyPolicy(["*"]),
+      rateLimitPerMinute: null,
+    }),
     getOrganizationByProjectId: async () => ({ id: "org-1", slug: "ratel", plan: "free" }) as never,
     putIntentGraph: async (input) => {
       puts.push(input);
@@ -139,7 +147,13 @@ test("413 from a declared Content-Length over the cap, before auth", async () =>
   const { deps } = makeDeps({
     resolveProjectFromBearer: async () => {
       authed = true;
-      return { ok: true, projectId: PROJECT_ID, apiKeyId: "key-1" };
+      return {
+        ok: true,
+        projectId: PROJECT_ID,
+        apiKeyId: "key-1",
+        policy: apiKeyPolicy(["*"]),
+        rateLimitPerMinute: null,
+      };
     },
   });
   const response = await handleIntentGraphPut(

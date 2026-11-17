@@ -1,4 +1,5 @@
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
@@ -25,6 +26,7 @@ const intentGraphRateLimiter = createTokenBucketRateLimiter({
 /** PUT /api/v1/intent-graph — store a runtime source's adaptive-ranking intent graph. */
 export const PUT = withRequestLog((request: Request) =>
   handleIntentGraphPut(request, {
+    scope: BEARER_ROUTE_SCOPES["PUT /api/v1/intent-graph"],
     resolveProjectFromBearer,
     getOrganizationByProjectId,
     putIntentGraph,
@@ -37,6 +39,7 @@ export const PUT = withRequestLog((request: Request) =>
 /** GET /api/v1/intent-graph?source= — return the stored graph with conditional GET. */
 export const GET = withRequestLog((request: Request) =>
   handleIntentGraphGet(request, {
+    scope: BEARER_ROUTE_SCOPES["GET /api/v1/intent-graph"],
     resolveProjectFromBearer,
     getOrganizationByProjectId,
     getIntentGraph,
