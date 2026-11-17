@@ -227,7 +227,7 @@ export function hasEffect(change: FixChange): boolean {
 export function parseChange(value: unknown): FixChange {
   const base = emptyChange();
   if (!value || typeof value !== "object")
-    return { ...base, unsupportedReason: "This eval set has no change to apply." };
+    return { ...base, unsupportedReason: "This suite has no change to apply." };
   const record = value as Record<string, unknown>;
   const strings = (raw: unknown) =>
     Array.isArray(raw) ? raw.filter((item): item is string => typeof item === "string") : [];

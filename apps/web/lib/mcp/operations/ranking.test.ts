@@ -208,3 +208,43 @@ test("get_ranking_graph: a failed supplementary read degrades, the answer still 
   );
   assert.equal(response.ok, true);
 });
+
+test("get_ranking_graph with catalog drift on: no catalog asks for one and marks nothing missing; gone tools are counted, ten named", async () => {
+  const flagged = (drift: { hasCatalog: boolean; gone: Set<string> }) => ({
+    catalogDriftEnabled: async () => true,
+    loadCatalogDrift: async () => drift,
+  });
+  const absent = ok(
+    await dispatch("get_ranking_graph", {}, flagged({ hasCatalog: false, gone: new Set() })),
+  ).data as {
+    warnings: string[];
+    topAskGroups: Array<{ topToolMissing: boolean }>;
+  };
+  assert.match(absent.warnings[0]!, /no tool catalog for this project/);
+  assert.equal(
+    absent.warnings.some((warning) => /no longer in your catalog/.test(warning)),
+    false,
+  );
+  assert.equal(
+    absent.topAskGroups[0]!.topToolMissing,
+    false,
+    "a tool is not missing from a catalog that does not exist",
+  );
+
+  const many = new Set([
+    "gone_tool",
+    ...Array.from({ length: 20 }, (_, index) => `t${String(index).padStart(2, "0")}`),
+  ]);
+  const gone = ok(
+    await dispatch("get_ranking_graph", {}, flagged({ hasCatalog: true, gone: many })),
+  ).data as {
+    warnings: string[];
+    topAskGroups: Array<{ topToolMissing: boolean }>;
+  };
+  assert.match(
+    gone.warnings[0]!,
+    /^It lifts 21 tools that are no longer in your catalog and unused for 14 days\./,
+  );
+  assert.match(gone.warnings[0]!, /, and 11 more\.$/);
+  assert.equal(gone.topAskGroups[0]!.topToolMissing, true);
+});

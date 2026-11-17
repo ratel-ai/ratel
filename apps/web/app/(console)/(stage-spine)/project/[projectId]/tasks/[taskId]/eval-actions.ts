@@ -55,7 +55,7 @@ export async function changeTaskEvalAction(input: unknown): Promise<TaskEvalActi
   } catch (err) {
     logger.error({ err }, "task eval change failed");
     reportServerException(err, "system:task-evals", { operation: "task_eval_case_change" });
-    return { ok: false, error: "Could not change the eval set. Try again." };
+    return { ok: false, error: "Could not change the suite. Try again." };
   }
 }
 

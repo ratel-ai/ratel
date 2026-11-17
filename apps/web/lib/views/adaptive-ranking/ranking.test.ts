@@ -9,7 +9,9 @@ import {
   rankingCurve,
   rankingHeadline,
   rankingMetrics,
+  rankingWarningItems,
   servingState,
+  warningText,
 } from "@/lib/views/adaptive-ranking/ranking";
 
 test("the chart's axis fits the curves on round steps", () => {
@@ -314,3 +316,82 @@ test("growth is how much has been learned and how much room is used", () => {
   );
   assert.equal(graphGrowth({ maturity: 4, clusterCount: 0, byteSize: 0 }).learned, 1);
 });
+
+describeWarnings();
+
+function describeWarnings() {
+  const view = buildBoostView([], { estimated: false });
+  const base = {
+    producer: "cloud" as const,
+    updatedAt: new Date(1_000),
+    lastEventAt: null,
+    view,
+    hasToolEdges: true,
+  };
+  const tools = Array.from({ length: 117 }, (_, index) => `tool_${String(index).padStart(3, "0")}`);
+
+  test("gone tools are counted in the sentence and listed apart from it", () => {
+    const [warning, ...rest] = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: true, gone: new Set(tools) },
+    });
+    assert.equal(rest.length, 0);
+    assert.equal(warning!.id, "gone_tools");
+    assert.match(
+      warning!.text,
+      /^It lifts 117 tools that are no longer in your catalog and unused for 14 days\./,
+    );
+    assert.doesNotMatch(warning!.text, /tool_000/, "no tool name in the sentence");
+    assert.equal(warning!.tools!.length, 117);
+    assert.match(warning!.text, /leave the graph when it next rebuilds/);
+  });
+
+  test("a project with no catalog is asked to send one instead of being told its tools left", () => {
+    const [warning] = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: false, gone: new Set() },
+    });
+    assert.equal(warning!.id, "no_catalog");
+    assert.match(warning!.text, /no tool catalog for this project/);
+    assert.deepEqual(
+      rankingWarningItems({
+        ...base,
+        hasToolEdges: false,
+        drift: { hasCatalog: false, gone: new Set() },
+      }),
+      [],
+    );
+    assert.deepEqual(
+      rankingWarningItems({ ...base, drift: { hasCatalog: true, gone: new Set() } }),
+      [],
+    );
+  });
+
+  test("a warning's fingerprint changes with what it says, so a closed one returns when the set changes", () => {
+    const first = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: true, gone: new Set(["a", "b"]) },
+    })[0]!;
+    const same = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: true, gone: new Set(["b", "a"]) },
+    })[0]!;
+    const changed = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: true, gone: new Set(["a", "c"]) },
+    })[0]!;
+    assert.equal(first.fingerprint, same.fingerprint);
+    assert.notEqual(first.fingerprint, changed.fingerprint);
+  });
+
+  test("an agent reads the sentence, ten tools and a count of the rest", () => {
+    const warning = rankingWarningItems({
+      ...base,
+      drift: { hasCatalog: true, gone: new Set(tools) },
+    })[0]!;
+    const text = warningText(warning);
+    assert.match(text, /Tools: tool_000, tool_001, .*tool_009, and 107 more\.$/);
+    assert.doesNotMatch(text, /tool_010/);
+    assert.equal(warningText({ text: "Plain." }), "Plain.");
+  });
+}

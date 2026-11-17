@@ -1,10 +1,19 @@
 import { z } from "zod";
 import { notFound } from "@/lib/mcp/errors";
+import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { APP_NAME } from "@/lib/platform/app-config";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import {
+  type CatalogDrift,
+  missingCapabilityKeys,
+} from "@/lib/readings/intent-graph/catalog-drift";
+import {
+  catalogDriftEnabledForActor,
+  loadCatalogDrift,
+} from "@/lib/readings/intent-graph/catalog-drift-queries";
 import {
   getIntentGraphDetail,
   type IntentGraphDetail,
@@ -30,10 +39,12 @@ import {
   rankingHeadline,
   rankingMetrics,
   rankingVerdict,
+  rankingWarningItems,
   rankingWarnings,
   servingState,
   toChecklistInput,
   WAITING_STEPS,
+  warningText,
 } from "@/lib/views/adaptive-ranking/ranking";
 import {
   buildGraphSteps,
@@ -82,6 +93,10 @@ export interface RankingOperationDeps {
     graphKey: string,
     liveAt: Date,
   ) => Promise<{ before: RuntimeOutcomes; after: RuntimeOutcomes }>;
+  /** `cloud-ranking-catalog-drift` for the caller in the project's organization; absent reads as off. */
+  catalogDriftEnabled?: (projectId: string, actor: string) => Promise<boolean>;
+  /** The gone-tool rule over the graph's tools (RC-722). */
+  loadCatalogDrift?: (projectId: string, toolIds: string[], now: Date) => Promise<CatalogDrift>;
   now?: () => Date;
 }
 
@@ -95,6 +110,8 @@ export const defaultRankingDeps: RankingOperationDeps = {
   firstBoostFromGraphAt: (projectId, graphKey) => firstBoostFromGraphAt(projectId, graphKey),
   loadOutcomesAroundLive: (projectId, graphKey, liveAt) =>
     loadOutcomesAroundLive(projectId, graphKey, liveAt),
+  catalogDriftEnabled: (projectId, actor) => catalogDriftEnabledForActor(projectId, actor),
+  loadCatalogDrift: (projectId, toolIds, now) => loadCatalogDrift(projectId, toolIds, now),
 };
 
 function checklistView(steps: readonly ChecklistStep[], tracker: TruncationTracker) {
@@ -273,7 +290,21 @@ export function rankingOperations(deps: RankingOperationDeps = defaultRankingDep
         const detail = await deps.getIntentGraphDetail(ctx.projectId, choice.graphKey);
         if (!detail) throw notFound("intent graph");
         const liveAt = detail.graph.producer === "cloud" ? detail.graph.liveAt : null;
-        const [boostSelections, onlineSince, outcomes] = await Promise.all([
+        const toolIds = [
+          ...new Set(
+            detail.edges.filter((edge) => edge.kind === "tool").map((edge) => edge.capabilityId),
+          ),
+        ];
+        const driftOn = await loadOrFallback({
+          operation: "mcp_intent_graph_catalog_drift_flag",
+          distinctId,
+          fallback: false,
+          load: async () =>
+            deps.catalogDriftEnabled
+              ? deps.catalogDriftEnabled(ctx.projectId, mcpActor(ctx.auth, ctx.projectId))
+              : false,
+        });
+        const [boostSelections, onlineSince, outcomes, drift] = await Promise.all([
           loadOrFallback({
             operation: "mcp_intent_graph_boost",
             distinctId,
@@ -302,6 +333,15 @@ export function rankingOperations(deps: RankingOperationDeps = defaultRankingDep
                 },
                 load: () => deps.loadOutcomesAroundLive(ctx.projectId, choice.graphKey, liveAt),
               }),
+          // A failed read says nothing rather than calling every tool gone or the catalog absent.
+          driftOn && deps.loadCatalogDrift
+            ? loadOrFallback<CatalogDrift>({
+                operation: "mcp_intent_graph_catalog_drift",
+                distinctId,
+                fallback: { hasCatalog: true, gone: new Set() },
+                load: () => deps.loadCatalogDrift!(ctx.projectId, toolIds, at),
+              })
+            : Promise.resolve(null),
         ]);
 
         const boost = buildBoostView(boostSelections.selections, {
@@ -320,13 +360,26 @@ export function rankingOperations(deps: RankingOperationDeps = defaultRankingDep
           (latest, source) => (latest === null || source.lastAt > latest ? source.lastAt : latest),
           null,
         );
-        const warnings = rankingWarnings({
-          producer: detail.graph.producer,
-          updatedAt: detail.graph.updatedAt,
-          missingCapabilities: detail.missingCapabilities,
-          lastEventAt,
-          view: boost,
-        });
+        const missing = drift
+          ? missingCapabilityKeys(detail.missingCapabilities, drift)
+          : detail.missingCapabilities;
+        // With the drift flag on, a gone-tool warning names a few tools and counts the rest (RC-723).
+        const warnings = drift
+          ? rankingWarningItems({
+              producer: detail.graph.producer,
+              updatedAt: detail.graph.updatedAt,
+              drift,
+              hasToolEdges: toolIds.length > 0,
+              lastEventAt,
+              view: boost,
+            }).map((warning) => warningText(warning))
+          : rankingWarnings({
+              producer: detail.graph.producer,
+              updatedAt: detail.graph.updatedAt,
+              missingCapabilities: detail.missingCapabilities,
+              lastEventAt,
+              view: boost,
+            });
         const graphSteps =
           detail.graph.producer === "cloud"
             ? buildGraphSteps({
@@ -340,11 +393,7 @@ export function rankingOperations(deps: RankingOperationDeps = defaultRankingDep
               })
             : null;
         const liveRecall = outcomes === null ? null : buildLiveRecall(outcomes);
-        const rows = buildClusterTableRows(
-          detail.clusters,
-          detail.edges,
-          detail.missingCapabilities,
-        );
+        const rows = buildClusterTableRows(detail.clusters, detail.edges, missing);
         const clusters = tracker.take(capRows(rows, TOP_CLUSTERS));
         const metrics = new Map(rankingMetrics(boost).map((metric) => [metric.id, metric]));
         const growth = graphGrowth({

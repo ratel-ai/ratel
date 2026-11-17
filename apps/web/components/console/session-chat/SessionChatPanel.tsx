@@ -12,9 +12,10 @@ import {
   formatStepTime,
   type SessionChat,
 } from "@/lib/views/session-chat/model";
+import type { StepContentSource } from "@/lib/views/session-chat/panel-client";
 import { type ChatPeek, sessionTraceHref } from "@/lib/views/session-chat/peek";
 import { clockTime, segmentTime, stepWords } from "./format";
-import type { ChatWhatIf } from "./SessionChatView";
+import type { ChatWhatIf, InspectorActions } from "./SessionChatView";
 import { StepInspector } from "./StepInspector";
 
 /**
@@ -34,6 +35,12 @@ export interface SessionChatPanelProps {
   onFollowChange: (follow: boolean) => void;
   /** What if… for a model call; absent, the inspector has none. */
   whatIf?: ChatWhatIf;
+  /** Where the inspector reads a step's content; absent, from the trace tables. */
+  source?: StepContentSource;
+  /** Actions under a step in the inspector; absent, the inspector has none. */
+  inspectorActions?: InspectorActions;
+  /** "Open full trace" on a work line; off for a chat with no trace. */
+  traceLinks?: boolean;
   onOpen: (peek: ChatPeek) => void;
   onClose: () => void;
 }
@@ -73,6 +80,9 @@ function panelBody({
   follow,
   onFollowChange,
   whatIf,
+  source,
+  inspectorActions,
+  traceLinks = true,
   onOpen,
 }: SessionChatPanelProps): { title: string; subtitle?: string; content: ReactNode } {
   if (peek.kind === "step") {
@@ -99,6 +109,8 @@ function panelBody({
           follow={follow}
           onFollowChange={onFollowChange}
           whatIf={whatIf}
+          source={source}
+          actions={inspectorActions}
           onOpen={onOpen}
         />
       ),
@@ -119,7 +131,15 @@ function panelBody({
     return {
       title,
       subtitle,
-      content: <WorkBody projectId={projectId} chat={chat} turn={turn} onOpen={onOpen} />,
+      content: (
+        <WorkBody
+          projectId={projectId}
+          chat={chat}
+          turn={turn}
+          traceLink={traceLinks}
+          onOpen={onOpen}
+        />
+      ),
     };
   }
   const person = peek.kind === "ask";
@@ -141,11 +161,13 @@ function WorkBody({
   projectId,
   chat,
   turn,
+  traceLink,
   onOpen,
 }: {
   projectId: string;
   chat: SessionChat;
   turn: ChatTurn;
+  traceLink: boolean;
   onOpen: (peek: ChatPeek) => void;
 }) {
   const steps = chat.segments.filter(
@@ -157,14 +179,16 @@ function WorkBody({
   );
   return (
     <div className="flex flex-col gap-6">
-      <Link
-        href={sessionTraceHref(projectId, chat.sessionId, turn.turnIndex)}
-        className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "self-start")}
-        data-open-full-trace={turn.turnIndex}
-      >
-        <ChartGantt aria-hidden />
-        Open full trace
-      </Link>
+      {traceLink ? (
+        <Link
+          href={sessionTraceHref(projectId, chat.sessionId, turn.turnIndex)}
+          className={cn(buttonVariants({ variant: "secondary", size: "sm" }), "self-start")}
+          data-open-full-trace={turn.turnIndex}
+        >
+          <ChartGantt aria-hidden />
+          Open full trace
+        </Link>
+      ) : null}
       <section>
         <h3 className="mb-2 text-ui font-medium text-fg">Step by step</h3>
         {steps.length === 0 ? (

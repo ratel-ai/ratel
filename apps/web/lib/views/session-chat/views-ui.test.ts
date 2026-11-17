@@ -516,3 +516,36 @@ test("views v3: no ?t= plays from the first message; an explicit ?t= wins; flag 
     ),
   );
 });
+
+/* --- RC-646: the inspector's source and actions come from the page ----------- */
+
+test("inspector actions: the page's actions show under the open step; Traces passes none", () => {
+  const timeline = buildSessionTimeline({
+    sessionId: "s1",
+    turns: TURNS,
+    modelCalls: CALLS,
+    selfCorrections: [],
+  });
+  const chat = buildSessionChat({ timeline, turns: TURNS, texts: null });
+  const seen: Array<string | null> = [];
+  const html = renderToStaticMarkup(
+    inRouter(
+      "?peek=step:5",
+      createElement(SessionChatView, {
+        projectId: "p1",
+        chat,
+        settingsHref: "/project/p1/settings",
+        synced: true,
+        source: async () => ({ ok: true as const, content: null }),
+        inspectorActions: (segment) => {
+          seen.push(segment.label);
+          return createElement("button", { type: "button" }, `Set the answer of ${segment.label}`);
+        },
+      }),
+    ),
+  );
+  assert.ok(html.includes("data-inspector-actions"));
+  assert.ok(html.includes("Set the answer of get_seat_map"));
+  assert.deepEqual(seen, ["get_seat_map"]);
+  assert.equal(renderV3("?peek=step:5").includes("data-inspector-actions"), false);
+});

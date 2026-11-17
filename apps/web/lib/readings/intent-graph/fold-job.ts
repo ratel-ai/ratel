@@ -9,6 +9,12 @@ import {
 } from "@/lib/platform/telemetry";
 import { DEFAULT_BATCH_POLICY, eventsToWaitFor } from "@/lib/readings/intent-graph/batching";
 import { COMPACT_PRESSURE_CLUSTERS, trimIntentGraph } from "@/lib/readings/intent-graph/bound";
+import { goneTools } from "@/lib/readings/intent-graph/catalog-drift";
+import {
+  type CatalogDriftFacts,
+  catalogDriftEnabledForActor,
+  loadCatalogDriftFacts as loadCatalogDriftFactsFn,
+} from "@/lib/readings/intent-graph/catalog-drift-queries";
 import { type CompactionOptions, compactIntentGraph } from "@/lib/readings/intent-graph/compact";
 import {
   type FoldShadow,
@@ -16,6 +22,7 @@ import {
   foldEventsIntoGraph,
   turnKey,
 } from "@/lib/readings/intent-graph/fold";
+import { graphToolIds, pruneGoneTools } from "@/lib/readings/intent-graph/prune-gone-tools";
 import type { FoldableEventRow, FoldLane } from "@/lib/readings/intent-graph/queries";
 import {
   advanceIntentGraphFoldCursor as advanceIntentGraphFoldCursorFn,
@@ -94,6 +101,10 @@ export interface FoldJobDeps {
   syncLive: typeof syncIntentGraphLiveFromStatusFn;
   enqueueFoldIntentGraphJob: typeof enqueueFoldIntentGraphJobFn;
   trackServerEvent: typeof trackServerEventFn;
+  /** `cloud-ranking-catalog-drift` for this project's organization: whether the fold drops gone tools (RC-725). */
+  catalogDriftEnabled: (projectId: string) => Promise<boolean>;
+  /** What the gone-tool rule reads (./catalog-drift.ts), once per job. */
+  loadCatalogDriftFacts: (projectId: string, now: Date) => Promise<CatalogDriftFacts>;
   now: () => Date;
   pageLimit: number;
   maxPages: number;
@@ -123,6 +134,9 @@ const defaultDeps: FoldJobDeps = {
   syncLive: syncIntentGraphLiveFromStatusFn,
   enqueueFoldIntentGraphJob: enqueueFoldIntentGraphJobFn,
   trackServerEvent: trackServerEventFn,
+  catalogDriftEnabled: (projectId) =>
+    catalogDriftEnabledForActor(projectId, "system:intent-graph-fold"),
+  loadCatalogDriftFacts: (projectId, now) => loadCatalogDriftFactsFn(projectId, now),
   now: () => new Date(),
   pageLimit: FOLD_PAGE_LIMIT,
   maxPages: MAX_PAGES_PER_JOB,
@@ -160,6 +174,10 @@ export interface FoldJobResult {
   clustersMerged: number;
   /** Clusters cut to keep a graph inside the store's caps, across the job's pages and graphs. */
   clustersDropped: number;
+  /** Edges to gone tools dropped, across the job's pages and graphs (RC-725); 0 with the flag off. */
+  edgesPruned: number;
+  /** Ask groups dropped because every tool they lifted was gone. */
+  clustersPruned: number;
   /** True when a follow-up job was enqueued for remaining backlog. */
   continued: boolean;
   /** New events a `waiting` run left for a fuller one (./batching.ts). */
@@ -195,6 +213,8 @@ export async function foldProjectIntentGraph(
   let clustersBeforeCompaction: number | null = null;
   let clustersMerged = 0;
   let clustersDropped = 0;
+  let edgesPruned = 0;
+  let clustersPruned = 0;
   let continued = false;
   let eventsHeld = 0;
   // A few new events wait for a fuller run; a project's first fold never waits.
@@ -220,6 +240,22 @@ export async function foldProjectIntentGraph(
     }
     return shadow;
   };
+
+  // Gone tools are dropped only with the flag on, and never when the facts
+  // cannot be read: the graph keeps learning either way.
+  let pruneFacts: CatalogDriftFacts | null = null;
+  if (waitingEvents === 0) {
+    try {
+      if (await deps.catalogDriftEnabled(projectId))
+        pruneFacts = await deps.loadCatalogDriftFacts(projectId, deps.now());
+    } catch (error) {
+      logger.error({ err: error, project_id: projectId }, "catalog drift load failed");
+      reportServerException(error, `project:${projectId}`, {
+        project_id: projectId,
+        operation: "intent_graph_catalog_drift_load",
+      });
+    }
+  }
 
   // A runtime that ranks from a Cloud graph reports both rankings on each
   // search it changed; those reports replace the replay on that graph only.
@@ -247,8 +283,17 @@ export async function foldProjectIntentGraph(
       // A search whose invoke has not arrived yet waits for the next run, so
       // the turn is folded whole. Nothing foldable: leave the cursor alone.
       const { fold: rows, held } = foldablePrefix(read, deps.now().getTime());
-      if (rows.length === 0)
-        return { rowCount: read.length, held, merged: null, dropped: 0, folded: false };
+      if (rows.length === 0) {
+        return {
+          rowCount: read.length,
+          held,
+          merged: null,
+          dropped: 0,
+          edgesPruned: 0,
+          clustersPruned: 0,
+          folded: false,
+        };
+      }
       const searchIds = rows
         .filter((r) => r.type === "search" || r.type === "skill_search")
         .map((r) => r.id);
@@ -296,6 +341,8 @@ export async function foldProjectIntentGraph(
         clustersMerged: number;
       } | null = null;
       let pageDropped = 0;
+      let pageEdgesPruned = 0;
+      let pageClustersPruned = 0;
       for (const target of targets) {
         const current = await deps.getIntentGraph(projectId, target.key, tx);
         const baseJson = current ? JSON.stringify(current.document) : null;
@@ -337,6 +384,17 @@ export async function foldProjectIntentGraph(
             graph_key: target.key,
             operation: "intent_graph_compact",
           });
+        }
+        if (pruneFacts) {
+          const { gone } = goneTools(
+            graphToolIds(graph),
+            pruneFacts.catalogToolIds,
+            pruneFacts.recentlyCalled,
+          );
+          const pruned = pruneGoneTools(graph, gone);
+          graph = pruned.graph;
+          pageEdgesPruned += pruned.edgesPruned;
+          pageClustersPruned += pruned.intentsDropped;
         }
         const trimmed = trimIntentGraph(graph, { maxClusters, maxBytes });
         if (trimmed.dropped > 0) {
@@ -404,13 +462,23 @@ export async function foldProjectIntentGraph(
       await deps.syncLive(projectId, tx);
       const last = rows[rows.length - 1];
       if (last) await deps.advanceCursor(projectId, last.receivedAtRaw, tx);
-      return { rowCount: read.length, held, merged, dropped: pageDropped, folded: true };
+      return {
+        rowCount: read.length,
+        held,
+        merged,
+        dropped: pageDropped,
+        edgesPruned: pageEdgesPruned,
+        clustersPruned: pageClustersPruned,
+        folded: true,
+      };
     });
     if (page === null) break;
     eventsHeld = page.held;
     if (!page.folded) break;
     pages += 1;
     clustersDropped += page.dropped;
+    edgesPruned += page.edgesPruned;
+    clustersPruned += page.clustersPruned;
     if (page.merged) {
       eventsFolded += page.merged.recorded;
       eventsByLane.runtime += page.merged.recordedByLane.runtime;
@@ -451,6 +519,8 @@ export async function foldProjectIntentGraph(
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
       clusters_dropped: clustersDropped,
+      edges_pruned: edgesPruned,
+      clusters_pruned: clustersPruned,
       continued,
       waiting_events: waitingEvents,
       duration_ms: durationMs,
@@ -477,6 +547,8 @@ export async function foldProjectIntentGraph(
       clusters_before_compaction: clustersBeforeCompaction,
       clusters_merged: clustersMerged,
       clusters_dropped: clustersDropped,
+      edges_pruned: edgesPruned,
+      clusters_pruned: clustersPruned,
       continued,
       waiting_events: waitingEvents,
       duration_ms: durationMs,
@@ -497,6 +569,8 @@ export async function foldProjectIntentGraph(
     clustersBeforeCompaction,
     clustersMerged,
     clustersDropped,
+    edgesPruned,
+    clustersPruned,
     continued,
     waitingEvents,
   };
