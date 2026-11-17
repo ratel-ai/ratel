@@ -38,6 +38,14 @@ test("the page view: the chat unless ?view=steps or ?view=trace (session replay 
   assert.equal(sessionPageView("nope"), "chat");
 });
 
+test("views v3 (RC-524): ?view=steps is the chat, the trace stays", () => {
+  assert.equal(sessionPageView("steps", true), "chat");
+  assert.equal(sessionPageView(["steps", "trace"], true), "chat");
+  assert.equal(sessionPageView("trace", true), "trace");
+  assert.equal(sessionPageView(undefined, true), "chat");
+  assert.equal(sessionPageView("steps", false), "steps");
+});
+
 test("a repeated ?view= reads as its first value (review finding session F2)", () => {
   assert.equal(sessionPageView(["steps", "steps"]), "steps");
   assert.equal(sessionPageView(["steps", "chat"]), "steps");

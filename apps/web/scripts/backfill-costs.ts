@@ -34,12 +34,12 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 config({ path: ".env" });
 
+import { getDb } from "@/lib/platform/db/client";
 import {
   type CostChange,
   repriceStored,
   repriceUnpriced,
-} from "@/lib/ingest/model-pricing/reprice";
-import { getDb } from "@/lib/platform/db/client";
+} from "@/lib/synthesis/model-pricing/reprice";
 
 async function main() {
   const { values } = parseArgs({

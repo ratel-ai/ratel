@@ -2,8 +2,12 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
+import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import { loadSessionListPage } from "@/lib/synthesis/traces/v2/sessions-list";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
+import {
+  traceFiltersEnabledForActor,
+  traceViewsV3EnabledForActor,
+} from "@/lib/synthesis/traces/v2/views-flag";
 import { tracesSessionsResponse } from "@/lib/synthesis/traces-sessions/route";
 import { loadSessionsPage } from "@/lib/synthesis/traces-sessions/sessions";
 import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
@@ -38,9 +42,16 @@ async function handleGet(
     }
     return viewsV3;
   };
+  // RC-506: with `cloud-traces-filters` the next page keeps the property filters.
+  const traces = async (id: string) => {
+    const session = await getSessionContext();
+    return session && (await traceFiltersEnabledForActor(id, session.user.externalId))
+      ? traceFilterFromSearch(params.toString())
+      : undefined;
+  };
   const load = async (id: string) =>
     (await v3())
-      ? loadSessionListPage(id, { filter, cursor })
+      ? loadSessionListPage(id, { filter, cursor, traces: await traces(id) })
       : loadSessionsPage(id, { filter, cursor });
   return tracesSessionsResponse(projectId, load, {
     // RC-472: the Sessions tab of the v3 views pages through the same list.

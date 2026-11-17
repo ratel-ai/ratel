@@ -23,6 +23,7 @@ import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
 import { containsText } from "./query-text";
+import { type TraceFilter, traceFilterMatch } from "./trace-filters";
 import { isUnpricedCall } from "./v2/cost-label";
 
 export type TraceQueriesDb = Pick<ReturnType<typeof getDb>, "select" | "selectDistinctOn">;
@@ -248,6 +249,8 @@ export interface ListTracesOptions extends TraceFacetFilters {
   direction?: SortDirection;
   cursor?: TraceCursor;
   limit?: number;
+  /** RC-505 property filters, matched on the per-trace rollup (`cloud-traces-filters`). */
+  traces?: TraceFilter;
 }
 
 export interface TraceSummary {
@@ -541,6 +544,7 @@ export async function listTraces(
     experimentTraceIds ? inArray(representatives.traceId, experimentTraceIds) : undefined,
     dimensionTraceIds ? inArray(representatives.traceId, dimensionTraceIds) : undefined,
     facetTraceIds ? inArray(representatives.traceId, facetTraceIds) : undefined,
+    traceFilterMatch(projectId, options.traces, sql`${representatives.traceId}`) ?? undefined,
   );
   const roots =
     sort === "tokens" || sort === "cost"
@@ -953,6 +957,7 @@ export async function getTraceAggregates(
     errorTraceIds ? inArray(rollups.traceId, errorTraceIds) : undefined,
     experimentTraceIds ? inArray(rollups.traceId, experimentTraceIds) : undefined,
     facetTraceIds ? inArray(rollups.traceId, facetTraceIds) : undefined,
+    traceFilterMatch(projectId, options.traces, sql`${rollups.traceId}`) ?? undefined,
   );
   const count = sql<number>`count(*)::int`;
   const errorCount = sql<number>`coalesce(sum(${rollups.hasError}), 0)::int`;

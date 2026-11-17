@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { traceViewsV3EnabledForActor } from "./views-flag";
+import { traceFiltersEnabledForActor, traceViewsV3EnabledForActor } from "./views-flag";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -30,6 +30,30 @@ test("a project id that is no UUID is off without a read", async () => {
 test("the flag's answer passes through", async () => {
   assert.equal(
     await traceViewsV3EnabledForActor(PROJECT_ID, "user_1", {
+      read: async () => true,
+      report: () => {},
+    }),
+    true,
+  );
+});
+
+test("the trace filters flag: a failed read is off and reported, a bad project id is off without a read", async () => {
+  const reported: string[] = [];
+  const failing = {
+    read: async () => Promise.reject(new Error("db down")),
+    report: (message: string) => reported.push(message),
+  };
+  assert.equal(await traceFiltersEnabledForActor(PROJECT_ID, "user_1", failing), false);
+  assert.deepEqual(reported, ["trace filters flag read failed"]);
+  assert.equal(
+    await traceFiltersEnabledForActor("not-a-uuid", "user_1", {
+      read: async () => true,
+      report: () => {},
+    }),
+    false,
+  );
+  assert.equal(
+    await traceFiltersEnabledForActor(PROJECT_ID, "user_1", {
       read: async () => true,
       report: () => {},
     }),

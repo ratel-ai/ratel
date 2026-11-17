@@ -19,6 +19,7 @@ import { eventMetrics, events, otelSpans } from "@/lib/ingest/otlp/schema";
 import { costFor, extendsByDate, type PriceBook, resolvePrice } from "@/lib/ingest/pricing";
 import type { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
+import { recomputeTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
 
 /**
  * Re-price stored model calls (RC-482). Ingest prices a call once, with the
@@ -38,7 +39,9 @@ import { projects } from "@/lib/platform/projects/schema";
  * `numeric(12,6)` precision, or when an event's `event_metrics` cost differs
  * from it, so a re-run writes nothing. Rows are read in id order, a page at a
  * time, and each page's `events` and `event_metrics` writes are one
- * transaction.
+ * transaction. Each page of spans restates the trace summaries of its traces
+ * in the same transaction, since the summary sweep only follows newly
+ * received spans.
  */
 
 export type RepriceDb = Pick<ReturnType<typeof getDb>, "select" | "execute" | "transaction">;
@@ -301,10 +304,18 @@ async function repriceSpans(
     if (rows.length === 0) return changed;
     after = rows[rows.length - 1]!.id;
     const written = await write(rows, async (tx, updates) => {
-      await tx.execute(sql`
+      const result = await tx.execute(sql`
         update ${otelSpans} as t set cost_usd = v.cost::numeric
         from (values ${valuesList(updates)}) as v(id, cost)
-        where t.id = v.id::uuid`);
+        where t.id = v.id::uuid
+        returning t.project_id, t.trace_id`);
+      const traces = (
+        result as unknown as { rows: Array<{ project_id: string; trace_id: string }> }
+      ).rows;
+      await recomputeTraceSummaries(
+        tx,
+        traces.map((trace) => ({ projectId: trace.project_id, traceId: trace.trace_id })),
+      );
     });
     if (written === STALE) return STALE;
     changed += written;

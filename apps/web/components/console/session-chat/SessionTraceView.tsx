@@ -26,7 +26,7 @@ export interface SessionTraceViewProps {
   trace: TraceViewProps | null;
   /**
    * `cloud-trace-views-v3` (RC-413): a session's unit is the turn, so the
-   * runs inside one turn read as its traces, and Step by step as Replay.
+   * runs inside one turn read as its traces; the conversation is the one replay (RC-524).
    */
   viewsV3?: boolean;
 }
@@ -47,8 +47,8 @@ export function SessionTraceView({
 }: SessionTraceViewProps) {
   const turn = turns.find((candidate) => candidate.turnIndex === turnIndex) ?? null;
   const part = viewsV3
-    ? { one: "Trace", lower: "trace", many: "traces", steps: "Replay" }
-    : { one: "Run", lower: "run", many: "runs", steps: "Step by step" };
+    ? { one: "Trace", lower: "trace", many: "traces", views: "conversation view" }
+    : { one: "Run", lower: "run", many: "runs", views: "chat and Step by step views" };
   return (
     <div className="flex flex-col gap-6">
       <nav aria-label="Turns" className="flex flex-wrap items-center gap-1.5" data-turn-picker>
@@ -119,7 +119,7 @@ export function SessionTraceView({
             title={`Turn ${turn.turnIndex} has no trace`}
             description={
               turn.traceIds.length === 0
-                ? `This turn did not come with OpenTelemetry spans, so there is no waterfall to show. The chat and ${part.steps} views still show its steps.`
+                ? `This turn did not come with OpenTelemetry spans, so there is no waterfall to show. The ${part.views} still show${viewsV3 ? "s" : ""} its steps.`
                 : `This ${part.lower}'s spans are no longer stored (raw telemetry expires after 30 days).`
             }
           />

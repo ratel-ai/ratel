@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { deleteModelPrice, saveModelPrice } from "@/lib/ingest/model-pricing/store";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { refreshTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
+import { traceFilterMatch } from "@/lib/synthesis/traces/trace-filters";
 import { repriceProjectModel, repriceStored, repriceUnpriced } from "./reprice";
-import { deleteModelPrice, saveModelPrice } from "./store";
 
 /**
  * RC-482: stored rows keep the cost they were ingested with. A price added
@@ -477,3 +480,56 @@ test("re-pricing writes an event and its metric together or not at all", async (
     await client.close();
   }
 });
+
+test("a re-price restates the summaries of the re-priced traces, so the min-cost filter sees the new cost", async () => {
+  const { client, db } = await setup();
+  try {
+    // claude-sonnet-5-5: $2 per 1M input tokens. Both traces are stored unpriced.
+    await span(client, PROJECT, "claude-sonnet-5-5", { input: 1_000_000, output: 0 });
+    await span(client, OTHER, "claude-sonnet-5-5", { input: 1_000_000, output: 0 });
+    await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+    const otherBefore = await summary(client, OTHER);
+    assert.equal(otherBefore.cost, "0.000000");
+
+    await repriceUnpriced(db, { projectId: PROJECT });
+    assert.equal((await summary(client, PROJECT)).cost, "2.000000");
+    assert.deepEqual(await overOneDollar(db, PROJECT), ["trace"]);
+    // The other project's trace was not re-priced, so its summary is untouched.
+    assert.deepEqual(await summary(client, OTHER), otherBefore);
+
+    // A price that goes down restates the summary too.
+    const version = await saveModelPrice(
+      PROJECT,
+      "claude-sonnet-5-5",
+      { input: 0.5, output: 0 },
+      "user_1",
+      db,
+    );
+    await repriceProjectModel(PROJECT, "claude-sonnet-5-5", version, db);
+    assert.equal((await summary(client, PROJECT)).cost, "0.500000");
+    assert.deepEqual(await overOneDollar(db, PROJECT), []);
+  } finally {
+    await client.close();
+  }
+});
+
+async function summary(
+  client: PGlite,
+  projectId: string,
+): Promise<{ cost: string; updatedAt: string }> {
+  const { rows } = await client.query<{ cost: string; updatedAt: string }>(
+    `select cost_usd::text as cost, updated_at::text as "updatedAt" from otel_trace_summaries where project_id = $1 and trace_id = 'trace'`,
+    [projectId],
+  );
+  return rows[0]!;
+}
+
+async function overOneDollar(db: Db, projectId: string): Promise<string[]> {
+  const match = traceFilterMatch(projectId, { minCostUsd: 1 }, sql`t.trace_id`)!;
+  const result = await db.execute(
+    sql`select t.trace_id from otel_trace_summaries t where t.project_id = ${projectId} and ${match}`,
+  );
+  return (result as unknown as { rows: Array<{ trace_id: string }> }).rows.map(
+    (row) => row.trace_id,
+  );
+}

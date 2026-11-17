@@ -16,9 +16,14 @@ import type {
   TraceFacets,
   TraceFacetValue,
 } from "@/lib/synthesis/traces/queries";
+import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { formatDuration, formatInteger, formatMoney } from "./format";
 
-export type TraceTab = "runs" | "spans" | "logs";
+/**
+ * `rollup` is the bar on Sessions and Turns with `cloud-traces-filters`
+ * (RC-506): every field matches the per-trace rollup.
+ */
+export type TraceTab = "runs" | "spans" | "logs" | "rollup";
 
 export type FilterFieldId =
   | "status"
@@ -29,7 +34,9 @@ export type FilterFieldId =
   | "experiment"
   | "variant"
   | "stepName"
-  | "unlinked";
+  | "unlinked"
+  | "cost"
+  | "tokens";
 
 export interface FilterChipModel {
   /** Stable key, the first parameter it reads. */
@@ -57,6 +64,19 @@ export interface FilterField {
 
 /** Never survive a filter change: the page and the open row belong to the old list. */
 const VOLATILE = ["cursor", "peek"] as const;
+
+/** The rollup bar's parameters (RC-506), besides the name search. */
+const ROLLUP_FILTER_PARAMS_LIST = [
+  "errorOnly",
+  "status",
+  "facetModel",
+  "facetTool",
+  "facetService",
+  "facetEnvironment",
+  "minCostUsd",
+  "minTokens",
+] as const;
+export const ROLLUP_FILTER_PARAMS: readonly string[] = ROLLUP_FILTER_PARAMS_LIST;
 
 /** Every parameter that narrows a list. The search box owns `name` (and `eventName` on Logs). */
 const RUN_FILTER_PARAMS = [
@@ -88,7 +108,12 @@ const FILTER_PARAMS: Readonly<Record<TraceTab, readonly string[]>> = {
   // The span list has no run-name filter, and adds the top-level-only scope.
   spans: [...RUN_FILTER_PARAMS.filter((param) => param !== "rootName"), "scope"],
   logs: ["name", "eventName", "experiment", "tracelessOnly"],
+  rollup: ["name", ...ROLLUP_FILTER_PARAMS_LIST],
 };
+
+/** The rollup bar's thresholds: a value is the minimum it keeps. */
+const COST_THRESHOLDS = [0.01, 0.1, 1] as const;
+const TOKEN_THRESHOLDS = [1_000, 10_000, 100_000] as const;
 
 const OTEL_STATUS_LABEL: Readonly<Record<string, string>> = {
   "0": "Not set",
@@ -115,6 +140,25 @@ export function filterChips(tab: TraceTab, search: string): FilterChipModel[] {
     return compact([
       single(params, "experiment", "Experiment contains"),
       flag(params, "tracelessOnly", "Showing", "logs without a run"),
+    ]);
+  }
+  if (tab === "rollup") {
+    const status = rollupStatus(params);
+    return compact([
+      status
+        ? {
+            key: "status",
+            field: "Status is",
+            value: status === "failed" ? "Failed" : "OK",
+            params: ["status", "errorOnly"],
+          }
+        : null,
+      multi(params, "facetModel", "Model is"),
+      multi(params, "facetTool", "Tool is"),
+      multi(params, "facetService", "Service is"),
+      multi(params, "facetEnvironment", "Environment is"),
+      measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
+      measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
     ]);
   }
   const exact = params.get("exactTags") === "1";
@@ -192,19 +236,60 @@ export function withSearchText(tab: TraceTab, search: string, text: string): str
 export function filterFields(
   tab: TraceTab,
   search: string,
-  facets: Pick<
-    TraceFacets,
-    "model" | "tool" | "service" | "environment" | "experiment" | "arm" | "name"
-  >,
+  facets: Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
+    Partial<Pick<TraceFacets, "experiment" | "arm" | "name">>,
 ): FilterField[] {
   const params = parse(search);
+  if (tab === "rollup") {
+    const status = rollupStatus(params);
+    const minCost = params.get("minCostUsd")?.trim();
+    const minTokens = params.get("minTokens")?.trim();
+    return compactFields([
+      {
+        id: "status",
+        label: "Status",
+        options: [
+          { value: "failed", label: "Failed", selected: status === "failed" },
+          { value: "ok", label: "OK", selected: status === "ok" },
+        ],
+      },
+      field("model", "Model", facets.model, new Set(params.getAll("facetModel")), true),
+      field("tool", "Tool", facets.tool, new Set(params.getAll("facetTool")), true),
+      field("service", "Service", facets.service, new Set(params.getAll("facetService")), true),
+      field(
+        "environment",
+        "Environment",
+        facets.environment,
+        new Set(params.getAll("facetEnvironment")),
+        true,
+      ),
+      {
+        id: "cost",
+        label: "Cost",
+        options: COST_THRESHOLDS.map((value) => ({
+          value: String(value),
+          label: `Over ${formatMoney(value)}`,
+          selected: minCost === String(value),
+        })),
+      },
+      {
+        id: "tokens",
+        label: "Tokens",
+        options: TOKEN_THRESHOLDS.map((value) => ({
+          value: String(value),
+          label: `Over ${formatInteger(value)}`,
+          selected: minTokens === String(value),
+        })),
+      },
+    ]);
+  }
   const withCounts = tab === "spans";
   if (tab === "logs") {
     return compactFields([
       field(
         "experiment",
         "Experiment",
-        facets.experiment,
+        facets.experiment ?? [],
         singleSelected(params, "experiment"),
         false,
       ),
@@ -230,7 +315,13 @@ export function filterFields(
     field("model", "Model", facets.model, new Set(params.getAll("facetModel")), withCounts),
     field("tool", "Tool", facets.tool, singleSelected(params, "tool"), withCounts),
     tab === "spans"
-      ? field("stepName", "Step name", facets.name, new Set(params.getAll("facetName")), withCounts)
+      ? field(
+          "stepName",
+          "Step name",
+          facets.name ?? [],
+          new Set(params.getAll("facetName")),
+          withCounts,
+        )
       : null,
     field("service", "Service", facets.service, new Set(params.getAll("facetService")), withCounts),
     field(
@@ -243,11 +334,11 @@ export function filterFields(
     field(
       "experiment",
       "Experiment",
-      facets.experiment,
+      facets.experiment ?? [],
       new Set(params.getAll("facetExperiment")),
       withCounts,
     ),
-    field("variant", "Variant", facets.arm, new Set(params.getAll("facetArm")), withCounts),
+    field("variant", "Variant", facets.arm ?? [], new Set(params.getAll("facetArm")), withCounts),
   ]);
 }
 
@@ -259,6 +350,10 @@ export function withFilterToggled(
   value: string,
 ): string {
   const params = parse(search);
+  if (tab === "rollup") {
+    toggleRollup(params, fieldId, value);
+    return withoutVolatile(params);
+  }
   switch (fieldId) {
     case "status":
       toggleFlag(params, "errorOnly");
@@ -290,6 +385,57 @@ export function withFilterToggled(
       break;
   }
   return withoutVolatile(params);
+}
+
+/**
+ * The Sessions and Turns property filters in the URL (RC-505, with
+ * `cloud-traces-filters`), as the rollup query reads them. Status reads
+ * `errorOnly` (what v1 links write) or `status=ok|failed`.
+ */
+export function traceFilterFromSearch(search: string): TraceFilter {
+  const params = parse(search);
+  const values = (name: string) => [
+    ...new Set(
+      params
+        .getAll(name)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
+  const status = rollupStatus(params) ?? undefined;
+  const minCostUsd = numberParam(params.get("minCostUsd"));
+  const minTokens = numberParam(params.get("minTokens"));
+  const filter: TraceFilter = {
+    models: values("facetModel"),
+    tools: values("facetTool"),
+    services: values("facetService"),
+    environments: values("facetEnvironment"),
+    status,
+    minCostUsd: minCostUsd ?? undefined,
+    minTokens: minTokens ?? undefined,
+  };
+  return Object.fromEntries(
+    Object.entries(filter).filter(
+      ([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0),
+    ),
+  ) as TraceFilter;
+}
+
+/** Only the rollup bar's parameters of a query string, for a request that pages the same list. */
+export function rollupFilterQuery(search: string): URLSearchParams {
+  const params = parse(search);
+  const kept = new URLSearchParams();
+  for (const name of ROLLUP_FILTER_PARAMS)
+    for (const value of params.getAll(name)) kept.append(name, value);
+  return kept;
+}
+
+/** A query string without the rollup bar's parameters, so the span-scan filters never also read them. */
+export function withoutRollupFilters(search: string): string {
+  const params = parse(search);
+  for (const name of ROLLUP_FILTER_PARAMS) params.delete(name);
+  const text = params.toString();
+  return text ? `?${text}` : "";
 }
 
 /** A preset time window replaces a custom one and its days. */
@@ -511,6 +657,33 @@ function compact<T>(items: readonly (T | null)[]): T[] {
 
 function compactFields(fields: readonly (FilterField | null)[]): FilterField[] {
   return compact(fields).filter((item) => item.options.length > 0);
+}
+
+const ROLLUP_MULTI: Partial<Record<FilterFieldId, string>> = {
+  model: "facetModel",
+  tool: "facetTool",
+  service: "facetService",
+  environment: "facetEnvironment",
+};
+
+function toggleRollup(params: URLSearchParams, fieldId: FilterFieldId, value: string): void {
+  const multiParam = ROLLUP_MULTI[fieldId];
+  if (multiParam) return toggleMulti(params, multiParam, value);
+  if (fieldId === "cost") return toggleSingle(params, "minCostUsd", value);
+  if (fieldId === "tokens") return toggleSingle(params, "minTokens", value);
+  if (fieldId === "status") {
+    const current = rollupStatus(params);
+    params.delete("errorOnly");
+    params.delete("status");
+    if (current !== value) params.set("status", value);
+  }
+}
+
+/** The rollup bar's status: `status=ok|failed`, or `errorOnly` from v1 links. */
+function rollupStatus(params: URLSearchParams): "failed" | "ok" | null {
+  if (isOn(params.get("errorOnly"))) return "failed";
+  const status = params.get("status");
+  return status === "failed" || status === "ok" ? status : null;
 }
 
 function toggleFlag(params: URLSearchParams, name: string): void {
