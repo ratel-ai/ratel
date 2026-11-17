@@ -1,6 +1,7 @@
 import type { ActingAs } from "@/lib/contracts/session";
 import {
   type ApiKeyExpiryPreset,
+  type ApiKeyKind,
   type ApiKeyStatus,
   apiKeyStatus,
   DEFAULT_API_KEY_EXPIRY,
@@ -8,6 +9,12 @@ import {
   normalizeApiKeyName,
   resolveApiKeyExpiry,
 } from "@/lib/platform/api-keys";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
+import {
+  type ApiKeyAccess,
+  type ApiKeyPreset,
+  resolveScopeChoice,
+} from "@/lib/platform/api-keys/scopes";
 
 /**
  * Create/revoke logic for a project's API keys, split from the `"use server"` wrappers in
@@ -27,6 +34,12 @@ export type ApiKeySummary = {
   lastUsedAt: string | null;
   expiresAt: string | null;
   status: ApiKeyStatus;
+  /** Stored scopes; `["*"]` for Full. */
+  scopes: string[];
+  /** Which preset the scopes match, or `custom`. */
+  access: ApiKeyAccess;
+  /** Ingest-only: safe to ship inside an app. */
+  publishable: boolean;
 };
 
 /** The stored columns these handlers care about. */
@@ -39,6 +52,7 @@ export type ApiKeyRecord = {
   lastUsedAt: Date | null;
   revokedAt: Date | null;
   expiresAt: Date | null;
+  scopes: string[];
 };
 
 /** Upstream's refusal text: a time-boxed support session must not mint or revoke credentials. */
@@ -66,13 +80,14 @@ export type ApiKeyActionDeps = {
   getProjectBySlug(organizationId: string, projectSlug: string): Promise<{ id: string } | null>;
   listApiKeysForProject(projectId: string): Promise<ApiKeyRecord[]>;
   findApiKeyForProject(projectId: string, keyId: string): Promise<ApiKeyRecord | null>;
-  generateApiKey(): GeneratedApiKey;
+  generateApiKey(kind: ApiKeyKind): GeneratedApiKey;
   createApiKey(input: {
     projectId: string;
     name: string | null;
     keyHash: string;
     keyPrefix: string;
     expiresAt: Date | null;
+    scopes: string[];
   }): Promise<ApiKeyRecord>;
   revokeApiKey(keyId: string): Promise<void>;
   trackApiKeyCreated(
@@ -83,6 +98,8 @@ export type ApiKeyActionDeps = {
       named: boolean;
       /** Which lifetime was picked — the distribution is the useful signal. */
       expiresIn: ApiKeyExpiryPreset;
+      /** Which access was picked: full, read_only, ingest or custom. */
+      access: ApiKeyAccess;
     },
   ): Promise<void>;
   trackApiKeyRevoked(
@@ -113,6 +130,10 @@ export type CreateApiKeyInput = {
    * client never gets to name the expiry date itself. Omitted means "never".
    */
   expiresIn?: ApiKeyExpiryPreset | null;
+  /** Full (the default), a narrower preset, or `custom` with `scopes`. */
+  access?: ApiKeyPreset | "custom" | null;
+  /** The single scopes picked, when `access` is `custom`. */
+  scopes?: readonly string[] | null;
 };
 
 /**
@@ -140,19 +161,27 @@ export async function createApiKeyHandler(
   if (!name.ok) return name;
   const expiration = resolveApiKeyExpiry(input.expiresIn, deps.now());
   if (!expiration.ok) return expiration;
+  const choice = resolveScopeChoice({ preset: input.access, scopes: input.scopes });
+  if (!choice.ok) return choice;
+  const policy = apiKeyPolicy(choice.scopes);
+  const access = policy.access;
+  // An ingest-only key carries rtl_pub_ so people and secret scanners can tell
+  // it is the one kind safe to ship; access is still decided by its scopes.
+  const kind: ApiKeyKind = policy.kind;
 
   const existing = await deps.listApiKeysForProject(project.id);
   if (existing.length >= MAX_API_KEYS_PER_PROJECT) {
     return { ok: false, error: KEY_LIMIT_ERROR };
   }
 
-  const generated = deps.generateApiKey();
+  const generated = deps.generateApiKey(kind);
   const created = await deps.createApiKey({
     projectId: project.id,
     name: name.name,
     keyHash: generated.hash,
     keyPrefix: generated.prefix,
     expiresAt: expiration.expiresAt,
+    scopes: choice.scopes,
   });
 
   deps.logInfo(
@@ -162,6 +191,8 @@ export async function createApiKeyHandler(
       orgId: ctx.organization.id,
       keyPrefix: created.keyPrefix,
       expiresAt: expiration.expiresAt?.toISOString() ?? null,
+      access,
+      scopes: choice.scopes,
     },
     "issued api key",
   );
@@ -169,6 +200,7 @@ export async function createApiKeyHandler(
     keyPrefix: created.keyPrefix,
     named: name.name !== null,
     expiresIn: input.expiresIn ?? DEFAULT_API_KEY_EXPIRY,
+    access,
   });
   revalidateApiKeySurfaces(deps, project.id);
 
@@ -233,6 +265,9 @@ export function toApiKeySummary(key: ApiKeyRecord, now: Date): ApiKeySummary {
     lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
     expiresAt: key.expiresAt?.toISOString() ?? null,
     status: apiKeyStatus(key, now),
+    scopes: [...key.scopes],
+    access: apiKeyPolicy(key.scopes).access,
+    publishable: apiKeyPolicy(key.scopes).publishable,
   };
 }
 

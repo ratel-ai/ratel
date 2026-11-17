@@ -2,6 +2,7 @@ import { serializeSkill } from "@/lib/catalog/http";
 import { statusTransitionInput } from "@/lib/catalog/manage";
 import { setSkillStatus } from "@/lib/catalog/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { v1MutationErrorResponse } from "@/lib/platform/v1-errors";
 
@@ -16,7 +17,10 @@ export const runtime = "nodejs";
 export const POST = withRequestLog(handlePost);
 
 async function handlePost(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(
+    req,
+    BEARER_ROUTE_SCOPES["POST /api/v1/skills/[id]/publish"],
+  );
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
   const { id } = await params;

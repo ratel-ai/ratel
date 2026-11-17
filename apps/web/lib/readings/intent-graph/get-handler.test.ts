@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import {
   handleIntentGraphGet,
   type IntentGraphGetHandlerDeps,
@@ -57,7 +58,14 @@ function makeDeps(overrides: Partial<IntentGraphGetHandlerDeps> = {}) {
   const events: Array<Record<string, unknown>> = [];
   const logs: Array<{ message: string; fields: unknown }> = [];
   const deps: IntentGraphGetHandlerDeps = {
-    resolveProjectFromBearer: async () => ({ ok: true, projectId: PROJECT_ID, apiKeyId: "key-1" }),
+    scope: "intent_graph:read",
+    resolveProjectFromBearer: async () => ({
+      ok: true,
+      projectId: PROJECT_ID,
+      apiKeyId: "key-1",
+      policy: apiKeyPolicy(["*"]),
+      rateLimitPerMinute: null,
+    }),
     getOrganizationByProjectId: async () => ({ id: "org-1", slug: "ratel", plan: "free" }) as never,
     getIntentGraph: async () => row,
     touchIntentGraphPull: async (projectId) => {

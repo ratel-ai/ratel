@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicAgent } from "@/lib/views/eval-gate/models";
-import { anthropicClient, anthropicConfigured } from "./client";
+import { anthropicBackend, anthropicClient, anthropicConfigured } from "./client";
 
 const message = {
   id: "msg_1",
@@ -30,11 +30,28 @@ function fakeFetch(status = 200): { fetch: typeof fetch; seen: Seen[] } {
       status === 200 ? JSON.stringify(message) : JSON.stringify({ message: "no" }),
       {
         status,
-        headers: { "content-type": "application/json" },
+        // retry-after-ms keeps the SDK's backoff short when Bedrock retries.
+        headers: { "content-type": "application/json", "retry-after-ms": "1" },
       },
     );
   }) as typeof fetch;
   return { fetch: fetchImpl, seen };
+}
+
+/** A fake network that answers each status in turn, then a message. */
+function flakyFetch(statuses: number[]): { fetch: typeof fetch; calls: () => number } {
+  let count = 0;
+  const fetchImpl = (async () => {
+    const status = statuses[count] ?? 200;
+    count += 1;
+    const body = status === 200 ? message : { message: "busy" };
+    // retry-after-ms keeps the SDK's backoff short in tests.
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json", "retry-after-ms": "1" },
+    });
+  }) as typeof fetch;
+  return { fetch: fetchImpl, calls: () => count };
 }
 
 const AWS_VARIABLES = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] as const;
@@ -179,4 +196,47 @@ test("an unknown backend gives no client, even with a key, and no call can leave
   const env = { ANTHROPIC_BACKEND: "bedrok", ANTHROPIC_API_KEY: "sk-test" };
   assert.equal(anthropicClient({}, env), null);
   assert.equal(anthropicConfigured(env), false);
+});
+
+test("the active backend is bedrock only when ANTHROPIC_BACKEND says so, else api", () => {
+  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: "bedrock" }), "bedrock");
+  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: " bedrock " }), "bedrock");
+  assert.equal(anthropicBackend({ ANTHROPIC_API_KEY: "sk-test" }), "api");
+  assert.equal(anthropicBackend({}), "api");
+  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: "REPLACE_ME" }), "api");
+});
+
+for (const [name, status] of [
+  ["503 Service Unavailable", 503],
+  ["throttling (429)", 429],
+] as const) {
+  test(`on Bedrock, ${name} is retried at least twice, even when the caller asks for no retries`, async () => {
+    const { fetch, calls } = flakyFetch([status, status]);
+    const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+    const reply = await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
+
+    assert.equal(reply.stop_reason, "end_turn");
+    assert.equal(calls(), 3);
+  });
+}
+
+test("on Bedrock, a caller asking for more retries keeps them", async () => {
+  const { fetch, calls } = flakyFetch([503, 503, 503]);
+  const client = anthropicClient({ fetch, maxRetries: 3 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+  await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
+
+  assert.equal(calls(), 4);
+});
+
+test("on the Anthropic API, the caller's retry setting is kept as is", async () => {
+  const { fetch, calls } = flakyFetch([503]);
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_API_KEY: "sk-test" });
+
+  await assert.rejects(
+    client!.messages.create({ ...params, model: "claude-sonnet-5-5" }),
+    Anthropic.InternalServerError,
+  );
+  assert.equal(calls(), 1);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { StatusDot } from "@ratel/design-system/badge";
+import { Badge, StatusDot } from "@ratel/design-system/badge";
 import { Button, IconButton } from "@ratel/design-system/button";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ConfirmDialog } from "@ratel/design-system/dialog";
@@ -72,6 +72,21 @@ export function ApiKeysTable({
     }
   }
 
+  const accessColumn: Column<ApiKeyRow> = {
+    id: "access",
+    header: "Access",
+    width: "11rem",
+    cell: (row) => (
+      <span title={row.access.detail} className="whitespace-nowrap">
+        <Badge tone={row.access.tone}>{row.access.label}</Badge>
+        <span className="sr-only">
+          {row.access.publishable ? ", safe to put in an app" : ", keep secret"}:{" "}
+          {row.access.detail}
+        </span>
+      </span>
+    ),
+  };
+
   const columns: readonly Column<ApiKeyRow>[] = [
     {
       id: "name",
@@ -80,6 +95,7 @@ export function ApiKeysTable({
         <span className={row.named ? "font-medium text-fg" : "text-fg-muted"}>{row.name}</span>
       ),
     },
+    accessColumn,
     {
       id: "key",
       header: "Key",

@@ -1,6 +1,7 @@
 import { replaceCatalogSnapshot } from "@/lib/ingest/catalogs/queries";
 import { handleCatalogSnapshotRequest } from "@/lib/ingest/catalogs/snapshot-handler";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
@@ -18,6 +19,7 @@ export const PUT = withRequestLog(handlePut);
 
 async function handlePut(request: Request): Promise<Response> {
   return handleCatalogSnapshotRequest(request, {
+    scope: BEARER_ROUTE_SCOPES["PUT /api/v1/catalog/snapshot"],
     resolveProjectFromBearer,
     getOrganizationByProjectId,
     replaceCatalogSnapshot,

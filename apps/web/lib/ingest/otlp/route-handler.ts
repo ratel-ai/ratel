@@ -1,4 +1,9 @@
 import { gunzipSync, inflateSync } from "node:zlib";
+import {
+  ingestRateLimitedResponse,
+  type PublishableIngestLimits,
+  publishableIngestLimits,
+} from "@/lib/ingest/ingest-limits";
 import type {
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
@@ -8,6 +13,8 @@ import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold
 import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trace-events/queries";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
+import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import type { EventQuotaResult, OrgLimitView } from "@/lib/platform/entitlements";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
@@ -88,6 +95,10 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   hashApiKey: typeof hashApiKeyFn;
   findActiveApiKeyByHash: typeof findActiveApiKeyByHashFn;
   touchApiKey: typeof touchApiKeyFn;
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
+  /** Shared-key abuse limits for ingest-only keys; the process-wide budget when absent. */
+  publishableLimits?: PublishableIngestLimits;
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
@@ -170,14 +181,41 @@ export async function handleTracesRequest(
     );
   }
 
-  const apiKey = await deps.findActiveApiKeyByHash(deps.hashApiKey(match[1].trim()));
-  if (!apiKey) {
+  const auth = await authenticateApiKey(req.headers.get("authorization"), deps.scope, deps);
+  if (!auth.ok) {
     return rejectTraceRequest(
-      json({ error: "Invalid or revoked API key." }, 401),
-      "invalid_key",
+      json(
+        auth.reason === "forbidden"
+          ? {
+              error: "forbidden",
+              reason: "missing_scope",
+              scope: deps.scope,
+              message: auth.message,
+            }
+          : { error: auth.message },
+        auth.status,
+      ),
+      auth.reason === "forbidden"
+        ? "missing_scope"
+        : auth.reason === "unavailable"
+          ? "unavailable"
+          : "invalid_key",
       startedAt,
       deps,
     );
+  }
+  const apiKey = auth.apiKey;
+  if (auth.policy.sharedKeyLimits) {
+    const limit = (deps.publishableLimits ?? publishableIngestLimits).check(req, apiKey);
+    if (!limit.allowed) {
+      return rejectTraceRequest(
+        ingestRateLimitedResponse(limit),
+        "rate_limited",
+        startedAt,
+        deps,
+        apiKey.projectId,
+      );
+    }
   }
 
   // 1b. Plan cap: reject once the org is over its monthly trace-event allotment. The
@@ -268,6 +306,25 @@ export async function handleTracesRequest(
       apiKey.projectId,
       organization?.id,
     );
+  }
+
+  // An ingest-only key's budget counts spans too, not only requests (RC-585).
+  if (auth.policy.sharedKeyLimits) {
+    const items = (deps.publishableLimits ?? publishableIngestLimits).chargeItems(
+      req,
+      apiKey,
+      spans.length,
+    );
+    if (!items.allowed) {
+      return rejectTraceRequest(
+        ingestRateLimitedResponse(items),
+        "rate_limited",
+        startedAt,
+        deps,
+        apiKey.projectId,
+        organization?.id,
+      );
+    }
   }
 
   // 3. Normalize, group, persist: shared with the Agent health importer.

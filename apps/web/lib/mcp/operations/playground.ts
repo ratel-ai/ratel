@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { composition } from "@/lib/composition/ports";
 import { authDistinctId } from "@/lib/mcp/auth";
-import { McpOperationError } from "@/lib/mcp/errors";
+import { forbidden, McpOperationError } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round, truncateText } from "@/lib/mcp/serialize";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
+import { missingScopeMessage } from "@/lib/platform/api-keys/scopes";
 import { loadBench } from "@/lib/synthesis/playground/catalog";
 import { MAX_QUERY_CHARS } from "@/lib/synthesis/playground/contract";
 import { embedTexts } from "@/lib/synthesis/playground/embed";
@@ -202,6 +204,15 @@ export function playgroundOperations(
           .describe("Include runtime-synced tool definitions in the bench."),
       }),
       async execute(ctx, params) {
+        // The embedding modes spend, so an API key needs the embeddings scope
+        // for them, as for /v1/embeddings (RC-585); bm25 is free for any reader.
+        if (
+          ctx.auth.kind === "api-key" &&
+          params.mode !== "bm25" &&
+          !apiKeyPolicy(ctx.auth.scopes).allows("embeddings")
+        ) {
+          throw forbidden(missingScopeMessage("embeddings"));
+        }
         // Keyed per credential, not per user: an API key is the thing whose loop
         // runs away, and two keys in one organization should not share a budget.
         const budgetKey = authDistinctId(ctx.auth);

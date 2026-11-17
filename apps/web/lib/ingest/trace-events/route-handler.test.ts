@@ -8,12 +8,15 @@ import {
   MAX_BODY_BYTES,
   type RuntimeEventsHandlerDeps,
 } from "@/lib/ingest/trace-events/route-handler";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { chunkedCountingBody } from "@/lib/platform/http/test-support";
 
 const AUTHORIZED = {
   ok: true as const,
   projectId: "11111111-1111-4111-8111-111111111111",
   apiKeyId: "key-1",
+  policy: apiKeyPolicy(["*"]),
+  rateLimitPerMinute: null,
 };
 
 function event(overrides: Record<string, unknown> = {}) {
@@ -50,6 +53,7 @@ function makeDeps(overrides: Partial<RuntimeEventsHandlerDeps> = {}) {
     properties: Record<string, unknown>;
   }> = [];
   const deps: RuntimeEventsHandlerDeps = {
+    scope: "ingest:events",
     resolveProjectFromBearer: async () => AUTHORIZED,
     getOrganizationByProjectId: async () =>
       ({
@@ -499,4 +503,79 @@ test("without the fold deps the handler behaves exactly as before", async () => 
 
   assert.equal(response.status, 202);
   assert.equal(inserted.length, 1);
+});
+
+// RC-585: an ingest-only key's events get the shared-key budget, not the
+// per-client one.
+
+const PUBLISHABLE = {
+  ...AUTHORIZED,
+  policy: apiKeyPolicy(["ingest:events"]),
+  rateLimitPerMinute: null,
+};
+
+test("an ingest-only key skips the per-client limiter and uses the shared-key budget", async () => {
+  let perClientCalls = 0;
+  const { deps, inserted } = makeDeps({
+    resolveProjectFromBearer: async () => PUBLISHABLE,
+    rateLimiter: {
+      consume: () => {
+        perClientCalls += 1;
+        return { allowed: false, retryAfterSeconds: 60 };
+      },
+    },
+    publishableLimits: {
+      check: () => ({ allowed: true }),
+      chargeItems: () => ({ allowed: true as const }),
+    },
+  });
+  const response = await handleRuntimeEventsRequest(request({ events: [event()] }), deps);
+  assert.equal(response.status, 202);
+  assert.equal(perClientCalls, 0);
+  assert.equal(inserted.length, 1);
+});
+
+test("an ingest-only key over its shared-key budget gets 429 with Retry-After", async () => {
+  const { deps, inserted } = makeDeps({
+    resolveProjectFromBearer: async () => PUBLISHABLE,
+    publishableLimits: {
+      check: () => ({ allowed: false, retryAfterSeconds: 4, limit: "per_source" }),
+      chargeItems: () => ({ allowed: true as const }),
+    },
+  });
+  const response = await handleRuntimeEventsRequest(request({ events: [event()] }), deps);
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "4");
+  assert.equal(inserted.length, 0);
+});
+
+test("the route asks the resolver for ingest:events", async () => {
+  const asked: string[] = [];
+  const { deps } = makeDeps({
+    resolveProjectFromBearer: async (_request, scope) => {
+      asked.push(scope);
+      return AUTHORIZED;
+    },
+  });
+  await handleRuntimeEventsRequest(request({ events: [event()] }), deps);
+  assert.deepEqual(asked, ["ingest:events"]);
+});
+
+test("an ingest-only key's events are stored append-only; a Full key's are not (RC-590)", async () => {
+  const seen: Array<boolean | undefined> = [];
+  for (const resolved of [PUBLISHABLE, AUTHORIZED]) {
+    const { deps } = makeDeps({
+      resolveProjectFromBearer: async () => resolved,
+      publishableLimits: {
+        check: () => ({ allowed: true }),
+        chargeItems: () => ({ allowed: true }),
+      },
+      insertTraceEvents: async (_projectId, rows, _db, options) => {
+        seen.push(options?.appendOnly);
+        return { accepted: rows.length };
+      },
+    });
+    await handleRuntimeEventsRequest(request({ events: [event()] }), deps);
+  }
+  assert.deepEqual(seen, [true, false]);
 });

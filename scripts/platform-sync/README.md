@@ -46,6 +46,8 @@ specifier, minimal owned edits) is the "Code from ratel-cloud" section of
   `map.json` (or a rule to `rewrites.json`) before landing.
 - The product's name in a copied string becomes `APP_NAME` (the `brand` rule in `rewrites.json`); a
   test gets the default name. A string that spans lines is left alone: own the file.
+- `identifiers` in `rewrites.json` renames whole words in copied code. `__dirname` becomes
+  `import.meta.dirname`: upstream's tests run as CommonJS, this repository's as ES modules.
 - A private-string hit is never worked around in the list; the file is excluded or fixed upstream.
 - Every upstream file under `apps/web` and `packages` has a decision. Most are an entry in
   `map.json`. A file whose upstream path contains a confidential word has none on purpose: writing

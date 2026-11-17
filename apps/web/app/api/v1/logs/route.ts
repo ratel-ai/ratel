@@ -6,6 +6,7 @@ import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-captur
 import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
 import { hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
@@ -19,6 +20,7 @@ export const POST = withRequestLog(handlePost);
 
 async function handlePost(req: Request) {
   return handleLogsRequest(req, {
+    scope: BEARER_ROUTE_SCOPES["POST /api/v1/logs"],
     isDbConfigured,
     hashApiKey,
     findActiveApiKeyByHash,

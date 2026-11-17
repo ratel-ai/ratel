@@ -22,7 +22,7 @@
  * experiment's records and tags, applied rewrites) is taken out and written
  * again the same way. The rewrites are a real analyst's answers, captured in
  * `lib/console/seed/site-copilot-quality-fixture.ts` and replayed (runs are stored as
- * mocked); `--capture` asks the real analyst again (ANTHROPIC_API_KEY, a model
+ * mocked); `--capture` asks the real analyst again (a Claude backend: ANTHROPIC_BACKEND=bedrock or ANTHROPIC_API_KEY, a model
  * call per run) and rewrites that file. No other model is called.
  *
  * Refuses a database that is not on this machine. Prints counts, never text.
@@ -67,11 +67,13 @@ import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { getLogger } from "@/lib/platform/logger";
 import { createApiKey, findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
 import { projects } from "@/lib/platform/projects/schema";
+import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { identityFingerprint } from "@/lib/readings/decisions/judge";
 import {
   type AnalystDeps,
@@ -180,6 +182,8 @@ async function sendRecords(
       body: JSON.stringify(logsExport(records.slice(offset, offset + RECORDS_PER_EXPORT))),
     });
     const response = await handleLogsRequest(request, {
+      // The route's scope (RC-585): the handler checks the seed's Full key against it.
+      scope: BEARER_ROUTE_SCOPES["POST /api/v1/logs"],
       isDbConfigured,
       hashApiKey,
       findActiveApiKeyByHash,
@@ -208,7 +212,7 @@ function analystFor(
   sink: Partial<Record<RunName, string>>,
 ): (context: AnalystContext) => AnalystDeps {
   if (!capture) return (context) => replayAnalyst(context, SITE_QUALITY_CAPTURED[run]);
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error("--capture needs ANTHROPIC_API_KEY");
+  if (!anthropicConfigured()) throw new Error("--capture needs a Claude backend: set ANTHROPIC_BACKEND=bedrock or ANTHROPIC_API_KEY");
   return () => {
     const real = anthropicAnalystDeps(process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL);
     return {
@@ -344,7 +348,7 @@ function writeFixture(
  * The analyst's answers for the Site Copilot quality seed, captured once from a
  * real analysis of the seeded searches (${model}) and replayed on every later
  * run, so the seed stays deterministic and spends nothing. Regenerate with
- * \`pnpm --filter @ratel/platform seed:quality --capture\` (needs ANTHROPIC_API_KEY).
+ * \`pnpm --filter @ratel/platform seed:quality --capture\` (needs a Claude backend: ANTHROPIC_BACKEND=bedrock or ANTHROPIC_API_KEY).
  */
 export const SITE_QUALITY_CAPTURED: { earlier: CapturedRun; latest: CapturedRun } = ${JSON.stringify(captured, null, 2)};
 `;

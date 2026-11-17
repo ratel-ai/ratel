@@ -260,6 +260,13 @@
       "when": 1794922136450,
       "tag": "0036_project_model_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794930503819,
+      "tag": "0037_api_key_scopes",
+      "breakpoints": true
     }
   ]
 }

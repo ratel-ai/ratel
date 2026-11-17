@@ -1,5 +1,6 @@
 import { ifNoneMatchMatches } from "@/lib/catalog/wire";
 import type { resolveProjectFromBearer as resolveProjectFromBearerFn } from "@/lib/platform/api-key-bearer";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import { getLogger, type LogError } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type { TokenBucketRateLimiter } from "@/lib/platform/rate-limit";
@@ -12,6 +13,8 @@ import type {
 import { intentGraphEtag } from "@/lib/readings/intent-types/wire";
 
 export interface IntentGraphGetHandlerDeps {
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
   resolveProjectFromBearer: typeof resolveProjectFromBearerFn;
   getOrganizationByProjectId: typeof getOrganizationByProjectIdFn;
   getIntentGraph: typeof getIntentGraphFn;
@@ -38,7 +41,7 @@ export async function handleIntentGraphGet(
   request: Request,
   deps: IntentGraphGetHandlerDeps,
 ): Promise<Response> {
-  const resolved = await deps.resolveProjectFromBearer(request);
+  const resolved = await deps.resolveProjectFromBearer(request, deps.scope);
   if (!resolved.ok) return resolved.response;
   const organization = await deps.getOrganizationByProjectId(resolved.projectId);
   deps.setRequestLogContext?.(request, {

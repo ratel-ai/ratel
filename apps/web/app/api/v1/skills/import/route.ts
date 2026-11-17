@@ -3,6 +3,7 @@ import { importSkills } from "@/lib/catalog/import";
 import { createSkillInput } from "@/lib/catalog/manage";
 import { countSkills, createSkill, getActiveSkillByName, updateSkill } from "@/lib/catalog/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { v1MutationErrorResponse, v1QuotaExceededResponse } from "@/lib/platform/v1-errors";
@@ -22,7 +23,10 @@ const importInput = z.object({
 export const POST = withRequestLog(handlePost);
 
 async function handlePost(req: Request) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(
+    req,
+    BEARER_ROUTE_SCOPES["POST /api/v1/skills/import"],
+  );
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
 

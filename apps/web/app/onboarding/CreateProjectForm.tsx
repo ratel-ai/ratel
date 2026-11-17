@@ -9,7 +9,13 @@ import { type CreateProjectState, createProjectAction } from "@/app/onboarding/a
 import { CaptureConsentPanel } from "@/components/console/onboarding/CaptureConsentPanel";
 import { OnboardingEmblem } from "@/components/console/onboarding/OnboardingEmblem";
 import { SdkQuickstart } from "@/components/console/onboarding/SdkQuickstart";
-import { NAV_DELAY_MS, ONBOARDING_LEAVE_EVENT } from "@/lib/console/onboarding/transition";
+import { navigateUnderVeil } from "@/lib/console/onboarding/arrival-veil";
+import {
+  LEAVE_VEIL_DELAY_MS,
+  LEAVE_VEIL_MS,
+  NAV_DELAY_MS,
+  ONBOARDING_LEAVE_EVENT,
+} from "@/lib/console/onboarding/transition";
 import { APP_NAME } from "@/lib/platform/app-config";
 
 /**
@@ -165,8 +171,8 @@ function KeyReveal({
     router.prefetch(dashboardHref);
   }, [router, dashboardHref]);
 
-  // Drain the streaks, settle + dissolve, then navigate — landing on the
-  // dashboard's own pop-in. Reduced-motion users go straight there, no animation.
+  // Drain the streaks, settle + dissolve, then navigate, and the dashboard
+  // fades in. Reduced-motion users go straight there, no animation.
   function goToDashboard() {
     if (leaving) return;
     const reduce =
@@ -180,7 +186,11 @@ function KeyReveal({
     // this edition's static backdrop has nothing to wind down).
     window.dispatchEvent(new CustomEvent(ONBOARDING_LEAVE_EVENT));
     setLeaving(true);
-    window.setTimeout(() => router.push(dashboardHref), NAV_DELAY_MS);
+    // Under a veil that outlives this page, so the dashboard fades in.
+    window.setTimeout(
+      () => navigateUnderVeil(dashboardHref, (href) => router.push(href)),
+      NAV_DELAY_MS,
+    );
   }
 
   return (
@@ -276,7 +286,16 @@ function KeyReveal({
         fixed child still inherits an ancestor's opacity), so the scene never
         actually dissolved. Out here it fades to base over the dot-field, then
         navigation reveals the dashboard behind. */}
-      {leaving && <div className="onboarding-dissolve fixed inset-0 z-50 bg-canvas" aria-hidden />}
+      {leaving && (
+        <div
+          className="onboarding-dissolve fixed inset-0 z-50 bg-canvas"
+          style={{
+            animationDelay: `${LEAVE_VEIL_DELAY_MS}ms`,
+            animationDuration: `${LEAVE_VEIL_MS}ms`,
+          }}
+          aria-hidden
+        />
+      )}
     </>
   );
 }

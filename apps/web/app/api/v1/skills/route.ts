@@ -2,6 +2,7 @@ import { serializeSkill } from "@/lib/catalog/http";
 import { createSkillInput, SKILL_STATUSES, type SkillStatus } from "@/lib/catalog/manage";
 import { countSkills, createSkill, listSkills } from "@/lib/catalog/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { checkQuota } from "@/lib/platform/entitlements";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
@@ -21,7 +22,7 @@ export const runtime = "nodejs";
 export const GET = withRequestLog(handleGet);
 
 async function handleGet(req: Request) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(req, BEARER_ROUTE_SCOPES["GET /api/v1/skills"]);
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
 
@@ -42,7 +43,7 @@ async function handleGet(req: Request) {
 export const POST = withRequestLog(handlePost);
 
 async function handlePost(req: Request) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(req, BEARER_ROUTE_SCOPES["POST /api/v1/skills"]);
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
 

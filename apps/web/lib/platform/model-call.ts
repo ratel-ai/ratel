@@ -7,6 +7,7 @@ import {
   trace,
 } from "@opentelemetry/api";
 import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
+import { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
 import { currentLogContext } from "@/lib/platform/logger";
 
 /**
@@ -16,6 +17,10 @@ import { currentLogContext } from "@/lib/platform/logger";
  * with nothing installed a tracked call only runs. An edition that tracks spend installs its sink
  * with `setModelCallSink` and prices the line itself. The fields carry ids, a model name, numbers
  * and an outcome; never a prompt or an answer.
+ *
+ * `backend` says which endpoint served the call: `bedrock` for a Claude call when
+ * `ANTHROPIC_BACKEND=bedrock`, else `api` (the provider's own API). It is read here once, so call
+ * sites never name it; an edition that prices the line adds the EU premium for a Bedrock call.
  *
  * A call Ratel pays for is also a `gen_ai.*` span for Ratel's own project (ratel-cloud #410), as
  * upstream makes it; the span is exported only where the self-telemetry export is configured
@@ -86,6 +91,11 @@ function errorType(error: unknown): string | undefined {
   return typeof error;
 }
 
+/** The endpoint that served the call: only Claude calls can go to Bedrock. */
+function backendOf(provider: ModelProvider): AnthropicBackend {
+  return provider === "anthropic" ? anthropicBackend() : "api";
+}
+
 /** Hand one `model_call` line to the sink. Never throws: reporting must not break the call it describes. */
 export function recordModelCall(record: ModelCallRecord): void {
   const out = sink;
@@ -109,6 +119,7 @@ export function recordModelCall(record: ModelCallRecord): void {
         ...(written !== null ? { cache_write_tokens: written } : {}),
         duration_ms: Math.max(0, Math.round(record.durationMs)),
         outcome: record.outcome,
+        backend: backendOf(record.provider),
         ...(record.calls !== undefined ? { calls: Math.max(1, Math.trunc(record.calls)) } : {}),
         ...(type ? { error_type: type } : {}),
       },

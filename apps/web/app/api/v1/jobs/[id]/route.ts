@@ -1,5 +1,6 @@
 import { getJobForProject } from "@/lib/jobs/queries";
 import { resolveProjectFromBearer } from "@/lib/platform/api-key-bearer";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 
 export const runtime = "nodejs";
@@ -16,7 +17,10 @@ export const runtime = "nodejs";
 export const GET = withRequestLog(handleGet);
 
 async function handleGet(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const resolved = await resolveProjectFromBearer(req);
+  const resolved = await resolveProjectFromBearer(
+    req,
+    BEARER_ROUTE_SCOPES["GET /api/v1/jobs/[id]"],
+  );
   if (!resolved.ok) return resolved.response;
   setRequestLogContext(req, { project_id: resolved.projectId });
 

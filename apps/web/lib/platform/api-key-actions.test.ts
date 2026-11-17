@@ -29,6 +29,7 @@ function record(over: Partial<ApiKeyRecord> = {}): ApiKeyRecord {
     lastUsedAt: null,
     revokedAt: null,
     expiresAt: null,
+    scopes: ["*"],
     ...over,
   };
 }
@@ -41,12 +42,17 @@ function deps(overrides: Partial<ApiKeyActionDeps> = {}): ApiKeyActionDeps {
     getProjectBySlug: async () => ({ id: PROJECT_ID }),
     listApiKeysForProject: async () => [],
     findApiKeyForProject: async () => record(),
-    generateApiKey: () => ({
-      plaintext: "rtl_abcd1234secret",
-      prefix: "rtl_abcd1234",
-      hash: "hash",
-    }),
-    createApiKey: async (input) => record({ name: input.name, expiresAt: input.expiresAt }),
+    generateApiKey: (kind) =>
+      kind === "publishable"
+        ? { plaintext: "rtl_pub_abcd1234secret", prefix: "rtl_pub_abcd1234", hash: "hash" }
+        : { plaintext: "rtl_abcd1234secret", prefix: "rtl_abcd1234", hash: "hash" },
+    createApiKey: async (input) =>
+      record({
+        name: input.name,
+        expiresAt: input.expiresAt,
+        scopes: input.scopes,
+        keyPrefix: input.keyPrefix,
+      }),
     revokeApiKey: async () => undefined,
     trackApiKeyCreated: async () => undefined,
     trackApiKeyRevoked: async () => undefined,
@@ -224,6 +230,7 @@ test("creating emits a typed event and a structured log", async () => {
       keyPrefix: "rtl_abcd1234",
       named: true,
       expiresIn: "3mo",
+      access: "full",
     },
   ]);
   assert.equal(logs.length, 1);
@@ -314,5 +321,91 @@ test("a summary carries the display fields the key list needs", () => {
     lastUsedAt: "2026-08-09T00:00:00.000Z",
     expiresAt: "2026-08-09T00:00:00.000Z",
     status: "expired",
+    scopes: ["*"],
+    access: "full",
+    publishable: false,
   });
+});
+
+/* Scopes (RC-585) */
+
+test("a key made without choosing access is Full, a secret rtl_ key, as before", async () => {
+  const created: Array<{ scopes: string[]; keyPrefix: string }> = [];
+  const result = await createApiKeyHandler(
+    { projectSlug: "support" },
+    undefined,
+    deps({
+      createApiKey: async (input) => {
+        created.push(input);
+        return record({ scopes: input.scopes, keyPrefix: input.keyPrefix });
+      },
+    }),
+  );
+  assert.ok(result.ok);
+  assert.deepEqual(created[0]?.scopes, ["*"]);
+  assert.equal(created[0]?.keyPrefix, "rtl_abcd1234");
+  assert.equal(result.key.access, "full");
+  assert.equal(result.key.publishable, false);
+});
+
+test("an ingest-only key is stored with the three ingest scopes and carries rtl_pub_", async () => {
+  const result = await createApiKeyHandler(
+    { projectSlug: "support", access: "ingest" },
+    undefined,
+    deps(),
+  );
+  assert.ok(result.ok);
+  assert.ok(result.plaintext.startsWith("rtl_pub_"));
+  assert.deepEqual(result.key.scopes, ["ingest:traces", "ingest:logs", "ingest:events"]);
+  assert.equal(result.key.access, "ingest");
+  assert.equal(result.key.publishable, true);
+});
+
+test("a custom list that is ingest-only is publishable too; one that reads is secret", async () => {
+  const logsOnly = await createApiKeyHandler(
+    { projectSlug: "support", access: "custom", scopes: ["ingest:logs"] },
+    undefined,
+    deps(),
+  );
+  assert.ok(logsOnly.ok);
+  assert.ok(logsOnly.plaintext.startsWith("rtl_pub_"));
+  assert.equal(logsOnly.key.access, "custom");
+
+  const mixed = await createApiKeyHandler(
+    { projectSlug: "support", access: "custom", scopes: ["ingest:logs", "catalog:read"] },
+    undefined,
+    deps(),
+  );
+  assert.ok(mixed.ok);
+  assert.ok(!mixed.plaintext.startsWith("rtl_pub_"));
+  assert.equal(mixed.key.publishable, false);
+});
+
+test("an unknown scope or an empty custom list is refused, never widened to Full", async () => {
+  for (const input of [
+    { access: "custom" as const, scopes: [] },
+    { access: "custom" as const, scopes: ["catalog:admin"] },
+    { access: "owner" as never },
+  ]) {
+    const result = await createApiKeyHandler(
+      { projectSlug: "support", ...input },
+      undefined,
+      deps({ createApiKey: async () => assert.fail("must not create") }),
+    );
+    assert.equal(result.ok, false, JSON.stringify(input));
+  }
+});
+
+test("the created event says which access was picked", async () => {
+  const tracked: string[] = [];
+  await createApiKeyHandler(
+    { projectSlug: "support", access: "ingest" },
+    undefined,
+    deps({
+      trackApiKeyCreated: async (_ctx, _projectId, details) => {
+        tracked.push(details.access);
+      },
+    }),
+  );
+  assert.deepEqual(tracked, ["ingest"]);
 });

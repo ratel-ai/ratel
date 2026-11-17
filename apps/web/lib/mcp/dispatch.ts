@@ -12,6 +12,9 @@ import {
   unknownOperation,
 } from "@/lib/mcp/errors";
 import type { McpOperation, OperationResult, Registry } from "@/lib/mcp/registry";
+import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
+import { mcpOperationScope } from "@/lib/platform/api-keys/routes";
+import { missingScopeMessage } from "@/lib/platform/api-keys/scopes";
 import { getLogger } from "@/lib/platform/logger";
 
 export interface DispatchSuccess {
@@ -145,6 +148,14 @@ export async function dispatchOperation(
   try {
     const params = (rawParams ?? {}) as Record<string, unknown>;
     const requestedProjectId = typeof params.projectId === "string" ? params.projectId : undefined;
+    // An API key reaches only the tools its scopes allow (RC-585): reading
+    // tools need `mcp:read`, changing ones `mcp:write`. Checked before the
+    // project is resolved, so a refusal reveals nothing about it.
+    if (deps.auth.kind === "api-key") {
+      const needed = mcpOperationScope(operation);
+      if (!apiKeyPolicy(deps.auth.scopes).allows(needed))
+        throw forbidden(missingScopeMessage(needed));
+    }
     let scope = resolveScope(deps.auth, operation, requestedProjectId);
     if (deps.projectOwner) {
       scope = await authorizeProject(deps.auth, scope, deps.projectOwner);

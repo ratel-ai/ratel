@@ -13,6 +13,7 @@ import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/querie
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { generateApiKey, hashApiKey } from "@/lib/platform/api-keys";
+import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
 import { getDb } from "@/lib/platform/db/client";
 import { getOrganizationById } from "@/lib/platform/organizations";
 import {
@@ -88,6 +89,7 @@ async function send(apiKey: string, body: object, db: SeedDb): Promise<Record<st
     body: JSON.stringify(body),
   });
   const response = await handleTracesRequest(request, {
+    scope: BEARER_ROUTE_SCOPES["POST /api/v1/traces"],
     isDbConfigured: () => true,
     hashApiKey,
     findActiveApiKeyByHash: (hash) => findActiveApiKeyByHash(hash, undefined, db),

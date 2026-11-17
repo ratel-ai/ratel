@@ -5,6 +5,8 @@ import type {
 } from "@/lib/catalog/queries";
 import { type Catalog, etagOf, ifNoneMatchMatches, resolve } from "@/lib/catalog/wire";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
+import { authenticateApiKey } from "@/lib/platform/api-keys/authenticate";
+import type { ApiKeyScope } from "@/lib/platform/api-keys/scopes";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import type {
   findActiveApiKeyByHash as findActiveApiKeyByHashFn,
@@ -46,6 +48,8 @@ export interface CatalogHandlerDeps {
   hashApiKey: typeof hashApiKeyFn;
   findActiveApiKeyByHash: typeof findActiveApiKeyByHashFn;
   touchApiKey: typeof touchApiKeyFn;
+  /** The scope this route needs (`BEARER_ROUTE_SCOPES`). */
+  scope: ApiKeyScope;
   /** The stored ETag hex (`projects.catalog_version`); null before the first publish. */
   getProjectCatalogVersion: typeof getProjectCatalogVersionFn;
   /** The project's published, global skills in wire shape (sorted by name = id). */
@@ -63,6 +67,7 @@ export interface CatalogHandlerDeps {
 /** v1 error code → HTTP status. */
 const ERROR_STATUS = {
   unauthorized: 401,
+  forbidden: 403,
   not_found: 404,
   invalid_request: 400,
   unavailable: 503,
@@ -92,10 +97,13 @@ export async function handleCatalogRequest(
     return fail("unavailable", "Catalog is not available. Database not configured.");
   }
 
-  const apiKey = await deps.findActiveApiKeyByHash(deps.hashApiKey(match[1].trim()));
-  if (!apiKey) {
+  const auth = await authenticateApiKey(authz, deps.scope, deps);
+  if (!auth.ok) {
+    if (auth.reason === "forbidden") return fail("forbidden", auth.message);
+    if (auth.reason === "unavailable") return fail("unavailable", auth.message);
     return fail("unauthorized", "Invalid or revoked API key.");
   }
+  const apiKey = auth.apiKey;
   deps.setRequestLogContext?.(req, { project_id: apiKey.projectId });
 
   // Parse the optional subject scope once (empty/whitespace ⇒ global).

@@ -13,6 +13,7 @@ const apiKeyAuth: McpAuthContext = {
   kind: "api-key",
   projectId: PROJECT,
   apiKeyId: "key-1",
+  scopes: ["*"],
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
@@ -340,4 +341,55 @@ test("a write is still counted as a mutation, so the dashboard can tell it from 
   );
 
   assert.deepEqual(outcomes, [{ code: "ok", mutates: true }]);
+});
+
+// RC-585: each tool checks the key's own scope.
+
+const readOnlyKey: McpAuthContext = { ...apiKeyAuth, scopes: ["mcp:read"] };
+
+test("a read-only key runs a read tool", async () => {
+  const result = await dispatchOperation(
+    "demo_op",
+    {},
+    { registry: registryOf(), auth: readOnlyKey },
+  );
+  assert.ok(result.ok);
+});
+
+test("a read-only key is refused a write tool before it runs, with the missing scope named", async () => {
+  let ran = false;
+  const write = op({
+    id: "demo_write",
+    mutates: true,
+    async execute() {
+      ran = true;
+      return { data: null };
+    },
+  });
+  const result = await dispatchOperation(
+    "demo_write",
+    {},
+    { registry: registryOf(write), auth: readOnlyKey },
+  );
+
+  assert.ok(!result.ok);
+  assert.equal(result.error, "forbidden");
+  assert.match(result.message, /"mcp:write"/);
+  assert.equal(ran, false);
+});
+
+test("a key with no MCP scope is refused every tool, read or write", async () => {
+  const ingestOnly: McpAuthContext = {
+    ...apiKeyAuth,
+    scopes: ["ingest:traces", "ingest:logs", "ingest:events"],
+  };
+  for (const operation of [op(), op({ id: "demo_write", mutates: true })]) {
+    const result = await dispatchOperation(
+      operation.id,
+      {},
+      { registry: registryOf(operation), auth: ingestOnly },
+    );
+    assert.ok(!result.ok, operation.id);
+    assert.equal(result.error, "forbidden", operation.id);
+  }
 });
