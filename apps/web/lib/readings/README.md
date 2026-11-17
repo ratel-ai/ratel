@@ -36,7 +36,12 @@ behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 `views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
 Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
-its summary, so the page can show the change. `trace-signals/signals/early-reading.ts` is the
+its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs
+went and 40% the open issues: `trace-signals/health-outcomes.ts` reads five measured rates from
+what the reading stored (runs end well, right tool in the top 5, no self-corrections, tasks
+finish, calls work), each left out below 20 observations. `trace-signals/health-score-flag.ts`
+(owned) is whether a public link carries the score: the deployment switch `FF_HEALTH_SCORE`,
+in place of upstream's flag service. `trace-signals/signals/early-reading.ts` is the
 quick first reading (RC-224), behind `FF_QUICK_FIRST_READING`: a new project's first run reads
 a week, is marked early, and queues the `full_reading` run; a reading made while an import runs
 (`composition.importRunning`, the edition's) stays early too.

@@ -328,7 +328,7 @@ test("an SDK run keeps the SDK page, with no source badge and no workflows when 
   assert.equal(model.sourceMode, "sdk");
   assert.deepEqual(
     model.tiles.map((t) => t.key),
-    ["first_try", "detours", "junk", "wasted_calls"],
+    ["top_5", "detours", "junk", "wasted_calls"],
   );
   assert.equal(model.shapes.length, 6);
 });

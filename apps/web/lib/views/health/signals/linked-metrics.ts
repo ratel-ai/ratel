@@ -1,7 +1,7 @@
 import {
   type DayBucket,
   readTile,
-  TILE_META,
+  sdkTileMeta,
   type TileMeta,
   type TileReading,
   type TileWindow,
@@ -26,7 +26,7 @@ const MODEL_CALLS: TileMeta = {
   unit: "per_turn",
   upIsGood: false,
 };
-const KEPT = new Set<HealthTile["key"]>(["first_try", "wasted_calls"]);
+const KEPT = new Set<HealthTile["key"]>(["top_5", "first_try", "wasted_calls"]);
 
 function readLinkedTile(key: HealthTile["key"], bucket: DayBucket): TileReading {
   const linked = bucket.linked;
@@ -59,8 +59,8 @@ export function hasLinkedRuns(total: Pick<DayBucket, "linked">): boolean {
   return (total.linked?.runs ?? 0) > 0;
 }
 
-/** First try and wasted calls, then cost and model calls per run, over a window. */
+/** The right tool in the top 5 (first try on older readings) and wasted calls, then cost and model calls per run, over a window. */
 export function linkedTilesFor(buckets: readonly DayBucket[], w: TileWindow): HealthTile[] {
-  const metas = [...TILE_META.filter((meta) => KEPT.has(meta.key)), COST, MODEL_CALLS];
+  const metas = [...sdkTileMeta(buckets).filter((meta) => KEPT.has(meta.key)), COST, MODEL_CALLS];
   return tilesWith(buckets, w, metas, readLinkedTile);
 }

@@ -174,12 +174,15 @@ test("a run writes every self-correction, phrases from captured replies included
 
   const run = await latestSignalRun(PROJECT_ID, db);
   const stored = (run?.summary as { selfCorrections?: StoredSelfCorrections }).selfCorrections;
+  // 12 runs corrected after update_task failed, and every one of them went on to succeed (the Health score counts them at half, RC-226).
   assert.deepEqual(stored, {
     version: 1,
     trust: { runs: "all", sessions: true },
     turns: 30,
     turnsWithReplies: 2,
     events: 16,
+    correctedTurns: 12,
+    recoveredTurns: 12,
   });
 
   const issue = (await listOpenSignals(PROJECT_ID, db)).find(

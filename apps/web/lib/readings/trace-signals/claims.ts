@@ -422,7 +422,7 @@ export function fixFor<K extends SignalKind>(kind: K, facts: ClaimFactsByKind[K]
 /** A short plain name per kind, for the kind glyph's label. */
 export const SIGNAL_KIND_LABELS: { readonly [K in SignalKind]: string } = {
   first_try_miss: "Missed on the first search",
-  buried_tool: "Found low in the list",
+  buried_tool: "Found below the top 5",
   magnet: "Shows up, never picked",
   dead_tool: "Never used",
   sequence_chain: "Always run together",
@@ -457,7 +457,7 @@ export const SIGNAL_KIND_LABELS: { readonly [K in SignalKind]: string } = {
  */
 export const SIGNAL_KIND_TITLES: { readonly [K in SignalKind]: string } = {
   first_try_miss: "Needs a second search",
-  buried_tool: "Right tool sits too low",
+  buried_tool: "Right tool below the top 5",
   magnet: "Wrong tool keeps showing up",
   dead_tool: "Tools nobody uses",
   sequence_chain: "Two tools always run together",

@@ -16,6 +16,7 @@ import {
   loadReloadableTurns,
   writeTurnPage,
 } from "@/lib/ledger/turns/queries";
+import type { PillarReading } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   HEALTH_SCORE_VERSION,
   healthScore,
@@ -723,13 +724,21 @@ test("a caught-up build asks for the full reading once an early one has stood te
 test("each reading stores its Health score, and the page reads it with the change since the last one (RC-225)", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problemFixtures());
-  const storeHealthScore = async (projectId: string, runId: string, turnsRead: number) => {
+  const storeHealthScore = async (
+    projectId: string,
+    runId: string,
+    turnsRead: number,
+    pillars: readonly PillarReading[],
+  ) => {
     const records = (await listOpenSignals(projectId, db))
       .map(toSignalRecord)
       .filter((r): r is NonNullable<typeof r> => r !== null);
     await setRunHealthScore(
       runId,
-      { version: HEALTH_SCORE_VERSION, value: healthScore(scoredIssues(records), turnsRead) },
+      {
+        version: HEALTH_SCORE_VERSION,
+        value: healthScore(scoredIssues(records), turnsRead, pillars),
+      },
       db,
     );
   };

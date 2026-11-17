@@ -109,9 +109,10 @@ test("the first-try tile counts a two-step turn with a fresh search per need", (
 
 test("tiles carry the Wilson interval of their share, a 7-day series and a delta", () => {
   // This week: 6 of 10 found first try each day; the week before: 4 of 10.
+  // Read as a reading stored before the top-5 count, which keeps the first-try tile.
   const daily = bucketsOver(14, (d) =>
     d < 7 ? { firstTry: 6, missed: 4 } : { firstTry: 4, missed: 6 },
-  );
+  ).map(({ top5: _k, top5N: _n, ...rest }) => rest);
   const tiles = tilesFor(daily, { end: END, days: 7, coveredFrom: daily[0]!.day, floor: 50 });
   const firstTry = tiles.find((t) => t.key === "first_try")!;
   assert.equal(firstTry.value, 0.6);
@@ -128,6 +129,22 @@ test("tiles carry the Wilson interval of their share, a 7-day series and a delta
     tiles.map((t) => t.key),
     ["first_try", "detours", "junk", "wasted_calls"],
   );
+});
+
+test("the band leads with the right tool in the top 5: a second search that served it still counts (RC-226)", () => {
+  // Every day: 6 found on the first search, 4 only on the second; all ran a tool the list served first or second.
+  const daily = bucketsOver(14, () => ({ firstTry: 6, missed: 4 }));
+  const tiles = tilesFor(daily, { end: END, days: 7, coveredFrom: daily[0]!.day, floor: 50 });
+  assert.deepEqual(
+    tiles.map((t) => t.key),
+    ["top_5", "detours", "junk", "wasted_calls"],
+  );
+  const top5 = tiles[0]!;
+  assert.equal(top5.label, "Right tool in top 5");
+  assert.equal(top5.value, 1);
+  assert.equal(top5.n, 70);
+  assert.match(top5.sub, /70 of 70 turns had each tool they ran in the top 5 of a search/);
+  assert.equal(top5.upIsGood, true);
 });
 
 test("tiles show no figure under the floor and no delta without a covered previous window", () => {

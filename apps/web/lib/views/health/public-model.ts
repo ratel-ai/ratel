@@ -81,8 +81,8 @@ const MODEL_RULES: Rules<HealthPageModel> = {
   earlyReading: () => undefined,
   earlyProgress: () => undefined,
   emptyEarlyReading: () => undefined,
-  // The score is the member page's: the report has its own readings.
-  score: () => undefined,
+  // The Health score: numbers and issue ids only, no text from a run (RC-226). The loader drops it where its flag is off.
+  score: (m) => m.score ?? undefined,
 };
 
 const SIGNAL_RULES: Rules<SignalView> = {
