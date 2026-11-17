@@ -5,6 +5,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { loadJobPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
+import { withAgentRun } from "@/lib/platform/agent-run";
 import { getDb } from "@/lib/platform/db/client";
 import { currentLogContext, getLogger } from "@/lib/platform/logger";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
@@ -531,7 +532,17 @@ export async function executeEvalRun(
   const claimed = await startEvalRun(runId, deps.db);
   if (!claimed) return getEvalRun(runId, deps.db);
   // Every log line of the simulation, its `model_call` lines included, names the project and its organization.
-  return withProjectLogContext(claimed.projectId, () => simulateClaimedRun(runId, claimed, deps));
+  // RC-722: one agent run, its replays and judges as children.
+  return withProjectLogContext(claimed.projectId, () =>
+    withAgentRun(
+      {
+        name: "simulate_fix_eval",
+        conversationId: runId,
+        ask: `simulate_fix_eval for project ${claimed.projectId}\n${JSON.stringify({ runId })}`,
+      },
+      () => simulateClaimedRun(runId, claimed, deps),
+    ),
+  );
 }
 
 async function simulateClaimedRun(

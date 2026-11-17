@@ -5,7 +5,7 @@
  * (`lib/platform/otel/ratel-export.ts`) agree without importing each other.
  */
 
-/** The tracer `trackModelCall` makes its spans with; its scope is what the export selects on. */
+/** The tracer `trackModelCall` and agent runs (lib/platform/agent-run.ts) make their spans with; its scope is what the export selects on. */
 export const MODEL_CALL_TRACER = "ratel-cloud/model-calls";
 
 /**

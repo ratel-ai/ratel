@@ -313,3 +313,52 @@ test("every agent_step and model_generation of the real Mastra export shows mess
     );
   }
 });
+
+test("an agent step that carries its own ask (an invoke_agent root, RC-740) shows it, not its child's", () => {
+  const ask = JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: "label_workflows for project p-1" }] },
+  ]);
+  const io = buildSpanIO(
+    {
+      spanId: "root",
+      spanClass: "other",
+      attributes: { "gen_ai.operation.name": "invoke_agent", "gen_ai.input.messages": ask },
+    },
+    NO_PAYLOAD,
+    [
+      {
+        spanId: "m1",
+        spanClass: "llm_call",
+        attributes: {
+          "gen_ai.input.messages": JSON.stringify([
+            { role: "user", parts: [{ type: "text", content: "Name this workflow" }] },
+          ]),
+        },
+      },
+    ],
+  );
+  assert.equal(io.kind, "messages");
+  assert.ok(io.kind === "messages" && io.source === "span");
+  assert.deepEqual(io.kind === "messages" ? io.input.map((message) => message.text) : [], [
+    "label_workflows for project p-1",
+  ]);
+});
+
+test("an agent step with no messages of its own still shows its first model call's", () => {
+  const io = buildSpanIO(
+    { spanId: "root", spanClass: "other", attributes: { "gen_ai.operation.name": "invoke_agent" } },
+    NO_PAYLOAD,
+    [
+      {
+        spanId: "m1",
+        spanClass: "llm_call",
+        attributes: {
+          "gen_ai.input.messages": JSON.stringify([
+            { role: "user", parts: [{ type: "text", content: "Name this workflow" }] },
+          ]),
+        },
+      },
+    ],
+  );
+  assert.ok(io.kind === "messages" && io.source === "child");
+});

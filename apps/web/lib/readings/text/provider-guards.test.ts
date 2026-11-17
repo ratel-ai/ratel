@@ -34,7 +34,8 @@ test("every Anthropic SDK call in lib sends its params through wellFormedJson", 
       if (!match[2].startsWith("wellFormedJson(")) unguarded.push(where);
     }
   }
-  assert.ok(calls.length >= 9, `found only ${calls.length} calls: the scan no longer sees them`);
+  // The eval gate makes all its calls through one `tracked` (lib/eval-gate/models.ts), so it counts once.
+  assert.ok(calls.length >= 8, `found only ${calls.length} calls: the scan no longer sees them`);
   assert.deepEqual(unguarded, []);
 });
 

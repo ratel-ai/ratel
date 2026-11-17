@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { type AnalystContext, buildAnalystPrompt } from "./context";
@@ -224,23 +225,25 @@ export function anthropicAnalystDeps(model: string): AnalystDeps {
   return {
     model,
     complete: async (system, user) => {
-      const msg = await trackModelCall(
-        { provider: "anthropic", model, feature: "match_quality_analyst", payer: "ratel" },
-        () => {
-          const stream = client.messages.stream(
-            wellFormedJson({
-              model,
-              max_tokens: ANALYST_MAX_TOKENS,
-              system,
-              messages: [{ role: "user", content: user }],
-              output_config: {
-                format: { type: "json_schema", schema: ANALYST_SCHEMA },
-                effort: ANALYST_EFFORT,
-              },
-            }),
-          );
-          return stream.finalMessage();
+      const request: Anthropic.MessageCreateParamsNonStreaming = {
+        model,
+        max_tokens: ANALYST_MAX_TOKENS,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: {
+          format: { type: "json_schema", schema: ANALYST_SCHEMA },
+          effort: ANALYST_EFFORT,
         },
+      };
+      const msg = await trackModelCall(
+        {
+          provider: "anthropic",
+          model,
+          feature: "match_quality_analyst",
+          payer: "ratel",
+          content: anthropicContent(request),
+        },
+        () => client.messages.stream(wellFormedJson(request)).finalMessage(),
         anthropicUsage,
       );
       // Named at the point they happen, so a failed run says why instead of

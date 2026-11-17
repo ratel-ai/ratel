@@ -226,3 +226,52 @@ test("spans without content take the ask, the answer and the content from the tr
   assert.equal(without.ask, null);
   assert.equal(without.contentCaptured, false, "no captured content keeps the callout");
 });
+
+test("an invoke_agent root's own ask names the run before its first model call's prompt (RC-740)", () => {
+  const ask = JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: "label_workflows for project p-1" }] },
+  ]);
+  const prompt = JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: "Name this workflow" }] },
+  ]);
+  const agentRoot = span({
+    spanId: "root",
+    parentSpanId: null,
+    name: "invoke_agent label_workflows",
+    operationName: "invoke_agent",
+    attributes: { "gen_ai.operation.name": "invoke_agent", "gen_ai.input.messages": ask },
+  });
+  const call = span({
+    spanId: "m1",
+    at: 5,
+    spanClass: "llm_call",
+    name: "chat",
+    attributes: { "gen_ai.input.messages": prompt },
+  });
+  assert.equal(runAsk([agentRoot, call]), "label_workflows for project p-1");
+  assert.equal(buildRunSummary([agentRoot, call]).title, "label_workflows for project p-1");
+});
+
+test("any other root's prompt still comes after the first model call's", () => {
+  const prompt = JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: "Name this workflow" }] },
+  ]);
+  const plainRoot = span({
+    spanId: "root",
+    parentSpanId: null,
+    name: "agent.run",
+    attributes: {
+      "gen_ai.input.messages": JSON.stringify([
+        { role: "user", parts: [{ type: "text", content: "root text" }] },
+      ]),
+    },
+  });
+  const call = span({
+    spanId: "m1",
+    at: 5,
+    spanClass: "llm_call",
+    name: "chat",
+    attributes: { "gen_ai.input.messages": prompt },
+  });
+  assert.equal(runAsk([plainRoot, call]), "Name this workflow");
+});

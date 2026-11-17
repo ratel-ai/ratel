@@ -7,9 +7,11 @@ import {
   trace,
 } from "@opentelemetry/api";
 import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
+import { agentRunParent } from "@/lib/platform/agent-run";
 import { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
 import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 import { currentLogContext } from "@/lib/platform/logger";
+import { contentAttributes, type ModelCallContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 
 /**
@@ -142,20 +144,22 @@ export function recordModelCall(record: ModelCallRecord): void {
  * tokens (the providers don't bill a failed request).
  */
 export async function trackModelCall<T>(
-  meta: ModelCallMeta,
+  meta: ModelCallMeta & { content?: ModelCallContent<NoInfer<T>> },
   call: () => Promise<T>,
   usageOf: (result: T) => ModelCallUsage = () => ({}),
   now: () => number = Date.now,
 ): Promise<T> {
+  const { content, ...lineMeta } = meta;
   const startedAt = now();
-  const span = startModelCallSpan(meta);
+  const span = startModelCallSpan(lineMeta);
   let result: T;
   try {
     result = await call();
   } catch (error) {
+    if (content) addContent(span, content);
     endModelCallSpan(span, {}, error);
-    recordModelCall({ ...meta, outcome: "error", durationMs: now() - startedAt, error });
-    if (error instanceof ModelNotEnabledError) reportNotEnabled(meta, error);
+    recordModelCall({ ...lineMeta, outcome: "error", durationMs: now() - startedAt, error });
+    if (error instanceof ModelNotEnabledError) reportNotEnabled(lineMeta, error);
     throw error;
   }
   let usage: ModelCallUsage = {};
@@ -164,9 +168,25 @@ export async function trackModelCall<T>(
   } catch {
     // An answer without readable usage is still an answer.
   }
+  if (content) addContent(span, content, result);
   endModelCallSpan(span, usage);
-  recordModelCall({ ...meta, ...usage, outcome: "ok", durationMs: now() - startedAt });
+  recordModelCall({ ...lineMeta, ...usage, outcome: "ok", durationMs: now() - startedAt });
   return result;
+}
+
+/**
+ * `recordModelCall` for a call that was made but not wrapped in
+ * `trackModelCall` (the Jev judge times its own retries): the line, and the
+ * span from `startedAt` to now.
+ */
+export function recordTracedModelCall(record: ModelCallRecord, startedAt: number): void {
+  recordModelCall(record);
+  const span = startModelCallSpan(record, startedAt);
+  endModelCallSpan(
+    span,
+    record,
+    record.outcome === "error" ? (record.error ?? new Error("model call failed")) : undefined,
+  );
 }
 
 export type ModelCallExceptionReporter = (
@@ -210,8 +230,9 @@ function reportNotEnabled(meta: ModelCallMeta, error: ModelNotEnabledError): voi
  * The same call as a `gen_ai.*` span, for Ratel's own project
  * (lib/platform/otel/ratel-export.ts picks these spans out by their tracer). Only calls
  * Ratel pays for: a customer's traffic is theirs, not an agent of ours. Like the log line, the
- * span carries no prompt, answer, error message or customer id: the model, the feature as the
- * agent's name, tokens, timing and the error's class name.
+ * span carries no error message or customer id: the model, the feature as the agent's name,
+ * tokens, timing and the error's class name, and the prompt and answer the call site offers
+ * (below).
  *
  * The span is not made active, so the provider's HTTP span keeps its parent and the traces the
  * self-telemetry exporter receives keep their shape. With no tracer provider registered (local
@@ -229,6 +250,25 @@ export function setModelCallTracer(next: Tracer | null): () => void {
   };
 }
 
+/*
+ * Content (RC-721): a call site may offer its prompt and answer with
+ * `content` (`anthropicContent(request)`). They ride the span of every
+ * Ratel-paid call, capped per attribute (lib/platform/model-call-content.ts).
+ */
+
+function addContent<T>(
+  span: Span | undefined,
+  content: ModelCallContent<T>,
+  ...answer: [] | [T]
+): void {
+  if (!span) return;
+  try {
+    span.setAttributes(contentAttributes(content, ...answer));
+  } catch {
+    // A tracing failure is not the call's failure.
+  }
+}
+
 /**
  * Owned: the core's own calls are chat completions. Upstream also names its hosted embedding
  * provider here; that call is the edition's, and its copy of this module names it.
@@ -237,7 +277,8 @@ function operationOf(_provider: ModelProvider): "chat" | "embeddings" {
   return "chat";
 }
 
-function startModelCallSpan(meta: ModelCallMeta): Span | undefined {
+/** `startTime`: when the call began, for a call traced after the fact. Inside an agent run, the run's root is its parent. */
+function startModelCallSpan(meta: ModelCallMeta, startTime?: number): Span | undefined {
   try {
     if (meta.payer !== "ratel") return undefined;
     const projectId = meta.projectId ?? currentLogContext().project_id ?? null;
@@ -245,15 +286,20 @@ function startModelCallSpan(meta: ModelCallMeta): Span | undefined {
     if (ownProject && projectId === ownProject) return undefined;
     const operation = operationOf(meta.provider);
     const tracer = tracerOverride ?? trace.getTracer(MODEL_CALL_TRACER);
-    return tracer.startSpan(`${operation} ${meta.model}`, {
-      kind: SpanKind.CLIENT,
-      attributes: {
-        "gen_ai.operation.name": operation,
-        "gen_ai.provider.name": meta.provider,
-        "gen_ai.request.model": meta.model,
-        "gen_ai.agent.name": meta.feature,
+    return tracer.startSpan(
+      `${operation} ${meta.model}`,
+      {
+        kind: SpanKind.CLIENT,
+        ...(startTime !== undefined ? { startTime } : {}),
+        attributes: {
+          "gen_ai.operation.name": operation,
+          "gen_ai.provider.name": meta.provider,
+          "gen_ai.request.model": meta.model,
+          "gen_ai.agent.name": meta.feature,
+        },
       },
-    });
+      agentRunParent(tracer),
+    );
   } catch {
     // A tracing failure is not the call's failure.
     return undefined;

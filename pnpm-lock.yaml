@@ -74,6 +74,9 @@ importers:
       '@ratel-ai/sdk':
         specifier: 0.13.0-rc.9
         version: 0.13.0-rc.9(zod@4.4.3)
+      '@ratel-ai/telemetry':
+        specifier: ^0.5.0
+        version: 0.5.0
       '@ratel/brand':
         specifier: workspace:*
         version: link:../../packages/brand

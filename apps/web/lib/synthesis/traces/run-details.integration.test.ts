@@ -340,3 +340,39 @@ function spanId(value: number): string {
 function traceId(value: number): string {
   return `a${value.toString(16).padStart(31, "0")}`;
 }
+
+test("an invoke_agent root's own ask names its run before the first model call's prompt (RC-740)", async () => {
+  const { client, db } = await setup();
+  const t0 = Date.parse("2026-10-09T12:00:00.000Z");
+  const text = (content: string) =>
+    JSON.stringify([{ role: "user", parts: [{ type: "text", content }] }]);
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      span(11, {
+        traceId: traceId(11),
+        name: "invoke_agent label_workflows",
+        at: t0,
+        attributes: {
+          "gen_ai.operation.name": "invoke_agent",
+          "gen_ai.input.messages": text("label_workflows for project p-1"),
+        },
+      }),
+      span(12, {
+        traceId: traceId(11),
+        parentSpanId: spanId(11),
+        spanClass: "llm_call",
+        name: "chat",
+        at: t0 + 1,
+        attributes: { "gen_ai.input.messages": text("Name this workflow") },
+      }),
+    ],
+    db,
+  );
+  const asks = await listRunAsks(PROJECT_ID, [traceId(11)], db);
+  assert.deepEqual(asks.get(traceId(11)), {
+    prompt: "label_workflows for project p-1",
+    hasRoot: true,
+  });
+  await client.close();
+});

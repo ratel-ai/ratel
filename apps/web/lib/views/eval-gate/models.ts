@@ -3,6 +3,7 @@ import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { envNumber } from "@/lib/platform/env-number";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import {
   type AnthropicClient,
   anthropicClient,
@@ -371,16 +372,12 @@ export function resolveTestDraftModel(
     standIn: false,
     async draft(input) {
       const message = await guarded(() =>
-        tracked(model, "eval_gate_task_test_draft", () =>
-          client.messages.create(
-            wellFormedJson({
-              model,
-              max_tokens: SMALL_MAX_TOKENS,
-              system: TEST_DRAFT_PROMPT,
-              messages: [{ role: "user", content: input }],
-            }),
-          ),
-        ),
+        tracked(client, "eval_gate_task_test_draft", {
+          model,
+          max_tokens: SMALL_MAX_TOKENS,
+          system: TEST_DRAFT_PROMPT,
+          messages: [{ role: "user", content: input }],
+        }),
       );
       return { text: textOf(message), usage: usageOf(message) };
     },
@@ -527,13 +524,19 @@ export type AgentFeature = Extract<EvalGateFeature, "eval_gate_replay" | "eval_g
 
 /** One Messages API call, reported through the model-call seam. */
 function tracked(
-  model: string,
+  client: AnthropicClient,
   feature: EvalGateFeature,
-  call: () => Promise<Anthropic.Message>,
+  params: Anthropic.MessageCreateParamsNonStreaming,
 ): Promise<Anthropic.Message> {
   return trackModelCall(
-    { provider: "anthropic", model, feature, payer: "ratel" },
-    call,
+    {
+      provider: "anthropic",
+      model: params.model,
+      feature,
+      payer: "ratel",
+      content: anthropicContent(params),
+    },
+    () => client.messages.create(wellFormedJson(params)),
     anthropicUsage,
   );
 }
@@ -609,32 +612,22 @@ export function anthropicAgent(
   feature: AgentFeature = "eval_gate_replay",
 ): AgentModel {
   let current = model;
+  const paramsFor = (
+    params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">,
+  ): Anthropic.MessageCreateParamsNonStreaming => ({
+    ...params,
+    model: current,
+    ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
+    ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
+  });
   const ask = (params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">) =>
     guarded(async () => {
       try {
-        return await tracked(current, feature, () =>
-          client.messages.create(
-            wellFormedJson({
-              ...params,
-              model: current,
-              ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
-              ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
-            }),
-          ),
-        );
+        return await tracked(client, feature, paramsFor(params));
       } catch (err) {
         if (!(err instanceof Anthropic.NotFoundError) || current === fallback) throw err;
         current = fallback;
-        return tracked(current, feature, () =>
-          client.messages.create(
-            wellFormedJson({
-              ...params,
-              model: current,
-              ...(acceptsTemperature(current) ? { temperature: 0 } : {}),
-              ...(takesEffort(current) ? { output_config: { effort: "low" as const } } : {}),
-            }),
-          ),
-        );
+        return tracked(client, feature, paramsFor(params));
       }
     });
   return {
@@ -696,17 +689,13 @@ export function anthropicToolStandIn(client: AnthropicClient, model: string): To
         .filter(Boolean)
         .join("\n");
       const message = await guarded(() =>
-        tracked(model, "eval_gate_stand_in", () =>
-          client.messages.create(
-            wellFormedJson({
-              model,
-              max_tokens: SMALL_MAX_TOKENS,
-              system: STAND_IN_SYSTEM,
-              messages: [{ role: "user", content: user }],
-              ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
-            }),
-          ),
-        ),
+        tracked(client, "eval_gate_stand_in", {
+          model,
+          max_tokens: SMALL_MAX_TOKENS,
+          system: STAND_IN_SYSTEM,
+          messages: [{ role: "user", content: user }],
+          ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
+        }),
       );
       const content = textOf(message).trim() || "{}";
       return { content, isError: /"error"\s*:/.test(content), usage: usageOf(message) };
@@ -734,22 +723,18 @@ export function anthropicPerson(client: AnthropicClient, model: string): PersonM
         )
         .join("\n");
       const message = await guarded(() =>
-        tracked(model, "eval_gate_stand_in", () =>
-          client.messages.create(
-            wellFormedJson({
-              model,
-              max_tokens: SMALL_MAX_TOKENS,
-              system: PERSON_SYSTEM,
-              messages: [
-                {
-                  role: "user",
-                  content: `The person: ${description}\n\nThe conversation so far:\n${conversation}\n\nWrite the person's next message.`,
-                },
-              ],
-              ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
-            }),
-          ),
-        ),
+        tracked(client, "eval_gate_stand_in", {
+          model,
+          max_tokens: SMALL_MAX_TOKENS,
+          system: PERSON_SYSTEM,
+          messages: [
+            {
+              role: "user",
+              content: `The person: ${description}\n\nThe conversation so far:\n${conversation}\n\nWrite the person's next message.`,
+            },
+          ],
+          ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
+        }),
       );
       if (message.stop_reason === "refusal")
         throw new Error("the simulated person declined the request");
@@ -781,20 +766,16 @@ export function anthropicJudge(
     standIn: false,
     async judge({ criteria, run }) {
       const message = await guarded(() =>
-        tracked(model, feature, () =>
-          client.messages.create(
-            wellFormedJson({
-              model,
-              max_tokens: SMALL_MAX_TOKENS,
-              system: JUDGE_SYSTEM,
-              messages: [{ role: "user", content: `Criteria:\n${criteria}\n\nThe run:\n${run}` }],
-              output_config: {
-                format: { type: "json_schema", schema: JUDGE_SCHEMA },
-                ...(takesEffort(model) ? { effort: "low" as const } : {}),
-              },
-            }),
-          ),
-        ),
+        tracked(client, feature, {
+          model,
+          max_tokens: SMALL_MAX_TOKENS,
+          system: JUDGE_SYSTEM,
+          messages: [{ role: "user", content: `Criteria:\n${criteria}\n\nThe run:\n${run}` }],
+          output_config: {
+            format: { type: "json_schema", schema: JUDGE_SCHEMA },
+            ...(takesEffort(model) ? { effort: "low" as const } : {}),
+          },
+        }),
       );
       if (message.stop_reason === "refusal") throw new Error("the judge declined the request");
       const parsed = JSON.parse(textOf(message)) as { pass?: unknown };
