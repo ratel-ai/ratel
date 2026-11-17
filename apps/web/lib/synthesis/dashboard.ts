@@ -7,7 +7,7 @@ import {
   type ContextSource,
   SOURCE_META,
 } from "@/lib/ingest/context";
-import type { DailyAggregateRow } from "@/lib/ingest/otlp/queries";
+import type { DailyAggregateRow, PromptCacheTotals } from "@/lib/ingest/otlp/queries";
 import { fmtCost, fmtCount } from "@/lib/platform/format";
 
 // Re-exported so existing dashboard-component imports keep working; the
@@ -345,6 +345,16 @@ function buildBreakdownView(days: BreakdownDay[]): BreakdownView {
     toolsUnusedRate: toolsFull > 0 ? toolsUnusedTotal / toolsFull : 0,
     historyUncachedRate: historyFull > 0 ? historyUncachedTotal / historyFull : 0,
   };
+}
+
+/**
+ * The share of the window's input tokens served from the prompt cache, 0..1:
+ * `sum(cached_tokens) / sum(input_tokens)`. Null without input (or without the
+ * read). Clamped: a row that reports more cached than input caps at 1.
+ */
+export function promptCacheHitRate(totals: PromptCacheTotals | null): number | null {
+  if (!totals || totals.inputTokens <= 0) return null;
+  return Math.min(1, Math.max(0, totals.cachedTokens) / totals.inputTokens);
 }
 
 export function buildDashboardModel(

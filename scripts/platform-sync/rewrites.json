@@ -108,6 +108,8 @@
     "@/lib/db/schema": {
       "default": "@/lib/platform/db/tables",
       "symbols": {
+        "otlpRawExports": "@/lib/ingest/otlp-raw/schema",
+        "OtlpRawExport": "@/lib/ingest/otlp-raw/schema",
         "lineageLinks": "@/lib/views/lineage/schema",
         "LineageLinkRow": "@/lib/views/lineage/schema",
         "NewLineageLinkRow": "@/lib/views/lineage/schema",
@@ -287,6 +289,8 @@
     "@/lib/db/queries": {
       "default": "@/lib/platform/db/queries",
       "symbols": {
+        "getPromptCacheTotals": "@/lib/ingest/otlp/queries",
+        "PromptCacheTotals": "@/lib/ingest/otlp/queries",
         "insertEventsWithMetrics": "@/lib/ingest/otlp/queries",
         "insertOtelSpans": "@/lib/ingest/otlp/queries",
         "DailyAggregateRow": "@/lib/ingest/otlp/queries",

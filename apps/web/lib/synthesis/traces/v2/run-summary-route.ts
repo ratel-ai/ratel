@@ -1,3 +1,4 @@
+import type { PayloadContent } from "@/lib/synthesis/traces/payload-content";
 import { buildRunSummary, type RunSpan, type RunSummary } from "./run-summary";
 
 /**
@@ -24,6 +25,12 @@ export interface RunSummaryRouteDeps {
     projectId: string,
     traceId: string,
   ) => Promise<{ spans: readonly RunSpan[]; truncated: boolean }>;
+  /** The trace's `events.payload` content for this reader, or null (flag off, nothing stored). */
+  loadPayload?: (
+    projectId: string,
+    traceId: string,
+    actor: string,
+  ) => Promise<PayloadContent | null>;
   setLogContext: (context: { project_id: string; org_id: string; distinct_id: string }) => void;
   logError: (fields: Record<string, unknown>, message: string) => void;
   reportException: (
@@ -61,10 +68,17 @@ export async function runSummaryResponse(
 
   const traceId = params.traceId.toLowerCase();
   try {
-    const load = await deps.loadSpans(project.projectId, traceId);
+    const [load, payload] = await Promise.all([
+      deps.loadSpans(project.projectId, traceId),
+      loadPayload(deps, project.projectId, traceId, session.externalId),
+    ]);
     if (load.spans.length === 0)
       return json(404, { ok: false, message: "This run is no longer retained." });
-    return json(200, { ok: true, summary: buildRunSummary(load.spans), truncated: load.truncated });
+    return json(200, {
+      ok: true,
+      summary: buildRunSummary(load.spans, undefined, payload),
+      truncated: load.truncated,
+    });
   } catch (err) {
     deps.logError(
       { err, project_id: project.projectId, trace_id: traceId },
@@ -75,6 +89,26 @@ export async function runSummaryResponse(
       project_id: project.projectId,
     });
     return json(500, { ok: false, message: "Couldn't load this run. Try again in a moment." });
+  }
+}
+
+/** The payload is an extra: a failed read is logged and reported, and the run reads from its spans. */
+async function loadPayload(
+  deps: RunSummaryRouteDeps,
+  projectId: string,
+  traceId: string,
+  actor: string,
+): Promise<PayloadContent | null> {
+  if (!deps.loadPayload) return null;
+  try {
+    return await deps.loadPayload(projectId, traceId, actor);
+  } catch (err) {
+    deps.logError({ err, project_id: projectId, trace_id: traceId }, "run payload load failed");
+    deps.reportException(err, `project:${projectId}`, {
+      operation: "trace_run_payload",
+      project_id: projectId,
+    });
+    return null;
   }
 }
 

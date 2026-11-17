@@ -451,3 +451,62 @@ test("flag on: a root alone in its batch drops its tokens when storage has the m
   assert.equal(lone.spanClass, "llm_call");
   assert.equal(lone.inputTokens, 300);
 });
+
+/* --- resource environment (flag cloud-otlp-semconv-aliases) ------------------ */
+
+const PROD_RESOURCE = {
+  "service.name": "agent",
+  "deployment.environment.name": "prod",
+  "service.version": "1.4.2",
+};
+
+test("flag on: the resource environment and service version are stored", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ resourceAttributes: PROD_RESOURCE })],
+    undefined,
+    {
+      resourceEnvironment: true,
+    },
+  );
+  assert.equal(row.attributes["deployment.environment.name"], "prod");
+  assert.equal(row.attributes["service.version"], "1.4.2");
+  assert.equal(row.attributes["deployment.environment"], undefined);
+});
+
+test("flag on: a span attribute of the same key wins over the resource", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [
+      span({
+        resourceAttributes: PROD_RESOURCE,
+        attributes: { "deployment.environment.name": "canary" },
+      }),
+    ],
+    undefined,
+    { resourceEnvironment: true },
+  );
+  assert.equal(row.attributes["deployment.environment.name"], "canary");
+});
+
+test("flag on: the legacy deployment.environment is kept when .name is absent", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ resourceAttributes: { "deployment.environment": "staging" } })],
+    undefined,
+    { resourceEnvironment: true },
+  );
+  assert.equal(row.attributes["deployment.environment"], "staging");
+  assert.equal(row.attributes["deployment.environment.name"], undefined);
+  assert.equal(row.attributes["service.version"], undefined);
+});
+
+test("flag off: the resource environment is not stored", () => {
+  const [row] = toOtelSpanRows("project-1", [
+    span({
+      resourceAttributes: PROD_RESOURCE,
+      attributes: { "deployment.environment.name": "canary" },
+    }),
+  ]);
+  assert.deepEqual(row.attributes, {});
+});

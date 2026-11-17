@@ -1,5 +1,10 @@
 import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
+import { semconvAliasesEnabled } from "@/lib/ingest/otlp/semconv/enabled";
+import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
+import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
+import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
+import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
@@ -22,5 +27,15 @@ async function handlePost(req: Request) {
     trackServerEvent,
     getOrganizationByProjectId,
     setRequestLogContext,
+    otlpRawCapture: {
+      isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
+      store: createOtlpRawStore(),
+    },
+    semconvAliases: (projectId, organization) => semconvAliasesEnabled(projectId, organization),
+    genAiLogJoin: {
+      store: createGenAiLogStore(),
+      sessionChatCapture: (projectId, organization) =>
+        sessionChatCaptureEnabled(projectId, organization),
+    },
   });
 }

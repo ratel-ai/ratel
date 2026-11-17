@@ -18,6 +18,8 @@ import {
 } from "drizzle-orm";
 import { alias, unionAll } from "drizzle-orm/pg-core";
 import { events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/schema";
+import { OTLP_RAW_PRUNE_BATCH_SIZE, otlpRawRetentionDays } from "@/lib/ingest/otlp-raw/domain";
+import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
 import { containsText } from "./query-text";
@@ -34,6 +36,12 @@ export interface PruneExpiredOtelSpansOptions {
 export interface PruneExpiredOtelLogsOptions {
   now?: Date;
   retentionDays?: number;
+}
+
+export interface PruneExpiredOtlpRawExportsOptions {
+  now?: Date;
+  retentionDays?: number;
+  batchSize?: number;
 }
 
 export interface PruneExpiredTraceSummariesOptions {
@@ -1313,6 +1321,34 @@ export async function pruneExpiredOtelLogs(
     .delete(otelLogs)
     .where(inArray(otelLogs.id, expiredIds))
     .returning({ id: otelLogs.id });
+
+  return deleted.length;
+}
+
+/**
+ * Delete one bounded batch of raw OTLP exports whose server receipt time has
+ * expired (`OTLP_RAW_RETENTION_DAYS`, default 30). Rows hold whole request
+ * bodies, so the batch is smaller than the span and log batches.
+ */
+export async function pruneExpiredOtlpRawExports(
+  options: PruneExpiredOtlpRawExportsOptions = {},
+  db: TraceMaintenanceDb = getDb(),
+): Promise<number> {
+  const cutoff = new Date(
+    (options.now?.getTime() ?? Date.now()) -
+      otlpRawRetentionDays(options.retentionDays) * MILLISECONDS_PER_DAY,
+  );
+  // cross-project: a bounded retention batch over every project (lib/db/tenant-scope.test.ts).
+  const expiredIds = db
+    .select({ id: otlpRawExports.id })
+    .from(otlpRawExports)
+    .where(lt(otlpRawExports.receivedAt, cutoff))
+    .orderBy(asc(otlpRawExports.receivedAt), asc(otlpRawExports.id))
+    .limit(options.batchSize ?? OTLP_RAW_PRUNE_BATCH_SIZE);
+  const deleted = await db
+    .delete(otlpRawExports)
+    .where(inArray(otlpRawExports.id, expiredIds))
+    .returning({ id: otlpRawExports.id });
 
   return deleted.length;
 }

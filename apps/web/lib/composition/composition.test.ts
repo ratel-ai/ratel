@@ -266,6 +266,7 @@ describe("registry root", () => {
         "after:intent_graph_revisions_prune:retention",
         "after:intent_engine_expire:retention",
         "after:trace_signal_sweep",
+        "after:otlp_raw_prune",
         "after:otel_spans_prune:retention",
         "after:otel_logs_prune:retention",
         "after:trace_summary_refresh",

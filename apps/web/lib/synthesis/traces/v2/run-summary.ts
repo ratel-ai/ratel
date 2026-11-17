@@ -1,14 +1,16 @@
 /**
  * A run told as a conversation (the run Panel and the full trace): what was
  * asked, each step the agent took in order with how long it took, what it
- * answered, and what it cost. Built from the spans alone, so it works whether
- * or not the customer captures message content; without content the steps
- * still read in order.
+ * answered, and what it cost. Built from the spans, so it works whether or not
+ * the customer captures message content; without content the steps still read
+ * in order. OTLP ingest keeps content out of the spans, so the caller can pass
+ * the trace's `events.payload` content, read when the spans carry none.
  */
 
 import { promptOf } from "@/lib/ingest/otlp/prompt-text";
 import type { AttrMap } from "@/lib/ingest/otlp/types";
-import { buildTraceContentView } from "@/lib/synthesis/traces/content-view";
+import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
+import type { PayloadContent } from "@/lib/synthesis/traces/payload-content";
 import type { RunStatus } from "./runs";
 import { STEP_KIND_LABEL, type StepKind, stepKind, stepTitle, stringAttribute } from "./span-kind";
 
@@ -88,6 +90,7 @@ const STEP_KINDS: ReadonlySet<StepKind> = new Set(["model", "tool", "search"]);
 export function buildRunSummary(
   spans: readonly RunSpan[],
   maxSteps = MAX_SUMMARY_STEPS,
+  payload: PayloadContent | null = null,
 ): RunSummary {
   const ordered = [...spans].sort(compareSpans);
   const topLevel = ordered.find((span) => span.parentSpanId === null);
@@ -121,8 +124,8 @@ export function buildRunSummary(
       },
     ];
   });
-  const content = buildTraceContentView(ordered);
-  const ask = runAsk(ordered) ?? firstUserText(content.messages);
+  const content = preferSpanContent(buildTraceContentView(ordered), payload?.view ?? null);
+  const ask = runAsk(ordered) ?? payload?.ask ?? firstUserText(content.messages);
   const answer = lastAssistantText(content.messages);
   const inputTokens = sum(ordered, (span) => span.inputTokens ?? 0);
   const outputTokens = sum(ordered, (span) => span.outputTokens ?? 0);

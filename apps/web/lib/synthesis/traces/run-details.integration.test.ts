@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
+import { events } from "@/lib/ingest/otlp/schema";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { getTraceAggregates, type TraceQueriesDb } from "./queries";
@@ -158,6 +159,50 @@ test("a long run's ask is its first model call's, however many calls follow and 
   );
   const asks = await listRunAsks(PROJECT_ID, [traceId(1)], db);
   assert.deepEqual(asks.get(traceId(1)), { prompt: "the first question", hasRoot: true });
+  await client.close();
+});
+
+test("with fromPayload, a run whose spans carry no ask takes it from its events.payload", async () => {
+  const { client, db } = await setup();
+  const t0 = Date.parse("2026-10-09T12:00:00.000Z");
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      span(1, { traceId: traceId(1), name: "agent.run", at: t0 }),
+      span(2, {
+        traceId: traceId(1),
+        parentSpanId: spanId(1),
+        spanClass: "llm_call",
+        name: "chat",
+        at: t0 + 1,
+      }),
+    ],
+    db,
+  );
+  await (db as unknown as ReturnType<typeof drizzle>).insert(events).values({
+    projectId: PROJECT_ID,
+    occurredAt: new Date(t0 + 1),
+    traceId: traceId(1),
+    spanId: spanId(2),
+    dedupeHash: "payload-ask",
+    payload: {
+      provider: "openai",
+      model: "gpt-5",
+      ts: new Date(t0 + 1).toISOString(),
+      messages: [{ role: "user", content: "Where is order 1234?" }],
+    },
+  });
+  assert.deepEqual((await listRunAsks(PROJECT_ID, [traceId(1)], db)).get(traceId(1)), {
+    prompt: null,
+    hasRoot: true,
+  });
+  assert.deepEqual(
+    (await listRunAsks(PROJECT_ID, [traceId(1)], db, { fromPayload: true })).get(traceId(1)),
+    {
+      prompt: "Where is order 1234?",
+      hasRoot: true,
+    },
+  );
   await client.close();
 });
 

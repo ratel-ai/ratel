@@ -23,6 +23,10 @@ import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
+import { normalizeSemconvAliases } from "./semconv/aliases";
+import type { SemconvAliasesEnabled } from "./semconv/enabled";
+import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
+import { attachGenAiLogEvents, distinctSpanKeys } from "./semconv/gen-ai-logs";
 import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
@@ -67,6 +71,10 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   agentSpanDedupe?: AgentSpanDedupeDeps;
   /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings. Absent, off. */
   sessionChatCapture?: SessionChatCaptureEnabled;
+  /** Flag `cloud-otlp-semconv-aliases`: read deprecated gen_ai keys and aliases. Absent, off. */
+  semconvAliases?: SemconvAliasesEnabled;
+  /** With `semconvAliases` on: the stored `gen_ai` log records of the batch's spans. Absent, none are read. */
+  genAiLogs?: Pick<GenAiLogStore, "findLogs">;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -96,6 +104,32 @@ export async function persistDecodedSpans(
       project_id: projectId,
     });
     deps.captureFailure(err);
+  }
+
+  // Flag `cloud-otlp-semconv-aliases`: deprecated gen_ai keys and OpenLLMetry
+  // aliases onto the canonical keys. Fail open, like the AI SDK pass above.
+  const semconvAliases =
+    !!deps.semconvAliases && (await deps.semconvAliases(projectId, organization));
+  if (semconvAliases) {
+    // Logs before spans: content sent as `gen_ai` log records that are already
+    // stored joins its span as span events. Fail open: the call stays without them.
+    if (deps.genAiLogs) {
+      try {
+        attachGenAiLogEvents(
+          spans,
+          await deps.genAiLogs.findLogs(projectId, distinctSpanKeys(spans)),
+        );
+      } catch (err) {
+        logError("gen_ai log lookup failed", err, { project_id: projectId });
+        deps.captureFailure(err);
+      }
+    }
+    try {
+      normalizeSemconvAliases(spans);
+    } catch (err) {
+      logError("semconv alias normalization failed", err, { project_id: projectId });
+      deps.captureFailure(err);
+    }
   }
 
   const dedupe = await resolveAgentSpanDedupe(
@@ -212,7 +246,9 @@ export async function persistDecodedSpans(
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
   try {
-    const spanRows = toOtelSpanRows(projectId, spans, dedupe);
+    const spanRows = toOtelSpanRows(projectId, spans, dedupe, {
+      resourceEnvironment: semconvAliases,
+    });
     if (spanRows.length > 0) {
       await deps.insertOtelSpans(projectId, spanRows);
     }

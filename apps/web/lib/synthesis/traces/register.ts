@@ -1,6 +1,11 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
-import { pruneExpiredOtelLogs, pruneExpiredOtelSpans, pruneExpiredTraceSummaries } from "./queries";
+import {
+  pruneExpiredOtelLogs,
+  pruneExpiredOtelSpans,
+  pruneExpiredOtlpRawExports,
+  pruneExpiredTraceSummaries,
+} from "./queries";
 import { refreshTraceSummaries, type TraceSummaryRefreshResult } from "./summary-refresh";
 
 type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackSystemEvent"];
@@ -73,9 +78,31 @@ export function retentionSteps(
   };
 }
 
+/**
+ * Raw OTLP request bodies (RC-404): one bounded batch past `OTLP_RAW_RETENTION_DAYS`. They are a
+ * capped debugging buffer, not telemetry the quality history needs, so they expire whatever
+ * `DATA_RETENTION_ENABLED` says (no `retentionOnly`), as upstream runs it.
+ */
+export function otlpRawPruneStep(
+  prune: () => Promise<number> = () => pruneExpiredOtlpRawExports(),
+): DrainStep {
+  return {
+    name: "otlp_raw_prune",
+    phase: "after",
+    run: async () => ({ otlpRawExportsPruned: await prune() }),
+  };
+}
+
 const retention = retentionSteps();
 
-// Upstream's order: spans and logs are pruned before the refresh, summaries after it.
+// Upstream's order: the raw prune runs first, then spans and logs are pruned before the refresh,
+// summaries after it.
 export const tracesRegistration: Registration = {
-  drainSteps: [retention.spans, retention.logs, refreshStep(), retention.summaries],
+  drainSteps: [
+    otlpRawPruneStep(),
+    retention.spans,
+    retention.logs,
+    refreshStep(),
+    retention.summaries,
+  ],
 };

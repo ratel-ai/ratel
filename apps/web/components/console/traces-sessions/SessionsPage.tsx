@@ -16,6 +16,7 @@ import type { ExperimentSummary } from "@/lib/synthesis/experiments/types";
 import { calibrationDetailPath } from "@/lib/synthesis/traces/calibration-view";
 import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
 import { selectExperimentBanner } from "@/lib/synthesis/traces/experiment-view";
+import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
 import { getTracesIngestDiagnostics } from "@/lib/synthesis/traces/queries";
 import { loadSessionsPage } from "@/lib/synthesis/traces-sessions/sessions";
 import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
@@ -42,10 +43,14 @@ export async function SessionsPage({
   const { project } = await requireProjectScope(projectId);
 
   const filter = parseSessionsFilter(searchParams[SESSIONS_FILTER_PARAM]);
+  const askFromPayload = await payloadContentEnabledForActor(
+    project.id,
+    `project:${project.id}`,
+  ).catch(() => false);
   const now = new Date();
   const window = { since: new Date(now.getTime() - EXPERIMENT_DAYS * DAY_MS), until: now };
   const [page, experiments] = await Promise.all([
-    loadSessionsPage(project.id, { filter }),
+    loadSessionsPage(project.id, { filter, askFromPayload }),
     loadOrFallback({
       operation: "trace_experiments",
       distinctId: `project:${project.id}`,
