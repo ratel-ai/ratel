@@ -1,3 +1,12 @@
+import {
+  type Attributes,
+  type Span,
+  SpanKind,
+  SpanStatusCode,
+  type Tracer,
+  trace,
+} from "@opentelemetry/api";
+import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
 import { currentLogContext } from "@/lib/platform/logger";
 
 /**
@@ -7,6 +16,10 @@ import { currentLogContext } from "@/lib/platform/logger";
  * with nothing installed a tracked call only runs. An edition that tracks spend installs its sink
  * with `setModelCallSink` and prices the line itself. The fields carry ids, a model name, numbers
  * and an outcome; never a prompt or an answer.
+ *
+ * A call Ratel pays for is also a `gen_ai.*` span for Ratel's own project (ratel-cloud #410), as
+ * upstream makes it; the span is exported only where the self-telemetry export is configured
+ * (`lib/platform/otel/ratel-export.ts`).
  */
 
 /** `anthropic`, `openai`, or whatever an edition's own clients name. */
@@ -14,11 +27,15 @@ export type ModelProvider = string;
 
 export type ModelCallOutcome = "ok" | "error" | "refused_budget" | "skipped_no_key";
 
+/** Who pays for the call: Ratel's own analysis, or a customer's traffic through Ratel. */
+export type ModelCallPayer = "ratel" | "customer";
+
 export interface ModelCallMeta {
   provider: ModelProvider;
   model: string;
   /** What the call is for, snake_case: `eval_gate_replay`, `eval_gate_judge`. */
   feature: string;
+  payer: ModelCallPayer;
   organizationId?: string | null;
   projectId?: string | null;
 }
@@ -83,6 +100,7 @@ export function recordModelCall(record: ModelCallRecord): void {
         provider: record.provider,
         model: record.model,
         feature: record.feature,
+        payer: record.payer,
         organization_id: record.organizationId ?? context.org_id ?? null,
         project_id: record.projectId ?? context.project_id ?? null,
         input_tokens: tokens(record.inputTokens),
@@ -113,10 +131,12 @@ export async function trackModelCall<T>(
   now: () => number = Date.now,
 ): Promise<T> {
   const startedAt = now();
+  const span = startModelCallSpan(meta);
   let result: T;
   try {
     result = await call();
   } catch (error) {
+    endModelCallSpan(span, {}, error);
     recordModelCall({ ...meta, outcome: "error", durationMs: now() - startedAt, error });
     throw error;
   }
@@ -126,8 +146,86 @@ export async function trackModelCall<T>(
   } catch {
     // An answer without readable usage is still an answer.
   }
+  endModelCallSpan(span, usage);
   recordModelCall({ ...meta, ...usage, outcome: "ok", durationMs: now() - startedAt });
   return result;
+}
+
+/*
+ * The same call as a `gen_ai.*` span, for Ratel's own project
+ * (lib/platform/otel/ratel-export.ts picks these spans out by their tracer). Only calls
+ * Ratel pays for: a customer's traffic is theirs, not an agent of ours. Like the log line, the
+ * span carries no prompt, answer, error message or customer id: the model, the feature as the
+ * agent's name, tokens, timing and the error's class name.
+ *
+ * The span is not made active, so the provider's HTTP span keeps its parent and the traces the
+ * self-telemetry exporter receives keep their shape. With no tracer provider registered (local
+ * development, tests) the API hands out no-op spans.
+ */
+
+let tracerOverride: Tracer | null = null;
+
+/** Swap the tracer model-call spans come from (tests); returns a restore function. */
+export function setModelCallTracer(next: Tracer | null): () => void {
+  const previous = tracerOverride;
+  tracerOverride = next;
+  return () => {
+    tracerOverride = previous;
+  };
+}
+
+/**
+ * Owned: the core's own calls are chat completions. Upstream also names its hosted embedding
+ * provider here; that call is the edition's, and its copy of this module names it.
+ */
+function operationOf(_provider: ModelProvider): "chat" | "embeddings" {
+  return "chat";
+}
+
+function startModelCallSpan(meta: ModelCallMeta): Span | undefined {
+  try {
+    if (meta.payer !== "ratel") return undefined;
+    const projectId = meta.projectId ?? currentLogContext().project_id ?? null;
+    const ownProject = selfTelemetryProjectId();
+    if (ownProject && projectId === ownProject) return undefined;
+    const operation = operationOf(meta.provider);
+    const tracer = tracerOverride ?? trace.getTracer(MODEL_CALL_TRACER);
+    return tracer.startSpan(`${operation} ${meta.model}`, {
+      kind: SpanKind.CLIENT,
+      attributes: {
+        "gen_ai.operation.name": operation,
+        "gen_ai.provider.name": meta.provider,
+        "gen_ai.request.model": meta.model,
+        "gen_ai.agent.name": meta.feature,
+      },
+    });
+  } catch {
+    // A tracing failure is not the call's failure.
+    return undefined;
+  }
+}
+
+function endModelCallSpan(span: Span | undefined, usage: ModelCallUsage, error?: unknown): void {
+  if (!span) return;
+  try {
+    const attributes: Attributes = {};
+    const input = tokens(usage.inputTokens);
+    const output = tokens(usage.outputTokens);
+    const cacheRead = tokens(usage.cachedTokens);
+    const cacheWrite = tokens(usage.cacheWriteTokens);
+    if (input !== null) attributes["gen_ai.usage.input_tokens"] = input;
+    if (output !== null) attributes["gen_ai.usage.output_tokens"] = output;
+    if (cacheRead !== null) attributes["gen_ai.usage.cache_read.input_tokens"] = cacheRead;
+    if (cacheWrite !== null) attributes["gen_ai.usage.cache_creation.input_tokens"] = cacheWrite;
+    if (error !== undefined) {
+      attributes["error.type"] = errorType(error) ?? "Error";
+      span.setStatus({ code: SpanStatusCode.ERROR });
+    }
+    span.setAttributes(attributes);
+    span.end();
+  } catch {
+    // A tracing failure is not the call's failure.
+  }
 }
 
 /** Usage off an Anthropic Messages API answer. */

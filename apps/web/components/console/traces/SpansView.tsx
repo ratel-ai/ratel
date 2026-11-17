@@ -13,6 +13,7 @@ import type {
   OperationGroupBy,
   TraceFacets,
 } from "@/lib/synthesis/traces/queries";
+import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import {
   withCursor,
   withoutCursor,
@@ -268,7 +269,7 @@ function SpansTable({
       align: "right",
       width: "6rem",
       sortHref: sortHref("cost"),
-      cell: (row) => formatMoney(row.costUsd),
+      cell: (row) => costLabel(row.costUsd, row.unpriced ? 1 : 0),
     },
   ];
   return (

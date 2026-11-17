@@ -8,7 +8,7 @@ import type {
   ToolCallBlock,
 } from "@/lib/ingest/cloud-schema";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
-import { costFor } from "@/lib/ingest/pricing";
+import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { attrBool, attrNumber, attrString, attrStringArray, attrStructured } from "./anyvalue";
 import { GEN_AI } from "./constants";
 import {
@@ -492,8 +492,8 @@ export function plausibleOccurredAt(startUnixMs: number): Date | null {
  * that once it is keyed on `gen_ai.response.id`. An empty id (a span the
  * exporter sent without one) is stored as null, never as "".
  */
-export function toRow(projectId: string, call: GroupedCall): EventWithMetric {
-  return rowOf(projectId, call, toCloudEvent(call));
+export function toRow(projectId: string, call: GroupedCall, prices?: BatchPrices): EventWithMetric {
+  return rowOf(projectId, call, toCloudEvent(call), [], prices);
 }
 
 /**
@@ -509,6 +509,7 @@ export function toRows(
   projectId: string,
   calls: GroupedCall[],
   capture: PayloadCapture = {},
+  prices?: BatchPrices,
 ): EventWithMetric[] {
   const contents = calls.map(callContent);
   const scopes = toolSpanScopes(calls, contents);
@@ -531,7 +532,7 @@ export function toRows(
     );
     indexes.forEach((callIndex, at) => recovered.set(callIndex, found[at]));
   }
-  return calls.map((call, i) => rowOf(projectId, call, events[i], recovered.get(i) ?? []));
+  return calls.map((call, i) => rowOf(projectId, call, events[i], recovered.get(i) ?? [], prices));
 }
 
 /** Per trace, the indexes of the calls that have content, in time order. */
@@ -551,6 +552,7 @@ function rowOf(
   call: GroupedCall,
   e: CloudEvent,
   recovered: ToolCallBlock[] = [],
+  prices?: BatchPrices,
 ): EventWithMetric {
   const occurredAt = plausibleOccurredAt(call.anchor.startUnixMs);
   const eventTime = occurredAt ?? new Date();
@@ -559,13 +561,17 @@ function rowOf(
   const inputTokens = usage?.input_tokens ?? null;
   const outputTokens = usage?.output_tokens ?? null;
   const latencyMs = e.latency_ms != null ? Math.round(e.latency_ms) : null;
-  const cost = costFor(
-    e.model,
-    usage && {
-      ...usage,
-      cache_write_tokens: attrNumber(call.anchor.attributes, GEN_AI.usageCacheCreation),
-    },
-  );
+  const cost =
+    prices === PRICES_UNKNOWN
+      ? null
+      : costFor(
+          e.model,
+          usage && {
+            ...usage,
+            cache_write_tokens: attrNumber(call.anchor.attributes, GEN_AI.usageCacheCreation),
+          },
+          prices,
+        );
   const costUsd = cost != null ? cost.toString() : null;
 
   // Every OTLP call counts only the tool calls it produced (ToolCallScope).

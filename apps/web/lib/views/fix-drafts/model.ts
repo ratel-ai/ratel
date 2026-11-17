@@ -79,7 +79,7 @@ export function draftModelFromEnv(
     model,
     async complete({ system, user, maxTokens }) {
       const message = await trackModelCall(
-        { provider: "anthropic", model, feature: DRAFT_FEATURE },
+        { provider: "anthropic", model, feature: DRAFT_FEATURE, payer: "ratel" },
         () =>
           client.messages.create(
             wellFormedJson({
@@ -119,6 +119,7 @@ export function recordNoDraftKey(env: Env = process.env): void {
     provider: "anthropic",
     model: env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL,
     feature: DRAFT_FEATURE,
+    payer: "ratel",
     outcome: "skipped_no_key",
     durationMs: 0,
     calls: 1,

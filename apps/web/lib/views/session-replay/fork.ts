@@ -1,5 +1,5 @@
 import type { CloudEvent } from "@/lib/ingest/cloud-schema";
-import { costFor, priceFor } from "@/lib/ingest/pricing";
+import { costFor, type PriceBook, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "@/lib/views/eval-gate/calls";
 import { emptyChange } from "@/lib/views/eval-gate/change";
@@ -76,6 +76,8 @@ export interface SampleDeps {
   toolDefs: ReadonlyMap<string, ToolDef>;
   /** A ranker over the project's catalog with a change applied; null when there is no catalog. */
   rank: ((change: FixChange) => Ranker | null) | null;
+  /** RC-482: the project's price book for a side's cost (the customer's model). Absent: the current built-in prices. */
+  prices?: PriceBook;
 }
 
 export interface SideSample {
@@ -264,7 +266,8 @@ async function sampleSide(
   for (let i = 0; i < k; i += 1) {
     const agent = deps.models.agent!(context);
     if (!agent) throw new Error("no agent for a what if sample");
-    const priced = recording.model && priceFor(recording.model) ? recording.model : agent.model;
+    const priced =
+      recording.model && priceFor(recording.model, deps.prices) ? recording.model : agent.model;
     const estimate = {
       inputTokens: Math.max(
         recording.inputTokens,
@@ -292,11 +295,15 @@ async function sampleSide(
     picks.push(reply.calls[0]?.name ?? NO_TOOL);
     inputTokens += reply.usage.inputTokens;
     outputTokens += reply.usage.outputTokens;
-    const cost = costFor(priced, {
-      input_tokens: reply.usage.inputTokens,
-      output_tokens: reply.usage.outputTokens,
-      cached_tokens: reply.usage.cachedTokens,
-    });
+    const cost = costFor(
+      priced,
+      {
+        input_tokens: reply.usage.inputTokens,
+        output_tokens: reply.usage.outputTokens,
+        cached_tokens: reply.usage.cachedTokens,
+      },
+      deps.prices,
+    );
     costUsd = costUsd === null || cost === null ? null : costUsd + cost;
   }
   return { ...distributionOf(picks), inputTokens, outputTokens, costUsd };

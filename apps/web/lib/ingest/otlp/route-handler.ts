@@ -29,7 +29,7 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import { persistDecodedSpans } from "./ingest-spans";
+import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
@@ -112,6 +112,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
   /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
   otlpRawCapture?: OtlpRawCaptureDeps;
+  /** The project's own prices (RC-482); absent, the current built-in prices. */
+  modelPricing?: PersistSpansDeps["modelPricing"];
 }
 
 export async function handleTracesRequest(

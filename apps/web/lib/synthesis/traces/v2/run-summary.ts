@@ -11,6 +11,7 @@ import { promptOf } from "@/lib/ingest/otlp/prompt-text";
 import type { AttrMap } from "@/lib/ingest/otlp/types";
 import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
 import type { PayloadContent } from "@/lib/synthesis/traces/payload-content";
+import { isUnpricedCall } from "./cost-label";
 import type { RunStatus } from "./runs";
 import { STEP_KIND_LABEL, type StepKind, stepKind, stepTitle, stringAttribute } from "./span-kind";
 
@@ -59,6 +60,8 @@ export interface RunTotals {
   outputTokens: number;
   tokens: number;
   costUsd: number;
+  /** Model calls with tokens and no cost: their model has no price (RC-482). */
+  unpricedCalls?: number;
   failedSpans: number;
 }
 
@@ -156,6 +159,7 @@ export function buildRunSummary(
       outputTokens,
       tokens: inputTokens + outputTokens,
       costUsd: sum(ordered, (span) => toNumber(span.costUsd)),
+      unpricedCalls: ordered.filter(isUnpricedCall).length,
       failedSpans,
     },
   };

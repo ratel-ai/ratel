@@ -1,4 +1,5 @@
 import { and, asc, eq, gt } from "drizzle-orm";
+import { loadPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import {
@@ -82,7 +83,7 @@ export async function loadTurnLinked(
     head.id,
   );
   if (!calls || calls.length === 0) return null;
-  const fact = linkedFactOf(calls);
+  const fact = linkedFactOf(calls, await loadPriceBook(projectId, db));
   return {
     modelCalls: fact.modelCalls,
     inputTokens: fact.inputTokens,

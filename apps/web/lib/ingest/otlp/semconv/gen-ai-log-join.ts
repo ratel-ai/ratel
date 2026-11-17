@@ -1,3 +1,4 @@
+import type { ModelPricingIngestDeps } from "@/lib/ingest/otlp/batch-prices";
 import { groupSpans } from "@/lib/ingest/otlp/group";
 import { toRows } from "@/lib/ingest/otlp/reconstruct";
 import type { OtelSpan } from "@/lib/ingest/otlp/schema";
@@ -6,6 +7,8 @@ import type { GenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { attachGenAiLogEvents, type SpanKey } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
 import type { SessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
+import type { PriceBook } from "@/lib/ingest/pricing";
+import { getLogger } from "@/lib/platform/logger";
 
 /** The project's organization, as the edition resolves it (owned: upstream types it with its flag service). */
 type IngestFlagOrganizationInput = unknown;
@@ -22,10 +25,25 @@ type IngestFlagOrganizationInput = unknown;
  * (`persistDecodedSpans`).
  */
 
+const logger = getLogger("otlp/gen-ai-log-join");
+
+/** What a restate prices with, and whether it keeps the stored cost instead (RC-482). */
+interface RestatePrices {
+  prices: PriceBook | undefined;
+  keepCost: boolean;
+}
+
+/** No model pricing deps: the current built-in prices. */
+const BUILT_IN_RESTATE: RestatePrices = { prices: undefined, keepCost: false };
+
 export interface GenAiLogJoinDeps {
   store: GenAiLogStore;
   /** Flag `cloud-session-replay`, as span ingest reads it: the payload keeps the reply. */
   sessionChatCapture?: SessionChatCaptureEnabled;
+  /** The project's own prices, as span ingest reads them (RC-482): the restated cost uses the same prices. Absent, the current built-in prices. */
+  modelPricing?: ModelPricingIngestDeps;
+  /** Reports a failed price read, as span ingest reports its own. */
+  captureFailure?: (error: unknown) => void;
 }
 
 /** Returns how many stored calls were restated. */
@@ -50,13 +68,39 @@ export async function rejoinStoredModelCalls(
     calls.length > 0 && deps.sessionChatCapture
       ? await deps.sessionChatCapture(projectId, organization)
       : false;
-  const rows = toRows(projectId, calls, { captureReply }).filter(
+  const { prices, keepCost } =
+    calls.length > 0 && deps.modelPricing
+      ? await restatePrices(projectId, deps.modelPricing, deps.captureFailure)
+      : BUILT_IN_RESTATE;
+  const rows = toRows(projectId, calls, { captureReply }, prices).filter(
     (row) =>
       row.event.traceId &&
       row.event.spanId &&
       wanted.has(`${row.event.traceId}:${row.event.spanId}`),
   );
-  return deps.store.restateCalls(projectId, rows);
+  return deps.store.restateCalls(projectId, rows, keepCost ? { keepCost } : undefined);
+}
+
+/**
+ * The prices a restate uses: the ones span ingest would use, read once per
+ * restate. A failed price read keeps each call's stored cost (restating it
+ * with no cost would erase it), logs the error and reports it with
+ * `captureFailure`. The kept cost can be stale: the next log record of the
+ * call or `backfill:costs --reprice` prices it again. Plain `backfill:costs`
+ * does not: it fills only null costs.
+ */
+async function restatePrices(
+  projectId: string,
+  modelPricing: ModelPricingIngestDeps,
+  captureFailure?: (error: unknown) => void,
+): Promise<RestatePrices> {
+  try {
+    return { prices: { overrides: await modelPricing.loadOverrides(projectId) }, keepCost: false };
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "restate model price read failed");
+    captureFailure?.(err);
+    return { prices: undefined, keepCost: true };
+  }
 }
 
 /**

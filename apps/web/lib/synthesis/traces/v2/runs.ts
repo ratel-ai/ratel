@@ -39,6 +39,8 @@ export interface RunRow {
   tools: readonly string[];
   tokens: number;
   costUsd: number;
+  /** Model calls with no price (RC-482): the cost reads "Unpriced" rather than $0.00. */
+  unpricedCalls?: number;
   spanCount: number;
   errorCount: number;
   experiment: string | null;
@@ -60,6 +62,7 @@ export function toRunRow(summary: TraceSummaryView, details?: RunDetails): RunRo
     tools: details?.tools ?? [],
     tokens: summary.totalTokens,
     costUsd: summary.costUsd,
+    unpricedCalls: summary.unpricedCalls ?? 0,
     spanCount: summary.spanCount,
     errorCount: summary.errorCount,
     experiment: summary.experimentName,

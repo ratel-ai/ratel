@@ -216,6 +216,9 @@ importers:
       '@clerk/themes':
         specifier: ^2.4.57
         version: 2.4.57(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
       '@ratel-ai/sdk':
         specifier: 0.13.0-rc.9
         version: 0.13.0-rc.9(zod@4.4.3)

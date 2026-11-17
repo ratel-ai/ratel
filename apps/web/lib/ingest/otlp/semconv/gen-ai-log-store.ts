@@ -16,9 +16,19 @@ export interface GenAiLogStore {
   /**
    * Restate the stored calls of `rows` (matched by dedupe hash); never inserts
    * one, and never drops content: a call whose stored payload has text the
-   * row lacks keeps its payload. Returns the count restated.
+   * row lacks keeps its payload. With `keepCost`, each call keeps its stored
+   * cost (RC-482). Returns the count restated.
    */
-  restateCalls(projectId: string, rows: EventWithMetric[]): Promise<number>;
+  restateCalls(
+    projectId: string,
+    rows: EventWithMetric[],
+    options?: RestateOptions,
+  ): Promise<number>;
+}
+
+export interface RestateOptions {
+  /** Keep each call's stored cost: the restate cannot tell which prices the project pays. */
+  keepCost?: boolean;
 }
 
 type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
@@ -27,7 +37,7 @@ export function createGenAiLogStore(db: () => Db = getDb): GenAiLogStore {
   return {
     findLogs: (projectId, keys) => findGenAiLogs(projectId, keys, db()),
     findSpans: (projectId, traceIds) => findOtelSpans(projectId, traceIds, db()),
-    restateCalls: (projectId, rows) => restateCalls(projectId, rows, db()),
+    restateCalls: (projectId, rows, options) => restateCalls(projectId, rows, db(), options),
   };
 }
 
@@ -71,7 +81,12 @@ async function findOtelSpans(projectId: string, traceIds: string[], db: Db): Pro
     .where(and(eq(otelSpans.projectId, projectId), inArray(otelSpans.traceId, traceIds)));
 }
 
-async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db): Promise<number> {
+async function restateCalls(
+  projectId: string,
+  rows: EventWithMetric[],
+  db: Db,
+  { keepCost = false }: RestateOptions = {},
+): Promise<number> {
   if (rows.length === 0) return 0;
   return db.transaction(async (tx) => {
     let restated = 0;
@@ -82,11 +97,12 @@ async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db):
       // from content-free `otel_spans` (the span carried the content) does
       // not cover the stored payload and is skipped.
       const [current] = await tx
-        .select({ payload: events.payload })
+        .select({ payload: events.payload, costUsd: events.costUsd })
         .from(events)
         .where(and(eq(events.projectId, projectId), eq(events.dedupeHash, event.dedupeHash)))
         .for("update");
       if (!current || !payloadCovers(event.payload, current.payload)) continue;
+      const costUsd = keepCost ? current.costUsd : event.costUsd;
       const [stored] = await tx
         .update(events)
         .set({
@@ -99,7 +115,7 @@ async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db):
           outputTokens: event.outputTokens,
           cachedTokens: event.cachedTokens,
           reasoningTokens: event.reasoningTokens,
-          costUsd: event.costUsd,
+          costUsd,
           payload: event.payload,
           categorizerVersion: event.categorizerVersion,
         })
@@ -108,8 +124,8 @@ async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db):
       if (!stored) continue;
       await tx
         .insert(eventMetrics)
-        .values({ ...metric, eventId: stored.id, projectId })
-        .onConflictDoUpdate({ target: eventMetrics.eventId, set: metric });
+        .values({ ...metric, costUsd, eventId: stored.id, projectId })
+        .onConflictDoUpdate({ target: eventMetrics.eventId, set: { ...metric, costUsd } });
       restated += 1;
     }
     return restated;

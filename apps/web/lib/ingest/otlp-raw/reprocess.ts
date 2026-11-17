@@ -11,6 +11,7 @@ import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
 import { toRows } from "@/lib/ingest/otlp/reconstruct";
 import { normalizeSemconvAliases } from "@/lib/ingest/otlp/semconv/aliases";
 import type { OtlpRawExportBody } from "@/lib/ingest/otlp-raw/store";
+import type { PriceBook } from "@/lib/ingest/pricing";
 
 /**
  * Reprocess stored raw OTLP trace exports (`otlp_raw_exports`, RC-404): run
@@ -47,6 +48,8 @@ export interface ReprocessIngestFlags {
   captureReply: boolean;
   /** `cloud-otlp-agent-span-dedupe` storage lookup; absent, the flag is off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** The project's price book (RC-482); absent, the current built-in prices. */
+  prices?: PriceBook;
 }
 
 /** One stored event and its metrics row, as far as a reprocess compares them. */
@@ -213,7 +216,12 @@ export async function rebuildEventRows(
   const dedupe = await resolveAgentSpanDedupe(spans, projectId, flags.agentSpanDedupe, (err) => {
     throw err;
   });
-  return toRows(projectId, groupSpans(spans, dedupe), { captureReply: flags.captureReply });
+  return toRows(
+    projectId,
+    groupSpans(spans, dedupe),
+    { captureReply: flags.captureReply },
+    flags.prices,
+  );
 }
 
 /** Compare rebuilt rows with stored ones: what to patch, what to insert, what already agrees. */

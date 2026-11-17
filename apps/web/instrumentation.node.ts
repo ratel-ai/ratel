@@ -49,6 +49,7 @@ export async function registerNodeInstrumentation(
     { SelfTimeSpanProcessor },
     { createTelemetryShutdown, registerTelemetryShutdownHandlers },
     { appRole },
+    { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
   ] = await Promise.all([
     import("@opentelemetry/api-logs"),
     import("@opentelemetry/context-async-hooks"),
@@ -66,17 +67,34 @@ export async function registerNodeInstrumentation(
     import("@/lib/platform/otel/self-time-processor"),
     import("@/lib/platform/otel/shutdown"),
     import("@/lib/jobs/role"),
+    import("@/lib/platform/otel/ratel-export"),
   ]);
 
   const resource = resourceFromAttributes(config.resourceAttributes);
+  // Ratel's own model calls go to a Ratel project (lib/platform/otel/ratel-export.ts),
+  // and only there: the self-telemetry exporter keeps every other span, as before.
+  const ratelExport = resolveRatelExportConfig(environment);
   const tracerProvider = new NodeTracerProvider({
     resource,
     sampler: createSelfTelemetrySampler(config.tracesSamplerRatio),
     spanProcessors: [
       new SelfTimeSpanProcessor(),
-      new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
-        exportTimeoutMillis: EXPORT_TIMEOUT_MS,
-      }),
+      new FilteredSpanProcessor(
+        new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
+          exportTimeoutMillis: EXPORT_TIMEOUT_MS,
+        }),
+        (span) => !isModelCallSpan(span),
+      ),
+      ...(ratelExport
+        ? [
+            new FilteredSpanProcessor(
+              new BatchSpanProcessor(new OTLPTraceExporter(ratelExport), {
+                exportTimeoutMillis: EXPORT_TIMEOUT_MS,
+              }),
+              isModelCallSpan,
+            ),
+          ]
+        : []),
     ],
   });
   const loggerProvider = new LoggerProvider({
@@ -97,7 +115,9 @@ export async function registerNodeInstrumentation(
     loggerProvider,
     instrumentations: [
       new UndiciInstrumentation({
-        ignoreRequestHook: ({ origin }) => isTelemetryExportOrigin(origin, config),
+        ignoreRequestHook: ({ origin }) =>
+          isTelemetryExportOrigin(origin, config) ||
+          (ratelExport !== null && sameOrigin(origin, ratelExport.url)),
       }),
       new PgInstrumentation({ requireParentSpan: true }),
       new PinoInstrumentation(),

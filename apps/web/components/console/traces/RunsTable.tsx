@@ -9,8 +9,9 @@ import { type Column, DataTable, type SortDirection } from "@ratel/design-system
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import { withSort } from "@/lib/synthesis/traces/v2/filters";
-import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/traces/v2/format";
+import { formatDuration, formatInteger } from "@/lib/synthesis/traces/v2/format";
 import { experimentLabel } from "@/lib/synthesis/traces/v2/logs";
 import { RUN_STATUS_LABEL, RUN_STATUS_TONE, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { RelativeTime, ToolBadges, TruncatedText } from "./cells";
@@ -138,7 +139,7 @@ export function RunsTable({
       align: "right",
       width: "6rem",
       sortHref: sortHref("cost"),
-      cell: (row) => formatMoney(row.costUsd),
+      cell: (row) => costLabel(row.costUsd, row.unpricedCalls ?? 0),
     },
     ...(showExperiment
       ? [

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { costFor } from "@/lib/ingest/pricing";
+import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { envNumber } from "@/lib/platform/env-number";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
@@ -172,14 +172,14 @@ export class SpendMeter {
   /** What this usage costs (nothing for the local stand-ins; an unpriced model at a list price, so the cap holds). */
   price(model: string, usage: ModelUsage): number {
     if (model === STAND_IN_MODEL) return 0;
-    const priced = costFor(model, {
+    const priced = ratelBudgetCostFor(model, {
       input_tokens: usage.inputTokens,
       output_tokens: usage.outputTokens,
       cached_tokens: usage.cachedTokens,
     });
     return (
       priced ??
-      costFor(FALLBACK_PRICE, {
+      ratelBudgetCostFor(FALLBACK_PRICE, {
         input_tokens: usage.inputTokens,
         output_tokens: usage.outputTokens,
       }) ??
@@ -509,7 +509,11 @@ function tracked(
   feature: EvalGateFeature,
   call: () => Promise<Anthropic.Message>,
 ): Promise<Anthropic.Message> {
-  return trackModelCall({ provider: "anthropic", model, feature }, call, anthropicUsage);
+  return trackModelCall(
+    { provider: "anthropic", model, feature, payer: "ratel" },
+    call,
+    anthropicUsage,
+  );
 }
 
 /**
@@ -526,6 +530,7 @@ export function recordBudgetRefusal(
     provider: "anthropic",
     model: model.model,
     feature,
+    payer: "ratel",
     outcome: "refused_budget",
     durationMs: 0,
     calls,
@@ -547,6 +552,7 @@ export function recordNoModelKey(
     provider: "anthropic",
     model,
     feature,
+    payer: "ratel",
     outcome: "skipped_no_key",
     durationMs: 0,
     calls,

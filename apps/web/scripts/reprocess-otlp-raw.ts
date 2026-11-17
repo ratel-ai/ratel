@@ -22,6 +22,7 @@ config({ path: ".env.local", quiet: true });
 config({ path: ".env", quiet: true });
 
 import { parseArgs } from "node:util";
+import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { findTracesWithModelCalls } from "@/lib/ingest/otlp/queries";
 import {
   type ReprocessIngestFlags,
@@ -66,13 +67,14 @@ async function main() {
       `flag ${flag} = ${enabled ? "on" : "off"} from ${source}, organization ${organization.id}`,
     );
   }
+  const db = getDb();
   const flags: ReprocessIngestFlags = {
     ...decided.flags,
     agentSpanDedupe: {
       findTracesWithModelCalls: (id, traceIds) => findTracesWithModelCalls(id, traceIds),
     },
+    prices: { overrides: await loadPriceOverrides(projectId, db) },
   };
-  const db = getDb();
 
   const run = (tx: ReprocessDb, flags: ReprocessIngestFlags) =>
     reprocessOtlpRawExports(

@@ -46,6 +46,7 @@ describe("createImportedRuns", () => {
         };
         logError: unknown;
         captureFailure: unknown;
+        modelPricing?: { loadOverrides: unknown };
       },
     ];
     assert.deepEqual(context, {
@@ -56,6 +57,8 @@ describe("createImportedRuns", () => {
     });
     assert.equal(persistDeps.logError, report.logError);
     assert.equal(persistDeps.captureFailure, report.captureFailure);
+    // An imported run is priced with the project's own prices, as live ingest prices it (RC-482).
+    assert.equal(typeof persistDeps.modelPricing?.loadOverrides, "function");
     await persistDeps.traceTurns.enqueueBuild("p");
     persistDeps.traceTurns.scheduleProjectDrain("p");
     assert.deepEqual(calls.slice(1), [["build", "p", undefined]]);

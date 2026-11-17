@@ -23,6 +23,7 @@ import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
 import { containsText } from "./query-text";
+import { isUnpricedCall } from "./v2/cost-label";
 
 export type TraceQueriesDb = Pick<ReturnType<typeof getDb>, "select" | "selectDistinctOn">;
 
@@ -180,6 +181,8 @@ export interface SpanSummary {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  /** A model call with tokens and no cost: its model has no price (RC-482). */
+  unpriced?: boolean;
   experimentName: string | null;
 }
 
@@ -262,6 +265,8 @@ export interface TraceSummary {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  /** Model calls with tokens and no cost: their model has no price (RC-482). */
+  unpricedCalls?: number;
   experimentName: string | null;
   experimentArm: string | null;
 }
@@ -657,6 +662,7 @@ export async function listTraces(
       costUsd: windowBounds
         ? sql<string>`coalesce(sum(${otelSpans.costUsd}) filter (where ${windowBounds}), 0)::text`
         : sql<string>`coalesce(sum(${otelSpans.costUsd}), 0)::text`,
+      unpricedCalls: sql<number>`count(*) filter (where ${and(unpricedCall(), windowBounds)})::int`,
       experimentName: rankedExperimentPairs.experimentName,
       experimentArm: rankedExperimentPairs.experimentArm,
     })
@@ -687,6 +693,7 @@ export async function listTraces(
       outputTokens,
       totalTokens: inputTokens + outputTokens,
       costUsd: Number(aggregate?.costUsd ?? 0),
+      unpricedCalls: aggregate?.unpricedCalls ?? 0,
       experimentName: aggregate?.experimentName ?? null,
       experimentArm: aggregate?.experimentArm ?? null,
     };
@@ -790,6 +797,7 @@ export async function listSpans(
       outputTokens,
       totalTokens: inputTokens + outputTokens,
       costUsd: Number(row.costUsd ?? 0),
+      unpriced: isUnpricedCall(row),
     };
   });
   const last = items.at(-1);
@@ -1882,4 +1890,13 @@ function isValidRetentionDays(value: number | undefined): value is number {
     value > 0 &&
     value <= MAX_SAFE_RETENTION_DAYS
   );
+}
+
+/** A model call that reported tokens and stored no cost: its model has no price (RC-482). */
+function unpricedCall() {
+  return and(
+    isNull(otelSpans.costUsd),
+    isNotNull(otelSpans.model),
+    or(isNotNull(otelSpans.inputTokens), isNotNull(otelSpans.outputTokens)),
+  )!;
 }

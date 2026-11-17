@@ -1,4 +1,4 @@
-import { costFor } from "@/lib/ingest/pricing";
+import { costFor, type PriceBook } from "@/lib/ingest/pricing";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
 
 /**
@@ -175,14 +175,15 @@ export function assignModelCalls(
 
 const roundUsd = (usd: number): number => Math.round(usd * 1_000_000) / 1_000_000;
 
-/** The facts of one run's linked calls (at least one). */
-export function linkedFactOf(calls: readonly LinkCandidate[]): LinkedRunFact {
+/** The facts of one run's linked calls (at least one), priced with the project's price book (absent: the current built-in prices). */
+export function linkedFactOf(calls: readonly LinkCandidate[], prices?: PriceBook): LinkedRunFact {
   const ordered = [...calls].sort((a, b) => a.atMs - b.atMs);
   const costs = ordered.flatMap((call) => {
-    const usd = costFor(call.model, {
-      input_tokens: call.inputTokens,
-      output_tokens: call.outputTokens,
-    });
+    const usd = costFor(
+      call.model,
+      { input_tokens: call.inputTokens, output_tokens: call.outputTokens },
+      prices,
+    );
     return usd === null ? [] : [usd];
   });
   const menus = ordered.map((call) =>
@@ -207,13 +208,14 @@ export function linkTurns(
   turns: readonly SignalTurn[],
   calls: readonly LinkCandidate[],
   runTraces: RunTraces = new Map(),
+  prices?: PriceBook,
 ): SignalTurn[] {
   const runs = turns.filter((turn) => turn.lane === "runtime");
   if (runs.length === 0 || calls.length === 0) return [...turns];
   const assigned = assignModelCalls(runs, calls, runTraces);
   return turns.map((turn) => {
     const linked = assigned.get(turn.id);
-    return linked && linked.length > 0 ? { ...turn, linked: linkedFactOf(linked) } : turn;
+    return linked && linked.length > 0 ? { ...turn, linked: linkedFactOf(linked, prices) } : turn;
   });
 }
 
