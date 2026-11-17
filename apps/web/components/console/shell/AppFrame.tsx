@@ -9,7 +9,6 @@ import { TooltipProvider } from "@ratel/design-system/tooltip";
 import { Menu, Search } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StageSpineProvider } from "@/components/console/lineage/stage-spine-context";
 import {
   activeNavItemId,
   commandEntries,
@@ -56,16 +55,8 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         additions: data.editionNav,
         organizationAdditions: data.organizationNav,
         projectGroups: data.projectNav,
-        stageSpine: data.stageSpine,
       }),
-    [
-      project,
-      data.organizationSlug,
-      data.editionNav,
-      data.organizationNav,
-      data.projectNav,
-      data.stageSpine,
-    ],
+    [project, data.organizationSlug, data.editionNav, data.organizationNav, data.projectNav],
   );
   const activeId = activeNavItemId(pathname, items);
   // Inside a project ⌘K reaches the organization's pages too.
@@ -214,7 +205,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
             tabIndex={-1}
             className="min-w-0 flex-1 px-6 py-8 outline-none lg:px-10 has-[>[data-page]]:p-0"
           >
-            <StageSpineProvider enabled={data.stageSpine}>{children}</StageSpineProvider>
+            {children}
           </main>
         </div>
       </div>

@@ -3,7 +3,6 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { loadFixes } from "@/lib/views/fixes/load";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { buildTaskDetail } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
 
@@ -12,7 +11,7 @@ import { loadTasksInputs } from "@/lib/views/tasks/page-model";
  * from the console scope; the stage spine is the env flag.
  */
 export async function simulationPageContext(projectId: string, taskId: string) {
-  if (!stageSpineEnabled() || !isDbConfigured()) notFound();
+  if (!isDbConfigured()) notFound();
   const { project, organization } = await requireProjectScope(projectId);
   if (!(await evalGateEnabledFor(organization))) notFound();
   const [inputs, fixes] = await Promise.all([

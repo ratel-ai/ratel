@@ -2,7 +2,7 @@ import { z } from "zod";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
-import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
+import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import {
   supplementaryReadTimeoutMs,
@@ -49,15 +49,14 @@ import {
   type WhatIfRunView,
   withSessionToolsFirst,
 } from "@/lib/views/session-replay/what-if";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 
 /**
  * Ship and the reads around it over MCP: what went live (`list_shipments`),
  * where any object came from (`get_lineage`), how fresh the analysis is
  * (`get_analysis_freshness`) and one session step by step (`get_session`).
  *
- * Gates follow the console. Ship and lineage live behind `cloud-stage-spine`,
- * session replay behind `cloud-session-replay`. A bearer caller has no cookie
+ * Gates follow the console. Ship and lineage are open to anyone who reaches
+ * the project; session replay is behind `cloud-session-replay`. A bearer caller has no cookie
  * session, so each flag is decided for the caller acting in the project's
  * organization, as `loop/index.ts` decides the eval gate: an OAuth user as
  * their Clerk id with their email, an API key as `project:<id>` with the
@@ -86,8 +85,6 @@ export interface LoadedSession {
 
 export interface ShipOperationDeps {
   getOrganization: (projectId: string) => Promise<Organization | null>;
-  /** `cloud-stage-spine` for this caller in the project's organization. */
-  stageSpineEnabled: (projectId: string, actor: string) => Promise<boolean>;
   evalGateEnabled: (projectId: string, actor: string) => Promise<boolean>;
   loadShipments: (projectId: string) => Promise<ShipmentRow[]>;
   shipmentTrail: (
@@ -112,20 +109,6 @@ export interface ShipOperationDeps {
   ) => Promise<LoadedSession | null>;
   loadWhatIfOptions: (projectId: string, organization: Organization) => Promise<WhatIfOptions>;
   now: () => Date;
-}
-
-/**
- * `cloud-stage-spine` for whoever asked, with no session, as
- * `sessionReplayEnabledForActor` decides its flag: a person with their email,
- * a key with the organization's properties only. An unknown project is off.
- */
-export async function stageSpineEnabledForActor(
-  _projectId: string,
-  _actor: string,
-): Promise<boolean> {
-  // Owned: the stage spine is the deployment's FF_STAGE_SPINE (views/stage-spine-flag.ts).
-  // Upstream decides cloud-stage-spine per organization and person through its flag service.
-  return stageSpineEnabled();
 }
 
 /**
@@ -188,7 +171,6 @@ async function readSession(
 
 export const defaultShipDeps: ShipOperationDeps = {
   getOrganization: (projectId) => getOrganizationByProjectId(projectId),
-  stageSpineEnabled: (projectId, actor) => stageSpineEnabledForActor(projectId, actor),
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
   loadShipments: (projectId) =>
     withStatementTimeout((db) => loadShipments(projectId, db), { operation: "ship_shipments" }),
@@ -246,19 +228,6 @@ async function requireOrganization(
   const organization = await deps.getOrganization(projectId);
   if (!organization) throw notFound("project");
   return organization;
-}
-
-/** Ship and lineage exist behind `cloud-stage-spine`; off, the pages do not exist. */
-async function requireStageSpine(deps: ShipOperationDeps, ctx: OperationContext): Promise<string> {
-  const actor = mcpActor(ctx.auth, ctx.projectId);
-  if (!(await deps.stageSpineEnabled(ctx.projectId, actor))) {
-    throw new McpOperationError(
-      "forbidden",
-      "Ship and lineage are not enabled for this organization.",
-      { reason: "stage_spine_off" },
-    );
-  }
-  return actor;
 }
 
 async function evalsFor(
@@ -340,7 +309,7 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
         limit: limitParam,
       }),
       async execute(ctx, params) {
-        const actor = await requireStageSpine(deps, ctx);
+        const actor = mcpActor(ctx.auth, ctx.projectId);
         const organization = await requireOrganization(deps, ctx.projectId);
         const tracker = new TruncationTracker();
         const all = await deps.loadShipments(ctx.projectId);
@@ -400,7 +369,6 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
           .describe("true: the whole chain back to Monitor. false: one step back."),
       }),
       async execute(ctx, params) {
-        await requireStageSpine(deps, ctx);
         const organization = await requireOrganization(deps, ctx.projectId);
         const stage = stageOfKind(params.kind);
         if (!stage) throw invalidParams("Name an object by its kind and id.");

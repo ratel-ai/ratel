@@ -29,7 +29,7 @@ import { scorersFor, upsertScorer } from "@/lib/views/task-scorers/store";
  * The task loop demo, run through the production jobs on a seeded project: 14 UTC days of live
  * scores, the eval sets, a draft, two fix simulations and a shipment dated eight days ago with
  * its post-ship measure. Owned (ADR-0030): upstream's `lib/seed/task-loop.ts`. The gates are
- * `FF_STAGE_SPINE` and `FF_EVAL_GATE` (set here, as upstream sets its Cloud flags); a job runs
+ * `FF_EVAL_GATE` (set here, as upstream sets its Cloud flag); a job runs
  * as one row through this repository's runner, which is the part of upstream's
  * `lib/seed/pipeline-runner.ts` (excluded) the demo needs (`runStep`, `resolveProject`); the
  * organization comes from the session port.
@@ -48,7 +48,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Run the demo through the production jobs. This function accepts test data only. */
 export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOptions = {}) {
-  process.env.FF_STAGE_SPINE = "true";
   process.env.FF_EVAL_GATE = "true";
   const project = await resolveProject(db, ref);
   const now = options.now ?? new Date();

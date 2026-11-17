@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { FixSource } from "@/components/console/lineage/FixSource";
 import { ShipmentTrail } from "@/components/console/lineage/ShipmentsTable";
 import { LineageSteps, LineageTrail, SourceLink } from "@/components/console/lineage/SourceLink";
-import { StageSpineProvider } from "@/components/console/lineage/stage-spine-context";
 import { evalRef, fixRef, insightRef, shipmentRef, traceRef, withHref } from "./refs";
 
 const P = "p1";
@@ -65,32 +64,17 @@ test("LineageTrail walks back oldest first and does not link the object itself",
   );
 });
 
-test("a fix's source shows only with the stage spine on", () => {
+test("a fix's source names where it came from, or says it is not linked", () => {
   const fix = {
     issues: [],
     intent: { id: "t1", label: "Book a flight", href: "/project/p1/intents?peek=t1" },
     subject: { tools: [], tasks: [], topics: [] },
   };
-  assert.equal(
-    renderToStaticMarkup(createElement(FixSource, { projectId: P, fix })),
-    "",
-    "off by default",
-  );
-  const on = renderToStaticMarkup(
-    createElement(
-      StageSpineProvider,
-      { enabled: true },
-      createElement(FixSource, { projectId: P, fix }),
-    ),
-  );
+  const on = renderToStaticMarkup(createElement(FixSource, { projectId: P, fix }));
   assert.match(on, /data-lineage-source="intent"/);
   assert.match(on, />Book a flight</);
   const none = renderToStaticMarkup(
-    createElement(
-      StageSpineProvider,
-      { enabled: true },
-      createElement(FixSource, { projectId: P, fix: { ...fix, intent: undefined } }),
-    ),
+    createElement(FixSource, { projectId: P, fix: { ...fix, intent: undefined } }),
   );
   assert.match(none, />Not linked to an insight</);
 });

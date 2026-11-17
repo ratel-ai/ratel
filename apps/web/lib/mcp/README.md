@@ -22,8 +22,8 @@ identical.
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
-| `operations/loop/` | the improvement loop as tools, behind `FF_MCP_LOOP` (`loop-flag.ts`), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
-| `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]` while the loop is on |
+| `operations/loop/` | the improvement loop as tools, listed for everyone with app access as upstream (RC-234), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
+| `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]` |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
 | `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real (owned snippets, see below) |
 
@@ -47,19 +47,14 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/playground.ts`: `test_retrieval` embeds through the embedding-provider port
   (`composition.embeddingProvider`), as the Playground route does, instead of a vendor key.
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.
-- `loop-flag.ts` (with its test): one env switch, `FF_MCP_LOOP` (or `RATEL_EXPERIMENTAL_FEATURES` in
-  the open-source edition, through `platform/experimental-features.ts`), in place of upstream's per-key and
-  per-organization flag. `operations/loop/index.ts` and `loop.test.ts`: the gates are the env
-  switches; `mark_fix_shipped` loads the task loop's shipment record (`views/task-evals/ship.ts`),
+- `operations/loop/index.ts` and `loop.test.ts`: the eval gate is the env switch; `mark_fix_shipped` loads the task loop's shipment record (`views/task-evals/ship.ts`),
   so with `FF_EVAL_GATE` on it queues the post-ship measures. `list_fixes` and
   `get_fix` return a fix's newest draft (`lib/views/fix-drafts`) while `FF_EVAL_GATE` is on, null
   otherwise, and a ready draft supplies `get_fix`'s change. `run-eval-gate.integration.test.ts`: the gate is the env
   switch. `stages.ts`: no stage for the tools this build does not have (embedding and Tool Picker
-  usage). `operations/index.ts`, `route-handler.ts` and `server.ts` keep the loop behind
-  `FF_MCP_LOOP` (upstream retired its flag in RC-234 and lists every tool for anyone with app
-  access); the loop's tasks and eval sets are behind it too. `__fixtures__/tools-list.json` is this
-  build's tool list with the loop on, regenerated with `UPDATE_MCP_TOOLS_FIXTURE=1`;
-  `route-handler.test.ts` pins it, and checks that with the loop off the loop tools are not listed.
+  usage). `route-handler.ts` and `server.ts`: the server name and the bearer realm say `ratel`, and
+  signed-in callers pass `launch-access.ts`. `__fixtures__/tools-list.json` is this build's tool
+  list, regenerated with `UPDATE_MCP_TOOLS_FIXTURE=1`; `route-handler.test.ts` pins it.
 - `launch-access.ts` (with its test): upstream asks its identity provider and flag service whether
   a signed-in caller may use the app; here a project key passes and a signed-in caller is the
   edition's decision, refused until one is wired.
@@ -67,8 +62,7 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   ledger stay private. `operations/health.ts`: imports come from the edition
   (`EditionUi.HealthImports`). `operations/loop/read.ts`: an unknown organization reads the
   entitlements port's default limits. `operations/ranking.ts`: the Boost reads come from
-  `views/adaptive-ranking/queries.ts`. `operations/ship.ts` and `operations/loop/tasks.ts`: the
-  stage spine is `FF_STAGE_SPINE`. Upstream's `account.test.ts` (its flag service, wallets and
+  `views/adaptive-ranking/queries.ts`. Upstream's `account.test.ts` (its flag service, wallets and
   embedding usage) is not here.
 - `connect/snippets.ts` and `snippets.test.ts`: every client carries the project key (Claude
   Code through `--header`, Cursor and VS Code through `${env:RATEL_API_KEY}` in `mcp.json`,

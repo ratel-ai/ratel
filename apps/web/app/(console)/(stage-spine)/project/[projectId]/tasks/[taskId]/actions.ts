@@ -7,14 +7,12 @@ import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { changeTaskScorer, type ScorerActionResult } from "@/lib/views/task-scorers/actions";
 import { resetScorer, upsertScorer } from "@/lib/views/task-scorers/store";
 import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 
 /**
- * Owned (ADR-0030): the project comes from the console scope; the stage spine is `FF_STAGE_SPINE`
- * (`stage-spine-flag.ts`) in place of the Cloud flag.
+ * Owned (ADR-0030): the project comes from the console scope.
  */
 const logger = getLogger("task-scorers/actions");
 
@@ -24,8 +22,7 @@ export async function changeTaskScorerAction(input: unknown): Promise<ScorerActi
     return await changeTaskScorer(input, {
       getSession: getSessionContext,
       findProjectScope,
-      enabled: async (projectId, actor) =>
-        stageSpineEnabled() && (await evalGateEnabledForActor(projectId, actor)),
+      enabled: evalGateEnabledForActor,
       save: upsertScorer,
       reset: resetScorer,
       observe: async (fields) => {

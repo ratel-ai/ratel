@@ -11,7 +11,6 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { sessionReplayEnabled } from "@/lib/views/session-replay-flag";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { buildTaskDetail, taskNames } from "@/lib/views/tasks/model";
 import { loadTaskExamples, loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
@@ -29,7 +28,6 @@ export default async function TaskPage({
 }: {
   params: Promise<{ projectId: string; taskId: string }>;
 }) {
-  if (!stageSpineEnabled()) notFound();
   if (!isDbConfigured()) return <TasksNoDatabase />;
   const { projectId, taskId } = await params;
   const { project, organization } = await requireProjectScope(projectId);

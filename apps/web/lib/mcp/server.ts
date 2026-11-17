@@ -40,12 +40,6 @@ export interface McpServerDeps {
   /** Resolves a project's owning organization, for OAuth membership checks. */
   projectOwner?: DispatchDeps["projectOwner"];
   onOutcome?: DispatchDeps["onOutcome"];
-  /**
-   * Whether the improvement-loop tools are on for this request (`FF_MCP_LOOP`).
-   * Only then do tools carry their loop stage as `_meta`; off, every tool is
-   * listed exactly as before.
-   */
-  includeLoop?: boolean;
 }
 
 function asToolResult(payload: unknown, isError = false) {
@@ -114,11 +108,8 @@ export function createRatelMcpServer(deps: McpServerDeps): McpServer {
         description: operation.description,
         inputSchema: operation.params,
         annotations: annotationsFor(operation),
-        // With the loop on, each staged tool (existing ones included) publishes its
-        // loop stage from lib/mcp/stages.ts. With it off no tool has _meta, as before.
-        ...(deps.includeLoop && TOOL_STAGES[operation.id]
-          ? { _meta: stageMeta(operation.id) }
-          : {}),
+        // Each staged tool publishes its loop stage from lib/mcp/stages.ts.
+        ...(TOOL_STAGES[operation.id] ? { _meta: stageMeta(operation.id) } : {}),
       },
       async (args: Record<string, unknown>) => {
         // Params are re-validated inside dispatch. The SDK has already checked

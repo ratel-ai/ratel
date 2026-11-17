@@ -11,7 +11,6 @@ import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-g
 import { type FixContext, loadFixContext } from "@/lib/views/eval-gate/service";
 import { findFix } from "@/lib/views/fixes/select";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { changeTaskEval } from "@/lib/views/task-evals/actions";
 import { draftTaskTest } from "@/lib/views/task-evals/draft-action";
 import { enqueueTaskEvalRefreshJob } from "@/lib/views/task-evals/job";
@@ -46,10 +45,9 @@ import type { ExampleRun } from "@/lib/views/tasks/queries";
  * points take a session; here the MCP caller stands in for it (`mcpActor`), and
  * the project is the one dispatch already authorized.
  *
- * Gated as the console gates them: the task pages exist only with
- * `cloud-stage-spine`, and their scoring only with `cloud-eval-gate`, both
- * decided for the caller in the project's organization. Either off, the tool
- * refuses with `forbidden` and the reason.
+ * Gated as the console gates them: scoring only with `cloud-eval-gate`,
+ * decided for the caller in the project's organization. Off, the tool refuses
+ * with `forbidden` and the reason.
  */
 
 /* - Shared with eval-sets.ts ------------------------------------------------ */
@@ -91,24 +89,6 @@ export function libRefusal(message: string): McpOperationError {
 
 export function evalGateOff(): McpOperationError {
   return new McpOperationError("forbidden", EVAL_GATE_OFF_ERROR, { reason: "eval_gate_off" });
-}
-
-export const STAGE_SPINE_FLAG = "cloud-stage-spine" as const;
-const STAGE_SPINE_OFF_ERROR = "Task pages are off for this organization.";
-
-/**
- * `cloud-stage-spine` for whoever asked, with no session, decided exactly as
- * `evalGateEnabledForActor` decides `cloud-eval-gate`: a person by their Clerk
- * id and email in the project's organization, an API key (`project:<id>`) by
- * the organization's properties alone.
- */
-export async function stageSpineEnabledForActor(
-  _projectId: string,
-  _actor: string,
-): Promise<boolean> {
-  // Owned: the stage spine is the deployment's FF_STAGE_SPINE (views/stage-spine-flag.ts).
-  // Upstream decides cloud-stage-spine per organization and person through its flag service.
-  return stageSpineEnabled();
 }
 
 /* - Reads behind list_tasks and get_task ------------------------------------ */
@@ -242,7 +222,6 @@ export function taskDetailView(read: TaskPageRead, tracker: TruncationTracker) {
 
 export interface TaskOperationDeps {
   evalGateEnabled: (projectId: string, actor: string) => Promise<boolean>;
-  stageSpineEnabled: (projectId: string, actor: string) => Promise<boolean>;
   /** Fixes open and applied, as the Simulations tab lists them. */
   loadProjectFixes: (projectId: string) => Promise<FixesModel | null>;
   taskSimulationListFor: (
@@ -276,7 +255,6 @@ export interface TaskOperationDeps {
 
 export const defaultTaskDeps: TaskOperationDeps = {
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
-  stageSpineEnabled: (projectId, actor) => stageSpineEnabledForActor(projectId, actor),
   loadProjectFixes,
   taskSimulationListFor: (projectId, taskId, fixes) =>
     taskSimulationListFor(projectId, taskId, fixes),
@@ -297,19 +275,12 @@ export const defaultTaskDeps: TaskOperationDeps = {
 };
 
 /**
- * The task pages' gates for this caller (RC-45 and RC-46): the eval gate, then
- * the stage spine. The `lib/task-*` actions are then told the answer rather
- * than deciding it a second time.
+ * The task tools' gate for this caller (RC-46): the eval gate. The `lib/task-*`
+ * actions are then told the answer rather than deciding it a second time.
  */
 async function requireTaskGates(deps: TaskOperationDeps, ctx: OperationContext): Promise<string> {
   const actor = mcpActor(ctx.auth, ctx.projectId);
-  const [gate, spine] = await Promise.all([
-    deps.evalGateEnabled(ctx.projectId, actor),
-    deps.stageSpineEnabled(ctx.projectId, actor),
-  ]);
-  if (!gate) throw evalGateOff();
-  if (!spine)
-    throw new McpOperationError("forbidden", STAGE_SPINE_OFF_ERROR, { reason: "stage_spine_off" });
+  if (!(await deps.evalGateEnabled(ctx.projectId, actor))) throw evalGateOff();
   return actor;
 }
 

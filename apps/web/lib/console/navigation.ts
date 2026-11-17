@@ -83,7 +83,6 @@ export function consoleNav({
   additions,
   organizationAdditions = [],
   projectGroups = [],
-  stageSpine = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -92,11 +91,6 @@ export function consoleNav({
   organizationAdditions?: readonly OrganizationNavItem[];
   /** Project page groups the edition adds (`composition.projectNav`), before Settings. */
   projectGroups?: readonly ProjectNavGroup[];
-  /**
-   * `FF_STAGE_SPINE`: the project rail grouped into the four stages, Monitor, Insights, Improve
-   * and Ship, then setup. Off: today's rail.
-   */
-  stageSpine?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const organization: NavItem[] = organizationSlug
@@ -351,7 +345,7 @@ export function consoleNav({
       ]
     : organization;
   return [
-    ...(root && stageSpine ? stageSpineNav(root, core) : core),
+    ...(root ? stageRailNav(root, core) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -364,12 +358,12 @@ export function consoleNav({
 }
 
 /**
- * Group the project rail by stage (upstream's `stageSpineNav`, in this flat model: a stage is a
+ * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new.
  */
-function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
+function stageRailNav(root: string, classic: readonly NavItem[]): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
     if (!item) throw new Error(`the classic rail has no ${id}`);
@@ -392,7 +386,7 @@ function stageSpineNav(root: string, classic: readonly NavItem[]): NavItem[] {
     id: "tasks",
     label: "Tasks",
     href: `${root}/tasks`,
-    icon: "health",
+    icon: "tasks",
     shortcut: "w",
     also: [`${root}/health/tasks`, `${root}/improvement/tool-explorer`],
     keywords: ["tasks", "workflows", "scores", "issues", "tool craft"],

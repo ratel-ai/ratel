@@ -12,7 +12,6 @@ import { type FixShipped, shippedByFix } from "@/lib/views/fixes/shipped";
 import type { FixesModel } from "@/lib/views/fixes/types";
 import type { SectionProgress } from "@/lib/views/freshness/model";
 import { loadPageProgress } from "@/lib/views/freshness/page";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 
 export type FixesPageData =
   | { kind: "no-db" }
@@ -23,9 +22,9 @@ export type FixesPageData =
       now: string;
       /** Each fix's eval gate badge, by fix id; null when `FF_EVAL_GATE` is off. */
       evalBadges: Record<string, EvalBadge> | null;
-      /** Each shipped fix's newest shipment, by fix id; null when `FF_STAGE_SPINE` is off. */
-      shipped: Record<string, FixShipped> | null;
-      /** Where the jobs that find fixes stand; null when the read failed. */
+      /** Each shipped fix's newest shipment, by fix id. */
+      shipped: Record<string, FixShipped>;
+      /** Where the jobs that find fixes stand (RC-210); null when the read failed. */
       progress: SectionProgress | null;
     };
 
@@ -58,15 +57,13 @@ export async function loadFixesPage(projectId: string): Promise<FixesPageData> {
 }
 
 /**
- * Which fixes shipped (RC-72, `fix_shipments` rows `mark_fix_shipped` wrote),
- * behind `FF_STAGE_SPINE` with the rest of Ship (null when off). A failed
+ * Which fixes shipped (RC-72, `fix_shipments` rows `mark_fix_shipped` wrote). A failed
  * read costs the marks, never the page: every fix then reads as before.
  */
 async function loadShipped(
   projectId: string,
   externalId: string,
-): Promise<Record<string, FixShipped> | null> {
-  if (!stageSpineEnabled()) return null;
+): Promise<Record<string, FixShipped>> {
   try {
     return shippedByFix(projectId, await listProjectShipments(projectId));
   } catch (err) {

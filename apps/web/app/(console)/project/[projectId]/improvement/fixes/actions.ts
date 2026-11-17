@@ -6,6 +6,7 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { dismissCraftProposal } from "@/lib/synthesis/tool-crafter/queries";
+import { type MarkFixShippedResult, markFixShipped } from "@/lib/views/fixes/mark-shipped";
 
 /**
  * Dismiss a drafted change on Fixes. Any member of the project may: it changes
@@ -66,4 +67,18 @@ export async function dismissDraftedFixAction(
     });
     return { ok: false, message: "Couldn't dismiss the fix. Try again in a moment." };
   }
+}
+
+/**
+ * Mark a fix as shipped from its panel (the version and optional notes come
+ * from the dialog). Membership, the fix and the limits are checked in
+ * `markFixShipped`, which records the shipment as `mark_fix_shipped` does.
+ */
+export async function markFixShippedAction(
+  projectId: string,
+  fixId: string,
+  version: string,
+  notes: string,
+): Promise<MarkFixShippedResult> {
+  return markFixShipped({ projectId, fixId, version, notes });
 }
