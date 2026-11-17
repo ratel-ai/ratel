@@ -13,7 +13,8 @@ import { messageText } from "@/lib/synthesis/traces/content-view";
  * attributes win (stored, or raw from `otlp_raw_exports`); the run's
  * `events.payload` content fills in when they carry none. A wrapper step
  * (Mastra's `agent_step`, `model_generation`) shows its own `mastra.*`
- * input and output, else its nearest child model call's (RC-501).
+ * input and output, else its nearest child model call's (RC-501). An
+ * `invoke_agent` step shows its own gen_ai messages first (RC-740).
  */
 export type SpanIO =
   | {
@@ -57,7 +58,7 @@ export function buildSpanIO(
 ): SpanIO {
   if (span.spanClass === "tool") return toolIO(span, payload);
   if (span.spanClass === "llm_call") return messagesIO(span, payload);
-  const own = mastraMessages(span.attributes);
+  const own = mastraMessages(span.attributes) ?? agentRunMessages(span.attributes);
   if (own) return { kind: "messages", source: "span", ...own };
   for (const child of descendants) {
     if (child.spanClass !== "llm_call") continue;
@@ -140,6 +141,15 @@ function mastraMessages(
     if (io.input.length > 0 || io.output.length > 0) return io;
   }
   return null;
+}
+
+/** An `invoke_agent` span's own gen_ai messages: the run's ask (RC-740), kept by ingest for Ratel's own jobs. */
+function agentRunMessages(
+  attributes: Readonly<Record<string, unknown>>,
+): { input: SpanMessage[]; output: SpanMessage[] } | null {
+  if (attributes[GEN_AI.operationName] !== "invoke_agent") return null;
+  const io = spanMessages(attributes);
+  return io.input.length > 0 || io.output.length > 0 ? io : null;
 }
 
 /** Mastra's `{ text, toolCalls }` output (or plain text) as one gen_ai assistant message. */

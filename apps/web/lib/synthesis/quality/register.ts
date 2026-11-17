@@ -1,7 +1,7 @@
 import type { DrainStep, JobHandler, Registration } from "@/lib/contracts/registry";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
-import { withProjectLogContext } from "@/lib/platform/project-log-context";
+import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { foldSeams } from "@/lib/readings/intent-graph/fold-job";
 import type { SweepResult } from "@/lib/readings/match-quality/sweep";
 import {
@@ -84,7 +84,7 @@ foldSeams.loadShadow = async (projectId) => {
 export const qualityRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    match_quality_run: (job) => withProjectLogContext(job.projectId, () => matchQualityRunJob(job)),
+    match_quality_run: inProjectLogContext((job) => matchQualityRunJob(job)),
   },
   drainSteps: [snapshotStep(), sweepStep()],
 };

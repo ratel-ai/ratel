@@ -7,6 +7,7 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 | Path | Holds |
 |---|---|
 | `schema.ts`, `queries.ts` | the `jobs` table with its coalescing indexes (one queued job of a kind per project; `draft_fix` one pending job per fix, `payload->>'fixId'`); enqueue, claim (`FOR UPDATE SKIP LOCKED`, fair across projects: a per-project running cap, `JOBS_RUNNING_PER_PROJECT`, default 1, and the projects a drain just served last), mark, reap, poll (`getJobForProject` answers `GET /api/v1/jobs/[id]` for a project key) |
+| `project-context.ts` | `inProjectLogContext`: the jobs that call models (labelling, topics, intents, match quality, fix drafts, What-if, task simulations) run in their project's log context and as one agent run each (`jobAsk`: the kind, the project and the payload). Owned: upstream keeps it in its job hub; each module's `register.ts` wraps its own |
 | `policy.ts` | each kind's claim tier (work someone waits on, fresh data, sweeps) and expected run time |
 | `kinds.ts` | `RUN_IMPORT_JOB`, the kind the worker's import lane takes (RC-40): the analysis lane and the cron drain take every other kind, and a running import does not count against its project's cap |
 | `runner.ts` | `drainJobs`: claim, run the kind's handler, record the outcome and a `job_finished` line (`job_over_budget` past the kind's budget); one poisoned job never stalls the queue |

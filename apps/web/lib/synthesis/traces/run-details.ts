@@ -5,6 +5,7 @@ import type { AttrMap } from "@/lib/ingest/otlp/types";
 import { getDb } from "@/lib/platform/db/client";
 import { listCapturedAsks } from "./payload-content";
 import type { TraceQueriesDb } from "./queries";
+import { isAgentRunRoot } from "./v2/run-summary";
 import { toolNameFromSpanName } from "./v2/span-kind";
 
 /**
@@ -127,9 +128,21 @@ export async function listRunAsks(
 
   const modelCallByRun = new Map(modelCalls.map((row) => [row.traceId, row]));
   const rootByRun = new Map(roots.map((row) => [row.traceId, row]));
-  // The first model call wins; the top-level span is the fallback.
+  // The first model call wins; the top-level span is the fallback. An
+  // invoke_agent root's own ask wins over both (RC-740).
+  const rootIsAgentRun = (id: string) => {
+    const row = rootByRun.get(id);
+    return isAgentRunRoot(
+      row ? (attributesById.get(row.id) as Record<string, unknown> | undefined) : undefined,
+    );
+  };
   const fromSpans = new Map(
-    ids.map((id) => [id, askOf(modelCallByRun.get(id)) ?? askOf(rootByRun.get(id))]),
+    ids.map((id) => [
+      id,
+      rootIsAgentRun(id)
+        ? (askOf(rootByRun.get(id)) ?? askOf(modelCallByRun.get(id)))
+        : (askOf(modelCallByRun.get(id)) ?? askOf(rootByRun.get(id))),
+    ]),
   );
   const withoutAsk = ids.filter((id) => fromSpans.get(id) === null);
   const captured =

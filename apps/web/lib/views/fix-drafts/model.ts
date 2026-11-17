@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { anthropicClient, anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
@@ -78,21 +79,22 @@ export function draftModelFromEnv(
   return {
     model,
     async complete({ system, user, maxTokens }) {
+      const request: Anthropic.MessageCreateParamsNonStreaming = {
+        model,
+        max_tokens: maxTokens,
+        system,
+        messages: [{ role: "user", content: user }],
+        output_config: { format: { type: "json_schema", schema: ANALYST_SCHEMA }, effort: "low" },
+      };
       const message = await trackModelCall(
-        { provider: "anthropic", model, feature: DRAFT_FEATURE, payer: "ratel" },
-        () =>
-          client.messages.create(
-            wellFormedJson({
-              model,
-              max_tokens: maxTokens,
-              system,
-              messages: [{ role: "user", content: user }],
-              output_config: {
-                format: { type: "json_schema", schema: ANALYST_SCHEMA },
-                effort: "low",
-              },
-            }),
-          ),
+        {
+          provider: "anthropic",
+          model,
+          feature: DRAFT_FEATURE,
+          payer: "ratel",
+          content: anthropicContent(request),
+        },
+        () => client.messages.create(wellFormedJson(request)),
         anthropicUsage,
       );
       if (message.stop_reason === "refusal")

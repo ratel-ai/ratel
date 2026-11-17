@@ -12,6 +12,7 @@ import {
   unknownOperation,
 } from "@/lib/mcp/errors";
 import type { McpOperation, OperationResult, Registry } from "@/lib/mcp/registry";
+import { traceMcpToolCall } from "@/lib/mcp/telemetry/trace-tool-call";
 import { apiKeyPolicy } from "@/lib/platform/api-keys/policy";
 import { mcpOperationScope } from "@/lib/platform/api-keys/routes";
 import { missingScopeMessage } from "@/lib/platform/api-keys/scopes";
@@ -174,14 +175,17 @@ export async function dispatchOperation(
       );
     }
 
-    const result: OperationResult = await operation.execute(
-      {
-        auth: deps.auth,
-        projectId: scope.projectId,
-        organizationId: scope.organizationId,
-        logger,
-      },
-      parsed.data,
+    const call = { toolName: operation.id, args: parsed.data, auth: deps.auth, ...scope };
+    const result: OperationResult = await traceMcpToolCall(call, () =>
+      operation.execute(
+        {
+          auth: deps.auth,
+          projectId: scope.projectId,
+          organizationId: scope.organizationId,
+          logger,
+        },
+        parsed.data,
+      ),
     );
 
     return finish({

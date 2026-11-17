@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import type { ActionKey } from "@/lib/readings/intent-engine/actions";
@@ -149,21 +150,25 @@ export function anthropicNamesComplete(
   const client = anthropicClient({ timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES }, env);
   if (!client) return null;
   return async (system, user, keyed) => {
+    const request: Anthropic.MessageCreateParamsNonStreaming = {
+      model,
+      max_tokens: NAME_MAX_TOKENS,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA },
+      },
+    };
     const message = await trackModelCall(
-      { provider: "anthropic", model, feature: "intent_names", payer: "ratel" },
-      () =>
-        client.messages.create(
-          wellFormedJson({
-            model,
-            max_tokens: NAME_MAX_TOKENS,
-            system,
-            messages: [{ role: "user", content: user }],
-            output_config: {
-              effort: "low",
-              format: { type: "json_schema", schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA },
-            },
-          }),
-        ),
+      {
+        provider: "anthropic",
+        model,
+        feature: "intent_names",
+        payer: "ratel",
+        content: anthropicContent(request),
+      },
+      () => client.messages.create(wellFormedJson(request)),
       anthropicUsage,
     );
     if (message.stop_reason === "refusal") throw new NamesDeclinedError();

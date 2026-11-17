@@ -1,5 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
-import { withProjectLogContext } from "@/lib/platform/project-log-context";
+import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
 import { draftFixJob, enqueueProjectFixDrafts } from "@/lib/views/fix-drafts/job";
@@ -39,7 +39,6 @@ fillComputeSeams();
 export const fixDraftsRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    draft_fix: (job) =>
-      withProjectLogContext(job.projectId, () => draftFixJob(job.projectId, job.payload)),
+    draft_fix: inProjectLogContext((job) => draftFixJob(job.projectId, job.payload)),
   },
 };

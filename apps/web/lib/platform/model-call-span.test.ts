@@ -18,6 +18,7 @@ import {
   setModelCallTracer,
   trackModelCall,
 } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 
 const META: ModelCallMeta = {
   provider: "anthropic",
@@ -129,6 +130,72 @@ test("calls made while analysing the self-telemetry project itself are not trace
 
   await trackModelCall({ ...META, projectId: "customer-project" }, async () => ({}));
   assert.equal(spans().length, 1);
+});
+
+const REQUEST = {
+  system: "Label the workflow.",
+  messages: [{ role: "user" as const, content: "Run 12 called search twice." }],
+};
+const ANSWER = {
+  content: [{ type: "text" as const, text: '{"label":"search"}' }],
+  stop_reason: "end_turn",
+  usage: { input_tokens: 10, output_tokens: 5 },
+};
+const CONTENT_KEYS = [
+  "gen_ai.system_instructions",
+  "gen_ai.input.messages",
+  "gen_ai.output.messages",
+];
+
+test("a call that offers its content carries its prompt and answer, whatever its organization", async () => {
+  await trackModelCall(
+    { ...META, organizationId: "org-a", content: anthropicContent(REQUEST) },
+    async () => ANSWER,
+    anthropicUsage,
+  );
+  await trackModelCall(
+    { ...META, content: anthropicContent(REQUEST) },
+    async () => ANSWER,
+    anthropicUsage,
+  );
+
+  const [a, none] = spans();
+  assert.deepEqual(JSON.parse(String(a!.attributes["gen_ai.system_instructions"])), [
+    { type: "text", content: "Label the workflow." },
+  ]);
+  assert.deepEqual(JSON.parse(String(a!.attributes["gen_ai.input.messages"])), [
+    { role: "user", parts: [{ type: "text", content: "Run 12 called search twice." }] },
+  ]);
+  assert.deepEqual(JSON.parse(String(a!.attributes["gen_ai.output.messages"])), [
+    {
+      role: "assistant",
+      parts: [{ type: "text", content: '{"label":"search"}' }],
+      finish_reason: "end_turn",
+    },
+  ]);
+  for (const key of CONTENT_KEYS) assert.equal(none!.attributes[key], a!.attributes[key], key);
+});
+
+test("a failed call keeps its prompt and has no answer", async () => {
+  await assert.rejects(
+    trackModelCall(
+      { ...META, organizationId: "org-a", content: anthropicContent(REQUEST) },
+      async () => {
+        throw new Error("boom");
+      },
+    ),
+  );
+  const span = spans()[0]!;
+  assert.ok(span.attributes["gen_ai.input.messages"]);
+  assert.equal(span.attributes["gen_ai.output.messages"], undefined);
+});
+
+test("a call the customer pays for makes no span, even with content", async () => {
+  await trackModelCall(
+    { ...META, payer: "customer", organizationId: "org-a", content: anthropicContent(REQUEST) },
+    async () => ANSWER,
+  );
+  assert.equal(spans().length, 0);
 });
 
 test("a span stays out of the active context, so the provider's HTTP span keeps its parent", async () => {

@@ -10,6 +10,7 @@ import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
@@ -227,18 +228,22 @@ export function anthropicTopicNamer(
   if (!client) return null;
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
+    const request: Anthropic.MessageCreateParamsNonStreaming = {
+      model,
+      max_tokens: NAME_MAX_TOKENS,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
+    };
     const message = await trackModelCall(
-      { provider: "anthropic", model, feature: "topics_names", payer: "ratel" },
-      () =>
-        client.messages.create(
-          wellFormedJson({
-            model,
-            max_tokens: NAME_MAX_TOKENS,
-            system,
-            messages: [{ role: "user", content: user }],
-            output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
-          }),
-        ),
+      {
+        provider: "anthropic",
+        model,
+        feature: "topics_names",
+        payer: "ratel",
+        content: anthropicContent(request),
+      },
+      () => client.messages.create(wellFormedJson(request)),
       anthropicUsage,
     );
     if (message.stop_reason === "refusal")

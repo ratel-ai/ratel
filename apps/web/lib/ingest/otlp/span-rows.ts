@@ -141,7 +141,11 @@ export function toOtelSpanRows(
               : null,
             options.prices,
           );
-    const retained = retainedAttributes(span.attributes, environmentAttributes(span));
+    const retained = retainedAttributes(
+      span.attributes,
+      environmentAttributes(span),
+      keptAsk(span),
+    );
     const experiment = experimentAttributes(span);
 
     return {
@@ -182,6 +186,28 @@ export function toOtelSpanRows(
       attrsTruncated: scalarTruncated || retained.truncated || experiment.truncated,
     } satisfies NewOtelSpan;
   });
+}
+
+/** The content a row keeps: an agent root's ask (RC-740); nothing for any other span. */
+function keptAsk(span: DecodedSpan): AttrMap {
+  return isAgentAskRoot(span)
+    ? { [GEN_AI.inputMessages]: span.attributes[GEN_AI.inputMessages]! }
+    : {};
+}
+
+/**
+ * A top-level `invoke_agent` span that carries its run's ask as
+ * `gen_ai.input.messages` (Ratel's own backend jobs, RC-722). Model calls keep
+ * their content in `events.payload`; this root has no event, so its row is the
+ * one place the ask can stay.
+ */
+function isAgentAskRoot(span: DecodedSpan): boolean {
+  const parent = span.parentSpanId;
+  return (
+    (parent === null || parent === ZERO_SPAN_ID) &&
+    attrString(span.attributes, GEN_AI.operationName) === "invoke_agent" &&
+    typeof span.attributes[GEN_AI.inputMessages] === "string"
+  );
 }
 
 function normalizeParentSpanId(span: DecodedSpan): DecodedSpan {
@@ -264,15 +290,20 @@ function environmentAttributes(span: DecodedSpan): AttrMap {
   return out;
 }
 
-/** `extra` goes first, so the size bound drops span attributes before it. */
+/**
+ * `extra` goes first, so the size bound drops span attributes before it.
+ * `content` (an agent root's kept ask) goes last: an ask too big for the bound
+ * is dropped before any content-free key.
+ */
 function retainedAttributes(
   attributes: AttrMap,
   extra: AttrMap,
+  content: AttrMap,
 ): {
   attributes: AttrMap;
   truncated: boolean;
 } {
-  return boundedAttributes({ ...extra, ...stripContentAttributes(attributes) });
+  return boundedAttributes({ ...extra, ...stripContentAttributes(attributes), ...content });
 }
 
 function boundedAttributes(attributes: AttrMap): {

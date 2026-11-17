@@ -168,7 +168,8 @@ export function buildRunSummary(
 /**
  * What the person asked: the last user message going into the run's first
  * model call (earlier messages are history), else the root span's own prompt.
- * Null when content isn't captured.
+ * An `invoke_agent` root's own ask comes first (RC-740): there the model calls'
+ * prompts are the agent's work, not the ask. Null when content isn't captured.
  */
 export function runAsk(
   spans: readonly Pick<
@@ -179,12 +180,23 @@ export function runAsk(
   const ordered = [...spans].sort(compareSpans);
   const firstModelCall = ordered.find((span) => span.spanClass === "llm_call");
   const root = ordered.find((span) => span.parentSpanId === null);
-  for (const span of [firstModelCall, root]) {
+  const order =
+    root && isAgentRunRoot(root.attributes as AttrMap)
+      ? [root, firstModelCall]
+      : [firstModelCall, root];
+  for (const span of order) {
     if (!span) continue;
     const prompt = promptOf(span.attributes as AttrMap);
     if (prompt?.trim()) return prompt.trim();
   }
   return null;
+}
+
+/** An `invoke_agent` root: its own ask, when it carries one, names the run (RC-740). */
+export function isAgentRunRoot(
+  attributes: Readonly<Record<string, unknown>> | null | undefined,
+): boolean {
+  return attributes?.["gen_ai.operation.name"] === "invoke_agent";
 }
 
 /** A one-line preview, cut at a word near the limit. */
