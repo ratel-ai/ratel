@@ -48,7 +48,11 @@ export async function OverviewPage({
       }
       contextPanel={
         <ContextPanel subtitle={`Tokens sent to the model, last ${window} days`}>
-          <ContextBreakdown split={data.context} suggestions={data.contextSuggestions} />
+          <ContextBreakdown
+            split={data.context}
+            suggestions={data.contextSuggestions}
+            promptCacheHitRate={data.promptCacheHitRate}
+          />
         </ContextPanel>
       }
     />

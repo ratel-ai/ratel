@@ -460,6 +460,34 @@ test("Conversation says plainly when content isn't captured", () => {
   assert.match(html, /This run called no tools\./);
 });
 
+test("Conversation shows the run's payload content when its spans carry none (RC-393)", () => {
+  const html = renderTrace({
+    initialTab: "conversation",
+    payloadContent: {
+      messages: [
+        { id: "p:0", role: "user", text: "Where is order 1234?" },
+        { id: "p:1", role: "assistant", text: "It shipped yesterday." },
+      ],
+      toolCalls: [
+        {
+          id: "c1",
+          name: "lookup_order",
+          arguments: { orderId: "1234" },
+          result: { status: "shipped" },
+          spanId: "",
+          durationMs: 400,
+          statusCode: 0,
+        },
+      ],
+      contentCaptured: true,
+    },
+  });
+  assert.doesNotMatch(html, /Message content isn(?:&#x27;|')t captured/);
+  assert.match(html, /Where is order 1234\?/);
+  assert.match(html, /It shipped yesterday\./);
+  assert.match(html, /lookup_order/);
+});
+
 test("the run Panel reads like a conversation: the ask, the steps in order, the failures, the answer", () => {
   const summary = buildRunSummary([
     ...SPANS.slice(0, 2).map((span) =>

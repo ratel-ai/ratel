@@ -66,12 +66,26 @@ const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   RATEL.searchQuery,
 ]);
 const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.address"]);
+/**
+ * Resource keys a span row keeps (flag `cloud-otlp-semconv-aliases`): the
+ * environment facet in `lib/traces/queries.ts` reads them from `attributes`.
+ * The legacy `deployment.environment` is kept only without the `.name` key.
+ */
+const ENVIRONMENT_KEY = "deployment.environment.name";
+const LEGACY_ENVIRONMENT_KEY = "deployment.environment";
+const SERVICE_VERSION_KEY = "service.version";
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
+
+export interface OtelSpanRowOptions {
+  /** Flag `cloud-otlp-semconv-aliases`: keep the environment and service version. */
+  resourceEnvironment?: boolean;
+}
 
 export function toOtelSpanRows(
   projectId: string,
   spans: DecodedSpan[],
   dedupe?: AgentSpanDedupe,
+  options: OtelSpanRowOptions = {},
 ): OtelSpanRow[] {
   const normalizedSpans = spans.map(normalizeParentSpanId);
   return normalizedSpans.filter(isPersistableSpan).map((span) => {
@@ -122,7 +136,10 @@ export function toOtelSpanRows(
           }
         : null,
     );
-    const retained = retainedAttributes(span.attributes);
+    const retained = retainedAttributes(
+      span.attributes,
+      options.resourceEnvironment ? environmentAttributes(span) : {},
+    );
     const experiment = experimentAttributes(span);
 
     return {
@@ -227,11 +244,29 @@ function stripContentAttributes(attributes: AttrMap): AttrMap {
   );
 }
 
-function retainedAttributes(attributes: AttrMap): {
+/** The environment and service version, a span attribute winning over the resource's. */
+function environmentAttributes(span: DecodedSpan): AttrMap {
+  const read = (key: string) =>
+    attrString(span.attributes, key) ?? attrString(span.resourceAttributes, key);
+  const out: AttrMap = {};
+  const environment = read(ENVIRONMENT_KEY);
+  const legacy = environment === undefined ? read(LEGACY_ENVIRONMENT_KEY) : undefined;
+  const version = read(SERVICE_VERSION_KEY);
+  if (environment !== undefined) out[ENVIRONMENT_KEY] = environment;
+  if (legacy !== undefined) out[LEGACY_ENVIRONMENT_KEY] = legacy;
+  if (version !== undefined) out[SERVICE_VERSION_KEY] = version;
+  return out;
+}
+
+/** `extra` goes first, so the size bound drops span attributes before it. */
+function retainedAttributes(
+  attributes: AttrMap,
+  extra: AttrMap,
+): {
   attributes: AttrMap;
   truncated: boolean;
 } {
-  return boundedAttributes(stripContentAttributes(attributes));
+  return boundedAttributes({ ...extra, ...stripContentAttributes(attributes) });
 }
 
 function boundedAttributes(attributes: AttrMap): {

@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deflateSync, gzipSync } from "node:zlib";
+import { deflateSync, gunzipSync, gzipSync } from "node:zlib";
 import protobuf from "protobufjs";
+import { decodeOtlp } from "@/lib/ingest/otlp/decode";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
+import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import {
+  compressForStorage,
+  type OtlpRawExportInput,
+  type OtlpRawStore,
+} from "@/lib/ingest/otlp-raw/domain";
 import { chunkedCountingBody } from "@/lib/platform/http/test-support";
 import type { ApiKey } from "@/lib/platform/projects/schema";
 import descriptor from "./proto/otlp-trace.descriptor.json";
@@ -1046,4 +1053,80 @@ test("nothing is counted without a quota gate, or when nothing was stored", asyn
   });
   assert.equal((await handleTracesRequest(req(body, auth), empty.deps)).status, 202);
   assert.deepEqual(increments, []);
+});
+
+function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
+  const stored: OtlpRawExportInput[] = [];
+  const capture: OtlpRawCaptureDeps = {
+    isEnabled: async () => enabled,
+    store: {
+      store:
+        store ??
+        (async (input) => {
+          stored.push(input);
+          return { stored: true, id: "raw-1", rawBytes: input.body.byteLength, storedBytes: 1 };
+        }),
+    },
+  };
+  return { capture, stored };
+}
+
+test("raw capture off: no store call and the same response", async () => {
+  const { capture, stored } = rawCapture(false);
+  const { deps } = makeDeps({ otlpRawCapture: capture });
+  const res = await handleTracesRequest(req(otlpJson(2), auth), deps);
+  assert.equal(res.status, 202);
+  assert.deepEqual(await res.json(), { accepted: 2, calls: 2, spans: 2 });
+  assert.equal(stored.length, 0);
+});
+
+test("raw capture on: one stored export whose body decodes back to the same spans", async () => {
+  const { capture, stored } = rawCapture(true);
+  const { deps } = makeDeps({ otlpRawCapture: capture });
+  const wire = gzipSync(otlpProto(3));
+  const res = await handleTracesRequest(
+    req(wire, { ...auth, "Content-Type": "application/x-protobuf", "Content-Encoding": "gzip" }),
+    deps,
+  );
+  assert.equal(res.status, 202);
+  assert.equal(stored.length, 1);
+  const [raw] = stored;
+  assert.equal(raw.projectId, "proj-1");
+  assert.equal(raw.signal, "traces");
+  assert.equal(raw.contentType, "application/x-protobuf");
+  assert.deepEqual(raw.gzipped, new Uint8Array(wire));
+  assert.equal(raw.itemCount, 3);
+  assert.deepEqual(raw.traceIds.length, 3);
+  assert.deepEqual(
+    decodeOtlp("application/x-protobuf", gunzipSync(compressForStorage(raw))).map((s) => s.spanId),
+    decodeOtlp("application/x-protobuf", otlpProto(3)).map((s) => s.spanId),
+  );
+});
+
+test("raw capture is not attempted for a rejected export", async () => {
+  const { capture, stored } = rawCapture(true);
+  const { deps } = makeDeps({ otlpRawCapture: capture });
+  assert.equal((await handleTracesRequest(req("{not json", auth), deps)).status, 400);
+  assert.equal(stored.length, 0);
+});
+
+test("a throwing raw store still returns the same 202 and logs sizes, not the body", async () => {
+  const logged: Array<{ message: string; fields: unknown }> = [];
+  const { capture } = rawCapture(true, async () => {
+    throw new Error("raw store down");
+  });
+  const { deps } = makeDeps({
+    otlpRawCapture: capture,
+    logError: (message, _error, fields) => logged.push({ message, fields }),
+  });
+  const body = otlpJson(1);
+  const res = await handleTracesRequest(req(body, auth), deps);
+  assert.equal(res.status, 202);
+  assert.deepEqual(await res.json(), { accepted: 1, calls: 1, spans: 1 });
+  assert.deepEqual(logged, [
+    {
+      message: "otlp raw capture failed",
+      fields: { project_id: "proj-1", signal: "traces", raw_bytes: Buffer.byteLength(body) },
+    },
+  ]);
 });

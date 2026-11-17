@@ -3,6 +3,7 @@ import { promptOf } from "@/lib/ingest/otlp/prompt-text";
 import { otelSpans } from "@/lib/ingest/otlp/schema";
 import type { AttrMap } from "@/lib/ingest/otlp/types";
 import { getDb } from "@/lib/platform/db/client";
+import { listCapturedAsks } from "./payload-content";
 import type { TraceQueriesDb } from "./queries";
 import { toolNameFromSpanName } from "./v2/span-kind";
 
@@ -77,11 +78,16 @@ export async function listRunTools(
  * then only the picked rows' attributes are read: the cost stays a few rows
  * per run however many model calls it made. Content-capture-off projects have
  * no message attributes and get `null`.
+ *
+ * OTLP ingest keeps message content out of the spans, so with `fromPayload`
+ * (`cloud-payload-content`) a run whose spans have no ask takes it from its
+ * `events.payload`, else from the prompt ingest derived (`listCapturedAsks`).
  */
 export async function listRunAsks(
   projectId: string,
   traceIds: readonly string[],
   db: TraceQueriesDb = getDb(),
+  options: { fromPayload?: boolean } = {},
 ): Promise<Map<string, RunAsk>> {
   const ids = [...new Set(traceIds)];
   if (ids.length === 0) return new Map();
@@ -123,13 +129,18 @@ export async function listRunAsks(
   const modelCallByRun = new Map(modelCalls.map((row) => [row.traceId, row]));
   const rootByRun = new Map(roots.map((row) => [row.traceId, row]));
   // The first model call wins; the top-level span is the fallback.
+  const fromSpans = new Map(
+    ids.map((id) => [id, askOf(modelCallByRun.get(id)) ?? askOf(rootByRun.get(id))]),
+  );
+  const withoutAsk = ids.filter((id) => fromSpans.get(id) === null);
+  const captured =
+    options.fromPayload && withoutAsk.length > 0
+      ? await listCapturedAsks(projectId, withoutAsk, db)
+      : new Map<string, string>();
   return new Map(
     ids.map((id) => [
       id,
-      {
-        prompt: askOf(modelCallByRun.get(id)) ?? askOf(rootByRun.get(id)),
-        hasRoot: rootByRun.has(id),
-      },
+      { prompt: fromSpans.get(id) ?? captured.get(id) ?? null, hasRoot: rootByRun.has(id) },
     ]),
   );
 }

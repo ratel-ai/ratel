@@ -115,6 +115,7 @@ export default async function SessionReplayPage({
           compareHref: `${projectHref}/traces?compare=${encodeURIComponent(traceId)}`,
           tab: firstParam(query.tab),
           spanId: firstParam(query.span) ?? null,
+          actor: `project:${project.id}`,
         })
       : null;
     return (

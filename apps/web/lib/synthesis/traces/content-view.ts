@@ -101,6 +101,14 @@ export function buildTraceContentView(spans: readonly TraceContentSpan[]): Trace
   return { messages, toolCalls, contentCaptured };
 }
 
+/** Span content wins when the spans carry any; the payload (`lib/traces/payload-content.ts`) fills in when they carry none. */
+export function preferSpanContent(
+  spans: TraceContentView,
+  payload: TraceContentView | null,
+): TraceContentView {
+  return !spans.contentCaptured && payload?.contentCaptured ? payload : spans;
+}
+
 function structuredAttribute(
   attributes: Readonly<Record<string, unknown>>,
   key: string,
@@ -125,7 +133,8 @@ function stringAttribute(
   return typeof value === "string" ? value : undefined;
 }
 
-function toolResults(messages: readonly CloudMessage[]): Map<string, unknown> {
+/** Each tool result in the messages, by the id of the call it answers. */
+export function toolResults(messages: readonly CloudMessage[]): Map<string, unknown> {
   return new Map(
     messages.flatMap((message): [string, unknown][] =>
       message.role === "tool" ? [[message.tool_call_id, parseJson(message.content)]] : [],
@@ -141,7 +150,8 @@ function parseJson(value: string): unknown {
   }
 }
 
-function messageText(message: CloudMessage): string {
+/** A message's readable text: its text blocks, attachments as placeholders. */
+export function messageText(message: CloudMessage): string {
   if (typeof message.content === "string") return message.content.trim();
   return message.content
     .flatMap((block) => blockText(block))

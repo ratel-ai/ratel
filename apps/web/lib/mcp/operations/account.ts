@@ -46,6 +46,10 @@ const DEPLOYMENT_SWITCHES = [
     note: "no score or verdict before a reading has scanned the imported runs",
   },
   {
+    key: "FF_OTLP_RAW_CAPTURE",
+    note: "each accepted OTLP export is kept, gzipped, within a daily byte cap per project",
+  },
+  {
     key: "FF_QUICK_FIRST_READING",
     note: "a new project's first Agent health reading reads a week first, marked early",
   },

@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { gunzipSync, gzipSync } from "node:zlib";
 import protobuf from "protobufjs";
+import { decodeOtlpLogs } from "@/lib/ingest/otlp/decode-logs";
 import type { NewOtelLog } from "@/lib/ingest/otlp/schema";
+import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
+import {
+  compressForStorage,
+  type OtlpRawExportInput,
+  type OtlpRawStore,
+} from "@/lib/ingest/otlp-raw/domain";
 import { chunkedCountingBody } from "@/lib/platform/http/test-support";
 import type { ApiKey } from "@/lib/platform/projects/schema";
 import {
@@ -590,4 +598,189 @@ test("accepted log events follow the injected success sampler", async () => {
       },
     },
   ]);
+});
+
+function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
+  const stored: OtlpRawExportInput[] = [];
+  const capture: OtlpRawCaptureDeps = {
+    isEnabled: async () => enabled,
+    store: {
+      store:
+        store ??
+        (async (input) => {
+          stored.push(input);
+          return { stored: true, id: "raw-1", rawBytes: input.body.byteLength, storedBytes: 1 };
+        }),
+    },
+  };
+  return { capture, stored };
+}
+
+const LIFECYCLE = ["ratel.experiment.results", "ratel.experiment.skip"];
+
+test("raw capture off: no store call and the same response", async () => {
+  const { capture, stored } = rawCapture(false);
+  const response = await handleLogsRequest(
+    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
+    makeDeps({ otlpRawCapture: capture }),
+  );
+  const baseline = await handleLogsRequest(
+    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
+    makeDeps(),
+  );
+  assert.equal(response.status, baseline.status);
+  assert.deepEqual(await response.json(), await baseline.json());
+  assert.equal(stored.length, 0);
+});
+
+test("raw capture on: one stored export whose body decodes back to the same records", async () => {
+  const { capture, stored } = rawCapture(true);
+  const body = otlpLogsProto(LIFECYCLE);
+  const response = await handleLogsRequest(
+    request(body, { Authorization: "Bearer rtl_test", "Content-Type": "application/x-protobuf" }),
+    makeDeps({ otlpRawCapture: capture }),
+  );
+  assert.equal(response.status, 202);
+  assert.equal(stored.length, 1);
+  const [raw] = stored;
+  assert.equal(raw.signal, "logs");
+  assert.equal(raw.contentType, "application/x-protobuf");
+  assert.equal(raw.itemCount, 2);
+  assert.deepEqual(
+    decodeOtlpLogs("application/x-protobuf", gunzipSync(compressForStorage(raw))).map(
+      (r) => r.eventName,
+    ),
+    LIFECYCLE,
+  );
+});
+
+test("a throwing raw store still returns the same log response", async () => {
+  const logged: string[] = [];
+  const { capture } = rawCapture(true, async () => {
+    throw new Error("raw store down");
+  });
+  const response = await handleLogsRequest(
+    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
+    makeDeps({ otlpRawCapture: capture, logError: (message) => logged.push(message) }),
+  );
+  const baseline = await handleLogsRequest(
+    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
+    makeDeps(),
+  );
+  assert.equal(response.status, baseline.status);
+  assert.deepEqual(await response.json(), await baseline.json());
+  assert.deepEqual(logged, ["otlp raw capture failed"]);
+});
+
+function genAiLogsJson(): string {
+  return JSON.stringify({
+    resourceLogs: [
+      {
+        resource: { attributes: [{ key: "service.name", value: { stringValue: "test-agent" } }] },
+        scopeLogs: [
+          {
+            scope: { name: "opentelemetry.instrumentation.openai" },
+            logRecords: [
+              {
+                timeUnixNano: "1751800000000000000",
+                eventName: "gen_ai.client.inference.operation.details",
+                traceId: "0123456789abcdef0123456789abcdef",
+                spanId: "0123456789abcdef",
+                attributes: [
+                  { key: "gen_ai.operation.name", value: { stringValue: "chat" } },
+                  {
+                    key: "gen_ai.input.messages",
+                    value: {
+                      stringValue: '[{"role":"user","parts":[{"type":"text","content":"hi"}]}]',
+                    },
+                  },
+                ],
+              },
+              { timeUnixNano: "1751800000000000001", eventName: "host.application.started" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+}
+
+test("a gzip body is inflated and accepted like an identity body", async () => {
+  const body = otlpLogsJson(LIFECYCLE);
+  const plain = await handleLogsRequest(
+    request(body, { Authorization: "Bearer rtl_test" }),
+    makeDeps(),
+  );
+  const gzipped = await handleLogsRequest(
+    request(gzipSync(body), { Authorization: "Bearer rtl_test", "Content-Encoding": "gzip" }),
+    makeDeps(),
+  );
+  assert.equal(gzipped.status, plain.status);
+  assert.deepEqual(await gzipped.json(), await plain.json());
+});
+
+test("a corrupt gzip body returns 400 and an unknown encoding 415", async () => {
+  const corrupt = await handleLogsRequest(
+    request("not gzip", { Authorization: "Bearer rtl_test", "Content-Encoding": "gzip" }),
+    makeDeps(),
+  );
+  const unknown = await handleLogsRequest(
+    request(otlpLogsJson(LIFECYCLE), {
+      Authorization: "Bearer rtl_test",
+      "Content-Encoding": "br",
+    }),
+    makeDeps(),
+  );
+  assert.equal(corrupt.status, 400);
+  assert.equal(unknown.status, 415);
+});
+
+test("raw capture of a gzip export keeps the inflated body and the sent gzip", async () => {
+  const { capture, stored } = rawCapture(true);
+  const sent = gzipSync(otlpLogsJson(LIFECYCLE));
+  await handleLogsRequest(
+    request(sent, { Authorization: "Bearer rtl_test", "Content-Encoding": "gzip" }),
+    makeDeps({ otlpRawCapture: capture }),
+  );
+  assert.equal(stored.length, 1);
+  assert.equal(new TextDecoder().decode(stored[0].body), otlpLogsJson(LIFECYCLE));
+  assert.deepEqual(stored[0].gzipped, new Uint8Array(sent));
+});
+
+test("semconv flag on: gen_ai details records are stored with ids and content", async () => {
+  const inserted: unknown[] = [];
+  const flagCalls: unknown[][] = [];
+  const response = await handleLogsRequest(
+    request(genAiLogsJson(), { Authorization: "Bearer rtl_test" }),
+    makeDeps({
+      getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
+      semconvAliases: async (...args) => {
+        flagCalls.push(args);
+        return true;
+      },
+      insertOtelLogs: async (_projectId, rows) => {
+        inserted.push(...rows);
+        return { accepted: rows.length };
+      },
+    }),
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { accepted: 1, records: 2, dropped: 1 });
+  assert.equal(flagCalls[0]?.[0], "proj-1");
+  const [row] = inserted as NewOtelLog[];
+  assert.equal(row.eventName, "gen_ai.client.inference.operation.details");
+  assert.equal(row.traceId, "0123456789abcdef0123456789abcdef");
+  assert.equal(row.spanId, "0123456789abcdef");
+  assert.equal(
+    (row.attributes as Record<string, unknown>)["gen_ai.input.messages"],
+    '[{"role":"user","parts":[{"type":"text","content":"hi"}]}]',
+  );
+});
+
+test("semconv flag off: gen_ai records are dropped as before", async () => {
+  const response = await handleLogsRequest(
+    request(genAiLogsJson(), { Authorization: "Bearer rtl_test" }),
+    makeDeps({ semconvAliases: async () => false }),
+  );
+  assert.deepEqual(await response.json(), { accepted: 0, records: 2, dropped: 2 });
 });

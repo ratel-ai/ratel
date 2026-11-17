@@ -341,3 +341,104 @@ test("bounds promoted metadata by UTF-8 bytes and defaults invalid severity", ()
   assert.equal(row.severityNumber, 0);
   assert.equal(row.attrsTruncated, true);
 });
+
+const DETAILS_ATTRIBUTES = {
+  "gen_ai.operation.name": "chat",
+  "gen_ai.request.model": "gpt-4o",
+  "gen_ai.input.messages": '[{"role":"user","parts":[{"type":"text","content":"hi"}]}]',
+  "gen_ai.output.messages": '[{"role":"assistant","parts":[{"type":"text","content":"hello"}]}]',
+  "gen_ai.system_instructions": '[{"type":"text","content":"be brief"}]',
+  "gen_ai.tool.definitions": '[{"name":"search"}]',
+  customer_email: "private@example.test",
+};
+
+test("gen_ai events off: details and per-message records are dropped", () => {
+  const { rows, dropped } = toOtelLogRows("project-1", [
+    record({
+      eventName: "gen_ai.client.inference.operation.details",
+      attributes: DETAILS_ATTRIBUTES,
+    }),
+    record({ eventName: "gen_ai.user.message", body: { content: "hi" } }),
+  ]);
+
+  assert.equal(rows.length, 0);
+  assert.equal(dropped, 2);
+});
+
+test("gen_ai events on: keeps the details record with ids and content attributes", () => {
+  const { rows, dropped } = toOtelLogRows(
+    "project-1",
+    [
+      record({
+        eventName: "gen_ai.client.inference.operation.details",
+        attributes: DETAILS_ATTRIBUTES,
+      }),
+      record({ eventName: "host.application.started" }),
+      record({ eventName: "gen_ai.unknown.event" }),
+    ],
+    { genAiEvents: true },
+  );
+
+  assert.equal(dropped, 2);
+  assert.equal(rows.length, 1);
+  const [row] = rows;
+  assert.equal(row.eventName, "gen_ai.client.inference.operation.details");
+  assert.equal(row.traceId, "0123456789abcdef0123456789abcdef");
+  assert.equal(row.spanId, "0123456789abcdef");
+  const { customer_email: _private, ...expected } = DETAILS_ATTRIBUTES;
+  assert.deepEqual(row.attributes, expected);
+  assert.equal(row.attrsTruncated, false);
+});
+
+test("gen_ai events on: keeps the five per-message events with their body", () => {
+  const names = [
+    "gen_ai.system.message",
+    "gen_ai.user.message",
+    "gen_ai.assistant.message",
+    "gen_ai.tool.message",
+    "gen_ai.choice",
+  ];
+  const { rows, dropped } = toOtelLogRows(
+    "project-1",
+    names.map((eventName) =>
+      record({ eventName, body: { content: `${eventName} text` }, attributes: {} }),
+    ),
+    { genAiEvents: true },
+  );
+
+  assert.equal(dropped, 0);
+  assert.deepEqual(
+    rows.map((row) => row.eventName),
+    names,
+  );
+  assert.deepEqual(rows[1].body, { content: "gen_ai.user.message text" });
+});
+
+test("gen_ai events on: content above the ratel budget is kept whole", () => {
+  const long = JSON.stringify([
+    { role: "user", parts: [{ type: "text", content: "x".repeat(40_000) }] },
+  ]);
+  const [row] = toOtelLogRows(
+    "project-1",
+    [
+      record({
+        eventName: "gen_ai.client.inference.operation.details",
+        attributes: { "gen_ai.input.messages": long },
+      }),
+    ],
+    { genAiEvents: true },
+  ).rows;
+
+  assert.equal(row.attributes["gen_ai.input.messages"], long);
+  assert.equal(row.attrsTruncated, false);
+});
+
+test("gen_ai events on: ratel records keep stripping content keys", () => {
+  const [row] = toOtelLogRows(
+    "project-1",
+    [record({ attributes: { "gen_ai.input.messages": "[]", "ratel.experiment.id": "x" } })],
+    { genAiEvents: true },
+  ).rows;
+
+  assert.deepEqual(row.attributes, { "ratel.experiment.id": "x" });
+});

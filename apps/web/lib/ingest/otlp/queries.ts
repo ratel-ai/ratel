@@ -15,6 +15,7 @@ import {
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
 import type { NewRuntimeCatalogEntry } from "@/lib/ingest/runtime-catalog/schema";
 import { getDb } from "@/lib/platform/db/client";
+import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { NON_ROUND_TRIP_OPERATIONS } from "./constants";
@@ -174,6 +175,39 @@ export async function getDailyAggregates(
     costUsd: r.costUsd,
     runs: r.runs,
   }));
+}
+
+/** Cached and total input tokens over a window, for the prompt cache hit rate. */
+export type PromptCacheTotals = { cachedTokens: number; inputTokens: number };
+
+/**
+ * The window's summed `cached_tokens` and `input_tokens` (RC-382). Reads
+ * `events`, since `event_metrics` holds no cached count, over the same event
+ * time (`coalesce(occurred_at, received_at)`, events_project_event_time_idx)
+ * as {@link getDailyAggregates}. Unlike the history split, it counts every
+ * cached token, a cached system prompt included.
+ */
+export async function getPromptCacheTotals(
+  projectId: string,
+  since: Date,
+  until?: Date,
+  db: BoundReadDb = getDb(),
+): Promise<PromptCacheTotals> {
+  const eventTime = sql`coalesce(${events.occurredAt}, ${events.receivedAt})`;
+  const [row] = await db
+    .select({
+      cachedTokens: sql<number>`coalesce(sum(${events.cachedTokens}), 0)::float8`,
+      inputTokens: sql<number>`coalesce(sum(${events.inputTokens}), 0)::float8`,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.projectId, projectId),
+        gte(eventTime, since),
+        until ? lt(eventTime, until) : undefined,
+      ),
+    );
+  return { cachedTokens: row?.cachedTokens ?? 0, inputTokens: row?.inputTokens ?? 0 };
 }
 
 /** Every run's per-tool footprint in the window, one map per `event_metrics` row (the Tools tab folds them). */

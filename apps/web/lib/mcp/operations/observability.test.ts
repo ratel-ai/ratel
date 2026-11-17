@@ -38,6 +38,7 @@ const stubDeps = {
   getToolMetrics: async () => ({}),
   listRunTools: async () => new Map(),
   listRunAsks: async () => new Map(),
+  payloadContentEnabled: async () => false,
   contentOptIn: async () => true,
 } as unknown as ObservabilityOperationDeps;
 
@@ -345,3 +346,39 @@ for (const { name, caller, optIn, sees } of CONTENT_CASES) {
     }
   });
 }
+
+test("list_traces with includeDetails reads run asks from events.payload exactly when cloud-payload-content is on", async () => {
+  for (const enabled of [false, true]) {
+    const seen: unknown[] = [];
+    const registry = buildRegistry(
+      observabilityOperations({
+        ...stubDeps,
+        listTraces: (async () => ({
+          items: [TRACE_ROW],
+          hasMore: false,
+          nextCursor: null,
+        })) as never,
+        payloadContentEnabled: async (projectId, actor) => {
+          assert.equal(projectId, PROJECT);
+          assert.equal(actor, `project:${PROJECT}`);
+          return enabled;
+        },
+        listRunAsks: (async (_project: string, _ids: string[], _db: unknown, options: unknown) => {
+          seen.push(options);
+          return new Map([
+            [TRACE, { prompt: enabled ? "Where is order 1234?" : null, hasRoot: true }],
+          ]);
+        }) as never,
+      }),
+    );
+    const result = (await dispatchOperation(
+      "list_traces",
+      { projectId: PROJECT, includeDetails: true },
+      { registry, auth },
+    )) as DispatchSuccess & {
+      data: { traces: Array<{ ask: string | null }> };
+    };
+    assert.deepEqual(seen, [{ fromPayload: enabled }]);
+    assert.equal(result.data.traces[0].ask, enabled ? "Where is order 1234?" : null);
+  }
+});

@@ -7,6 +7,8 @@ import {
 } from "@/components/console/traces/TraceView";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { getSessionContext } from "@/lib/platform/session";
+import { loadPayloadContentForActor } from "@/lib/synthesis/traces/payload-content";
 import {
   getTraceSpansWithTruncation,
   listTraceLifecycleEvents,
@@ -36,8 +38,9 @@ export async function TracePageV2({
   };
 }) {
   if (!isDbConfigured()) return <TracesUnavailable title="Trace" />;
-  // The project layout already guarded the id against the session.
+  // The project layout already guarded the id against the session; the actor is whoever reads.
   const project = { id: projectId };
+  const session = await getSessionContext();
 
   const { span, tab, ...listParams } = searchParams;
   const requestedTab = firstParam(tab);
@@ -48,6 +51,7 @@ export async function TracePageV2({
     compareHref: `${tracesPath}${searchFromParams({ ...listParams, peek: undefined, project: undefined, compare: id })}`,
     tab: requestedTab,
     spanId: firstParam(span) ?? null,
+    actor: session?.user.externalId ?? `project:${project.id}`,
   });
   if (!props) notFound();
   return <TraceView {...props} />;
@@ -56,7 +60,9 @@ export async function TracePageV2({
 /**
  * One run's full-trace props: its spans and lifecycle records, read under
  * the page's statement timeouts. Null when the project has no span of it.
- * The session replay's Trace view reads a turn's run through this too.
+ * The session replay's Trace view reads a turn's run through this too. With
+ * `cloud-payload-content` on for `actor`, the run's `events.payload` content
+ * fills in what the spans do not carry (RC-393).
  */
 export async function loadTraceViewProps(
   projectId: string,
@@ -66,19 +72,21 @@ export async function loadTraceViewProps(
     compareHref: string;
     tab: string | undefined;
     spanId: string | null;
+    actor: string;
   },
 ): Promise<TraceViewProps | null> {
   const id = traceId.toLowerCase();
-  const [load, lifecycle] = await Promise.all([
+  const [load, lifecycle, payload] = await Promise.all([
     withStatementTimeout((db) => getTraceSpansWithTruncation(projectId, id, db), {
       operation: "trace_detail",
     }),
     withStatementTimeout((db) => listTraceLifecycleEvents(projectId, id, db), {
       operation: "trace_lifecycle",
     }),
+    loadPayloadContentForActor(projectId, id, options.actor, "trace_payload"),
   ]);
   if (load.spans.length === 0) return null;
-  const summary = buildRunSummary(load.spans, 0);
+  const summary = buildRunSummary(load.spans, 0, payload);
   const root = load.spans.find((span) => span.parentSpanId === null) ?? load.spans[0];
   return {
     projectId,
@@ -90,6 +98,7 @@ export async function loadTraceViewProps(
     totals: summary.totals,
     waterfall: buildTraceWaterfall(load.spans),
     truncated: load.truncated,
+    payloadContent: payload?.view ?? null,
     lifecycle: lifecycle.map((event) => ({
       id: event.id,
       eventName: event.eventName,

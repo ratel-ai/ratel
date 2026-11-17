@@ -118,3 +118,35 @@ test("a failed read is logged and reported before the reader gets a retryable er
   assert.deepEqual(calls.logged, ["run summary load failed"]);
   assert.equal(calls.reported, 1);
 });
+
+test("the run's payload content, read for the signed-in person, fills the summary when its spans carry none", async () => {
+  const asked: string[] = [];
+  const { value } = deps({
+    loadPayload: async (projectId, traceId, actor) => {
+      asked.push(`${projectId}/${traceId}/${actor}`);
+      return {
+        view: { messages: [], toolCalls: [], contentCaptured: false },
+        ask: "Where is order 1234?",
+      };
+    },
+  });
+  const response = await runSummaryResponse({ projectId: PROJECT, traceId: TRACE }, value);
+  const body = await response.json();
+  assert.equal(body.summary.title, "Where is order 1234?");
+  assert.equal(body.summary.ask, "Where is order 1234?");
+  assert.deepEqual(asked, [`${PROJECT}/${TRACE.toLowerCase()}/user_clerk`]);
+});
+
+test("a failed payload read is logged and reported, and the run still reads from its spans", async () => {
+  const { value, calls } = deps({
+    loadPayload: async () => {
+      throw new Error("statement timeout");
+    },
+  });
+  const response = await runSummaryResponse({ projectId: PROJECT, traceId: TRACE }, value);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.summary.title, "agent.run");
+  assert.deepEqual(calls.logged, ["run payload load failed"]);
+  assert.equal(calls.reported, 1);
+});

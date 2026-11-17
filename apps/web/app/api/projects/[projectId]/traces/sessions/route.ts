@@ -2,6 +2,7 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
+import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
 import { tracesSessionsResponse } from "@/lib/synthesis/traces-sessions/route";
 import { loadSessionsPage } from "@/lib/synthesis/traces-sessions/sessions";
 import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
@@ -25,7 +26,14 @@ async function handleGet(
   const params = new URL(request.url).searchParams;
   const filter = parseSessionsFilter(params.getAll(SESSIONS_FILTER_PARAM));
   const cursor = params.get("cursor");
-  return tracesSessionsResponse(projectId, (id) => loadSessionsPage(id, { filter, cursor }), {
+  const load = async (id: string) => {
+    const session = await getSessionContext();
+    const askFromPayload = session
+      ? await payloadContentEnabledForActor(id, session.user.externalId).catch(() => false)
+      : false;
+    return loadSessionsPage(id, { filter, cursor, askFromPayload });
+  };
+  return tracesSessionsResponse(projectId, load, {
     enabled: async () => tracesSessionsEnabled(),
     dbConfigured: isDbConfigured,
     getSession: async () => {

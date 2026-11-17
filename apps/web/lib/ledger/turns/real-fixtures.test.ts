@@ -325,3 +325,29 @@ test("MCP server-only calls carry the root-tool mark and the MCP session", () =>
   const noSession = resultOf("mcp-python-sdk-native-server-only").toolRows;
   assert.ok(noSession.every((row) => row.sessionId === row.traceId));
 });
+
+// Flag `cloud-otlp-semconv-aliases`. OpenInference spans carry usage only under
+// `llm.*`, so with the flag off they make no events rows at all. With it on, each
+// innermost model call is one row: a `generation` around a `ChatCompletion` adds none.
+const OPENINFERENCE = new Set([
+  "langgraph-openinference",
+  "openai-agents-openinference",
+  "openai-agents-openinference-plus-openai",
+]);
+
+for (const name of Object.keys(EXPECTED)) {
+  test(`${name}: events rows per trace with the semconv aliases`, () => {
+    const off = resultOf(name);
+    const on = runPipeline(loadFixture(name), { semconvAliases: true });
+    if (!OPENINFERENCE.has(name)) {
+      assert.deepEqual(on.llmCallsByTrace, off.llmCallsByTrace);
+      return;
+    }
+    assert.equal(off.llmCalls, 0);
+    const traces = ordered(off).map((turn) => turn.turnKey.slice("otlp:".length));
+    assert.deepEqual(
+      traces.map((id) => on.llmCallsByTrace.get(id) ?? 0),
+      EXPECTED[name].modelCalls,
+    );
+  });
+}

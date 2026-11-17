@@ -10,7 +10,11 @@ import { Tabs } from "@ratel/design-system/tabs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildTraceContentView } from "@/lib/synthesis/traces/content-view";
+import {
+  buildTraceContentView,
+  preferSpanContent,
+  type TraceContentView,
+} from "@/lib/synthesis/traces/content-view";
 import {
   formatDuration,
   formatInteger,
@@ -46,6 +50,8 @@ export interface TraceViewProps {
   totals: RunTotals;
   waterfall: TraceWaterfallView;
   truncated: boolean;
+  /** The run's `events.payload` content, read on the server; the spans' own content wins when they carry any. */
+  payloadContent?: TraceContentView | null;
   lifecycle: readonly LifecycleRecord[];
   /** The list this trace was opened from, filters and page included. */
   listHref: string;
@@ -68,7 +74,11 @@ export function TraceView(props: TraceViewProps) {
   const { waterfall, totals } = props;
   const rows = waterfall.rows;
   const shape = useMemo(() => timelineShape(rows.map((row) => row.depth)), [rows]);
-  const content = useMemo(() => buildTraceContentView(rows.map((row) => row.span)), [rows]);
+  const { payloadContent = null } = props;
+  const content = useMemo(
+    () => preferSpanContent(buildTraceContentView(rows.map((row) => row.span)), payloadContent),
+    [rows, payloadContent],
+  );
   const [tab, setTab] = useState<TraceTab>(
     props.lifecycle.length === 0 && props.initialTab === "ranking" ? "timeline" : props.initialTab,
   );

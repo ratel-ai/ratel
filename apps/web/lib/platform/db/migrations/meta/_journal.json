@@ -239,6 +239,13 @@
       "when": 1794911439655,
       "tag": "0033_trace_turns_turn_key_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794920254090,
+      "tag": "0034_otlp_raw_exports",
+      "breakpoints": true
     }
   ]
 }

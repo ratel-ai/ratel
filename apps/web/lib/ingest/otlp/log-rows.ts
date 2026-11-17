@@ -33,7 +33,24 @@ export interface OtelLogRowsResult {
   dropped: number;
 }
 
+export interface OtelLogRowsOptions {
+  /** Flag `cloud-otlp-semconv-aliases`: keep the `gen_ai` content events too. */
+  genAiEvents?: boolean;
+}
+
+/** The `gen_ai` log events that carry a model call's messages, kept under the flag. */
+export const GEN_AI_LOG_EVENT_NAMES: ReadonlySet<string> = new Set([
+  "gen_ai.client.inference.operation.details",
+  "gen_ai.system.message",
+  "gen_ai.user.message",
+  "gen_ai.assistant.message",
+  "gen_ai.tool.message",
+  "gen_ai.choice",
+]);
+
 const MAX_ATTRIBUTE_BYTES = 16 * 1024;
+/** A `gen_ai` event carries whole messages, so it gets the span content budget. */
+const MAX_GEN_AI_CONTENT_BYTES = 256 * 1024;
 const MAX_METADATA_BYTES = 1024;
 const MAX_CATALOG_IDENTITY_CHARS = 256;
 const MAX_DATE_MS = 8_640_000_000_000_000;
@@ -66,8 +83,16 @@ const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
 
 /** Filter and map normalized OTLP log records into standalone persistence rows. */
-export function toOtelLogRows(projectId: string, records: DecodedLogRecord[]): OtelLogRowsResult {
-  const accepted = records.filter((record) => record.eventName.startsWith("ratel."));
+export function toOtelLogRows(
+  projectId: string,
+  records: DecodedLogRecord[],
+  options: OtelLogRowsOptions = {},
+): OtelLogRowsResult {
+  const accepted = records.filter(
+    (record) =>
+      record.eventName.startsWith("ratel.") ||
+      (!!options.genAiEvents && GEN_AI_LOG_EVENT_NAMES.has(record.eventName)),
+  );
 
   return {
     rows: accepted.map((record) => toOtelLogRow(projectId, record)),
@@ -76,6 +101,7 @@ export function toOtelLogRows(projectId: string, records: DecodedLogRecord[]): O
 }
 
 function toOtelLogRow(projectId: string, record: DecodedLogRecord): OtelLogRow {
+  const genAiEvent = GEN_AI_LOG_EVENT_NAMES.has(record.eventName);
   let scalarTruncated = false;
   const text = (value: string | null | undefined): string | null => {
     if (value == null) return null;
@@ -84,8 +110,13 @@ function toOtelLogRow(projectId: string, record: DecodedLogRecord): OtelLogRow {
     return bounded.value;
   };
   const experiment = experimentAttributes(record.attributes);
-  const retained = retainedAttributes(record.attributes);
-  const body = boundedBody(record.body);
+  const retained = genAiEvent
+    ? genAiAttributes(record.attributes)
+    : retainedAttributes(record.attributes);
+  const body = boundedBody(
+    record.body,
+    genAiEvent ? MAX_GEN_AI_CONTENT_BYTES : MAX_ATTRIBUTE_BYTES,
+  );
   const eventId = text(attrString(record.attributes, RATEL.eventId));
   const serviceName = text(attrString(record.resourceAttributes, "service.name"));
   const recordOccurredAt = occurredAt(record);
@@ -203,7 +234,26 @@ function retainedAttributes(attributes: AttrMap): {
   );
 }
 
-function boundedAttributes(attributes: AttrMap): {
+/** A `gen_ai` event keeps its `gen_ai.*` keys, content included: the content is why it is kept. */
+function genAiAttributes(attributes: AttrMap): {
+  attributes: AttrMap;
+  truncated: boolean;
+} {
+  return boundedAttributes(
+    Object.fromEntries(
+      Object.entries(attributes).filter(([key]) => {
+        const sanitizedKey = stripNul(key);
+        return SAFE_ATTRIBUTE_KEYS.has(sanitizedKey) || sanitizedKey.startsWith("gen_ai.");
+      }),
+    ),
+    MAX_GEN_AI_CONTENT_BYTES,
+  );
+}
+
+function boundedAttributes(
+  attributes: AttrMap,
+  maxBytes = MAX_ATTRIBUTE_BYTES,
+): {
   attributes: AttrMap;
   truncated: boolean;
 } {
@@ -226,7 +276,7 @@ function boundedAttributes(attributes: AttrMap): {
       Buffer.byteLength(JSON.stringify(sanitizedKey), "utf8") +
       1 +
       Buffer.byteLength(serializedValue, "utf8");
-    if (retainedBytes + entryBytes <= MAX_ATTRIBUTE_BYTES) {
+    if (retainedBytes + entryBytes <= maxBytes) {
       retained[sanitizedKey] = sanitizedValue.value;
       retainedCount += 1;
       retainedBytes += entryBytes;
@@ -240,28 +290,25 @@ function boundedAttributes(attributes: AttrMap): {
 
 /**
  * Cap the free-form `body` the same way attributes are capped, so a single
- * `ratel.*` record can't push a multi-megabyte body into jsonb. A scalar string
+ * record can't push a multi-megabyte body into jsonb. A scalar string
  * keeps a UTF-8-safe prefix; any richer shape degrades to its truncated JSON
  * text (still valid jsonb) once it exceeds the attribute budget.
  */
-function boundedBody(value: AttrValue): { value: AttrValue; truncated: boolean } {
+function boundedBody(value: AttrValue, maxBytes: number): { value: AttrValue; truncated: boolean } {
   const sanitized = sanitizeJsonValue(value);
   const serialized = JSON.stringify(sanitized.value);
   if (serialized === undefined) {
     return { value: null, truncated: true };
   }
-  if (Buffer.byteLength(serialized, "utf8") <= MAX_ATTRIBUTE_BYTES) {
+  if (Buffer.byteLength(serialized, "utf8") <= maxBytes) {
     return { value: sanitized.value, truncated: sanitized.sanitized };
   }
   // Oversized: keep a UTF-8-safe prefix of the source text (the raw string, or
   // the JSON rendering of a richer shape), shrinking until the *stored* jsonb
   // string — enclosing quotes and escapes included — fits the attribute budget.
   const source = typeof sanitized.value === "string" ? sanitized.value : serialized;
-  let prefix = boundedString(source, MAX_ATTRIBUTE_BYTES).value;
-  while (
-    prefix.length > 0 &&
-    Buffer.byteLength(JSON.stringify(prefix), "utf8") > MAX_ATTRIBUTE_BYTES
-  ) {
+  let prefix = boundedString(source, maxBytes).value;
+  while (prefix.length > 0 && Buffer.byteLength(JSON.stringify(prefix), "utf8") > maxBytes) {
     prefix = boundedString(prefix, Buffer.byteLength(prefix, "utf8") - 128).value;
   }
   return { value: prefix, truncated: true };
