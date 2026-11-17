@@ -61,6 +61,8 @@
     { "from": "apps/web/lib/observability/process-stats.test.ts", "to": "apps/web/lib/platform/process-stats.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/observability/model-call-sites.test.ts", "mode": "excluded", "$why": "tests the model_call spend line, which is ratel-platform's (its observability/model-call.ts); the public model-call is an unset seam. ratel-platform owns the test" },
     { "from": "apps/web/scripts/eval-gate-measure.mts", "to": "apps/web/scripts/eval-gate-measure.mts", "mode": "copy" },
+    { "from": "apps/web/lib/anthropic", "to": "apps/web/lib/readings/anthropic", "mode": "copy" },
+    { "from": "apps/web/scripts/bedrock-smoke.mts", "to": "apps/web/scripts/bedrock-smoke.mts", "mode": "copy" },
     {"from":"apps/web/lib/jobs/policy.test.ts","to":"apps/web/lib/jobs/policy.test.ts","mode":"copy"},
     {"from":"apps/web/lib/jobs/worker.ts","to":"apps/web/lib/jobs/worker.ts","mode":"copy"},
     {"from":"apps/web/lib/jobs/worker.test.ts","to":"apps/web/lib/jobs/worker.test.ts","mode":"owned","$why":"no lib/cron/background-drain here: the api-role tick is asserted against the owned drain"},

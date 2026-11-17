@@ -1,10 +1,11 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicClient, anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
 import type { ModelUsage } from "@/lib/views/eval-gate/models";
-import { anthropicKey, mockModelsEnabled } from "@/lib/views/eval-gate/models";
+import { mockModelsEnabled } from "@/lib/views/eval-gate/models";
 
 type Env = Record<string, string | undefined>;
 
@@ -52,18 +53,18 @@ export function standInDraftModel(
   };
 }
 
-/** Whether a draft can be made here: the local stand-in, or an Anthropic key. */
+/** Whether a draft can be made here: the local stand-in, or a Claude backend. */
 export function draftModelAvailable(
   env: Env = process.env,
   environment: string = deploymentEnvironment(),
 ): boolean {
-  return mockModelsEnabled(env, environment) || !!anthropicKey(env);
+  return mockModelsEnabled(env, environment) || anthropicConfigured(env);
 }
 
 /**
- * The draft model this deployment has. Owned (ADR-0030): upstream always builds the Anthropic
- * client, which with no key fails only at the request; here no key is no model (`null`), so
- * nothing is reserved or sent. The placeholder key is no key.
+ * The draft model this deployment has. Owned (ADR-0030): upstream fails only at the request when
+ * no Claude backend is configured; here no backend is no model (`null`), so nothing is reserved
+ * or sent. The placeholder key is no key.
  */
 export function draftModelFromEnv(
   env: Env = process.env,
@@ -71,10 +72,9 @@ export function draftModelFromEnv(
   tools: ReadonlyArray<{ entryId: string; searchable: string }> = [],
 ): DraftModel | null {
   if (mockModelsEnabled(env, environment)) return standInDraftModel(tools);
-  const apiKey = anthropicKey(env);
-  if (!apiKey) return null;
+  const client = anthropicClient({ maxRetries: 0 }, env);
+  if (!client) return null;
   const model = env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL;
-  const client = new Anthropic({ apiKey, maxRetries: 0 });
   return {
     model,
     async complete({ system, user, maxTokens }) {

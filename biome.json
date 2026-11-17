@@ -144,6 +144,8 @@
         "apps/web/lib/platform/process-stats.ts",
         "apps/web/lib/platform/process-stats.test.ts",
         "apps/web/scripts/eval-gate-measure.mts",
+        "apps/web/lib/readings/anthropic/**",
+        "apps/web/scripts/bedrock-smoke.mts",
         "apps/web/lib/jobs/policy.test.ts",
         "apps/web/lib/jobs/worker.ts",
         "apps/web/lib/jobs/fair-claim.integration.test.ts",

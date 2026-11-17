@@ -1,7 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import {
   type DecideDeps,
@@ -64,11 +65,10 @@ export interface LabelJobResult {
   decisions: DecideResult | null;
 }
 
-/** A structured-output Anthropic completion, or null without an API key. */
+/** A structured-output Anthropic completion, or null without a Claude backend. */
 export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey || apiKey === "REPLACE_ME") return null;
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient();
+  if (!client) return null;
   return async (system, user) => {
     const msg = await client.messages.create(
       wellFormedJson({

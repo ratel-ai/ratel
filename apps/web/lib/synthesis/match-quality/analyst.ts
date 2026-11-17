@@ -1,6 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
+import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { type AnalystContext, buildAnalystPrompt } from "./context";
 import type { AnalystDiagnosis, AnalystProposal, AnalystResult } from "./types";
@@ -214,11 +215,11 @@ export function parseAnalystResponse(
   return { diagnosis, proposals, rejectedEntryIds };
 }
 
-/** Anthropic-backed deps. Throws if no API key is configured. */
+/** Anthropic-backed deps. Throws if no Claude backend is configured. */
 export function anthropicAnalystDeps(model: string): AnalystDeps {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured");
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient();
+  if (!client)
+    throw new Error("No Claude backend is configured: set ANTHROPIC_BACKEND or ANTHROPIC_API_KEY");
   return {
     model,
     complete: async (system, user) => {

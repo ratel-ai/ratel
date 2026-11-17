@@ -18,10 +18,12 @@
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.mts",
     "seed:quality": "tsx scripts/seed-site-copilot-quality.mts",
-    "seed:task-loop": "tsx scripts/seed-task-loop.mts"
+    "seed:task-loop": "tsx scripts/seed-task-loop.mts",
+    "bedrock:smoke": "tsx scripts/bedrock-smoke.mts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.107.0",
+    "@anthropic-ai/bedrock-sdk": "^0.36.0",
+    "@anthropic-ai/sdk": "^0.137.0",
     "@base-ui/react": "^1.6.0",
     "@modelcontextprotocol/sdk": "1.32.2",
     "@opentelemetry/api": "^1.9.1",
