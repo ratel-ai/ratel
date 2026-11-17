@@ -123,15 +123,20 @@ test("a retry is judged by hit overlap when there is no query text", () => {
   );
 });
 
-test("buried_tool fires when picks sit at #4 or lower often enough", () => {
+test("buried_tool fires when picks sit below the top 5 often enough (RC-226)", () => {
   const buried = (n: number) =>
-    times(n, () => fresh().search(["a", "b", "c", "tool"]).invoke("tool"));
+    times(n, () => fresh().search(["a", "b", "c", "d", "e", "tool"]).invoke("tool"));
   const top = (n: number) => times(n, () => fresh().search(["tool", "a"]).invoke("tool"));
   const fires = statsOf(signalTurns([...buried(6), ...top(4)]));
   const [signal] = kinds(detectRetrieval(fires), "buried_tool");
   assert.equal(signal?.severity, round4(wilsonLow(6, 10)));
-  assert.equal(signal?.metrics.medianRank, 4);
-  assert.deepEqual(signal?.metrics.rankBands, [4, 6, 0, 0]);
+  assert.equal(signal?.metrics.medianRank, 6);
+  assert.equal(signal?.metrics.minRank, 6);
+  // Fifth is still in the top 5, where the agent reads: not buried.
+  const fifth = statsOf(
+    signalTurns(times(10, () => fresh().search(["a", "b", "c", "d", "tool"]).invoke("tool"))),
+  );
+  assert.equal(kinds(detectRetrieval(fifth), "buried_tool").length, 0, "#5 is served");
   const quiet = statsOf(signalTurns([...buried(5), ...top(5)]));
   assert.equal(
     kinds(detectRetrieval(quiet), "buried_tool").length,

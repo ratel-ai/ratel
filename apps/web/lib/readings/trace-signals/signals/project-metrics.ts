@@ -1,4 +1,4 @@
-import { turnDetour, turnFirstTry } from "@/lib/ledger/same-ask";
+import { turnDetour, turnFirstTry, turnInTopK } from "@/lib/ledger/same-ask";
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
 import {
   addLinkedDays,
@@ -50,6 +50,13 @@ export interface DayBucket {
   mix: TurnSourceMix;
   firstTry: number;
   firstTryN: number;
+  /**
+   * Turns whose every tool sat in the top 5 of a search before its first call
+   * (`turnInTopK`), of the turns that searched and ran one. Absent on runs
+   * stored before it (RC-226).
+   */
+  top5?: number;
+  top5N?: number;
   detours: number;
   detourN: number;
   junk: number;
@@ -116,6 +123,7 @@ export function turnBucket(
   // Read from the steps, not the stored turn columns, so a ledger built under
   // an older rule reads the same as a replay.
   const firstTry = turnFirstTry(turn.steps);
+  const top5 = turnInTopK(turn.steps);
   const otel = usesOtelShapes(turn);
   const shape = otel ? null : classifyTurnShape(turn);
   const junk = searches.map(junkOfSearch).filter((j) => j !== null);
@@ -130,6 +138,7 @@ export function turnBucket(
     mix: { ...bucket.mix, [turn.turnSource]: 1 },
     firstTry: firstTry === true ? 1 : 0,
     firstTryN: firstTry === null ? 0 : 1,
+    ...(top5 === null ? {} : { top5: top5 ? 1 : 0, top5N: 1 }),
     detours: searches.length > 0 && turnDetour(turn.steps) ? 1 : 0,
     detourN: searches.length > 0 ? 1 : 0,
     junk: junk.reduce((sum, j) => sum + j.junk, 0),
@@ -162,6 +171,12 @@ export function addBuckets(left: DayBucket, right: DayBucket): DayBucket {
     },
     firstTry: left.firstTry + right.firstTry,
     firstTryN: left.firstTryN + right.firstTryN,
+    ...(left.top5N !== undefined || right.top5N !== undefined
+      ? {
+          top5: (left.top5 ?? 0) + (right.top5 ?? 0),
+          top5N: (left.top5N ?? 0) + (right.top5N ?? 0),
+        }
+      : {}),
     detours: left.detours + right.detours,
     detourN: left.detourN + right.detourN,
     junk: left.junk + right.junk,
@@ -263,6 +278,16 @@ export function rateInterval(count: number, turns: number): Interval | null {
 
 export function readTile(key: TileKey, t: DayBucket): TileReading {
   switch (key) {
+    case "top_5": {
+      const k = t.top5 ?? 0;
+      const n = t.top5N ?? 0;
+      return {
+        value: n > 0 ? k / n : null,
+        interval: wilson(k, n),
+        n,
+        sub: `${fmt(k)} of ${fmt(n)} turns had each tool they ran in the top 5 of a search.`,
+      };
+    }
     case "first_try":
       return {
         value: t.firstTryN > 0 ? t.firstTry / t.firstTryN : null,
@@ -305,8 +330,26 @@ export interface TileMeta {
   upIsGood: boolean;
 }
 
+/**
+ * The band's first tile (RC-226): whether search served the right tool in the
+ * top 5, where the agent reads. Readings stored before the top-5 count keep
+ * first try, so an older reading never shows a dash in its place.
+ */
+export const TOP_5_TILE: TileMeta = {
+  key: "top_5",
+  label: "Right tool in top 5",
+  unit: "share",
+  upIsGood: true,
+};
+export const FIRST_TRY_TILE: TileMeta = {
+  key: "first_try",
+  label: "First try",
+  unit: "share",
+  upIsGood: true,
+};
+
 export const TILE_META: ReadonlyArray<TileMeta> = [
-  { key: "first_try", label: "First try", unit: "share", upIsGood: true },
+  TOP_5_TILE,
   { key: "detours", label: "Detours", unit: "share", upIsGood: false },
   { key: "junk", label: "Junk in lists", unit: "share", upIsGood: false },
   { key: "wasted_calls", label: "Wasted calls", unit: "per_100_turns", upIsGood: false },
@@ -324,7 +367,15 @@ export interface TileWindow {
 
 /** The four tiles over a window: figure, interval, 7-day series, delta. */
 export function tilesFor(buckets: readonly DayBucket[], w: TileWindow): HealthTile[] {
-  return tilesWith(buckets, w, TILE_META, readTile);
+  return tilesWith(buckets, w, sdkTileMeta(buckets), readTile);
+}
+
+/** The SDK band for these buckets: top 5 first when they carry its count, first try on older ones. */
+export function sdkTileMeta(buckets: readonly DayBucket[]): ReadonlyArray<TileMeta> {
+  const counted = buckets.some((bucket) => bucket.top5N !== undefined);
+  return counted
+    ? TILE_META
+    : TILE_META.map((meta) => (meta.key === "top_5" ? FIRST_TRY_TILE : meta));
 }
 
 /** Any set of tiles over a window, each read by `read`: figure, interval, 7-day series, delta. */

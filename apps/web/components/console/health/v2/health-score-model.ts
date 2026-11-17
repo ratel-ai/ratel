@@ -1,3 +1,4 @@
+import { PILLAR_LABEL } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   HARM_LABEL,
   HARM_LEVELS,
@@ -5,6 +6,7 @@ import {
   type HealthBand,
   type HealthScoreView,
   type IssueHarm,
+  OUTCOME_SHARE,
 } from "@/lib/readings/trace-signals/health-score";
 
 /**
@@ -52,6 +54,15 @@ export interface ScoreCopy {
   lost: readonly LostPart[];
   /** How it is counted, in one sentence. */
   basis: string;
+  /** What it is made of: each measured rate, then the open issues, as whole percents. */
+  parts: readonly ScorePart[];
+}
+
+export interface ScorePart {
+  key: string;
+  label: string;
+  /** 0 to 100. */
+  value: number;
 }
 
 export function scoreCopy(view: HealthScoreView): ScoreCopy {
@@ -92,7 +103,21 @@ export function scoreCopy(view: HealthScoreView): ScoreCopy {
     target,
     change,
     lost,
-    basis: "Every open issue costs points by how many turns it touches and how much it hurts them.",
+    basis:
+      view.outcome === null
+        ? "Every open issue costs points by how many turns it touches and how much it hurts them."
+        : `${Math.round(OUTCOME_SHARE * 100)}% from how your runs went, ${Math.round((1 - OUTCOME_SHARE) * 100)}% from the issues still open.`,
+    parts:
+      view.outcome === null
+        ? []
+        : [
+            ...view.pillars.map((reading) => ({
+              key: reading.pillar,
+              label: PILLAR_LABEL[reading.pillar],
+              value: Math.round(reading.good * 100),
+            })),
+            { key: "issues", label: "Open issues", value: view.issueScore },
+          ],
   };
 }
 

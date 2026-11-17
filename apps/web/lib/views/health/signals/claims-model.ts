@@ -103,9 +103,9 @@ const COPY: Record<SignalKind, (c: Ctx) => KindCopy> = {
       value: num(m, "medianRank"),
       unit: "rank",
       display: `#${count(num(m, "medianRank"))}`,
-      raw: `${count(num(m, "k"))} of ${count(num(m, "n"))} picks below #${count(num(m, "minRank", 4) - 1)}`,
+      raw: `${count(num(m, "k"))} of ${count(num(m, "n"))} picks below #${count(num(m, "minRank", 6) - 1)}`,
     },
-    cost: `${plural(num(m, "k"), "turn", "turns")} read ${count(num(m, "minRank", 4) - 1)} or more hits before reaching it.`,
+    cost: `${plural(num(m, "k"), "turn", "turns")} read ${count(num(m, "minRank", 6) - 1)} or more hits before reaching it.`,
     fix: `Have Ratel rank ${name(a)} higher for asks like these, then tighten its description.`,
   }),
   magnet: ({ m, name, a, period }) => {

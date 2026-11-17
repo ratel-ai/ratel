@@ -3,10 +3,12 @@ import { test } from "node:test";
 import {
   hitOverlap,
   retryReaching,
+  SERVED_TOP_K,
   sameAsk,
   searchedAgainForSame,
   turnDetour,
   turnFirstTry,
+  turnInTopK,
 } from "@/lib/ledger/same-ask";
 import type { StepDraft } from "@/lib/ledger/types";
 import { fresh, signalTurns } from "@/lib/readings/trace-signals/signals/test-fixtures";
@@ -100,4 +102,29 @@ test("searched again for the same thing, versus a next step after a call", () =>
   const next = twoNeeds();
   const find = next.steps.findIndex((s) => s.targetId === "find_task");
   assert.equal(searchedAgainForSame(next.steps, find, 30_000), false);
+});
+
+test("recall at 5: the tool the agent ran sat in the top 5 of a search before it, whatever came first (RC-226)", () => {
+  // A retry still counts when the second list served the tool high: search put it where the agent reads.
+  assert.equal(turnInTopK(retried().steps), true);
+  // Listed sixth: not served, though it was listed and the agent dug it out.
+  const sixth = signalTurns([
+    fresh().search(["a", "b", "c", "d", "e", "deep_tool"]).invoke("deep_tool"),
+  ])[0]!;
+  assert.equal(turnInTopK(sixth.steps), false);
+  assert.equal(turnInTopK(sixth.steps, 6), true);
+  // Fifth is served.
+  const fifth = signalTurns([
+    fresh().search(["a", "b", "c", "d", "fifth_tool", "f"]).invoke("fifth_tool"),
+  ])[0]!;
+  assert.equal(turnInTopK(fifth.steps), true);
+  // Every tool counts: one served and one never listed is a miss.
+  const half = signalTurns([
+    fresh().search(["find_task", "x"]).invoke("find_task").invoke("never_listed"),
+  ])[0]!;
+  assert.equal(turnInTopK(half.steps), false);
+  // No search, nothing to judge.
+  const blind = signalTurns([fresh().invoke("find_task")])[0]!;
+  assert.equal(turnInTopK(blind.steps), null);
+  assert.equal(SERVED_TOP_K, 5);
 });

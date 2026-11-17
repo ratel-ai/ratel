@@ -122,7 +122,7 @@ test("an SDK project with a few OTLP turns too keeps the SDK page, marked mixed"
   assert.equal(model.sourceMode, "mixed");
   assert.deepEqual(
     model.tiles.map((t) => t.key),
-    ["first_try", "detours", "junk", "wasted_calls"],
+    ["top_5", "detours", "junk", "wasted_calls"],
   );
   assert.equal(model.shapes.length, 6);
 });

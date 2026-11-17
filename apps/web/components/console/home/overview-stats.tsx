@@ -52,13 +52,13 @@ function spark(values: readonly (number | null)[], label: string): ReactNode {
   return hasTrend(values) ? <DotSpark values={values} label={label} /> : undefined;
 }
 
-/** First try, from Agent health, once it has a reading; null before. */
+/** The right tool in the top 5 (first try on older readings), from Agent health, once it has a reading; null before. */
 function firstTryStat(data: OverviewData): StatProps | null {
   const health = data.health;
   const tile = health?.firstTry;
   if (!health || !tile || tile.value === null) return null;
   return {
-    label: "First try",
+    label: tile.label,
     value: formatSharePercent(tile.value),
     delta: toDelta(
       pointDelta(tile.delta),
@@ -69,7 +69,7 @@ function firstTryStat(data: OverviewData): StatProps | null {
     hint: health.windowDays === data.window ? undefined : `Last ${health.windowDays} days`,
     trend: spark(
       tile.series.map((point) => point.value),
-      `First try per day, last ${health.windowDays} days`,
+      `${tile.label} per day, last ${health.windowDays} days`,
     ),
     href: health.href,
   };

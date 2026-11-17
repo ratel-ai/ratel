@@ -359,6 +359,8 @@
         "apps/web/lib/readings/trace-signals/view-workflows.ts",
         "apps/web/lib/readings/trace-signals/health-score.ts",
         "apps/web/lib/readings/trace-signals/health-score.test.ts",
+        "apps/web/lib/readings/trace-signals/health-outcomes.ts",
+        "apps/web/lib/readings/trace-signals/health-outcomes.test.ts",
         "apps/web/lib/readings/trace-signals/signals/accumulators.ts",
         "apps/web/lib/readings/trace-signals/signals/analyze.ts",
         "apps/web/lib/readings/trace-signals/signals/analyze-workflows.test.ts",

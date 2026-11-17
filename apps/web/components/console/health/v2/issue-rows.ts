@@ -167,7 +167,7 @@ export interface IssueRowsInput {
   /** Null when Fixes could not be read: no row then claims a fix. */
   fixes: readonly FixLookup[] | null;
   /** The Health score, when it leads the page: each row then says what it is worth, and the rows go most points first. */
-  score?: Pick<HealthScoreView, "value" | "parts"> | null;
+  score?: Pick<HealthScoreView, "value" | "parts" | "outcome"> | null;
 }
 
 export const ISSUE_PEEK_PREFIX = "issue:";

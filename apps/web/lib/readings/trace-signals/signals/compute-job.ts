@@ -14,6 +14,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { configured, decisionEngineConfigured } from "@/lib/readings/decisions/engine";
+import { outcomePillars, type PillarReading } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   HEALTH_SCORE_VERSION,
   healthScore,
@@ -157,7 +158,12 @@ export interface ComputeJobDeps {
   /** Queue the full-window run that follows a quick first reading. */
   enqueueFullReading: (projectId: string) => Promise<unknown>;
   /** Store the reading's Health score (RC-225) from the project's open issues, once they are persisted. */
-  storeHealthScore: (projectId: string, runId: string, turnsRead: number) => Promise<unknown>;
+  storeHealthScore: (
+    projectId: string,
+    runId: string,
+    turnsRead: number,
+    pillars: readonly PillarReading[],
+  ) => Promise<unknown>;
   now: () => Date;
   timeBudgetMs: number;
 }
@@ -212,11 +218,11 @@ function defaultDeps(env: Env): ComputeJobDeps {
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: async (projectId) => (await composition.importRunning?.(projectId)) ?? false,
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
-    storeHealthScore: async (projectId, runId, turnsRead) => {
+    storeHealthScore: async (projectId, runId, turnsRead, pillars) => {
       const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
       await setRunHealthScoreFn(runId, {
         version: HEALTH_SCORE_VERSION,
-        value: healthScore(scoredIssues(withStoredToolStandings(records)), turnsRead),
+        value: healthScore(scoredIssues(withStoredToolStandings(records)), turnsRead, pillars),
       });
     },
     now: () => new Date(),
@@ -428,7 +434,18 @@ export async function computeProjectTraceSignals(
     }
     logger.info(fields, "trace signal run completed");
     // An early reading's score is provisional: the change and the trend compare full readings only.
-    if (!earlyReading) await storeHealthScoreFor(projectId, run.id, result.turnsScanned, deps);
+    if (!earlyReading) {
+      // The measured half reads what this run stored, over its own window, as the page does.
+      const pillars = outcomePillars(
+        {
+          daily: result.summary.daily,
+          selfCorrections: corrections?.stored,
+          workflows: result.summary.workflows,
+        },
+        { end: window.end, days },
+      );
+      await storeHealthScoreFor(projectId, run.id, result.turnsScanned, pillars, deps);
+    }
     // The full window follows a quick week at once; an early reading for a
     // backlog or an import waits for them instead (the build's drain hook).
     if (early?.quickDays) await queueFullReading(projectId, deps);
@@ -704,10 +721,11 @@ async function storeHealthScoreFor(
   projectId: string,
   runId: string,
   turnsRead: number,
+  pillars: readonly PillarReading[],
   deps: Pick<ComputeJobDeps, "storeHealthScore">,
 ): Promise<void> {
   try {
-    await deps.storeHealthScore(projectId, runId, turnsRead);
+    await deps.storeHealthScore(projectId, runId, turnsRead, pillars);
   } catch (err) {
     logger.error({ err, project_id: projectId, run_id: runId }, "health score store failed");
     reportServerException(err, `project:${projectId}`, { operation: "trace_signals_health_score" });

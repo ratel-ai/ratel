@@ -118,9 +118,9 @@ test("after a run the page is ready with tiles, shapes, flow and signals", async
     155,
   );
   assert.equal(
-    model.tiles.find((t) => t.key === "first_try")?.value,
+    model.tiles.find((t) => t.key === "top_5")?.value,
     1,
-    "each chain step is a fresh search for a new need, not a retry",
+    "each chain step's tool sat in the top 5 of its own search",
   );
   assert.ok(model.flow.nodes.some((n) => n.id === "create_task" && n.tint === "magnet"));
   const magnet = model.signals.find((s) => s.kind === "magnet");

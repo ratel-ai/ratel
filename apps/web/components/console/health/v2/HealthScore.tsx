@@ -1,6 +1,6 @@
 import { StatusDot } from "@ratel/design-system/badge";
 import { cn } from "@ratel/design-system/cn";
-import { DotSpark } from "@ratel/design-system/dot-matrix";
+import { DotMeter, DotSpark } from "@ratel/design-system/dot-matrix";
 import { PeekLink } from "@ratel/design-system/panel";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -58,12 +58,15 @@ export function HealthScore({
   next = [],
   early = false,
   progress = null,
+  shared = false,
 }: {
   score: HealthScoreView;
   next?: readonly ScoreFix[];
   /** The reading is early (RC-224): the ring beats and a wave runs round it. */
   early?: boolean;
   progress?: EarlyProgress | null;
+  /** A public link (RC-226): a change is still shown, the team's own "first reading" line is not. */
+  shared?: boolean;
 }) {
   const copy = scoreCopy(score);
   return (
@@ -96,7 +99,7 @@ export function HealthScore({
                 />
               ) : null}
               {/* An early score is provisional: no change against a full reading until it is one. */}
-              {early ? null : <ScoreChange change={copy.change} />}
+              {early || (shared && !copy.change) ? null : <ScoreChange change={copy.change} />}
             </div>
           </div>
           <div className="flex flex-col gap-1">
@@ -116,6 +119,7 @@ export function HealthScore({
             </p>
           </div>
           <LostBar value={score.value} tone={copy.tone} lost={copy.lost} />
+          {copy.parts.length > 0 ? <ScoreParts parts={copy.parts} /> : null}
         </div>
       </div>
       {next.length > 0 ? (
@@ -324,5 +328,33 @@ function NextFixes({ fixes }: { fixes: readonly ScoreFix[] }) {
         })}
       </ol>
     </div>
+  );
+}
+
+/**
+ * What the score is made of (RC-226): each measured rate and the open issues,
+ * as a number and a row of pixels, so the one number never hides its parts.
+ */
+function ScoreParts({ parts }: { parts: ReturnType<typeof scoreCopy>["parts"] }) {
+  return (
+    <dl
+      className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-3 lg:grid-cols-6"
+      data-health-score-parts={parts.length}
+    >
+      {parts.map((part) => (
+        <div key={part.key} className="flex min-w-0 flex-col gap-1">
+          <dt className="truncate text-xs text-fg-subtle">{part.label}</dt>
+          <dd className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-fg tabular-nums">{part.value}</span>
+            <DotMeter
+              value={part.value / 100}
+              cells={10}
+              tone="neutral"
+              label={`${part.label}: ${part.value} of 100`}
+            />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }

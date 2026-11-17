@@ -198,6 +198,28 @@ export function turnFirstTry(
   });
 }
 
+/** How deep in a list the right tool may sit and still count as served: the agent reads that far. */
+export const SERVED_TOP_K = 5;
+
+/**
+ * Recall at k (RC-226): every tool the turn ran sat in the top `k` of a search
+ * before its first call. The tool the agent ran is the right one; whether it
+ * came first, or the agent searched twice for it, does not matter here, only
+ * whether search put it where the agent reads. Null when the turn has no
+ * search or no call with a target.
+ */
+export function turnInTopK(steps: readonly StepDraft[], k: number = SERVED_TOP_K): boolean | null {
+  const calls = firstCalls(steps);
+  if (calls.length === 0 || !steps.some((s) => s.kind === "search")) return null;
+  return calls.every((call) =>
+    steps.some((s) => {
+      if (s.kind !== "search" || s.ordinal >= call.ordinal || !s.hitIds) return false;
+      const rank = s.hitIds.indexOf(call.targetId!);
+      return rank >= 0 && rank < k;
+    }),
+  );
+}
+
 /**
  * Detour: the turn searched again for the same thing at least once, before or after
  * running something. A later search for a new need is not a detour.
