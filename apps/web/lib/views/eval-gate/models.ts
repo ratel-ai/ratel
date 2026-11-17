@@ -17,7 +17,7 @@ import type { ToolDef } from "@/lib/views/eval-gate/types";
  * - the **tool stand-in**: answers a tool call the recording has no result for;
  * - the **judge**: reads a run's path against the person's criteria.
  *
- * Real calls go through `anthropicClient` (`lib/anthropic/client.ts`), as the
+ * Real calls go through `anthropicClient` (`lib/readings/anthropic/client.ts`), as the
  * pipeline's labeller and Quality's analyst do. With no key there is no model
  * and callers say so. `EVAL_GATE_MOCK_MODEL=1` swaps in the deterministic
  * stand-ins, in local environments only (the `MATCH_QUALITY_MOCK_ANALYST`
