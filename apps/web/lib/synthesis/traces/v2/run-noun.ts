@@ -22,6 +22,11 @@ export function runNoun(viewsV3: boolean): RunNoun {
 }
 
 /** "Untitled turn · 35d8a7b7": a title in place of a raw id. */
+/** The list of runs under Traces: the first tab, or with the redesign the Turns tab, after Sessions (RC-503). */
+export function runsListPath(tracesPath: string, viewsV3: boolean): string {
+  return viewsV3 ? `${tracesPath}/turns` : tracesPath;
+}
+
 export function untitledTitle(kind: "turn" | "session", id: string): string {
   return `Untitled ${kind} · ${id.slice(0, SHORT_ID)}`;
 }

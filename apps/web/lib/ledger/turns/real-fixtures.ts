@@ -119,16 +119,8 @@ function factRowOf(row: ParsedTraceEvent): OtelFactRow {
   };
 }
 
-export interface PipelineOptions {
-  /** Flag `cloud-otlp-semconv-aliases`: run the alias pass after the AI SDK one, as ingest does. */
-  semconvAliases?: boolean;
-}
-
 /** Every body through decode and derivation, then the derived rows through the turn builder. */
-export function runPipeline(
-  bodies: readonly FixtureBody[],
-  options: PipelineOptions = {},
-): PipelineResult {
+export function runPipeline(bodies: readonly FixtureBody[]): PipelineResult {
   const spans: DecodedSpan[] = [];
   const toolRows: ParsedTraceEvent[] = [];
   const modelRows: ParsedTraceEvent[] = [];
@@ -142,7 +134,7 @@ export function runPipeline(
   for (const body of bodies) {
     const decoded = decodeOtlp(body.contentType, body.bytes);
     normalizeAiSdkSpans(decoded);
-    if (options.semconvAliases) normalizeSemconvAliases(decoded);
+    normalizeSemconvAliases(decoded);
     const calls = groupSpans(decoded);
     llmCalls += calls.length;
     for (const call of calls) {

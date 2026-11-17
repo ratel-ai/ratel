@@ -48,11 +48,11 @@ export function TracesHeader({
   const sessions = useTracesSessions();
   const noun = useRunNoun();
   const viewsV3 = useTraceViewsV3();
-  // RC-472: with `cloud-trace-views-v3`, Turns stays the first tab and Sessions groups them.
+  // RC-503: with `cloud-trace-views-v3`, Sessions is the first tab and Turns the second.
   const first = viewsV3
     ? [
-        { href: `${root}${carried}`, label: noun.many, exact: true },
-        { href: `${root}/sessions${carried}`, label: "Sessions" },
+        { href: `${root}${carried}`, label: "Sessions", exact: true },
+        { href: `${root}/turns${carried}`, label: noun.many },
       ]
     : [{ href: `${root}${carried}`, label: sessions ? "Sessions" : noun.many, exact: true }];
   return (

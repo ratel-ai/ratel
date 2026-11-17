@@ -33,12 +33,7 @@ export interface OtelLogRowsResult {
   dropped: number;
 }
 
-export interface OtelLogRowsOptions {
-  /** Flag `cloud-otlp-semconv-aliases`: keep the `gen_ai` content events too. */
-  genAiEvents?: boolean;
-}
-
-/** The `gen_ai` log events that carry a model call's messages, kept under the flag. */
+/** The `gen_ai` log events that carry a model call's messages. */
 export const GEN_AI_LOG_EVENT_NAMES: ReadonlySet<string> = new Set([
   "gen_ai.client.inference.operation.details",
   "gen_ai.system.message",
@@ -83,15 +78,10 @@ const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
 
 /** Filter and map normalized OTLP log records into standalone persistence rows. */
-export function toOtelLogRows(
-  projectId: string,
-  records: DecodedLogRecord[],
-  options: OtelLogRowsOptions = {},
-): OtelLogRowsResult {
+export function toOtelLogRows(projectId: string, records: DecodedLogRecord[]): OtelLogRowsResult {
   const accepted = records.filter(
     (record) =>
-      record.eventName.startsWith("ratel.") ||
-      (!!options.genAiEvents && GEN_AI_LOG_EVENT_NAMES.has(record.eventName)),
+      record.eventName.startsWith("ratel.") || GEN_AI_LOG_EVENT_NAMES.has(record.eventName),
   );
 
   return {

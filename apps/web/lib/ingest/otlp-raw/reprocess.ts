@@ -43,8 +43,6 @@ export interface ReprocessOptions {
 
 /** What ingest would decide for this project today. */
 export interface ReprocessIngestFlags {
-  /** `cloud-otlp-semconv-aliases`. */
-  semconvAliases: boolean;
   /** `cloud-session-replay`: payloads keep each call's reply and settings. */
   captureReply: boolean;
   /** `cloud-otlp-agent-span-dedupe` storage lookup; absent, the flag is off. */
@@ -211,7 +209,7 @@ export async function rebuildEventRows(
   flags: ReprocessIngestFlags,
 ): Promise<EventWithMetric[]> {
   normalizeAiSdkSpans(spans);
-  if (flags.semconvAliases) normalizeSemconvAliases(spans);
+  normalizeSemconvAliases(spans);
   const dedupe = await resolveAgentSpanDedupe(spans, projectId, flags.agentSpanDedupe, (err) => {
     throw err;
   });

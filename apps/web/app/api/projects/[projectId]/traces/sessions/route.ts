@@ -2,7 +2,7 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
-import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
+import { loadSessionListPage } from "@/lib/synthesis/traces/v2/sessions-list";
 import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { tracesSessionsResponse } from "@/lib/synthesis/traces-sessions/route";
 import { loadSessionsPage } from "@/lib/synthesis/traces-sessions/sessions";
@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/projects/:projectId/traces/sessions?show=all|failed&cursor=<c>:
  * the next page of the Sessions tab (RC-313), newest first, 50 rows, no
- * timeframe. Behind `FF_TRACES_SESSIONS`, or `FF_TRACE_VIEWS_V3` (RC-472). A read; no product event.
+ * timeframe. Behind `FF_TRACES_SESSIONS`, or `FF_TRACE_VIEWS_V3` (RC-472),
+ * which reads the sessions-only list (RC-503). A read; no product event.
  */
 export const GET = withRequestLog(handleGet);
 
@@ -27,17 +28,23 @@ async function handleGet(
   const params = new URL(request.url).searchParams;
   const filter = parseSessionsFilter(params.getAll(SESSIONS_FILTER_PARAM));
   const cursor = params.get("cursor");
-  const load = async (id: string) => {
-    const session = await getSessionContext();
-    const askFromPayload = session
-      ? await payloadContentEnabledForActor(id, session.user.externalId).catch(() => false)
-      : false;
-    return loadSessionsPage(id, { filter, cursor, askFromPayload });
+  let viewsV3: boolean | null = null;
+  const v3 = async () => {
+    if (viewsV3 === null) {
+      const session = await getSessionContext();
+      viewsV3 = session
+        ? await traceViewsV3EnabledForActor(projectId, session.user.externalId)
+        : false;
+    }
+    return viewsV3;
   };
+  const load = async (id: string) =>
+    (await v3())
+      ? loadSessionListPage(id, { filter, cursor })
+      : loadSessionsPage(id, { filter, cursor });
   return tracesSessionsResponse(projectId, load, {
     // RC-472: the Sessions tab of the v3 views pages through the same list.
-    enabled: async () =>
-      tracesSessionsEnabled() || traceViewsV3EnabledForActor(projectId, `project:${projectId}`),
+    enabled: async () => (await v3()) || tracesSessionsEnabled(),
     dbConfigured: isDbConfigured,
     getSession: async () => {
       const session = await getSessionContext();

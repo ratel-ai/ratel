@@ -14,7 +14,8 @@ import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/trac
 import { experimentLabel } from "@/lib/synthesis/traces/v2/logs";
 import { RUN_STATUS_LABEL, RUN_STATUS_TONE, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { RelativeTime, ToolBadges, TruncatedText } from "./cells";
-import { useRunNoun } from "./views-v3-context";
+import { TracesListTable } from "./TracesListTable";
+import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
 
 export type RunSort = "started" | "duration" | "tokens" | "cost";
 
@@ -50,6 +51,7 @@ export function RunsTable({
   empty?: ReactNode;
 }) {
   const noun = useRunNoun();
+  const viewsV3 = useTraceViewsV3();
   const sortHref = (id: RunSort) => (direction: SortDirection) =>
     `${pathname}${withSort(search, id, direction)}`;
   const full = picked.length >= 2;
@@ -159,19 +161,19 @@ export function RunsTable({
       : []),
   ];
 
-  return (
-    <DataTable
-      caption={noun.many}
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.id}
-      onRowOpen={onOpen}
-      onRowToggle={(row) => onTogglePick(row.id)}
-      selectedKey={openId}
-      sort={sort}
-      empty={empty}
-    />
-  );
+  const table = {
+    caption: noun.many,
+    rows,
+    rowKey: (row: RunRow) => row.id,
+    onRowOpen: onOpen,
+    onRowToggle: (row: RunRow) => onTogglePick(row.id),
+    selectedKey: openId,
+    sort,
+    empty,
+  };
+  // RC-503: with the redesign, Turns shares the Sessions layout, its ID first.
+  if (viewsV3) return <TracesListTable {...table} idOf={(row) => row.id} columns={columns} />;
+  return <DataTable {...table} columns={columns} />;
 }
 
 /**

@@ -26,7 +26,11 @@ import {
   seedLedger,
   setupDb,
 } from "@/lib/readings/trace-signals/signals/integration-support";
-import { loadVerdicts, saveVerdicts } from "@/lib/readings/trace-signals/workflows/decide-queries";
+import {
+  loadCarriedVerdicts,
+  loadVerdicts,
+  saveVerdicts,
+} from "@/lib/readings/trace-signals/workflows/decide-queries";
 import { loadAskSourcesByTurn } from "@/lib/readings/trace-signals/workflows/label-queries";
 
 /**
@@ -167,6 +171,7 @@ function deps(
     name: null,
     nameModel: "test-model",
     observability: { trackSystemEvent: async (event) => void tracked.push(event) },
+    adaptive: async () => false,
     ...over,
   };
 }
@@ -372,6 +377,66 @@ test("the decision engine places the asks once; later readings read its cached v
   assert.equal(second.sentimentJudged, 0);
   assert.equal(asked.length, 1);
   assert.equal(second.placement, "judged");
+});
+
+test("behind the flag, a new topic does not re-ask every ask: placements whose topic is unchanged are carried after an audit", async () => {
+  const { client, db } = await seed();
+  const asked: string[][] = [];
+  const judge = {
+    model: "fake-engine",
+    judge: async (
+      cases: readonly { id: string; query: string }[],
+      corpus: readonly { entryId: string; name: string }[],
+    ) => {
+      asked.push(cases.map((c) => c.query));
+      const pick = (query: string) =>
+        corpus.find(
+          (entry) =>
+            (query.includes("deliver") ? /deliver/i : /inspect/i).test(entry.name) &&
+            !query.includes("thanks"),
+        )?.entryId ?? "none";
+      return cases.map((c) => ({
+        id: c.id,
+        entryId: pick(c.query),
+        confident: true,
+        confidence: 0.95,
+      }));
+    },
+  };
+  const adaptive = {
+    adaptive: async () => true,
+    loadCarried: (p: string, hashes: readonly string[]) => loadCarriedVerdicts(p, hashes, db),
+  };
+  await assignProjectTopics(PROJECT_ID, deps(db, [], { judge, name: null, ...adaptive }));
+  const printed = (
+    await client.query<{ n: number }>(
+      `select count(*)::int as n from trace_workflow_verdicts where verdict = 'workflow' and option_print is not null`,
+    )
+  ).rows[0]!.n;
+  assert.ok(printed > 0, "decided placements are stored with their topic's print");
+
+  // A topic appears that none of these asks are about: the option list changed.
+  await client.query(
+    `insert into trace_topics (project_id, topic_id, name, description, label_source, input_hash) values ($1, 't_refunds', 'Refund requests', 'Asking for money back.', 'llm', 'x')`,
+    [PROJECT_ID],
+  );
+  asked.length = 0;
+  const second = await assignProjectTopics(
+    PROJECT_ID,
+    deps(db, [], { judge, name: null, ...adaptive }),
+  );
+  assert.equal(second.placement, "judged");
+  // Under the audit's sample size every carried placement is re-asked; they agree, so they stand.
+  const reasked = asked.flat().length;
+  assert.ok(reasked > 0 && reasked <= 20, `the audit sample, got ${reasked}`);
+
+  asked.length = 0;
+  const third = await assignProjectTopics(
+    PROJECT_ID,
+    deps(db, [], { judge, name: null, ...adaptive }),
+  );
+  assert.equal(third.judged, 0, "the same list again: every placement is an exact hit");
+  assert.equal(asked.length, 0);
 });
 
 test("a trace of model calls alone is an ask too: read from its prompt, counted unanswered, never written as a turn", async () => {

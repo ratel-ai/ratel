@@ -6,9 +6,11 @@ import { usePeek } from "@ratel/design-system/panel";
 import { isTypingTarget } from "@ratel/design-system/peek";
 import { Callout } from "@ratel/design-system/states";
 import { Check, Ellipsis, ListChecks, TriangleAlert, Wrench } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createUrlWriter, withQueryUpdates } from "@/lib/synthesis/traces/v2/url-writer";
+import type { PanelChat, PanelChatTurn } from "@/lib/views/session-chat/actions";
 import {
   type ChatTurn,
   formatStepTime,
@@ -236,6 +238,60 @@ export function SessionChatView({ projectId, chat, settingsHref }: SessionChatVi
   );
 }
 
+/**
+ * The whole session as chat, at rest (RC-503): every turn's message, its work
+ * line and its reply, in order, each turn linking to its own trace. The
+ * Sessions tab's side panel shows it; the replay page plays it.
+ */
+export function SessionChatTranscript({
+  chat,
+  turnHref,
+}: {
+  chat: PanelChat;
+  turnHref: (turn: PanelChatTurn) => string | null;
+}) {
+  if (chat.turns.length === 0)
+    return <p className="text-sm text-fg-muted">This session has no finished turn yet.</p>;
+  return (
+    <ol aria-label="Session chat" className="flex flex-col gap-3" data-session-transcript>
+      {chat.textOff ? (
+        <Callout tone="info">
+          Message text is off for this project, so the turns show without the words.
+        </Callout>
+      ) : null}
+      <DaySeparator at={chat.turns[0]!.startedAt} />
+      {chat.turns.map((turn) => {
+        const href = turnHref(turn);
+        return (
+          <li
+            key={turn.turnIndex}
+            className="flex flex-col gap-2"
+            data-transcript-turn={turn.turnIndex}
+          >
+            <Bubble side="person" text={turn.ask} textOff={chat.textOff} at={turn.startedAt} />
+            <div className="flex flex-wrap items-center gap-2 text-ui text-fg-muted">
+              <Wrench aria-hidden className="size-3.5" />
+              <span className="tabular-nums">{turn.work.label}</span>
+              {href ? (
+                <Link
+                  href={href}
+                  className="ml-auto text-xs text-fg-muted underline decoration-line-strong underline-offset-4 hover:text-fg"
+                  data-turn-link={turn.turnIndex}
+                >
+                  Open turn {turn.turnIndex}
+                </Link>
+              ) : null}
+            </div>
+            {turn.reply !== null || chat.textOff ? (
+              <Bubble side="agent" text={turn.reply} textOff={chat.textOff} at={turn.endedAt} />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function TurnBlock({
   chat,
   phase,
@@ -410,29 +466,25 @@ function Bubble({
   text,
   textOff,
   at,
-  selected,
+  selected = false,
   onClick,
 }: {
   side: "person" | "agent";
   text: string | null;
   textOff: boolean;
   at: string;
-  selected: boolean;
-  onClick: () => void;
+  selected?: boolean;
+  onClick?: () => void;
 }) {
   const person = side === "person";
-  return (
-    <button
-      type="button"
-      data-chat-bubble={side}
-      aria-pressed={selected}
-      onClick={onClick}
-      className={cn(
-        "flex max-w-[80%] flex-col gap-1 rounded-xl border px-3.5 py-2.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus",
-        person ? "self-end border-line-strong bg-selected" : "self-start border-line bg-raised",
-        selected && "border-line-active",
-      )}
-    >
+  const className = cn(
+    "flex max-w-[80%] flex-col gap-1 rounded-xl border px-3.5 py-2.5 text-left text-sm",
+    onClick && "outline-none focus-visible:ring-2 focus-visible:ring-focus",
+    person ? "self-end border-line-strong bg-selected" : "self-start border-line bg-raised",
+    selected && "border-line-active",
+  );
+  const body = (
+    <>
       {textOff ? (
         <span aria-label="Message text is off" className="flex w-56 flex-col gap-1.5 py-1">
           <span className="h-2 w-full rounded-full bg-hover" />
@@ -446,6 +498,24 @@ function Bubble({
         </span>
       )}
       <span className="self-end text-xs tabular-nums text-fg-subtle">{clockTime(at)}</span>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <div data-chat-bubble={side} className={className}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-chat-bubble={side}
+      aria-pressed={selected}
+      onClick={onClick}
+      className={className}
+    >
+      {body}
     </button>
   );
 }

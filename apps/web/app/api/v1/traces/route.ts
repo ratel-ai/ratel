@@ -5,7 +5,6 @@ import {
 } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
-import { semconvAliasesEnabled } from "@/lib/ingest/otlp/semconv/enabled";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
 import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
@@ -75,8 +74,6 @@ async function handlePost(req: Request) {
     // Session chat: each call's payload keeps its reply and request settings.
     sessionChatCapture: (projectId, organization) =>
       sessionChatCaptureEnabled(projectId, organization),
-    // Deprecated gen_ai keys and OpenLLMetry cache aliases onto the canonical keys.
-    semconvAliases: (projectId, organization) => semconvAliasesEnabled(projectId, organization),
     // Content sent as gen_ai log records joins its model call.
     genAiLogs: createGenAiLogStore(),
     // Raw request bodies for the organizations that have the flag.

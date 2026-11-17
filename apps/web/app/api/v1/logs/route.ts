@@ -1,6 +1,5 @@
 import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
-import { semconvAliasesEnabled } from "@/lib/ingest/otlp/semconv/enabled";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
 import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
@@ -31,7 +30,6 @@ async function handlePost(req: Request) {
       isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
       store: createOtlpRawStore(),
     },
-    semconvAliases: (projectId, organization) => semconvAliasesEnabled(projectId, organization),
     genAiLogJoin: {
       store: createGenAiLogStore(),
       sessionChatCapture: (projectId, organization) =>

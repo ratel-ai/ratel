@@ -5,10 +5,7 @@ import { getLogger } from "@/lib/platform/logger";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
 import { reportServerException } from "@/lib/platform/telemetry";
-import {
-  loadPayloadContent,
-  payloadContentEnabledForActor,
-} from "@/lib/synthesis/traces/payload-content";
+import { loadPayloadContent } from "@/lib/synthesis/traces/payload-content";
 import { getTraceSpansWithTruncation } from "@/lib/synthesis/traces/queries";
 import { runSummaryResponse } from "@/lib/synthesis/traces/v2/run-summary-route";
 
@@ -41,12 +38,10 @@ async function handleGet(
       withStatementTimeout((db) => getTraceSpansWithTruncation(projectId, traceId, db), {
         operation: "trace_run_summary",
       }),
-    loadPayload: async (projectId, traceId, actor) =>
-      (await payloadContentEnabledForActor(projectId, actor))
-        ? withStatementTimeout((db) => loadPayloadContent(projectId, traceId, db), {
-            operation: "trace_run_payload",
-          })
-        : null,
+    loadPayload: (projectId, traceId) =>
+      withStatementTimeout((db) => loadPayloadContent(projectId, traceId, db), {
+        operation: "trace_run_payload",
+      }),
     setLogContext: (fields) => setRequestLogContext(request, fields),
     logError: (fields, message) => logger.error(fields, message),
     reportException: reportServerException,

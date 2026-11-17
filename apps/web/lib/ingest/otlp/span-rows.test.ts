@@ -434,7 +434,7 @@ for (const [label, build, children] of [
   });
 }
 
-test("flag on: an agent span with no model call in its trace keeps class, tokens and cost", () => {
+test("an agent span with no model call in its trace keeps class, tokens and cost", () => {
   const spans = agentOnlyTrace();
   const [root] = toOtelSpanRows("project-1", spans, dedupe(spans));
   assert.equal(root.spanClass, "llm_call");
@@ -442,7 +442,7 @@ test("flag on: an agent span with no model call in its trace keeps class, tokens
   assert.ok(Number(root.costUsd) > 0);
 });
 
-test("flag on: a root alone in its batch drops its tokens when storage has the model calls", () => {
+test("a root alone in its batch drops its tokens when storage has the model calls", () => {
   const [root] = langGraphTrace();
   const [stored] = toOtelSpanRows("project-1", [root], dedupe([root], [LANGGRAPH_TRACE]));
   assert.equal(stored.spanClass, "other");
@@ -452,7 +452,7 @@ test("flag on: a root alone in its batch drops its tokens when storage has the m
   assert.equal(lone.inputTokens, 300);
 });
 
-/* --- resource environment (flag cloud-otlp-semconv-aliases) ------------------ */
+/* --- resource environment ---------------------------------------------------- */
 
 const PROD_RESOURCE = {
   "service.name": "agent",
@@ -460,53 +460,28 @@ const PROD_RESOURCE = {
   "service.version": "1.4.2",
 };
 
-test("flag on: the resource environment and service version are stored", () => {
-  const [row] = toOtelSpanRows(
-    "project-1",
-    [span({ resourceAttributes: PROD_RESOURCE })],
-    undefined,
-    {
-      resourceEnvironment: true,
-    },
-  );
+test("the resource environment and service version are stored", () => {
+  const [row] = toOtelSpanRows("project-1", [span({ resourceAttributes: PROD_RESOURCE })]);
   assert.equal(row.attributes["deployment.environment.name"], "prod");
   assert.equal(row.attributes["service.version"], "1.4.2");
   assert.equal(row.attributes["deployment.environment"], undefined);
 });
 
-test("flag on: a span attribute of the same key wins over the resource", () => {
-  const [row] = toOtelSpanRows(
-    "project-1",
-    [
-      span({
-        resourceAttributes: PROD_RESOURCE,
-        attributes: { "deployment.environment.name": "canary" },
-      }),
-    ],
-    undefined,
-    { resourceEnvironment: true },
-  );
-  assert.equal(row.attributes["deployment.environment.name"], "canary");
-});
-
-test("flag on: the legacy deployment.environment is kept when .name is absent", () => {
-  const [row] = toOtelSpanRows(
-    "project-1",
-    [span({ resourceAttributes: { "deployment.environment": "staging" } })],
-    undefined,
-    { resourceEnvironment: true },
-  );
-  assert.equal(row.attributes["deployment.environment"], "staging");
-  assert.equal(row.attributes["deployment.environment.name"], undefined);
-  assert.equal(row.attributes["service.version"], undefined);
-});
-
-test("flag off: the resource environment is not stored", () => {
+test("a span attribute of the same key wins over the resource", () => {
   const [row] = toOtelSpanRows("project-1", [
     span({
       resourceAttributes: PROD_RESOURCE,
       attributes: { "deployment.environment.name": "canary" },
     }),
   ]);
-  assert.deepEqual(row.attributes, {});
+  assert.equal(row.attributes["deployment.environment.name"], "canary");
+});
+
+test("the legacy deployment.environment is kept when .name is absent", () => {
+  const [row] = toOtelSpanRows("project-1", [
+    span({ resourceAttributes: { "deployment.environment": "staging" } }),
+  ]);
+  assert.equal(row.attributes["deployment.environment"], "staging");
+  assert.equal(row.attributes["deployment.environment.name"], undefined);
+  assert.equal(row.attributes["service.version"], undefined);
 });

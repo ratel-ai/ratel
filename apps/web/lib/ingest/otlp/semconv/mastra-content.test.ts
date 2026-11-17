@@ -12,9 +12,9 @@ import { normalizeSemconvAliases } from "./aliases";
 import { mapMastraInput } from "./mastra-content";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: the real Mastra fixture
+ * The real Mastra fixture
  * (`@mastra/otel-exporter` 1.4.4) carries its input on the spans around the
- * `chat` anchor. With the flag on it reaches `events.payload`.
+ * `chat` anchor. It reaches `events.payload`.
  */
 
 function ingest(flag: boolean) {

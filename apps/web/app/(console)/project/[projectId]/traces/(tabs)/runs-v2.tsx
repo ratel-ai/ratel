@@ -13,7 +13,6 @@ import type { ExperimentMode, ExperimentSummary } from "@/lib/synthesis/experime
 import { calibrationDetailPath } from "@/lib/synthesis/traces/calibration-view";
 import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
 import { selectExperimentBanner } from "@/lib/synthesis/traces/experiment-view";
-import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
 import {
   EMPTY_TRACE_FACETS,
   getTraceAggregates,
@@ -66,10 +65,7 @@ export async function RunsPageV2({
   const view = resolveTraceListView(params, now);
   const spanView = resolveSpanListView(params, now);
   const distinctId = `project:${project.id}`;
-  const [askFromPayload, viewsV3] = await Promise.all([
-    payloadContentEnabledForActor(project.id, `project:${project.id}`).catch(() => false),
-    traceViewsV3EnabledForActor(project.id, `project:${project.id}`),
-  ]);
+  const viewsV3 = await traceViewsV3EnabledForActor(project.id, `project:${project.id}`);
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
@@ -143,13 +139,10 @@ export async function RunsPageV2({
             distinctId,
             fallback: null,
             load: () =>
-              withStatementTimeout(
-                (db) => listRunAsks(project.id, traceIds, db, { fromPayload: askFromPayload }),
-                {
-                  operation: "trace_run_asks",
-                  timeoutMs,
-                },
-              ),
+              withStatementTimeout((db) => listRunAsks(project.id, traceIds, db), {
+                operation: "trace_run_asks",
+                timeoutMs,
+              }),
           }),
         ])
       : [new Map<string, string[]>(), new Map<string, RunAsk>()];

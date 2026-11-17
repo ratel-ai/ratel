@@ -19,6 +19,8 @@ import type {
   JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
+import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
@@ -86,6 +88,7 @@ import {
   normalizeAsk,
 } from "@/lib/readings/trace-signals/workflows/decide";
 import {
+  loadCarriedVerdicts as loadCarriedVerdictsFn,
   loadVerdicts as loadVerdictsFn,
   saveVerdicts as saveVerdictsFn,
   type VerdictRow,
@@ -164,6 +167,9 @@ export interface AssignTopicsDeps {
   loadReading: typeof loadTopicReadingFn;
   loadVerdicts: typeof loadVerdictsFn;
   saveVerdicts: typeof saveVerdictsFn;
+  /** `cloud-adaptive-labelling` for the project: placements survive topic changes behind an audit (RC-395). */
+  adaptive?: (projectId: string) => Promise<boolean>;
+  loadCarried?: typeof loadCarriedVerdictsFn;
   saveReading: typeof saveTopicReadingFn;
   /** The decision engine with the topic framing; null without a key. */
   judge: JudgeEngine | null;
@@ -282,6 +288,8 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     loadReading: loadTopicReadingFn,
     loadVerdicts: loadVerdictsFn,
     saveVerdicts: saveVerdictsFn,
+    adaptive: (projectId) => adaptiveLabellingForProject(projectId),
+    loadCarried: loadCarriedVerdictsFn,
     saveReading: saveTopicReadingFn,
     judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
     sentimentJudge: "sentimentJudge" in overrides ? null : topicJudgeFromEnv(SENTIMENT_FRAMING),
@@ -344,13 +352,28 @@ export function modelOnlyTurn(trace: ModelOnlyTrace, salt: string | null): Topic
   };
 }
 
-/** The verdict as the cache keeps it: the chosen option in `workflow_id`. */
-function toRow(verdict: JudgeVerdict, known: ReadonlySet<string>): VerdictRow {
+/** Topic placements are carried between topic sets by the chosen topic's own print. */
+const TOPIC_FAMILY = "topic";
+
+/** The verdict as the cache keeps it: the chosen option in `workflow_id`, with that option's print. */
+function toRow(
+  verdict: JudgeVerdict,
+  known: ReadonlySet<string>,
+  options: readonly CorpusEntry[] = [],
+): VerdictRow {
   const confidence = verdict.confidence ?? null;
   if (verdict.entryId === NONE_OPTION_ID)
     return { promptHash: verdict.id, verdict: "none", workflowId: null, confidence };
-  if (known.has(verdict.entryId))
-    return { promptHash: verdict.id, verdict: "workflow", workflowId: verdict.entryId, confidence };
+  if (known.has(verdict.entryId)) {
+    const option = options.find((o) => o.entryId === verdict.entryId);
+    return {
+      promptHash: verdict.id,
+      verdict: "workflow",
+      workflowId: verdict.entryId,
+      confidence,
+      optionPrint: option ? optionPrint(TOPIC_FAMILY, option) : null,
+    };
+  }
   return { promptHash: verdict.id, verdict: "unclear", workflowId: null, confidence };
 }
 
@@ -373,8 +396,9 @@ async function judgeAsks(
   options: readonly CorpusEntry[],
   optionsHash: string,
   budget: number,
-  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts">,
+  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts" | "loadCarried">,
   operation: string,
+  carry = false,
 ): Promise<Judged> {
   const cases = askCases(asks);
   const known = new Set(options.map((option) => option.entryId));
@@ -390,6 +414,51 @@ async function judgeAsks(
   );
   for (const [id, verdict] of cached) read(id, verdict.entryId);
   const capacity = judge.capacity ? judge.capacity(options) : budget;
+  if (carry && deps.loadCarried) {
+    const missingIds = cases.filter((c) => !cached.has(c.id)).map((c) => c.id);
+    if (missingIds.length === 0) return { choices, fresh: 0 };
+    try {
+      const previous = await deps.loadCarried(projectId, missingIds);
+      const outcome = await decideWithCarry({
+        family: TOPIC_FAMILY,
+        cases,
+        options,
+        exact: cached,
+        previous,
+        judge,
+        budget: Math.max(0, Math.min(budget, capacity)),
+      });
+      const rows = [
+        ...outcome.fresh.map((verdict) => toRow(verdict, known, options)),
+        ...[...outcome.carried].map(([promptHash, optionId]) =>
+          toRow({ id: promptHash, entryId: optionId, confident: true }, known, options),
+        ),
+      ];
+      await deps.saveVerdicts(projectId, optionsHash, judge.model, rows);
+      for (const verdict of outcome.fresh) read(verdict.id, verdict.entryId);
+      for (const [id, optionId] of outcome.carried) read(id, optionId);
+      logger.info(
+        {
+          project_id: projectId,
+          operation,
+          asked: outcome.asked,
+          carried: outcome.carried.size,
+          audited: outcome.audited,
+          audit_agreed: outcome.auditAgreed,
+          audit: outcome.audit,
+        },
+        "carried decisions checked",
+      );
+      return { choices, fresh: outcome.asked };
+    } catch (err) {
+      logger.error(
+        { err, project_id: projectId, asks: missingIds.length, operation },
+        "topic decisions failed",
+      );
+      reportServerException(err, `project:${projectId}`, { operation });
+      return { choices, fresh: 0 };
+    }
+  }
   const missing = cases
     .filter((c) => !cached.has(c.id))
     .slice(0, Math.max(0, Math.min(budget, capacity)));
@@ -400,7 +469,7 @@ async function judgeAsks(
       projectId,
       optionsHash,
       judge.model,
-      fresh.map((verdict) => toRow(verdict, known)),
+      fresh.map((verdict) => toRow(verdict, known, options)),
     );
     for (const verdict of fresh) read(verdict.id, verdict.entryId);
     return { choices, fresh: missing.length };
@@ -579,6 +648,10 @@ async function read(
   const askedTurns = distinct.reduce((sum, ask) => sum + ask.turnIds.length, 0);
   let budget = MAX_JUDGED_ASKS;
   let judged = 0;
+  const carry =
+    deps.judge !== null && distinct.length > 0
+      ? ((await deps.adaptive?.(projectId)) ?? false)
+      : false;
 
   // Pass one: the topics there are.
   const current = stored.filter((topic) => topic.retiredAt === null);
@@ -593,6 +666,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
+          carry,
         )
       : null;
   budget -= first?.fresh ?? 0;
@@ -631,6 +705,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
+          carry,
         )
       : null;
   judged += second?.fresh ?? 0;

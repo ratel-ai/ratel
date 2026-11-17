@@ -475,6 +475,17 @@
     "@/lib/match-quality/judge": {
       "default": "@/lib/readings/decisions/judge",
       "symbols": {
+        "AdaptiveCensus": "@/lib/synthesis/match-quality/judge",
+        "entryIdentities": "@/lib/synthesis/match-quality/judge",
+        "labelPrint": "@/lib/synthesis/match-quality/judge",
+        "readPrint": "@/lib/synthesis/match-quality/judge",
+        "ADAPTIVE_ROUND_SIZE": "@/lib/synthesis/match-quality/judge",
+        "ADAPTIVE_MAX_ROUNDS": "@/lib/synthesis/match-quality/judge",
+        "DRIFT_PER_STRATUM": "@/lib/synthesis/match-quality/judge",
+        "AdaptiveTally": "@/lib/synthesis/match-quality/judge",
+        "sampleAdaptively": "@/lib/synthesis/match-quality/judge",
+        "AdaptiveOptions": "@/lib/synthesis/match-quality/judge",
+        "ADAPTIVE_DEADLINE_MS": "@/lib/synthesis/match-quality/judge",
         "MAX_DISPUTED_CASES": "@/lib/synthesis/match-quality/judge",
         "MAX_CONTROL_CASES": "@/lib/synthesis/match-quality/judge",
         "SHORTLIST_PER_ARM": "@/lib/synthesis/match-quality/judge",

@@ -129,6 +129,32 @@ export function TraceView(props: TraceViewProps) {
     [rows, writer],
   );
 
+  const raw = useTraceRaw(props.projectId, props.traceId, props.viewsV3 === true);
+  // RC-501: a wrapper step shows its nearest model call's content, and links to it.
+  const descendants = useMemo(() => {
+    const out = [];
+    for (
+      let index = shown + 1;
+      index < rows.length && rows[index]!.depth > rows[shown]!.depth;
+      index += 1
+    ) {
+      const span = rows[index]!.span;
+      out.push({
+        spanId: span.spanId,
+        spanClass: span.spanClass,
+        attributes: { ...span.attributes, ...raw.spans.get(span.spanId)?.attributes },
+      });
+    }
+    return out;
+  }, [rows, shown, raw.spans]);
+  const selectSpan = useCallback(
+    (spanId: string) => {
+      const index = rows.findIndex((row) => row.span.spanId === spanId);
+      if (index >= 0) select(index);
+    },
+    [rows, select],
+  );
+
   const toggle = useCallback((index: number) => {
     setCollapsed((current) => {
       const next = new Set(current);
@@ -147,7 +173,6 @@ export function TraceView(props: TraceViewProps) {
   );
 
   const noun = runNoun(props.viewsV3 === true);
-  const raw = useTraceRaw(props.projectId, props.traceId, props.viewsV3 === true);
 
   const kindSummary = useMemo(() => summarizeKinds(rows.map((row) => stepKind(row.span))), [rows]);
 
@@ -254,6 +279,9 @@ export function TraceView(props: TraceViewProps) {
                         raw={raw.spans.get(selectedRow.span.spanId) ?? null}
                         rawState={raw.state}
                         payload={payloadContent}
+                        descendants={descendants}
+                        turnHasContent={content.contentCaptured}
+                        onSelectSpan={selectSpan}
                       />
                     ) : undefined}
                   </SpanInspector>

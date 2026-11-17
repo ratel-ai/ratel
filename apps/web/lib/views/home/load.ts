@@ -6,7 +6,6 @@ import {
   getPromptCacheTotals,
   type PromptCacheTotals,
 } from "@/lib/ingest/otlp/queries";
-import { semconvAliasesEnabled } from "@/lib/ingest/otlp/semconv/enabled";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
 import {
@@ -175,7 +174,7 @@ export interface OverviewReads {
   /** Null when the read failed: then nobody is sent to the setup guide by mistake. */
   telemetry: TracesIngestDiagnostics | null;
   dailyAggregates: DailyAggregateRow[];
-  /** Flag `cloud-otlp-semconv-aliases`: the window's cached and input tokens. Absent or null when off or unread. */
+  /** The window's cached and input tokens for the prompt cache hit rate. Absent or null when unread. */
   promptCache?: PromptCacheTotals | null;
   /** Null when Agent health is off. */
   health: HealthPageModel | null;
@@ -377,16 +376,11 @@ export async function loadOverview({
       fallback: unavailableSelfCorrectionsCard(project.id, healthWindow),
       load: () => loadSelfCorrectionsCard(project.id, healthWindow),
     }),
-    // Flag `cloud-otlp-semconv-aliases`: the prompt cache hit rate, decided per organization as at ingest.
-    semconvAliasesEnabled(project.id, null).then((on) =>
-      on
-        ? bounded<PromptCacheTotals | null>(
-            "overview_prompt_cache",
-            null,
-            (db) => getPromptCacheTotals(project.id, range.since, range.until, db),
-            supplementary,
-          )
-        : null,
+    bounded<PromptCacheTotals | null>(
+      "overview_prompt_cache",
+      null,
+      (db) => getPromptCacheTotals(project.id, range.since, range.until, db),
+      supplementary,
     ),
   ]);
 

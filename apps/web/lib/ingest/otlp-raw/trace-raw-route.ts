@@ -26,8 +26,6 @@ export interface TraceRawRouteDeps {
   getSession(): Promise<{ userId: string; externalId: string } | null>;
   findProject(projectId: string, userId: string): Promise<{ projectId: string } | null>;
   flagEnabled(projectId: string, actor: string): Promise<boolean>;
-  /** The content kill switch (`cloud-payload-content`): raw spans carry message content. */
-  contentEnabled(projectId: string, actor: string): Promise<boolean>;
   /** The project's `session_replay_settings.read_content`: off, content keys are left out. */
   readContent(projectId: string): Promise<boolean>;
   loadRaw(projectId: string, traceId: string): Promise<TraceRawSpans>;
@@ -43,9 +41,8 @@ const NOT_FOUND = "This run isn't available.";
  * GET one run's raw spans from `otlp_raw_exports` (RC-412), for a member of
  * its project with `cloud-trace-views-v3` on. `?format=otlp` answers the
  * whole trace as an OTLP/JSON file. A project without raw capture gets no
- * spans, not an error. Raw spans carry message content, so with the content
- * kill switch off the route reads nothing: no spans, and no download. With
- * the project's `read_content` off, both leave content keys out. Both always
+ * spans, not an error. With the project's `read_content` off, both leave
+ * content keys out. Both always
  * redact credentials (`redact.ts`). A download cut at the read bounds is
  * marked partial. A read; no product event.
  */
@@ -68,19 +65,6 @@ export async function traceRawResponse(
   }
   const format = new URL(request.url).searchParams.get("format") === "otlp" ? "otlp" : "spans";
   deps.setLogContext({ project_id: scope.projectId, trace_id: traceId, format });
-  if (!(await deps.contentEnabled(scope.projectId, session.externalId))) {
-    deps.setLogContext({ raw_content_off: true });
-    if (format === "otlp") return Response.json({ ok: false, message: NOT_FOUND }, { status: 404 });
-    const empty: TraceRawRouteResponse = {
-      ok: true,
-      exports: 0,
-      truncated: false,
-      contentWithheld: true,
-      spans: [],
-    };
-    return Response.json(empty, { headers: { "cache-control": "no-store" } });
-  }
-
   const policy: RawViewPolicy = { readContent: await deps.readContent(scope.projectId) };
   deps.setLogContext({ raw_read_content: policy.readContent });
   if (format === "otlp") {

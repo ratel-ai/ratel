@@ -14,6 +14,8 @@ import {
   type JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { type CarryOutcome, decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
+import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import {
   type AskGroup,
   aggregateDecisions,
@@ -27,6 +29,7 @@ import {
   WORKFLOW_FRAMING,
 } from "./decide";
 import {
+  loadCarriedVerdicts as loadCarriedVerdictsFn,
   loadRecentAskGroups as loadRecentAskGroupsFn,
   loadVerdicts as loadVerdictsFn,
   saveInsights as saveInsightsFn,
@@ -67,6 +70,9 @@ export interface DecideDeps {
   loadVerdicts: typeof loadVerdictsFn;
   saveVerdicts: typeof saveVerdictsFn;
   saveInsights: typeof saveInsightsFn;
+  /** `cloud-adaptive-labelling` for the project: carry decisions across option changes (RC-395). */
+  adaptive?: (projectId: string) => Promise<boolean>;
+  loadCarried?: typeof loadCarriedVerdictsFn;
   now: () => Date;
 }
 
@@ -110,8 +116,91 @@ export function defaultDecideDeps(env: Env = process.env): DecideDeps {
     loadVerdicts: loadVerdictsFn,
     saveVerdicts: saveVerdictsFn,
     saveInsights: saveInsightsFn,
+    adaptive: (projectId) => adaptiveLabellingForProject(projectId),
+    loadCarried: loadCarriedVerdictsFn,
     now: () => new Date(),
   };
+}
+
+const WORKFLOW_FAMILY = "workflow";
+const TOOL_FAMILY = "tool";
+
+/**
+ * Ask the engine about the asks the cache does not hold for this option list:
+ * all of them as before, or (behind the flag) carrying the decisions whose
+ * option is still here unchanged, checked by the audit. Returns the fresh
+ * verdicts and what was carried, both to be stored under `hash`.
+ */
+async function decideMissing(
+  projectId: string,
+  family: string,
+  judge: JudgeEngine,
+  cases: ReturnType<typeof decisionCases>,
+  options: readonly CorpusEntry[],
+  cached: ReadonlyMap<string, { entryId: string }>,
+  deps: DecideDeps,
+  adaptive: boolean,
+): Promise<Pick<CarryOutcome, "fresh" | "carried"> & { audit: CarryOutcome["audit"] | null }> {
+  const missing = cases.filter((c) => !cached.has(c.id));
+  if (!adaptive || !deps.loadCarried) {
+    const fresh = missing.length > 0 ? await judge.judge(missing, options) : [];
+    return { fresh, carried: new Map(), audit: null };
+  }
+  const previous = await deps.loadCarried(
+    projectId,
+    missing.map((c) => c.id),
+  );
+  const outcome = await decideWithCarry({
+    family,
+    cases,
+    options,
+    exact: cached,
+    previous,
+    judge,
+    budget: missing.length,
+  });
+  logger.info(
+    {
+      project_id: projectId,
+      family,
+      asked: outcome.asked,
+      carried: outcome.carried.size,
+      audited: outcome.audited,
+      audit_agreed: outcome.auditAgreed,
+      audit: outcome.audit,
+    },
+    "carried decisions checked",
+  );
+  return { fresh: outcome.fresh, carried: outcome.carried, audit: outcome.audit };
+}
+
+/** The rows to store: fresh verdicts with their option's print, and carried decisions under the new list. */
+function rowsToSave(
+  family: string,
+  fresh: readonly JudgeVerdict[],
+  carried: ReadonlyMap<string, string>,
+  options: readonly CorpusEntry[],
+  chosenIds: ReadonlySet<string>,
+): VerdictRow[] {
+  const byId = new Map(options.map((option) => [option.entryId, option]));
+  const printOf = (id: string | null) => {
+    const option = id ? byId.get(id) : undefined;
+    return option ? optionPrint(family, option) : null;
+  };
+  const rows = fresh.map((v) => {
+    const row = toRow(v, chosenIds);
+    return { ...row, optionPrint: row.verdict === "workflow" ? printOf(row.workflowId) : null };
+  });
+  for (const [promptHash, optionId] of carried) {
+    rows.push({
+      promptHash,
+      verdict: "workflow",
+      workflowId: optionId,
+      confidence: null,
+      optionPrint: printOf(optionId),
+    });
+  }
+  return rows;
 }
 
 /**
@@ -123,6 +212,7 @@ async function checkTools(
   projectId: string,
   groups: readonly AskGroup[],
   deps: DecideDeps,
+  adaptive: boolean,
 ): Promise<Map<string, { entryId: string }>> {
   const { toolJudge } = deps;
   if (!toolJudge || groups.length === 0) return new Map();
@@ -135,17 +225,29 @@ async function checkTools(
     hash,
     cases.map((c) => c.id),
   );
-  const missing = cases.filter((c) => !cached.has(c.id));
-  const fresh =
-    missing.length > 0 ? await toolJudge.judge(missing, [...corpus, NO_TOOL_OPTION]) : [];
+  const options = [...corpus, NO_TOOL_OPTION];
+  const { fresh, carried } = await decideMissing(
+    projectId,
+    TOOL_FAMILY,
+    toolJudge,
+    cases,
+    options,
+    cached,
+    deps,
+    adaptive,
+  );
   const toolIds = new Set(corpus.map((entry) => entry.entryId));
   await deps.saveVerdicts(
     projectId,
     hash,
     toolJudge.model,
-    fresh.map((v) => toRow(v, toolIds)),
+    rowsToSave(TOOL_FAMILY, fresh, carried, options, toolIds),
   );
-  return new Map([...cached, ...fresh.map((v) => [v.id, { entryId: v.entryId }] as const)]);
+  return new Map([
+    ...cached,
+    ...fresh.map((v) => [v.id, { entryId: v.entryId }] as const),
+    ...[...carried].map(([id, entryId]) => [id, { entryId }] as const),
+  ]);
 }
 
 /** A verdict as stored: the chosen option id (a workflow, or a tool for the tool check) in `workflow_id`. */
@@ -180,22 +282,32 @@ export async function decideProjectWorkflows(
     hash,
     cases.map((c) => c.id),
   );
-  const missing = cases.filter((c) => !cached.has(c.id));
   const workflowIds = new Set(workflows.map((w) => w.id));
   try {
-    const fresh = missing.length > 0 ? await judge.judge(missing, options) : [];
+    const adaptive = (await deps.adaptive?.(projectId)) ?? false;
+    const { fresh, carried } = await decideMissing(
+      projectId,
+      WORKFLOW_FAMILY,
+      judge,
+      cases,
+      options,
+      cached,
+      deps,
+      adaptive,
+    );
     await deps.saveVerdicts(
       projectId,
       hash,
       judge.model,
-      fresh.map((v) => toRow(v, workflowIds)),
+      rowsToSave(WORKFLOW_FAMILY, fresh, carried, options, workflowIds),
     );
     const all = new Map<string, { entryId: string }>([
       ...cached,
       ...fresh.map((v) => [v.id, { entryId: v.entryId }] as const),
+      ...[...carried].map(([id, entryId]) => [id, { entryId }] as const),
     ]);
     const unplaced = groups.filter((g) => all.get(askHash(g))?.entryId === NONE_OPTION_ID);
-    const tools = await checkTools(projectId, unplaced, deps);
+    const tools = await checkTools(projectId, unplaced, deps, adaptive);
     await deps.saveInsights(
       projectId,
       aggregateDecisions(groups, all, workflows, tools),
@@ -207,6 +319,7 @@ export async function decideProjectWorkflows(
         asks: groups.length,
         judged: fresh.length,
         cached: cached.size,
+        carried: carried.size,
         max_usd: deps.maxUsd,
       },
       "workflow decisions written",

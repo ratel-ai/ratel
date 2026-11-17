@@ -25,12 +25,8 @@ export interface RunSummaryRouteDeps {
     projectId: string,
     traceId: string,
   ) => Promise<{ spans: readonly RunSpan[]; truncated: boolean }>;
-  /** The trace's `events.payload` content for this reader, or null (flag off, nothing stored). */
-  loadPayload?: (
-    projectId: string,
-    traceId: string,
-    actor: string,
-  ) => Promise<PayloadContent | null>;
+  /** The trace's `events.payload` content, or null when nothing is stored. */
+  loadPayload?: (projectId: string, traceId: string) => Promise<PayloadContent | null>;
   setLogContext: (context: { project_id: string; org_id: string; distinct_id: string }) => void;
   logError: (fields: Record<string, unknown>, message: string) => void;
   reportException: (
@@ -70,7 +66,7 @@ export async function runSummaryResponse(
   try {
     const [load, payload] = await Promise.all([
       deps.loadSpans(project.projectId, traceId),
-      loadPayload(deps, project.projectId, traceId, session.externalId),
+      loadPayload(deps, project.projectId, traceId),
     ]);
     if (load.spans.length === 0)
       return json(404, { ok: false, message: "This run is no longer retained." });
@@ -97,11 +93,10 @@ async function loadPayload(
   deps: RunSummaryRouteDeps,
   projectId: string,
   traceId: string,
-  actor: string,
 ): Promise<PayloadContent | null> {
   if (!deps.loadPayload) return null;
   try {
-    return await deps.loadPayload(projectId, traceId, actor);
+    return await deps.loadPayload(projectId, traceId);
   } catch (err) {
     deps.logError({ err, project_id: projectId, trace_id: traceId }, "run payload load failed");
     deps.reportException(err, `project:${projectId}`, {

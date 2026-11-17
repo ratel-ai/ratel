@@ -26,7 +26,6 @@ import {
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, WINDOW_PRESETS, windowParams } from "@/lib/mcp/windows";
-import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
 import {
   getSpanAggregates,
   getTraceDailyAggregates,
@@ -41,7 +40,6 @@ import {
 import { listRunAsks, listRunTools } from "@/lib/synthesis/traces/run-details";
 import { runStatus } from "@/lib/synthesis/traces/v2/runs";
 import { parseTraceCursor, serializeTraceCursor } from "@/lib/synthesis/traces/view";
-import { mcpActor } from "./health";
 
 /**
  * Observability reads.
@@ -104,8 +102,6 @@ export interface ObservabilityOperationDeps extends ContentAccessDeps {
   getToolMetrics: typeof getToolMetrics;
   listRunTools: typeof listRunTools;
   listRunAsks: typeof listRunAsks;
-  /** `cloud-payload-content` for this actor: run asks fall back to `events.payload`, as the Runs page's do. */
-  payloadContentEnabled: (projectId: string, actor: string) => Promise<boolean>;
 }
 
 export const defaultObservabilityDeps: ObservabilityOperationDeps = {
@@ -121,7 +117,6 @@ export const defaultObservabilityDeps: ObservabilityOperationDeps = {
   getToolMetrics,
   listRunTools,
   listRunAsks,
-  payloadContentEnabled: payloadContentEnabledForActor,
   contentOptIn: readContentOptIn,
 };
 
@@ -235,11 +230,7 @@ export function observabilityOperations(
         const [tools, asks] = details
           ? await Promise.all([
               deps.listRunTools(ctx.projectId, traceIds),
-              deps
-                .payloadContentEnabled(ctx.projectId, mcpActor(ctx.auth, ctx.projectId))
-                .then((fromPayload) =>
-                  deps.listRunAsks(ctx.projectId, traceIds, undefined, { fromPayload }),
-                ),
+              deps.listRunAsks(ctx.projectId, traceIds),
             ])
           : [undefined, undefined];
 

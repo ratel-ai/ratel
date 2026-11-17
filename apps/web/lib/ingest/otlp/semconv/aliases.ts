@@ -8,7 +8,7 @@ import { mapMastraInput } from "./mastra-content";
 import { providerFromGenAiSystem, providerFromOpenInference } from "./provider-names";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: copy deprecated `gen_ai.*` keys and vendor
+ * Copy deprecated `gen_ai.*` keys and vendor
  * usage keys (OpenLLMetry, OpenInference, logfire, AI SDK 4) onto the canonical
  * semconv keys that `reconstruct.ts` and `span-rows.ts` read. Additive: the
  * alias stays, and a canonical key the span already has is never overwritten.

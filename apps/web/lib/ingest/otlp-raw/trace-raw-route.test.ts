@@ -197,30 +197,6 @@ test("a trace id that is not hex is 404 and reads nothing", async () => {
   assert.equal(reads, 0);
 });
 
-test("with content switched off for the project, the route returns no raw spans and no download", async () => {
-  let reads = 0;
-  const off = deps({
-    contentEnabled: async () => false,
-    loadRaw: async () => (
-      (reads += 1), { spans: [SPAN], exports: 1, undecodable: 0, truncated: false }
-    ),
-  });
-  const params = { projectId: PROJECT_ID, traceId: TRACE_ID };
-
-  const spans = await traceRawResponse(request(), params, off);
-  const download = await traceRawResponse(request("?format=otlp"), params, off);
-
-  assert.deepEqual(await spans.json(), {
-    ok: true,
-    exports: 0,
-    truncated: false,
-    contentWithheld: true,
-    spans: [],
-  });
-  assert.equal(download.status, 404);
-  assert.equal(reads, 0);
-});
-
 function request(search = ""): Request {
   return new Request(`http://localhost/api/projects/${PROJECT_ID}/traces/${TRACE_ID}/raw${search}`);
 }
@@ -230,7 +206,6 @@ function deps(overrides: Partial<TraceRawRouteDeps> = {}): TraceRawRouteDeps {
     getSession: async () => ({ userId: "u1", externalId: "user_1" }),
     findProject: async (projectId) => ({ projectId }),
     flagEnabled: async () => true,
-    contentEnabled: async () => true,
     readContent: async () => true,
     loadRawOtlp: async () => ({ requests: [EXPORT], exports: 1, undecodable: 0, truncated: false }),
     loadRaw: async () => ({ spans: [SPAN], exports: 1, undecodable: 0, truncated: false }),

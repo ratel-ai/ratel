@@ -11,7 +11,7 @@ import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 type IngestFlagOrganizationInput = unknown;
 
 /**
- * Spans before logs (flag `cloud-otlp-semconv-aliases`): `gen_ai` log records
+ * Spans before logs: `gen_ai` log records
  * that arrive after their model call was stored restate that call's `events`
  * and `event_metrics` row with the content of the logs.
  *

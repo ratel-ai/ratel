@@ -5,7 +5,7 @@ import { splitPromptMessages } from "../normalize-ai-sdk";
 import type { AttrValue, DecodedSpan } from "../types";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: Mastra's input messages onto its model
+ * Mastra's input messages onto its model
  * call. `@mastra/otel-exporter` puts `gen_ai.output.messages` on the `chat`
  * span (the anchor) but sends the input only on the spans around it:
  * `mastra.model_step.input` on `agent_step` (this step's input) and
@@ -45,7 +45,7 @@ function nearestMastraInput(
   for (const span of [anchor, ...ancestorsOf(anchor, byId)]) {
     if (span !== anchor && (isExecuteTool(span) || isAnchor(span))) return undefined;
     for (const key of MASTRA_INPUT_KEYS) {
-      const messages = messageList(span.attributes[key]);
+      const messages = mastraMessageList(span.attributes[key]);
       if (messages) return messages;
     }
   }
@@ -53,7 +53,7 @@ function nearestMastraInput(
 }
 
 /** A message list, or `{ messages: [...] }` as `model_generation` sends it. */
-function messageList(value: AttrValue | undefined): unknown[] | undefined {
+export function mastraMessageList(value: AttrValue | undefined): unknown[] | undefined {
   let parsed: unknown = value;
   if (typeof value === "string") {
     try {
@@ -64,7 +64,7 @@ function messageList(value: AttrValue | undefined): unknown[] | undefined {
   }
   if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : undefined;
   if (parsed && typeof parsed === "object")
-    return messageList((parsed as { messages?: AttrValue }).messages);
+    return mastraMessageList((parsed as { messages?: AttrValue }).messages);
   return undefined;
 }
 

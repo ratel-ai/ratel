@@ -352,32 +352,15 @@ const DETAILS_ATTRIBUTES = {
   customer_email: "private@example.test",
 };
 
-test("gen_ai events off: details and per-message records are dropped", () => {
+test("gen_ai events: keeps the details record with ids and content attributes", () => {
   const { rows, dropped } = toOtelLogRows("project-1", [
     record({
       eventName: "gen_ai.client.inference.operation.details",
       attributes: DETAILS_ATTRIBUTES,
     }),
-    record({ eventName: "gen_ai.user.message", body: { content: "hi" } }),
+    record({ eventName: "host.application.started" }),
+    record({ eventName: "gen_ai.unknown.event" }),
   ]);
-
-  assert.equal(rows.length, 0);
-  assert.equal(dropped, 2);
-});
-
-test("gen_ai events on: keeps the details record with ids and content attributes", () => {
-  const { rows, dropped } = toOtelLogRows(
-    "project-1",
-    [
-      record({
-        eventName: "gen_ai.client.inference.operation.details",
-        attributes: DETAILS_ATTRIBUTES,
-      }),
-      record({ eventName: "host.application.started" }),
-      record({ eventName: "gen_ai.unknown.event" }),
-    ],
-    { genAiEvents: true },
-  );
 
   assert.equal(dropped, 2);
   assert.equal(rows.length, 1);
@@ -390,7 +373,7 @@ test("gen_ai events on: keeps the details record with ids and content attributes
   assert.equal(row.attrsTruncated, false);
 });
 
-test("gen_ai events on: keeps the five per-message events with their body", () => {
+test("gen_ai events: keeps the five per-message events with their body", () => {
   const names = [
     "gen_ai.system.message",
     "gen_ai.user.message",
@@ -403,7 +386,6 @@ test("gen_ai events on: keeps the five per-message events with their body", () =
     names.map((eventName) =>
       record({ eventName, body: { content: `${eventName} text` }, attributes: {} }),
     ),
-    { genAiEvents: true },
   );
 
   assert.equal(dropped, 0);
@@ -414,52 +396,42 @@ test("gen_ai events on: keeps the five per-message events with their body", () =
   assert.deepEqual(rows[1].body, { content: "gen_ai.user.message text" });
 });
 
-test("gen_ai events on: content above the ratel budget is kept whole", () => {
+test("gen_ai events: content above the ratel budget is kept whole", () => {
   const long = JSON.stringify([
     { role: "user", parts: [{ type: "text", content: "x".repeat(40_000) }] },
   ]);
-  const [row] = toOtelLogRows(
-    "project-1",
-    [
-      record({
-        eventName: "gen_ai.client.inference.operation.details",
-        attributes: { "gen_ai.input.messages": long },
-      }),
-    ],
-    { genAiEvents: true },
-  ).rows;
+  const [row] = toOtelLogRows("project-1", [
+    record({
+      eventName: "gen_ai.client.inference.operation.details",
+      attributes: { "gen_ai.input.messages": long },
+    }),
+  ]).rows;
 
   assert.equal(row.attributes["gen_ai.input.messages"], long);
   assert.equal(row.attrsTruncated, false);
 });
 
-test("gen_ai events on: ratel records keep stripping content keys", () => {
-  const [row] = toOtelLogRows(
-    "project-1",
-    [record({ attributes: { "gen_ai.input.messages": "[]", "ratel.experiment.id": "x" } })],
-    { genAiEvents: true },
-  ).rows;
+test("gen_ai events: ratel records keep stripping content keys", () => {
+  const [row] = toOtelLogRows("project-1", [
+    record({ attributes: { "gen_ai.input.messages": "[]", "ratel.experiment.id": "x" } }),
+  ]).rows;
 
   assert.deepEqual(row.attributes, { "ratel.experiment.id": "x" });
 });
 
-test("gen_ai events on: per-message records of one span at one time keep one row each", () => {
-  const { rows } = toOtelLogRows(
-    "project-1",
-    [
-      record({
-        eventName: "gen_ai.user.message",
-        body: { content: "first question" },
-        attributes: {},
-      }),
-      record({
-        eventName: "gen_ai.user.message",
-        body: { content: "second question" },
-        attributes: {},
-      }),
-    ],
-    { genAiEvents: true },
-  );
+test("gen_ai events: per-message records of one span at one time keep one row each", () => {
+  const { rows } = toOtelLogRows("project-1", [
+    record({
+      eventName: "gen_ai.user.message",
+      body: { content: "first question" },
+      attributes: {},
+    }),
+    record({
+      eventName: "gen_ai.user.message",
+      body: { content: "second question" },
+      attributes: {},
+    }),
+  ]);
 
   assert.equal(new Set(rows.map((row) => row.id)).size, 2);
 });

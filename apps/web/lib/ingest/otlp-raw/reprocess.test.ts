@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
+import { groupSpans } from "@/lib/ingest/otlp/group";
+import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
+import { toRows } from "@/lib/ingest/otlp/reconstruct";
 import {
   planReprocess,
   type ReprocessDeps,
@@ -16,13 +19,12 @@ import type { OtlpRawExportBody } from "./store";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const SINCE = new Date("2026-11-01T00:00:00.000Z");
-const OFF: ReprocessIngestFlags = { semconvAliases: false, captureReply: false };
-const ALIASES: ReprocessIngestFlags = { semconvAliases: true, captureReply: false };
+const FLAGS: ReprocessIngestFlags = { captureReply: false };
 
 test("a dry run reports the cache tokens a new alias reads, and writes nothing", async () => {
-  const store = await storeIngestedAt(OFF, [chatExport("a1")]);
+  const store = storeIngestedBeforeAliases([chatExport("a1")]);
 
-  const { report, applied } = await run(store, ALIASES, { apply: false });
+  const { report, applied } = await run(store, { apply: false });
 
   assert.equal(applied.length, 0);
   assert.equal(report.exports, 1);
@@ -37,9 +39,9 @@ test("a dry run reports the cache tokens a new alias reads, and writes nothing",
 });
 
 test("--apply patches usage, cost and metrics, and a second --apply changes nothing", async () => {
-  const store = await storeIngestedAt(OFF, [chatExport("a1")]);
+  const store = storeIngestedBeforeAliases([chatExport("a1")]);
 
-  const first = await run(store, ALIASES, { apply: true });
+  const first = await run(store, { apply: true });
   assert.equal(first.report.changedEvents, 1);
   assert.equal(first.applied.length, 1);
   const [patched] = [...store.events.values()];
@@ -47,7 +49,7 @@ test("--apply patches usage, cost and metrics, and a second --apply changes noth
   assert.ok(patched.metric);
   assert.ok(Number(patched.metric.costUsd) < Number(first.report.before.costUsd));
 
-  const second = await run(store, ALIASES, { apply: true });
+  const second = await run(store, { apply: true });
   assert.equal(second.applied.length, 0);
   assert.equal(second.report.changedEvents, 0);
   assert.equal(second.report.newEvents, 0);
@@ -55,27 +57,27 @@ test("--apply patches usage, cost and metrics, and a second --apply changes noth
 });
 
 test("a call ingest did not store is inserted once", async () => {
-  const store = await storeIngestedAt(OFF, []);
+  const store = storeIngestedBeforeAliases([]);
   store.exports.push(rawExport(chatExport("b1")));
 
-  const first = await run(store, ALIASES, { apply: true });
+  const first = await run(store, { apply: true });
   assert.equal(first.report.newEvents, 1);
   assert.equal(first.report.inserted.cachedTokens, 800);
   assert.equal(store.events.size, 1);
 
-  const second = await run(store, ALIASES, { apply: true });
+  const second = await run(store, { apply: true });
   assert.equal(second.applied.length, 0);
   assert.equal(second.report.unchangedEvents, 1);
 });
 
 test("a stored row matches by span id when the rebuilt dedupe hash differs", async () => {
-  const [row] = await rowsFor(OFF, chatExport("c1"));
+  const [row] = rowsBeforeAliases(chatExport("c1"));
   const stored = storedFrom("event-1", {
     ...row,
     event: { ...row.event, dedupeHash: "hash-from-an-older-mapping" },
   });
 
-  const plan = planReprocess(await rowsFor(ALIASES, chatExport("c1")), [stored]);
+  const plan = planReprocess(await rowsFor(chatExport("c1")), [stored]);
 
   assert.equal(plan.inserts.length, 0);
   assert.equal(plan.updates.length, 1);
@@ -83,7 +85,7 @@ test("a stored row matches by span id when the rebuilt dedupe hash differs", asy
 });
 
 test("jsonb key order and numeric(12,6) cost rounding are not a change", async () => {
-  const [row] = await rowsFor(ALIASES, chatExport("d1"));
+  const [row] = await rowsFor(chatExport("d1"));
   const stored = storedFrom("event-1", row);
   stored.event.payload = reversedKeys(stored.event.payload);
   stored.event.costUsd = Number(row.event.costUsd).toFixed(6);
@@ -95,7 +97,7 @@ test("jsonb key order and numeric(12,6) cost rounding are not a change", async (
 });
 
 test("a stored event with no metrics row gets one", async () => {
-  const [row] = await rowsFor(ALIASES, chatExport("e1"));
+  const [row] = await rowsFor(chatExport("e1"));
   const stored = { ...storedFrom("event-1", row), metric: null };
 
   const plan = planReprocess([row], [stored]);
@@ -105,13 +107,13 @@ test("a stored event with no metrics row gets one", async () => {
 });
 
 test("log exports are skipped and undecodable bodies are counted", async () => {
-  const store = await storeIngestedAt(OFF, []);
+  const store = storeIngestedBeforeAliases([]);
   store.exports.push(
     { ...rawExport({ resourceLogs: [] }), signal: "logs" },
     { ...rawExport({}), body: new Uint8Array(gzipSync(Buffer.from("not json"))) },
   );
 
-  const { report } = await run(store, ALIASES, { apply: true });
+  const { report } = await run(store, { apply: true });
 
   assert.equal(report.exports, 2);
   assert.equal(report.skippedLogExports, 1);
@@ -120,9 +122,9 @@ test("log exports are skipped and undecodable bodies are counted", async () => {
 });
 
 test("exports are read and applied in bounded batches", async () => {
-  const store = await storeIngestedAt(OFF, [chatExport("f1"), chatExport("f2"), chatExport("f3")]);
+  const store = storeIngestedBeforeAliases([chatExport("f1"), chatExport("f2"), chatExport("f3")]);
 
-  const { applied, pages } = await run(store, ALIASES, { apply: true, pageSize: 2 });
+  const { applied, pages } = await run(store, { apply: true, pageSize: 2 });
 
   assert.deepEqual(pages, [2, 1]);
   assert.deepEqual(
@@ -137,11 +139,12 @@ interface FakeStore {
   events: Map<string, StoredEvent>;
 }
 
-async function storeIngestedAt(flags: ReprocessIngestFlags, bodies: object[]): Promise<FakeStore> {
+/** A store whose rows ingest wrote before it read the semconv aliases (RC-380). */
+function storeIngestedBeforeAliases(bodies: object[]): FakeStore {
   const store: FakeStore = { exports: [], events: new Map() };
   for (const body of bodies) {
     store.exports.push(rawExport(body));
-    for (const row of await rowsFor(flags, body)) {
+    for (const row of rowsBeforeAliases(body)) {
       const id = `event-${store.events.size + 1}`;
       store.events.set(id, storedFrom(id, row));
     }
@@ -149,15 +152,11 @@ async function storeIngestedAt(flags: ReprocessIngestFlags, bodies: object[]): P
   return store;
 }
 
-async function run(
-  store: FakeStore,
-  flags: ReprocessIngestFlags,
-  options: { apply: boolean; pageSize?: number },
-) {
+async function run(store: FakeStore, options: { apply: boolean; pageSize?: number }) {
   const applied: ReprocessPlan[] = [];
   const pages: number[] = [];
   const deps: ReprocessDeps = {
-    flags,
+    flags: FLAGS,
     async readPage(after, limit) {
       const start = after ? store.exports.indexOf(after) + 1 : 0;
       const page = store.exports.slice(start, start + limit);
@@ -205,9 +204,19 @@ async function run(
   return { report, applied, pages };
 }
 
-async function rowsFor(flags: ReprocessIngestFlags, body: object): Promise<EventWithMetric[]> {
-  const spans = decodeOtlp("application/json", new TextEncoder().encode(JSON.stringify(body)));
-  return rebuildEventRows(PROJECT_ID, spans, flags);
+async function rowsFor(body: object): Promise<EventWithMetric[]> {
+  return rebuildEventRows(PROJECT_ID, decode(body), FLAGS);
+}
+
+/** The rows ingest derived before the semconv alias pass. */
+function rowsBeforeAliases(body: object): EventWithMetric[] {
+  const spans = decode(body);
+  normalizeAiSdkSpans(spans);
+  return toRows(PROJECT_ID, groupSpans(spans), { captureReply: false });
+}
+
+function decode(body: object) {
+  return decodeOtlp("application/json", new TextEncoder().encode(JSON.stringify(body)));
 }
 
 /** A row as Postgres returns it: jsonb round-tripped, cost as numeric(12,6). */
@@ -307,7 +316,7 @@ function reversedKeys<T>(value: T): T {
 }
 
 test("a stored row of another trace with the same span id is not matched", async () => {
-  const [row] = await rowsFor(ALIASES, chatExport("g1"));
+  const [row] = await rowsFor(chatExport("g1"));
   const other = storedFrom("event-other", {
     ...row,
     event: {

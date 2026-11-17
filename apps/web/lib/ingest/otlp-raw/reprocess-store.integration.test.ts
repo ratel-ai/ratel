@@ -4,7 +4,10 @@ import { gzipSync } from "node:zlib";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
+import { groupSpans } from "@/lib/ingest/otlp/group";
+import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
 import { insertEventsWithMetrics } from "@/lib/ingest/otlp/queries";
+import { toRows } from "@/lib/ingest/otlp/reconstruct";
 import { eventMetrics, events } from "@/lib/ingest/otlp/schema";
 import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import * as schema from "@/lib/platform/db/tables";
@@ -16,8 +19,7 @@ import { readOtlpRawExportPage } from "./store";
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const SINCE = new Date("2026-11-01T00:00:00.000Z");
-const ALIASES: ReprocessIngestFlags = { semconvAliases: true, captureReply: false };
-const OFF: ReprocessIngestFlags = { semconvAliases: false, captureReply: false };
+const FLAGS: ReprocessIngestFlags = { captureReply: false };
 
 test("apply patches the stored event and its metrics, and a second apply changes nothing", async () => {
   const db = await setup();
@@ -33,10 +35,8 @@ test("apply patches the stored event and its metrics, and a second apply changes
     itemCount: 1,
     traceIds: ["0af7651916cd43dd8448eb211c80319c"],
   });
-  const ingested = await rebuildEventRows(PROJECT_ID, decodeOtlp("application/json", body), {
-    semconvAliases: false,
-    captureReply: false,
-  });
+  // Stored before ingest read the semconv aliases (RC-380).
+  const ingested = rowsBeforeAliases(decodeOtlp("application/json", body));
   await insertEventsWithMetrics(PROJECT_ID, ingested, db);
   const [before] = await db.select().from(events);
   assert.equal(before.cachedTokens, null);
@@ -88,17 +88,17 @@ test("a span id reused in another trace keeps each row on its own trace, and a s
   // Live ingest keeps the first call: the second has the same span-id dedupe hash and conflicts.
   await insertEventsWithMetrics(
     PROJECT_ID,
-    await rebuildEventRows(PROJECT_ID, decodeOtlp("application/json", first), OFF),
+    await rebuildEventRows(PROJECT_ID, decodeOtlp("application/json", first), FLAGS),
     db,
   );
   await insertEventsWithMetrics(
     PROJECT_ID,
-    await rebuildEventRows(PROJECT_ID, decodeOtlp("application/json", second), OFF),
+    await rebuildEventRows(PROJECT_ID, decodeOtlp("application/json", second), FLAGS),
     db,
   );
 
-  const applied = await reprocess(db, true, OFF, 1);
-  const again = await reprocess(db, true, OFF, 1);
+  const applied = await reprocess(db, true, 1);
+  const again = await reprocess(db, true, 1);
 
   const rows = await db.select().from(events);
   assert.deepEqual(
@@ -123,11 +123,11 @@ async function storeRawExport(db: ReprocessDb, body: Uint8Array, receivedAt: str
   });
 }
 
-async function reprocess(db: ReprocessDb, apply: boolean, flags = ALIASES, pageSize?: number) {
+async function reprocess(db: ReprocessDb, apply: boolean, pageSize?: number) {
   return reprocessOtlpRawExports(
     { projectId: PROJECT_ID, since: SINCE, apply, pageSize },
     {
-      flags,
+      flags: FLAGS,
       readPage: (after, limit) =>
         readOtlpRawExportPage(db, { projectId: PROJECT_ID, since: SINCE, after, limit }),
       findStoredEvents: (keys) => findStoredEvents(db, PROJECT_ID, keys),
@@ -185,4 +185,10 @@ function chatExport({
       ],
     }),
   );
+}
+
+/** The rows ingest derived before the semconv alias pass. */
+function rowsBeforeAliases(spans: ReturnType<typeof decodeOtlp>) {
+  normalizeAiSdkSpans(spans);
+  return toRows(PROJECT_ID, groupSpans(spans), { captureReply: false });
 }

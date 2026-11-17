@@ -175,6 +175,8 @@ export interface RunOptions {
   experimentName: string;
   window: ExperimentWindow;
   mocked?: boolean;
+  /** `cloud-adaptive-labelling` (RC-394): judge in batches until the share's margin is met. */
+  adaptive?: boolean;
 }
 
 /** Score every arm under both tiers, for the prompt and for the stored record. */
@@ -372,6 +374,7 @@ export function summariseQuality(
           priority,
           key: known,
           fingerprint: identityFingerprint(corpus.entries),
+          ...(options.adaptive ? { adaptive: {} } : {}),
         },
       );
       if (judged) {

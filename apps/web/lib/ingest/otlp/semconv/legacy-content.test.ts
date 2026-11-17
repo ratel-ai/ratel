@@ -9,7 +9,7 @@ import { normalizeSemconvAliases } from "./aliases";
 import { mapLegacyContent } from "./legacy-content";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: OpenLLMetry indexed prompt/completion
+ * OpenLLMetry indexed prompt/completion
  * keys and per-message span events become `gen_ai.*` messages.
  */
 

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CloudEvent } from "@/lib/ingest/cloud-schema";
+import { decodeOtlp } from "@/lib/ingest/otlp/decode";
+import { groupSpans } from "@/lib/ingest/otlp/group";
+import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
+import { toRows } from "@/lib/ingest/otlp/reconstruct";
+import { normalizeSemconvAliases } from "@/lib/ingest/otlp/semconv/aliases";
+import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
 import { preferSpanContent, type TraceContentView } from "./content-view";
 import { buildPayloadContent, type PayloadCall } from "./payload-content";
 import { conversationMessages } from "./v2/conversation";
@@ -173,3 +179,117 @@ test("each message is kept once on the server, however many calls repeat the his
     ],
   );
 });
+
+/**
+ * RC-500: Mastra with memory (Pillar's shape) sends the whole session as each
+ * call's input, so a later turn's trace repeats every earlier turn. The
+ * messages before the trace's own ask are marked `earlier`; the turn's own
+ * messages are the rest, and across the session each message is its turn's once.
+ */
+test("a later turn's trace marks the session's earlier messages, so each message belongs to one turn (Mastra memory)", () => {
+  const byTrace = mastraTraces();
+  assert.equal(byTrace.length, 3);
+  const own = byTrace.map((calls) =>
+    buildPayloadContent(calls).view.messages.filter(
+      (message) => !message.earlier && message.role !== "system",
+    ),
+  );
+  const earlier = byTrace.map(
+    (calls) => buildPayloadContent(calls).view.messages.filter((message) => message.earlier).length,
+  );
+  assert.deepEqual(earlier, [0, 8, 14]);
+  assert.deepEqual(
+    own.map((messages) => messages[0]?.role),
+    ["user", "user", "user"],
+  );
+  const all = own.flat().map(({ role, text }) => `${role}:${text}`);
+  assert.equal(new Set(all).size, all.length, "a message shows in two turns");
+  const last = buildPayloadContent(byTrace[2]!).view.messages;
+  assert.equal(new Set(last.map(({ role, text }) => `${role}:${text}`)).size, last.length);
+});
+
+test("a trace whose first call has no history before its ask marks nothing earlier", () => {
+  const content = buildPayloadContent([
+    call(1, {
+      messages: [
+        { role: "user", content: "Hi" },
+        { role: "assistant", content: [{ type: "text", text: "Hello" }] },
+      ],
+      input_message_count: 1,
+    }),
+  ]);
+  assert.deepEqual(
+    content.view.messages.map((message) => message.earlier ?? false),
+    [false, false],
+  );
+});
+
+test("tool calls an earlier turn made are marked earlier; the turn's own are not", () => {
+  const content = buildPayloadContent([
+    call(1, {
+      messages: [
+        { role: "user", content: "Where is order 1234?" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_call", id: "call_1", name: "lookup_order", arguments: { id: "1234" } },
+          ],
+        },
+        { role: "tool", tool_call_id: "call_1", content: '{"status":"shipped"}' },
+        { role: "assistant", content: [{ type: "text", text: "It shipped yesterday." }] },
+        { role: "user", content: "And order 99?" },
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_call", id: "call_2", name: "lookup_order", arguments: { id: "99" } },
+          ],
+        },
+      ],
+      input_message_count: 5,
+    }),
+  ]);
+  assert.deepEqual(
+    content.view.toolCalls.map((toolCall) => [toolCall.id, toolCall.earlier ?? false]),
+    [
+      ["call_1", true],
+      ["call_2", false],
+    ],
+  );
+  assert.deepEqual(
+    content.view.messages.map((message) => [message.role, message.earlier ?? false]),
+    [
+      ["user", true],
+      ["tool", true],
+      ["assistant", true],
+      ["user", false],
+    ],
+  );
+  assert.equal(content.ask, "And order 99?");
+});
+
+function mastraTraces(): PayloadCall[][] {
+  const rows = [];
+  for (const body of loadFixture("mastra")) {
+    const spans = decodeOtlp(body.contentType, body.bytes);
+    normalizeAiSdkSpans(spans);
+    normalizeSemconvAliases(spans);
+    rows.push(...toRows("p1", groupSpans(spans)));
+  }
+  const byTrace = new Map<string, PayloadCall[]>();
+  for (const [index, { event }] of rows.entries()) {
+    const calls = byTrace.get(event.traceId ?? "") ?? [];
+    calls.push({
+      eventId: `e${index}`,
+      spanId: event.spanId ?? null,
+      occurredAt: event.occurredAt!,
+      latencyMs: null,
+      payload: event.payload as CloudEvent,
+    });
+    byTrace.set(event.traceId ?? "", calls);
+  }
+  return [...byTrace.values()].sort(
+    (left, right) =>
+      Math.min(...left.map((c) => c.occurredAt.getTime())) -
+      Math.min(...right.map((c) => c.occurredAt.getTime())),
+  );
+}

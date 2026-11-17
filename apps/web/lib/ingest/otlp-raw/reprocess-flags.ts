@@ -2,19 +2,18 @@ import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features
 import type { ReprocessIngestFlags } from "./reprocess";
 
 /**
- * The ingest switches a reprocess runs with, decided as `/v1/traces` decides them.
+ * The ingest switch a reprocess runs with, decided as `/v1/traces` decides it.
  *
- * Owned (ADR-0030): upstream asks its flag service for `cloud-otlp-semconv-aliases` and
- * `cloud-session-replay` for the project's organization, and aborts when it cannot get a clean
- * answer, because a reprocess rewrites stored rows. Here both are the deployment's: the aliases
- * are always read (upstream retires that flag in #402) and the reply capture is the switch
- * `FF_SESSION_REPLAY`, the one ingest reads. A switch always answers, so nothing aborts.
+ * Owned (ADR-0030): upstream asks its flag service for `cloud-session-replay` for the project's
+ * organization, and aborts when it cannot get a clean answer, because a reprocess rewrites
+ * stored rows. Here the reply capture is the deployment switch `FF_SESSION_REPLAY`, the one
+ * ingest reads, and a switch always answers, so nothing aborts.
  */
 
 export interface ReprocessFlagDecision {
   flag: string;
   enabled: boolean;
-  source: "always on" | "deployment switch";
+  source: "deployment switch";
 }
 
 export interface ReprocessFlags {
@@ -29,10 +28,7 @@ export async function decideReprocessFlags(
 ): Promise<ReprocessFlags> {
   const captureReply = experimentalFeatureEnabled("FF_SESSION_REPLAY", env);
   return {
-    flags: { semconvAliases: true, captureReply },
-    decisions: [
-      { flag: "cloud-otlp-semconv-aliases", enabled: true, source: "always on" },
-      { flag: "FF_SESSION_REPLAY", enabled: captureReply, source: "deployment switch" },
-    ],
+    flags: { captureReply },
+    decisions: [{ flag: "FF_SESSION_REPLAY", enabled: captureReply, source: "deployment switch" }],
   };
 }

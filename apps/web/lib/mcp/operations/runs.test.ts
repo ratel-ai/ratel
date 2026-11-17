@@ -403,8 +403,8 @@ test("spans without content read the trace's payload content: the same messages,
   ]);
   const overrides: Partial<RunsOperationDeps> = {
     getTraceSpansWithTruncation: async () => ({ spans: bare, truncated: false }),
-    loadPayloadContent: async (_project, traceId, actor) => {
-      asked.push(`${traceId}/${actor}`);
+    loadPayloadContent: async (_project, traceId) => {
+      asked.push(traceId);
       return payload;
     },
   };
@@ -428,11 +428,7 @@ test("spans without content read the trace's payload content: the same messages,
   const summary = ok<SummaryData>(await run("get_run_summary", { traceId: TRACE }, overrides));
   assert.equal(summary.data.ask, "Where is order 1234?");
   assert.equal(summary.data.answer, "It shipped yesterday.");
-  assert.deepEqual(
-    asked,
-    [`${TRACE}/project:${PROJECT}`, `${TRACE}/project:${PROJECT}`],
-    "a key is decided as its project",
-  );
+  assert.deepEqual(asked, [TRACE, TRACE]);
 });
 
 const SPAN_ROW: SpanSummary = {

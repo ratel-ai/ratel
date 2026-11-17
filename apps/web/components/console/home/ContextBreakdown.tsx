@@ -10,8 +10,8 @@ const DOCS_URL = "https://docs.ratel.sh";
 /**
  * What used to be the Dashboards page, at the depth it deserves: the prompt
  * split by source with the measurable waste inside each, then what to do
- * about the biggest parts. With flag `cloud-otlp-semconv-aliases`, it also
- * says how much of the input the prompt cache served (`promptCacheHitRate`).
+ * about the biggest parts. It also says how much of the input the prompt
+ * cache served (`promptCacheHitRate`).
  */
 export function ContextBreakdown({
   split,

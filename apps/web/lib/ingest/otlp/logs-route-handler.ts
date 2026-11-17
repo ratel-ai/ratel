@@ -1,6 +1,5 @@
 import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queries";
 import { inflateBody, isGzipEncoding, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
-import type { SemconvAliasesEnabled } from "@/lib/ingest/otlp/semconv/enabled";
 import {
   type GenAiLogJoinDeps,
   rejoinStoredModelCalls,
@@ -49,9 +48,7 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   setRequestLogContext?: typeof setRequestLogContextFn;
   /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
   otlpRawCapture?: OtlpRawCaptureDeps;
-  /** Flag `cloud-otlp-semconv-aliases`: keep `gen_ai` content log events; absent, off. */
-  semconvAliases?: SemconvAliasesEnabled;
-  /** With `semconvAliases` on: restate a stored model call with its new `gen_ai` logs; absent, off. */
+  /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
   genAiLogJoin?: GenAiLogJoinDeps;
 }
 
@@ -192,9 +189,7 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
     );
   }
 
-  const genAiEvents =
-    !!deps.semconvAliases && (await deps.semconvAliases(apiKey.projectId, organization));
-  const { rows, dropped } = toOtelLogRows(apiKey.projectId, records, { genAiEvents });
+  const { rows, dropped } = toOtelLogRows(apiKey.projectId, records);
   let accepted = 0;
   if (rows.length > 0) {
     try {
@@ -215,7 +210,7 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
 
   // Spans before logs: restate the model calls these records belong to.
   // Fails open: the logs are stored, and a retry of the export joins again.
-  if (genAiEvents && deps.genAiLogJoin) {
+  if (deps.genAiLogJoin) {
     const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
     try {
       await rejoinStoredModelCalls(apiKey.projectId, organization, keys, deps.genAiLogJoin);
