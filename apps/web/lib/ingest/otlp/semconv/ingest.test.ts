@@ -23,6 +23,7 @@ function deps(stored: Stored): PersistSpansDeps {
       stored.spans.push(...(rows as OtelSpanRow[]));
       return { accepted: rows.length };
     },
+    agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
     logError: () => {},
     captureFailure: () => {},
   };

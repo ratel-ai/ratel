@@ -33,8 +33,7 @@ type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackS
 export const ledgerSeamFills: Required<typeof ledgerSeams> = {
   enqueueReading: (projectId, trigger) => enqueueComputeJob(projectId, trigger),
   onBacklogDrained: (projectId) => enqueueFirstSignalRun(projectId),
-  // The quick first reading's switch is the deployment's, so no organization is read for it.
-  onBacklogProgress: (projectId) => enqueueEarlyFirstReading(projectId, null),
+  onBacklogProgress: (projectId) => enqueueEarlyFirstReading(projectId),
 };
 
 export function fillLedgerSeams(seams: Partial<typeof ledgerSeams> = ledgerSeams): void {

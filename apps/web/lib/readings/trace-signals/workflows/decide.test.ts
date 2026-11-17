@@ -139,6 +139,7 @@ function deps(over: Partial<DecideDeps> = {}) {
     saveInsights: async (_p, data) => {
       saved.insights.push(data);
     },
+    loadCarried: async () => [],
     now: () => new Date("2026-10-01T00:00:00Z"),
     ...over,
   };
@@ -324,7 +325,7 @@ test("a long ask with an emoji at the cut never leaves half of it in the questio
   assert.equal(row?.id, askHash({ ask }));
 });
 
-test("behind the flag, a decision whose workflow is unchanged is carried to a new option list and stored under it", async () => {
+test("a decision whose workflow is unchanged is carried to a new option list and stored under it", async () => {
   const { optionPrint } = await import("@/lib/readings/labelling/carry");
   // 30 asks about the release workflow, decided against an older list (before wf-sprint was named).
   const many: AskGroup[] = Array.from({ length: 30 }, (_, index) => ({
@@ -339,7 +340,6 @@ test("behind the flag, a decision whose workflow is unchanged is carried to a ne
   }));
   const { d, saved, calls } = deps({
     loadRecentAskGroups: async () => many,
-    adaptive: async () => true,
     loadCarried: async () => previous,
   });
   const result = await decideProjectWorkflows("p1", WORKFLOWS, LABELS, d);
@@ -359,13 +359,4 @@ test("behind the flag, a decision whose workflow is unchanged is carried to a ne
         row.optionPrint === optionPrint("workflow", release),
     ),
   );
-
-  // Flag off: every uncached ask is put to the engine, as before.
-  const off = deps({
-    loadRecentAskGroups: async () => many,
-    adaptive: async () => false,
-    loadCarried: async () => previous,
-  });
-  await decideProjectWorkflows("p1", WORKFLOWS, LABELS, off.d);
-  assert.equal(off.calls.flat().length, 30);
 });

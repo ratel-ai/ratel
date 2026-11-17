@@ -21,7 +21,6 @@ import type {
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
 import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
-import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
@@ -168,9 +167,8 @@ export interface AssignTopicsDeps {
   loadReading: typeof loadTopicReadingFn;
   loadVerdicts: typeof loadVerdictsFn;
   saveVerdicts: typeof saveVerdictsFn;
-  /** `cloud-adaptive-labelling` for the project: placements survive topic changes behind an audit (RC-395). */
-  adaptive?: (projectId: string) => Promise<boolean>;
-  loadCarried?: typeof loadCarriedVerdictsFn;
+  /** Stored placements, so they survive topic changes behind an audit (RC-395). */
+  loadCarried: typeof loadCarriedVerdictsFn;
   saveReading: typeof saveTopicReadingFn;
   /** The decision engine with the topic framing; null without a key. */
   judge: JudgeEngine | null;
@@ -294,7 +292,6 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     loadReading: loadTopicReadingFn,
     loadVerdicts: loadVerdictsFn,
     saveVerdicts: saveVerdictsFn,
-    adaptive: (projectId) => adaptiveLabellingForProject(projectId),
     loadCarried: loadCarriedVerdictsFn,
     saveReading: saveTopicReadingFn,
     judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
@@ -392,8 +389,10 @@ interface Judged {
 
 /**
  * Asks put to the decision engine against `options`, busiest first, at most
- * `budget` fresh ones; cached answers are free. A failed engine is logged and
- * reported, and the asks it did not answer are left to the wording.
+ * `budget` fresh ones; cached answers are free. With `loadCarried`, a stored
+ * decision whose option is unchanged is carried behind an audit (RC-395). A
+ * failed engine is logged and reported, and the asks it did not answer are
+ * left to the wording.
  */
 async function judgeAsks(
   projectId: string,
@@ -402,9 +401,9 @@ async function judgeAsks(
   options: readonly CorpusEntry[],
   optionsHash: string,
   budget: number,
-  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts" | "loadCarried">,
+  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts">,
   operation: string,
-  carry = false,
+  loadCarried?: AssignTopicsDeps["loadCarried"],
 ): Promise<Judged> {
   const cases = askCases(asks);
   const known = new Set(options.map((option) => option.entryId));
@@ -420,11 +419,11 @@ async function judgeAsks(
   );
   for (const [id, verdict] of cached) read(id, verdict.entryId);
   const capacity = judge.capacity ? judge.capacity(options) : budget;
-  if (carry && deps.loadCarried) {
+  if (loadCarried) {
     const missingIds = cases.filter((c) => !cached.has(c.id)).map((c) => c.id);
     if (missingIds.length === 0) return { choices, fresh: 0 };
     try {
-      const previous = await deps.loadCarried(projectId, missingIds);
+      const previous = await loadCarried(projectId, missingIds);
       const outcome = await decideWithCarry({
         family: TOPIC_FAMILY,
         cases,
@@ -654,10 +653,6 @@ async function read(
   const askedTurns = distinct.reduce((sum, ask) => sum + ask.turnIds.length, 0);
   let budget = MAX_JUDGED_ASKS;
   let judged = 0;
-  const carry =
-    deps.judge !== null && distinct.length > 0
-      ? ((await deps.adaptive?.(projectId)) ?? false)
-      : false;
 
   // Pass one: the topics there are.
   const current = stored.filter((topic) => topic.retiredAt === null);
@@ -672,7 +667,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
-          carry,
+          deps.loadCarried,
         )
       : null;
   budget -= first?.fresh ?? 0;
@@ -711,7 +706,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
-          carry,
+          deps.loadCarried,
         )
       : null;
   judged += second?.fresh ?? 0;

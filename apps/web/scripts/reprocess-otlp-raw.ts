@@ -3,7 +3,8 @@
  * Re-run today's span-to-event mapping over one project's stored raw OTLP
  * trace exports (`otlp_raw_exports`) and patch the `events` and
  * `event_metrics` rows they derive (usage, cost, payload, categorize), as
- * `/v1/traces` would today: each call's payload keeps its reply.
+ * `/v1/traces` would today: each call's payload keeps its reply, and each call
+ * is priced with the project's own model prices.
  *
  * A dry run by default: it reads in a read-only transaction and prints how many
  * events would change, with the before/after input, cached and cost totals.

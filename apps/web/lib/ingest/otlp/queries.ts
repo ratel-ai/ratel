@@ -1,4 +1,15 @@
-import { and, eq, gte, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  getTableColumns,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { CategorySplits, ToolsByName } from "@/lib/ingest/categorize";
 import type { ContextSource } from "@/lib/ingest/context";
@@ -236,15 +247,36 @@ export type OtelSpansDb = Pick<ReturnType<typeof getDb>, "insert" | "transaction
 const OTEL_SPAN_INSERT_CHUNK_SIZE = 500;
 
 /**
- * Idempotently persist a bounded batch of mapped OTLP spans. Duplicate deterministic ids are
- * collapsed before writing, and each statement stays below the PostgreSQL parameter ceiling.
+ * What a stored span with the same id gets. `ignore` (live OTLP ingest): it is
+ * kept, so a retried export is a no-op. `update` (Agent health imports and their
+ * reprocess): it takes every decoded column of the new row, so a mapper fix
+ * reaches the spans already stored.
+ */
+export type OtelSpanConflict = "ignore" | "update";
+
+/** The columns an import rewrite replaces: all but the key and the project. */
+const OTEL_SPAN_REWRITE_SET = Object.fromEntries(
+  Object.entries(getTableColumns(otelSpans))
+    .filter(([key]) => key !== "id" && key !== "projectId" && key !== "receivedAt")
+    .map(([key, column]) => [key, sql.raw(`excluded."${column.name}"`)]),
+);
+
+/**
+ * Persist a bounded batch of mapped OTLP spans.
+ *
+ * Duplicate deterministic ids are collapsed before writing, and each statement
+ * stays below the PostgreSQL parameter ceiling. `accepted` counts new rows only.
+ * With `onConflict: "update"`, a rewritten row is counted in `updated` and gets a
+ * new `received_at`, so the trace summary sweep recomputes its trace.
  */
 export async function insertOtelSpans(
   projectId: string,
   rows: NewOtelSpan[],
   db: OtelSpansDb = getDb(),
-): Promise<{ accepted: number }> {
-  if (rows.length === 0) return { accepted: 0 };
+  { onConflict = "ignore" }: { onConflict?: OtelSpanConflict } = {},
+): Promise<{ accepted: number; updated?: number }> {
+  if (rows.length === 0)
+    return onConflict === "update" ? { accepted: 0, updated: 0 } : { accepted: 0 };
 
   const byId = new Map<string, NewOtelSpan>();
   for (const row of rows) {
@@ -254,15 +286,30 @@ export async function insertOtelSpans(
   const uniqueRows = [...byId.values()];
   return db.transaction(async (tx) => {
     let accepted = 0;
+    let updated = 0;
     for (let offset = 0; offset < uniqueRows.length; offset += OTEL_SPAN_INSERT_CHUNK_SIZE) {
-      const inserted = await tx
+      const insert = tx
         .insert(otelSpans)
-        .values(uniqueRows.slice(offset, offset + OTEL_SPAN_INSERT_CHUNK_SIZE))
-        .onConflictDoNothing()
-        .returning({ id: otelSpans.id });
-      accepted += inserted.length;
+        .values(uniqueRows.slice(offset, offset + OTEL_SPAN_INSERT_CHUNK_SIZE));
+      if (onConflict === "ignore") {
+        accepted += (await insert.onConflictDoNothing().returning({ id: otelSpans.id })).length;
+        continue;
+      }
+      const written = await insert
+        .onConflictDoUpdate({
+          target: otelSpans.id,
+          set: { ...OTEL_SPAN_REWRITE_SET, receivedAt: sql`now()` },
+          // A row of another project is never rewritten (ids are per project anyway).
+          setWhere: sql`${otelSpans.projectId} = excluded."project_id"`,
+        })
+        // `xmax = 0` only on a row this statement inserted; an updated row has the updating transaction's id.
+        .returning({ inserted: sql<boolean>`(xmax = 0)` });
+      for (const row of written) {
+        if (row.inserted) accepted += 1;
+        else updated += 1;
+      }
     }
-    return { accepted };
+    return onConflict === "update" ? { accepted, updated } : { accepted };
   });
 }
 

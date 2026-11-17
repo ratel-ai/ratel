@@ -1,6 +1,8 @@
 import type {
+  EventWithMetric,
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
+  OtelSpanConflict,
 } from "@/lib/ingest/otlp/queries";
 import type { BatchPrices } from "@/lib/ingest/pricing";
 import {
@@ -42,7 +44,9 @@ type IncrementEventUsage = (organizationId: string, n: number) => Promise<void>;
  * export, and any other caller with decoded spans gets exactly the tables,
  * ledger rows and signals a live exporter produces.
  *
- * Every row id is deterministic, so storing the same spans twice is a no-op.
+ * Every row id is deterministic, so storing the same spans twice adds no row.
+ * Live ingest keeps what is stored (a retried export is a no-op); an import sets
+ * `spanConflict: "update"` so a re-read import rewrites its stored spans.
  */
 
 export interface PersistSpansContext {
@@ -59,6 +63,12 @@ export interface PersistSpansContext {
    * them paced, instead of one job per imported page.
    */
   foldIntentGraph?: boolean;
+  /**
+   * A raw span whose id is already stored: `ignore` (the default, live ingest)
+   * keeps it; `update` (the Agent health importer) rewrites it with the new
+   * values, so an import reprocessed after a mapper fix reaches `otel_spans`.
+   */
+  spanConflict?: OtelSpanConflict;
 }
 
 export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
@@ -69,8 +79,12 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   traceTurns?: TraceTurnsIngestDeps;
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** Storage lookup for agent-wrapper span dedupe. Absent, off. */
-  agentSpanDedupe?: AgentSpanDedupeDeps;
+  /**
+   * The agent-span dedupe's storage lookup: an agent wrapper with the run's
+   * summed usage is not one more model call. `null` turns the dedupe off; only
+   * the health importer passes it (lib/health-imports/start.ts).
+   */
+  agentSpanDedupe: AgentSpanDedupeDeps | null;
   /**
    * The project's own prices (RC-482), read once per batch: the batch pays
    * them and the current prices. Absent, the current built-in prices.
@@ -87,14 +101,24 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   captureFailure: (error: unknown) => void;
 }
 
-/** `events`: the LLM-call rows failed. `derived`: a batch of only ledger rows failed. Either way, retry. */
+/**
+ * `rows`: the model call rows stored. `events`: the LLM-call rows failed.
+ * `derived`: a batch of only ledger rows failed. Either way, retry.
+ */
 export type PersistSpansResult =
-  | { ok: true; accepted: number; calls: number }
+  | { ok: true; accepted: number; calls: number; rows: EventWithMetric[] }
   | { ok: false; stage: "events" | "derived" };
 
 export async function persistDecodedSpans(
   spans: DecodedSpan[],
-  { projectId, organization, quotaOrgId, endpoint, foldIntentGraph = false }: PersistSpansContext,
+  {
+    projectId,
+    organization,
+    quotaOrgId,
+    endpoint,
+    foldIntentGraph = false,
+    spanConflict = "ignore",
+  }: PersistSpansContext,
   deps: PersistSpansDeps,
 ): Promise<PersistSpansResult> {
   const { logError } = deps;
@@ -135,18 +159,15 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
-  const dedupe = await resolveAgentSpanDedupe(
-    spans,
-    projectId,
-    deps.agentSpanDedupe,
-    (err, traceIds) => {
-      logError("agent span model call lookup failed", err, {
-        project_id: projectId,
-        trace_count: traceIds.length,
-      });
-      deps.captureFailure(err);
-    },
-  );
+  const dedupe = deps.agentSpanDedupe
+    ? await resolveAgentSpanDedupe(spans, projectId, deps.agentSpanDedupe, (err, traceIds) => {
+        logError("agent span model call lookup failed", err, {
+          project_id: projectId,
+          trace_count: traceIds.length,
+        });
+        deps.captureFailure(err);
+      })
+    : undefined;
 
   // Group into LLM calls, reconstruct rows, and persist under the project.
   const calls = groupSpans(spans, dedupe);
@@ -249,7 +270,11 @@ export async function persistDecodedSpans(
   try {
     const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices });
     if (spanRows.length > 0) {
-      await deps.insertOtelSpans(projectId, spanRows);
+      if (spanConflict === "update") {
+        await deps.insertOtelSpans(projectId, spanRows, undefined, { onConflict: "update" });
+      } else {
+        await deps.insertOtelSpans(projectId, spanRows);
+      }
     }
   } catch (err) {
     logError("raw span insert failed", err, {
@@ -260,7 +285,7 @@ export async function persistDecodedSpans(
 
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
-  return { ok: true, accepted, calls: calls.length };
+  return { ok: true, accepted, calls: calls.length, rows };
 }
 
 /**

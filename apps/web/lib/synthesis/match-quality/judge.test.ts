@@ -9,7 +9,7 @@ import {
   type JudgeEngine,
   judgeTargets,
   labelsFromVerdicts,
-  sampleForJudging,
+  sampleAdaptively,
   stratifiedAccuracy,
   validateVerdicts,
 } from "./judge";
@@ -51,7 +51,7 @@ const CORPUS: CorpusEntry[] = ["tool_a", "tool_b", "tool_c"].map((entryId) => ({
 }));
 
 test("an invoked target is never sent to the judge", () => {
-  const { cases } = sampleForJudging([item("a", { source: "invoked" }), item("b")], OURS, BASE);
+  const { cases } = sampleAdaptively([item("a", { source: "invoked" }), item("b")], OURS, BASE);
   assert.deepEqual(
     cases.map((row) => row.id),
     ["b"],
@@ -59,7 +59,7 @@ test("an invoked target is never sent to the judge", () => {
 });
 
 test("a search with no captured query is skipped", () => {
-  const { cases } = sampleForJudging([item("a", { query: null })], OURS, BASE);
+  const { cases } = sampleAdaptively([item("a", { query: null })], OURS, BASE);
   assert.equal(cases.length, 0);
 });
 
@@ -69,7 +69,7 @@ test("repeated phrasings spend one judgment", () => {
     item("b", { query: "  deploy   the service  " }),
     item("c", { query: "something else" }),
   ];
-  const { cases } = sampleForJudging(rows, OURS, BASE);
+  const { cases } = sampleAdaptively(rows, OURS, BASE);
   assert.deepEqual(
     cases.map((row) => row.id),
     ["a", "c"],
@@ -81,7 +81,7 @@ test("the strata split on whether the two engines led with the same result", () 
     item("dispute", { ours: ["tool_b"], base: ["tool_a"] }),
     item("agree", { ours: ["tool_a", "tool_c"], base: ["tool_a"] }),
   ];
-  const { cases, populationDisputed, populationControl } = sampleForJudging(rows, OURS, BASE);
+  const { cases, populationDisputed, populationControl } = sampleAdaptively(rows, OURS, BASE);
   assert.equal(populationDisputed, 1);
   assert.equal(populationControl, 1);
   assert.deepEqual(
@@ -95,27 +95,16 @@ test("the strata split on whether the two engines led with the same result", () 
 
 test("the shortlist merges both arms and carries no arm ordering", () => {
   const rows = [item("a", { ours: ["tool_b", "tool_c"], base: ["tool_a"] })];
-  const { cases } = sampleForJudging(rows, OURS, BASE);
+  const { cases } = sampleAdaptively(rows, OURS, BASE);
   const shortlist = cases[0]?.shortlist ?? [];
   assert.deepEqual([...shortlist].sort(), ["tool_a", "tool_b", "tool_c"]);
   // Stable across calls, so a re-run and a snapshot both hold.
-  const again = sampleForJudging(rows, OURS, BASE).cases[0]?.shortlist ?? [];
+  const again = sampleAdaptively(rows, OURS, BASE).cases[0]?.shortlist ?? [];
   assert.deepEqual(shortlist, again);
 });
 
-test("the control sample strides the population instead of taking the newest", () => {
-  const rows = Array.from({ length: 10 }, (_, index) =>
-    item(`c${index}`, { query: `q${index}`, ours: ["tool_a"], base: ["tool_a"] }),
-  );
-  const { cases } = sampleForJudging(rows, OURS, BASE, { maxControl: 3 });
-  assert.deepEqual(
-    cases.map((row) => row.id),
-    ["c0", "c3", "c6"],
-  );
-});
-
 test("a case carries no arm labels and no assumed target", () => {
-  const { cases } = sampleForJudging([item("a", { query: "how do I deploy" })], OURS, BASE);
+  const { cases } = sampleAdaptively([item("a", { query: "how do I deploy" })], OURS, BASE);
   const sent = JSON.stringify(cases.map(({ id, query, shortlist }) => ({ id, query, shortlist })));
   assert.ok(!sent.includes(OURS));
   assert.ok(!sent.includes(BASE));
@@ -285,26 +274,14 @@ test("a case the engine left out stays on the reference tier", async () => {
   assert.equal(result?.census.answeredDisputed, 1);
 });
 
-test("every distinct search is judged, not a sample", () => {
-  const rows = Array.from({ length: 300 }, (_, index) =>
-    item(`s${index}`, {
-      query: `q${index}`,
-      ours: index % 2 === 0 ? ["tool_a"] : ["tool_b"],
-      base: ["tool_a"],
-    }),
-  );
-  const { cases } = sampleForJudging(rows, OURS, BASE);
-  assert.equal(cases.length, 300);
-});
-
 test("a disagreement already driving a nomination jumps the queue", () => {
   const rows = [
     item("filler-1", { query: "q1", ours: ["tool_b"], base: ["tool_a"] }),
     item("filler-2", { query: "q2", ours: ["tool_b"], base: ["tool_a"] }),
     item("nominating", { query: "q3", ours: ["tool_b"], base: ["tool_a"] }),
   ];
-  const { cases, nominatingPopulation, nominatingSampled } = sampleForJudging(rows, OURS, BASE, {
-    maxDisputed: 1,
+  const { cases, nominatingPopulation, nominatingSampled } = sampleAdaptively(rows, OURS, BASE, {
+    maxCases: 1,
     priority: new Set(["nominating"]),
   });
   assert.deepEqual(
@@ -319,9 +296,9 @@ test("priority never reorders the control stratum, because it is the measurement
   const rows = Array.from({ length: 6 }, (_, index) =>
     item(`c${index}`, { query: `q${index}`, ours: ["tool_a"], base: ["tool_a"] }),
   );
-  const plain = sampleForJudging(rows, OURS, BASE, { maxControl: 2 });
-  const prioritised = sampleForJudging(rows, OURS, BASE, {
-    maxControl: 2,
+  const plain = sampleAdaptively(rows, OURS, BASE, { maxCases: 2 });
+  const prioritised = sampleAdaptively(rows, OURS, BASE, {
+    maxCases: 2,
     priority: new Set(["c5"]),
   });
   assert.deepEqual(
@@ -361,36 +338,14 @@ test("a request with a fresh verdict is not paid for again; a stale one is re-re
     ["q fresh", label("q fresh", "tool_a")],
     ["q stale", label("q stale", "tool_a", { fingerprint: "fp-old" })],
   ]);
-  const { cases } = sampleForJudging(rows, OURS, BASE, { key, fingerprint: "fp-now" });
-  // Unread first, then stale.
-  assert.deepEqual(
-    cases.map((row) => row.id),
-    ["unread", "stale"],
-  );
+  const { cases } = sampleAdaptively(rows, OURS, BASE, { key, fingerprint: "fp-now" });
+  assert.deepEqual(cases.map((row) => row.id).sort(), ["stale", "unread"]);
 });
 
 test("an unclear verdict counts as read: it is not asked again until the tools change", () => {
   const rows = [item("u", { query: "q u", ours: ["tool_b"], base: ["tool_a"] })];
   const key = new Map([["q u", label("q u", "", { source: "unclear" })]]);
-  assert.equal(sampleForJudging(rows, OURS, BASE, { key, fingerprint: "fp-now" }).cases.length, 0);
-});
-
-test("once a stratum has its answers, only a trickle of new requests is judged", () => {
-  const rows = Array.from({ length: 40 }, (_, index) =>
-    item(`s${index}`, { query: `q${index}`, ours: ["tool_a"], base: ["tool_a"] }),
-  );
-  const key = new Map(
-    Array.from({ length: 20 }, (_, index) => [`q${index}`, label(`q${index}`, "tool_a")] as const),
-  );
-  const { cases } = sampleForJudging(rows, OURS, BASE, {
-    key,
-    fingerprint: "fp-now",
-    targetPerStratum: 10,
-    trickle: 0.25,
-  });
-  // 20 fresh already exceed the target of 10, so 25% of the 20 unread: 5.
-  assert.equal(cases.length, 5);
-  assert.ok(cases.every((row) => Number(row.id.slice(1)) >= 20));
+  assert.equal(sampleAdaptively(rows, OURS, BASE, { key, fingerprint: "fp-now" }).cases.length, 0);
 });
 
 test("the engine's capacity caps a run, alternating strata so both are measured", () => {
@@ -401,7 +356,7 @@ test("the engine's capacity caps a run, alternating strata so both are measured"
       base: ["tool_a"],
     }),
   );
-  const { cases } = sampleForJudging(rows, OURS, BASE, { maxCases: 6 });
+  const { cases } = sampleAdaptively(rows, OURS, BASE, { maxCases: 6 });
   assert.equal(cases.length, 6);
   assert.equal(cases.filter((row) => row.stratum === "control").length, 3);
 });
@@ -497,34 +452,10 @@ test("judgeTargets returns labels and honours the engine's capacity", async () =
   assert.equal(result?.labels.length, 2);
 });
 
-test("stale verdicts keep being re-read after a stratum has its answers", () => {
-  const rows = Array.from({ length: 40 }, (_, index) =>
-    item(`s${index}`, { query: `q${index}`, ours: ["tool_a"], base: ["tool_a"] }),
-  );
-  const key = new Map(
-    Array.from(
-      { length: 40 },
-      (_, index) =>
-        [
-          `q${index}`,
-          label(`q${index}`, "tool_a", { fingerprint: index < 20 ? "fp-now" : "fp-old" }),
-        ] as const,
-    ),
-  );
-  const { cases } = sampleForJudging(rows, OURS, BASE, {
-    key,
-    fingerprint: "fp-now",
-    targetPerStratum: 10,
-    trickle: 0.25,
-  });
-  // Target met by the 20 fresh; a quarter of the 20 stale is still re-read.
-  assert.equal(cases.length, 5);
-});
-
 test("a verdict naming a tool the catalog no longer has is re-read", () => {
   const rows = [item("g", { query: "q g", ours: ["tool_b"], base: ["tool_a"] })];
   const key = new Map([["q g", label("q g", "tool_deleted")]]);
-  const { cases } = sampleForJudging(rows, OURS, BASE, {
+  const { cases } = sampleAdaptively(rows, OURS, BASE, {
     key,
     fingerprint: "fp-now",
     corpusIds: new Set(["tool_a", "tool_b"]),
@@ -541,7 +472,7 @@ test("with no baseline every unread search is one stratum and still judged", () 
     arms: [{ arm: OURS, role: "serving" as const, resultIds: ["tool_b"], resultScores: null }],
     targetEntryId: "",
   }));
-  const { cases } = sampleForJudging(rows, OURS, "");
+  const { cases } = sampleAdaptively(rows, OURS, "");
   assert.equal(cases.length, 3);
   assert.ok(cases.every((row) => row.stratum === "disputed" && row.assumed === ""));
 });

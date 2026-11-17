@@ -611,9 +611,8 @@ export interface HealthPageModel {
   /**
    * The early reading read no turns, while `turns` counts some: its daily
    * counts cover a wider scan than the window it reads, so older runs count
-   * and its score of 100 stands on nothing (RC-255). Set only under
-   * `cloud-health-import-first-reading`. Where those runs are imported, the
-   * page says the reading is being built.
+   * and its score of 100 stands on nothing (RC-255). Where those runs are
+   * imported, the page says the reading is being built.
    */
   emptyEarlyReading?: true;
   /** How far the early reading has got: runs read of the runs there are. Set only with `earlyReading`. */

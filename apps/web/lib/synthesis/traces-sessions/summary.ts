@@ -28,7 +28,7 @@ import {
 } from "./timeframe";
 
 /**
- * The summary inside each Traces tab (`cloud-traces-sessions`, RC-331): the
+ * The summary inside each Traces tab (RC-331): the
  * timeframe in `?window=` and the numbers of that tab only. Sessions:
  * sessions, failed, typical duration and cost. Spans: spans, errors, p50/p95
  * and kinds. Logs: records, levels and errors. Each has a volume chart. Only

@@ -901,7 +901,6 @@ test("a reading that read none of the imported runs shows no score and no verdic
   };
   const html = page({
     model,
-    scoreLeads: true,
     state: {
       kind: "building",
       phase: "computing",
@@ -918,7 +917,7 @@ test("a reading that read none of the imported runs shows no score and no verdic
   assert.doesNotMatch(text, /great shape|Healthy|of 100/);
 });
 
-test("with the Health score on, the page leads with it and each issue says what fixing it wins back (RC-225)", () => {
+test("the page leads with the Health score, and each issue says what fixing it wins back (RC-225)", () => {
   const issues = scoredIssues(
     READY_MODEL.signals.map((signal) => ({
       id: signal.id,
@@ -932,7 +931,7 @@ test("with the Health score on, the page leads with it and each issue says what 
     { version: HEALTH_SCORE_VERSION, value: base.value - 4 },
     { version: HEALTH_SCORE_VERSION, value: base.value - 9 },
   ]);
-  const html = page({ model: { ...READY_MODEL, score }, scoreLeads: true });
+  const html = page({ model: { ...READY_MODEL, score } });
   assertHouseStyle(html, "health score");
   const text = visibleText(html);
   assert.match(html, new RegExp(`data-health-score="${score.value}"`));
@@ -968,7 +967,6 @@ test("with the Health score on, the page leads with it and each issue says what 
       earlyReading: true,
       earlyProgress: { read: 1_055, total: 5_315, percent: 19 },
     },
-    scoreLeads: true,
   });
   assertHouseStyle(early, "early score");
   assert.match(early, /data-calculating=""/);
@@ -994,9 +992,6 @@ test("with the Health score on, the page leads with it and each issue says what 
     html,
     /score-beat|score-wave|data-health-calculating|data-health-still-reading/,
   );
-  // Off: the page is as before, even with a score in the model.
-  const off = page({ model: { ...READY_MODEL, score } });
-  assert.doesNotMatch(off, /data-health-score|If fixed/);
 });
 
 test("reads that failed cost their part, not the page", () => {
@@ -1165,11 +1160,7 @@ test("with the score shown and the tool calls inferred, the score card says what
   );
   const score = healthScoreView(issues, READY_MODEL.turns);
   const line = /Read from tool calls inferred from span shape\. Asks and answers are not checked\./;
-  const inferred = page({
-    model: { ...READY_MODEL, score },
-    scoreLeads: true,
-    inferredTools: true,
-  });
+  const inferred = page({ model: { ...READY_MODEL, score }, inferredTools: true });
   assertHouseStyle(inferred, "inferred score");
   assert.match(visibleText(inferred), line);
   assert.ok(
@@ -1183,12 +1174,12 @@ test("with the score shown and the tool calls inferred, the score card says what
   );
 
   assert.doesNotMatch(
-    visibleText(page({ model: { ...READY_MODEL, score }, scoreLeads: true })),
+    visibleText(page({ model: { ...READY_MODEL, score } })),
     line,
     "recorded tool calls: no line",
   );
   assert.doesNotMatch(
-    visibleText(page({ model: { ...READY_MODEL, score }, inferredTools: true })),
+    visibleText(page({ model: { ...READY_MODEL, score: null }, inferredTools: true })),
     line,
     "no score: no line",
   );

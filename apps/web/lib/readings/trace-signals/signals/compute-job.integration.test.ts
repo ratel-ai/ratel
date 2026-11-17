@@ -31,6 +31,7 @@ import {
 import { awaitedFixes } from "@/lib/readings/trace-signals/signals/data-fixes";
 import {
   count,
+  type Db,
   jobDeps,
   PROJECT_ID,
   seedLedger,
@@ -67,6 +68,16 @@ function problemFixtures() {
   ];
 }
 
+/** A new project's first reading is a quick week (RC-224); the full one follows it, a minute later. */
+async function readFully(db: Db, at: Date): Promise<void> {
+  await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "first_build" },
+    jobDeps(db, new Date(at.getTime() - 60_000)),
+  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "full_reading" }, jobDeps(db, at));
+}
+
 test("a run computes signals over the stored ledger and persists them with the finished run", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problemFixtures());
@@ -80,7 +91,7 @@ test("a run computes signals over the stored ledger and persists them with the f
 
   assert.equal(result.outcome, "completed");
   assert.equal(result.turnsScanned, 155);
-  assert.equal(result.windowDays, 90, "the default limits read 90 days");
+  assert.equal(result.windowDays, 7, "a new project's first reading reads a week (RC-224)");
   const run = await latestSignalRun(PROJECT_ID, db);
   assert.equal(run?.status, "completed");
   assert.equal(run?.trigger, "manual");
@@ -150,6 +161,7 @@ test("one live run per project: a second run is busy, a stale one is reaped", as
 test("a run over its time budget fails with time_budget and the next run halves its window", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problemFixtures());
+  await readFully(db, new Date(NOW.getTime() - 60_000));
   const tracked: Tracked[] = [];
   const over = await computeProjectTraceSignals(
     PROJECT_ID,
@@ -360,12 +372,13 @@ test("a reading that lacked turn ids is read again once enough runs carry them, 
   const { client, db } = await setupDb();
   const run = (f: ReturnType<typeof fresh>) =>
     f.search(["find_pr", "link_pr"]).invoke("find_pr").invoke("link_pr").invoke("notify");
+  // The floor's worth of runs: a thinner project still awaits its full reading, and an early reading asks for that first (RC-224).
   await seedLedger(
     client,
     db,
-    times(40, () => run(fresh())),
+    times(50, () => run(fresh())),
   );
-  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  await readFully(db, NOW);
   assert.deepEqual(awaitedFixes((await latestSignalRun(PROJECT_ID, db))?.summary), [
     "turn_ids",
     "user_messages",
@@ -410,7 +423,7 @@ test("a reading that lacked turn ids is read again once enough runs carry them, 
   };
   assert.equal(summary.workflows?.basis?.basis, "exact");
   assert.equal(summary.workflows?.basis?.since, fixedAt.toISOString());
-  assert.equal(summary.workflows?.basis?.excludedRuns, 40);
+  assert.equal(summary.workflows?.basis?.excludedRuns, 50);
   assert.equal(
     await fix(new Date(later.getTime() + 60 * 60_000)),
     false,
@@ -576,14 +589,13 @@ test("a completed run queues fix drafts through the seam, and a failed enqueue n
   assert.equal(failing.outcome, "completed");
 });
 
-test("with the quick first reading on, the first run reads a week, says it is early and queues the full one (RC-224)", async () => {
+test("the first run reads a week, says it is early and queues the full one (RC-224)", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problemFixtures());
   const queued: string[] = [];
   const stored: string[] = [];
   const quick = (over: Parameters<typeof jobDeps>[3] = {}) =>
     jobDeps(db, NOW, [], {
-      quickFirstReading: async () => true,
       storeHealthScore: async (_p, runId) => {
         stored.push(runId);
       },
@@ -639,7 +651,7 @@ test("with the quick first reading on, the first run reads a week, says it is ea
   assert.deepEqual(stored, [fullRun?.id], "the full reading stores its score");
   assert.deepEqual(queued, [PROJECT_ID], "and queues nothing more");
 
-  // Past the full reading the flag changes nothing: the next run is a usual one.
+  // Past the full reading the next run is a usual one.
   const next = await computeProjectTraceSignals(
     PROJECT_ID,
     { trigger: "scheduled" },
@@ -657,7 +669,6 @@ test("a full-window reading made while an import still runs stays early, and wai
   await seedLedger(client, db, problemFixtures());
   const queued: string[] = [];
   const deps = jobDeps(db, NOW, [], {
-    quickFirstReading: async () => true,
     importRunning: async () => true,
     enqueueFullReading: async (p) => {
       queued.push(p);
@@ -678,29 +689,10 @@ test("a full-window reading made while an import still runs stays early, and wai
   );
 });
 
-test("with the flag off the first run reads the plan's window and is never early", async () => {
-  const { client, db } = await setupDb();
-  await seedLedger(client, db, problemFixtures());
-  const first = await computeProjectTraceSignals(
-    PROJECT_ID,
-    { trigger: "first_build" },
-    jobDeps(db, NOW, [], { importRunning: async () => true }),
-  );
-  assert.equal(first.windowDays, 90);
-  assert.equal(
-    ((await latestSignalRun(PROJECT_ID, db))?.summary as { earlyReading?: boolean }).earlyReading,
-    undefined,
-  );
-});
-
 test("a caught-up build asks for the full reading once an early one has stood ten minutes", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problemFixtures());
-  await computeProjectTraceSignals(
-    PROJECT_ID,
-    { trigger: "first_build" },
-    jobDeps(db, NOW, [], { quickFirstReading: async () => true }),
-  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "first_build" }, jobDeps(db, NOW));
   const drained = (minutes: number) =>
     enqueueFirstSignalRun(PROJECT_ID, {
       latestRun: (id) => latestSignalRun(id, db),
@@ -744,7 +736,12 @@ test("each reading stores its Health score, and the page reads it with the chang
   };
   await computeProjectTraceSignals(
     PROJECT_ID,
-    { trigger: "manual" },
+    { trigger: "first_build" },
+    jobDeps(db, new Date(NOW.getTime() - 60_000), [], { storeHealthScore }),
+  );
+  await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "full_reading" },
     jobDeps(db, NOW, [], { storeHealthScore }),
   );
   const first = await latestSignalRun(PROJECT_ID, db);
@@ -755,14 +752,14 @@ test("each reading stores its Health score, and the page reads it with the chang
 
   // A later reading: the page's score is live, its change is against the stored one before it.
   await client.exec(
-    `update trace_signal_runs set summary = summary || '{"healthScore": {"version": ${HEALTH_SCORE_VERSION}, "value": ${stored!.value - 5}}}'::jsonb`,
+    `update trace_signal_runs set summary = summary || '{"healthScore": {"version": ${HEALTH_SCORE_VERSION}, "value": ${stored!.value - 5}}}'::jsonb where id = '${first!.id}'`,
   );
   await computeProjectTraceSignals(
     PROJECT_ID,
     { trigger: "scheduled" },
     jobDeps(db, new Date(NOW.getTime() + 60_000), [], { storeHealthScore }),
   );
-  assert.deepEqual(await listEarlierHealthScores(PROJECT_ID, 7, db), [
+  assert.deepEqual(await listEarlierHealthScores(PROJECT_ID, 1, db), [
     { version: HEALTH_SCORE_VERSION, value: stored!.value - 5 },
   ]);
 

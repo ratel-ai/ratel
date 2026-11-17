@@ -171,7 +171,7 @@ function deps(
     name: null,
     nameModel: "test-model",
     observability: { trackSystemEvent: async (event) => void tracked.push(event) },
-    adaptive: async () => false,
+    loadCarried: (p, hashes) => loadCarriedVerdicts(p, hashes, db),
     ...over,
   };
 }
@@ -379,7 +379,7 @@ test("the decision engine places the asks once; later readings read its cached v
   assert.equal(second.placement, "judged");
 });
 
-test("behind the flag, a new topic does not re-ask every ask: placements whose topic is unchanged are carried after an audit", async () => {
+test("a new topic does not re-ask every ask: placements whose topic is unchanged are carried after an audit", async () => {
   const { client, db } = await seed();
   const asked: string[][] = [];
   const judge = {
@@ -403,11 +403,7 @@ test("behind the flag, a new topic does not re-ask every ask: placements whose t
       }));
     },
   };
-  const adaptive = {
-    adaptive: async () => true,
-    loadCarried: (p: string, hashes: readonly string[]) => loadCarriedVerdicts(p, hashes, db),
-  };
-  await assignProjectTopics(PROJECT_ID, deps(db, [], { judge, name: null, ...adaptive }));
+  await assignProjectTopics(PROJECT_ID, deps(db, [], { judge, name: null }));
   const printed = (
     await client.query<{ n: number }>(
       `select count(*)::int as n from trace_workflow_verdicts where verdict = 'workflow' and option_print is not null`,
@@ -421,20 +417,14 @@ test("behind the flag, a new topic does not re-ask every ask: placements whose t
     [PROJECT_ID],
   );
   asked.length = 0;
-  const second = await assignProjectTopics(
-    PROJECT_ID,
-    deps(db, [], { judge, name: null, ...adaptive }),
-  );
+  const second = await assignProjectTopics(PROJECT_ID, deps(db, [], { judge, name: null }));
   assert.equal(second.placement, "judged");
   // Under the audit's sample size every carried placement is re-asked; they agree, so they stand.
   const reasked = asked.flat().length;
   assert.ok(reasked > 0 && reasked <= 20, `the audit sample, got ${reasked}`);
 
   asked.length = 0;
-  const third = await assignProjectTopics(
-    PROJECT_ID,
-    deps(db, [], { judge, name: null, ...adaptive }),
-  );
+  const third = await assignProjectTopics(PROJECT_ID, deps(db, [], { judge, name: null }));
   assert.equal(third.judged, 0, "the same list again: every placement is an exact hit");
   assert.equal(asked.length, 0);
 });

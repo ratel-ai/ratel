@@ -11,15 +11,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { LogsView } from "@/components/console/traces/LogsView";
 import { SpansView } from "@/components/console/traces/SpansView";
 import { MINI_VOLUME_HEIGHT } from "@/components/console/traces-sessions/MiniVolume";
-import { SessionsView } from "@/components/console/traces-sessions/SessionsView";
+import { SessionListView } from "@/components/console/traces-sessions/SessionListView";
 import {
   type TabSummaryState,
   TabSummaryView,
 } from "@/components/console/traces-sessions/TabSummary";
-import { TracesFrame } from "@/components/console/traces-sessions/TracesFrame";
 import { EMPTY_TRACE_FACETS } from "@/lib/synthesis/traces/queries";
 import { buildVolumeModel } from "@/lib/synthesis/traces/v2/volume";
-import { listSessions } from "./sessions";
 import { TRACES_WINDOWS, type TracesWindow } from "./timeframe";
 
 /** RC-312, RC-331: the summary inside each Traces tab, rendered as the app renders it. */
@@ -120,13 +118,13 @@ function ok(tab: "sessions" | "spans" | "logs", window: TracesWindow = "7d"): Ta
 
 const VIEWS = {
   sessions: () =>
-    createElement(SessionsView, {
+    createElement(SessionListView, {
       projectId: PROJECT,
       filter: "all",
       rows: [],
       nextCursor: null,
+      now: NOW,
       empty: null,
-      experiment: null,
     }),
   spans: () =>
     createElement(SpansView, {
@@ -157,16 +155,9 @@ const VIEWS = {
     }),
 };
 
-function tab(name: keyof typeof VIEWS, enabled: boolean | null): string {
+function tab(name: keyof typeof VIEWS): string {
   const path = `/project/${PROJECT}/traces${name === "sessions" ? "" : `/${name}`}`;
-  const view = VIEWS[name]();
-  return renderToStaticMarkup(
-    inRouter(
-      path,
-      "?window=30d",
-      enabled === null ? view : createElement(TracesFrame, { enabled }, view),
-    ),
-  );
+  return renderToStaticMarkup(inRouter(path, "?window=30d", VIEWS[name]()));
 }
 
 test("each tab's summary shows each timeframe, picked, with only that tab's numbers", () => {
@@ -253,9 +244,9 @@ test("while reading, and when the aggregate was too slow, the summary says so an
   assert.match(text(slow), /24 hours 7 days 30 days/, "the timeframe can still change");
 });
 
-test("flag on: each tab has its own summary under the tabs, with the URL's timeframe, and nothing above the tabs", () => {
+test("each tab has its own summary under the tabs, with the URL's timeframe, and nothing above the tabs, with no flag (RC-591)", () => {
   for (const name of ["sessions", "spans", "logs"] as const) {
-    const html = tab(name, true);
+    const html = tab(name);
     assert.equal(html.match(/data-tab-summary="/g)?.length, 1, `${name}: one summary`);
     assert.match(html, new RegExp(`data-tab-summary="${name}" data-window="30d"`));
     const tabs = html.indexOf('aria-label="Traces sections"');
@@ -265,23 +256,4 @@ test("flag on: each tab has its own summary under the tabs, with the URL's timef
       `${name}: the summary sits inside the tab, under the tabs`,
     );
   }
-});
-
-test("flag off: Spans and Logs render as on main, with no summary", () => {
-  for (const name of ["spans", "logs"] as const) {
-    const off = tab(name, false);
-    assert.doesNotMatch(off, /data-tab-summary/);
-    assert.equal(off, tab(name, null), `${name}: the same markup as the view alone`);
-  }
-});
-
-test("the Sessions list does not take the timeframe", () => {
-  // Compile-time: the list's options have no window; a page pages newest first whatever the summary says.
-  const call = () =>
-    listSessions(PROJECT, {
-      filter: "all",
-      // @ts-expect-error the Sessions list has no timeframe
-      window: "24h",
-    });
-  assert.equal(typeof call, "function");
 });

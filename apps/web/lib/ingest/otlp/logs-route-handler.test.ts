@@ -906,3 +906,38 @@ test("an ingest-only key's gen_ai logs never restate a stored model call", async
   );
   assert.deepEqual(ingest.storeCalls, []);
 });
+
+test("a stored log export logs its record counts by project and org", async () => {
+  const lines: Array<[string, Record<string, unknown>]> = [];
+  const response = await handleLogsRequest(
+    request(otlpLogsJson(["ratel.experiment.results", "host.application.log"]), {
+      Authorization: "Bearer rtl_testkey",
+    }),
+    makeDeps({
+      ingestLog: {
+        sink: { info: (fields, message) => lines.push([message, fields]) },
+        lookupLabels: async () => ({
+          org_id: "org-1",
+          org_slug: "acme",
+          project_path: "acme/agent",
+        }),
+      },
+    }),
+  );
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(lines, [
+    [
+      "otlp_logs_ingested",
+      {
+        project_id: "proj-1",
+        org_id: "org-1",
+        org_slug: "acme",
+        project_path: "acme/agent",
+        records: 2,
+        accepted: 1,
+        dropped: 1,
+      },
+    ],
+  ]);
+});

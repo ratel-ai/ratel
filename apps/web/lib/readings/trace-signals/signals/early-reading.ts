@@ -1,13 +1,12 @@
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { MIN_SIGNAL_WINDOW_DAYS } from "@/lib/readings/trace-signals/signals/compute";
 
 /**
  * The quick first reading (RC-224): a new project's first findings, before
  * the whole post-processing has run.
  *
- * Without it, a project's first signal run waits for its turn backlog to be
- * built in full and then reads the plan's whole window (up to 90 days) under
- * the run's time budget. With it:
+ * A project's first signal run does not wait for its turn backlog to be
+ * built in full, nor read the plan's whole window (up to 90 days) under the
+ * run's time budget:
  * - the first run reads the last week only (`QUICK_FIRST_READING_DAYS`, the
  *   window the page opens on) and queues the full-window run as soon as it
  *   lands;
@@ -17,26 +16,10 @@ import { MIN_SIGNAL_WINDOW_DAYS } from "@/lib/readings/trace-signals/signals/com
  * - every reading made before the full one is stored as early
  *   (`summary.earlyReading`): a narrow window, a backlog still being built,
  *   or an import still running. The page says so, and asks for the full one.
- *
- * Owned: upstream evaluates `cloud-quick-first-reading` per project through its flag service.
- * Here it is the deployment switch `FF_QUICK_FIRST_READING` (off by default), so the project and
- * organization are kept only for the callers' shape.
  */
-export const QUICK_FIRST_READING_FLAG = "FF_QUICK_FIRST_READING" as const;
 
 /** The first reading's window: a week, which is also the page's default window. */
 export const QUICK_FIRST_READING_DAYS = MIN_SIGNAL_WINDOW_DAYS;
-
-/** Whether a project's first reading starts from the last week. */
-export type QuickFirstReadingFlag = (projectId: string, organization: unknown) => Promise<boolean>;
-
-export async function quickFirstReadingEnabled(
-  _projectId: string,
-  _organization: unknown,
-  env: Record<string, string | undefined> = process.env,
-): Promise<boolean> {
-  return experimentalFeatureEnabled(QUICK_FIRST_READING_FLAG, env);
-}
 
 /** The parts of a stored run these rules read. */
 export interface ReadingFacts {

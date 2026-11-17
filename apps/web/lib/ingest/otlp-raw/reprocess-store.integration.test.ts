@@ -19,7 +19,10 @@ import { readOtlpRawExportPage } from "./store";
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const SINCE = new Date("2026-11-01T00:00:00.000Z");
-const FLAGS: ReprocessIngestFlags = { captureReply: false };
+const FLAGS: ReprocessIngestFlags = {
+  captureReply: false,
+  agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
+};
 
 test("apply patches the stored event and its metrics, and a second apply changes nothing", async () => {
   const db = await setup();

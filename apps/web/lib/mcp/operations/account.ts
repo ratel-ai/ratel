@@ -34,24 +34,7 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
  * `RATEL_EXPERIMENTAL_FEATURES`).
  */
 const DEPLOYMENT_SWITCHES = [
-  {
-    key: "FF_ADAPTIVE_LABELLING",
-    note: "labelling asks in rounds until the number's margin is met, and decisions carry over unchanged options",
-  },
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
-  {
-    key: "FF_TRACES_SESSIONS",
-    note: "the console's Traces page leads with the person's ask; no tool reads it yet",
-  },
-  { key: "FF_HEALTH_SCORE", note: "Agent health's Summary leads with the Health score" },
-  {
-    key: "FF_HEALTH_IMPORT_FIRST_READING",
-    note: "no score or verdict before a reading has scanned the imported runs",
-  },
-  {
-    key: "FF_QUICK_FIRST_READING",
-    note: "a new project's first Agent health reading reads a week first, marked early",
-  },
 ] as const;
 
 export interface AccountOperationDeps {
@@ -81,7 +64,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       domain: "account",
       title: "Feature flag status",
       description:
-        "The deployment's feature switches and whether each is on: the eval gate, the Traces Sessions view and the Agent health readings. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+        "The deployment's feature switches and whether each is on: the eval gate. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
       keywords: ["flags", "enabled", "disabled", "feature access"],
       scope: "project",
       mutates: false,

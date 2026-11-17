@@ -52,44 +52,8 @@ import type { EvalItem } from "@/lib/synthesis/match-quality/types";
  * entries get NOMINATED, and reports how much the reference tier was worth.
  */
 
-/**
- * Disagreements judged per run. These are the ones that change what gets fixed.
- *
- * Sized for a classifier-shaped engine, not a generative one. The first engine
- * was a Claude call over the whole sample at once, which priced judging at
- * about a cent a case and capped it at 32. Jev answers one case per call at a
- * few hundredths of a cent, so the cap is now a runaway guard rather than a
- * budget: in practice every distinct unjudged query in the window is read, and
- * the answer key (`labels.ts`) keeps the next run from paying for it again.
- */
-export const MAX_DISPUTED_CASES = 2_000;
-
-/**
- * Agreements judged per run. These are the ones that measure the reference tier.
- *
- * As high as the disputed cap for the same reason: once the whole control
- * stratum fits, `stratifiedAccuracy` stops being an estimate over a sample and
- * becomes a count over the population, less abstentions.
- */
-export const MAX_CONTROL_CASES = 2_000;
-
 /** Results per arm offered as context for one case. */
 export const SHORTLIST_PER_ARM = 5;
-
-/**
- * Fresh answers per stratum a window needs before judging slows down.
- *
- * About 500 answered searches put a stratum's accuracy within roughly +-4
- * points at 95%, which is as sharp as a weekly number needs to be. Until a
- * window holds that many, every unread request in the stratum is judged (budget
- * allowing); past it only a trickle of NEW requests is, so the key keeps
- * noticing new kinds of search without paying to re-measure a settled number.
- * This is how judging costs less and less as the key grows.
- */
-export const TARGET_ANSWERS_PER_STRATUM = 500;
-
-/** Share of never-read requests judged once a stratum has its target. */
-export const TRICKLE_SHARE = 0.25;
 
 /**
  * What one run may spend on judging, in dollars.
@@ -157,7 +121,7 @@ export interface JudgeCensus {
   nominatingSampled: number;
   /** Stratified estimate of how often the baseline's top result was right. */
   referenceAccuracy: number | null;
-  /** How the adaptive loop went (RC-394); absent on a fixed-count run. */
+  /** How the adaptive loop went (RC-394); absent on a census stored before it. */
   adaptive?: AdaptiveCensus;
 }
 
@@ -358,7 +322,7 @@ interface PoolOptions {
 
 /**
  * Sort the window's distinct requests into the two strata, and within each
- * into unread, stale and fresh (see `sampleForJudging`). Deduplicated by
+ * into unread, stale and fresh (see `sampleAdaptively`). Deduplicated by
  * query text, newest sighting kept; a request the agent was seen running is
  * never eligible: behaviour beats an opinion.
  */
@@ -481,116 +445,6 @@ function interleave(
   return cases;
 }
 
-/**
- * Pick the searches worth judging, in two strata.
- *
- * Deduplicated by query text first, so forty repetitions of one phrasing spend
- * one judgment rather than forty. Items arrive newest first, so the survivor of a
- * duplicate group is the most recent one.
- *
- * WHAT IS ELIGIBLE. A request with no answer yet (`unread`), and a request whose
- * stored verdict was made against tools that have since changed (`stale`). A
- * request with an observed invocation never is: behaviour beats an opinion.
- *
- * HOW MANY. Per stratum, everything unread until the window holds
- * {@link TARGET_ANSWERS_PER_STRATUM} fresh answers, then only a
- * {@link TRICKLE_SHARE} of the unread. Stale verdicts are re-read only with
- * what that leaves. The engine's own `capacity` caps the total.
- * (`sampleAdaptively` replaces these fixed counts behind the flag.)
- *
- * Within a stratum picks are strided across the window rather than the newest
- * N, because the newest N of a busy window can all be one afternoon of one
- * person's work, which is not a sample of anything.
- */
-export function sampleForJudging(
-  items: readonly EvalItem[],
-  ourArm: string,
-  baselineArm: string,
-  opts: {
-    maxDisputed?: number;
-    maxControl?: number;
-    /** Hard cap on the total, usually the engine's `capacity`. */
-    maxCases?: number;
-    /**
-     * Selections already on course to nominate an entry for rewriting.
-     *
-     * These jump the disputed queue. A run that judges a random subset of the
-     * disagreements and misses the ones actually driving proposals has spent
-     * the call and kept the risk. Only the DISPUTED stratum is reordered: the
-     * control stratum is the measurement, and prioritising inside it would bias
-     * the very number it exists to produce.
-     */
-    priority?: ReadonlySet<string>;
-    /** The stored answer key, keyed by `queryKey`. Absent means nothing is known. */
-    key?: ReadonlyMap<string, GroundTruthLabel>;
-    /** The current `identityFingerprint`; a verdict made against another is stale. */
-    fingerprint?: string;
-    targetPerStratum?: number;
-    trickle?: number;
-    /** The catalog's entry ids: a verdict naming a tool that is gone is stale. */
-    corpusIds?: ReadonlySet<string>;
-    /** Each entry's identity (`entryIdentities`), so a per-tool print is read per tool. */
-    identities?: ReadonlyMap<string, string>;
-  } = {},
-): SampleResult {
-  const maxDisputed = opts.maxDisputed ?? MAX_DISPUTED_CASES;
-  const maxControl = opts.maxControl ?? MAX_CONTROL_CASES;
-  const target = opts.targetPerStratum ?? TARGET_ANSWERS_PER_STRATUM;
-  const trickle = opts.trickle ?? TRICKLE_SHARE;
-  const pools = buildPools(items, ourArm, baselineArm, opts);
-
-  // Unread and stale are sized separately so stale verdicts are never starved:
-  // below the target, unread first and stale with what is left; at or past it,
-  // a trickle of EACH, so a catalog change is re-read over a few weekly runs
-  // instead of never.
-  const wanted = (pool: StratumPool, max: number) => {
-    const short = Math.max(0, target - pool.fresh);
-    const unread = Math.min(
-      pool.unread.length,
-      Math.max(short, Math.ceil(trickle * pool.unread.length)),
-    );
-    const stale = Math.min(
-      pool.stale.length,
-      Math.max(short - unread, Math.ceil(trickle * pool.stale.length)),
-    );
-    const total = Math.min(max, unread + stale);
-    return { unread: Math.min(unread, total), stale: Math.max(0, total - Math.min(unread, total)) };
-  };
-  const fill = (
-    rows: readonly JudgeCase[],
-    stale: readonly JudgeCase[],
-    want: { unread: number; stale: number },
-  ) => [...stride(rows, want.unread), ...stride(stale, want.stale)];
-
-  const priority = opts.priority ?? new Set<string>();
-  const disputedPool = [...pools.disputed.unread, ...pools.disputed.stale];
-  const urgent = disputedPool.filter((row) => priority.has(row.id)).slice(0, maxDisputed);
-  const urgentIds = new Set(urgent.map((row) => row.id));
-  const disputedWant = wanted(pools.disputed, maxDisputed);
-  const urgentUnread = urgent.filter((row) => pools.disputed.unread.includes(row)).length;
-  const disputed = fill(
-    pools.disputed.unread.filter((row) => !urgentIds.has(row.id)),
-    pools.disputed.stale.filter((row) => !urgentIds.has(row.id)),
-    {
-      unread: Math.max(0, disputedWant.unread - urgentUnread),
-      stale: Math.max(0, disputedWant.stale - (urgent.length - urgentUnread)),
-    },
-  );
-  const control = fill(
-    pools.control.unread,
-    pools.control.stale,
-    wanted(pools.control, maxControl),
-  );
-
-  const cases = interleave(urgent, disputed, control, opts.maxCases ?? Number.POSITIVE_INFINITY);
-  return {
-    cases,
-    populationDisputed: pools.disputed.unread.length + pools.disputed.stale.length,
-    populationControl: pools.control.unread.length + pools.control.stale.length,
-    ...nominating(pools, cases, priority),
-  };
-}
-
 /** Requests one adaptive round asks about at most: the batch Kayra's loop looks at before asking for more. */
 export const ADAPTIVE_ROUND_SIZE = 100;
 /** Rounds one run may take; with the round size, a ceiling of 600 answers per run. */
@@ -605,9 +459,13 @@ export interface AdaptiveTally {
 }
 
 /**
- * The adaptive sample (RC-394, behind `cloud-adaptive-labelling`): as many
- * requests as the headline share still needs for its margin, plus a small
- * drift sample, instead of 500 per stratum and then a quarter forever.
+ * The adaptive sample (RC-394): as many requests as the headline share
+ * still needs for its margin, plus a small drift sample.
+ *
+ * Deduplicated by query text, so forty repetitions of one phrasing spend one
+ * judgment. A request with no answer yet (unread) and one whose stored
+ * verdict was made against tools that have since changed (stale) are both
+ * eligible; a request with an observed invocation never is.
  *
  * The share is "our first result was the right tool" over each stratum's
  * distinct requests; `labelsNeeded` sizes each stratum by Neyman allocation
@@ -681,18 +539,6 @@ export function sampleAdaptively(
     tally,
     audit,
   };
-}
-
-/** Evenly spaced picks, so a sample spans the window instead of clustering. */
-function stride<T>(rows: readonly T[], limit: number): T[] {
-  if (rows.length <= limit) return [...rows];
-  const step = rows.length / limit;
-  const picked: T[] = [];
-  for (let index = 0; index < limit; index += 1) {
-    const row = rows[Math.floor(index * step)];
-    if (row !== undefined) picked.push(row);
-  }
-  return picked;
 }
 
 /**
@@ -906,68 +752,6 @@ export function stratifiedAccuracy(disputed: Stratum, control: Stratum): number 
   return sum / weight;
 }
 
-/** Run the judge over one sample. Null when nothing was worth judging. */
-export async function judgeTargets(
-  items: readonly EvalItem[],
-  corpus: readonly CorpusEntry[],
-  ourArm: string,
-  baselineArm: string,
-  engine: JudgeEngine,
-  opts: {
-    mocked?: boolean;
-    maxDisputed?: number;
-    maxControl?: number;
-    priority?: ReadonlySet<string>;
-    key?: ReadonlyMap<string, GroundTruthLabel>;
-    fingerprint?: string;
-    judgedAt?: Date;
-    /** Label a batch, re-estimate, label more only while needed (RC-394); absent keeps the fixed counts. */
-    adaptive?: AdaptiveOptions;
-  } = {},
-): Promise<{ items: EvalItem[]; census: JudgeCensus; labels: GroundTruthLabel[] } | null> {
-  if (opts.adaptive)
-    return judgeAdaptively(items, corpus, ourArm, baselineArm, engine, {
-      ...opts,
-      adaptive: opts.adaptive,
-    });
-  const capacity = engine.capacity?.(corpus);
-  const { cases, populationDisputed, populationControl, nominatingPopulation, nominatingSampled } =
-    sampleForJudging(items, ourArm, baselineArm, {
-      ...opts,
-      corpusIds: new Set(corpus.map((entry) => entry.entryId)),
-      identities: entryIdentities(corpus),
-      ...(capacity === undefined ? {} : { maxCases: Math.max(0, Math.floor(capacity)) }),
-    });
-  if (cases.length === 0) return null;
-
-  const verdicts = validateVerdicts(
-    await engine.judge(cases, corpus),
-    new Set(cases.map((row) => row.id)),
-    new Set(corpus.map((entry) => entry.entryId)),
-  );
-  const applied = applyVerdicts(
-    items,
-    cases,
-    verdicts,
-    {
-      disputed: populationDisputed,
-      control: populationControl,
-      nominatingPopulation,
-      nominatingSampled,
-    },
-    { model: engine.model, mocked: opts.mocked ?? false },
-    baselineArm,
-  );
-  return {
-    ...applied,
-    labels: labelsFromVerdicts(cases, verdicts, {
-      model: engine.model,
-      fingerprint: opts.fingerprint ?? null,
-      judgedAt: opts.judgedAt ?? new Date(),
-    }),
-  };
-}
-
 export interface AdaptiveOptions {
   /** The margin the share needs, plus or minus; `DEFAULT_TARGET_MARGIN` when absent. */
   targetMargin?: number;
@@ -980,20 +764,21 @@ export interface AdaptiveOptions {
 
 /**
  * All of a run's rounds together stop after this long. A round is not started
- * unless the slowest round so far still fits, so judging stays inside the half
- * of the job's time the fixed-count pass was given (`JEV_MAX_DURATION_MS`).
+ * unless the slowest round so far still fits, so judging stays inside the
+ * half of the job's time that judging is given (`JEV_MAX_DURATION_MS`).
  */
 export const ADAPTIVE_DEADLINE_MS = 5 * 60_000;
 
 /**
- * The adaptive judge (RC-394): ask a batch, fold the answers into the key,
+ * Run the judge (RC-394): ask a batch, fold the answers into the key,
  * re-estimate how many more the share needs, and ask again until the margin
  * is met, nothing is left, or the engine's budget, the deadline or the round
  * limit is reached. The first round also re-asks a sample of fresh verdicts
  * whose catalog moved since (the audit); when too few come back the same,
- * every such verdict counts as stale for the rounds that follow.
+ * every such verdict counts as stale for the rounds that follow. Null when
+ * nothing was worth judging.
  */
-async function judgeAdaptively(
+export async function judgeTargets(
   items: readonly EvalItem[],
   corpus: readonly CorpusEntry[],
   ourArm: string,
@@ -1005,15 +790,17 @@ async function judgeAdaptively(
     key?: ReadonlyMap<string, GroundTruthLabel>;
     fingerprint?: string;
     judgedAt?: Date;
-    adaptive: AdaptiveOptions;
-  },
+    /** Tunes the loop (margin, round size, rounds, deadline); the defaults when absent. */
+    adaptive?: AdaptiveOptions;
+  } = {},
 ): Promise<{ items: EvalItem[]; census: JudgeCensus; labels: GroundTruthLabel[] } | null> {
-  const now = opts.adaptive.now ?? Date.now;
+  const tuning = opts.adaptive ?? {};
+  const now = tuning.now ?? Date.now;
   const startedAt = now();
-  const deadline = startedAt + (opts.adaptive.deadlineMs ?? ADAPTIVE_DEADLINE_MS);
-  const roundSize = Math.max(1, Math.floor(opts.adaptive.roundSize ?? ADAPTIVE_ROUND_SIZE));
-  const maxRounds = Math.max(1, Math.floor(opts.adaptive.maxRounds ?? ADAPTIVE_MAX_ROUNDS));
-  const targetMargin = opts.adaptive.targetMargin ?? DEFAULT_TARGET_MARGIN;
+  const deadline = startedAt + (tuning.deadlineMs ?? ADAPTIVE_DEADLINE_MS);
+  const roundSize = Math.max(1, Math.floor(tuning.roundSize ?? ADAPTIVE_ROUND_SIZE));
+  const maxRounds = Math.max(1, Math.floor(tuning.maxRounds ?? ADAPTIVE_MAX_ROUNDS));
+  const targetMargin = tuning.targetMargin ?? DEFAULT_TARGET_MARGIN;
   const corpusIds = new Set(corpus.map((entry) => entry.entryId));
   const identities = entryIdentities(corpus);
   const capacity = engine.capacity?.(corpus);

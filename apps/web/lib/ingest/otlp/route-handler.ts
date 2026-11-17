@@ -29,6 +29,7 @@ import { reportServerException } from "@/lib/platform/telemetry";
 import type { AgentSpanDedupeDeps } from "./agent-span-dedupe";
 import { decodeOtlp, OtlpDecodeError } from "./decode";
 import { otlpSuccessResponse, transportFor } from "./http";
+import { type IngestLogDeps, logTracesIngested } from "./ingest-log";
 import {
   type IngestObservabilityDeps,
   type IngestRejectionReason,
@@ -114,14 +115,16 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   traceTurns?: TraceTurnsIngestDeps;
   /** The project's SDK invokes near a batch's tool spans, so a call both send is counted once. */
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** Storage lookup for agent-wrapper span dedupe; absent, off. */
-  agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** The agent-span dedupe's storage lookup: live ingest always dedupes. */
+  agentSpanDedupe: AgentSpanDedupeDeps;
   /** Stored `gen_ai` log records join their spans; absent, none are read. */
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
   /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
   modelPricing?: PersistSpansDeps["modelPricing"];
+  /** Where the Datadog ingest lines go; absent, the app log and the cached project lookup. */
+  ingestLog?: IngestLogDeps;
 }
 
 export async function handleTracesRequest(
@@ -351,6 +354,7 @@ export async function handleTracesRequest(
     );
   }
   const { accepted, calls } = persisted;
+  await logTracesIngested(apiKey.projectId, spans, persisted.rows, deps.ingestLog);
 
   // Raw capture after a stored export, so garbage and retried failures are
   // never kept. Fails open: it never changes the response.

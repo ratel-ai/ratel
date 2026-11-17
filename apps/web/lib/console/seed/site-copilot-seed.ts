@@ -6,7 +6,11 @@ import {
   SITE_COPILOT_SEED,
   SITE_COPILOT_TURNS,
 } from "@/lib/console/seed/site-copilot-plan";
-import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
+import {
+  findTracesWithModelCalls,
+  insertEventsWithMetrics,
+  insertOtelSpans,
+} from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
@@ -113,6 +117,11 @@ async function send(apiKey: string, body: object, db: SeedDb): Promise<Record<st
       enqueueClusterIntentsJob(projectId, db, options),
     scheduleProjectDrain: () => {},
     findRuntimeInvokes: (projectId, probe) => findRuntimeInvokes(projectId, probe, db),
+    // Live ingest always dedupes agent wrappers (upstream #461), so the seed does too.
+    agentSpanDedupe: {
+      findTracesWithModelCalls: (projectId, traceIds) =>
+        findTracesWithModelCalls(projectId, traceIds, db),
+    },
   });
   if (response.status !== 202) throw new Error(`ingest returned ${response.status}`);
   const counts = (await response.json()) as Record<string, unknown>;

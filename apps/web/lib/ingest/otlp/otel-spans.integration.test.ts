@@ -307,3 +307,88 @@ test("findTracesWithModelCalls returns only traces with a stored non-agent, non-
     [],
   );
 });
+
+test("live ingest keeps the stored span on conflict: a retried export changes nothing", async () => {
+  const { client, db } = await setup();
+  await insertOtelSpans(PROJECT_ID, [span()], db);
+  const before = await client.query(`select received_at from otel_spans`);
+
+  const retried = await insertOtelSpans(
+    PROJECT_ID,
+    [
+      span({
+        spanClass: "tool",
+        operationName: "execute_tool",
+        attributes: { "ratel.tool.inferred": true },
+      }),
+    ],
+    db,
+  );
+
+  assert.deepEqual(retried, { accepted: 0 });
+  const { rows } = await client.query<{
+    span_class: string;
+    operation_name: string | null;
+    attributes: object;
+    received_at: Date;
+  }>(`select span_class, operation_name, attributes, received_at from otel_spans`);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].span_class, "other");
+  assert.equal(rows[0].operation_name, null);
+  assert.deepEqual(rows[0].attributes, {});
+  assert.deepEqual(rows[0].received_at, (before.rows[0] as { received_at: Date }).received_at);
+});
+
+test("an import rewrite updates every decoded column of a stored span and counts it as updated, not accepted", async () => {
+  const { client, db } = await setup();
+  await insertOtelSpans(PROJECT_ID, [span()], db);
+  await client.query(`update otel_spans set received_at = now() - interval '1 day'`);
+
+  const rewritten = await insertOtelSpans(
+    PROJECT_ID,
+    [
+      span({
+        name: "kb.search",
+        spanClass: "tool",
+        operationName: "execute_tool",
+        parentSpanId: "1111111111111111",
+        statusCode: 2,
+        durationMs: 400,
+        model: "m",
+        inputTokens: 7,
+        costUsd: "0.010000",
+        attributes: { "ratel.tool.inferred": true },
+      }),
+      span({ id: "cccccccc-cccc-8ccc-8ccc-cccccccccccc", spanId: "aaaaaaaaaaaaaaaa" }),
+    ],
+    db,
+    { onConflict: "update" },
+  );
+
+  assert.deepEqual(rewritten, { accepted: 1, updated: 1 });
+  const { rows } = await client.query<Record<string, unknown>>(
+    `select name, span_class, operation_name, parent_span_id, status_code, duration_ms, model, input_tokens,
+       cost_usd, attributes, received_at > now() - interval '1 minute' as received_now
+     from otel_spans where id = 'aaaaaaaa-aaaa-8aaa-8aaa-aaaaaaaaaaaa'`,
+  );
+  assert.deepEqual(rows[0], {
+    name: "kb.search",
+    span_class: "tool",
+    operation_name: "execute_tool",
+    parent_span_id: "1111111111111111",
+    status_code: 2,
+    duration_ms: 400,
+    model: "m",
+    input_tokens: 7,
+    cost_usd: "0.010000",
+    attributes: { "ratel.tool.inferred": true },
+    // A newer receipt time: the trace summary sweep recomputes the trace.
+    received_now: true,
+  });
+  assert.equal(await countRows(client), 2);
+});
+
+async function countRows(client: PGlite): Promise<number> {
+  const { rows } = await client.query<{ n: number }>(`select count(*)::int as n from otel_spans`);
+  return rows[0].n;
+}

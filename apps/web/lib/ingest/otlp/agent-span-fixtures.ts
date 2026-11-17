@@ -1,7 +1,7 @@
 import type { AttrMap, DecodedSpan } from "./types";
 
 /**
- * Test traces for the agent-span dedupe (flag `cloud-otlp-agent-span-dedupe`):
+ * Test traces for the agent-span dedupe:
  * an agent wrapper span that carries the run's model and SUMMED usage, with
  * the real model calls as its children. Ids are valid OTLP hex so the same
  * traces feed `groupSpans`, `toOtelSpanRows` and `persistDecodedSpans`.
