@@ -1,11 +1,19 @@
-import type { CloudMessage, CloudToolDef, ContentBlock } from "@/lib/ingest/cloud-schema";
-import type { AttrValue } from "./types";
+import type {
+  CloudMessage,
+  CloudSettings,
+  CloudToolDef,
+  ContentBlock,
+} from "@/lib/ingest/cloud-schema";
+import { attrNumber, attrStringArray } from "./anyvalue";
+import { GEN_AI } from "./constants";
+import type { AttrMap, AttrValue } from "./types";
 
 /**
  * Map the opt-in `gen_ai.client.inference.operation.details` event content —
  * `gen_ai.system_instructions`, `gen_ai.input.messages`, `gen_ai.output.messages`
  * — into the `CloudEvent` `system` + `messages` shape the categorizer consumes.
- * Also maps the `gen_ai.tool.definitions` catalog into `CloudEvent.tools`.
+ * Also maps the `gen_ai.tool.definitions` catalog into `CloudEvent.tools`, and
+ * the `gen_ai.request.*` settings into `CloudEvent.settings`.
  *
  * v1.42.0 message parts: text | reasoning | tool_call | tool_call_response |
  * blob | uri | file. Reads are defensive (content is customer-shaped and only
@@ -228,4 +236,39 @@ export function mapToolDefinitions(v: AttrValue | undefined): CloudToolDef[] {
     });
   }
   return out;
+}
+
+const NUMBER_SETTINGS = [
+  ["temperature", GEN_AI.requestTemperature],
+  ["top_p", GEN_AI.requestTopP],
+  ["top_k", GEN_AI.requestTopK],
+  ["max_tokens", GEN_AI.requestMaxTokens],
+  ["seed", GEN_AI.requestSeed],
+  ["frequency_penalty", GEN_AI.requestFrequencyPenalty],
+  ["presence_penalty", GEN_AI.requestPresencePenalty],
+  ["choice_count", GEN_AI.requestChoiceCount],
+] as const;
+
+/**
+ * Map the `gen_ai.request.*` settings into CloudSettings. Each key is read from
+ * the first map that has it (the details event before the span). Undefined
+ * when no map has any setting.
+ */
+export function mapSettings(maps: AttrMap[]): CloudSettings | undefined {
+  const settings: CloudSettings = {};
+  for (const [key, attr] of NUMBER_SETTINGS) {
+    const value = firstOf(maps, (m) => attrNumber(m, attr));
+    if (value !== undefined && Number.isFinite(value)) settings[key] = value;
+  }
+  const stop = firstOf(maps, (m) => attrStringArray(m, GEN_AI.requestStopSequences));
+  if (stop) settings.stop = stop;
+  return Object.keys(settings).length > 0 ? settings : undefined;
+}
+
+function firstOf<T>(maps: AttrMap[], read: (m: AttrMap) => T | undefined): T | undefined {
+  for (const m of maps) {
+    const value = read(m);
+    if (value !== undefined) return value;
+  }
+  return undefined;
 }

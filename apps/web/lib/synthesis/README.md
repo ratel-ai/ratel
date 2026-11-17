@@ -18,6 +18,8 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `catalog/` | the tools table model, data provenance and the runtime-catalog reads, shared by Test a search and the Catalog pages |
 | `tool-crafter/` | the `craft_tools` job: rule-drafted changes to a project's tools (merges, folds, retirements, tightened schemas…) with their backtest and round-trip price, read off the tool explorer, match quality and the topic patterns; `register.ts` fills `exploreSeams.enqueueCraft`. Owned: `schema.ts`, `job.ts`, `job.integration.test.ts`, `register.ts` |
 | `traces/v2/` | the console Traces pages' models: filters, runs, run summary, timeline, volume |
+| `traces-sessions/` | the Traces Sessions tab (copies): `sessions` (one row per session, newest activity first, paged by a cursor, no timeframe), `summary`, `tab-aggregates` and `timeframe` (the summary inside each tab: its `?window=` and that tab's numbers and volume), `view` (All or Failed), `route` (the two API routes' shared guard) |
+| `traces-sessions-flag.ts` | `tracesSessionsEnabled`: the deployment switch `FF_TRACES_SESSIONS`, in place of upstream's `cloud-traces-sessions` flag. Off, Traces opens on Runs. The tabs layout, the Traces page and the two routes read it |
 
 The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and
 their services stay upstream until they land. Copies and owned files are listed in `scripts/platform-sync/map.json`.

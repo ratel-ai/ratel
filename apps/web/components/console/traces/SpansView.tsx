@@ -6,6 +6,7 @@ import { type Column, DataTable, type SortDirection } from "@ratel/design-system
 import { Page, PageBody } from "@ratel/design-system/page-header";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { useRouter } from "next/navigation";
+import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type {
   OperationAggregate,
@@ -86,6 +87,7 @@ export function SpansView(props: SpansViewProps) {
         onSearchChange={go}
       />
       <PageBody wide className="gap-6">
+        <TabSummary projectId={projectId} tab="spans" />
         <TraceFilterBar
           tab="spans"
           search={search}

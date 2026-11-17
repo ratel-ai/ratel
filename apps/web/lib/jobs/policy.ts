@@ -19,6 +19,8 @@ export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   simulate_fix_eval: 0,
   simulate_task_eval: 0,
   what_if_step: 0,
+  run_eval_set: 0,
+  simulate_eval_set: 0,
   refresh_task_eval_set: 0,
   draft_fix: 0,
   build_trace_turns: 1,
@@ -59,6 +61,8 @@ export const JOB_BUDGET_MS: Record<JobKind, number> = {
   simulate_fix_eval: 5 * 60_000,
   simulate_task_eval: 5 * 60_000,
   what_if_step: 3 * 60_000,
+  run_eval_set: 5 * 60_000,
+  simulate_eval_set: 5 * 60_000,
   refresh_task_eval_set: 2 * 60_000,
   draft_fix: 2 * 60_000,
 };

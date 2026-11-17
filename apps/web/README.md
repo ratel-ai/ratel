@@ -56,10 +56,12 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `.env.local`, or on the container, when the app runs anywhere else.
 
 `RATEL_EXPERIMENTAL_FEATURES=1` turns on every experimental feature in the open-source edition
-(the Tasks and Ship pages, the eval gate, session replay, the improvement-loop MCP tools); Cloud
-ignores it and reads each feature's own `FF_*` flag. Their pages live in the route groups
-`app/(console)/(stage-spine)`, `(eval-gate)` and `(session-replay)`, whose layout answers a real
-404 with the feature off, above the project's loading boundary.
+(the eval gate, session replay with the session chat, the Traces Sessions tab, the Health score
+and the early readings); Cloud ignores it and reads each feature's own `FF_*` flag. The eval
+gate's and session replay's pages live in the route groups `app/(console)/(eval-gate)` and
+`(session-replay)`, whose layout answers a real 404 with the feature off, above the project's
+loading boundary. `(stage-spine)` (Tasks and Ship) is on for everyone, and the Traces Sessions
+tab is a switch inside the page: off, Traces opens on Runs.
 
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise.

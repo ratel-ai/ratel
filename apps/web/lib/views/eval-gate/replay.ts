@@ -25,6 +25,9 @@ import type {
   ReplayStop,
   RunRecord,
   RunView,
+  SideTrace,
+  ToolAnswerReason,
+  ToolAnswerSource,
   ToolDef,
 } from "./types";
 
@@ -53,7 +56,9 @@ import type {
  * sources). Each side's path and how it stopped are kept, for the eval page.
  *
  * Nothing runs against the customer's agent or tools, and nothing textual from
- * the replay is kept: the result is tool names, outcomes and numbers.
+ * the replay is kept: the result is tool names, outcomes and numbers. RC-288:
+ * a caller that asks for `trace` also gets each call's source and reason, and
+ * with `keepText` its args, its result and the side's transcript.
  */
 
 const logger = getLogger("eval-gate/replay");
@@ -194,21 +199,7 @@ export function readRecording(run: RunRecord, calls: readonly ModelCall[]): Reco
         });
     }
   }
-  const earlierResults = new Map(
-    history
-      .filter(
-        (message): message is Extract<ReplayMessage, { role: "tool" }> => message.role === "tool",
-      )
-      .map((message) => [message.callId, message]),
-  );
-  const earlier = history.flatMap((message) =>
-    message.role !== "assistant"
-      ? []
-      : message.calls.flatMap((call) => {
-          const result = earlierResults.get(call.id);
-          return result ? [{ ...call, result: result.content, isError: result.isError }] : [];
-        }),
-  );
+  const earlier = answeredCalls(history);
   const modelMs = points.reduce((sum, call) => sum + (call.latencyMs ?? 0), 0);
   const toolMs =
     recordedCalls.length > 0 && run.durationMs
@@ -225,6 +216,25 @@ export function readRecording(run: RunRecord, calls: readonly ModelCall[]): Reco
     toolMs,
     inputTokens,
   };
+}
+
+/** The calls `messages` made that have a result in them. */
+function answeredCalls(messages: readonly ReplayMessage[]): RecordedCall[] {
+  const results = new Map(
+    messages
+      .filter(
+        (message): message is Extract<ReplayMessage, { role: "tool" }> => message.role === "tool",
+      )
+      .map((message) => [message.callId, message]),
+  );
+  return messages.flatMap((message) =>
+    message.role !== "assistant"
+      ? []
+      : message.calls.flatMap((call) => {
+          const result = results.get(call.id);
+          return result ? [{ ...call, result: result.content, isError: result.isError }] : [];
+        }),
+  );
 }
 
 /**
@@ -279,6 +289,36 @@ export interface ReplayInput {
   merged: ReadonlyMap<string, string[]>;
   /** Whether the fix changed anything this run's model sees. */
   touched: boolean;
+  /** RC-295: fixed answers, checked before the recording. */
+  mocks?: readonly ToolMock[];
+}
+
+/**
+ * RC-295: a fixed answer an eval sets for a tool. It answers every call of
+ * `tool` that passes the `when` arguments (all calls without one), before the
+ * recording, and is never used up.
+ */
+export interface ToolMock {
+  tool: string;
+  when?: Record<string, unknown>;
+  content: string;
+  isError: boolean;
+  /** Why the author fixed it, shown with the answer. */
+  why?: string;
+}
+
+/**
+ * RC-295: what an eval adds to a replay: earlier messages given as history
+ * (not scored), and fixed answers. RC-296: `after` is the conversation after
+ * the recorded ask (earlier turns of this replay and the next message), so a
+ * caller replays one turn at a time; `conversation` returns what the replay
+ * added, for the next turn.
+ */
+export interface ReplayExtras {
+  history?: readonly ReplayMessage[];
+  mocks?: readonly ToolMock[];
+  after?: readonly ReplayMessage[];
+  conversation?: boolean;
 }
 
 const FAILS_CLEARLY = " When it fails, it says why and whether trying again can help.";
@@ -466,7 +506,9 @@ export function sameCall(
 type Answer = {
   content: string;
   isError: boolean;
-  source: "recorded" | "composed" | "earlier" | "stand-in";
+  source: ToolAnswerSource;
+  reason: ToolAnswerReason;
+  why?: string;
 };
 
 class BudgetSpent extends Error {
@@ -486,6 +528,8 @@ export interface ReplayDeps {
   halt?: { reason: string | null };
   /** What a run says when the meter refuses a call (the organization's daily budget, when that is what bounds it). */
   budgetNote?: string;
+  /** RC-288: return each side's trace. Text (args, results, transcript) only with `keepText`. Absent: today's output. */
+  trace?: { keepText: boolean };
 }
 
 interface SideRun {
@@ -503,6 +547,9 @@ interface SideRun {
   latencyMs: number;
   /** The model that answered last (a retired one falls back mid-run). */
   model: string | null;
+  trace?: SideTrace;
+  /** The conversation the side ended with: the history, then what it added. */
+  messages: ReplayMessage[];
 }
 
 async function answerCall(
@@ -512,10 +559,26 @@ async function answerCall(
   recording: Recording,
   deps: ReplayDeps,
 ): Promise<Answer> {
+  const mock = input.mocks?.find((item) =>
+    answers({ name: item.tool, args: item.when ?? {} }, call),
+  );
+  if (mock)
+    return {
+      content: mock.content,
+      isError: mock.isError,
+      source: "mock",
+      reason: "fixed_answer",
+      ...(mock.why ? { why: mock.why } : {}),
+    };
   const match = pool.find((recorded) => answers(recorded, call));
   if (match) {
     pool.splice(pool.indexOf(match), 1);
-    return { content: match.result, isError: match.isError, source: "recorded" };
+    return {
+      content: match.result,
+      isError: match.isError,
+      source: "recorded",
+      reason: "matched_recording",
+    };
   }
   const sources = input.merged.get(call.name);
   if (sources) {
@@ -540,16 +603,24 @@ async function answerCall(
         content: JSON.stringify(failed ? { error: "a step failed", steps: parts } : parts),
         isError: failed,
         source: "composed",
+        reason: "merged_from_sources",
       };
   }
   const reread = recording.earlier.find((earlier) => answers(earlier, call));
-  if (reread) return { content: reread.result, isError: reread.isError, source: "earlier" };
+  if (reread)
+    return {
+      content: reread.result,
+      isError: reread.isError,
+      source: "earlier",
+      reason: "answered_before_run",
+    };
   const tool = deps.models.tool;
   if (!tool)
     return {
       content: JSON.stringify({ error: "no recorded result for this call" }),
       isError: true,
       source: "stand-in",
+      reason: "no_stand_in",
     };
   const def = input.tools.find((item) => item.name === call.name) ?? null;
   const examples = recording.calls
@@ -572,7 +643,12 @@ async function answerCall(
     throw err;
   }
   deps.spend.settle(hold, tool.model, answer.usage);
-  return { content: answer.content, isError: answer.isError, source: "stand-in" };
+  return {
+    content: answer.content,
+    isError: answer.isError,
+    source: "stand-in",
+    reason: "stand_in_model",
+  };
 }
 
 async function replaySide(
@@ -580,6 +656,7 @@ async function replaySide(
   recording: Recording,
   input: ReplayInput,
   deps: ReplayDeps,
+  onSide?: (side: SideRun) => void,
 ): Promise<SideRun> {
   const messages: ReplayMessage[] = [...recording.history];
   const pool = [...recording.calls];
@@ -595,7 +672,17 @@ async function replaySide(
     costUsd: 0,
     latencyMs: 0,
     model: null,
+    messages,
   };
+  const keepText = deps.trace?.keepText ?? false;
+  if (deps.trace)
+    side.trace = {
+      toolsOffered: input.tools.map((tool) => tool.name),
+      answers: [],
+      ...(keepText ? { transcript: [] } : {}),
+    };
+  // The caller sees the side even when a later step throws or a check rejects it.
+  onSide?.(side);
   const priced = recording.model && priceFor(recording.model) ? recording.model : agent.model;
   for (let step = 0; step < deps.maxSteps; step += 1) {
     // Room for the worst case first (the recorded prompt size or this one, whichever is larger, and a full answer): other runs are calling at the same time.
@@ -634,6 +721,11 @@ async function replaySide(
       calls: reply.calls,
       ...(reply.raw ? { raw: reply.raw } : {}),
     });
+    side.trace?.transcript?.push({
+      role: "assistant",
+      text: reply.text,
+      calls: reply.calls.map(({ name, args }) => ({ name, args })),
+    });
     if (reply.calls.length === 0) {
       side.answered = true;
       return side;
@@ -651,6 +743,22 @@ async function replaySide(
       side.outcomes.push(answer.isError ? "error" : "ok");
       side.latencyMs += recording.toolMs;
       messages.push({ role: "tool", callId: call.id, content, isError: answer.isError });
+      if (side.trace) {
+        side.trace.answers.push({
+          tool: call.name,
+          source: answer.source,
+          reason: answer.reason,
+          ms: Math.round(recording.toolMs),
+          ...(answer.why ? { why: answer.why } : {}),
+          ...(keepText ? { args: call.args, result: content, isError: answer.isError } : {}),
+        });
+        side.trace.transcript?.push({
+          role: "tool",
+          tool: call.name,
+          content,
+          isError: answer.isError,
+        });
+      }
     }
   }
   side.capped = true;
@@ -716,8 +824,21 @@ function viewOf(side: SideRun, wanted: readonly string[] | null): RunView {
   };
 }
 
+/** RC-288: each side's trace, only when `ReplayDeps.trace` was set. `after` is null when that side never ran. */
+export interface ReplayTrace {
+  before: SideTrace;
+  after: SideTrace | null;
+}
+
 export type ReplayOutcome =
-  | { ok: true; before: RunView; after: RunView; facts: ReplayFacts; note: string | null }
+  | {
+      ok: true;
+      before: RunView;
+      after: RunView;
+      facts: ReplayFacts;
+      note: string | null;
+      trace?: ReplayTrace;
+    }
   /**
    * `replayFailed`: replayed, and the side without the fix made no tool calls
    * where the run made some (RC-69) or took another path (RC-76); `facts` say
@@ -729,6 +850,7 @@ export type ReplayOutcome =
       notAffected?: boolean;
       replayFailed?: boolean;
       facts?: ReplayFacts;
+      trace?: ReplayTrace;
     };
 
 /** Replay one run with and without the fix. */
@@ -779,39 +901,150 @@ export async function replayRun(
       stops: { before: stopOf(before), after: after ? stopOf(after) : "not-run" },
     };
   };
+  const started: { before: SideRun | null; after: SideRun | null } = { before: null, after: null };
+  // Absent unless the caller asked for a trace, so callers that don't get exactly the outcome they always did.
+  const traced = <T extends ReplayOutcome>(outcome: T): T => {
+    if (!deps.trace || !started.before?.trace) return outcome;
+    return {
+      ...outcome,
+      trace: { before: started.before.trace, after: started.after?.trace ?? null },
+    };
+  };
   try {
-    const before = await replaySide(beforeAgent, recording, control, deps);
+    const before = await replaySide(beforeAgent, recording, control, deps, (side) => {
+      started.before = side;
+    });
     // The run used tools and the replay of it as it was didn't, or took another path: no baseline to read the fix against. The fix side isn't worth paying for.
     if (recording.calls.length > 0 && before.calls.length === 0)
-      return {
+      return traced({
         ok: false,
         reason: CANT_SIMULATE.noCalls,
         replayFailed: true,
         facts: factsOf(before, null),
-      };
+      });
     const baseline = factsOf(before, null);
     if (!baseline.controlMatchesRecording)
-      return { ok: false, reason: CANT_SIMULATE.drifted, replayFailed: true, facts: baseline };
-    const after = await replaySide(afterAgent, recording, fixed, deps);
+      return traced({
+        ok: false,
+        reason: CANT_SIMULATE.drifted,
+        replayFailed: true,
+        facts: baseline,
+      });
+    const after = await replaySide(afterAgent, recording, fixed, deps, (side) => {
+      started.after = side;
+    });
     const facts = factsOf(before, after);
-    return {
+    return traced({
       ok: true,
       before: viewOf(before, intended ? recordedPath : null),
       after: viewOf(after, intended),
       facts,
       note: replayNote(facts, beforeAgent.standIn),
-    };
+    });
   } catch (err) {
     if (err instanceof BudgetSpent)
-      return { ok: false, reason: deps.budgetNote ?? CANT_SIMULATE.budget };
+      return traced({ ok: false, reason: deps.budgetNote ?? CANT_SIMULATE.budget });
     if (err instanceof ModelRefused) {
       logger.error({ err, turn_id: run.turnId }, "fix eval replay model key refused");
       if (deps.halt) deps.halt.reason = CANT_SIMULATE.refused;
-      return { ok: false, reason: CANT_SIMULATE.refused };
+      return traced({ ok: false, reason: CANT_SIMULATE.refused });
     }
     logger.error({ err, turn_id: run.turnId }, "fix eval replay failed");
-    return { ok: false, reason: CANT_SIMULATE.failed };
+    return traced({ ok: false, reason: CANT_SIMULATE.failed });
   }
+}
+
+export type RecordedReplayOutcome =
+  /** `messages`: what the replay added to the conversation, with `ReplayExtras.conversation` only. */
+  | { ok: true; view: RunView; note: string | null; trace?: SideTrace; messages?: ReplayMessage[] }
+  | { ok: false; reason: string; trace?: SideTrace };
+
+/**
+ * RC-289: replay a run as recorded, one side, no fix: the agent-wide eval
+ * set's check that the agent still handles the ask. A path other than the
+ * recorded one is a result here, not a failed replay. RC-295: `extras` adds
+ * an eval's earlier messages before the recorded history and its fixed answers.
+ * RC-293: with `change`, the same one-side replay with the fix applied (an eval
+ * simulation's side with the fix, read against this function's side without it).
+ */
+export async function replayAsRecorded(
+  run: RunRecord,
+  calls: readonly ModelCall[],
+  deps: ReplayDeps,
+  extras: ReplayExtras = {},
+  change: FixChange | null = null,
+): Promise<RecordedReplayOutcome> {
+  const read = readRecording(run, calls);
+  const recording = read && withEarlier(read, extras.history ?? [], extras.after ?? []);
+  if (!recording) return { ok: false, reason: CANT_SIMULATE.noPrompts };
+  if (!deps.models.agent) return { ok: false, reason: CANT_SIMULATE.noModel };
+  if (deps.halt?.reason) return { ok: false, reason: deps.halt.reason };
+  if (ungroundedArgs(recording).length > 0) return { ok: false, reason: CANT_SIMULATE.ungrounded };
+  const agent = deps.models.agent({
+    recordedModel: recording.model,
+    recorded: recording.calls.map(({ id, name, args }) => ({ id, name, args })),
+  });
+  if (!agent) return { ok: false, reason: CANT_SIMULATE.noModel };
+  let side: SideRun | null = null;
+  const traced = <T extends RecordedReplayOutcome>(outcome: T): T =>
+    deps.trace && side?.trace ? { ...outcome, trace: side.trace } : outcome;
+  try {
+    const input = {
+      ...replayInput(recording, change, deps.toolDefs),
+      ...(extras.mocks?.length ? { mocks: extras.mocks } : {}),
+    };
+    const done = await replaySide(agent, recording, input, deps, (started) => {
+      side = started;
+    });
+    const added = extras.conversation
+      ? { messages: done.messages.slice(recording.history.length) }
+      : {};
+    const model = done.model ?? agent.model;
+    const facts: ReplayFacts = {
+      model,
+      recordedModel: recording.model && recording.model !== model ? recording.model : null,
+      steps: { before: done.steps, after: 0 },
+      standIns: { before: done.standIns, after: 0 },
+      controlMatchesRecording:
+        done.fresh.join(" ") === recording.calls.map((call) => call.name).join(" "),
+      paths: { recorded: recording.calls.map((call) => call.name), before: done.calls, after: [] },
+      capped: done.capped,
+    };
+    return traced({
+      ok: true,
+      view: viewOf(done, null),
+      note: replayNote(facts, agent.standIn),
+      ...added,
+    });
+  } catch (err) {
+    if (err instanceof BudgetSpent)
+      return traced({ ok: false, reason: deps.budgetNote ?? CANT_SIMULATE.budget });
+    if (err instanceof ModelRefused) {
+      logger.error({ err, turn_id: run.turnId }, "eval replay model key refused");
+      if (deps.halt) deps.halt.reason = CANT_SIMULATE.refused;
+      return traced({ ok: false, reason: CANT_SIMULATE.refused });
+    }
+    logger.error({ err, turn_id: run.turnId }, "eval replay failed");
+    return traced({ ok: false, reason: CANT_SIMULATE.failed });
+  }
+}
+
+/**
+ * RC-295: the recording with `history` before its own and (RC-296) `after`
+ * after it. Calls answered in them count as earlier ones (a re-read gets the
+ * same answer, and isn't held to the recorded path).
+ */
+function withEarlier(
+  recording: Recording,
+  history: readonly ReplayMessage[],
+  after: readonly ReplayMessage[],
+): Recording {
+  if (history.length === 0 && after.length === 0) return recording;
+  return {
+    ...recording,
+    history: [...history, ...recording.history, ...after],
+    earlier: [...answeredCalls(history), ...recording.earlier, ...answeredCalls(after)],
+  };
 }
 
 /** What the replay had to stand in for, in plain words; null when it stood in for nothing. */
