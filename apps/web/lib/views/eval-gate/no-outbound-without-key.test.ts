@@ -60,3 +60,15 @@ test("with no key and no mock there is no fix-draft model, and nothing to queue 
   assert.ok(draftModelFromEnv(mock, "development"));
   assert.equal(draftModelFromEnv(mock, "production"), null);
 });
+
+test("the Claude backend decides, not the key alone: Bedrock needs no key, a typo is no model", () => {
+  const bedrock = { ...NO_KEYS, ANTHROPIC_BACKEND: "bedrock" };
+  assert.equal(draftModelAvailable(bedrock, "production"), true);
+  assert.ok(draftModelFromEnv(bedrock, "production"));
+  assert.ok(resolveEvalModels(bedrock, undefined, "production").agent);
+
+  const typo = { ANTHROPIC_API_KEY: "sk-test", ANTHROPIC_BACKEND: "bedrok" };
+  assert.equal(draftModelAvailable(typo, "production"), false);
+  assert.equal(draftModelFromEnv(typo, "production"), null);
+  assert.equal(resolveEvalModels(typo, undefined, "production").agent, null);
+});

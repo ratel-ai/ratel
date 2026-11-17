@@ -61,7 +61,8 @@ const KIND_NOTES: { readonly [K in SignalKind]?: Partial<Record<ExampleVerdict, 
       "The first search for this ask did not list the right tool, so the agent had to search again for the same thing.",
   },
   buried_tool: {
-    agent_struggled: "The right tool was listed, but low, so the agent had to dig for it.",
+    agent_struggled:
+      "The right tool was listed, but below the top 5, so the agent had to dig for it.",
   },
   sibling_confusion: {
     agent_struggled: "Two similar tools were listed, and the agent could not tell which one fits.",
@@ -268,7 +269,7 @@ export function exampleWhy(
         flagged && isInvoke(flagged) ? flagged.pickedRank : rankInLabel(flagged?.flag?.label);
       return rank !== null
         ? `${a} was listed at ${formatRank(rank)}, and the agent had to dig for it.`
-        : `${a} was listed low, and the agent had to dig for it.`;
+        : `${a} was listed below the top 5, and the agent had to dig for it.`;
     }
     case "first_try_miss":
       // The flagged step is the search the agent had to repeat; the retry after it found the tool.

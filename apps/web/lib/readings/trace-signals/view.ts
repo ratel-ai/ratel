@@ -144,11 +144,13 @@ export const FIRST_READING_FLOOR = 50;
 /* - Health band ------------------------------------------------------------- */
 
 /**
- * The SDK band reads first try, detours, junk and wasted calls. A project that
+ * The SDK band reads the right tool in the top 5 (first try on readings stored
+ * before it, RC-226), detours, junk and wasted calls. A project that
  * only sends OpenTelemetry has no search to score, so its band reads
  * completed runs, failed calls, wasted calls and model round trips instead.
  */
 export type HealthTileKey =
+  | "top_5"
   | "first_try"
   | "detours"
   | "junk"
@@ -767,10 +769,12 @@ export function hasSignals(model: Pick<HealthPageModel, "signals" | "lockedCount
  */
 export function healthStripReading(model: HealthPageModel): string | null {
   if (healthReadiness(model) !== "ready") return null;
-  const firstTry = model.tiles.find((tile) => tile.key === "first_try");
+  const served = model.tiles.find(
+    (tile) => (tile.key === "top_5" || tile.key === "first_try") && tile.value !== null,
+  );
   const problems = model.signals.length + model.lockedCount;
   const parts = [
-    ...(firstTry?.value != null ? [`First try ${formatSharePercent(firstTry.value)}`] : []),
+    ...(served?.value != null ? [`${served.label} ${formatSharePercent(served.value)}`] : []),
     problems === 0
       ? "Nothing worth a look"
       : `${problems} ${problems === 1 ? "problem" : "problems"} worth a look`,

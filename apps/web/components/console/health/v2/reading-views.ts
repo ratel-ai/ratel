@@ -20,6 +20,7 @@ export const READING_PEEK_PREFIX = "reading:";
 
 /** The band's labels, in the words the product uses. */
 const LABEL: Readonly<Record<HealthTileKey, string>> = {
+  top_5: "Right tool in top 5",
   first_try: "First try",
   detours: "Detours",
   junk: "Junk in lists",
@@ -33,6 +34,7 @@ const LABEL: Readonly<Record<HealthTileKey, string>> = {
 
 /** What each reading means, in one line, for its panel. */
 const MEANING: Readonly<Record<HealthTileKey, string>> = {
+  top_5: "Turns where every tool the agent ran sat in the top 5 of a search before it.",
   first_try: "Turns where the first search listed the tool the agent then ran.",
   detours: "Turns where the agent searched again before running a tool.",
   junk: "Listed tools that could not have answered the ask.",

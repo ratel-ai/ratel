@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { healthScoreView } from "@/lib/readings/trace-signals/health-score";
+import { sharedHealthScoreEnabled } from "@/lib/readings/trace-signals/health-score-flag";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import {
   createModelCache,
@@ -30,6 +32,7 @@ function harness(over: Partial<SharedHealthDeps> = {}) {
       return LINK;
     },
     getLimits: () => LIMITS,
+    scoreShown: async () => false,
     loadModel: async ({ projectId, windowDays, limits }) => {
       loads.push({ projectId, windowDays, evidenceTurns: limits.agentHealthEvidenceTurns });
       return pendingHealthModel(windowDays);
@@ -122,4 +125,40 @@ test("the cache keeps the newest links and drops the oldest past its cap", async
   assert.deepEqual(built, ["a", "b", "c", "a"]);
   await cache.get("c", 0, build("c"));
   assert.deepEqual(built, ["a", "b", "c", "a"]);
+});
+
+/** A model with a score as the page would build it: no open issue and two measured rates. */
+function scoredModel() {
+  const pillars = [
+    { pillar: "ended" as const, good: 0.97, n: 500 },
+    { pillar: "top_5" as const, good: 0.84, n: 500 },
+  ];
+  return { ...pendingHealthModel(30), score: healthScoreView([], 500, [], pillars) };
+}
+
+test("a public link carries the Health score only where its switch is on (RC-226)", async () => {
+  const model = scoredModel();
+  assert.ok(model.score, "the fixture has a score");
+  const off = await loadSharedHealth("tok", harness({ loadModel: async () => model }).deps);
+  assert.equal(off?.model.score, undefined, "switch off: the link reads as it always has");
+  const on = await loadSharedHealth(
+    "tok",
+    harness({ loadModel: async () => model, scoreShown: async () => true }).deps,
+  );
+  assert.equal(on?.model.score?.value, model.score?.value);
+  assert.deepEqual(on?.model.score?.pillars, model.score?.pillars, "with what it is made of");
+});
+
+test("turning the switch on is seen at once: the cached model is kept per answer", async () => {
+  const model = scoredModel();
+  let shown = false;
+  const { deps } = harness({ loadModel: async () => model, scoreShown: async () => shown });
+  assert.equal((await loadSharedHealth("tok", deps))?.model.score, undefined);
+  shown = true;
+  assert.equal((await loadSharedHealth("tok", deps))?.model.score?.value, model.score?.value);
+});
+
+test("the public link reads FF_HEALTH_SCORE, the switch the member page reads", async () => {
+  assert.equal(await sharedHealthScoreEnabled("project-1", null, {}), false);
+  assert.equal(await sharedHealthScoreEnabled("project-1", null, { FF_HEALTH_SCORE: "1" }), true);
 });

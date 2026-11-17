@@ -53,8 +53,9 @@ test('a turn page offers "run to test" behind the eval gate', () => {
 
 test("the trace span inspector is given the SDK events page to link to", () => {
   const view = source("app/(console)/project/[projectId]/traces/[traceId]/trace-v2.tsx");
-  const root = view.match(/runtimeEventsRoot=\{([^}]*)\}/)?.[1]?.trim();
+  const root = view.match(/runtimeEventsRoot:\s*([^,\n]*)/)?.[1]?.trim();
   assert.ok(root !== undefined && root !== "null", "runtimeEventsRoot is a path, not null");
+  assert.match(root, /runtime-events/);
 });
 
 test("Settings › Developer builds each SDK event's trace link", () => {
@@ -97,12 +98,27 @@ test("the capture nudge's unchanged lines are lines of the quickstart it is a di
   for (const line of context) assert.ok(quickstart.has(line.text), line.text);
 });
 
-test("the playground rank route and the trace summary route resolve the project through findProjectScope", () => {
+test("the playground rank route and the traces routes resolve the project through findProjectScope", () => {
   for (const route of [
     "app/api/playground/rank/route.ts",
     "app/api/projects/[projectId]/traces/[traceId]/summary/route.ts",
+    "app/api/projects/[projectId]/traces/sessions/route.ts",
+    "app/api/projects/[projectId]/traces/summary/route.ts",
   ]) {
     assert.match(source(route), /\bfindProjectScope\(/, route);
+  }
+});
+
+test("the Sessions page checks the project scope itself, as its two routes do", () => {
+  assert.match(
+    source("components/console/traces-sessions/SessionsPage.tsx"),
+    /\brequireProjectScope\(projectId\)/,
+  );
+});
+
+test("both ingest paths wire the session chat's reply capture", () => {
+  for (const file of ["app/api/v1/traces/route.ts", "lib/ledger/imported-runs.ts"]) {
+    assert.match(source(file), /sessionChatCapture: \(.*\) =>\s*sessionChatCaptureEnabled\(/, file);
   }
 });
 

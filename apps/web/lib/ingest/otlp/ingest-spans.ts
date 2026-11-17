@@ -23,6 +23,7 @@ import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
+import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
@@ -64,6 +65,8 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe. Absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings. Absent, off. */
+  sessionChatCapture?: SessionChatCaptureEnabled;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -110,7 +113,11 @@ export async function persistDecodedSpans(
 
   // Group into LLM calls, reconstruct rows, and persist under the project.
   const calls = groupSpans(spans, dedupe);
-  const rows = toRows(projectId, calls);
+  const captureReply =
+    calls.length > 0 && deps.sessionChatCapture
+      ? await deps.sessionChatCapture(projectId, organization)
+      : false;
+  const rows = toRows(projectId, calls, { captureReply });
 
   let accepted = 0;
   if (rows.length > 0) {

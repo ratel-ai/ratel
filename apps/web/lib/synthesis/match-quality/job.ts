@@ -3,6 +3,7 @@ import {
   defaultBackgroundObservabilityDeps,
 } from "@/lib/jobs/observability";
 import { getLogger } from "@/lib/platform/logger";
+import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
 import { JUDGE_BUDGET_USD } from "@/lib/synthesis/match-quality/judge";
 import { loadCorpusWithFingerprint } from "@/lib/synthesis/match-quality/service";
@@ -127,7 +128,7 @@ export function resolveAnalystFactory(): {
   if (mockAnalystEnabled()) {
     return { analyst: (context) => mockAnalystDeps(context), mocked: true };
   }
-  if (!process.env.ANTHROPIC_API_KEY) return { analyst: undefined, mocked: false };
+  if (!anthropicConfigured()) return { analyst: undefined, mocked: false };
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL;
   return { analyst: () => anthropicAnalystDeps(model), mocked: false };
 }

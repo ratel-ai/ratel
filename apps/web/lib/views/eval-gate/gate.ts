@@ -1,6 +1,9 @@
+import type { getDb } from "@/lib/platform/db/client";
 import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import type { Organization } from "@/lib/platform/organizations";
-import type { EvalDb } from "@/lib/views/eval-gate/runs";
+
+/** What the gate reads: a project's organization and the asking person's email. */
+export type GateDb = Pick<ReturnType<typeof getDb>, "select">;
 
 /**
  * Whether the eval gate (RC-46 and its follow-up RC-61: holdout, outcome
@@ -37,7 +40,7 @@ export function evalGateEnabledFor(
 export function evalGateEnabledForActor(
   _projectId: string,
   _actor: string,
-  _db?: EvalDb,
+  _db?: GateDb,
   env: Env = process.env,
 ): Promise<boolean> {
   return Promise.resolve(evalGateEnabled(env));
@@ -46,7 +49,7 @@ export function evalGateEnabledForActor(
 /** The background job's check, before it runs a queued simulation. */
 export function evalGateEnabledForRun(
   run: { projectId: string; requestedBy: string | null },
-  db?: EvalDb,
+  db?: GateDb,
   env: Env = process.env,
 ): Promise<boolean> {
   return evalGateEnabledForActor(run.projectId, run.requestedBy ?? "system:eval-gate", db, env);

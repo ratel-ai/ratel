@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -10,6 +10,7 @@ import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import type {
   CorpusEntry,
@@ -212,14 +213,13 @@ export function topicJudgeFromEnv(
   });
 }
 
-/** One structured-output Anthropic call that names topics; null without an API key. */
+/** One structured-output Anthropic call that names topics; null without a Claude backend. */
 export function anthropicTopicNamer(
   model: string,
   env: Record<string, string | undefined> = process.env,
 ): Namer | null {
-  const apiKey = configured(env.ANTHROPIC_API_KEY);
-  if (!apiKey) return null;
-  const client = new Anthropic({ apiKey });
+  const client = anthropicClient({}, env);
+  if (!client) return null;
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
     const message = await client.messages.create(

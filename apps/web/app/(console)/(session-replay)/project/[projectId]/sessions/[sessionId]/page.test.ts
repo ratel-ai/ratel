@@ -7,7 +7,10 @@ test("the session replay page is a 404 while FF_SESSION_REPLAY is off", async ()
   // A database that is never reached: the flag answers first.
   process.env.DATABASE_URL = "postgres://unreachable.invalid:1/none";
   await assert.rejects(
-    SessionReplayPage({ params: Promise.resolve({ projectId: "p1", sessionId: "s1" }) }),
+    SessionReplayPage({
+      params: Promise.resolve({ projectId: "p1", sessionId: "s1" }),
+      searchParams: Promise.resolve({}),
+    }),
     (err: { digest?: string }) => String(err.digest).includes("404"),
   );
 });

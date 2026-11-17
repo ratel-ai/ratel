@@ -6,6 +6,7 @@ import { PageHeader } from "@ratel/design-system/page-header";
 import { TabNav } from "@ratel/design-system/tabs";
 import { CalendarRange, Check, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTracesSessions } from "@/components/console/traces-sessions/sessions-context";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/synthesis/dashboard";
 import { tabSearch, withRangePreset } from "@/lib/synthesis/traces/v2/filters";
 import { formatDayRange } from "@/lib/synthesis/traces/v2/format";
@@ -35,35 +36,39 @@ export function TracesHeader({
   projectId: string;
   /** The current query string, with its `?`. */
   search: string;
-  timeWindow: TimeWindow;
+  /** The tab's own time window; the Sessions tab has none (the summary header holds the timeframe). */
+  timeWindow: TimeWindow | null;
   /** Applies a new query string (the page owns navigation and its pending state). */
   onSearchChange: (next: SearchUpdate) => void;
   actions?: ReactNode;
 }) {
   const root = `/project/${encodeURIComponent(projectId)}/traces`;
   const carried = tabSearch(search);
+  const sessions = useTracesSessions();
   return (
     <PageHeader
       title="Traces"
       actions={
         <>
           {actions}
-          <TimeWindowMenu
-            timeWindow={timeWindow}
-            onToday={() =>
-              onSearchChange((current) =>
-                withSelectedDays(current, { from: timeWindow.today, to: timeWindow.today }),
-              )
-            }
-            onSelect={(preset) => onSearchChange((current) => withRangePreset(current, preset))}
-          />
+          {timeWindow ? (
+            <TimeWindowMenu
+              timeWindow={timeWindow}
+              onToday={() =>
+                onSearchChange((current) =>
+                  withSelectedDays(current, { from: timeWindow.today, to: timeWindow.today }),
+                )
+              }
+              onSelect={(preset) => onSearchChange((current) => withRangePreset(current, preset))}
+            />
+          ) : null}
         </>
       }
       tabs={
         <TabNav
           label="Traces sections"
           tabs={[
-            { href: `${root}${carried}`, label: "Runs", exact: true },
+            { href: `${root}${carried}`, label: sessions ? "Sessions" : "Runs", exact: true },
             { href: `${root}/spans${carried}`, label: "Spans" },
             { href: `${root}/logs${carried}`, label: "Logs" },
           ]}

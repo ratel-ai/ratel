@@ -16,6 +16,7 @@ What the SDKs send: OTLP traces and logs, runtime events, catalog snapshots.
 | `trace-events/event-types.ts`, `fold-schedule.ts`, `turns-schedule.ts` | which stored events start an intent-graph fold or a turn build, and the enqueues the routes inject (the turn build is wired; the fold and the engine run join with their modules) |
 | `trace-events/maintenance.ts`, `register.ts` | the bounded retention prunes of runtime events and rejects, registered as retention-only drain steps |
 | `otlp/queries.ts` `findTracesWithModelCalls` | the storage half of the agent-span dedupe the traces route wires |
+| `otlp/session-chat-capture.ts` | `sessionChatCaptureEnabled`: whether a model call's payload keeps its own reply and request settings for the session chat. Owned: the deployment switch `FF_SESSION_REPLAY`, read from the platform layer (upstream asks its flag service per organization). The traces route and the imported-runs service wire it |
 | `otlp/queries.ts` `hasProjectIngestedEvents`, `getDailyAggregates`, `getToolMetrics` | event presence and the derived `event_metrics` reads (per-day sums, per-tool footprints) the project overview and the MCP cost tools quote |
 | `runtime-events/schema.ts` | `runtime_event_sources` |
 | `runtime-events/queries.ts`, `view.ts` | the reads behind Settings > Developer: events, rejects, client drops, facets |

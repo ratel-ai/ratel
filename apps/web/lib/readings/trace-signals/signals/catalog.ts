@@ -71,7 +71,8 @@ export function resolveFloors() {
     buried_tool: {
       minN: floor("buried_tool", "min_n", 10),
       minK: floor("buried_tool", "min_k", 3),
-      minRank: floor("buried_tool", "min_rank", 4),
+      // Picked from below the top 5 (RC-226): within it the agent reads the list and picks well.
+      minRank: floor("buried_tool", "min_rank", 6),
       minLow: floor("buried_tool", "min_low", 0.3, true),
     },
     magnet: {

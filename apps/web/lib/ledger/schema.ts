@@ -98,6 +98,9 @@ export const traceTurns = pgTable(
     index("trace_turns_closed_ended_idx")
       .on(t.projectId, t.endedAt, t.id)
       .where(sql`${t.status} = 'closed'`),
+    // A run's turn by its `otlp:<trace id>` key, without knowing its session
+    // (the Sessions list leaves out runs that already sit in a session).
+    index("trace_turns_project_turn_key_idx").on(t.projectId, t.turnKey),
   ],
 );
 

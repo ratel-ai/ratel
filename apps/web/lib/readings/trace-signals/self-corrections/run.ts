@@ -75,6 +75,31 @@ export interface StoredSelfCorrections {
   turnsWithReplies: number;
   /** Rows written. */
   events: number;
+  /**
+   * Turns with at least one self-correction, and of those the ones that
+   * recovered (every behaviour with a known outcome recovered, at least one
+   * did). The Health score reads them (RC-226). Absent on runs stored before.
+   */
+  correctedTurns?: number;
+  recoveredTurns?: number;
+}
+
+/** Turns with a correction, and how many of them recovered, from one reading's rows. */
+export function correctedTurnCounts(
+  rows: readonly Pick<CorrectionRowDraft, "turnId" | "recovered">[],
+): { correctedTurns: number; recoveredTurns: number } {
+  const byTurn = new Map<string, (boolean | null)[]>();
+  for (const row of rows)
+    byTurn.set(row.turnId, [...(byTurn.get(row.turnId) ?? []), row.recovered]);
+  let recoveredTurns = 0;
+  for (const outcomes of byTurn.values()) {
+    if (
+      outcomes.some((outcome) => outcome === true) &&
+      !outcomes.some((outcome) => outcome === false)
+    )
+      recoveredTurns += 1;
+  }
+  return { correctedTurns: byTurn.size, recoveredTurns };
 }
 
 export interface SelfCorrectionRunDeps {
@@ -280,6 +305,7 @@ export async function recordSelfCorrections(
     turns: turns.length,
     turnsWithReplies,
     events: written,
+    ...correctedTurnCounts(rows),
   };
   if (trust.runs === "none") return { signals: [], measured: new Set(), stored };
 

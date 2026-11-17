@@ -35,7 +35,11 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
  */
 const DEPLOYMENT_SWITCHES = [
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
-  { key: "FF_SESSION_REPLAY", note: "the session timeline and What-if" },
+  { key: "FF_SESSION_REPLAY", note: "session replay as a chat, and What-if, in the console" },
+  {
+    key: "FF_TRACES_SESSIONS",
+    note: "the console's Traces page leads with the person's ask; no tool reads it yet",
+  },
   { key: "FF_HEALTH_SCORE", note: "Agent health's Summary leads with the Health score" },
   {
     key: "FF_HEALTH_IMPORT_FIRST_READING",
@@ -74,7 +78,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       domain: "account",
       title: "Feature flag status",
       description:
-        "The deployment's feature switches and whether each is on: the stage spine (Tasks and Ship), the eval gate, session replay and the improvement-loop tools. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+        "The deployment's feature switches and whether each is on: the eval gate, session replay, the Traces Sessions view and the Agent health readings. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
       keywords: ["flags", "enabled", "disabled", "feature access"],
       scope: "project",
       mutates: false,

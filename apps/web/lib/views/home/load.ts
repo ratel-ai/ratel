@@ -535,8 +535,10 @@ export function assembleOverview({
             windowDays: reads.healthWindow,
             firstTry:
               healthReadiness(health) === "ready"
-                ? (health.tiles.find((tile) => tile.key === "first_try" && tile.value !== null) ??
-                  null)
+                ? (health.tiles.find(
+                    (tile) =>
+                      (tile.key === "top_5" || tile.key === "first_try") && tile.value !== null,
+                  ) ?? null)
                 : null,
           }
         : null,

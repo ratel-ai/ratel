@@ -1,3 +1,4 @@
+import { outcomePillars } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   type HealthScoreView,
   healthScoreView,
@@ -337,14 +338,17 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
 }
 
 /**
- * The reading's Health score (RC-225), from every open issue before the plan
- * cuts the list: a locked issue still costs points, it is only not named.
+ * The reading's Health score (RC-225, v2 RC-226): its measured rates over the
+ * reading's own window, and every open issue before the plan cuts the list
+ * (a locked issue still costs points, it is only not named).
  */
 function scoreFor(inputs: PageInputs): HealthScoreView | null {
-  const turnsRead = inputs.run?.turnsScanned;
-  if (turnsRead === undefined) return null;
+  const run = inputs.run;
+  const turnsRead = run?.turnsScanned;
+  if (!run || turnsRead === undefined) return null;
   const history = (inputs.scoreHistory ?? [])
     .map(parseStoredHealthScore)
     .filter((s): s is StoredHealthScore => s !== null);
-  return healthScoreView(scoredIssues(inputs.signals), turnsRead, history);
+  const pillars = outcomePillars(run.summary, { end: run.windowEnd, days: run.windowDays });
+  return healthScoreView(scoredIssues(inputs.signals), turnsRead, history, pillars);
 }

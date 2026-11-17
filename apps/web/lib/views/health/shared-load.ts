@@ -1,5 +1,6 @@
 import type { SharedHealthLink } from "@/lib/contracts/composition";
 import { type AgentHealthLimits, getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { sharedHealthScoreEnabled } from "@/lib/readings/trace-signals/health-score-flag";
 import {
   applyPlanLimits,
   type HealthPageModel,
@@ -78,6 +79,8 @@ export interface SharedHealthDeps {
   /** The edition's `HealthShare.resolve`: the live link behind a token, or null. */
   resolve: (token: string) => Promise<SharedHealthLink | null>;
   getLimits: (organization: SharedHealthLink["organization"]) => AgentHealthLimits;
+  /** Whether the link shows the Health score (`FF_HEALTH_SCORE`, asked for the link's project). */
+  scoreShown: (link: SharedHealthLink) => Promise<boolean>;
   loadModel: (input: {
     projectId: string;
     windowDays: HealthPageModel["windowDays"];
@@ -116,6 +119,7 @@ export function sharedHealthDeps(resolve: SharedHealthDeps["resolve"]): SharedHe
     resolve,
     cache: sharedCache,
     getLimits: (organization) => getAgentHealthLimits(organization),
+    scoreShown: (link) => sharedHealthScoreEnabled(link.project.id, link.organization),
     loadModel: ({ projectId, windowDays, limits }) =>
       loadHealthPageModel(
         { projectId, windowDays },
@@ -140,14 +144,17 @@ export async function loadSharedHealth(
   // The window chosen when the link was made, cut to the plan as it is now.
   const windowDays = parseWindowDays(String(link.windowDays), limits.agentHealthWindowDays);
   const now = deps.now?.() ?? Date.now();
-  const key = `${link.linkId}:${windowDays}:${limits.agentHealthSignalsShown}`;
-  const build = async () =>
-    publicHealthModel(
-      applyPlanLimits(await deps.loadModel({ projectId: link.project.id, windowDays, limits }), {
-        ...limits,
-        agentHealthEvidenceTurns: 0,
-      }),
+  // Owned: the switch is the deployment's (FF_HEALTH_SCORE), read without a flag service.
+  const scoreShown = await deps.scoreShown(link);
+  const key = `${link.linkId}:${windowDays}:${limits.agentHealthSignalsShown}:${scoreShown ? "score" : "plain"}`;
+  const build = async () => {
+    const loaded = await deps.loadModel({ projectId: link.project.id, windowDays, limits });
+    const model = publicHealthModel(
+      applyPlanLimits(loaded, { ...limits, agentHealthEvidenceTurns: 0 }),
     );
+    // The score only where its flag is on; otherwise the link reads as it always has.
+    return scoreShown ? model : { ...model, score: undefined };
+  };
   const model = await (deps.cache ? deps.cache.get(key, now, build) : build());
   return {
     linkId: link.linkId,

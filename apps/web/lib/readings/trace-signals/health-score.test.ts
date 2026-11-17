@@ -5,6 +5,7 @@ import {
   ringCells,
   scoreCopy,
 } from "@/components/console/health/v2/health-score-model";
+import { outcomeScore } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   gainOf,
   HARM_CAP,
@@ -15,6 +16,7 @@ import {
   healthScoreView,
   ISSUE_HARM,
   issueHarm,
+  OUTCOME_SHARE,
   parseStoredHealthScore,
   type ScoredIssue,
   scoredIssues,
@@ -67,7 +69,7 @@ test("no issues is 100; kinds combine like a turn getting through each, each kin
   assert.equal(healthScore([issue("a", "error_loop", 100)], 1_000), 90);
   // 0.9 × (1 − 0.06) = 0.846
   assert.equal(
-    healthScore([issue("a", "error_loop", 100), issue("b", "first_try_miss", 100)], 1_000),
+    healthScore([issue("a", "error_loop", 100), issue("b", "buried_tool", 100)], 1_000),
     85,
   );
   assert.equal(
@@ -94,7 +96,7 @@ test("no issues is 100; kinds combine like a turn getting through each, each kin
 test("what fixing issues wins back is exact: the score without them, minus the score now", () => {
   const issues = [
     issue("a", "error_loop", 100),
-    issue("b", "first_try_miss", 100),
+    issue("b", "buried_tool", 100),
     issue("c", "padding_share", 300),
     issue("d", "sequence_chain", 400),
     issue("e", "sequence_chain", 400),
@@ -169,7 +171,7 @@ test("bands and the stored score parse", () => {
 test("the score's words: band, headline, the goal three fixes reach, change, where the points go", () => {
   const issues = [
     issue("a", "error_loop", 100),
-    issue("b", "first_try_miss", 100),
+    issue("b", "buried_tool", 100),
     issue("c", "padding_share", 300),
     issue("d", "dead_tool", 0, 0.1),
   ];
@@ -187,7 +189,7 @@ test("the score's words: band, headline, the goal three fixes reach, change, whe
   assert.equal(copy.goalLead, "Fix the top 3 issues to reach");
   assert.deepEqual(
     copy.lost.map((part) => part.label),
-    ["Failing turns", "Wrong tool first", "Wasted calls and time", "Tidying"],
+    ["Failing turns", "Detours and corrections", "Wasted calls and time", "Tidying"],
   );
   assert.equal(
     copy.lost.reduce((sum, part) => sum + part.points, 0),
@@ -263,7 +265,7 @@ test("the ring lights the score clockwise, its tip coral, the pixels three fixes
 test("the missing points split by level and add up to exactly what is missing", () => {
   const issues = [
     issue("a", "error_loop", 100),
-    issue("b", "first_try_miss", 100),
+    issue("b", "buried_tool", 100),
     issue("c", "padding_share", 300),
     issue("d", "sequence_chain", 400),
   ];
@@ -307,5 +309,72 @@ test("an unknown_tool whose calls ran is not a failing turn; one the catalog alo
   assert.deepEqual(
     issues.map((i) => i.id),
     ["catalog", "missing", "other"],
+  );
+});
+
+test("v2: the score blends how the runs went with what is open, and fixing an issue moves only its share now (RC-226)", () => {
+  assert.equal(HEALTH_SCORE_VERSION, 2);
+  const issues = [
+    issue("a", "error_loop", 100),
+    issue("b", "buried_tool", 100),
+    issue("c", "sequence_chain", 400),
+  ];
+  const pillars = [
+    { pillar: "ended" as const, good: 0.95, n: 1_000 },
+    { pillar: "top_5" as const, good: 0.8, n: 1_000 },
+    { pillar: "corrections" as const, good: 0.9, n: 1_000 },
+  ];
+  const outcome = outcomeScore(pillars)!;
+  const issuesOnly = healthScoreView(issues, 1_000);
+  const view = healthScoreView(issues, 1_000, [], pillars);
+  assert.equal(
+    view.value,
+    Math.round(OUTCOME_SHARE * outcome + (1 - OUTCOME_SHARE) * (issuesOnly.value + 0)),
+    "60% measured, 40% issues",
+  );
+  assert.equal(view.issueScore, issuesOnly.value);
+  assert.equal(view.outcome, outcome);
+  assert.equal(healthScore(issues, 1_000, pillars), view.value, "the stored score is the page's");
+
+  // Fixing everything open lifts only the issue share: the runs show the fix at the next reading.
+  const allFixed = gainOf(view, ["a", "b", "c"]);
+  assert.equal(
+    allFixed,
+    Math.round(OUTCOME_SHARE * outcome + (1 - OUTCOME_SHARE) * 100) - view.value,
+  );
+  assert.equal(scoreGain(issues, 1_000, new Set(["a"]), pillars), gainOf(view, ["a"]));
+
+  // Missing points: the issues' share by level, plus each rate at its level; they still add up exactly.
+  assert.equal(
+    Object.values(view.lost).reduce((a, b) => a + b, 0),
+    100 - view.value,
+  );
+  assert.ok(
+    view.lost.misleads > 0,
+    "right tool first and self-corrections lose points as wrong tool first",
+  );
+
+  // Without a measured rate, the score is the issues alone, as before.
+  assert.equal(healthScoreView(issues, 1_000, [], []).value, issuesOnly.value);
+  // A v1 score in the history is never compared with a v2 one.
+  assert.equal(healthScoreView(issues, 1_000, [{ version: 1, value: 50 }], pillars).change, null);
+});
+
+test("v2 words: what the score is made of, and how it is weighed", () => {
+  const pillars = [
+    { pillar: "ended" as const, good: 0.951, n: 1_000 },
+    { pillar: "tasks" as const, good: 0.5, n: 1_000 },
+  ];
+  const copy = scoreCopy(healthScoreView([issue("a", "error_loop", 100)], 1_000, [], pillars));
+  assert.equal(copy.basis, "60% from how your runs went, 40% from the issues still open.");
+  assert.deepEqual(copy.parts, [
+    { key: "ended", label: "Runs end well", value: 95 },
+    { key: "tasks", label: "Tasks finish", value: 50 },
+    { key: "issues", label: "Open issues", value: 90 },
+  ]);
+  assert.deepEqual(
+    scoreCopy(healthScoreView([issue("a", "error_loop", 100)], 1_000)).parts,
+    [],
+    "no rates: no parts, the issues are the score",
   );
 });

@@ -43,6 +43,15 @@ export async function loadSessionTimeline(
   sessionId: string,
   db: ReplayDb = getDb(),
 ): Promise<SessionTimeline | null> {
+  return (await loadSessionReplay(projectId, sessionId, db))?.timeline ?? null;
+}
+
+/** {@link loadSessionTimeline} with the turns it was built from (the session chat reads their times). */
+export async function loadSessionReplay(
+  projectId: string,
+  sessionId: string,
+  db: ReplayDb = getDb(),
+): Promise<{ timeline: SessionTimeline; turns: TimelineTurn[] } | null> {
   const ledger = await listSessionTurns(projectId, sessionId, db);
   if (ledger.length === 0) return null;
   const eventIds = [
@@ -115,7 +124,7 @@ export async function loadSessionTimeline(
     },
     "session_replay_timeline_built",
   );
-  return timeline;
+  return { timeline, turns };
 }
 
 /** Trace id by `trace_events` id, for the rows not yet pruned (a row with no trace id maps to ""). */
