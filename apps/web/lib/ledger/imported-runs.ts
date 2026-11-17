@@ -1,4 +1,5 @@
 import type { ImportedRunsPort } from "@/lib/contracts/imported-runs";
+import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
@@ -10,6 +11,7 @@ import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { drainProjectJobs } from "@/lib/jobs/store";
 import { registerImportedSourceIds } from "@/lib/ledger/constants";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
+import { getDb } from "@/lib/platform/db/client";
 
 export type ImportedRunsDeps = {
   persistDecodedSpans: typeof persistDecodedSpans;
@@ -60,6 +62,8 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
           // No agentSpanDedupe: an imported run's `invoke_agent` root carries no model or
           // usage, so it is never a call to dedupe.
           sessionChatCapture: (id, org) => sessionChatCaptureEnabled(id, org),
+          // The project's own model prices, as live ingest reads them (RC-482).
+          modelPricing: { loadOverrides: (id) => loadPriceOverrides(id, getDb()) },
           logError: report.logError,
           captureFailure: report.captureFailure,
         },

@@ -7,7 +7,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 import { ModelPricingSection } from "./ModelPricingSection";
 import { ProjectNameForm } from "./ProjectNameForm";
 
-/** Settings > General: the project's name, its model prices and the session replay content opt-in, each when its flag is on. */
+/** Settings > General: the project's name, its model prices and the session replay content opt-in (when `FF_SESSION_REPLAY` is on). */
 export async function GeneralSettings({ projectId }: { projectId: string }) {
   const scope = await getConsoleScope();
   const project = findProject(scope?.projects ?? [], projectId);
