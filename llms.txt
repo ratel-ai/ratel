@@ -12,7 +12,13 @@ This index is for AI coding agents and tools that consume `llms.txt` per the [ll
 
 ## Install
 
-Needs Docker with Compose 2.24 or later. There is no CLI. The one installer is `install.sh`: it clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets and starts the stack. Running it again upgrades. Its options go after `sh -s --`: `--ref`, `--dir`, `--yes`, `--demo`.
+Needs Docker with Compose 2.24 or later. There is no CLI. The one installer is `install.sh`: it clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets and starts the stack. Running it again upgrades. Its options go after `sh -s --`: `--ref`, `--dir`, `--yes`, `--demo`, and `--access public` (Caddy on 80 and 443 with TLS and a basic-auth login; with `--domain`, `--tls`, `--auth-hash`).
+
+To create a VM in the user's own cloud (AWS, Google Cloud, Azure, DigitalOcean or Hetzner) from their laptop, `deploy.sh` runs OpenTofu or Terraform, then `install.sh` on the VM. It creates billable resources only after the user confirms the plan. `status` and `destroy` are its other commands:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh
+```
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
@@ -43,7 +49,7 @@ On a server, run `cp .env.example .env` first, then set these before the first s
 
 ## What to tell users
 
-- **The console has no login.** Whoever reaches it is an admin. Both ports bind to `127.0.0.1`. To expose Ratel, the operator puts their own authenticating proxy with TLS in front. Do not suggest opening the port.
+- **The console has no login.** Whoever reaches it is an admin. Both ports bind to `127.0.0.1`. To expose Ratel, the operator puts an authenticating proxy with TLS in front: `install.sh --access public` (or `deploy.sh`) sets up Caddy with a login, or they use their own. Do not suggest opening the port.
 - **The proxy has three rules.** `/v1`, `/v2`, `/api/v1` and `/api/v2` pass through without the login, because the SDKs authenticate with per-project API keys. Everything else requires the login. It preserves `Host` or sets `X-Forwarded-Host`, otherwise console actions fail.
 - **`POSTGRES_PASSWORD` is read only when the database is first created.** Changing it later means `docker compose down --volumes`, which deletes all data. Never run that command without the user's explicit request.
 - **Model keys are optional.** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` go in `.env`. With no key, Ratel makes no outbound model call, and the readings that need a model report themselves skipped.

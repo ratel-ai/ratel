@@ -145,6 +145,18 @@ test("install.sh and its test set compose and platform", () => {
   assertFalse(r, ["sdk", "rust", "python"]);
 });
 
+test("deploy.sh, its modules and its test set deploy and platform", () => {
+  for (const f of ["deploy.sh", "deploy/terraform/aws/main.tf", "scripts/deploy.test.mjs"]) {
+    assertTrue(on([f]), ["deploy", "platform"]);
+    assertFalse(on([f]), ["sdk", "rust", "python", "compose"]);
+  }
+});
+
+test("the Caddy overlay sets compose and platform", () => {
+  assertTrue(on(["docker-compose.caddy.yml"]), ["compose", "platform"]);
+  assertFalse(on(["docker-compose.caddy.yml"]), ["sdk", "deploy"]);
+});
+
 test("lockfile and exceptions-file changes set lockfiles", () => {
   for (const f of ["pnpm-lock.yaml", "Cargo.lock", ".trivyignore.yaml"]) {
     assertTrue(on([f]), ["lockfiles"]);

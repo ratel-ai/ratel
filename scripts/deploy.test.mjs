@@ -293,10 +293,10 @@ test("save_config and config_get keep the deploy's settings, owner-only", async 
   assert.equal(statSync(join(home, "s/config")).mode & 0o777, 0o600);
 });
 
-test("save_credentials writes the password owner-only and never prints it", async () => {
-  const { stdout, home } = await sh('STATE="$HOME/s"\ninit_state\nsave_credentials https://x.example ratel s3cret-pass');
+test("save_login writes the console password owner-only and never prints it", async () => {
+  const { stdout, home } = await sh('STATE="$HOME/s"\ninit_state\nsave_login https://x.example ratel s3cret-pass');
   assert.ok(!stdout.includes("s3cret-pass"));
-  const file = join(home, "s/credentials");
+  const file = join(home, "s/login");
   assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.equal(readFileSync(file, "utf8"), "url=https://x.example\nuser=ratel\npassword=s3cret-pass\n");
 });

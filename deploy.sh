@@ -242,7 +242,7 @@ create() {
   save_config
   read_outputs
   if [ "$ACCESS" = public ]; then
-    save_credentials "$URL" "$CONSOLE_USER" "$(tf output -raw password)"
+    save_login "$URL" "$CONSOLE_USER" "$(tf output -raw password)"
   fi
 
   step "Install"
@@ -441,8 +441,8 @@ load_config() {
   MY_IP=$(config_get MY_IP)
 }
 
-save_credentials() {
-  (umask 077 && printf 'url=%s\nuser=%s\npassword=%s\n' "$1" "$2" "$3" >"$STATE/credentials")
+save_login() {
+  (umask 077 && printf 'url=%s\nuser=%s\npassword=%s\n' "$1" "$2" "$3" >"$STATE/login")
 }
 
 # True after an apply that succeeded. A run stopped at the question, or a failed apply, is not
@@ -544,7 +544,7 @@ tf_quiet() {
   fi
 }
 
-# The credentials each provider reads, taken from the CLI the user is logged in with.
+# The login each provider reads, taken from the CLI the user is logged in with.
 cloud_env() {
   case "$CLOUD" in
     gcp)
@@ -700,12 +700,12 @@ print_result() {
   step "Ratel is running"
   if [ "$ACCESS" = public ]; then
     info "Open:     $URL"
-    info "User:     $(sed -n 's/^user=//p' "$STATE/credentials")"
+    info "User:     $(sed -n 's/^user=//p' "$STATE/login")"
     if [ "$1" = new ]; then
-      info "Password: $(sed -n 's/^password=//p' "$STATE/credentials")"
-      info "          Shown once. It is also in $STATE/credentials (only you can read it)."
+      info "Password: $(sed -n 's/^password=//p' "$STATE/login")"
+      info "          Shown once. It is also in $STATE/login (only you can read it)."
     else
-      info "Password: in $STATE/credentials"
+      info "Password: in $STATE/login"
     fi
     [ -z "$ALLOW_CIDRS" ] || info "TLS:      Caddy's own CA, so the browser warns until you trust it."
     info ""
@@ -783,7 +783,7 @@ status() {
   info "Ref:      $(config_get REF)"
   if health >/dev/null 2>&1; then ok "Healthy: $(health_target)"; else warn "Not answering: $(health_target)"; fi
   if [ "$ACCESS" = public ]; then
-    info "Open:     $URL (user and password in $STATE/credentials)"
+    info "Open:     $URL (user and password in $STATE/login)"
   else
     info "Tunnel:   ssh -i $STATE/id_ed25519 -N -L 3000:127.0.0.1:3000 $SSH_USER@$IP"
   fi

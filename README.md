@@ -42,13 +42,40 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
 ```
 
-The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps your `.env` and stops if the checkout has local changes.
+The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps the values in your `.env` and stops if the checkout has local changes.
 
 Options, after `sh -s --`: `--ref <branch|tag|sha>` (default `main`), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
 ```
+
+On a server with a public IP, `--access public` puts [Caddy](https://caddyserver.com) in front of the console, on ports 80 and 443, with a Let's Encrypt certificate and a login (basic auth, user `ratel`). The password is new and printed once. `--domain <name>` sets the site name (default `<public-ip>.sslip.io`), `--tls internal` uses Caddy's own CA in place of Let's Encrypt, and `--auth-hash <bcrypt>` sets the password's hash. The routes that SDKs and MCP clients call with project API keys (`/v1`, `/v2`, `/api/v1`, `/api/v2`, `/api/mcp`) and `/api/health` pass without the login. A rerun keeps the mode, and `--access private` turns Caddy off. The installer writes `Caddyfile` and adds `docker-compose.caddy.yml` to `COMPOSE_FILE` in `.env`, so every `docker compose` command in the directory includes Caddy.
+
+### Deploy to your cloud
+
+From your laptop, one command creates a VM in your cloud and installs Ratel on it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh
+```
+
+`deploy.sh` finds the cloud you are logged in to: AWS (`aws sts get-caller-identity`), Google Cloud (the account and project of `gcloud`), Azure (`az account show`), DigitalOcean (`DIGITALOCEAN_TOKEN` or `doctl`) or Hetzner (`HCLOUD_TOKEN` or `hcloud`). With several, it asks, or takes `--cloud`. It uses [OpenTofu](https://opentofu.org) (`tofu`), or Terraform when OpenTofu is not installed. It creates one Ubuntu 24.04 LTS VM with 2 vCPU or more, 8 GB of RAM and 30 GB of disk or more, a firewall, a static IP and a dedicated SSH key. It shows the plan and a rough monthly cost per size, and asks before it creates anything. Then it follows the install and prints how to open the console. The modules are in [deploy/terraform/](deploy/terraform/).
+
+There are two access modes:
+
+- **`--access public`** (default): Caddy with TLS and a login, as above. Ports 80 and 443 are open to all, or only to the `--allow-cidr` ranges (for example a VPN), and then Caddy uses its own CA because Let's Encrypt cannot reach port 80. SSH is open only to your current IP. The certificate is for `--domain`, or for `<ip>.sslip.io` with no domain. The login password is printed once, and stays only on your laptop, in `~/.ratel/deploy/<name>/login`.
+- **`--access private`**: no web port. SSH is open to your current IP and the `--allow-cidr` ranges, and you reach the console through a tunnel: `ssh -i ~/.ratel/deploy/ratel/id_ed25519 -N -L 3000:127.0.0.1:3000 ratel@<ip>`.
+
+Other options, after `sh -s --`: `--region`, `--size`, `--name` (default `ratel`, for more than one deploy), `--ref` (passed to `install.sh`), `--iac terraform|tofu` and `--yes`. The state, the SSH key and the password stay on your laptop in `~/.ratel/deploy/<name>/` (owner-only), so the other commands need no flags:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- status
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- up --ref <tag>   # upgrade
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- destroy
+```
+
+`up` on an existing deploy upgrades it: it reruns `install.sh` on the VM over SSH with the new `--ref`. If your IP changed, it first opens SSH to the new one. `destroy` deletes the VM, its disk with all Ratel data and its IP, then the local state. Back up first (see [On a server](#on-a-server)).
 
 ### On your machine
 
@@ -88,7 +115,7 @@ A fresh install seeds this sample project, Site Copilot, by itself the first tim
 
 > **The console has no login.** Anyone who reaches it is an admin. Ratel binds to `127.0.0.1` only: keep it behind your own proxy with authentication and TLS.
 
-The [one-command installer](#one-command) does the steps below for you, with random secrets. Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
+The [one-command installer](#one-command) does the steps below for you, with random secrets. With `--access public` it also sets up the proxy (Caddy). Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
