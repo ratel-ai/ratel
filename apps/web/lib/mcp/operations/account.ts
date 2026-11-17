@@ -50,6 +50,10 @@ const DEPLOYMENT_SWITCHES = [
     note: "each accepted OTLP export is kept, gzipped, within a daily byte cap per project",
   },
   {
+    key: "FF_TRACE_VIEWS_V3",
+    note: "the redesigned trace and session views: Turn naming, the span pane and raw view, a Sessions tab",
+  },
+  {
     key: "FF_QUICK_FIRST_READING",
     note: "a new project's first Agent health reading reads a week first, marked early",
   },

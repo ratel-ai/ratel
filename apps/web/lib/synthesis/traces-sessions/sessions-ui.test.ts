@@ -212,6 +212,6 @@ test("switch off renders RunsPageV2; switch on renders the Sessions page", () =>
     new URL("../../../app/(console)/project/[projectId]/traces/(tabs)/page.tsx", import.meta.url),
     "utf8",
   );
-  assert.match(source, /const sessions = tracesSessionsEnabled\(\)/);
+  assert.match(source, /const sessions = !viewsV3 && tracesSessionsEnabled\(\)/);
   assert.match(source, /sessions \?\s*\(\s*<SessionsPage[\s\S]*\) : \(\s*<RunsPageV2/);
 });

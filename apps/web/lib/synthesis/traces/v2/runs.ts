@@ -8,6 +8,7 @@
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
 import type { TraceSummaryView } from "@/lib/synthesis/traces/view";
 import { formatCompact, formatDuration, formatInteger, formatMoney, formatPercent } from "./format";
+import { RUN_NOUN, type RunNoun } from "./run-noun";
 import { humanSpanName } from "./span-kind";
 
 /** What the list knows about a run beyond its summary row. */
@@ -113,16 +114,16 @@ export interface RunStat {
  * The Runs page's key numbers. Five, not six (DESIGN.md: a StatRow holds 2 to
  * 5): the median and p95 durations share one stat.
  */
-export function runStats(aggregate: TraceAggregateSummary): RunStat[] {
+export function runStats(aggregate: TraceAggregateSummary, noun: RunNoun = RUN_NOUN): RunStat[] {
   const failed = aggregate.errorCount;
   const high = aggregate.count > 0 && aggregate.errorRate >= HIGH_ERROR_RATE;
   return [
-    { id: "runs", label: "Runs", value: formatCompact(aggregate.count) },
+    { id: "runs", label: noun.many, value: formatCompact(aggregate.count) },
     {
       id: "errorRate",
       label: "Error rate",
       value: formatPercent(aggregate.errorRate),
-      hint: failed === 0 ? "No failed runs" : `${formatInteger(failed)} failed`,
+      hint: failed === 0 ? `No failed ${noun.lowerMany}` : `${formatInteger(failed)} failed`,
       ...(high ? { tone: "danger" as const } : {}),
     },
     {

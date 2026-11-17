@@ -24,7 +24,9 @@ import {
 } from "@/lib/synthesis/traces/queries";
 import { listRunAsks, listRunTools, type RunAsk } from "@/lib/synthesis/traces/run-details";
 import { hasFilters, presetCovering, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
+import { runNoun } from "@/lib/synthesis/traces/v2/run-noun";
 import { runStats, toRunRow } from "@/lib/synthesis/traces/v2/runs";
+import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { buildVolumeModel, needsHourlyVolume } from "@/lib/synthesis/traces/v2/volume";
 import {
   resolveSpanListView,
@@ -64,10 +66,10 @@ export async function RunsPageV2({
   const view = resolveTraceListView(params, now);
   const spanView = resolveSpanListView(params, now);
   const distinctId = `project:${project.id}`;
-  const askFromPayload = await payloadContentEnabledForActor(
-    project.id,
-    `project:${project.id}`,
-  ).catch(() => false);
+  const [askFromPayload, viewsV3] = await Promise.all([
+    payloadContentEnabledForActor(project.id, `project:${project.id}`).catch(() => false),
+    traceViewsV3EnabledForActor(project.id, `project:${project.id}`),
+  ]);
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
@@ -203,7 +205,7 @@ export async function RunsPageV2({
           hasRoot: asks?.get(item.traceId)?.hasRoot,
         }),
       )}
-      stats={aggregate ? runStats(aggregate) : null}
+      stats={aggregate ? runStats(aggregate, runNoun(viewsV3)) : null}
       volume={
         aggregate
           ? buildVolumeModel({ from: view.range.from, to: view.range.to, points: aggregate.volume })

@@ -135,6 +135,10 @@ function toOtelLogRow(projectId: string, record: DecodedLogRecord): OtelLogRow {
           record.eventName,
           record.timeUnixNano,
           contentHash(record.attributes),
+          // A per-message `gen_ai` record carries its message in the body, so
+          // two of one span at one time differ only there. Ratel ids stay as
+          // they were.
+          ...(genAiEvent ? [contentHash(record.body)] : []),
         ].join(":"),
     ),
     projectId,

@@ -25,6 +25,7 @@ import { SpanAttributesList } from "./SpanInspector";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TRACES_DOCS } from "./TracesEmpty";
 import { type TimeWindow, TracesHeader } from "./TracesHeader";
+import { useRunNoun } from "./views-v3-context";
 
 /** A log row as the page sends it: dates as ISO strings. */
 export interface LogRow {
@@ -70,6 +71,7 @@ export function LogsView(props: LogsViewProps) {
   const { projectId, now, timeWindow, logs } = props;
   const { pathname, search, pending, go } = useTraceNavigation();
   const peek = usePeek();
+  const noun = useRunNoun();
   const [lastId, setLastId] = useState(peek.id);
   if (peek.id && peek.id !== lastId) setLastId(peek.id);
   const tracesPath = `/project/${encodeURIComponent(projectId)}/traces`;
@@ -109,7 +111,7 @@ export function LogsView(props: LogsViewProps) {
     },
     {
       id: "run",
-      header: "Run",
+      header: noun.one,
       width: "9rem",
       cell: (log) =>
         log.traceId ? (

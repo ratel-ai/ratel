@@ -36,6 +36,7 @@ import { ListFooter } from "./RunsTable";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "./TracesEmpty";
 import { type TimeWindow, TracesHeader } from "./TracesHeader";
+import { useRunNoun } from "./views-v3-context";
 
 export type SpanSort = "started" | "duration" | "tokens" | "cost";
 export type OperationSortId = "key" | "count" | "errorRate" | "p50" | "p95" | "cost" | "tokens";
@@ -193,6 +194,7 @@ function SpansTable({
   sortHref: (id: SpanSort) => (direction: SortDirection) => string;
   onOpen: (row: SpanSummaryView) => void;
 }) {
+  const noun = useRunNoun();
   const columns: Column<SpanSummaryView>[] = [
     {
       id: "status",
@@ -228,7 +230,7 @@ function SpansTable({
     },
     {
       id: "run",
-      header: "Run",
+      header: noun.one,
       width: "9rem",
       cell: (row) => (
         <span className="font-mono text-xs whitespace-nowrap text-fg-muted">

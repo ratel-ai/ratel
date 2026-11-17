@@ -36,11 +36,14 @@ export function SpanInspector({
   offsetMs,
   runtimeEventsRoot,
   onShowDetails,
+  children,
 }: {
   span: TraceSpanView;
   offsetMs: number;
   runtimeEventsRoot: string | null;
   onShowDetails: () => void;
+  /** The span's content pane (`cloud-trace-views-v3`); in its place, the tool arguments and result. */
+  children?: ReactNode;
 }) {
   const kind = stepKind(span);
   const failed = span.statusCode === 2;
@@ -98,8 +101,12 @@ export function SpanInspector({
         ))}
       </dl>
 
-      {toolArguments !== undefined ? <Payload label="Arguments" value={toolArguments} /> : null}
-      {toolResult !== undefined ? <Payload label="Result" value={toolResult} /> : null}
+      {children ?? (
+        <>
+          {toolArguments !== undefined ? <Payload label="Arguments" value={toolArguments} /> : null}
+          {toolResult !== undefined ? <Payload label="Result" value={toolResult} /> : null}
+        </>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={onShowDetails}>

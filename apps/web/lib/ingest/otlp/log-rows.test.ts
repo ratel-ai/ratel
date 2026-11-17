@@ -442,3 +442,33 @@ test("gen_ai events on: ratel records keep stripping content keys", () => {
 
   assert.deepEqual(row.attributes, { "ratel.experiment.id": "x" });
 });
+
+test("gen_ai events on: per-message records of one span at one time keep one row each", () => {
+  const { rows } = toOtelLogRows(
+    "project-1",
+    [
+      record({
+        eventName: "gen_ai.user.message",
+        body: { content: "first question" },
+        attributes: {},
+      }),
+      record({
+        eventName: "gen_ai.user.message",
+        body: { content: "second question" },
+        attributes: {},
+      }),
+    ],
+    { genAiEvents: true },
+  );
+
+  assert.equal(new Set(rows.map((row) => row.id)).size, 2);
+});
+
+test("ratel records keep their id when only the body differs", () => {
+  const { rows } = toOtelLogRows("project-1", [
+    record({ body: { comparison: "shadow" } }),
+    record({ body: { comparison: "live" } }),
+  ]);
+
+  assert.equal(rows[0].id, rows[1].id);
+});

@@ -6,6 +6,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { CalendarRange, SearchX } from "lucide-react";
 import Link from "next/link";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import { useRunNoun } from "./views-v3-context";
 
 export const TRACES_DOCS = "https://docs.ratel.sh/observability";
 
@@ -35,7 +36,8 @@ export function TracesEmpty({
   /** Widen the window, when a wider preset exists. */
   onWiden?: { label: string; run: () => void };
 }) {
-  const noun = NOUN[unit];
+  const runNoun = useRunNoun();
+  const noun = unit === "runs" ? runNoun.lowerMany : NOUN[unit];
   const docs = (
     <a
       href={TRACES_DOCS}
@@ -69,7 +71,7 @@ export function TracesEmpty({
         <EmptyState
           emblem
           title={`No ${noun} yet`}
-          description="Your SDK is sending events, but no traces. Turn on tracing to see each run step by step."
+          description={`Your SDK is sending events, but no traces. Turn on tracing to see each ${runNoun.lower} step by step.`}
           action={
             <a
               href={TRACES_DOCS}

@@ -9,6 +9,7 @@ import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import { conversationMessages, ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";
 import { CONTENT_CAPTURE_DOCS } from "./RunPanel";
+import { useRunNoun } from "./views-v3-context";
 
 /**
  * The run as it was spoken: each message once, in order, then the tool calls
@@ -17,6 +18,7 @@ import { CONTENT_CAPTURE_DOCS } from "./RunPanel";
  */
 export function TraceConversation({ content }: { content: TraceContentView }) {
   const messages = conversationMessages(content.messages);
+  const noun = useRunNoun();
   return (
     <div className="flex max-w-3xl flex-col gap-8" data-conversation>
       {!content.contentCaptured ? (
@@ -34,7 +36,7 @@ export function TraceConversation({ content }: { content: TraceContentView }) {
           }
         >
           Capture is off by default to protect your users&apos; data. Turn it on in your SDK to read
-          what this run was asked and answered.
+          what this {noun.lower} was asked and answered.
         </Callout>
       ) : null}
 
@@ -64,7 +66,7 @@ export function TraceConversation({ content }: { content: TraceContentView }) {
       <section aria-label="Tool calls" className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-fg">Tool calls</h2>
         {content.toolCalls.length === 0 ? (
-          <p className="text-sm text-fg-muted">This run called no tools.</p>
+          <p className="text-sm text-fg-muted">This {noun.lower} called no tools.</p>
         ) : (
           <ol className="flex flex-col gap-5">
             {content.toolCalls.map((call, index) => (
@@ -102,7 +104,8 @@ export function TraceConversation({ content }: { content: TraceContentView }) {
   );
 }
 
-function pretty(value: unknown): string {
+/** A value as indented JSON; a JSON string is parsed first, other text stays as it is. */
+export function pretty(value: unknown): string {
   if (typeof value === "string") {
     try {
       return JSON.stringify(JSON.parse(value), null, 2);

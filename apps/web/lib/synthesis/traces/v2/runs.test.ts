@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMPTY_TRACE_AGGREGATE } from "@/lib/synthesis/traces/queries";
 import type { TraceSummaryView } from "@/lib/synthesis/traces/view";
+import { TURN_NOUN } from "./run-noun";
 import {
   HIGH_ERROR_RATE,
   RUN_STATUS_LABEL,
@@ -110,4 +111,10 @@ test("the key numbers are five, with p95 beside the median and a danger mark onl
     errorRate: HIGH_ERROR_RATE - 0.01,
   });
   assert.equal(justBelow[1].tone, undefined);
+  // RC-413: with `cloud-trace-views-v3` the stats say turns.
+  const turns = runStats(
+    { ...EMPTY_TRACE_AGGREGATE, count: 60, errorCount: 0, errorRate: 0 },
+    TURN_NOUN,
+  );
+  assert.deepEqual([turns[0].label, turns[1].hint], ["Turns", "No failed turns"]);
 });

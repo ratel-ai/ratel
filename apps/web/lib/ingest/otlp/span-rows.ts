@@ -232,15 +232,19 @@ function experimentAttributes(span: DecodedSpan): {
   );
 }
 
+/** A key `otel_spans` keeps: a safe key, or a `gen_ai.*` / `ratel.*` key that carries no content. */
+export function isContentFreeAttributeKey(key: string): boolean {
+  return (
+    SAFE_ATTRIBUTE_KEYS.has(key) ||
+    ((key.startsWith("gen_ai.") || key.startsWith("ratel.")) &&
+      !CONTENT_ATTRIBUTE_KEYS.has(key) &&
+      !LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN.test(key))
+  );
+}
+
 function stripContentAttributes(attributes: AttrMap): AttrMap {
   return Object.fromEntries(
-    Object.entries(attributes).filter(
-      ([key]) =>
-        SAFE_ATTRIBUTE_KEYS.has(key) ||
-        ((key.startsWith("gen_ai.") || key.startsWith("ratel.")) &&
-          !CONTENT_ATTRIBUTE_KEYS.has(key) &&
-          !LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN.test(key)),
-    ),
+    Object.entries(attributes).filter(([key]) => isContentFreeAttributeKey(key)),
   );
 }
 
