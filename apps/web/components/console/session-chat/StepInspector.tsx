@@ -6,6 +6,8 @@ import { Checkbox } from "@ratel/design-system/checkbox";
 import { cn } from "@ratel/design-system/cn";
 import { Check, ChevronLeft, ChevronRight, Copy, ListTree, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { DecisionChip } from "@/components/console/session-replay/DecisionChip";
+import { WhatIfPanel } from "@/components/console/session-replay/WhatIfPanel";
 import { loadStepContentAction } from "@/lib/views/session-chat/actions";
 import {
   type CallView,
@@ -25,6 +27,7 @@ import {
 import type { ChatPeek } from "@/lib/views/session-chat/peek";
 import { LENS_PARTS, type LensPart } from "@/lib/views/session-replay/composition";
 import { segmentTime } from "./format";
+import type { ChatWhatIf } from "./SessionChatView";
 
 /**
  * One step in the side panel (RC-284, A6, A7). A model call shows its tokens,
@@ -33,6 +36,8 @@ import { segmentTime } from "./format";
  * tool step shows why it was flagged, its arguments and result, and the call
  * that chose it; a search shows its query and ranked results. Text is read
  * on demand through `loadStepContentAction`, never with the opt-in off.
+ * Each step shows its tool-choice verdicts, and a model call What if… when
+ * the page gave it (RC-524: what the step-by-step view had).
  */
 
 export interface StepInspectorProps {
@@ -41,6 +46,7 @@ export interface StepInspectorProps {
   segment: TrackSegment;
   follow: boolean;
   onFollowChange: (follow: boolean) => void;
+  whatIf?: ChatWhatIf;
   onOpen: (peek: ChatPeek) => void;
 }
 
@@ -80,6 +86,23 @@ const TAG_WORDS: Record<ToolTag, string> = {
 };
 
 export function StepInspector(props: StepInspectorProps) {
+  const { chat, segment } = props;
+  const verdicts = segment.stepIndex !== null ? (chat.verdicts?.[segment.stepIndex] ?? []) : [];
+  return (
+    <div className="flex flex-col gap-4">
+      {verdicts.length > 0 ? (
+        <section data-step-verdicts className="flex flex-col gap-1.5" aria-label="Tool choice">
+          {verdicts.map((chip, i) => (
+            <DecisionChip key={i} chip={chip} />
+          ))}
+        </section>
+      ) : null}
+      <StepBody {...props} />
+    </div>
+  );
+}
+
+function StepBody(props: StepInspectorProps) {
   const { segment } = props;
   if (segment.kind === "model_call") return <CallInspector {...props} />;
   if (segment.kind === "tool_call") return <ToolStep {...props} />;
@@ -99,6 +122,7 @@ function CallInspector({
   segment,
   follow,
   onFollowChange,
+  whatIf,
   onOpen,
 }: StepInspectorProps) {
   const at = chat.calls.findIndex((c) => c.stepIndex === segment.stepIndex);
@@ -118,6 +142,7 @@ function CallInspector({
   const sessionCalled = new Set(
     chat.segments.filter((s) => s.kind === "tool_call").map((s) => s.label),
   );
+  const fork = chat.forks?.[call.stepIndex];
   return (
     <div data-call-inspector className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -200,6 +225,18 @@ function CallInspector({
           )}
         </>
       )}
+      {whatIf && fork ? (
+        <div data-call-what-if>
+          <WhatIfPanel
+            key={call.stepIndex}
+            projectId={whatIf.projectId}
+            target={fork}
+            options={whatIf.options}
+            runs={whatIf.runs}
+            readContent={whatIf.readContent}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

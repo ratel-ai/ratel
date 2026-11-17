@@ -22,10 +22,20 @@ import {
   type TraceAggregateSummary,
 } from "@/lib/synthesis/traces/queries";
 import { listRunAsks, listRunTools, type RunAsk } from "@/lib/synthesis/traces/run-details";
-import { hasFilters, presetCovering, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
+import { getTraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
+import {
+  hasFilters,
+  presetCovering,
+  searchFromParams,
+  traceFilterFromSearch,
+  withoutRollupFilters,
+} from "@/lib/synthesis/traces/v2/filters";
 import { runNoun } from "@/lib/synthesis/traces/v2/run-noun";
 import { runStats, toRunRow } from "@/lib/synthesis/traces/v2/runs";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
+import {
+  traceFiltersEnabledForActor,
+  traceViewsV3EnabledForActor,
+} from "@/lib/synthesis/traces/v2/views-flag";
 import { buildVolumeModel, needsHourlyVolume } from "@/lib/synthesis/traces/v2/volume";
 import {
   resolveSpanListView,
@@ -62,10 +72,17 @@ export async function RunsPageV2({
 
   const now = new Date();
   const params: TraceListSearchParams = { ...searchParams, peek: undefined };
-  const view = resolveTraceListView(params, now);
-  const spanView = resolveSpanListView(params, now);
-  const distinctId = `project:${project.id}`;
+  const search = searchFromParams(params);
   const viewsV3 = await traceViewsV3EnabledForActor(project.id, `project:${project.id}`);
+  // RC-506: on Turns, `cloud-traces-filters` swaps the span-scan filters for the
+  // rollup bar. Its parameters then never reach the span-scan options.
+  const rollup =
+    viewsV3 && (await traceFiltersEnabledForActor(project.id, `project:${project.id}`));
+  const listParams = rollup ? paramsOf(withoutRollupFilters(search)) : params;
+  const view = resolveTraceListView(listParams, now);
+  if (rollup) view.queryOptions = { ...view.queryOptions, traces: traceFilterFromSearch(search) };
+  const spanView = resolveSpanListView(listParams, now);
+  const distinctId = `project:${project.id}`;
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
 
@@ -78,10 +95,20 @@ export async function RunsPageV2({
       distinctId,
       fallback: EMPTY_TRACE_FACETS,
       load: () =>
-        withStatementTimeout((db) => getTraceFacets(project.id, spanView.queryOptions, db), {
-          operation: "trace_facets",
-          timeoutMs,
-        }),
+        withStatementTimeout(
+          async (db) =>
+            rollup
+              ? {
+                  ...EMPTY_TRACE_FACETS,
+                  ...(await getTraceFilterFacets(
+                    project.id,
+                    { since: view.range.since, until: view.range.until },
+                    db,
+                  )),
+                }
+              : getTraceFacets(project.id, spanView.queryOptions, db),
+          { operation: "trace_facets", timeoutMs },
+        ),
     }),
     loadOrFallback<TraceAggregateSummary | null>({
       operation: "trace_filtered_aggregates",
@@ -147,11 +174,10 @@ export async function RunsPageV2({
         ])
       : [new Map<string, string[]>(), new Map<string, RunAsk>()];
 
-  const search = searchFromParams(params);
   let empty: TracesEmptyKind | null = null;
   let latestRunAt: string | null = null;
   if (page.items.length === 0 && !view.queryOptions.cursor) {
-    if (hasFilters("runs", search)) {
+    if (hasFilters(rollup ? "rollup" : "runs", search)) {
       empty = "filtered";
     } else {
       const diagnostics = await getTracesIngestDiagnostics(project.id);
@@ -206,6 +232,7 @@ export async function RunsPageV2({
       }
       detailsUnavailable={tools === null || asks === null}
       facets={facets}
+      filterTab={rollup ? "rollup" : "runs"}
       sort={{ id: view.filters.sort, direction: view.filters.direction }}
       nextCursor={
         page.hasMore && page.nextCursor ? serializeTraceCursor(page.nextCursor, view.filters) : null
@@ -224,6 +251,15 @@ export async function RunsPageV2({
       experiment={experiment}
     />
   );
+}
+
+function paramsOf(search: string): TraceListSearchParams {
+  const params: Record<string, string | string[]> = {};
+  for (const [key, value] of new URLSearchParams(search.slice(1))) {
+    const current = params[key];
+    params[key] = current === undefined ? value : [current, value].flat();
+  }
+  return params as TraceListSearchParams;
 }
 
 function windowQuery(range: { preset: string; from: string; to: string }): string {

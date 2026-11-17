@@ -114,6 +114,35 @@ test("opt-in on: full ask and reply text, work lines, a wait and the failed step
   }
 });
 
+test("RC-524: each model call's What-if fork target and the tool-choice verdicts by step", async () => {
+  const { client, db } = await setup();
+  try {
+    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false }, db);
+    assert.ok(chat?.forks && chat.verdicts);
+    assert.deepEqual(
+      chat.calls.map((c) => chat.forks![c.stepIndex]),
+      [
+        { turnId: TURN_1, call: 0 },
+        { turnId: TURN_1, call: 1 },
+      ],
+    );
+    const invoke = chat.segments.find((s) => s.kind === "tool_call")!;
+    const verdicts = Object.entries(chat.verdicts).flatMap(([step, chips]) =>
+      chips.map((chip) => [Number(step), chip.tone, chip.text]),
+    );
+    assert.deepEqual(verdicts, [
+      [
+        invoke.stepIndex,
+        "good",
+        `At step ${invoke.stepIndex} the agent picked search_flights, the top search result.`,
+      ],
+      [invoke.stepIndex, "bad", `At step ${invoke.stepIndex} the call to search_flights failed.`],
+    ]);
+  } finally {
+    await client.close();
+  }
+});
+
 test("opt-in off: the same shape with no words", async () => {
   const { client, db } = await setup();
   try {

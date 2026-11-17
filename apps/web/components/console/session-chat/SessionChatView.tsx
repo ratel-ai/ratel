@@ -8,7 +8,8 @@ import { Callout } from "@ratel/design-system/states";
 import { Check, Ellipsis, ListChecks, TriangleAlert, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { WhatIfSetup } from "@/components/console/session-replay/SessionTimeline";
 import { createUrlWriter, withQueryUpdates } from "@/lib/synthesis/traces/v2/url-writer";
 import type { PanelChat, PanelChatTurn } from "@/lib/views/session-chat/actions";
 import {
@@ -24,6 +25,7 @@ import {
   keyAction,
   parsePlayhead,
   parseZoom,
+  playheadParam,
   type TurnPhase,
   type Zoom,
 } from "@/lib/views/session-chat/playback";
@@ -40,28 +42,76 @@ import { SessionTrack, type Speed } from "./SessionTrack";
  * them again). A click opens the side panel, which pushes the chat aside.
  * The panel is `?peek=`, the playhead `?t=` and the zoom `?zoom=`; Esc closes
  * the panel, ←/→ move a step, Space plays.
+ *
+ * `synced` is the one replay of views v3 (RC-524): with no `?t=` it plays from
+ * the first message, the first model call's inspector is open (an explicit
+ * `?peek=` wins), and the two move together: the playhead moves the inspector
+ * to the call under it, and opening a call (Previous / Next call, a click)
+ * moves the playhead to that call's start, where the playhead already points
+ * at it, so neither direction triggers the other again.
  */
+
+/** What the inspector needs to fork a model call: the targets come with the chat. */
+export type ChatWhatIf = Omit<WhatIfSetup, "targets">;
 
 export interface SessionChatViewProps {
   projectId: string;
   chat: SessionChat;
   /** Project settings, where an admin turns message text on. */
   settingsHref: string;
+  /** Views v3: play from the start, the inspector open, and the two in sync. */
+  synced?: boolean;
+  /** What if… in the model call inspector; absent, the inspector has none. */
+  whatIf?: ChatWhatIf;
 }
 
-export function SessionChatView({ projectId, chat, settingsHref }: SessionChatViewProps) {
-  const { id, open: openPeek, close } = usePeek();
-  const peek = parseChatPeek(id);
-  const open = (next: ChatPeek) => openPeek(chatPeekId(next));
+export function SessionChatView({
+  projectId,
+  chat,
+  settingsHref,
+  synced = false,
+  whatIf,
+}: SessionChatViewProps) {
+  const { id, open: openPeek, close: closePeek } = usePeek();
+  // Closed once, the default inspector stays closed until a click opens a panel.
+  const [dismissed, setDismissed] = useState(false);
+  const firstCall = chat.calls[0]?.stepIndex;
+  const peek =
+    parseChatPeek(id) ??
+    (synced && !dismissed && firstCall !== undefined
+      ? ({ kind: "step", stepIndex: firstCall } as const)
+      : null);
+  const open = (next: ChatPeek) => {
+    // Synced, a model call puts the playhead at its start: the follow below then already points at it.
+    const start =
+      synced && next.kind === "step" && chat.calls.some((c) => c.stepIndex === next.stepIndex)
+        ? callStart(chat, next.stepIndex)
+        : null;
+    if (start !== null) setT(start);
+    openPeek(chatPeekId(next));
+  };
+  const close = useCallback(() => {
+    setDismissed(true);
+    closePeek();
+  }, [closePeek]);
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const total = chat.trackTotalMs;
-  const [t, setT] = useState(() => parsePlayhead(searchParams.get("t"), total));
+  const [t, setT] = useState(() =>
+    parsePlayhead(searchParams.get("t"), total, { fromStart: synced }),
+  );
   const [zoom, setZoom] = useState<Zoom>(() => parseZoom(searchParams.get("zoom")));
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
   const [showActions, setShowActions] = useState(false);
-  const [follow, setFollow] = useState(false);
+  const [follow, setFollow] = useState(synced);
+  // Following starts when the playhead leaves where the page opened, or when someone ticks it.
+  const [startT] = useState(t);
+  const [followTicked, setFollowTicked] = useState(false);
+  const onFollowChange = (next: boolean) => {
+    setFollow(next);
+    setFollowTicked(next);
+  };
   const seek = (next: number) => setT(Math.min(Math.max(0, next), total));
 
   // The playhead and zoom follow into the URL once they rest (Safari caps replaceState).
@@ -83,10 +133,10 @@ export function SessionChatView({ projectId, chat, settingsHref }: SessionChatVi
       return;
     }
     writer.set({
-      t: t >= total ? null : String(Math.round(t)),
+      t: playheadParam(t, total, { fromStart: synced }),
       zoom: zoom === 1 ? null : String(zoom),
     });
-  }, [t, zoom, total, writer]);
+  }, [t, zoom, total, writer, synced]);
   useEffect(() => () => writer.cancel(), [writer]);
 
   const playhead = useRef(t);
@@ -142,7 +192,10 @@ export function SessionChatView({ projectId, chat, settingsHref }: SessionChatVi
 
   // "Follow the playhead": an open model call moves to the call at the playhead.
   const followedCall =
-    follow && peek?.kind === "step" && chat.calls.some((c) => c.stepIndex === peek.stepIndex)
+    follow &&
+    (followTicked || t !== startT) &&
+    peek?.kind === "step" &&
+    chat.calls.some((c) => c.stepIndex === peek.stepIndex)
       ? callAt(chat, t)
       : null;
   const openStep = peek?.kind === "step" ? peek.stepIndex : null;
@@ -229,7 +282,8 @@ export function SessionChatView({ projectId, chat, settingsHref }: SessionChatVi
           chat={chat}
           peek={peek}
           follow={follow}
-          onFollowChange={setFollow}
+          onFollowChange={onFollowChange}
+          whatIf={whatIf}
           onOpen={open}
           onClose={close}
         />
@@ -445,6 +499,11 @@ function ActionRow({
       </button>
     </li>
   );
+}
+
+/** Where a step starts on the track, or null when the chat has no such step. */
+function callStart(chat: SessionChat, stepIndex: number): number | null {
+  return chat.segments.find((s) => s.stepIndex === stepIndex)?.trackStartMs ?? null;
 }
 
 /** The model call at the playhead: the last one started by then (step index), or null before the first. */

@@ -4,6 +4,8 @@ import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
 import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
 import { loadSessionReplay, type ReplayDb } from "@/lib/views/session-replay/load";
+import { chipText } from "@/lib/views/session-replay/view";
+import { forkTargets } from "@/lib/views/session-replay/what-if";
 import { buildSessionChat, type ChatCallText, type SessionChat } from "./model";
 import { chatTextOf } from "./text";
 
@@ -45,6 +47,14 @@ export async function loadSessionChat(
       { inputTokens: call.composition.inputTokens, parts: call.composition.parts },
     ]),
   );
+  // RC-524: what the step-by-step view offered, for the inspector.
+  chat.forks = forkTargets(replay.timeline);
+  chat.verdicts = {};
+  for (const annotation of lens.annotations)
+    (chat.verdicts[annotation.step] ??= []).push({
+      tone: annotation.verdict,
+      text: chipText(annotation),
+    });
   logger.info(
     {
       project_id: projectId,

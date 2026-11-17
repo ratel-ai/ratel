@@ -86,11 +86,31 @@ export function chatStateAt(chat: SessionChat, t: number): TurnPhase[] {
   });
 }
 
-/** `?t=` as a playhead in the track; missing or unreadable is the end (the whole chat). */
-export function parsePlayhead(value: string | null | undefined, totalMs: number): number {
+/** Where a replay with no `?t=` starts: the end (the whole chat), or with views v3 (RC-524) the first message. */
+export interface PlayheadDefault {
+  fromStart?: boolean;
+}
+
+/** `?t=` as a playhead in the track; missing or unreadable is the default (the end, or the start with `fromStart`). */
+export function parsePlayhead(
+  value: string | null | undefined,
+  totalMs: number,
+  { fromStart = false }: PlayheadDefault = {},
+): number {
   const n = value == null || value === "" ? Number.NaN : Number(value);
-  if (!Number.isFinite(n)) return totalMs;
+  if (!Number.isFinite(n)) return fromStart ? 0 : totalMs;
   return Math.min(Math.max(0, Math.round(n)), totalMs);
+}
+
+/** The playhead as `?t=`: null at the default, so the URL stays clean and `parsePlayhead` reads it back. */
+export function playheadParam(
+  t: number,
+  totalMs: number,
+  { fromStart = false }: PlayheadDefault = {},
+): string | null {
+  const at = Math.round(t);
+  if (fromStart ? at <= 0 : at >= totalMs) return null;
+  return String(Math.min(at, totalMs));
 }
 
 /** `?zoom=`: 2 or 4, else Fit. */

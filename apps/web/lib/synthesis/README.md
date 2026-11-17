@@ -6,8 +6,10 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 |---|---|
 | `dashboard.ts` | the date-range presets and deltas the trace views share (the overview model rides along) |
 | `tool-corpus.ts` | the core's `toolCorpus` service (the match-quality corpus loader), lent to the edition at startup |
-| `traces/schema.ts` | `otel_trace_summaries`, `trace_summary_cursor` |
-| `traces/summary-refresh.ts`, `register.ts` | the drain step that folds new spans into one summary row per trace, between the retention-only prunes of expired spans and logs (before it) and of expired summaries (after it) |
+| `traces/schema.ts` | `otel_trace_summaries` (with the filter columns `models`, `tools`, `service_name`, `environment` and their GIN indexes, migration `0038`), `trace_summary_cursor` |
+| `traces/summary-refresh.ts`, `register.ts` | the drain step that folds new spans into one summary row per trace (and `recomputeTraceSummaries`, which a writer that changes stored spans in place calls itself), between the retention-only prunes of expired spans and logs (before it) and of expired summaries (after it) |
+| `traces/trace-filters.ts`, `summary-filters-backfill.ts` | the Sessions and Turns property filters (model, tool, service, environment, status, cost, tokens) matched on the trace rollup, with their facet values; on for every project (upstream retired `cloud-traces-filters`). The one-off `pnpm traces:backfill-filters [--before] [--dry-run]` fills the columns of summaries written before `0038` |
+| `model-pricing/reprice.ts` | restates stored costs after a price changes, and the summaries of the traces it touched; backs `pnpm backfill:costs [--reprice] [--dry-run]` (ported, run by hand; stored costs are not re-priced on deploy). Owned: an owner is its project's organization id |
 | `traces/queries.ts`, `run-details.ts`, `events-queries.ts` | the trace, span, operation and log reads over `otel_spans`, `otel_logs` and the summaries |
 | `traces/view.ts`, `events-view.ts` | search params to query options and cursors, rows to view models |
 | `traces/waterfall.ts`, `tree.ts`, `content-view.ts`, `format.ts` | one trace as a span tree, a waterfall and its message content |

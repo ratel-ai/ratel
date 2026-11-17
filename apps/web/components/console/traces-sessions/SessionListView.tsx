@@ -15,9 +15,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SessionChatTranscript } from "@/components/console/session-chat/SessionChatView";
 import { RelativeTime, TruncatedText } from "@/components/console/traces/cells";
 import { useTraceNavigation } from "@/components/console/traces/navigation";
+import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import { TracesListTable } from "@/components/console/traces/TracesListTable";
+import type { TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
+import { rollupFilterQuery, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
 import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/traces/v2/format";
 import type {
   SessionListPage,
@@ -31,10 +34,8 @@ import {
   type SessionsFilter,
   withSessionsFilter,
 } from "@/lib/synthesis/traces-sessions/view";
-import {
-  loadSessionPanelChatAction,
-  type SessionPanelChatResult,
-} from "@/lib/views/session-chat/actions";
+import { fetchSessionPanelChat } from "@/lib/views/session-chat/panel-client";
+import type { SessionPanelChatResult } from "@/lib/views/session-chat/panel-route";
 import { sessionTraceHref } from "@/lib/views/session-chat/peek";
 import { TabSummary } from "./TabSummary";
 
@@ -50,6 +51,7 @@ export type LoadSessionListPage = (
   projectId: string,
   filter: SessionsFilter,
   cursor: string,
+  search: string,
 ) => Promise<SessionListPage>;
 /** Reads one session's chat for the Panel; the server action unless a test stubs it. */
 export type LoadSessionPanelChat = (
@@ -65,6 +67,8 @@ export interface SessionListViewProps {
   /** The request's time, for relative times. */
   now: string;
   empty: TracesEmptyKind | "no-failed" | null;
+  /** With `cloud-traces-filters` (RC-506): the property bar's values; null hides the bar. */
+  filterFacets?: TraceFilterFacets | null;
   loadPage?: LoadSessionListPage;
   loadChat?: LoadSessionPanelChat;
 }
@@ -93,6 +97,16 @@ export function SessionListView(props: SessionListViewProps) {
               label: <span data-filter={value}>{SESSIONS_FILTER_LABEL[value]}</span>,
             }))}
           />
+          {props.filterFacets ? (
+            <TraceFilterBar
+              tab="rollup"
+              searchable={false}
+              search={search}
+              pending={pending}
+              facets={props.filterFacets}
+              onSearchChange={go}
+            />
+          ) : null}
         </div>
         {empty === "no-failed" ? (
           <div className="rounded-lg border border-line" data-sessions-empty="no-failed">
@@ -110,6 +124,22 @@ export function SessionListView(props: SessionListViewProps) {
               }
             />
           </div>
+        ) : empty === "filtered" ? (
+          <div className="rounded-lg border border-line" data-sessions-empty="filtered">
+            <EmptyState
+              title="No sessions match"
+              description="No session has a turn that matches these filters."
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => go((current) => withoutFilters("rollup", current))}
+                >
+                  Clear filters
+                </Button>
+              }
+            />
+          </div>
         ) : empty ? (
           <div className="rounded-lg border border-line" data-sessions-empty={empty}>
             <TracesEmpty kind={empty} unit="runs" projectId={projectId} />
@@ -119,6 +149,7 @@ export function SessionListView(props: SessionListViewProps) {
             // A new first page (another filter, or a refresh) starts the list again.
             key={`${filter}:${props.rows[0]?.id ?? ""}:${props.nextCursor ?? ""}`}
             {...props}
+            search={search}
             pending={pending}
           />
         )}
@@ -134,9 +165,10 @@ function SessionList({
   nextCursor: firstCursor,
   now,
   pending,
+  search,
   loadPage = fetchSessionListPage,
-  loadChat = loadSessionPanelChatAction,
-}: SessionListViewProps & { pending: boolean }) {
+  loadChat = fetchSessionPanelChat,
+}: SessionListViewProps & { pending: boolean; search: string }) {
   const peek = usePeek();
   const [rows, setRows] = useState<readonly SessionListRow[]>(firstRows);
   const [cursor, setCursor] = useState(firstCursor);
@@ -148,7 +180,7 @@ function SessionList({
     if (!cursor || loading.current) return;
     loading.current = true;
     setState("loading");
-    loadPage(projectId, filter, cursor)
+    loadPage(projectId, filter, cursor, search)
       .then((page) => {
         const seen = new Set(rows.map((row) => row.id));
         setRows([...rows, ...page.items.filter((row) => !seen.has(row.id))]);
@@ -162,7 +194,7 @@ function SessionList({
       .finally(() => {
         loading.current = false;
       });
-  }, [cursor, filter, loadPage, projectId, rows]);
+  }, [cursor, filter, loadPage, projectId, rows, search]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -366,12 +398,10 @@ export function SessionListPanel({
     if (!openId || !row || result) return;
     let live = true;
     loadChat(projectId, row.id)
-      .catch(
-        (): SessionPanelChatResult => ({
-          ok: false,
-          error: "This session could not be loaded. Try again.",
-        }),
-      )
+      .catch((error: unknown): SessionPanelChatResult => {
+        console.error("session panel chat load failed", error);
+        return { ok: false, error: "This session could not be loaded. Try again." };
+      })
       .then((next) => {
         if (live) setResults((current) => new Map(current).set(row.id, next));
       });
@@ -489,8 +519,12 @@ async function fetchSessionListPage(
   projectId: string,
   filter: SessionsFilter,
   cursor: string,
+  search: string,
 ): Promise<SessionListPage> {
-  const params = new URLSearchParams({ [SESSIONS_FILTER_PARAM]: filter, cursor });
+  // The next page reads the same property filters the first one did.
+  const params = rollupFilterQuery(search);
+  params.set(SESSIONS_FILTER_PARAM, filter);
+  params.set("cursor", cursor);
   const response = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/traces/sessions?${params.toString()}`,
   );

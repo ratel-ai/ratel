@@ -66,6 +66,8 @@ export interface RunsViewProps {
     TraceFacets,
     "model" | "tool" | "service" | "environment" | "experiment" | "arm" | "name"
   >;
+  /** `rollup` with `cloud-traces-filters` (RC-506): the property bar on the trace rollup. */
+  filterTab?: "runs" | "rollup";
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */
   nextCursor: string | null;
@@ -132,7 +134,7 @@ export function RunsView(props: RunsViewProps) {
 
         {showFilterBar ? (
           <TraceFilterBar
-            tab="runs"
+            tab={props.filterTab ?? "runs"}
             search={search}
             pending={pending}
             facets={facets}

@@ -14,6 +14,7 @@ import {
 } from "@/lib/views/session-chat/model";
 import { type ChatPeek, sessionTraceHref } from "@/lib/views/session-chat/peek";
 import { clockTime, segmentTime, stepWords } from "./format";
+import type { ChatWhatIf } from "./SessionChatView";
 import { StepInspector } from "./StepInspector";
 
 /**
@@ -31,6 +32,8 @@ export interface SessionChatPanelProps {
   /** The inspector follows the playhead from call to call. */
   follow: boolean;
   onFollowChange: (follow: boolean) => void;
+  /** What if… for a model call; absent, the inspector has none. */
+  whatIf?: ChatWhatIf;
   onOpen: (peek: ChatPeek) => void;
   onClose: () => void;
 }
@@ -69,6 +72,7 @@ function panelBody({
   peek,
   follow,
   onFollowChange,
+  whatIf,
   onOpen,
 }: SessionChatPanelProps): { title: string; subtitle?: string; content: ReactNode } {
   if (peek.kind === "step") {
@@ -94,6 +98,7 @@ function panelBody({
           segment={segment}
           follow={follow}
           onFollowChange={onFollowChange}
+          whatIf={whatIf}
           onOpen={onOpen}
         />
       ),

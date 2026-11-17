@@ -29,11 +29,17 @@ export type SessionPageView = "chat" | "steps" | "trace";
 
 /**
  * The chat unless `?view=steps` or `?view=trace`; a repeated `?view=` reads as
- * its first value. The page itself exists only with `cloud-session-replay` on.
+ * its first value. With views v3 (RC-524) there is no step list: `steps` is
+ * the chat, whose inspector shows the steps. The page itself exists only with
+ * `cloud-session-replay` on.
  */
-export function sessionPageView(view: string | readonly string[] | undefined): SessionPageView {
+export function sessionPageView(
+  view: string | readonly string[] | undefined,
+  viewsV3 = false,
+): SessionPageView {
   const first = firstOf(view);
-  return first === "steps" || first === "trace" ? first : "chat";
+  if (first === "steps") return viewsV3 ? "chat" : "steps";
+  return first === "trace" ? first : "chat";
 }
 
 /** The Trace view's turn: `?turn=` when the session has it, else its last turn; null without turns. */

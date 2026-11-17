@@ -208,8 +208,6 @@
         "!apps/web/lib/ingest/otlp-raw/reprocess.ts",
         "!apps/web/lib/ingest/otlp-raw/schema.ts",
         "apps/web/lib/ingest/model-pricing/**",
-        "!apps/web/lib/ingest/model-pricing/reprice.ts",
-        "!apps/web/lib/ingest/model-pricing/reprice.integration.test.ts",
         "!apps/web/lib/ingest/model-pricing/schema.ts",
         "apps/web/lib/ledger/turns/real-fixtures.test.ts",
         "apps/web/lib/ingest/otlp/runtime-facts-query.integration.test.ts",
@@ -992,11 +990,16 @@
         "!apps/web/lib/synthesis/traces/register.ts",
         "!apps/web/lib/synthesis/traces/register.test.ts",
         "apps/web/components/console/traces/**",
+        "apps/web/components/console/stale-build-callout.tsx",
+        "apps/web/lib/console/stale-build.ts",
+        "apps/web/lib/console/stale-build.test.ts",
         "apps/web/lib/synthesis/traces-sessions/**",
         "!apps/web/lib/synthesis/traces-sessions/sessions-ui.test.ts",
         "apps/web/components/console/traces-sessions/**",
         "!apps/web/components/console/traces-sessions/SessionsPage.tsx",
         "!apps/web/components/console/traces-sessions/SessionListPage.tsx",
+        "apps/web/app/api/projects/\\[projectId\\]/session-steps/route.ts",
+        "apps/web/app/api/projects/\\[projectId\\]/sessions/\\[sessionId\\]/chat/route.ts",
         "apps/web/app/(console)/project/\\[projectId\\]/traces/operations/page.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/traces/\\[traceId\\]/loading.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/traces/\\[traceId\\]/not-found.tsx",
@@ -1181,6 +1184,7 @@
         "!apps/web/lib/views/session-replay/register.ts",
         "apps/web/components/console/session-replay/**",
         "apps/web/lib/views/session-chat/**",
+        "!apps/web/lib/views/session-chat/panel-route-deps.ts",
         "!apps/web/lib/views/session-chat/actions.ts",
         "!apps/web/lib/views/session-chat/load.integration.test.ts",
         "!apps/web/lib/views/session-chat/inspect-load.integration.test.ts",
@@ -1276,6 +1280,9 @@
             "useIterableCallbackReturn": "off",
             "noAssignInExpressions": "off",
             "noThenProperty": "off"
+          },
+          "correctness": {
+            "noVoidTypeReturn": "off"
           }
         }
       }

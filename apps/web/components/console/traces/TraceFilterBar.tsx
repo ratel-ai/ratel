@@ -37,6 +37,7 @@ const SEARCH_PLACEHOLDER: Readonly<Record<TraceTab, string>> = {
   runs: "Search by name…",
   spans: "Search steps by name…",
   logs: "Search logs by name…",
+  rollup: "Search by name…",
 };
 
 /**
@@ -52,19 +53,20 @@ export function TraceFilterBar({
   facets,
   onSearchChange,
   end,
+  searchable = true,
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
   search: string;
   /** A navigation is loading, so a value the search box sent may not be in `search` yet. */
   pending: boolean;
-  facets: Pick<
-    TraceFacets,
-    "model" | "tool" | "service" | "environment" | "experiment" | "arm" | "name"
-  >;
+  facets: Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
+    Partial<Pick<TraceFacets, "experiment" | "arm" | "name">>;
   /** Applies a change. Every change here is a function of the newest query asked for, never a stale copy. */
   onSearchChange: (next: SearchUpdate, options?: { replace?: boolean }) => void;
   end?: ReactNode;
+  /** False on a list without a name search (Sessions). */
+  searchable?: boolean;
 }) {
   const chips = useMemo(() => filterChips(tab, search), [tab, search]);
   const fields = useMemo(() => filterFields(tab, search, facets), [tab, search, facets]);
@@ -80,7 +82,9 @@ export function TraceFilterBar({
 
   const send = (value: string) => {
     dispatch({ type: "sent", value });
-    onSearchChange((current) => withSearchText(tab, current, value), { replace: true });
+    onSearchChange((current) => withSearchText(tab, current, value), {
+      replace: true,
+    });
   };
   const sendTyped = useEffectEvent(() => {
     const value = searchToSend(box);
@@ -97,15 +101,17 @@ export function TraceFilterBar({
   return (
     <FilterBar
       search={
-        <NameSearch
-          text={box.text}
-          placeholder={SEARCH_PLACEHOLDER[tab]}
-          onType={(text) => dispatch({ type: "typed", text })}
-          onSubmit={() => {
-            const value = searchToSend(box);
-            if (value !== null) send(value);
-          }}
-        />
+        searchable ? (
+          <NameSearch
+            text={box.text}
+            placeholder={SEARCH_PLACEHOLDER[tab]}
+            onType={(text) => dispatch({ type: "typed", text })}
+            onSubmit={() => {
+              const value = searchToSend(box);
+              if (value !== null) send(value);
+            }}
+          />
+        ) : undefined
       }
       chips={
         <>
@@ -292,10 +298,7 @@ function AddFilter({
                 <button
                   type="button"
                   onClick={() => {
-                    if (
-                      item.options.length === 1 &&
-                      (item.id === "status" || item.id === "unlinked")
-                    ) {
+                    if (isSwitch(item)) {
                       onToggle(item.id, item.options[0].value);
                       setOpen(false);
                       return;
@@ -305,7 +308,7 @@ function AddFilter({
                   className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-ui text-fg outline-none hover:bg-hover focus-visible:bg-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset"
                 >
                   <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {item.id === "status" || item.id === "unlinked" ? (
+                  {isSwitch(item) ? (
                     <span className="text-xs text-fg-subtle">
                       {item.options[0].selected ? "On" : item.options[0].label}
                     </span>
@@ -320,4 +323,9 @@ function AddFilter({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** A one-value field (Failed only, Logs without a run) toggles from the field list. */
+function isSwitch(field: FilterField): boolean {
+  return field.options.length === 1 && (field.id === "status" || field.id === "unlinked");
 }

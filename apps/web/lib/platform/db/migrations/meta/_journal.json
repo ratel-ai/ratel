@@ -267,6 +267,13 @@
       "when": 1794930503819,
       "tag": "0037_api_key_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794931648130,
+      "tag": "0038_trace_summary_filters",
+      "breakpoints": true
     }
   ]
 }

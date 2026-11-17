@@ -20,6 +20,7 @@ import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-no
 import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
+import type { SessionChat } from "@/lib/views/session-chat/model";
 import {
   type SessionPageView,
   sessionPageView,
@@ -55,6 +56,9 @@ export const metadata = { title: "Session replay" };
  * The page opens as a chat with its work lines and a side panel (RC-282);
  * "Step by step" (`?view=steps`) shows the view above, unchanged; "Trace"
  * (`?view=trace&turn=<n>`, RC-314) shows a turn's full trace waterfall.
+ * With views v3 (RC-524) there is one replay: the chat, its context inspector
+ * open at load with the verdicts and What if… of the step-by-step view, which
+ * is gone (`?view=steps` opens the chat).
  */
 export default async function SessionReplayPage({
   params,
@@ -89,7 +93,7 @@ export default async function SessionReplayPage({
     ? [{ label: "Sessions", href: `${projectHref}/traces` }]
     : [{ label: "Traces", href: `${projectHref}/traces` }];
   const query = await searchParams;
-  const pageView = sessionPageView(query.view);
+  const pageView = sessionPageView(query.view, viewsV3);
   if (pageView === "trace") {
     const loaded = await withStatementTimeout(
       async (db) => {
@@ -163,17 +167,36 @@ export default async function SessionReplayPage({
     );
   }
   if (pageView === "chat") {
-    const chat = await withStatementTimeout(
-      async (db) =>
-        loadSessionChat(
-          project.id,
-          sessionId,
-          { readContent: await contentOptIn(project.id, db) },
-          db,
-        ),
+    const loaded = await withStatementTimeout(
+      async (db) => {
+        const readContent = await contentOptIn(project.id, db);
+        const chat = await loadSessionChat(project.id, sessionId, { readContent }, db);
+        if (!chat) return null;
+        return {
+          chat,
+          readContent,
+          runs: viewsV3 ? await listWhatIfRuns(project.id, sessionId, db) : [],
+        };
+      },
       { operation: "session_chat_page" },
     );
-    if (!chat) notFound();
+    if (!loaded) notFound();
+    const { chat } = loaded;
+    // Fixes read with their own statement timeouts, outside the page's read.
+    const whatIf = viewsV3
+      ? {
+          projectId: project.id,
+          runs: loaded.runs,
+          readContent: loaded.readContent,
+          options: withSessionToolsFirst(
+            await loadWhatIfOptions(
+              project.id,
+              async (id) => (await loadFixes({ projectId: id, organization, topics: false })).open,
+            ),
+            chatTools(chat),
+          ),
+        }
+      : undefined;
     const toCheck = chat.problems.length;
     return (
       <Page>
@@ -203,6 +226,8 @@ export default async function SessionReplayPage({
             projectId={project.id}
             chat={chat}
             settingsHref={`${projectHref}/settings`}
+            synced={viewsV3}
+            whatIf={whatIf}
           />
         </PageBody>
       </Page>
@@ -299,7 +324,7 @@ export default async function SessionReplayPage({
   );
 }
 
-/** The page's three views; the current one is not a link. */
+/** The page's views; the current one is not a link. Views v3 has no step list (RC-524). */
 function ViewLinks({
   current,
   sessionHref,
@@ -318,18 +343,13 @@ function ViewLinks({
       href: sessionHref,
       icon: MessagesSquare,
     },
-    {
-      view: "steps",
-      label: viewsV3 ? "Replay" : "Step by step",
-      href: `${sessionHref}?view=steps`,
-      icon: List,
-    },
+    { view: "steps", label: "Step by step", href: `${sessionHref}?view=steps`, icon: List },
     { view: "trace", label: "Trace", href: traceHref, icon: ChartGantt },
   ] as const;
   return (
     <>
       {views
-        .filter((item) => item.view !== current)
+        .filter((item) => item.view !== current && !(viewsV3 && item.view === "steps"))
         .map((item) => (
           <Link
             key={item.view}
@@ -343,4 +363,14 @@ function ViewLinks({
         ))}
     </>
   );
+}
+
+/** The tools the session searched for or called, in the order it first met them: What if… offers them first. */
+function chatTools(chat: SessionChat): string[] {
+  const out = new Set<string>();
+  for (const segment of chat.segments) {
+    if (segment.kind === "search") for (const hit of segment.hits) out.add(hit);
+    if (segment.kind === "tool_call") out.add(segment.label);
+  }
+  return [...out];
 }
