@@ -39,7 +39,7 @@ main() {
 
   step "Prerequisites"
   need curl
-  need git
+  ensure_git "$os"
   ensure_docker "$os"
   check_compose
   check_resources
@@ -212,6 +212,27 @@ describe_cloud() {
 need() {
   command -v "$1" >/dev/null 2>&1 || fail "$1 is required. Install it and run the installer again."
   ok "$1"
+}
+
+# Minimal server images can lack git. On Linux, offers the distribution's package manager.
+ensure_git() {
+  if ! command -v git >/dev/null 2>&1 && [ "$1" = Linux ]; then
+    manager=$(package_manager)
+    [ -n "$manager" ] && confirm "git is not installed. Install it now with $manager?" &&
+      case "$manager" in
+        apt-get) as_root apt-get update -qq && as_root apt-get install -y -qq git ;;
+        apk) as_root apk add --no-cache git ;;
+        *) as_root "$manager" install -y git ;;
+      esac
+  fi
+  need git
+}
+
+package_manager() {
+  for manager in apt-get dnf yum zypper apk; do
+    command -v "$manager" >/dev/null 2>&1 && { echo "$manager"; return 0; }
+  done
+  return 0
 }
 
 # Sets SUDO to "sudo " when only root reaches the Docker daemon. dc runs docker with it.
