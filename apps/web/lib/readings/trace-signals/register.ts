@@ -23,8 +23,8 @@ type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackS
  * under upstream's heartbeat key.
  *
  * Loading this module also fills the ledger's seams: the turn build enqueues a run when a
- * page asked for one, kicks the first reading once enough turns have closed, and, with the
- * quick first reading on, starts it from the last week while an older backlog still builds. Only the
+ * page asked for one, kicks the first reading once enough turns have closed, and starts it
+ * from the last week while an older backlog still builds. Only the
  * job runner builds turns, and it loads the registry first, so the seams are set before
  * any build runs.
  */

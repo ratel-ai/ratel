@@ -203,10 +203,11 @@ export interface AssignTopicsResult {
 /** Bound on the helper read: one row's JSON path, so a slow one is cut rather than holding the reading. */
 const HELPER_READ_TIMEOUT_MS = 5_000;
 
-/** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. */
+/** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. `feature` names its questions on `model_call` lines. */
 export function topicJudgeFromEnv(
   framing: JudgeFraming,
   env: Record<string, string | undefined> = process.env,
+  feature = "topics_place",
 ): JudgeEngine | null {
   const resolved = resolveDecisionEngine(env);
   if (!resolved) return null;
@@ -215,6 +216,7 @@ export function topicJudgeFromEnv(
     baseUrl: configured(env.OPENAI_BASE_URL),
     model: configured(env.OPENAI_DECISIONS_MODEL),
     framing,
+    feature,
     maxInputTokens: TOPICS_MAX_JUDGE_TOKENS,
   });
 }
@@ -300,7 +302,10 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     loadCarried: loadCarriedVerdictsFn,
     saveReading: saveTopicReadingFn,
     judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
-    sentimentJudge: "sentimentJudge" in overrides ? null : topicJudgeFromEnv(SENTIMENT_FRAMING),
+    sentimentJudge:
+      "sentimentJudge" in overrides
+        ? null
+        : topicJudgeFromEnv(SENTIMENT_FRAMING, process.env, "topics_sentiment"),
     name: "name" in overrides ? null : anthropicTopicNamer(nameModel),
     nameModel,
     observability: createBackgroundObservability(),

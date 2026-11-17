@@ -11,6 +11,9 @@ export interface JudgeRunOptions {
   budgetUsd?: number;
 }
 
+/** The judge's questions, on each `model_call` log line. */
+const MATCH_QUALITY_JUDGE_FEATURE = "match_quality_judge";
+
 /**
  * The judge this deployment can plug in, or undefined with no key: a run then stops before
  * judging. Owned (ADR-0030): OpenAI is the one decision engine here.
@@ -25,6 +28,7 @@ export function resolveJudgeEngine(
     apiKey,
     baseUrl: configured(env.OPENAI_BASE_URL),
     model: configured(env.OPENAI_DECISIONS_MODEL),
+    feature: MATCH_QUALITY_JUDGE_FEATURE,
     ...(run.budgetUsd === undefined
       ? {}
       : { maxInputTokens: Math.floor(run.budgetUsd / OPENAI_USD_PER_INPUT_TOKEN) }),
