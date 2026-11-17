@@ -1,5 +1,5 @@
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
-import { costFor } from "@/lib/ingest/pricing";
+import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { deterministicEventId, MAX_QUERY } from "@/lib/ingest/trace-events/parse";
 import { attrNumber, attrString } from "./anyvalue";
 import { GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
@@ -75,10 +75,16 @@ const LEGACY_ENVIRONMENT_KEY = "deployment.environment";
 const SERVICE_VERSION_KEY = "service.version";
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
 
+export interface OtelSpanRowOptions {
+  /** The project's price book (RC-482); absent, the current built-in prices; unknown, no cost. */
+  prices?: BatchPrices;
+}
+
 export function toOtelSpanRows(
   projectId: string,
   spans: DecodedSpan[],
   dedupe?: AgentSpanDedupe,
+  options: OtelSpanRowOptions = {},
 ): OtelSpanRow[] {
   const normalizedSpans = spans.map(normalizeParentSpanId);
   return normalizedSpans.filter(isPersistableSpan).map((span) => {
@@ -118,17 +124,23 @@ export function toOtelSpanRows(
     const outputTokens = usage(GEN_AI.usageOutputTokens);
     const cachedTokens = usage(GEN_AI.usageCacheRead);
     const hasCostUsage = inputTokens !== null || outputTokens !== null;
-    const cost = costFor(
-      model,
-      hasCostUsage
-        ? {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            cached_tokens: cachedTokens,
-            cache_write_tokens: intColumn(attrNumber(span.attributes, GEN_AI.usageCacheCreation)),
-          }
-        : null,
-    );
+    const cost =
+      options.prices === PRICES_UNKNOWN
+        ? null
+        : costFor(
+            model,
+            hasCostUsage
+              ? {
+                  input_tokens: inputTokens,
+                  output_tokens: outputTokens,
+                  cached_tokens: cachedTokens,
+                  cache_write_tokens: intColumn(
+                    attrNumber(span.attributes, GEN_AI.usageCacheCreation),
+                  ),
+                }
+              : null,
+            options.prices,
+          );
     const retained = retainedAttributes(span.attributes, environmentAttributes(span));
     const experiment = experimentAttributes(span);
 

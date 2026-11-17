@@ -9,10 +9,10 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, Skeleton } from "@ratel/design-system/states";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import {
   formatDuration,
   formatInteger,
-  formatMoney,
   formatRelativeTime,
 } from "@/lib/synthesis/traces/v2/format";
 import {
@@ -192,7 +192,10 @@ export function RunSummaryBody({
           { label: "Duration", value: formatDuration(summary.totals.durationMs) },
           { label: "Steps", value: formatInteger(stepCount) },
           { label: "Tokens", value: formatInteger(summary.totals.tokens) },
-          { label: "Cost", value: formatMoney(summary.totals.costUsd) },
+          {
+            label: "Cost",
+            value: costLabel(summary.totals.costUsd, summary.totals.unpricedCalls ?? 0),
+          },
         ]}
       />
 

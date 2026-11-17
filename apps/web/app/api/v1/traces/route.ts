@@ -1,3 +1,4 @@
+import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
   findTracesWithModelCalls,
   insertEventsWithMetrics,
@@ -13,7 +14,7 @@ import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { hashApiKey } from "@/lib/platform/api-keys";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { checkEventQuota, incrementEventUsage } from "@/lib/platform/entitlements";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
@@ -80,6 +81,10 @@ async function handlePost(req: Request) {
     otlpRawCapture: {
       isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
       store: createOtlpRawStore(),
+    },
+    // The project's own prices, read once per batch (RC-482).
+    modelPricing: {
+      loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
     },
   });
 }

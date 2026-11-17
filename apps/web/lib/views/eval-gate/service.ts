@@ -2,6 +2,7 @@
 // process that reads a fix's change, the web process included.
 import "@/lib/views/fix-drafts/register";
 import { and, eq, inArray } from "drizzle-orm";
+import { loadJobPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { getDb } from "@/lib/platform/db/client";
@@ -600,6 +601,7 @@ async function simulateClaimedRun(
         replayUsd: deps.replayBudgetUsd,
         judgeUsd: deps.judgeBudgetUsd,
         maxSteps: deps.maxSteps,
+        prices: await loadJobPriceBook(set.projectId, deps.db),
       },
     );
     const { results, spend, judge } = simulation;

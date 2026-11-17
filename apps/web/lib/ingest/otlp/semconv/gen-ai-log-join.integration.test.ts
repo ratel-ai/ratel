@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import type { ModelPricingIngestDeps } from "@/lib/ingest/otlp/batch-prices";
 import { persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
 import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import {
@@ -213,6 +214,49 @@ test("two log exports for one call: the older restate does not win", async () =>
   await client.close();
 });
 
+test("spans first: the restated call keeps the project's price (RC-482)", async () => {
+  const { client, db } = await setup();
+  // The project's own gpt-4o price prices the dated id: (120 + 8) * $1,000 per 1M.
+  const modelPricing = {
+    loadOverrides: async () => ({ "gpt-4o": { input: 1_000, output: 1_000 } }),
+  };
+  await persistSpan(db, { modelPricing });
+  assert.equal((await storedCall(client)).event.cost_usd, "0.128000");
+  await sendLogs(db, DETAILS, undefined, modelPricing);
+  const restated = await storedCall(client);
+  assert.equal(restated.event.cost_usd, "0.128000");
+  assert.equal(restated.metric.cost_usd, "0.128000");
+  await client.close();
+});
+
+test("spans first, the price read fails at the restate: the call is restated and keeps its stored cost (RC-482)", async () => {
+  const { client, db } = await setup();
+  await persistSpan(db, {
+    modelPricing: { loadOverrides: async () => ({ "gpt-4o": { input: 1_000, output: 1_000 } }) },
+  });
+  const before = await storedCall(client);
+  assert.equal(before.event.cost_usd, "0.128000");
+
+  const unreadable = {
+    loadOverrides: async (): Promise<Record<string, never>> => {
+      throw new Error("db down");
+    },
+  };
+  const captured: unknown[] = [];
+  assert.equal((await sendLogs(db, DETAILS, undefined, unreadable, captured)).status, 202);
+
+  const restated = await storedCall(client);
+  assert.notDeepEqual(restated.event.payload, before.event.payload, "the call is restated");
+  assert.equal(restated.event.cost_usd, "0.128000");
+  assert.equal(restated.metric.cost_usd, "0.128000");
+  // The failed read is reported, as ingest reports its own.
+  assert.deepEqual(
+    captured.map((error) => (error as Error).message),
+    ["db down"],
+  );
+  await client.close();
+});
+
 async function setup(): Promise<{ client: PGlite; db: Db }> {
   const client = await createMigratedPGlite();
   await client.exec(`
@@ -227,6 +271,8 @@ async function sendLogs(
   db: Db,
   logRecords: readonly unknown[],
   store: GenAiLogStore = createGenAiLogStore(() => db as never),
+  modelPricing?: ModelPricingIngestDeps,
+  captured?: unknown[],
 ): Promise<Response> {
   const body = JSON.stringify({
     resourceLogs: [
@@ -258,7 +304,15 @@ async function sendLogs(
         throw error instanceof Error ? error : new Error(message);
       },
       logWarn: () => {},
-      genAiLogJoin: { store },
+      // Owned: failures go to the telemetry port's reporter (upstream reads its vendor client).
+      ...(captured
+        ? {
+            reportServerException: (error: unknown) => {
+              captured.push(error);
+            },
+          }
+        : {}),
+      genAiLogJoin: { store, ...(modelPricing ? { modelPricing } : {}) },
     },
   );
 }
@@ -268,7 +322,12 @@ async function persistSpan(
   {
     attributes = {},
     genAiLogs = createGenAiLogStore(() => db as never),
-  }: { attributes?: DecodedSpan["attributes"]; genAiLogs?: GenAiLogStore } = {},
+    modelPricing,
+  }: {
+    attributes?: DecodedSpan["attributes"];
+    genAiLogs?: GenAiLogStore;
+    modelPricing?: ModelPricingIngestDeps;
+  } = {},
 ): Promise<void> {
   const span: DecodedSpan = {
     traceId: TRACE_ID,
@@ -303,6 +362,7 @@ async function persistSpan(
       insertTraceEvents: async () => ({ accepted: 0 }),
       insertOtelSpans: (projectId, rows) => insertOtelSpans(projectId, rows, db as never),
       genAiLogs,
+      ...(modelPricing ? { modelPricing } : {}),
       logError: (message, error) => {
         throw error instanceof Error ? error : new Error(message);
       },

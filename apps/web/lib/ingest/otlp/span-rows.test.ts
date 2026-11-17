@@ -104,7 +104,8 @@ test("promotes service and GenAI fields and computes model cost", () => {
   assert.equal(row.outputTokens, 200);
   assert.equal(row.cachedTokens, 400);
   assert.equal(row.reasoningTokens, 32);
-  assert.equal(row.costUsd, "0.004");
+  // No price book: current gpt-5.5 at $5 in, $0.50 cached, $30 out: 600 * 5 + 400 * 0.5 + 200 * 30, per 1M.
+  assert.equal(row.costUsd, "0.0092");
 });
 
 test("prices cache writes and long-context Haiku 5.5 calls", () => {
@@ -484,4 +485,24 @@ test("the legacy deployment.environment is kept when .name is absent", () => {
   assert.equal(row.attributes["deployment.environment"], "staging");
   assert.equal(row.attributes["deployment.environment.name"], undefined);
   assert.equal(row.attributes["service.version"], undefined);
+});
+
+test("a span pays the project's own price (RC-482)", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [
+      span({
+        attributes: {
+          "gen_ai.response.model": "gpt-5.5",
+          "gen_ai.usage.input_tokens": 1_000,
+          "gen_ai.usage.output_tokens": 200,
+          "gen_ai.usage.cache_read.input_tokens": 400,
+        },
+      }),
+    ],
+    undefined,
+    { prices: { overrides: { "gpt-5.5": { input: 1, output: 1 } } } },
+  );
+  // The project's gpt-5.5 at $1 in (cached at input), $1 out: (1,000 + 200) / 1M.
+  assert.equal(row.costUsd, "0.0012");
 });

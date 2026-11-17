@@ -108,6 +108,8 @@
     "@/lib/db/schema": {
       "default": "@/lib/platform/db/tables",
       "symbols": {
+        "projectModelPrices": "@/lib/ingest/model-pricing/schema",
+        "ProjectModelPriceRow": "@/lib/ingest/model-pricing/schema",
         "otlpRawExports": "@/lib/ingest/otlp-raw/schema",
         "OtlpRawExport": "@/lib/ingest/otlp-raw/schema",
         "lineageLinks": "@/lib/views/lineage/schema",

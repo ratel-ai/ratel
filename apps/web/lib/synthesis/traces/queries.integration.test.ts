@@ -2913,6 +2913,92 @@ test("log pruning defaults to 30 days when retention config is invalid", async (
   }
 });
 
+test("listTraces counts each run's model calls stored without a cost, and listSpans marks them (RC-482)", async () => {
+  const { client, db } = await setup();
+  const priced = traceId(901);
+  const unpriced = traceId(902);
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      span({
+        id: uuid(901),
+        traceId: priced,
+        spanId: spanId(901),
+        name: "priced.run",
+        model: "gpt-5.5",
+        inputTokens: 100,
+        outputTokens: 10,
+        costUsd: "0.001000",
+      }),
+      span({
+        id: uuid(902),
+        traceId: unpriced,
+        spanId: spanId(902),
+        name: "unpriced.run",
+        startedAt: new Date("2026-07-30T10:00:01.000Z"),
+      }),
+      span({
+        id: uuid(903),
+        traceId: unpriced,
+        spanId: spanId(903),
+        parentSpanId: spanId(902),
+        name: "chat",
+        model: "my-own-model",
+        inputTokens: 100,
+        outputTokens: 10,
+        costUsd: null,
+        startedAt: new Date("2026-07-30T10:00:01.100Z"),
+      }),
+      span({
+        id: uuid(904),
+        traceId: unpriced,
+        spanId: spanId(904),
+        parentSpanId: spanId(902),
+        name: "chat",
+        model: "my-own-model",
+        inputTokens: 50,
+        outputTokens: 5,
+        costUsd: null,
+        startedAt: new Date("2026-07-30T10:00:01.200Z"),
+      }),
+      // A tool span has no model call: never unpriced.
+      span({
+        id: uuid(905),
+        traceId: unpriced,
+        spanId: spanId(905),
+        parentSpanId: spanId(902),
+        name: "tool",
+        model: null,
+        inputTokens: null,
+        outputTokens: null,
+        costUsd: null,
+        startedAt: new Date("2026-07-30T10:00:01.300Z"),
+      }),
+    ],
+    db,
+  );
+
+  const page = await listTraces(PROJECT_ID, {}, db);
+  const byTrace = new Map(page.items.map((item) => [item.traceId, item]));
+  assert.deepEqual([byTrace.get(priced)?.costUsd, byTrace.get(priced)?.unpricedCalls], [0.001, 0]);
+  assert.deepEqual([byTrace.get(unpriced)?.costUsd, byTrace.get(unpriced)?.unpricedCalls], [0, 2]);
+
+  const spans = await listSpans(PROJECT_ID, {}, db);
+  assert.deepEqual(
+    spans.items
+      .filter((item) => item.traceId === unpriced)
+      .map((item) => [item.name, item.unpriced])
+      .sort(),
+    [
+      ["chat", true],
+      ["chat", true],
+      ["tool", false],
+      ["unpriced.run", false],
+    ],
+  );
+  await client.close();
+});
+
 async function setup(): Promise<{ client: PGlite; db: TestDb }> {
   const client = await createMigratedPGlite();
   await client.exec(`

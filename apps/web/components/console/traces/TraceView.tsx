@@ -16,12 +16,8 @@ import {
   preferSpanContent,
   type TraceContentView,
 } from "@/lib/synthesis/traces/content-view";
-import {
-  formatDuration,
-  formatInteger,
-  formatMoney,
-  formatTimestamp,
-} from "@/lib/synthesis/traces/v2/format";
+import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
+import { formatDuration, formatInteger, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { runNoun } from "@/lib/synthesis/traces/v2/run-noun";
 import type { RunTotals } from "@/lib/synthesis/traces/v2/run-summary";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunStatus } from "@/lib/synthesis/traces/v2/runs";
@@ -236,7 +232,7 @@ export function TraceView(props: TraceViewProps) {
                 ? `${formatInteger(totals.inputTokens)} in, ${formatInteger(totals.outputTokens)} out`
                 : undefined,
           },
-          { label: "Cost", value: formatMoney(totals.costUsd) },
+          { label: "Cost", value: costLabel(totals.costUsd, totals.unpricedCalls ?? 0) },
         ]}
       />
 

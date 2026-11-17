@@ -1,4 +1,5 @@
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
+import { loadPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { costFor } from "@/lib/ingest/pricing";
 import { traceTurns } from "@/lib/ledger/schema";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
@@ -83,6 +84,7 @@ export async function loadTaskUsage(
   );
   if (calls.length >= MAX_LINK_ROWS) throw new Error("task usage exceeds the model call limit");
   const assigned = assignModelCalls(runs, calls, traces);
+  const prices = calls.length > 0 ? await loadPriceBook(projectId, db) : undefined;
   const usage = new Map<string, FixUsage>();
   for (const run of runs) {
     if (!run.taskId) continue;
@@ -96,10 +98,11 @@ export async function loadTaskUsage(
     for (const call of linked) {
       if (call.inputTokens === null && call.outputTokens === null) continue;
       total.tokens = (total.tokens ?? 0) + (call.inputTokens ?? 0) + (call.outputTokens ?? 0);
-      const usd = costFor(call.model, {
-        input_tokens: call.inputTokens,
-        output_tokens: call.outputTokens,
-      });
+      const usd = costFor(
+        call.model,
+        { input_tokens: call.inputTokens, output_tokens: call.outputTokens },
+        prices,
+      );
       if (usd !== null) total.usd = (total.usd ?? 0) + usd;
     }
     total.ms = (total.ms ?? 0) + runWaitingMs(run, linked);

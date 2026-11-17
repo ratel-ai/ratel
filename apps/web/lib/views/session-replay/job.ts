@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { loadJobPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
@@ -90,6 +91,7 @@ export async function whatIfStepJob(
     const corpus = deps.rank
       ? null
       : await (deps.loadCorpus ?? ((id) => loadToolCorpus(id, db)))(projectId);
+    const prices = await loadJobPriceBook(projectId, db);
     const sample = await sampleStep(step.run, step.calls, run.step, variant, {
       models:
         deps.models ??
@@ -98,6 +100,7 @@ export async function whatIfStepJob(
       k: run.k,
       toolDefs: new Map(),
       rank: deps.rank ?? ((change) => createRanker(corpus ?? [], change)),
+      ...(prices ? { prices } : {}),
     });
     if (!sample.ok)
       return await fail(

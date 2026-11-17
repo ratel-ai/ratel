@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { loadJobPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { getDb } from "@/lib/platform/db/client";
@@ -138,6 +139,7 @@ export async function simulateTaskEvalJob(
           replayUsd,
           judgeUsd,
           judgeFeature: "eval_gate_task_judge",
+          prices: await loadJobPriceBook(projectId, db),
         },
       );
       const taskIds = new Set(active.filter((item) => item.fixId === null).map((item) => item.id));

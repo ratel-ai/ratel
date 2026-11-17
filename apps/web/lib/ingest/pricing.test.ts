@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { costFor, priceFor } from "@/lib/ingest/pricing";
+
+// Owned (ADR-0030): upstream's cases, less the vendor prices of Ratel's own model calls, which
+// live with their clients in the private edition (`ee/src/observability/pricing.ts`).
+import {
+  CURRENT_PRICES,
+  costFor,
+  type PriceBook,
+  priceFor,
+  ratelBudgetCostFor,
+  resolvePrice,
+} from "@/lib/ingest/pricing";
 
 test("costFor charges input + output at model rates", () => {
   // claude-opus-4-8: $5/Mtok in, $25/Mtok out.
@@ -168,4 +178,151 @@ test("the 5.5 models keep their own prices next to their 5 prefixes", () => {
   assert.notEqual(priceFor("claude-sonnet-5-5"), priceFor("claude-sonnet-5"));
   assert.notEqual(priceFor("claude-opus-5-5"), priceFor("claude-opus-5"));
   assert.equal(priceFor("claude-opus-5-5-20261001"), priceFor("claude-opus-5-5"));
+});
+
+// RC-482: a customer cost uses the current table and the date-only lookup,
+// with the project's own prices when it has a book. Ratel's own budget costs
+// keep the frozen rates below (`RATEL_BUDGET_PRICES`).
+
+const C = CURRENT_PRICES;
+const own = (overrides: PriceBook["overrides"]): PriceBook => ({ overrides });
+const M = { input_tokens: 1_000_000, output_tokens: 1_000_000 };
+
+test("with no book a cost uses the current table and the date-only lookup", () => {
+  assert.equal(costFor("gpt-5.5", { input_tokens: 100_000, output_tokens: 0 }), 0.5);
+  assert.equal(costFor("gpt-4o", M), 12.5);
+  assert.equal(costFor("gpt-5.5-turbo", M), null);
+  assert.equal(costFor("gpt-5-mini", M), costFor("gpt-5-mini", M, C));
+});
+
+test("Ratel's own budget costs keep the frozen rates and the any-suffix lookup", () => {
+  assert.equal(ratelBudgetCostFor("gpt-5.5", { input_tokens: 1_000_000, output_tokens: 0 }), 2.5);
+  assert.equal(ratelBudgetCostFor("gpt-5.5-pro", M), ratelBudgetCostFor("gpt-5.5", M));
+  assert.equal(ratelBudgetCostFor("gpt-5-mini", M), 3);
+  assert.equal(ratelBudgetCostFor("gpt-4o", M), null);
+  assert.equal(
+    ratelBudgetCostFor("claude-opus-5-5", {
+      input_tokens: 1_000_000,
+      output_tokens: 0,
+      cache_write_tokens: 1_000_000,
+    }),
+    4,
+  );
+});
+
+test("gpt-4o-mini keeps its own price next to its gpt-4o prefix, dated ids included", () => {
+  // gpt-4o: $2.50/$10, gpt-4o-mini: $0.15/$0.60 (platform.openai.com, checked 2026-11-09).
+  assert.equal(costFor("gpt-4o", M, C), 12.5);
+  assert.equal(costFor("gpt-4o-2024-08-06", M, C), 12.5);
+  assert.equal(costFor("gpt-4o-mini", M, C), 0.75);
+  assert.equal(costFor("gpt-4o-mini-2024-07-18", M, C), 0.75);
+});
+
+test("a prefix prices only a dated id, never a named variant or a newer version", () => {
+  // o3-pro is a different, pricier model than o3: unpriced beats a wrong price.
+  assert.equal(priceFor("o3-2025-04-16", C), priceFor("o3", C));
+  assert.equal(priceFor("claude-sonnet-4-5-20250929", C), priceFor("claude-sonnet-4-5", C));
+  assert.equal(priceFor("claude-sonnet-4-5@20250929", C), priceFor("claude-sonnet-4-5", C));
+  assert.equal(priceFor("claude-sonnet-4-5-20250929-v1:0", C), priceFor("claude-sonnet-4-5", C));
+  assert.equal(priceFor("mistral-medium-3-5-2604", C), priceFor("mistral-medium-3-5", C));
+  // A minor version is a different model, not a date.
+  for (const model of [
+    "gpt-5.7",
+    "gpt-5.3",
+    "claude-opus-5-6",
+    "claude-sonnet-5-6",
+    "claude-opus-4-2",
+    "gpt-6-astra-1",
+    "o3-deep-research",
+    "gpt-5.5-turbo",
+  ]) {
+    assert.equal(priceFor(model, C), null, `${model} stays unpriced`);
+  }
+});
+
+test("each minor version has its own official price", () => {
+  // platform.openai.com model pages, checked 2026-11-09.
+  assert.equal(costFor("gpt-5.1", M, C), 11.25);
+  assert.equal(costFor("gpt-5.2", M, C), 15.75);
+  assert.equal(costFor("gpt-5.6", M, C), costFor("gpt-5.6-sol", M, C));
+  assert.equal(costFor("gpt-5-codex", M, C), 11.25);
+  assert.equal(costFor("gpt-5-chat-latest", M, C), 11.25);
+  assert.equal(costFor("gpt-5.5-pro", M, C), 210);
+  assert.equal(costFor("o3-pro", M, C), 100);
+  // The first gpt-4o snapshot kept its launch price.
+  assert.equal(costFor("gpt-4o-2024-05-13", M, C), 20);
+});
+
+test("a project override wins over the built-in price, for dated ids too", () => {
+  const book = own({ "gpt-4o": { input: 1, output: 2 } });
+  assert.equal(costFor("gpt-4o", M, book), 3);
+  assert.equal(costFor("gpt-4o-2024-08-06", M, book), 3);
+  // The override of gpt-4o does not reach gpt-4o-mini, which keeps its built-in price.
+  assert.equal(costFor("gpt-4o-mini", M, book), 0.75);
+});
+
+test("a project override prices a model the built-in list does not know", () => {
+  const book = own({ "llama-4-maverick": { input: 0.27, output: 0.85, cachedInput: 0.1 } });
+  assert.equal(costFor("llama-4-maverick", M, C), null);
+  assert.equal(costFor("llama-4-maverick", M, book), 1.12);
+});
+
+test("resolvePrice names the key that priced a model and where it came from", () => {
+  const book = own({ "gpt-4o": { input: 1, output: 2 } });
+  assert.deepEqual(
+    [resolvePrice("gpt-4o-2024-08-06", book)?.key, resolvePrice("gpt-4o-2024-08-06", book)?.source],
+    ["gpt-4o", "custom"],
+  );
+  assert.deepEqual(
+    [
+      resolvePrice("gpt-4o-mini-2024-07-18", book)?.key,
+      resolvePrice("gpt-4o-mini-2024-07-18", book)?.source,
+    ],
+    ["gpt-4o-mini", "built-in"],
+  );
+  assert.equal(resolvePrice("unknown", book), null);
+});
+
+test("claude-sonnet-5-5 reads cache hits at 5% of input", () => {
+  // $2 input, cache hits 0.05x = $0.10 (platform.claude.com, checked 2026-11-09).
+  assert.equal(
+    costFor(
+      "claude-sonnet-5-5",
+      { input_tokens: 1_000_000, output_tokens: 0, cached_tokens: 1_000_000 },
+      C,
+    ),
+    0.1,
+  );
+});
+
+test("gpt-5.5 bills prompts over 272k at 2x input, 2x cache and 1.5x output", () => {
+  // $5/$30 base; 300k in at $10 + 10k out at $45.
+  assert.equal(costFor("gpt-5.5", { input_tokens: 300_000, output_tokens: 10_000 }, C), 3.45);
+  // Cached input over 272k: $1.00 (2x $0.50).
+  assert.equal(
+    costFor("gpt-5.5", { input_tokens: 1_000_000, output_tokens: 0, cached_tokens: 1_000_000 }, C),
+    1,
+  );
+});
+
+test("the main providers' current models are priced", () => {
+  for (const model of [
+    "gpt-6.1-sol",
+    "gpt-5.4-mini",
+    "gpt-4.1-nano",
+    "o4-mini",
+    "claude-fable-5-2",
+    "claude-opus-4-6",
+    "gemini-4-argon",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-pro",
+    "mistral-medium-3-5",
+    "mistral-small-2603",
+    "grok-4.7",
+    "grok-4.20-0309-reasoning",
+    "deepseek-flash",
+    "deepseek-v4-pro",
+  ]) {
+    assert.ok(priceFor(model, C), `${model} has a price`);
+  }
 });

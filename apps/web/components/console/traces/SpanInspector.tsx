@@ -12,6 +12,7 @@ import {
   formatSpanKind,
   formatSpanStatus,
 } from "@/lib/synthesis/traces/format";
+import { isUnpricedCall } from "@/lib/synthesis/traces/v2/cost-label";
 import {
   formatDuration,
   formatInteger,
@@ -64,6 +65,7 @@ export function SpanInspector({
     ...(span.costUsd !== null && Number(span.costUsd) > 0
       ? [{ label: "Cost", value: formatMoney(span.costUsd) }]
       : []),
+    ...(isUnpricedCall(span) ? [{ label: "Cost", value: "Unpriced" }] : []),
     ...(span.searchQuery ? [{ label: "Query", value: span.searchQuery }] : []),
     ...(span.searchTarget ? [{ label: "Searched", value: span.searchTarget }] : []),
     ...(span.searchHitCount !== null

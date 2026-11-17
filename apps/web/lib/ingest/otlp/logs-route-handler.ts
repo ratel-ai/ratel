@@ -213,7 +213,10 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
   if (deps.genAiLogJoin) {
     const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
     try {
-      await rejoinStoredModelCalls(apiKey.projectId, organization, keys, deps.genAiLogJoin);
+      await rejoinStoredModelCalls(apiKey.projectId, organization, keys, {
+        ...deps.genAiLogJoin,
+        captureFailure: (failure) => captureInsertFailure(failure, apiKey.projectId, deps),
+      });
     } catch (error) {
       logError("gen_ai log join failed", error, { project_id: apiKey.projectId });
       captureInsertFailure(error, apiKey.projectId, deps);

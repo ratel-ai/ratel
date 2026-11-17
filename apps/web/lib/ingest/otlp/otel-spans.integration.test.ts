@@ -179,7 +179,7 @@ test("mapped decoded spans persist promoted GenAI and experiment columns", async
       input_tokens: 1_000,
       output_tokens: 200,
       cached_tokens: 400,
-      cost_usd: "0.004000",
+      cost_usd: "0.009200",
       experiment_name: "search-ranking-v2",
       experiment_arm: "candidate",
       experiment_role: "shadow",

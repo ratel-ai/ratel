@@ -315,6 +315,20 @@ function reversedKeys<T>(value: T): T {
   return value;
 }
 
+test("the rebuilt cost uses the project's price book (RC-482)", async () => {
+  const book = { overrides: { "claude-sonnet-4-5": { input: 1000, output: 1000 } } };
+
+  const [builtIn] = await rowsFor(chatExport("p1"));
+  const [priced] = await rebuildEventRows(PROJECT_ID, decode(chatExport("p1")), {
+    ...FLAGS,
+    prices: book,
+  });
+
+  assert.notEqual(builtIn.event.costUsd, priced.event.costUsd);
+  assert.equal(Number(priced.event.costUsd), 1.05);
+  assert.equal(Number(priced.metric.costUsd), 1.05);
+});
+
 test("a stored row of another trace with the same span id is not matched", async () => {
   const [row] = await rowsFor(chatExport("g1"));
   const other = storedFrom("event-other", {

@@ -9,6 +9,7 @@ import { hashEndUser, traceSignalsHashSalt } from "@/lib/ledger/hash";
 import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
+import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
@@ -228,14 +229,19 @@ export function anthropicTopicNamer(
   if (!client) return null;
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
-    const message = await client.messages.create(
-      wellFormedJson({
-        model,
-        max_tokens: NAME_MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: user }],
-        output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
-      }),
+    const message = await trackModelCall(
+      { provider: "anthropic", model, feature: "topics_names", payer: "ratel" },
+      () =>
+        client.messages.create(
+          wellFormedJson({
+            model,
+            max_tokens: NAME_MAX_TOKENS,
+            system,
+            messages: [{ role: "user", content: user }],
+            output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
+          }),
+        ),
+      anthropicUsage,
     );
     if (message.stop_reason === "refusal")
       throw new Error("topic names declined by the model's safety filter");

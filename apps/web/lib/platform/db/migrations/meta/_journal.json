@@ -253,6 +253,13 @@
       "when": 1794921466866,
       "tag": "0035_verdict_option_print",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794922136450,
+      "tag": "0036_project_model_prices",
+      "breakpoints": true
     }
   ]
 }
