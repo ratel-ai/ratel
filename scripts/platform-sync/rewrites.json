@@ -15,7 +15,6 @@
     { "from": "@/lib/db/statement-timeout", "to": "@/lib/platform/db/statement-timeout", "exact": true },
     { "from": "@/lib/auth-user", "to": "@/lib/platform/session", "exact": true },
     { "from": "@/lib/admin/support/guard", "to": "@/lib/platform/support-session", "exact": true },
-    { "from": "@/lib/flags-org", "to": "@/lib/views/session-replay/gate", "exact": true },
     { "from": "@/lib/trace-signals/flag", "to": "@/lib/views/health/agent-health-flag", "exact": true },
     { "from": "@/lib/session-replay/actions", "to": "@/app/(console)/(session-replay)/session-replay-actions", "exact": true },
     { "from": "@/lib/entitlements", "to": "@/lib/platform/entitlements", "exact": true },

@@ -13,7 +13,7 @@
  */
 import type Anthropic from "@anthropic-ai/sdk";
 import { anthropicClient, type AnthropicClient } from "@/lib/readings/anthropic/client";
-import { anthropicUsage, setModelCallLabelLookup, setModelCallSink, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicUsage, setModelCallSink, trackModelCall } from "@/lib/platform/model-call";
 
 type Check = (client: AnthropicClient, model: string) => Promise<string>;
 
@@ -40,7 +40,6 @@ process.env.ANTHROPIC_BACKEND = "bedrock";
 const bedrock = anthropicClient({ maxRetries: 0 });
 if (!bedrock) throw new Error("No Bedrock client: unset AWS_BEARER_TOKEN_BEDROCK");
 const client = tracked(bedrock);
-setModelCallLabelLookup(null);
 setModelCallSink({
   info: (fields, message) => console.log(`      ${message} ${JSON.stringify(fields)}`),
   warn: (fields, message) => console.log(`      ${message} ${JSON.stringify(fields)}`),

@@ -93,7 +93,6 @@ function tokens(value: number | null | undefined): number | null {
 function errorType(error: unknown): string | undefined {
   if (error === undefined || error === null) return undefined;
   if (error instanceof ModelNotEnabledError) return error.errorType;
-  if (error instanceof ModelNotEnabledError) return error.errorType;
   if (error instanceof Error) return error.constructor?.name || error.name || "Error";
   return typeof error;
 }
