@@ -10,7 +10,10 @@ import {
   insertOtelLogs,
   insertOtelSpans,
 } from "@/lib/ingest/otlp/queries";
-import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
+import {
+  createGenAiLogStore,
+  type GenAiLogStore,
+} from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -161,6 +164,69 @@ test("flag off: the logs are dropped and the stored call keeps no content", asyn
   await client.close();
 });
 
+test("a span batch and a log export that arrive together join", async () => {
+  const expected = await setup();
+  await sendLogs(expected.db, DETAILS);
+  await persistSpan(expected.db);
+
+  const { client, db } = await setup();
+  const store = createGenAiLogStore(() => db as never);
+  let raced = false;
+  await persistSpan(db, true, {
+    genAiLogs: {
+      ...store,
+      // The span batch reads no logs; the log export lands before the span is stored.
+      findLogs: async (projectId, keys) => {
+        const found = await store.findLogs(projectId, keys);
+        if (!raced) {
+          raced = true;
+          assert.equal((await sendLogs(db, DETAILS)).status, 202);
+        }
+        return found;
+      },
+    },
+  });
+
+  assert.deepEqual(await storedCall(client), await storedCall(expected.client));
+  await expected.client.close();
+  await client.close();
+});
+
+test("spans first: a log record does not overwrite content the span carried", async () => {
+  const { client, db } = await setup();
+  await persistSpan(db, true, {
+    attributes: { "gen_ai.input.messages": INPUT, "gen_ai.output.messages": OUTPUT },
+  });
+  const fromSpan = await storedCall(client);
+  assert.equal((await sendLogs(db, [PER_MESSAGE[1]])).status, 202);
+
+  assert.deepEqual(await storedCall(client), fromSpan);
+  await client.close();
+});
+
+test("two log exports for one call: the older restate does not win", async () => {
+  const expected = await setup();
+  await persistSpan(expected.db);
+  await sendLogs(expected.db, PER_MESSAGE);
+
+  const { client, db } = await setup();
+  await persistSpan(db);
+  const store = createGenAiLogStore(() => db as never);
+  // The first export reads only its own record, then the second export
+  // lands and restates before the first one writes.
+  await sendLogs(db, [PER_MESSAGE[0]], true, {
+    ...store,
+    restateCalls: async (projectId, rows) => {
+      assert.equal((await sendLogs(db, [PER_MESSAGE[1]])).status, 202);
+      return store.restateCalls(projectId, rows);
+    },
+  });
+
+  assert.deepEqual(await storedCall(client), await storedCall(expected.client));
+  await expected.client.close();
+  await client.close();
+});
+
 async function setup(): Promise<{ client: PGlite; db: Db }> {
   const client = await createMigratedPGlite();
   await client.exec(`
@@ -171,7 +237,12 @@ async function setup(): Promise<{ client: PGlite; db: Db }> {
 }
 
 /** A gzipped OTLP/JSON log export, as the OpenTelemetry Collector sends it. */
-async function sendLogs(db: Db, logRecords: readonly unknown[], flag = true): Promise<Response> {
+async function sendLogs(
+  db: Db,
+  logRecords: readonly unknown[],
+  flag = true,
+  store: GenAiLogStore = createGenAiLogStore(() => db as never),
+): Promise<Response> {
   const body = JSON.stringify({
     resourceLogs: [
       {
@@ -182,7 +253,6 @@ async function sendLogs(db: Db, logRecords: readonly unknown[], flag = true): Pr
       },
     ],
   });
-  const store = createGenAiLogStore(() => db as never);
   return handleLogsRequest(
     new Request("http://localhost/v1/logs", {
       method: "POST",
@@ -209,7 +279,14 @@ async function sendLogs(db: Db, logRecords: readonly unknown[], flag = true): Pr
   );
 }
 
-async function persistSpan(db: Db, flag = true): Promise<void> {
+async function persistSpan(
+  db: Db,
+  flag = true,
+  {
+    attributes = {},
+    genAiLogs = createGenAiLogStore(() => db as never),
+  }: { attributes?: DecodedSpan["attributes"]; genAiLogs?: GenAiLogStore } = {},
+): Promise<void> {
   const span: DecodedSpan = {
     traceId: TRACE_ID,
     spanId: SPAN_ID,
@@ -227,6 +304,7 @@ async function persistSpan(db: Db, flag = true): Promise<void> {
       "gen_ai.usage.input_tokens": 120,
       "gen_ai.usage.output_tokens": 8,
       "gen_ai.response.finish_reasons": ["stop"],
+      ...attributes,
     },
     events: [],
     statusCode: 1,
@@ -242,7 +320,7 @@ async function persistSpan(db: Db, flag = true): Promise<void> {
       insertTraceEvents: async () => ({ accepted: 0 }),
       insertOtelSpans: (projectId, rows) => insertOtelSpans(projectId, rows, db as never),
       semconvAliases: async () => flag,
-      genAiLogs: createGenAiLogStore(() => db as never),
+      genAiLogs,
       logError: (message, error) => {
         throw error instanceof Error ? error : new Error(message);
       },

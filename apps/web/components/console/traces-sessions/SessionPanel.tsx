@@ -10,6 +10,7 @@ import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { LoadRunSummary } from "@/components/console/traces/RunPanel";
+import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import {
   formatClock,
   formatDuration,
@@ -49,6 +50,7 @@ export function SessionPanel({
   onOpen: (key: string) => void;
   onClose: () => void;
 }) {
+  const viewsV3 = useTraceViewsV3();
   // Keep showing the last row while the Panel animates closed.
   const [lastKey, setLastKey] = useState(openKey);
   if (openKey && openKey !== lastKey) setLastKey(openKey);
@@ -87,7 +89,7 @@ export function SessionPanel({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={row ? sessionTitle(row).text : "Session"}
+      title={row ? sessionTitle(row, viewsV3).text : "Session"}
       subtitle={
         row ? `${formatClock(row.startedAt)} · ${formatDuration(row.durationMs)}` : undefined
       }
@@ -120,13 +122,14 @@ export function SessionPanelBody({
   result: RunSummaryResult | null | undefined;
   onRetry: (() => void) | null;
 }) {
+  const noun = useRunNoun();
   return (
     <div className="flex flex-col gap-5" data-session-panel={row.kind}>
       {result === undefined ? (
         <ChatSkeleton />
       ) : result === null ? (
         <p className="text-sm text-fg-muted">
-          This session has no run to preview. The replay still shows each step.
+          This session has no {noun.lower} to preview. The replay still shows each step.
         </p>
       ) : result.ok ? (
         <ChatPreview
@@ -160,7 +163,7 @@ export function SessionPanelBody({
       {row.failed ? (
         <StatusDot
           tone="danger"
-          label={row.kind === "session" ? "This session failed" : "This run failed"}
+          label={row.kind === "session" ? "This session failed" : `This ${noun.lower} failed`}
         />
       ) : null}
 

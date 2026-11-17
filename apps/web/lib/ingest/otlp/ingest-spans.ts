@@ -25,6 +25,7 @@ import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import { normalizeSemconvAliases } from "./semconv/aliases";
 import type { SemconvAliasesEnabled } from "./semconv/enabled";
+import { rejoinStoredModelCalls } from "./semconv/gen-ai-log-join";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
 import { attachGenAiLogEvents, distinctSpanKeys } from "./semconv/gen-ai-logs";
 import type { SessionChatCaptureEnabled } from "./session-chat-capture";
@@ -73,8 +74,13 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   sessionChatCapture?: SessionChatCaptureEnabled;
   /** Flag `cloud-otlp-semconv-aliases`: read deprecated gen_ai keys and aliases. Absent, off. */
   semconvAliases?: SemconvAliasesEnabled;
-  /** With `semconvAliases` on: the stored `gen_ai` log records of the batch's spans. Absent, none are read. */
-  genAiLogs?: Pick<GenAiLogStore, "findLogs">;
+  /**
+   * With `semconvAliases` on: the stored `gen_ai` log records of the batch's
+   * spans. Absent, none are read. With `findSpans` and `restateCalls`, a log
+   * export stored while the batch was stored joins too.
+   */
+  genAiLogs?: Pick<GenAiLogStore, "findLogs"> &
+    Partial<Pick<GenAiLogStore, "findSpans" | "restateCalls">>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -110,15 +116,15 @@ export async function persistDecodedSpans(
   // aliases onto the canonical keys. Fail open, like the AI SDK pass above.
   const semconvAliases =
     !!deps.semconvAliases && (await deps.semconvAliases(projectId, organization));
+  let genAiLogsRead: number | null = null;
   if (semconvAliases) {
     // Logs before spans: content sent as `gen_ai` log records that are already
     // stored joins its span as span events. Fail open: the call stays without them.
     if (deps.genAiLogs) {
       try {
-        attachGenAiLogEvents(
-          spans,
-          await deps.genAiLogs.findLogs(projectId, distinctSpanKeys(spans)),
-        );
+        const logs = await deps.genAiLogs.findLogs(projectId, distinctSpanKeys(spans));
+        genAiLogsRead = logs.length;
+        attachGenAiLogEvents(spans, logs);
       } catch (err) {
         logError("gen_ai log lookup failed", err, { project_id: projectId });
         deps.captureFailure(err);
@@ -259,5 +265,36 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
+  await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
+
   return { ok: true, accepted, calls: calls.length };
+}
+
+/**
+ * A log export stored while this batch was stored: its restate read no
+ * `otel_spans` yet, and this batch read no logs. Both sides store first and
+ * read after, so at least one of them sees the other: here, more log records
+ * than the first read means the export missed the call, so restate it.
+ * Fails open, like the first read.
+ */
+async function rejoinLateGenAiLogs(
+  spans: DecodedSpan[],
+  logsRead: number | null,
+  projectId: string,
+  organization: Organization | null,
+  deps: PersistSpansDeps,
+): Promise<void> {
+  const { findLogs, findSpans, restateCalls } = deps.genAiLogs ?? {};
+  if (logsRead === null || !findLogs || !findSpans || !restateCalls) return;
+  try {
+    const logs = await findLogs(projectId, distinctSpanKeys(spans));
+    if (logs.length <= logsRead) return;
+    await rejoinStoredModelCalls(projectId, organization, distinctSpanKeys(logs), {
+      store: { findLogs, findSpans, restateCalls },
+      sessionChatCapture: deps.sessionChatCapture,
+    });
+  } catch (err) {
+    deps.logError("gen_ai log rejoin failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
 }

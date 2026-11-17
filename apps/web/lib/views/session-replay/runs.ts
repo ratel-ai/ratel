@@ -1,7 +1,9 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { TRACE_VIEWS_V3_FLAG } from "@/lib/synthesis/traces/v2/views-flag";
 import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
 import { DAILY_ORG_BUDGET_USD } from "@/lib/views/eval-gate/models";
 import {
@@ -246,17 +248,24 @@ export async function pruneWhatIfRuns(
   return { pruned: pruned.length, timedOut: timedOut.length };
 }
 
-/** Whether the project lets a What-if run read captured content (off unless set). */
+/**
+ * Whether the project lets session replay read captured content. An admin's
+ * choice (a settings row) wins. Without one (RC-471), content is on where
+ * `FF_TRACE_VIEWS_V3` is on, else off as before.
+ */
 export async function contentOptIn(
   projectId: string,
   db: Pick<RunsDb, "select"> = getDb(),
+  flagDeps: OrganizationFlagDeps = defaultOrganizationFlagDeps,
 ): Promise<boolean> {
   const [row] = await db
     .select({ readContent: sessionReplaySettings.readContent })
     .from(sessionReplaySettings)
     .where(eq(sessionReplaySettings.projectId, projectId))
     .limit(1);
-  return row?.readContent ?? false;
+  if (row) return row.readContent;
+  // Owned: the v3 views are the deployment switch FF_TRACE_VIEWS_V3, read from `flagDeps`.
+  return experimentalFeatureEnabled(TRACE_VIEWS_V3_FLAG, flagDeps);
 }
 
 /** A failure reason as the code a run stores: the `CANT_SIMULATE` key, else `failed`. */

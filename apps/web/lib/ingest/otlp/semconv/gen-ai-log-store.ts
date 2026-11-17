@@ -13,7 +13,11 @@ import type { SpanKey, StoredGenAiLog } from "./gen-ai-logs";
 export interface GenAiLogStore {
   findLogs(projectId: string, keys: SpanKey[]): Promise<StoredGenAiLog[]>;
   findSpans(projectId: string, traceIds: string[]): Promise<OtelSpan[]>;
-  /** Restate the stored calls of `rows` (matched by dedupe hash); never inserts one. Returns the count restated. */
+  /**
+   * Restate the stored calls of `rows` (matched by dedupe hash); never inserts
+   * one, and never drops content: a call whose stored payload has text the
+   * row lacks keeps its payload. Returns the count restated.
+   */
   restateCalls(projectId: string, rows: EventWithMetric[]): Promise<number>;
 }
 
@@ -73,6 +77,16 @@ async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db):
     let restated = 0;
     for (const { event, metric } of rows) {
       if (!event.dedupeHash) continue;
+      // Lock the row: of two restates of one call, the second reads what the
+      // first wrote. A row built from fewer log records (an older export) or
+      // from content-free `otel_spans` (the span carried the content) does
+      // not cover the stored payload and is skipped.
+      const [current] = await tx
+        .select({ payload: events.payload })
+        .from(events)
+        .where(and(eq(events.projectId, projectId), eq(events.dedupeHash, event.dedupeHash)))
+        .for("update");
+      if (!current || !payloadCovers(event.payload, current.payload)) continue;
       const [stored] = await tx
         .update(events)
         .set({
@@ -100,4 +114,17 @@ async function restateCalls(projectId: string, rows: EventWithMetric[], db: Db):
     }
     return restated;
   });
+}
+
+/** Every non-empty text of `stored` is also in `next`. */
+function payloadCovers(next: unknown, stored: unknown): boolean {
+  const texts = new Set(textsOf(next));
+  return textsOf(stored).every((text) => texts.has(text));
+}
+
+function textsOf(value: unknown): string[] {
+  if (typeof value === "string") return value ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(textsOf);
+  if (value && typeof value === "object") return Object.values(value).flatMap(textsOf);
+  return [];
 }

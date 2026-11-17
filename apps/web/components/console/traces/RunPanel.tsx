@@ -25,6 +25,7 @@ import type { RunStep, RunSummary } from "@/lib/synthesis/traces/v2/run-summary"
 import type { RunSummaryResult } from "@/lib/synthesis/traces/v2/run-summary-route";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { KIND_DOT } from "./kind";
+import { useRunNoun } from "./views-v3-context";
 
 export const CONTENT_CAPTURE_DOCS = "https://docs.ratel.sh/observability#content-capture";
 
@@ -69,6 +70,7 @@ export function RunPanel({
   onOpen: (id: string) => void;
   onClose: () => void;
 }) {
+  const noun = useRunNoun();
   // Keep showing the last run while the Panel animates closed.
   const [lastId, setLastId] = useState(openId);
   if (openId && openId !== lastId) setLastId(openId);
@@ -115,7 +117,7 @@ export function RunPanel({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title={row?.title ?? summary?.title ?? "Run"}
+      title={row?.title ?? summary?.title ?? noun.one}
       subtitle={
         status ? (
           <>
@@ -181,6 +183,7 @@ export function RunSummaryBody({
   truncated: boolean;
   fullTraceHref: string | null;
 }) {
+  const noun = useRunNoun();
   const stepCount = summary.steps.length + summary.hiddenStepCount;
   return (
     <div className="flex flex-col gap-5" data-run-summary>
@@ -218,7 +221,7 @@ export function RunSummaryBody({
         <h3 className="text-sm font-semibold text-fg">Steps</h3>
         {summary.steps.length === 0 ? (
           <p className="text-sm text-fg-muted">
-            This run made no model calls, tool calls or searches.
+            This {noun.lower} made no model calls, tool calls or searches.
           </p>
         ) : (
           <ol className="relative flex flex-col">
@@ -237,14 +240,14 @@ export function RunSummaryBody({
         ) : null}
         {truncated ? (
           <p className="text-xs text-fg-subtle">
-            This run is long; the steps come from its first 5,000 spans.
+            This {noun.lower} is long; the steps come from its first 5,000 spans.
           </p>
         ) : null}
       </section>
 
       {summary.runError ? (
         <p className="flex items-center gap-2 text-sm text-fg">
-          <StatusDot tone="danger" label="The run failed" />
+          <StatusDot tone="danger" label={`The ${noun.lower} failed`} />
           <code className="font-mono text-xs text-fg-muted">{summary.runError}</code>
         </p>
       ) : null}
@@ -312,9 +315,10 @@ function StepRow({ step, last }: { step: RunStep; last: boolean }) {
 }
 
 function RunSummarySkeleton() {
+  const noun = useRunNoun();
   return (
     <div className="flex flex-col gap-5" aria-busy="true">
-      <span className="sr-only">Loading the run…</span>
+      <span className="sr-only">Loading the {noun.lower}…</span>
       <Skeleton className="h-[84px] w-full rounded-lg" />
       <Skeleton className="h-12 w-full rounded-lg" />
       <div className="flex flex-col gap-3">

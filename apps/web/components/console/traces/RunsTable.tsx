@@ -14,6 +14,7 @@ import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/trac
 import { experimentLabel } from "@/lib/synthesis/traces/v2/logs";
 import { RUN_STATUS_LABEL, RUN_STATUS_TONE, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { RelativeTime, ToolBadges, TruncatedText } from "./cells";
+import { useRunNoun } from "./views-v3-context";
 
 export type RunSort = "started" | "duration" | "tokens" | "cost";
 
@@ -48,6 +49,7 @@ export function RunsTable({
   onTogglePick: (id: string) => void;
   empty?: ReactNode;
 }) {
+  const noun = useRunNoun();
   const sortHref = (id: RunSort) => (direction: SortDirection) =>
     `${pathname}${withSort(search, id, direction)}`;
   const full = picked.length >= 2;
@@ -91,7 +93,7 @@ export function RunsTable({
     },
     {
       id: "run",
-      header: "Run",
+      header: noun.one,
       // The flexible column: it takes the room left and truncates inside it.
       // Narrow screens scroll the table sideways rather than crush this column.
       className: "w-full max-w-0 min-w-48",
@@ -159,7 +161,7 @@ export function RunsTable({
 
   return (
     <DataTable
-      caption="Runs"
+      caption={noun.many}
       columns={columns}
       rows={rows}
       rowKey={(row) => row.id}
@@ -185,16 +187,19 @@ export function CompareBar({
   href: string | null;
   onClear: () => void;
 }) {
+  const noun = useRunNoun();
   if (picked.length === 0) return null;
   return (
     <div className="pointer-events-none sticky bottom-6 z-sticky flex justify-center">
       <div
         role="region"
-        aria-label="Compare runs"
+        aria-label={`Compare ${noun.lowerMany}`}
         className="pointer-events-auto flex items-center gap-2 rounded-xl border border-line bg-overlay py-1.5 pr-1.5 pl-4 shadow-overlay"
       >
         <p aria-live="polite" className="text-ui text-fg">
-          {picked.length === 2 ? "2 runs picked" : "1 run picked. Pick one more to compare."}
+          {picked.length === 2
+            ? `2 ${noun.lowerMany} picked`
+            : `1 ${noun.lower} picked. Pick one more to compare.`}
         </p>
         <Button variant="ghost" size="sm" onClick={onClear}>
           Clear

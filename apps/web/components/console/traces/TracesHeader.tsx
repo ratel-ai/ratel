@@ -6,6 +6,7 @@ import { PageHeader } from "@ratel/design-system/page-header";
 import { TabNav } from "@ratel/design-system/tabs";
 import { CalendarRange, Check, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
+import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import { useTracesSessions } from "@/components/console/traces-sessions/sessions-context";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/synthesis/dashboard";
 import { tabSearch, withRangePreset } from "@/lib/synthesis/traces/v2/filters";
@@ -22,7 +23,7 @@ export interface TimeWindow {
 }
 
 /**
- * The Traces frame shared by Runs, Spans and Logs: one title, the time window
+ * The Traces frame shared by Runs (Turns and Sessions with the redesign), Spans and Logs: one title, the time window
  * on the right, and the tabs below. Tabs carry the window and the filters, so
  * moving between them keeps the question the reader is asking.
  */
@@ -45,6 +46,15 @@ export function TracesHeader({
   const root = `/project/${encodeURIComponent(projectId)}/traces`;
   const carried = tabSearch(search);
   const sessions = useTracesSessions();
+  const noun = useRunNoun();
+  const viewsV3 = useTraceViewsV3();
+  // RC-472: with `cloud-trace-views-v3`, Turns stays the first tab and Sessions groups them.
+  const first = viewsV3
+    ? [
+        { href: `${root}${carried}`, label: noun.many, exact: true },
+        { href: `${root}/sessions${carried}`, label: "Sessions" },
+      ]
+    : [{ href: `${root}${carried}`, label: sessions ? "Sessions" : noun.many, exact: true }];
   return (
     <PageHeader
       title="Traces"
@@ -68,7 +78,7 @@ export function TracesHeader({
         <TabNav
           label="Traces sections"
           tabs={[
-            { href: `${root}${carried}`, label: sessions ? "Sessions" : "Runs", exact: true },
+            ...first,
             { href: `${root}/spans${carried}`, label: "Spans" },
             { href: `${root}/logs${carried}`, label: "Logs" },
           ]}

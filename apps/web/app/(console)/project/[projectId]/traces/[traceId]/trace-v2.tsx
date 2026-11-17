@@ -7,7 +7,7 @@ import {
 } from "@/components/console/traces/TraceView";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
-import { getSessionContext } from "@/lib/platform/session";
+import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadPayloadContentForActor } from "@/lib/synthesis/traces/payload-content";
 import {
   getTraceSpansWithTruncation,
@@ -15,8 +15,12 @@ import {
 } from "@/lib/synthesis/traces/queries";
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { buildRunSummary } from "@/lib/synthesis/traces/v2/run-summary";
+import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
+import { loadTraceSession } from "@/lib/views/session-chat/trace-session";
+import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 const TABS: ReadonlySet<string> = new Set(["timeline", "conversation", "details", "ranking"]);
 
@@ -38,9 +42,8 @@ export async function TracePageV2({
   };
 }) {
   if (!isDbConfigured()) return <TracesUnavailable title="Trace" />;
-  // The project layout already guarded the id against the session; the actor is whoever reads.
+  // The project layout already guarded the id against the session.
   const project = { id: projectId };
-  const session = await getSessionContext();
 
   const { span, tab, ...listParams } = searchParams;
   const requestedTab = firstParam(tab);
@@ -51,10 +54,30 @@ export async function TracePageV2({
     compareHref: `${tracesPath}${searchFromParams({ ...listParams, peek: undefined, project: undefined, compare: id })}`,
     tab: requestedTab,
     spanId: firstParam(span) ?? null,
-    actor: session?.user.externalId ?? `project:${project.id}`,
+    actor: `project:${project.id}`,
   });
   if (!props) notFound();
-  return <TraceView {...props} />;
+  // RC-472: a turn links to its full session, and keeps the session's turns on top. The session page needs session replay.
+  const traceSession =
+    props.viewsV3 && (await sessionReplayEnabledForActor(project.id, `project:${project.id}`))
+      ? await loadOrFallback({
+          operation: "trace_session",
+          distinctId: `project:${project.id}`,
+          fallback: null,
+          load: () =>
+            withStatementTimeout(
+              async (db) =>
+                loadTraceSession(
+                  project.id,
+                  id,
+                  { readContent: await contentOptIn(project.id, db) },
+                  db,
+                ),
+              { operation: "trace_session" },
+            ),
+        })
+      : null;
+  return <TraceView {...props} session={traceSession} />;
 }
 
 /**
@@ -76,7 +99,7 @@ export async function loadTraceViewProps(
   },
 ): Promise<TraceViewProps | null> {
   const id = traceId.toLowerCase();
-  const [load, lifecycle, payload] = await Promise.all([
+  const [load, lifecycle, payload, viewsV3] = await Promise.all([
     withStatementTimeout((db) => getTraceSpansWithTruncation(projectId, id, db), {
       operation: "trace_detail",
     }),
@@ -84,6 +107,7 @@ export async function loadTraceViewProps(
       operation: "trace_lifecycle",
     }),
     loadPayloadContentForActor(projectId, id, options.actor, "trace_payload"),
+    traceViewsV3EnabledForActor(projectId, options.actor),
   ]);
   if (load.spans.length === 0) return null;
   const summary = buildRunSummary(load.spans, 0, payload);
@@ -112,6 +136,7 @@ export async function loadTraceViewProps(
     compareHref: options.compareHref,
     initialTab: options.tab && TABS.has(options.tab) ? (options.tab as TraceTab) : "timeline",
     initialSpanId: options.spanId,
+    viewsV3,
     runtimeEventsRoot: `/project/${encodeURIComponent(projectId)}/runtime-events`,
   };
 }

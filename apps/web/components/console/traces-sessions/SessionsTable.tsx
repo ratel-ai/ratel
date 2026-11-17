@@ -3,6 +3,7 @@
 import { StatusDot } from "@ratel/design-system/badge";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ToolBadges, TruncatedText } from "@/components/console/traces/cells";
+import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import {
   formatClock,
   formatDuration,
@@ -53,6 +54,8 @@ export function SessionsTable({
   openKey: string | null;
   onOpen: (key: string) => void;
 }) {
+  const viewsV3 = useTraceViewsV3();
+  const noun = useRunNoun();
   const tableColumns: Column<SessionRow>[] = [
     {
       id: "ask",
@@ -60,14 +63,16 @@ export function SessionsTable({
       // The flexible column: it takes the room left and truncates inside it.
       className: "w-full max-w-0 min-w-48",
       cell: (row) => {
-        const title = sessionTitle(row);
+        const title = sessionTitle(row, viewsV3);
         return (
           <span className="flex min-w-0 items-center gap-2" data-title-source={title.source}>
             <TruncatedText
               text={title.text}
               className={
                 title.source === "id"
-                  ? "font-mono text-fg-muted"
+                  ? viewsV3
+                    ? "text-fg-muted"
+                    : "font-mono text-fg-muted"
                   : title.source === "intent"
                     ? "text-fg-muted"
                     : "text-fg"
@@ -101,7 +106,7 @@ export function SessionsTable({
       width: "4.5rem",
       cell: (row) =>
         row.kind === "run" ? (
-          <span className="text-fg-subtle" title="A run with no session">
+          <span className="text-fg-subtle" title={`A ${noun.lower} with no session`}>
             1
           </span>
         ) : (
@@ -130,7 +135,8 @@ export function SessionsTable({
           },
         ]
       : []),
-    ...(columns.includes("cost")
+    // RC-472: with the redesign a session row always shows what it cost.
+    ...(viewsV3 || columns.includes("cost")
       ? [
           {
             id: "cost",

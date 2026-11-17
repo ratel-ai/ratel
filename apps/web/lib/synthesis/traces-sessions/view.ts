@@ -4,6 +4,7 @@
  * `?peek=`; and how a row reads: its title and its day. Pure.
  */
 
+import { untitledTitle } from "@/lib/synthesis/traces/v2/run-noun";
 import type { SessionRow, SessionsPage } from "./sessions";
 
 export const SESSIONS_FILTERS = ["all", "failed"] as const;
@@ -68,14 +69,19 @@ export function sessionRowKey(row: Pick<SessionRow, "kind" | "id">): string {
 }
 
 /** What the row reads as: the ask, else the intent (text off), else what it is. */
-export function sessionTitle(row: Pick<SessionRow, "kind" | "id" | "ask" | "intent">): {
-  text: string;
-  source: "ask" | "intent" | "id";
-} {
+export function sessionTitle(
+  row: Pick<SessionRow, "kind" | "id" | "ask" | "intent">,
+  viewsV3 = false,
+): { text: string; source: "ask" | "intent" | "id" } {
   const ask = row.ask?.replace(/\s+/g, " ").trim();
   if (ask) return { text: ask, source: "ask" };
   const intent = row.intent?.trim();
   if (intent) return { text: intent, source: "intent" };
+  if (viewsV3)
+    return {
+      text: untitledTitle(row.kind === "session" ? "session" : "turn", row.id),
+      source: "id",
+    };
   return {
     text: row.kind === "session" ? `Session ${row.id}` : `Run ${row.id.slice(0, 8)}`,
     source: "id",
