@@ -8,7 +8,7 @@ import { getTraceFacets, type TraceQueriesDb } from "@/lib/synthesis/traces/quer
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
-/** Flag `cloud-otlp-semconv-aliases`: the resource environment reaches the traces facet. */
+/** The resource environment reaches the traces facet. */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -30,27 +30,19 @@ const SPAN: DecodedSpan = {
   scopeName: "agent",
 };
 
-async function facetsFor(resourceEnvironment: boolean) {
+async function facets() {
   const client = await createMigratedPGlite();
   await client.exec(`
     insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme');
     insert into projects (id, organization_id, name, slug) values ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent');
   `);
   const db = drizzle(client, { schema }) as unknown as TestDb;
-  await insertOtelSpans(
-    PROJECT_ID,
-    toOtelSpanRows(PROJECT_ID, [SPAN], undefined, { resourceEnvironment }),
-    db,
-  );
+  await insertOtelSpans(PROJECT_ID, toOtelSpanRows(PROJECT_ID, [SPAN]), db);
   const facets = await getTraceFacets(PROJECT_ID, {}, db);
   await client.close();
   return facets;
 }
 
-test("flag on: the environment facet returns the resource's deployment.environment.name", async () => {
-  assert.deepEqual((await facetsFor(true)).environment, [{ value: "prod", count: 1 }]);
-});
-
-test("flag off: the environment facet has no value", async () => {
-  assert.deepEqual((await facetsFor(false)).environment, []);
+test("the environment facet returns the resource's deployment.environment.name", async () => {
+  assert.deepEqual((await facets()).environment, [{ value: "prod", count: 1 }]);
 });

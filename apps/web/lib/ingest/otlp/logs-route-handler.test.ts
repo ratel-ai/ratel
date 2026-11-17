@@ -747,17 +747,12 @@ test("raw capture of a gzip export keeps the inflated body and the sent gzip", a
   assert.deepEqual(stored[0].gzipped, new Uint8Array(sent));
 });
 
-test("semconv flag on: gen_ai details records are stored with ids and content", async () => {
+test("gen_ai details records are stored with ids and content", async () => {
   const inserted: unknown[] = [];
-  const flagCalls: unknown[][] = [];
   const response = await handleLogsRequest(
     request(genAiLogsJson(), { Authorization: "Bearer rtl_test" }),
     makeDeps({
       getOrganizationByProjectId: async () => ({ id: "org-1" }) as never,
-      semconvAliases: async (...args) => {
-        flagCalls.push(args);
-        return true;
-      },
       insertOtelLogs: async (_projectId, rows) => {
         inserted.push(...rows);
         return { accepted: rows.length };
@@ -766,7 +761,6 @@ test("semconv flag on: gen_ai details records are stored with ids and content", 
   );
   assert.equal(response.status, 202);
   assert.deepEqual(await response.json(), { accepted: 1, records: 2, dropped: 1 });
-  assert.equal(flagCalls[0]?.[0], "proj-1");
   const [row] = inserted as NewOtelLog[];
   assert.equal(row.eventName, "gen_ai.client.inference.operation.details");
   assert.equal(row.traceId, "0123456789abcdef0123456789abcdef");
@@ -775,12 +769,4 @@ test("semconv flag on: gen_ai details records are stored with ids and content", 
     (row.attributes as Record<string, unknown>)["gen_ai.input.messages"],
     '[{"role":"user","parts":[{"type":"text","content":"hi"}]}]',
   );
-});
-
-test("semconv flag off: gen_ai records are dropped as before", async () => {
-  const response = await handleLogsRequest(
-    request(genAiLogsJson(), { Authorization: "Bearer rtl_test" }),
-    makeDeps({ semconvAliases: async () => false }),
-  );
-  assert.deepEqual(await response.json(), { accepted: 0, records: 2, dropped: 2 });
 });

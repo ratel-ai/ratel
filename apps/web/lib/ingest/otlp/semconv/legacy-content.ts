@@ -2,7 +2,7 @@ import { GEN_AI, GEN_AI_INFERENCE_DETAILS } from "../constants";
 import type { AttrMap, AttrValue, DecodedEvent, DecodedSpan } from "../types";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: older content forms onto the v1.41
+ * Older content forms onto the v1.41
  * `gen_ai.system_instructions` / `gen_ai.input.messages` /
  * `gen_ai.output.messages` (JSON strings of `{ role, parts }`) that
  * `reconstruct.ts` reads.

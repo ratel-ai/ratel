@@ -20,7 +20,7 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import type { ApiKey } from "@/lib/platform/projects/schema";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: content sent as `gen_ai` log records
+ * Content sent as `gen_ai` log records
  * joins its model call whichever of the two exports is stored first.
  */
 
@@ -150,20 +150,6 @@ test("logs with no stored call yet restate nothing and insert no events row", as
   await client.close();
 });
 
-test("flag off: the logs are dropped and the stored call keeps no content", async () => {
-  const { client, db } = await setup();
-  await persistSpan(db, false);
-  const before = await storedCall(client);
-  const response = await sendLogs(db, DETAILS, false);
-
-  assert.deepEqual(await response.json(), { accepted: 0, records: 1, dropped: 1 });
-  assert.deepEqual(await storedCall(client), before);
-  assert.deepEqual((before.event.payload as { messages: unknown[] }).messages, [
-    { role: "user", content: "" },
-  ]);
-  await client.close();
-});
-
 test("a span batch and a log export that arrive together join", async () => {
   const expected = await setup();
   await sendLogs(expected.db, DETAILS);
@@ -172,7 +158,7 @@ test("a span batch and a log export that arrive together join", async () => {
   const { client, db } = await setup();
   const store = createGenAiLogStore(() => db as never);
   let raced = false;
-  await persistSpan(db, true, {
+  await persistSpan(db, {
     genAiLogs: {
       ...store,
       // The span batch reads no logs; the log export lands before the span is stored.
@@ -194,7 +180,7 @@ test("a span batch and a log export that arrive together join", async () => {
 
 test("spans first: a log record does not overwrite content the span carried", async () => {
   const { client, db } = await setup();
-  await persistSpan(db, true, {
+  await persistSpan(db, {
     attributes: { "gen_ai.input.messages": INPUT, "gen_ai.output.messages": OUTPUT },
   });
   const fromSpan = await storedCall(client);
@@ -214,7 +200,7 @@ test("two log exports for one call: the older restate does not win", async () =>
   const store = createGenAiLogStore(() => db as never);
   // The first export reads only its own record, then the second export
   // lands and restates before the first one writes.
-  await sendLogs(db, [PER_MESSAGE[0]], true, {
+  await sendLogs(db, [PER_MESSAGE[0]], {
     ...store,
     restateCalls: async (projectId, rows) => {
       assert.equal((await sendLogs(db, [PER_MESSAGE[1]])).status, 202);
@@ -240,7 +226,6 @@ async function setup(): Promise<{ client: PGlite; db: Db }> {
 async function sendLogs(
   db: Db,
   logRecords: readonly unknown[],
-  flag = true,
   store: GenAiLogStore = createGenAiLogStore(() => db as never),
 ): Promise<Response> {
   const body = JSON.stringify({
@@ -273,7 +258,6 @@ async function sendLogs(
         throw error instanceof Error ? error : new Error(message);
       },
       logWarn: () => {},
-      semconvAliases: async () => flag,
       genAiLogJoin: { store },
     },
   );
@@ -281,7 +265,6 @@ async function sendLogs(
 
 async function persistSpan(
   db: Db,
-  flag = true,
   {
     attributes = {},
     genAiLogs = createGenAiLogStore(() => db as never),
@@ -319,7 +302,6 @@ async function persistSpan(
         insertEventsWithMetrics(projectId, rows, db as never),
       insertTraceEvents: async () => ({ accepted: 0 }),
       insertOtelSpans: (projectId, rows) => insertOtelSpans(projectId, rows, db as never),
-      semconvAliases: async () => flag,
       genAiLogs,
       logError: (message, error) => {
         throw error instanceof Error ? error : new Error(message);

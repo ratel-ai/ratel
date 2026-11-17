@@ -6,7 +6,7 @@ import { GEN_AI_LOG_EVENT_NAMES } from "../log-rows";
 import type { SpanKey, StoredGenAiLog } from "./gen-ai-logs";
 
 /**
- * The storage half of the `gen_ai` log join (flag `cloud-otlp-semconv-aliases`):
+ * The storage half of the `gen_ai` log join:
  * read the stored log records and spans of a batch, and restate a stored model
  * call. Every read is scoped to one project and uses `*_project_trace_idx`.
  */

@@ -2,7 +2,7 @@ import { getLogger } from "@/lib/platform/logger";
 import {
   enqueueComputeJob as enqueueComputeJobFn,
   latestRunByProject as latestRunByProjectFn,
-  listProjectsWithRecentTurns as listProjectsWithRecentTurnsFn,
+  listSweepCandidates as listSweepCandidatesFn,
   reapAllStaleSignalRuns as reapAllStaleSignalRunsFn,
   STALE_RUN_MS,
 } from "@/lib/readings/trace-signals/signals/queries";
@@ -32,7 +32,7 @@ const logger = getLogger("trace-signals/sweep");
 const DAY_MS = 86_400_000;
 
 export interface SignalSweepDeps {
-  listCandidates: typeof listProjectsWithRecentTurnsFn;
+  listCandidates: typeof listSweepCandidatesFn;
   latestRuns: typeof latestRunByProjectFn;
   enqueue: typeof enqueueComputeJobFn;
   /** Fail every live run that started before the given time; returns how many. */
@@ -44,7 +44,7 @@ export async function sweepTraceSignals(
   overrides: Partial<SignalSweepDeps> = {},
 ): Promise<SignalSweepResult> {
   const deps: SignalSweepDeps = {
-    listCandidates: listProjectsWithRecentTurnsFn,
+    listCandidates: listSweepCandidatesFn,
     latestRuns: latestRunByProjectFn,
     enqueue: enqueueComputeJobFn,
     reapStale: (before, now) => reapAllStaleSignalRunsFn(before, undefined, now),
@@ -63,7 +63,12 @@ export async function sweepTraceSignals(
     new Date(now.getTime() - SWEEP_CANDIDATE_DAYS * DAY_MS),
   );
   if (candidates.length === 0) return IDLE_SIGNAL_SWEEP;
-  const due = dueSignalProjects(candidates, await deps.latestRuns(), now);
+  const due = dueSignalProjects(
+    candidates.map((c) => c.projectId),
+    await deps.latestRuns(),
+    now,
+    { builtThrough: new Map(candidates.map((c) => [c.projectId, c.builtThrough])) },
+  );
   if (due.length === 0) return IDLE_SIGNAL_SWEEP;
 
   let runsEnqueued = 0;

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { CodeBlock } from "@ratel/design-system/code";
 import { Callout } from "@ratel/design-system/states";
@@ -9,7 +10,12 @@ import type { RawSpanView } from "@/lib/ingest/otlp-raw/trace-raw-route";
 import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
 import { ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
-import { buildSpanIO, type SpanIO, type SpanMessage } from "@/lib/synthesis/traces/v2/span-io";
+import {
+  buildSpanIO,
+  type SpanIO,
+  type SpanIOInput,
+  type SpanMessage,
+} from "@/lib/synthesis/traces/v2/span-io";
 import type { TraceSpanView } from "@/lib/synthesis/traces/view";
 import { CONTENT_CAPTURE_DOCS } from "./RunPanel";
 import { SpanAttributesList } from "./SpanInspector";
@@ -35,11 +41,19 @@ export function SpanIOPanel({
   raw,
   rawState,
   payload,
+  descendants = [],
+  turnHasContent = false,
+  onSelectSpan,
 }: {
   span: TraceSpanView;
   raw: RawSpanView | null;
   rawState: RawState;
   payload: TraceContentView | null;
+  /** The span's descendants in timeline order, raw attributes merged (RC-501). */
+  descendants?: readonly SpanIOInput[];
+  /** Whether the turn carries any message content, on its spans or its payload. */
+  turnHasContent?: boolean;
+  onSelectSpan?: (spanId: string) => void;
 }) {
   const [mode, setMode] = useState<Mode>("formatted");
   const attributes = useMemo(
@@ -47,8 +61,13 @@ export function SpanIOPanel({
     [span.attributes, raw],
   );
   const io = useMemo(
-    () => buildSpanIO({ spanId: span.spanId, spanClass: span.spanClass, attributes }, payload),
-    [span.spanId, span.spanClass, attributes, payload],
+    () =>
+      buildSpanIO(
+        { spanId: span.spanId, spanClass: span.spanClass, attributes },
+        payload,
+        descendants,
+      ),
+    [span.spanId, span.spanClass, attributes, payload, descendants],
   );
 
   return (
@@ -65,7 +84,12 @@ export function SpanIOPanel({
               mode === "json" ? (
                 <JsonBlock caption="Input & output" value={ioJson(io)} />
               ) : (
-                <IOFormatted io={io} rawState={rawState} />
+                <IOFormatted
+                  io={io}
+                  rawState={rawState}
+                  turnHasContent={turnHasContent}
+                  onSelectSpan={onSelectSpan}
+                />
               ),
           },
           {
@@ -97,10 +121,28 @@ export function SpanIOPanel({
   );
 }
 
-function IOFormatted({ io, rawState }: { io: SpanIO; rawState: RawState }) {
+function IOFormatted({
+  io,
+  rawState,
+  turnHasContent,
+  onSelectSpan,
+}: {
+  io: SpanIO;
+  rawState: RawState;
+  turnHasContent: boolean;
+  onSelectSpan?: (spanId: string) => void;
+}) {
   if (io.kind === "none") {
     if (rawState === "loading")
       return <p className="text-ui text-fg-muted">Loading the span&apos;s content…</p>;
+    // RC-501: "isn't captured" only when the whole turn has no content.
+    if (turnHasContent) {
+      return (
+        <Callout title="This step has no messages of its own">
+          The turn&apos;s messages are on its model calls. The Conversation tab shows them all.
+        </Callout>
+      );
+    }
     return (
       <Callout
         title="Message content isn't captured"
@@ -120,7 +162,19 @@ function IOFormatted({ io, rawState }: { io: SpanIO; rawState: RawState }) {
     );
   }
   const note =
-    io.source === "payload" ? (
+    io.kind === "messages" && io.source === "child" ? (
+      <p
+        className="flex flex-wrap items-center gap-x-2 text-xs text-fg-subtle"
+        data-span-io-source="child"
+      >
+        This step has no messages of its own. These are from the model call under it.
+        {onSelectSpan ? (
+          <Button variant="ghost" size="sm" onClick={() => onSelectSpan(io.childSpanId)}>
+            Open that model call
+          </Button>
+        ) : null}
+      </p>
+    ) : io.source === "payload" ? (
       <p className="text-xs text-fg-subtle">From the turn&apos;s stored model calls.</p>
     ) : null;
   if (io.kind === "tool") {

@@ -38,7 +38,7 @@ import {
   formatSpanStatus,
 } from "@/lib/synthesis/traces/format";
 import {
-  loadPayloadContentForActor,
+  loadPayloadContentSafely,
   type PayloadContent,
 } from "@/lib/synthesis/traces/payload-content";
 import {
@@ -77,7 +77,6 @@ import {
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
 import { agentHealthEnabled } from "@/lib/views/health/agent-health-flag";
 import { loadTurnDetail, type TurnDetail } from "@/lib/views/traces/turn-detail";
-import { mcpActor } from "./health";
 
 /**
  * Runs and traces, one tool per thing the Traces section shows: a run told as
@@ -136,12 +135,8 @@ export interface RunsOperationDeps extends ContentAccessDeps {
   loadTurnDetail: (projectId: string, turnId: string) => Promise<TurnDetail | null>;
   /** The turn page's gate. Retired to always-on, kept so the two cannot drift. */
   agentHealthEnabled: (projectId: string, organizationId: string | null) => Promise<boolean>;
-  /** The trace's `events.payload` content for this actor; null with `cloud-payload-content` off, as the pages read it. */
-  loadPayloadContent: (
-    projectId: string,
-    traceId: string,
-    actor: string,
-  ) => Promise<PayloadContent | null>;
+  /** The trace's `events.payload` content, as the pages read it; null when nothing is stored or the read fails. */
+  loadPayloadContent: (projectId: string, traceId: string) => Promise<PayloadContent | null>;
 }
 
 export const defaultRunsDeps: RunsOperationDeps = {
@@ -170,8 +165,8 @@ export const defaultRunsDeps: RunsOperationDeps = {
       operation: "mcp_trace_turn_detail",
     }),
   agentHealthEnabled: (projectId, organizationId) => agentHealthEnabled(projectId, organizationId),
-  loadPayloadContent: (projectId, traceId, actor) =>
-    loadPayloadContentForActor(projectId, traceId, actor, "mcp_trace_payload"),
+  loadPayloadContent: (projectId, traceId) =>
+    loadPayloadContentSafely(projectId, traceId, "mcp_trace_payload"),
   contentOptIn: readContentOptIn,
 };
 
@@ -505,11 +500,7 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
       }),
       async execute(ctx, params) {
         const { traceId, load } = await loadTrace(ctx.projectId, params.traceId, "run");
-        const payload = await deps.loadPayloadContent(
-          ctx.projectId,
-          traceId,
-          mcpActor(ctx.auth, ctx.projectId),
-        );
+        const payload = await deps.loadPayloadContent(ctx.projectId, traceId);
         const summary = buildRunSummary(load.spans, params.maxSteps, payload);
         const content = await mayReadContent(ctx, deps);
         const tracker = new TruncationTracker();
@@ -713,11 +704,7 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
         const { traceId, load } = await loadTrace(ctx.projectId, params.traceId);
         // The tab reads the spans in timeline order, so this does too.
         const ordered = buildTraceWaterfall(load.spans).rows.map((row) => row.span);
-        const payload = await deps.loadPayloadContent(
-          ctx.projectId,
-          traceId,
-          mcpActor(ctx.auth, ctx.projectId),
-        );
+        const payload = await deps.loadPayloadContent(ctx.projectId, traceId);
         const content = preferSpanContent(buildTraceContentView(ordered), payload?.view ?? null);
         const messages = conversationMessages(content.messages);
         const readable = await mayReadContent(ctx, deps);

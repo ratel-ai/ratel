@@ -79,15 +79,14 @@ export async function listRunTools(
  * per run however many model calls it made. Content-capture-off projects have
  * no message attributes and get `null`.
  *
- * OTLP ingest keeps message content out of the spans, so with `fromPayload`
- * (`cloud-payload-content`) a run whose spans have no ask takes it from its
- * `events.payload`, else from the prompt ingest derived (`listCapturedAsks`).
+ * OTLP ingest keeps message content out of the spans, so a run whose spans
+ * have no ask takes it from its `events.payload`, else from the prompt ingest
+ * derived (`listCapturedAsks`, RC-393).
  */
 export async function listRunAsks(
   projectId: string,
   traceIds: readonly string[],
   db: TraceQueriesDb = getDb(),
-  options: { fromPayload?: boolean } = {},
 ): Promise<Map<string, RunAsk>> {
   const ids = [...new Set(traceIds)];
   if (ids.length === 0) return new Map();
@@ -134,7 +133,7 @@ export async function listRunAsks(
   );
   const withoutAsk = ids.filter((id) => fromSpans.get(id) === null);
   const captured =
-    options.fromPayload && withoutAsk.length > 0
+    withoutAsk.length > 0
       ? await listCapturedAsks(projectId, withoutAsk, db)
       : new Map<string, string>();
   return new Map(

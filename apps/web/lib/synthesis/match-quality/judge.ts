@@ -1,5 +1,14 @@
 import { createHash } from "node:crypto";
 import type { CorpusEntry } from "@/lib/readings/decisions/judge";
+import {
+  AUDIT_SAMPLE,
+  auditVerdict,
+  DEFAULT_TARGET_MARGIN,
+  labelsNeeded,
+  type StratumTally,
+  spreadPick,
+  stratifiedShare,
+} from "@/lib/readings/labelling/adaptive";
 import { type GroundTruthLabel, queryKey } from "@/lib/synthesis/match-quality/labels";
 import type { EvalItem } from "@/lib/synthesis/match-quality/types";
 
@@ -148,6 +157,33 @@ export interface JudgeCensus {
   nominatingSampled: number;
   /** Stratified estimate of how often the baseline's top result was right. */
   referenceAccuracy: number | null;
+  /** How the adaptive loop went (RC-394); absent on a fixed-count run. */
+  adaptive?: AdaptiveCensus;
+}
+
+/** What the adaptive loop did in one run, stored on the census. */
+export interface AdaptiveCensus {
+  rounds: number;
+  targetMargin: number;
+  /** Our first result was the right tool, over the window's distinct answered requests, weighted by stratum. */
+  share: number | null;
+  /** Its 95% margin after this run's answers. */
+  margin: number | null;
+  /** Requests still unanswered that the margin would want; zero when it was met. */
+  stillNeeded: number;
+  /** Carried verdicts re-asked, how many came back the same, and what that said. */
+  audited: number;
+  auditAgreed: number;
+  audit: "trust" | "distrust" | "unknown";
+  /** Why the loop stopped. */
+  stopped:
+    | "margin_met"
+    | "nothing_left"
+    | "capacity"
+    | "engine_stopped"
+    | "engine_failed"
+    | "deadline"
+    | "max_rounds";
 }
 
 /**
@@ -224,6 +260,228 @@ function shuffleKey(caseId: string, entryId: string): number {
 }
 
 /**
+ * The parts of a tool a verdict about it depends on, hashed: what
+ * `identityFingerprint` reads, for one entry.
+ */
+function entryIdentity(entry: CorpusEntry | undefined): string {
+  if (!entry) return "";
+  return [entry.entryId, entry.name, entry.description ?? "", entry.runtimeSearchable ?? ""].join(
+    "\u0000",
+  );
+}
+
+/** Every entry's identity, for `labelPrint` and `readPrint`. */
+export function entryIdentities(corpus: readonly CorpusEntry[]): Map<string, string> {
+  return new Map(corpus.map((entry) => [entry.entryId, entryIdentity(entry)]));
+}
+
+const ENTRY_PRINT = "e:";
+
+function entryPart(
+  identities: ReadonlyMap<string, string>,
+  entryId: string,
+  runnerUp: string | null | undefined,
+): string {
+  const rows = [
+    identities.get(entryId) ?? `missing:${entryId}`,
+    runnerUp ? (identities.get(runnerUp) ?? `missing:${runnerUp}`) : "",
+  ];
+  return createHash("sha256").update(rows.join("\u0001")).digest("hex").slice(0, 24);
+}
+
+/**
+ * The fingerprint a verdict is stored with (RC-394).
+ *
+ * A decided verdict is about the tool it chose and the one it nearly chose,
+ * so it is printed with those two: `e:<their identity>:<the catalog's>`. It
+ * stays fresh while they are unchanged, however many other tools come and go;
+ * a catalog that moved only marks it for the audit, which re-asks a sample.
+ * An abstention is about the whole catalog (any new tool might answer it), so
+ * it keeps the catalog fingerprint alone, as every verdict did before.
+ */
+export function labelPrint(
+  identities: ReadonlyMap<string, string>,
+  catalog: string,
+  entryId: string,
+  runnerUp?: string | null,
+): string {
+  if (entryId === "") return catalog;
+  return `${ENTRY_PRINT}${entryPart(identities, entryId, runnerUp)}:${catalog}`;
+}
+
+/**
+ * How a stored verdict stands against today's tools: `fresh` while what it
+ * was made against is unchanged, and `moved` when it is fresh but the rest of
+ * the catalog changed since (the audit's pool). A catalog-wide print (every
+ * verdict before RC-394, and every abstention) is fresh only on the same
+ * catalog, exactly as before.
+ */
+export function readPrint(
+  stored: Pick<GroundTruthLabel, "entryId" | "runnerUp" | "catalogFingerprint">,
+  identities: ReadonlyMap<string, string> | undefined,
+  catalog: string | undefined,
+): { fresh: boolean; moved: boolean } {
+  const print = stored.catalogFingerprint ?? null;
+  if (print === null || catalog === undefined) return { fresh: false, moved: false };
+  if (!print.startsWith(ENTRY_PRINT) || identities === undefined)
+    return { fresh: print === catalog, moved: false };
+  const [entry, made] = print.slice(ENTRY_PRINT.length).split(":");
+  if (stored.entryId === "" || entry !== entryPart(identities, stored.entryId, stored.runnerUp))
+    return { fresh: false, moved: false };
+  return { fresh: true, moved: made !== catalog };
+}
+
+interface StratumPool {
+  unread: JudgeCase[];
+  stale: JudgeCase[];
+  /** Fresh decided verdicts whose catalog moved since: re-asked by the audit. */
+  moved: JudgeCase[];
+  /** Fresh decided verdicts in the window. */
+  fresh: number;
+  /** Of those, how many named our engine's first result. */
+  freshHits: number;
+}
+
+interface Pools {
+  disputed: StratumPool;
+  control: StratumPool;
+}
+
+interface PoolOptions {
+  key?: ReadonlyMap<string, GroundTruthLabel>;
+  fingerprint?: string;
+  corpusIds?: ReadonlySet<string>;
+  identities?: ReadonlyMap<string, string>;
+  /** A failed audit: a fresh verdict whose catalog moved counts as stale. */
+  distrustMoved?: boolean;
+}
+
+/**
+ * Sort the window's distinct requests into the two strata, and within each
+ * into unread, stale and fresh (see `sampleForJudging`). Deduplicated by
+ * query text, newest sighting kept; a request the agent was seen running is
+ * never eligible: behaviour beats an opinion.
+ */
+function buildPools(
+  items: readonly EvalItem[],
+  ourArm: string,
+  baselineArm: string,
+  opts: PoolOptions,
+): Pools {
+  const key = opts.key ?? new Map<string, GroundTruthLabel>();
+  const seen = new Set<string>(
+    items
+      .filter((item) => item.targetSource === "invoked" && item.query?.trim())
+      .map((item) => normalise(item.query ?? "")),
+  );
+  const empty = (): StratumPool => ({ unread: [], stale: [], moved: [], fresh: 0, freshHits: 0 });
+  const pools: Pools = { disputed: empty(), control: empty() };
+
+  for (const item of items) {
+    if (item.targetSource === "invoked") continue;
+    const query = item.query?.trim();
+    if (!query) continue;
+    const normal = normalise(query);
+    if (seen.has(normal)) continue;
+    seen.add(normal);
+
+    const ours = item.arms.find((arm) => arm.arm === ourArm);
+    // No baseline (search telemetry, one engine): every search is one stratum,
+    // "disputed", since there is no second engine to agree with.
+    const baseline = item.arms.find((arm) => arm.arm === baselineArm);
+    if (!ours) continue;
+
+    const ourTop = ours.resultIds[0];
+    const agreed =
+      baseline !== undefined && ourTop !== undefined && ourTop === baseline.resultIds[0];
+    const stratum: JudgeStratum = agreed ? "control" : "disputed";
+    const pool = pools[stratum];
+
+    const stored = key.get(queryKey(query) ?? normal);
+    if (stored?.source === "invoked") continue;
+    const namesGoneTool =
+      stored !== undefined &&
+      stored.entryId !== "" &&
+      opts.corpusIds !== undefined &&
+      !opts.corpusIds.has(stored.entryId);
+    const print =
+      stored === undefined || namesGoneTool
+        ? { fresh: false, moved: false }
+        : readPrint(stored, opts.identities, opts.fingerprint);
+
+    const merged = new Set([
+      ...ours.resultIds.slice(0, SHORTLIST_PER_ARM),
+      ...(baseline?.resultIds.slice(0, SHORTLIST_PER_ARM) ?? []),
+    ]);
+    const shortlist = [...merged].sort(
+      (left, right) => shuffleKey(item.selectionId, left) - shuffleKey(item.selectionId, right),
+    );
+    const entry: JudgeCase = {
+      id: item.selectionId,
+      query,
+      shortlist,
+      assumed: baseline?.resultIds[0] ?? item.targetEntryId,
+      stratum,
+    };
+
+    if (stored !== undefined && print.fresh && !(print.moved && opts.distrustMoved)) {
+      // Only a decided answer counts toward the measurement. A fresh
+      // `unclear` is read (so never re-bought) but measures nothing.
+      if (stored.source !== "unclear") {
+        pool.fresh += 1;
+        if (stored.entryId === ourTop) pool.freshHits += 1;
+        if (print.moved) pool.moved.push(entry);
+      }
+      continue;
+    }
+    (stored === undefined ? pool.unread : pool.stale).push(entry);
+  }
+  return pools;
+}
+
+/** What a sample is drawn from, and what it measured so far: for the census and the adaptive loop. */
+interface SampleResult {
+  cases: JudgeCase[];
+  populationDisputed: number;
+  populationControl: number;
+  nominatingPopulation: number;
+  nominatingSampled: number;
+}
+
+function nominating(pools: Pools, cases: readonly JudgeCase[], priority: ReadonlySet<string>) {
+  const all = [
+    ...pools.disputed.unread,
+    ...pools.disputed.stale,
+    ...pools.control.unread,
+    ...pools.control.stale,
+  ];
+  return {
+    nominatingPopulation: all.filter((row) => priority.has(row.id)).length,
+    nominatingSampled: cases.filter((row) => row.stratum === "disputed" && priority.has(row.id))
+      .length,
+  };
+}
+
+/** Urgent first, then the strata alternate, so an engine that stops early still leaves both measured. */
+function interleave(
+  urgent: readonly JudgeCase[],
+  disputed: readonly JudgeCase[],
+  control: readonly JudgeCase[],
+  maxCases: number,
+): JudgeCase[] {
+  const rest = { disputed: [...disputed], control: [...control] };
+  const cases = urgent.slice(0, maxCases);
+  while (cases.length < maxCases && (rest.disputed.length > 0 || rest.control.length > 0)) {
+    const next = rest.disputed.shift();
+    if (next) cases.push(next);
+    if (cases.length >= maxCases) break;
+    const other = rest.control.shift();
+    if (other) cases.push(other);
+  }
+  return cases;
+}
+
+/**
  * Pick the searches worth judging, in two strata.
  *
  * Deduplicated by query text first, so forty repetitions of one phrasing spend
@@ -238,6 +496,7 @@ function shuffleKey(caseId: string, entryId: string): number {
  * {@link TARGET_ANSWERS_PER_STRATUM} fresh answers, then only a
  * {@link TRICKLE_SHARE} of the unread. Stale verdicts are re-read only with
  * what that leaves. The engine's own `capacity` caps the total.
+ * (`sampleAdaptively` replaces these fixed counts behind the flag.)
  *
  * Within a stratum picks are strided across the window rather than the newest
  * N, because the newest N of a busy window can all be one afternoon of one
@@ -270,94 +529,21 @@ export function sampleForJudging(
     trickle?: number;
     /** The catalog's entry ids: a verdict naming a tool that is gone is stale. */
     corpusIds?: ReadonlySet<string>;
+    /** Each entry's identity (`entryIdentities`), so a per-tool print is read per tool. */
+    identities?: ReadonlyMap<string, string>;
   } = {},
-): {
-  cases: JudgeCase[];
-  populationDisputed: number;
-  populationControl: number;
-  nominatingPopulation: number;
-  nominatingSampled: number;
-} {
+): SampleResult {
   const maxDisputed = opts.maxDisputed ?? MAX_DISPUTED_CASES;
   const maxControl = opts.maxControl ?? MAX_CONTROL_CASES;
   const target = opts.targetPerStratum ?? TARGET_ANSWERS_PER_STRATUM;
   const trickle = opts.trickle ?? TRICKLE_SHARE;
-  const key = opts.key ?? new Map<string, GroundTruthLabel>();
-
-  // A request the agent was seen running anywhere in the window is answered by
-  // behaviour, so no other sighting of it is worth paying to judge.
-  const seen = new Set<string>(
-    items
-      .filter((item) => item.targetSource === "invoked" && item.query?.trim())
-      .map((item) => normalise(item.query ?? "")),
-  );
-  const pools = {
-    disputed: { unread: [] as JudgeCase[], stale: [] as JudgeCase[], fresh: 0 },
-    control: { unread: [] as JudgeCase[], stale: [] as JudgeCase[], fresh: 0 },
-  };
-
-  for (const item of items) {
-    // Behaviour beats an opinion: an invoked target is never second-guessed.
-    if (item.targetSource === "invoked") continue;
-    const query = item.query?.trim();
-    if (!query) continue;
-    const normal = normalise(query);
-    if (seen.has(normal)) continue;
-    seen.add(normal);
-
-    const ours = item.arms.find((arm) => arm.arm === ourArm);
-    // No baseline (search telemetry, one engine): every search is one stratum,
-    // "disputed", since there is no second engine to agree with.
-    const baseline = item.arms.find((arm) => arm.arm === baselineArm);
-    if (!ours) continue;
-
-    const ourTop = ours.resultIds[0];
-    const agreed =
-      baseline !== undefined && ourTop !== undefined && ourTop === baseline.resultIds[0];
-    const stratum: JudgeStratum = agreed ? "control" : "disputed";
-    const pool = pools[stratum];
-
-    const stored = key.get(queryKey(query) ?? normal);
-    if (stored?.source === "invoked") continue;
-    const namesGoneTool =
-      stored !== undefined &&
-      stored.entryId !== "" &&
-      opts.corpusIds !== undefined &&
-      !opts.corpusIds.has(stored.entryId);
-    const isFresh =
-      stored !== undefined &&
-      !namesGoneTool &&
-      opts.fingerprint !== undefined &&
-      stored.catalogFingerprint === opts.fingerprint;
-    if (isFresh) {
-      // Only a decided answer counts toward the measurement target. A fresh
-      // `unclear` is read (so never re-bought) but measures nothing.
-      if (stored.source !== "unclear") pool.fresh += 1;
-      continue;
-    }
-
-    const merged = new Set([
-      ...ours.resultIds.slice(0, SHORTLIST_PER_ARM),
-      ...(baseline?.resultIds.slice(0, SHORTLIST_PER_ARM) ?? []),
-    ]);
-    const shortlist = [...merged].sort(
-      (left, right) => shuffleKey(item.selectionId, left) - shuffleKey(item.selectionId, right),
-    );
-    const entry: JudgeCase = {
-      id: item.selectionId,
-      query,
-      shortlist,
-      assumed: baseline?.resultIds[0] ?? item.targetEntryId,
-      stratum,
-    };
-    (stored === undefined ? pool.unread : pool.stale).push(entry);
-  }
+  const pools = buildPools(items, ourArm, baselineArm, opts);
 
   // Unread and stale are sized separately so stale verdicts are never starved:
   // below the target, unread first and stale with what is left; at or past it,
   // a trickle of EACH, so a catalog change is re-read over a few weekly runs
   // instead of never.
-  const wanted = (pool: (typeof pools)["disputed"], max: number) => {
+  const wanted = (pool: StratumPool, max: number) => {
     const short = Math.max(0, target - pool.fresh);
     const unread = Math.min(
       pool.unread.length,
@@ -382,49 +568,118 @@ export function sampleForJudging(
   const urgentIds = new Set(urgent.map((row) => row.id));
   const disputedWant = wanted(pools.disputed, maxDisputed);
   const urgentUnread = urgent.filter((row) => pools.disputed.unread.includes(row)).length;
-  const disputed = [
-    ...urgent,
-    ...fill(
-      pools.disputed.unread.filter((row) => !urgentIds.has(row.id)),
-      pools.disputed.stale.filter((row) => !urgentIds.has(row.id)),
-      {
-        unread: Math.max(0, disputedWant.unread - urgentUnread),
-        stale: Math.max(0, disputedWant.stale - (urgent.length - urgentUnread)),
-      },
-    ),
-  ];
+  const disputed = fill(
+    pools.disputed.unread.filter((row) => !urgentIds.has(row.id)),
+    pools.disputed.stale.filter((row) => !urgentIds.has(row.id)),
+    {
+      unread: Math.max(0, disputedWant.unread - urgentUnread),
+      stale: Math.max(0, disputedWant.stale - (urgent.length - urgentUnread)),
+    },
+  );
   const control = fill(
     pools.control.unread,
     pools.control.stale,
     wanted(pools.control, maxControl),
   );
 
-  // Urgent first, then the strata ALTERNATE, always: an engine that stops early
-  // (its token budget or deadline) then still leaves both strata measured
-  // instead of starving whichever was queued last.
-  const maxCases = opts.maxCases ?? Number.POSITIVE_INFINITY;
-  const rest = { disputed: disputed.slice(urgent.length), control: [...control] };
-  const cases = urgent.slice(0, maxCases);
-  while (cases.length < maxCases && (rest.disputed.length > 0 || rest.control.length > 0)) {
-    const next = rest.disputed.shift();
-    if (next) cases.push(next);
-    if (cases.length >= maxCases) break;
-    const other = rest.control.shift();
-    if (other) cases.push(other);
-  }
-
-  const populationDisputed = pools.disputed.unread.length + pools.disputed.stale.length;
-  const populationControl = pools.control.unread.length + pools.control.stale.length;
+  const cases = interleave(urgent, disputed, control, opts.maxCases ?? Number.POSITIVE_INFINITY);
   return {
     cases,
-    populationDisputed,
-    populationControl,
-    nominatingPopulation:
-      disputedPool.filter((row) => priority.has(row.id)).length +
-      [...pools.control.unread, ...pools.control.stale].filter((row) => priority.has(row.id))
-        .length,
-    nominatingSampled: cases.filter((row) => row.stratum === "disputed" && priority.has(row.id))
-      .length,
+    populationDisputed: pools.disputed.unread.length + pools.disputed.stale.length,
+    populationControl: pools.control.unread.length + pools.control.stale.length,
+    ...nominating(pools, cases, priority),
+  };
+}
+
+/** Requests one adaptive round asks about at most: the batch Kayra's loop looks at before asking for more. */
+export const ADAPTIVE_ROUND_SIZE = 100;
+/** Rounds one run may take; with the round size, a ceiling of 600 answers per run. */
+export const ADAPTIVE_MAX_ROUNDS = 6;
+/** Never-read requests asked per stratum per run once the margin is met, so the key notices new kinds of search. */
+export const DRIFT_PER_STRATUM = 10;
+
+/** How far one adaptive round got, for the census. */
+export interface AdaptiveTally {
+  disputed: StratumTally;
+  control: StratumTally;
+}
+
+/**
+ * The adaptive sample (RC-394, behind `cloud-adaptive-labelling`): as many
+ * requests as the headline share still needs for its margin, plus a small
+ * drift sample, instead of 500 per stratum and then a quarter forever.
+ *
+ * The share is "our first result was the right tool" over each stratum's
+ * distinct requests; `labelsNeeded` sizes each stratum by Neyman allocation
+ * from the fresh answers it already holds. Unread and stale requests are one
+ * pool (both are unanswered today), picked evenly over the window. Requests
+ * driving a proposal still jump the disputed queue. Up to `audit` fresh
+ * verdicts whose catalog moved since are re-asked to check that carrying them
+ * is safe; `distrustMoved` (a failed audit) counts all of those as stale.
+ * One call is one round; `judgeTargets` loops, re-estimating between rounds.
+ */
+export function sampleAdaptively(
+  items: readonly EvalItem[],
+  ourArm: string,
+  baselineArm: string,
+  opts: PoolOptions & {
+    maxCases?: number;
+    priority?: ReadonlySet<string>;
+    targetMargin?: number;
+    drift?: number;
+    audit?: number;
+  } = {},
+): SampleResult & { tally: AdaptiveTally; audit: JudgeCase[] } {
+  const pools = buildPools(items, ourArm, baselineArm, opts);
+  const tallyOf = (pool: StratumPool): StratumTally => ({
+    population: pool.unread.length + pool.stale.length + pool.fresh,
+    labelled: pool.fresh,
+    hits: pool.freshHits,
+  });
+  const tally = { disputed: tallyOf(pools.disputed), control: tallyOf(pools.control) };
+  const [needDisputed = 0, needControl = 0] = labelsNeeded(
+    [tally.disputed, tally.control],
+    opts.targetMargin ?? DEFAULT_TARGET_MARGIN,
+  );
+  const drift = opts.drift ?? DRIFT_PER_STRATUM;
+  const priority = opts.priority ?? new Set<string>();
+
+  // A round asks at most `maxCases`, so each stratum's pick is capped at that
+  // BEFORE spreading: picking the full need and truncating later would keep
+  // the newest slice of the window.
+  const roundCap = opts.maxCases ?? Number.POSITIVE_INFINITY;
+  const pick = (pool: StratumPool, need: number, skip: ReadonlySet<string>) => {
+    const open = [...pool.unread, ...pool.stale].filter((row) => !skip.has(row.id));
+    const chosen = spreadPick(open, Math.min(need, roundCap));
+    if (need > 0 || drift <= 0) return chosen;
+    // Margin met: a few never-read requests only, so new kinds of search still get noticed.
+    return spreadPick(
+      pool.unread.filter((row) => !skip.has(row.id)),
+      Math.min(drift, roundCap),
+    );
+  };
+  const urgentAll = [...pools.disputed.unread, ...pools.disputed.stale].filter((row) =>
+    priority.has(row.id),
+  );
+  // Every request driving a proposal is read: what gets fixed depends on it.
+  const urgent = urgentAll;
+  const urgentIds = new Set(urgent.map((row) => row.id));
+  const disputed = pick(pools.disputed, Math.max(0, needDisputed - urgent.length), urgentIds);
+  const control = pick(pools.control, needControl, new Set());
+  const cases = interleave(urgent, disputed, control, opts.maxCases ?? Number.POSITIVE_INFINITY);
+
+  const auditCount = Math.max(0, Math.floor(opts.audit ?? 0));
+  const audit =
+    auditCount === 0
+      ? []
+      : spreadPick([...pools.disputed.moved, ...pools.control.moved], auditCount);
+  return {
+    cases,
+    populationDisputed: pools.disputed.unread.length + pools.disputed.stale.length,
+    populationControl: pools.control.unread.length + pools.control.stale.length,
+    ...nominating(pools, cases, priority),
+    tally,
+    audit,
   };
 }
 
@@ -589,7 +844,13 @@ function baselineTop(item: EvalItem, baselineArm: string | undefined): string | 
 export function labelsFromVerdicts(
   cases: readonly JudgeCase[],
   verdicts: readonly JudgeVerdict[],
-  meta: { model: string; fingerprint: string | null; judgedAt: Date },
+  meta: {
+    model: string;
+    fingerprint: string | null;
+    judgedAt: Date;
+    /** Each entry's identity: when given, a decided verdict is printed per tool (`labelPrint`). */
+    identities?: ReadonlyMap<string, string>;
+  },
 ): GroundTruthLabel[] {
   const caseById = new Map(cases.map((row) => [row.id, row]));
   const labels: GroundTruthLabel[] = [];
@@ -609,7 +870,10 @@ export function labelsFromVerdicts(
       observedAt: meta.judgedAt,
       confidence: verdict.confidence ?? null,
       runnerUp: verdict.runnerUp ?? null,
-      catalogFingerprint: meta.fingerprint,
+      catalogFingerprint:
+        meta.identities !== undefined && meta.fingerprint !== null
+          ? labelPrint(meta.identities, meta.fingerprint, verdict.entryId, verdict.runnerUp)
+          : meta.fingerprint,
     });
   }
   return labels;
@@ -657,13 +921,21 @@ export async function judgeTargets(
     key?: ReadonlyMap<string, GroundTruthLabel>;
     fingerprint?: string;
     judgedAt?: Date;
+    /** Label a batch, re-estimate, label more only while needed (RC-394); absent keeps the fixed counts. */
+    adaptive?: AdaptiveOptions;
   } = {},
 ): Promise<{ items: EvalItem[]; census: JudgeCensus; labels: GroundTruthLabel[] } | null> {
+  if (opts.adaptive)
+    return judgeAdaptively(items, corpus, ourArm, baselineArm, engine, {
+      ...opts,
+      adaptive: opts.adaptive,
+    });
   const capacity = engine.capacity?.(corpus);
   const { cases, populationDisputed, populationControl, nominatingPopulation, nominatingSampled } =
     sampleForJudging(items, ourArm, baselineArm, {
       ...opts,
       corpusIds: new Set(corpus.map((entry) => entry.entryId)),
+      identities: entryIdentities(corpus),
       ...(capacity === undefined ? {} : { maxCases: Math.max(0, Math.floor(capacity)) }),
     });
   if (cases.length === 0) return null;
@@ -693,5 +965,221 @@ export async function judgeTargets(
       fingerprint: opts.fingerprint ?? null,
       judgedAt: opts.judgedAt ?? new Date(),
     }),
+  };
+}
+
+export interface AdaptiveOptions {
+  /** The margin the share needs, plus or minus; `DEFAULT_TARGET_MARGIN` when absent. */
+  targetMargin?: number;
+  roundSize?: number;
+  maxRounds?: number;
+  /** Wall-clock budget for all rounds together. */
+  deadlineMs?: number;
+  now?: () => number;
+}
+
+/**
+ * All of a run's rounds together stop after this long. A round is not started
+ * unless the slowest round so far still fits, so judging stays inside the half
+ * of the job's time the fixed-count pass was given (`JEV_MAX_DURATION_MS`).
+ */
+export const ADAPTIVE_DEADLINE_MS = 5 * 60_000;
+
+/**
+ * The adaptive judge (RC-394): ask a batch, fold the answers into the key,
+ * re-estimate how many more the share needs, and ask again until the margin
+ * is met, nothing is left, or the engine's budget, the deadline or the round
+ * limit is reached. The first round also re-asks a sample of fresh verdicts
+ * whose catalog moved since (the audit); when too few come back the same,
+ * every such verdict counts as stale for the rounds that follow.
+ */
+async function judgeAdaptively(
+  items: readonly EvalItem[],
+  corpus: readonly CorpusEntry[],
+  ourArm: string,
+  baselineArm: string,
+  engine: JudgeEngine,
+  opts: {
+    mocked?: boolean;
+    priority?: ReadonlySet<string>;
+    key?: ReadonlyMap<string, GroundTruthLabel>;
+    fingerprint?: string;
+    judgedAt?: Date;
+    adaptive: AdaptiveOptions;
+  },
+): Promise<{ items: EvalItem[]; census: JudgeCensus; labels: GroundTruthLabel[] } | null> {
+  const now = opts.adaptive.now ?? Date.now;
+  const startedAt = now();
+  const deadline = startedAt + (opts.adaptive.deadlineMs ?? ADAPTIVE_DEADLINE_MS);
+  const roundSize = Math.max(1, Math.floor(opts.adaptive.roundSize ?? ADAPTIVE_ROUND_SIZE));
+  const maxRounds = Math.max(1, Math.floor(opts.adaptive.maxRounds ?? ADAPTIVE_MAX_ROUNDS));
+  const targetMargin = opts.adaptive.targetMargin ?? DEFAULT_TARGET_MARGIN;
+  const corpusIds = new Set(corpus.map((entry) => entry.entryId));
+  const identities = entryIdentities(corpus);
+  const capacity = engine.capacity?.(corpus);
+  let remaining =
+    capacity === undefined ? Number.POSITIVE_INFINITY : Math.max(0, Math.floor(capacity));
+  const judgedAt = opts.judgedAt ?? new Date();
+  const key = new Map(opts.key ?? []);
+  const asked = new Set<string>();
+  const allCases: JudgeCase[] = [];
+  const allVerdicts: JudgeVerdict[] = [];
+  const labels: GroundTruthLabel[] = [];
+  let population: {
+    disputed: number;
+    control: number;
+    nominatingPopulation: number;
+    nominatingSampled: number;
+  } | null = null;
+  let audited = 0;
+  let auditAgreed = 0;
+  let audit: AdaptiveCensus["audit"] = "unknown";
+  let rounds = 0;
+  let stopped: AdaptiveCensus["stopped"] = "max_rounds";
+
+  const sample = (round: number) =>
+    sampleAdaptively(items, ourArm, baselineArm, {
+      key,
+      fingerprint: opts.fingerprint,
+      corpusIds,
+      identities,
+      ...(opts.priority ? { priority: opts.priority } : {}),
+      targetMargin,
+      distrustMoved: audit === "distrust",
+      // The drift sample and the audit belong to the run, so only the first round takes them.
+      audit: round === 0 ? AUDIT_SAMPLE : 0,
+      drift: round === 0 ? DRIFT_PER_STRATUM : 0,
+      maxCases: Math.min(roundSize, remaining),
+    });
+
+  let slowestRoundMs = 0;
+  const auditIds = new Set<string>();
+  for (let round = 0; round < maxRounds; round += 1) {
+    if (remaining <= 0) {
+      stopped = "capacity";
+      break;
+    }
+    if (now() + slowestRoundMs >= deadline) {
+      stopped = "deadline";
+      break;
+    }
+    const drawn = sample(round);
+    population ??= {
+      disputed: drawn.populationDisputed,
+      control: drawn.populationControl,
+      nominatingPopulation: drawn.nominatingPopulation,
+      nominatingSampled: 0,
+    };
+    const fresh = drawn.cases.filter((row) => !asked.has(row.id));
+    const auditCases = drawn.audit.filter(
+      (row) => !asked.has(row.id) && !fresh.some((other) => other.id === row.id),
+    );
+    const cases = [...fresh, ...auditCases].slice(0, Math.max(0, remaining));
+    if (cases.length === 0) {
+      const needed = labelsNeeded([drawn.tally.disputed, drawn.tally.control], targetMargin).reduce(
+        (a, b) => a + b,
+        0,
+      );
+      stopped = needed === 0 ? "margin_met" : "nothing_left";
+      break;
+    }
+    for (const row of cases) asked.add(row.id);
+    const roundStartedAt = now();
+    let returned: JudgeVerdict[];
+    try {
+      returned = await engine.judge(cases, corpus);
+    } catch (error) {
+      // The first round failing is the run's judge failing, as before. A later
+      // one keeps what the earlier rounds bought instead of throwing it away.
+      if (rounds === 0) throw error;
+      stopped = "engine_failed";
+      break;
+    }
+    rounds += 1;
+    slowestRoundMs = Math.max(slowestRoundMs, now() - roundStartedAt);
+    const verdicts = validateVerdicts(returned, new Set(cases.map((row) => row.id)), corpusIds);
+    remaining -= cases.length;
+    allCases.push(...cases);
+    allVerdicts.push(...verdicts);
+
+    // The audit: did the carried verdicts come back the same?
+    for (const row of auditCases) auditIds.add(row.id);
+    const caseById = new Map(cases.map((row) => [row.id, row]));
+    for (const verdict of verdicts) {
+      if (!auditCases.some((row) => row.id === verdict.id)) continue;
+      const before = key.get(queryKey(caseById.get(verdict.id)?.query) ?? "");
+      audited += 1;
+      if (before !== undefined && before.entryId !== "" && before.entryId === verdict.entryId)
+        auditAgreed += 1;
+    }
+    if (round === 0) audit = auditVerdict(auditAgreed, audited);
+
+    const bought = labelsFromVerdicts(cases, verdicts, {
+      model: engine.model,
+      fingerprint: opts.fingerprint ?? null,
+      judgedAt,
+      identities,
+    });
+    for (const label of bought) key.set(label.queryKey, label);
+    labels.push(...bought);
+    // An engine that answered fewer than it was asked hit its own budget or deadline.
+    if (verdicts.length < cases.length) {
+      stopped = "engine_stopped";
+      break;
+    }
+  }
+  if (allCases.length === 0 || population === null) return null;
+
+  const after = sampleAdaptively(items, ourArm, baselineArm, {
+    key,
+    fingerprint: opts.fingerprint,
+    corpusIds,
+    identities,
+    targetMargin,
+    distrustMoved: audit === "distrust",
+  });
+  const estimate = stratifiedShare([after.tally.disputed, after.tally.control]);
+  const stillNeeded = labelsNeeded(
+    [after.tally.disputed, after.tally.control],
+    targetMargin,
+  ).reduce((a, b) => a + b, 0);
+  if (stopped === "max_rounds" && stillNeeded === 0) stopped = "margin_met";
+  // The audit re-asks requests outside the sampled population (they were
+  // fresh), so its answers move items but are kept out of the census.
+  const sampledCases = allCases.filter((row) => !auditIds.has(row.id));
+  const sampledVerdicts = allVerdicts.filter((verdict) => !auditIds.has(verdict.id));
+  const censusPopulation = {
+    ...population,
+    nominatingSampled: sampledCases.filter(
+      (row) => row.stratum === "disputed" && (opts.priority?.has(row.id) ?? false),
+    ).length,
+  };
+  const model = { model: engine.model, mocked: opts.mocked ?? false };
+  const applied = applyVerdicts(items, allCases, allVerdicts, censusPopulation, model, baselineArm);
+  const counted = applyVerdicts(
+    items,
+    sampledCases,
+    sampledVerdicts,
+    censusPopulation,
+    model,
+    baselineArm,
+  );
+  return {
+    items: applied.items,
+    census: {
+      ...counted.census,
+      adaptive: {
+        rounds,
+        targetMargin,
+        share: estimate.share,
+        margin: estimate.margin,
+        stillNeeded,
+        audited,
+        auditAgreed,
+        audit,
+        stopped,
+      },
+    },
+    labels,
   };
 }

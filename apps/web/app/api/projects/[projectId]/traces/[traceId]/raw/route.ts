@@ -5,7 +5,6 @@ import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
-import { payloadContentEnabledForActor } from "@/lib/synthesis/traces/payload-content";
 import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 
@@ -37,7 +36,6 @@ async function handleGet(
       return scope ? { projectId: scope.project.id } : null;
     },
     flagEnabled: traceViewsV3EnabledForActor,
-    contentEnabled: payloadContentEnabledForActor,
     readContent: (projectId) =>
       withStatementTimeout((db) => contentOptIn(projectId, db), {
         operation: "trace_raw_read_content",

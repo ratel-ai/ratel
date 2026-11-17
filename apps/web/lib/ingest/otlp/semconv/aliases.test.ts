@@ -9,7 +9,7 @@ import { normalizeSemconvAliases } from "./aliases";
 import { GEN_AI_SYSTEM_TO_PROVIDER } from "./provider-names";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: deprecated `gen_ai.*` keys and the
+ * Deprecated `gen_ai.*` keys and the
  * OpenLLMetry cache aliases land on the canonical keys every reader uses.
  */
 

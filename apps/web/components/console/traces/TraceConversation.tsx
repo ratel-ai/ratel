@@ -3,13 +3,14 @@
 import { StatusDot } from "@ratel/design-system/badge";
 import { cn } from "@ratel/design-system/cn";
 import { CodeBlock } from "@ratel/design-system/code";
+import { Disclosure } from "@ratel/design-system/disclosure";
 import { Callout } from "@ratel/design-system/states";
-import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
+import type { TraceContentView, TraceMessageView } from "@/lib/synthesis/traces/content-view";
 import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import { conversationMessages, ROLE_LABEL } from "@/lib/synthesis/traces/v2/conversation";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";
 import { CONTENT_CAPTURE_DOCS } from "./RunPanel";
-import { useRunNoun } from "./views-v3-context";
+import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
 
 /**
  * The run as it was spoken: each message once, in order, then the tool calls
@@ -17,8 +18,13 @@ import { useRunNoun } from "./views-v3-context";
  * and still lists the tool calls it can see.
  */
 export function TraceConversation({ content }: { content: TraceContentView }) {
-  const messages = conversationMessages(content.messages);
   const noun = useRunNoun();
+  // RC-500: with the redesign on, what earlier turns sent again as history folds away.
+  const viewsV3 = useTraceViewsV3();
+  const all = conversationMessages(content.messages);
+  const earlier = viewsV3 ? all.filter((message) => message.earlier) : [];
+  const messages = viewsV3 ? all.filter((message) => !message.earlier) : all;
+  const toolCalls = viewsV3 ? content.toolCalls.filter((call) => !call.earlier) : content.toolCalls;
   return (
     <div className="flex max-w-3xl flex-col gap-8" data-conversation>
       {!content.contentCaptured ? (
@@ -40,36 +46,28 @@ export function TraceConversation({ content }: { content: TraceContentView }) {
         </Callout>
       ) : null}
 
-      {messages.length > 0 ? (
+      {messages.length > 0 || earlier.length > 0 ? (
         <section aria-label="Messages" className="flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-fg">Messages</h2>
-          <ol className="flex flex-col gap-4">
-            {messages.map((message) => (
-              <li key={message.id} className="flex flex-col gap-1.5" data-role={message.role}>
-                <span className="text-xs font-medium text-fg-subtle">
-                  {ROLE_LABEL[message.role]}
-                </span>
-                <p
-                  className={cn(
-                    "max-h-96 overflow-auto rounded-lg border border-line px-3 py-2.5 text-sm whitespace-pre-wrap break-words text-fg",
-                    message.role === "user" ? "bg-raised" : "bg-app",
-                  )}
-                >
-                  {message.text}
-                </p>
-              </li>
-            ))}
-          </ol>
+          {earlier.length > 0 ? (
+            <Disclosure
+              title="Earlier in the session"
+              hint={`${earlier.length} ${earlier.length === 1 ? "message" : "messages"} sent again as history`}
+            >
+              <MessageList messages={earlier} earlier />
+            </Disclosure>
+          ) : null}
+          <MessageList messages={messages} />
         </section>
       ) : null}
 
       <section aria-label="Tool calls" className="flex flex-col gap-4">
         <h2 className="text-sm font-semibold text-fg">Tool calls</h2>
-        {content.toolCalls.length === 0 ? (
+        {toolCalls.length === 0 ? (
           <p className="text-sm text-fg-muted">This {noun.lower} called no tools.</p>
         ) : (
           <ol className="flex flex-col gap-5">
-            {content.toolCalls.map((call, index) => (
+            {toolCalls.map((call, index) => (
               <li key={`${call.id}:${index}`} className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui">
                   <span className="font-medium text-fg">{call.name}</span>
@@ -101,6 +99,37 @@ export function TraceConversation({ content }: { content: TraceContentView }) {
         )}
       </section>
     </div>
+  );
+}
+
+function MessageList({
+  messages,
+  earlier = false,
+}: {
+  messages: readonly TraceMessageView[];
+  earlier?: boolean;
+}) {
+  return (
+    <ol className="flex flex-col gap-4">
+      {messages.map((message) => (
+        <li
+          key={message.id}
+          className="flex flex-col gap-1.5"
+          data-role={message.role}
+          data-earlier={earlier || undefined}
+        >
+          <span className="text-xs font-medium text-fg-subtle">{ROLE_LABEL[message.role]}</span>
+          <p
+            className={cn(
+              "max-h-96 overflow-auto rounded-lg border border-line px-3 py-2.5 text-sm whitespace-pre-wrap break-words text-fg",
+              message.role === "user" ? "bg-raised" : "bg-app",
+            )}
+          >
+            {message.text}
+          </p>
+        </li>
+      ))}
+    </ol>
   );
 }
 

@@ -1,6 +1,7 @@
-import { and, desc, eq, gt, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNotNull } from "drizzle-orm";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import type { CarriedRow } from "@/lib/readings/labelling/carry";
 import { traceWorkflowInsights, traceWorkflowVerdicts } from "@/lib/readings/trace-signals/schema";
 import {
   type AskGroup,
@@ -156,6 +157,47 @@ export interface VerdictRow {
   verdict: "workflow" | "none" | "unclear";
   workflowId: string | null;
   confidence: number | null;
+  /** The chosen option's print (`lib/labelling/carry.ts`), for a decided verdict. */
+  optionPrint?: string | null;
+}
+
+/**
+ * The newest stored decision for each of these asks under ANY option list
+ * that names an option with its print: what `decideWithCarry` may carry to a
+ * new list. One row per ask (distinct on the prompt), read on the primary
+ * key's (project, prompt) prefix.
+ */
+export async function loadCarriedVerdicts(
+  projectId: string,
+  promptHashes: readonly string[],
+  db: Pick<ReturnType<typeof getDb>, "selectDistinctOn"> = getDb(),
+): Promise<CarriedRow[]> {
+  if (promptHashes.length === 0) return [];
+  const out: CarriedRow[] = [];
+  const CHUNK = 500;
+  for (let i = 0; i < promptHashes.length; i += CHUNK) {
+    const rows = await db
+      .selectDistinctOn([traceWorkflowVerdicts.promptHash], {
+        hash: traceWorkflowVerdicts.promptHash,
+        workflowId: traceWorkflowVerdicts.workflowId,
+        print: traceWorkflowVerdicts.optionPrint,
+      })
+      .from(traceWorkflowVerdicts)
+      .where(
+        and(
+          eq(traceWorkflowVerdicts.projectId, projectId),
+          inArray(traceWorkflowVerdicts.promptHash, promptHashes.slice(i, i + CHUNK)),
+          eq(traceWorkflowVerdicts.verdict, "workflow"),
+          isNotNull(traceWorkflowVerdicts.optionPrint),
+        ),
+      )
+      .orderBy(traceWorkflowVerdicts.promptHash, desc(traceWorkflowVerdicts.createdAt));
+    for (const row of rows) {
+      if (row.workflowId && row.print)
+        out.push({ promptHash: row.hash, optionId: row.workflowId, optionPrint: row.print });
+    }
+  }
+  return out;
 }
 
 export async function saveVerdicts(
@@ -168,7 +210,15 @@ export async function saveVerdicts(
   if (rows.length === 0) return;
   await db
     .insert(traceWorkflowVerdicts)
-    .values(rows.map((r) => ({ projectId, optionsHash, model, ...r })))
+    .values(
+      rows.map((r) => ({
+        projectId,
+        optionsHash,
+        model,
+        ...r,
+        optionPrint: r.optionPrint ?? null,
+      })),
+    )
     .onConflictDoNothing();
 }
 

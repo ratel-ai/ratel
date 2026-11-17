@@ -16,6 +16,8 @@ export interface TraceMessageView {
   id: string;
   role: "system" | "user" | "assistant" | "tool";
   text: string;
+  /** Sent again from an earlier turn of the session: the trace's first call carried it as history before its ask (RC-500). */
+  earlier?: boolean;
 }
 
 export interface TraceToolCallView {
@@ -26,6 +28,8 @@ export interface TraceToolCallView {
   spanId: string;
   durationMs: number;
   statusCode: number;
+  /** Made in an earlier turn of the session, as {@link TraceMessageView.earlier}. */
+  earlier?: boolean;
 }
 
 export interface TraceContentView {

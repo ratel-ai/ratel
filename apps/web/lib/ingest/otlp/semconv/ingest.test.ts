@@ -5,15 +5,14 @@ import { type PersistSpansDeps, persistDecodedSpans } from "../ingest-spans";
 import type { OtelSpanRow } from "../span-rows";
 import type { DecodedSpan } from "../types";
 
-/** `persistDecodedSpans` with flag `cloud-otlp-semconv-aliases` on, off and absent. */
+/** `persistDecodedSpans` reads the OpenLLMetry aliases onto the canonical keys. */
 
 interface Stored {
   events: EventWithMetric[];
   spans: OtelSpanRow[];
-  flagAsks: string[];
 }
 
-function deps(flag: boolean | undefined, stored: Stored): PersistSpansDeps {
+function deps(stored: Stored): PersistSpansDeps {
   return {
     insertEventsWithMetrics: async (_projectId, rows) => {
       stored.events.push(...(rows as EventWithMetric[]));
@@ -26,13 +25,7 @@ function deps(flag: boolean | undefined, stored: Stored): PersistSpansDeps {
     },
     logError: () => {},
     captureFailure: () => {},
-    ...(flag !== undefined && {
-      semconvAliases: async (projectId: string) => {
-        stored.flagAsks.push(projectId);
-        return flag;
-      },
-    }),
-  } as PersistSpansDeps;
+  };
 }
 
 function openLlmetrySpan(): DecodedSpan {
@@ -59,20 +52,19 @@ function openLlmetrySpan(): DecodedSpan {
   };
 }
 
-async function persist(flag: boolean | undefined): Promise<Stored> {
-  const stored: Stored = { events: [], spans: [], flagAsks: [] };
+async function persist(): Promise<Stored> {
+  const stored: Stored = { events: [], spans: [] };
   const result = await persistDecodedSpans(
     [openLlmetrySpan()],
     { projectId: "project-1", organization: null, endpoint: "/v1/traces" },
-    deps(flag, stored),
+    deps(stored),
   );
   assert.ok(result.ok);
   return stored;
 }
 
-test("flag on: events and otel_spans carry the OpenLLMetry cached tokens", async () => {
-  const { events, spans, flagAsks } = await persist(true);
-  assert.deepEqual(flagAsks, ["project-1"]);
+test("events and otel_spans carry the OpenLLMetry cached tokens", async () => {
+  const { events, spans } = await persist();
   assert.equal(events.length, 1);
   assert.equal(events[0].event.cachedTokens, 900);
   assert.equal(events[0].event.inputTokens, 1_000);
@@ -80,14 +72,4 @@ test("flag on: events and otel_spans carry the OpenLLMetry cached tokens", async
   assert.equal(spans[0].cachedTokens, 900);
   assert.equal(spans[0].providerName, "anthropic");
   assert.equal(spans[0].attributes["deployment.environment.name"], "prod");
-});
-
-test("flag off or not wired: rows are as today", async () => {
-  for (const flag of [false, undefined]) {
-    const { events, spans } = await persist(flag);
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event.cachedTokens, null);
-    assert.equal(spans[0].cachedTokens, null);
-    assert.equal(spans[0].attributes["deployment.environment.name"], undefined);
-  }
 });

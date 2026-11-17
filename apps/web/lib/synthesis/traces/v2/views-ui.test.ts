@@ -488,6 +488,26 @@ test("Conversation shows the run's payload content when its spans carry none (RC
   assert.match(html, /lookup_order/);
 });
 
+test("a later turn's Conversation folds what earlier turns sent again, with the redesign on only (RC-500)", () => {
+  const payloadContent = {
+    messages: [
+      { id: "p:0", role: "user" as const, text: "Where is order 1234?", earlier: true },
+      { id: "p:1", role: "assistant" as const, text: "It shipped yesterday.", earlier: true },
+      { id: "p:2", role: "user" as const, text: "And order 99?" },
+    ],
+    toolCalls: [],
+    contentCaptured: true,
+  };
+  const on = renderTrace({ initialTab: "conversation", payloadContent, viewsV3: true });
+  assert.match(on, /Earlier in the session/);
+  assert.match(on, /2 messages sent again as history/);
+  assert.equal(on.match(/data-earlier="true"/g)?.length, 2);
+  assert.match(on, /And order 99\?/);
+  const off = renderTrace({ initialTab: "conversation", payloadContent });
+  assert.doesNotMatch(off, /Earlier in the session|data-earlier/);
+  assert.match(off, /Where is order 1234\?/);
+});
+
 test("the run Panel reads like a conversation: the ask, the steps in order, the failures, the answer", () => {
   const summary = buildRunSummary([
     ...SPANS.slice(0, 2).map((span) =>

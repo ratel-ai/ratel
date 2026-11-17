@@ -16,7 +16,7 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
-import { sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
+import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
 import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
@@ -86,7 +86,7 @@ export default async function SessionReplayPage({
   const sessionHref = `${projectHref}/sessions/${encodeURIComponent(sessionId)}`;
   // RC-472: with the redesign a session is opened from the Sessions tab, and goes back there.
   const crumbs = viewsV3
-    ? [{ label: "Sessions", href: `${projectHref}/traces/sessions` }]
+    ? [{ label: "Sessions", href: `${projectHref}/traces` }]
     : [{ label: "Traces", href: `${projectHref}/traces` }];
   const query = await searchParams;
   const pageView = sessionPageView(query.view);
@@ -127,8 +127,8 @@ export default async function SessionReplayPage({
     // The run reads with its own statement timeouts, outside the page's read.
     const trace = traceId
       ? await loadTraceViewProps(project.id, traceId, {
-          listHref: `${projectHref}/traces`,
-          compareHref: `${projectHref}/traces?compare=${encodeURIComponent(traceId)}`,
+          listHref: runsListPath(`${projectHref}/traces`, viewsV3),
+          compareHref: `${runsListPath(`${projectHref}/traces`, viewsV3)}?compare=${encodeURIComponent(traceId)}`,
           tab: firstParam(query.tab),
           spanId: firstParam(query.span) ?? null,
           actor: `project:${project.id}`,

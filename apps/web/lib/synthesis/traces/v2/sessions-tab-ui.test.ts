@@ -8,10 +8,17 @@ import {
 } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { RunsTable } from "@/components/console/traces/RunsTable";
 import { TraceSessionBar } from "@/components/console/traces/TraceSessionBar";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import { TraceViewsV3Provider } from "@/components/console/traces/views-v3-context";
+import {
+  SessionListPanelBody,
+  SessionListTable,
+} from "@/components/console/traces-sessions/SessionListView";
 import { TracesSessionsProvider } from "@/components/console/traces-sessions/sessions-context";
+import type { RunRow } from "@/lib/synthesis/traces/v2/runs";
+import type { SessionListRow } from "@/lib/synthesis/traces/v2/sessions-list";
 
 /** RC-472: with `cloud-trace-views-v3`, Traces lists turns and has a Sessions tab; a turn's trace links to its session. */
 
@@ -55,19 +62,9 @@ function tabs(viewsV3: boolean, sessions: boolean): string[] {
   );
 }
 
-test("with the redesign, the tabs are Turns, Sessions, Spans and Logs, even with cloud-traces-sessions on", () => {
-  assert.deepEqual(tabs(true, false), [
-    "Turns /",
-    "Sessions /sessions",
-    "Spans /spans",
-    "Logs /logs",
-  ]);
-  assert.deepEqual(tabs(true, true), [
-    "Turns /",
-    "Sessions /sessions",
-    "Spans /spans",
-    "Logs /logs",
-  ]);
+test("with the redesign, the tabs are Sessions (first), Turns, Spans and Logs, even with cloud-traces-sessions on (RC-503)", () => {
+  assert.deepEqual(tabs(true, false), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
+  assert.deepEqual(tabs(true, true), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
 });
 
 test("without the redesign, the tabs are as before", () => {
@@ -116,4 +113,147 @@ test("a session of one turn shows only the link, no picker", () => {
   );
   assert.match(html, /data-part-of-session/);
   assert.doesNotMatch(html, /data-turn-picker/);
+});
+
+// RC-503: Sessions and Turns share one table layout, the ID column first; the session Panel shows every turn.
+
+const SESSION: SessionListRow = {
+  id: "session-0123456789",
+  status: "failed",
+  firstMessage: "Where is order 1234?",
+  lastTurn: "Refund it",
+  turns: 2,
+  startedAt: "2026-11-02T09:00:00.000Z",
+  lastActivityAt: "2026-11-02T09:00:10.100Z",
+  durationMs: 10_100,
+  tokens: 45,
+  costUsd: 0.03,
+  traceIds: [],
+  href: `/project/${PROJECT}/sessions/session-0123456789`,
+};
+
+function headers(html: string): string[] {
+  return [...html.matchAll(/<th[^>]*>(.*?)<\/th>/g)].map(([, cell]) =>
+    cell!.replace(/<[^>]+>/g, "").trim(),
+  );
+}
+
+test("the Sessions table puts the ID first, then status, first message, last turn, turns, duration, started, last update, tokens and cost", () => {
+  const html = renderToStaticMarkup(
+    inRouter(
+      ROOT,
+      createElement(SessionListTable, {
+        rows: [SESSION],
+        now: "2026-11-02T10:00:00.000Z",
+        openId: null,
+        onOpen: () => {},
+      }),
+    ),
+  );
+  assert.deepEqual(headers(html), [
+    "ID",
+    "Status",
+    "First message",
+    "Last turn",
+    "Turns",
+    "Duration",
+    "Started",
+    "Last update",
+    "Tokens",
+    "Cost",
+  ]);
+  assert.match(html, /data-row-id="session-0123456789"[^>]*>session-…/);
+  assert.match(html, /Failed/);
+  assert.match(html, /Where is order 1234\?/);
+  assert.match(html, /Refund it/);
+});
+
+test("with the redesign the Turns table starts with the same ID column; without it, as before", () => {
+  const row: RunRow = {
+    id: "abcdef0123456789abcdef0123456789",
+    status: "completed",
+    title: "Where is order 1234?",
+    titleIsAsk: true,
+    startedAt: "2026-11-02T09:00:00.000Z",
+    durationMs: 100,
+    tools: [],
+    tokens: 1,
+    costUsd: 0,
+    spanCount: 1,
+    errorCount: 0,
+    experiment: null,
+    variant: null,
+  };
+  const table = createElement(RunsTable, {
+    rows: [row],
+    now: "2026-11-02T10:00:00.000Z",
+    pathname: ROOT,
+    search: "",
+    sort: { id: "started", direction: "desc" },
+    showExperiment: false,
+    openId: null,
+    onOpen: () => {},
+    picked: [],
+    onTogglePick: () => {},
+  });
+  const on = headers(
+    renderToStaticMarkup(inRouter(ROOT, TraceViewsV3Provider({ enabled: true, children: table }))),
+  );
+  const off = headers(
+    renderToStaticMarkup(inRouter(ROOT, TraceViewsV3Provider({ enabled: false, children: table }))),
+  );
+  assert.equal(on[0], "ID");
+  assert.equal(on[3], "Turn");
+  assert.ok(!off.includes("ID"));
+  // Only the noun differs: "Turn" with the redesign, "Run" without.
+  assert.deepEqual(
+    on.slice(1),
+    off.map((header) => (header === "Run" ? "Turn" : header)),
+  );
+});
+
+test("the session Panel shows every turn of the session as chat, each linking to its trace", () => {
+  const work = { actions: 1, tookMs: 1000, problems: 0, label: "1 action · 1 s" };
+  const html = renderToStaticMarkup(
+    inRouter(
+      ROOT,
+      createElement(SessionListPanelBody, {
+        projectId: PROJECT,
+        row: SESSION,
+        onRetry: () => {},
+        result: {
+          ok: true,
+          chat: {
+            textOff: false,
+            turns: [
+              {
+                turnIndex: 1,
+                ask: "Where is order 1234?",
+                reply: "It shipped yesterday.",
+                startedAt: "2026-11-02T09:00:00.000Z",
+                endedAt: "2026-11-02T09:00:01.000Z",
+                work,
+                traceId: "a".repeat(32),
+              },
+              {
+                turnIndex: 2,
+                ask: "Refund it",
+                reply: "Refunded.",
+                startedAt: "2026-11-02T09:00:10.000Z",
+                endedAt: "2026-11-02T09:00:10.100Z",
+                work,
+                traceId: null,
+              },
+            ],
+          },
+        },
+      }),
+    ),
+  );
+  assert.equal(html.match(/data-chat-bubble="person"/g)?.length, 2);
+  assert.equal(html.match(/data-chat-bubble="agent"/g)?.length, 2);
+  for (const text of ["Where is order 1234?", "It shipped yesterday.", "Refund it", "Refunded."])
+    assert.equal(html.split(text).length - 1, 1, text);
+  assert.match(html, new RegExp(`href="${ROOT}/${"a".repeat(32)}"[^>]*>Open turn 1`));
+  assert.match(html, /href="[^"]*sessions\/session-0123456789[^"]*"[^>]*>Open turn 2/);
 });

@@ -1,7 +1,7 @@
 import type { AttrMap, AttrValue, DecodedEvent, DecodedSpan } from "../types";
 
 /**
- * Flag `cloud-otlp-semconv-aliases`: `gen_ai` log records joined to their
+ * `gen_ai` log records joined to their
  * model call. An emitter may send a call's content as log records (the
  * `gen_ai.client.inference.operation.details` event, or the five older
  * per-message events) instead of span events. `/v1/logs` stores them in

@@ -162,7 +162,7 @@ test("a long run's ask is its first model call's, however many calls follow and 
   await client.close();
 });
 
-test("with fromPayload, a run whose spans carry no ask takes it from its events.payload", async () => {
+test("a run whose spans carry no ask takes it from its events.payload", async () => {
   const { client, db } = await setup();
   const t0 = Date.parse("2026-10-09T12:00:00.000Z");
   await insertOtelSpans(
@@ -193,16 +193,9 @@ test("with fromPayload, a run whose spans carry no ask takes it from its events.
     },
   });
   assert.deepEqual((await listRunAsks(PROJECT_ID, [traceId(1)], db)).get(traceId(1)), {
-    prompt: null,
+    prompt: "Where is order 1234?",
     hasRoot: true,
   });
-  assert.deepEqual(
-    (await listRunAsks(PROJECT_ID, [traceId(1)], db, { fromPayload: true })).get(traceId(1)),
-    {
-      prompt: "Where is order 1234?",
-      hasRoot: true,
-    },
-  );
   await client.close();
 });
 

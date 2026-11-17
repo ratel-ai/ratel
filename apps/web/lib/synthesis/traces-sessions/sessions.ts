@@ -60,8 +60,6 @@ export interface ListSessionsOptions {
   filter: SessionsFilter;
   cursor?: string | null;
   limit?: number;
-  /** `cloud-payload-content`: a run whose spans carry no ask takes it from `events.payload` (RC-393). */
-  askFromPayload?: boolean;
 }
 
 /** Where the next page starts: the last row's activity (UTC, microseconds) and id. */
@@ -107,7 +105,7 @@ export async function listSessions(
   const last = heads.at(-1);
   const nextCursor =
     merged.length > limit && last ? encodeSessionsCursor({ at: last.at, id: last.id }) : null;
-  const items = await loadRows(projectId, heads, db, options.askFromPayload === true);
+  const items = await loadRows(projectId, heads, db);
   logger.info(
     {
       project_id: projectId,
@@ -227,7 +225,6 @@ async function loadRows(
   projectId: string,
   heads: readonly Head[],
   db: TraceQueriesDb,
-  askFromPayload: boolean,
 ): Promise<SessionRow[]> {
   if (heads.length === 0) return [];
   const sessionIds = heads.filter((head) => head.kind === "session").map((head) => head.id);
@@ -248,7 +245,7 @@ async function loadRows(
   const firstTraceIds = heads
     .map((head) => (head.kind === "run" ? head.id : turns.get(head.id)?.[0]?.traceId))
     .filter((id): id is string => !!id);
-  const asks = await listRunAsks(projectId, firstTraceIds, db, { fromPayload: askFromPayload });
+  const asks = await listRunAsks(projectId, firstTraceIds, db);
   const tools = await listRunTools(projectId, allTraceIds, db);
   const totals = await loadRunTotals(projectId, allTraceIds, db);
 

@@ -34,6 +34,10 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
  * `RATEL_EXPERIMENTAL_FEATURES`).
  */
 const DEPLOYMENT_SWITCHES = [
+  {
+    key: "FF_ADAPTIVE_LABELLING",
+    note: "labelling asks in rounds until the number's margin is met, and decisions carry over unchanged options",
+  },
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
   { key: "FF_SESSION_REPLAY", note: "session replay as a chat, and What-if, in the console" },
   {

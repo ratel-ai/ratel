@@ -8,12 +8,13 @@ import {
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import { loadPayloadContentForActor } from "@/lib/synthesis/traces/payload-content";
+import { loadPayloadContentSafely } from "@/lib/synthesis/traces/payload-content";
 import {
   getTraceSpansWithTruncation,
   listTraceLifecycleEvents,
 } from "@/lib/synthesis/traces/queries";
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
+import { runsListPath } from "@/lib/synthesis/traces/v2/run-noun";
 import { buildRunSummary } from "@/lib/synthesis/traces/v2/run-summary";
 import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
@@ -57,6 +58,12 @@ export async function TracePageV2({
     actor: `project:${project.id}`,
   });
   if (!props) notFound();
+  // RC-503: with the redesign Traces opens on Sessions, so the crumb and Compare go back to the Turns tab.
+  if (props.viewsV3) {
+    const list = runsListPath(tracesPath, true);
+    props.listHref = props.listHref.replace(tracesPath, list);
+    props.compareHref = props.compareHref.replace(tracesPath, list);
+  }
   // RC-472: a turn links to its full session, and keeps the session's turns on top. The session page needs session replay.
   const traceSession =
     props.viewsV3 && (await sessionReplayEnabledForActor(project.id, `project:${project.id}`))
@@ -83,9 +90,8 @@ export async function TracePageV2({
 /**
  * One run's full-trace props: its spans and lifecycle records, read under
  * the page's statement timeouts. Null when the project has no span of it.
- * The session replay's Trace view reads a turn's run through this too. With
- * `cloud-payload-content` on for `actor`, the run's `events.payload` content
- * fills in what the spans do not carry (RC-393).
+ * The session replay's Trace view reads a turn's run through this too. The
+ * run's `events.payload` content fills in what the spans do not carry (RC-393).
  */
 export async function loadTraceViewProps(
   projectId: string,
@@ -106,7 +112,7 @@ export async function loadTraceViewProps(
     withStatementTimeout((db) => listTraceLifecycleEvents(projectId, id, db), {
       operation: "trace_lifecycle",
     }),
-    loadPayloadContentForActor(projectId, id, options.actor, "trace_payload"),
+    loadPayloadContentSafely(projectId, id, "trace_payload"),
     traceViewsV3EnabledForActor(projectId, options.actor),
   ]);
   if (load.spans.length === 0) return null;

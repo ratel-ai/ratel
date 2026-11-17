@@ -1,6 +1,8 @@
 import type { CloudMessage } from "@/lib/ingest/cloud-schema";
 import { GEN_AI } from "@/lib/ingest/otlp/constants";
 import { mapMessages, systemFromInstructions } from "@/lib/ingest/otlp/content";
+import { splitPromptMessages } from "@/lib/ingest/otlp/normalize-ai-sdk";
+import { mastraMessageList } from "@/lib/ingest/otlp/semconv/mastra-content";
 import type { AttrValue } from "@/lib/ingest/otlp/types";
 import type { TraceContentView, TraceMessageView } from "@/lib/synthesis/traces/content-view";
 import { messageText } from "@/lib/synthesis/traces/content-view";
@@ -9,14 +11,28 @@ import { messageText } from "@/lib/synthesis/traces/content-view";
  * One span's input and output for the span pane (RC-412): messages for a
  * model call, arguments and result for a tool call. The span's own
  * attributes win (stored, or raw from `otlp_raw_exports`); the run's
- * `events.payload` content fills in when they carry none.
+ * `events.payload` content fills in when they carry none. A wrapper step
+ * (Mastra's `agent_step`, `model_generation`) shows its own `mastra.*`
+ * input and output, else its nearest child model call's (RC-501).
  */
 export type SpanIO =
-  | { kind: "messages"; source: SpanIOSource; input: SpanMessage[]; output: SpanMessage[] }
+  | {
+      kind: "messages";
+      source: Exclude<SpanIOSource, "child">;
+      input: SpanMessage[];
+      output: SpanMessage[];
+    }
+  | {
+      kind: "messages";
+      source: "child";
+      childSpanId: string;
+      input: SpanMessage[];
+      output: SpanMessage[];
+    }
   | { kind: "tool"; source: SpanIOSource; arguments: unknown; result: unknown }
   | { kind: "none" };
 
-export type SpanIOSource = "span" | "payload";
+export type SpanIOSource = "span" | "payload" | "child";
 
 export interface SpanMessage {
   role: TraceMessageView["role"];
@@ -30,9 +46,31 @@ export interface SpanIOInput {
   attributes: Readonly<Record<string, unknown>>;
 }
 
-export function buildSpanIO(span: SpanIOInput, payload: TraceContentView | null): SpanIO {
+/** Mastra's wrapper inputs and outputs, the step's own first. */
+const MASTRA_KINDS = ["model_step", "model_generation", "agent_run"] as const;
+
+/** `descendants`: the span's descendants in timeline order, so the first model call is the nearest. */
+export function buildSpanIO(
+  span: SpanIOInput,
+  payload: TraceContentView | null,
+  descendants: readonly SpanIOInput[] = [],
+): SpanIO {
   if (span.spanClass === "tool") return toolIO(span, payload);
   if (span.spanClass === "llm_call") return messagesIO(span, payload);
+  const own = mastraMessages(span.attributes);
+  if (own) return { kind: "messages", source: "span", ...own };
+  for (const child of descendants) {
+    if (child.spanClass !== "llm_call") continue;
+    const io = messagesIO(child, payload);
+    if (io.kind === "messages")
+      return {
+        kind: "messages",
+        source: "child",
+        childSpanId: child.spanId,
+        input: io.input,
+        output: io.output,
+      };
+  }
   return { kind: "none" };
 }
 
@@ -77,6 +115,60 @@ function messagesIO(span: SpanIOInput, payload: TraceContentView | null): SpanIO
     else output.push({ role: "assistant", text: "", toolCalls: calls });
   }
   return { kind: "messages", source: "payload", input: own.slice(0, split).map(toMessage), output };
+}
+
+/** A Mastra wrapper's `mastra.<kind>.input` / `.output`, read as gen_ai messages; null when it has neither. */
+function mastraMessages(
+  attributes: Readonly<Record<string, unknown>>,
+): { input: SpanMessage[]; output: SpanMessage[] } | null {
+  for (const kind of MASTRA_KINDS) {
+    const input = attributes[`mastra.${kind}.input`];
+    const output = attributes[`mastra.${kind}.output`];
+    if (input === undefined && output === undefined) continue;
+    const messages =
+      typeof input === "string" && parsed(input) === input
+        ? [{ role: "user", content: input }]
+        : mastraMessageList(input as AttrValue | undefined);
+    const { systemInstructions, inputMessages } = messages
+      ? splitPromptMessages(JSON.stringify(messages))
+      : {};
+    const io = spanMessages({
+      [GEN_AI.systemInstructions]: systemInstructions,
+      [GEN_AI.inputMessages]: inputMessages,
+      [GEN_AI.outputMessages]: mastraOutput(parsed(output)),
+    });
+    if (io.input.length > 0 || io.output.length > 0) return io;
+  }
+  return null;
+}
+
+/** Mastra's `{ text, toolCalls }` output (or plain text) as one gen_ai assistant message. */
+function mastraOutput(value: unknown): string | undefined {
+  const record =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as { text?: unknown; toolCalls?: unknown })
+      : null;
+  const text =
+    typeof value === "string" ? value : typeof record?.text === "string" ? record.text : "";
+  const calls = Array.isArray(record?.toolCalls)
+    ? (record.toolCalls as { toolCallId?: unknown; toolName?: unknown; args?: unknown }[])
+    : [];
+  const parts = [
+    ...(text ? [{ type: "text", content: text }] : []),
+    ...calls.flatMap((call) =>
+      typeof call?.toolName === "string"
+        ? [
+            {
+              type: "tool_call",
+              id: call.toolCallId,
+              name: call.toolName,
+              arguments: call.args ?? null,
+            },
+          ]
+        : [],
+    ),
+  ];
+  return parts.length > 0 ? JSON.stringify([{ role: "assistant", parts }]) : undefined;
 }
 
 function spanMessages(attributes: Readonly<Record<string, unknown>>): {

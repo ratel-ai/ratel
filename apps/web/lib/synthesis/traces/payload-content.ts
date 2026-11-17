@@ -43,8 +43,6 @@ export interface PayloadContent {
   ask: string | null;
 }
 
-export const PAYLOAD_CONTENT_FLAG = "cloud-payload-content" as const;
-
 /** Calls read per trace. Every call repeats the history, so the first ones and the latest ones tell the whole run. */
 const MAX_CALLS = 200;
 const FIRST_CALLS = 20;
@@ -115,13 +113,16 @@ export function buildPayloadContent(calls: readonly PayloadCall[]): PayloadConte
   );
   // Every call repeats the history: keep each message once, where it first
   // appeared, so the view sent to the page grows with the run, not with calls × history.
+  // A model with memory sends the earlier turns of the session as history:
+  // what the first call with an ask carried before that ask is not this trace's own.
+  const history = earlierHistory(ordered);
   const messages: TraceMessageView[] = [];
   const seenMessages = new Set<string>();
   const keep = (message: TraceMessageView) => {
     const key = `${message.role}\u0000${message.text}`;
     if (seenMessages.has(key)) return;
     seenMessages.add(key);
-    messages.push(message);
+    messages.push(history.messages.has(key) ? { ...message, earlier: true } : message);
   };
   const toolCalls: TraceToolCallView[] = [];
   const seenToolCalls = new Set<string>();
@@ -148,6 +149,7 @@ export function buildPayloadContent(calls: readonly PayloadCall[]): PayloadConte
           spanId: call.spanId ?? "",
           durationMs: call.latencyMs ?? 0,
           statusCode: 0,
+          ...(history.toolCalls.has(callId) ? { earlier: true } : {}),
         });
       }
     }
@@ -197,33 +199,16 @@ export async function listCapturedAsks(
 }
 
 /**
- * Whether payload content (`cloud-payload-content`) is on for whoever asks
- * about this project.
- *
- * Owned (ADR-0030): upstream decides it in the project's organization through its flag service
- * (on at 100%) and retires it in #402, reading the payload for everyone. Here that end state
- * lands at once: always on. The name and arguments stay upstream's.
+ * {@link loadPayloadContent} for a reader who is not the API route: null,
+ * logged and reported, when the read fails. The payload is an extra; the trace
+ * still reads from its spans.
  */
-export async function payloadContentEnabledForActor(
-  _projectId: string,
-  _actor: string,
-): Promise<boolean> {
-  return true;
-}
-
-/**
- * {@link loadPayloadContent} for a reader who is not the API route: null when
- * the flag is off for `actor`, and null, logged and reported, when the read
- * fails. The payload is an extra; the trace still reads from its spans.
- */
-export async function loadPayloadContentForActor(
+export async function loadPayloadContentSafely(
   projectId: string,
   traceId: string,
-  actor: string,
   operation: string,
 ): Promise<PayloadContent | null> {
   try {
-    if (!(await payloadContentEnabledForActor(projectId, actor))) return null;
     return await withStatementTimeout((db) => loadPayloadContent(projectId, traceId, db), {
       operation,
     });
@@ -264,6 +249,30 @@ async function derivedAsks(
         sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`,
       );
     for (const row of rows) if (row.traceId && row.prompt) out.set(row.traceId, row.prompt);
+  }
+  return out;
+}
+
+/** Keys of the messages (role and text) and ids of the tool calls the first call with an ask carried before it. */
+function earlierHistory(ordered: readonly PayloadCall[]): {
+  messages: Set<string>;
+  toolCalls: Set<string>;
+} {
+  const out = { messages: new Set<string>(), toolCalls: new Set<string>() };
+  for (const call of ordered) {
+    const input = callInput(call.payload);
+    const askIndex = input.findLastIndex(
+      (message) => message.role === "user" && messageText(message) !== "",
+    );
+    if (askIndex < 0) continue;
+    for (const message of input.slice(0, askIndex)) {
+      const text = messageText(message);
+      if (text) out.messages.add(`${message.role}\u0000${text}`);
+      if (message.role !== "assistant" || typeof message.content === "string") continue;
+      for (const block of message.content)
+        if (block.type === "tool_call" && block.id) out.toolCalls.add(block.id);
+    }
+    return out;
   }
   return out;
 }
