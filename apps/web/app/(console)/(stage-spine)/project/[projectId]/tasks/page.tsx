@@ -1,10 +1,8 @@
-import { notFound } from "next/navigation";
 import { TasksNoDatabase, TasksView } from "@/components/console/tasks/TasksView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { loadPageProgress } from "@/lib/views/freshness/page";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { loadTaskScores } from "@/lib/views/tasks/live-scores";
 import { buildTaskList } from "@/lib/views/tasks/model";
 import { loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
@@ -13,11 +11,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Tasks" };
 
 /**
- * Show tasks at the project level when `FF_STAGE_SPINE` is on; live scores with `FF_EVAL_GATE`.
- * Owned (ADR-0030): the project comes from the console scope, and the stage spine is the env flag.
+ * Tasks at the project level; live scores with `FF_EVAL_GATE`. Owned (ADR-0030): the project
+ * comes from the console scope.
  */
 export default async function TasksPage({ params }: { params: Promise<{ projectId: string }> }) {
-  if (!stageSpineEnabled()) notFound();
   if (!isDbConfigured()) return <TasksNoDatabase />;
   const { projectId } = await params;
   const { project, organization } = await requireProjectScope(projectId);

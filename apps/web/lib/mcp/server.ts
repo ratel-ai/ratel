@@ -14,8 +14,8 @@ export const MCP_SERVER_VERSION = "0.1.0";
  */
 const INSTRUCTIONS = `Ratel: agent context-usage analytics.
 
-Each tool reads or changes one thing about a project. Call whoami first to learn
-which project this credential reaches; most tools default to it.
+Each tool reads or changes one thing about a project. whoami names the project
+this credential reaches; most tools default to it.
 
 Results are summarized with row caps. When one sets "truncated": true, narrow the
 time window or filters, or follow the cursor a list returns. An empty result
@@ -29,7 +29,8 @@ sees on their own dashboard. Do not add totals from the two together.
 
 Tools that change something say so in their description.`;
 
-const WHOAMI_DESCRIPTION = `Identify the credential calling this server: which project and organization it can reach. Call this first, since most tools act on a project and this tells you which one you have.`;
+const WHOAMI_TITLE = "Who am I";
+const WHOAMI_DESCRIPTION = `Identify the credential calling this server: which project and organization it can reach. Most tools act on a project, and this tells you which one you have.`;
 
 export interface McpServerDeps {
   auth: McpAuthContext;
@@ -39,12 +40,6 @@ export interface McpServerDeps {
   /** Resolves a project's owning organization, for OAuth membership checks. */
   projectOwner?: DispatchDeps["projectOwner"];
   onOutcome?: DispatchDeps["onOutcome"];
-  /**
-   * Whether the improvement-loop tools are on for this request (`FF_MCP_LOOP`).
-   * Only then do tools carry their loop stage as `_meta`; off, every tool is
-   * listed exactly as before.
-   */
-  includeLoop?: boolean;
 }
 
 function asToolResult(payload: unknown, isError = false) {
@@ -59,11 +54,14 @@ function asToolResult(payload: unknown, isError = false) {
  * Annotations let a client warn before running something that changes state,
  * and let it parallelize reads. Derived from the operation's own `mutates`
  * declaration so the two cannot disagree.
+ *
+ * Every write sets `destructiveHint`: the Claude directory asks for it on each
+ * tool that modifies or deletes data, and Claude prompts before running one.
  */
 function annotationsFor(operation: McpOperation) {
   return operation.mutates
-    ? { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
-    : { readOnlyHint: true };
+    ? { title: operation.title, readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+    : { title: operation.title, readOnlyHint: true };
 }
 
 /**
@@ -91,10 +89,10 @@ export function createRatelMcpServer(deps: McpServerDeps): McpServer {
   server.registerTool(
     "whoami",
     {
-      title: "Who am I",
+      title: WHOAMI_TITLE,
       description: WHOAMI_DESCRIPTION,
       inputSchema: z.object({}),
-      annotations: { readOnlyHint: true },
+      annotations: { title: WHOAMI_TITLE, readOnlyHint: true },
     },
     async () => {
       const identity = await deps.describeCaller(deps.auth);
@@ -110,11 +108,8 @@ export function createRatelMcpServer(deps: McpServerDeps): McpServer {
         description: operation.description,
         inputSchema: operation.params,
         annotations: annotationsFor(operation),
-        // With the loop on, each staged tool (existing ones included) publishes its
-        // loop stage from lib/mcp/stages.ts. With it off no tool has _meta, as before.
-        ...(deps.includeLoop && TOOL_STAGES[operation.id]
-          ? { _meta: stageMeta(operation.id) }
-          : {}),
+        // Each staged tool publishes its loop stage from lib/mcp/stages.ts.
+        ...(TOOL_STAGES[operation.id] ? { _meta: stageMeta(operation.id) } : {}),
       },
       async (args: Record<string, unknown>) => {
         // Params are re-validated inside dispatch. The SDK has already checked

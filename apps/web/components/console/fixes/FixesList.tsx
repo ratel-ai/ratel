@@ -43,6 +43,7 @@ import { AffectsPins } from "./FixAffects";
 import { EffectValue, EvidenceValue, FixTitleCell } from "./FixCells";
 import { FixDetail } from "./FixDetail";
 import { FIX_GROUP_ICONS } from "./kind-icons";
+import { MarkShippedButton } from "./MarkShippedButton";
 import { useFixFilters } from "./url";
 
 /** The value the "everything" option carries; the URL leaves the filter out. */
@@ -76,7 +77,7 @@ export function FixesList({
   now: string;
   /** Each fix's eval gate, by fix id; null when `cloud-eval-gate` is off (no column, no section). */
   evalBadges?: Readonly<Record<string, EvalBadge>> | null;
-  /** Each shipped fix's newest shipment, by fix id (RC-72); null when `cloud-stage-spine` is off. */
+  /** Each shipped fix's newest shipment, by fix id (RC-72); null when none. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
   taskSimulations?: boolean;
 }) {
@@ -175,7 +176,7 @@ export function FixesList({
     ) : null;
   };
 
-  /** The Panel's actions: the row's, as the primary one, and Dismiss where the fix can be dismissed. */
+  /** The Panel's actions: the row's, as the primary one, Mark as shipped, and Dismiss where the fix can be dismissed. An applied fix has no ship button: it already shows on Ship. */
   const panelActions = (fix: Fix): ReactNode => {
     if (fix.status === "applied") {
       return (
@@ -200,6 +201,9 @@ export function FixesList({
     }
     // A rewrite is dismissed where it is applied, on Quality; a drafted change here.
     const dismissable = fix.actions.dismiss && fix.source === "craft";
+    const shipButton = (
+      <MarkShippedButton projectId={model.projectId} fix={fix} shipped={shippedFor(shipped, fix)} />
+    );
     const dismissButton = dismissable ? (
       <Button size="md" variant="ghost" disabled={busy.has(fix.id)} onClick={() => dismiss(fix)}>
         Dismiss
@@ -215,6 +219,7 @@ export function FixesList({
             {ROW_ACTION.descriptions}
             <ArrowUpRight aria-hidden className="size-3.5" />
           </Link>
+          {shipButton}
           {dismissButton}
         </>
       );
@@ -229,6 +234,7 @@ export function FixesList({
             variant="primary"
           />
         ) : null}
+        {shipButton}
         {dismissButton}
       </>
     );

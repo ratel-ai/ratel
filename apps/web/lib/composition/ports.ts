@@ -23,6 +23,7 @@ export type NavItem = {
 export type NavIconName =
   | "overview"
   | "health"
+  | "tasks"
   | "intents"
   | "improvements"
   | "catalog"

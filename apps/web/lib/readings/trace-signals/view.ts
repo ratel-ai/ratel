@@ -479,6 +479,8 @@ export interface SignalView {
   /** Stable id (the `trace_signals` row id); cards and flow nodes link by it. */
   id: string;
   kind: SignalKind;
+  /** Set on an `unknown_tool` about a tool that exists (`unknown-tool-standing.ts`): its row and fix must not say to add it. */
+  toolStanding?: "succeeded" | "in_catalog";
   tier: SignalTier;
   status: SignalStatus;
   subject: SignalSubject;
@@ -604,6 +606,14 @@ export interface HealthPageModel {
    * one. Absent on a full reading and before the first run.
    */
   earlyReading?: true;
+  /**
+   * The early reading read no turns, while `turns` counts some: its daily
+   * counts cover a wider scan than the window it reads, so older runs count
+   * and its score of 100 stands on nothing (RC-255). Set only under
+   * `cloud-health-import-first-reading`. Where those runs are imported, the
+   * page says the reading is being built.
+   */
+  emptyEarlyReading?: true;
   /** How far the early reading has got: runs read of the runs there are. Set only with `earlyReading`. */
   earlyProgress?: EarlyProgress;
   /**

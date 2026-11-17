@@ -31,7 +31,7 @@ export function FixDetail({
   actions: ReactNode;
   projectId?: string;
   gate?: ReactNode;
-  /** Its newest shipment (RC-72, behind `cloud-stage-spine`); null when it has not shipped or the flag is off. */
+  /** Its newest shipment (RC-72); null when it has not shipped. */
   shipped?: FixShipped | null;
 }) {
   const detail = fix.detail;
@@ -42,7 +42,7 @@ export function FixDetail({
       data-fix-source={fix.source}
       data-fix-group={fix.group}
     >
-      {/* Where it came from (RC-45, behind cloud-stage-spine). */}
+      {/* Where it came from (RC-45). */}
       {projectId ? <FixSource projectId={projectId} fix={fix} /> : null}
       <Hero fix={fix} actions={actions} />
       {shipped ? <ShippedSection shipped={shipped} /> : null}

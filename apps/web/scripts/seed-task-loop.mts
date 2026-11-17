@@ -30,7 +30,6 @@ async function main() {
     );
   }
   assertLocalDatabase("seed the task loop demo");
-  process.env.FF_STAGE_SPINE = "true";
   process.env.FF_EVAL_GATE = "true";
   const noModels = argv.includes("--no-models");
   if (noModels) {

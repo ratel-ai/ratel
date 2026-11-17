@@ -32,24 +32,15 @@ import { buildRegistry, type McpOperation, type Registry } from "@/lib/mcp/regis
 export interface AssembleOptions {
   /** Omit write operations, for a read-only deployment or a read-only test. */
   includeWrites?: boolean;
-  /**
-   * The improvement-loop tools (`lib/mcp/operations/loop`, its tasks and eval sets), behind
-   * `FF_MCP_LOOP`. Defaults to true so the contract tests see the whole surface; the route
-   * passes the caller's flag decision. Owned: upstream retired its flag (RC-234) and lists them
-   * for everyone with app access; here they stay an experimental switch for the open-source
-   * edition, which the Cloud deployments turn on.
-   */
-  includeLoop?: boolean;
 }
 
 /**
- * Every console surface's tools, in the order the console's navigation lists them. A module may
- * mix reads and writes; `includeWrites: false` drops every operation that declares `mutates`,
- * which the contract test pins.
+ * Every console surface's tools, in the order the console's navigation lists
+ * them. A module may mix reads and writes; `includeWrites: false` drops every
+ * operation that declares `mutates`, which the contract test pins.
  */
 export function assembleOperations(options: AssembleOptions = {}): McpOperation[] {
   const includeWrites = options.includeWrites ?? true;
-  const includeLoop = options.includeLoop ?? true;
   const operations = [
     ...scopeOperations(),
     ...catalogOperations(),
@@ -69,15 +60,15 @@ export function assembleOperations(options: AssembleOptions = {}): McpOperation[
     ...joinsOperations(),
     ...playgroundOperations(),
     ...shipOperations(),
-    ...(includeLoop
-      ? [...loopReadOperations(), ...loopTaskReadOperations(), ...loopEvalSetReadOperations()]
-      : []),
+    ...loopReadOperations(),
+    ...loopTaskReadOperations(),
+    ...loopEvalSetReadOperations(),
     ...writeOperations(),
     ...runtimeWriteOperations(),
     ...toolCrafterWriteOperations(),
-    ...(includeLoop
-      ? [...loopWriteOperations(), ...loopTaskWriteOperations(), ...loopEvalSetWriteOperations()]
-      : []),
+    ...loopWriteOperations(),
+    ...loopTaskWriteOperations(),
+    ...loopEvalSetWriteOperations(),
   ];
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);
 }

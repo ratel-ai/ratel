@@ -11,7 +11,10 @@ import {
   isDismissable,
 } from "@/lib/readings/trace-signals/dismiss";
 import { SCORE_TREND_READINGS } from "@/lib/readings/trace-signals/health-score";
-import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
+import {
+  loadCatalogNames,
+  loadSucceededTools,
+} from "@/lib/readings/trace-signals/signals/analysis-context";
 import { targetWindowDays } from "@/lib/readings/trace-signals/signals/compute";
 import {
   type EarlyProgress,
@@ -23,6 +26,11 @@ import {
   listMutedSignals,
   listOpenSignals,
 } from "@/lib/readings/trace-signals/signals/queries";
+import {
+  catalogIdentities,
+  unknownToolsToProbe,
+  withToolStandings,
+} from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type { HealthPageModel, SignalKind, WindowDays } from "@/lib/readings/trace-signals/view";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
 import { loadWorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide-queries";
@@ -165,13 +173,51 @@ async function earlyProgressFor(
   }
 }
 
+/**
+ * The signals as this reading tells them: an `unknown_tool`
+ * about a tool that exists says so. Never failing the page: a bad read logs and
+ * tells them as stored. Asked only of a project with such a signal.
+ */
+async function withUnknownToolStandings(
+  projectId: string,
+  records: SignalRecord[],
+  names: ReadonlyMap<string, string>,
+  window: { windowStart: Date; windowEnd: Date },
+  deps: PageModelDeps,
+): Promise<SignalRecord[]> {
+  if (!records.some((record) => record.kind === "unknown_tool")) return records;
+  try {
+    const succeededToolIds = await loadSucceededTools(
+      projectId,
+      unknownToolsToProbe(records),
+      window,
+      deps.db,
+    );
+    return withToolStandings(records, { catalog: catalogIdentities(names), succeededToolIds });
+  } catch (err) {
+    logger.error(
+      { err, project_id: projectId },
+      "unknown tool standing unreadable for agent health page",
+    );
+    reportServerException(err, `project:${projectId}`, {
+      project_id: projectId,
+      operation: "agent_health_unknown_tool_standing",
+    });
+    return records;
+  }
+}
+
 async function limitsFor(projectId: string): Promise<AgentHealthLimits> {
   const organization = await getOrganizationByProjectId(projectId);
   return organization ? getAgentHealthLimits(organization) : NO_ORGANIZATION_LIMITS;
 }
 
 export async function loadHealthPageModel(
-  { projectId, windowDays }: { projectId: string; windowDays: WindowDays },
+  {
+    projectId,
+    windowDays,
+    holdEmptyEarlyReading,
+  }: { projectId: string; windowDays: WindowDays; holdEmptyEarlyReading?: boolean },
   nodeEnv: string | undefined = process.env.NODE_ENV,
   overrides: Partial<PageModelDeps> = {},
 ): Promise<HealthPageModel> {
@@ -225,7 +271,13 @@ export async function loadHealthPageModel(
     listMutedSignals(projectId, DISMISSABLE_KINDS, deps.db),
     listEarlierHealthScores(projectId, SCORE_TREND_READINGS - 1, deps.db),
   ]);
-  const records = rows.map(toSignalRecord).filter((r): r is SignalRecord => r !== null);
+  const records = await withUnknownToolStandings(
+    projectId,
+    rows.map(toSignalRecord).filter((r): r is SignalRecord => r !== null),
+    names,
+    run,
+    deps,
+  );
   const shown = Number.isFinite(limits.agentHealthSignalsShown)
     ? records.slice(0, Math.max(0, Math.floor(limits.agentHealthSignalsShown)))
     : records;
@@ -260,6 +312,7 @@ export async function loadHealthPageModel(
       labels,
       insights,
       scoreHistory,
+      holdEmptyEarlyReading,
     },
     now,
   );

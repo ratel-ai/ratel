@@ -47,9 +47,11 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "overview", href: `/project/${P1}` },
       { id: "health", href: `/project/${P1}/health` },
       { id: "traces", href: `/project/${P1}/traces` },
-      { id: "catalog", href: `/project/${P1}/catalogs` },
+      { id: "tasks", href: `/project/${P1}/tasks` },
       { id: "intents", href: `/project/${P1}/intents` },
       { id: "improvements", href: `/project/${P1}/improvement` },
+      { id: "ship", href: `/project/${P1}/ship` },
+      { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "settings", href: `/project/${P1}/settings` },
     ],
   );
@@ -58,7 +60,6 @@ test("with a project, the rail links every core destination to that project", ()
     health?.children?.map(({ id, href }) => ({ id, href })),
     [
       { id: "health-summary", href: `/project/${P1}/health` },
-      { id: "health-tasks", href: `/project/${P1}/health/tasks` },
       { id: "health-self-corrections", href: `/project/${P1}/health/self-corrections` },
     ],
   );
@@ -142,7 +143,17 @@ test("outside a project, the organization rail lists its projects page", () => {
   // Inside a project the rail is the project's, even when the organization is known.
   assert.deepEqual(
     consoleNav({ projectId: P1, organizationSlug: "acme", additions: [] }).map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "intents", "improvements", "settings"],
+    [
+      "overview",
+      "health",
+      "traces",
+      "tasks",
+      "intents",
+      "improvements",
+      "ship",
+      "catalog",
+      "settings",
+    ],
   );
 });
 
@@ -157,7 +168,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 8);
+  assert.equal(withProject.length, 10);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -173,9 +184,22 @@ test("the OSS composition adds no destination", () => {
   });
   assert.deepEqual(
     items.map(({ id }) => id),
-    ["overview", "health", "traces", "catalog", "intents", "improvements", "settings"],
+    [
+      "overview",
+      "health",
+      "traces",
+      "tasks",
+      "intents",
+      "improvements",
+      "ship",
+      "catalog",
+      "settings",
+    ],
   );
-  assert.ok(items.every(({ sectionLabel }) => sectionLabel === undefined));
+  assert.deepEqual(
+    items.flatMap(({ sectionLabel }) => (sectionLabel ? [sectionLabel] : [])),
+    ["Monitor", "Insights", "Improve", "Ship"],
+  );
 });
 
 test("an edition's project group sits between the core pages and Settings, under its label", () => {
@@ -198,14 +222,16 @@ test("an edition's project group sits between the core pages and Settings, under
       ({ id, section, sectionLabel }) => `${section ?? "main"}:${id}:${sectionLabel ?? ""}`,
     ),
     [
-      "main:overview:",
-      "main:health:",
-      "main:traces:",
-      "main:catalog:",
-      "main:intents:",
-      "main:improvements:",
+      "group:monitor:overview:Monitor",
+      "group:monitor:health:",
+      "group:monitor:traces:",
+      "group:insights:tasks:Insights",
+      "group:insights:intents:",
+      "group:improve:improvements:Improve",
+      "group:ship:ship:Ship",
       "group:apis:project-models/embeddings:APIs",
       "group:apis:project-models/tool-picker:",
+      "settings:catalog:",
       "settings:settings:",
     ],
   );
@@ -236,12 +262,14 @@ test("Settings sits in a section of its own in both rails, the edition's items i
   assert.deepEqual(
     sectionsOf(consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] })),
     [
-      "main:overview",
-      "main:health",
-      "main:traces",
-      "main:catalog",
-      "main:intents",
-      "main:improvements",
+      "group:monitor:overview",
+      "group:monitor:health",
+      "group:monitor:traces",
+      "group:insights:tasks",
+      "group:insights:intents",
+      "group:improve:improvements",
+      "group:ship:ship",
+      "settings:catalog",
       "settings:settings",
       "edition:edition:/admin",
     ],
@@ -258,9 +286,9 @@ test("the active item matches exact index pages and nested paths", () => {
   assert.equal(activeNavItemId(`/project/${P1}/settings`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/settings/general`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/traces/abc`, items), "traces");
-  // The Summary child shares the group's href: the most specific item wins, and the group opens around it.
-  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health-summary");
-  assert.equal(activeNavItemId(`/project/${P1}/health/tasks/t1`, items), "health-tasks");
+  // Agent health is lit as one item in the stage rail, and Tasks has absorbed its Tasks pages.
+  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
+  assert.equal(activeNavItemId(`/project/${P1}/health/tasks/t1`, items), "tasks");
   assert.equal(activeNavItemId(`/project/${P1}/intents/map`, items), "intents-map");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs`, items), "catalog");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs/tools`, items), "catalog-tools");
@@ -277,7 +305,7 @@ test("an item is lit on every path it has absorbed, old URLs included", () => {
   assert.equal(active("/dashboards"), "overview");
   assert.equal(active("/insights"), "overview");
   assert.equal(active("/improvement/health"), "health");
-  assert.equal(active("/improvement/tool-explorer"), "health-tasks");
+  assert.equal(active("/improvement/tool-explorer"), "tasks");
   // The longer absorbed path wins over the shorter one above it.
   assert.equal(active("/improvement/tool-explorer/suggestions"), "fixes");
   assert.equal(active("/intents/asks"), "intents-topics");
@@ -330,13 +358,9 @@ test("the command menu lists the project's pages, the organization's, then every
     [
       `Project|Overview|/project/${P1}`,
       `Project|Agent health|/project/${P1}/health`,
-      `Project|Tasks|/project/${P1}/health/tasks`,
       `Project|Self-corrections|/project/${P1}/health/self-corrections`,
       `Project|Traces|/project/${P1}/traces`,
-      `Project|Catalog|/project/${P1}/catalogs`,
-      `Project|Tools|/project/${P1}/catalogs/tools`,
-      `Project|Skills|/project/${P1}/catalogs/skills`,
-      `Project|Test a search|/project/${P1}/playground`,
+      `Project|Tasks|/project/${P1}/tasks`,
       `Project|Intents|/project/${P1}/intents`,
       `Project|Flows|/project/${P1}/intents/flows`,
       `Project|Map|/project/${P1}/intents/map`,
@@ -344,20 +368,25 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Fixes|/project/${P1}/improvement/fixes`,
       `Project|Quality|/project/${P1}/quality`,
       `Project|Adaptive ranking|/project/${P1}/improvement/adaptive-ranking`,
+      `Project|Ship|/project/${P1}/ship`,
+      `Project|Catalog|/project/${P1}/catalogs`,
+      `Project|Tools|/project/${P1}/catalogs/tools`,
+      `Project|Skills|/project/${P1}/catalogs/skills`,
+      `Project|Test a search|/project/${P1}/playground`,
       `Project|Settings|/project/${P1}/settings`,
-      "Pages|Admin|/admin",
+      `Pages|Admin|/admin`,
       `Overview|Usage and spend|/project/${P1}/dashboards`,
       `Settings|API keys|/project/${P1}/settings/api-keys`,
       `Settings|Danger zone|/project/${P1}/settings/danger`,
       `Quality|Experiments|/project/${P1}/calibration`,
       `Settings|SDK events|/project/${P1}/runtime-events`,
-      "Organization|Projects|/org/acme",
-      "Organization|Integrations|/org/acme/mcp",
-      "Organization|Settings|/org/acme/settings",
+      `Organization|Projects|/org/acme`,
+      `Organization|Integrations|/org/acme/mcp`,
+      `Organization|Settings|/org/acme/settings`,
       `Projects|One|/project/${P1}/traces`,
       `Projects|Two|/project/${P2}/traces`,
-      "Projects|All projects|/org/acme",
-      "Projects|New project|/onboarding?organization=acme",
+      `Projects|All projects|/org/acme`,
+      `Projects|New project|/onboarding?organization=acme`,
     ],
   );
   assert.equal(new Set(entries.map(({ id }) => id)).size, entries.length);
@@ -459,9 +488,11 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "overview:o",
       "health:h",
       "traces:t",
-      "catalog:c",
+      "tasks:w",
       "intents:i",
       "improvements:",
+      "ship:l",
+      "catalog:c",
       "settings:s",
       "edition:/admin:",
     ],
@@ -489,22 +520,10 @@ test("visibleOrganizationNav hides only the paths given", () => {
   assert.deepEqual(visibleOrganizationNav(nav, ["other"]), nav);
 });
 
-test("the stage spine is off unless asked for: the rail is today's", () => {
-  assert.deepEqual(
-    consoleNav({ projectId: P1, additions: [], stageSpine: false }),
-    consoleNav({ projectId: P1, additions: [] }),
-  );
-  assert.equal(
-    consoleNav({ projectId: P1, additions: [] }).some(({ id }) => id === "ship"),
-    false,
-  );
-});
-
-test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, then setup", () => {
+test("the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone", () => {
   const items = consoleNav({
     projectId: P1,
     additions: [],
-    stageSpine: true,
     projectGroups: [{ id: "apis", label: "APIs", items: [{ path: "models/x", label: "X" }] }],
   });
   assert.deepEqual(
@@ -549,11 +568,4 @@ test("the stage spine groups the rail into Monitor, Insights, Improve and Ship, 
     pathname: `/project/${P1}`,
   }).map((entry) => entry.href);
   assert.ok(hrefs.includes(`/project/${P1}/ship`), "⌘K reaches Ship");
-});
-
-test("outside a project the stage spine changes nothing", () => {
-  assert.deepEqual(
-    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [], stageSpine: true }),
-    consoleNav({ projectId: undefined, organizationSlug: "acme", additions: [] }),
-  );
 });

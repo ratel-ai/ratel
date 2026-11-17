@@ -11,7 +11,7 @@ import {
   sortSignals,
   splitFix,
 } from "@/components/console/health/card-model";
-import { clampFigures, figureCaption, signalTitle } from "@/lib/readings/trace-signals/claims";
+import { clampFigures, figureCaption, signalsTitle } from "@/lib/readings/trace-signals/claims";
 import type { EvidenceTurn, SignalKind, SignalView } from "@/lib/readings/trace-signals/view";
 import type { ChainFolding } from "@/lib/views/health/workflows-view";
 
@@ -42,7 +42,7 @@ export function groupKey(group: Pick<ProblemGroup, "kind" | "workflow">): string
 
 /** The row's title: the kind's, or "3 chains inside Close out a release". */
 export function groupTitle(group: ProblemGroup): string {
-  if (!group.workflow) return signalTitle(group.kind);
+  if (!group.workflow) return signalsTitle(group.kind, group.members);
   return `${group.members.length} chains inside ${group.workflow.name}`;
 }
 
@@ -280,6 +280,7 @@ export function groupFigure(group: ProblemGroup): { display: string; caption: st
 function namesPhrase(group: ProblemGroup): string {
   const labels = group.members.map(memberLabel);
   const pairs = group.members.every((member) => member.subject.chips.length === 2);
+  if (labels.length === 1) return labels[0]!;
   if (labels.length === 2 && !pairs) return `${labels[0]} and ${labels[1]}`;
   return `these ${labels.length} ${pairs ? "pairs" : "tools"}`;
 }
@@ -301,7 +302,15 @@ const GROUP_FIX: { readonly [K in SignalKind]?: (names: string, group: ProblemGr
   tool_switch: (names) => `Say in the descriptions of ${names} when to use the other tool instead.`,
   empty_result: (names) =>
     `Rewrite the descriptions of ${names} to say what input they need and when they find nothing.`,
-  unknown_tool: (names) => `Add ${names}, or fix the prompt that makes the agent expect them.`,
+  unknown_tool: (names, group) => {
+    const missing = group.members.filter((member) => !member.toolStanding);
+    if (missing.length === 0)
+      return "No tool to add. Check that your tracing captures the full tool list on each model call, and that these tools are available everywhere the agent runs.";
+    if (missing.length === group.members.length)
+      return `Add ${names}, or fix the prompt that makes the agent expect them.`;
+    const some = namesPhrase({ ...group, members: missing });
+    return `Add ${some}, or fix the prompt that makes the agent expect ${missing.length === 1 ? "it" : "them"}. The others exist: check your tracing and where they are available.`;
+  },
   unused_tool: (names) => `Stop sending ${names} to the model, or retire them.`,
   blocked_action: (names) =>
     `Tell the agent what ${names} may do, or stop offering them where they will be refused.`,

@@ -8,7 +8,6 @@ import {
 import { clientAddress } from "@/lib/mcp/client-address";
 import { type McpErrorCode, McpOperationError } from "@/lib/mcp/errors";
 import { mcpLaunchAccess } from "@/lib/mcp/launch-access";
-import { mcpLoopEnabled } from "@/lib/mcp/loop-flag";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
 import { loopReadOperations, loopWriteOperations } from "@/lib/mcp/operations/loop";
 import {
@@ -70,7 +69,7 @@ const MAX_BODY_BYTES = 256 * 1024;
 
 let loopToolIds: ReadonlySet<string> | null = null;
 
-/** Whether a tool is one of the improvement-loop tools (`FF_MCP_LOOP`), for the logs. */
+/** Whether a tool is one of the improvement-loop tools (RC-43), for the logs. */
 export function isLoopTool(operationId: string): boolean {
   loopToolIds ??= new Set(
     [
@@ -95,8 +94,6 @@ export interface McpRouteDeps {
   perKeyLimiter: ReturnType<typeof createTokenBucketRateLimiter>;
   globalLimiter: ReturnType<typeof createTokenBucketRateLimiter>;
   trackServerEvent: typeof trackServerEvent;
-  /** Whether the improvement-loop tools are listed for this caller (`FF_MCP_LOOP`). */
-  loopEnabled?: (auth: McpAuthContext) => Promise<boolean>;
   /**
    * Whether the caller may use the app at all, as the console decides it. Without it the request
    * is refused with 403.
@@ -111,7 +108,6 @@ export const defaultRouteDeps: McpRouteDeps = {
   perKeyLimiter: createTokenBucketRateLimiter(PER_KEY_LIMIT),
   globalLimiter: createTokenBucketRateLimiter(GLOBAL_LIMIT),
   trackServerEvent,
-  loopEnabled: mcpLoopEnabled,
   launchAccess: mcpLaunchAccess,
 };
 
@@ -339,12 +335,10 @@ async function runMessages(
   auth: McpAuthContext,
   deps: McpRouteDeps,
 ): Promise<JSONRPCMessage[]> {
-  const includeLoop = await (deps.loopEnabled ?? mcpLoopEnabled)(auth);
-  const registry = buildRequestRegistry({ includeLoop });
+  const registry = buildRequestRegistry();
   const server = createRatelMcpServer({
     auth,
     registry,
-    includeLoop,
     describeCaller,
     projectOwner: async (projectId) => {
       const project = await getProjectById(projectId);

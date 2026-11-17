@@ -65,6 +65,8 @@ export interface SetupCounts {
     /** Tool rows that were the root span of their own trace (one call per trace), and of those, with a session. Absent reads as 0. */
     rootToolRows?: number;
     rootToolRowsWithSession?: number;
+    /** Tool rows and model calls a Braintrust import wrote. Absent reads as 0. */
+    braintrustImportRows?: number;
   };
   sdk: {
     searches: number;
@@ -130,8 +132,12 @@ export function buildSetupFacts(
         Math.max(otel.modelCallsWithPrompt, otel.toolRowsWithResult > 0 ? otel.modelCalls : 0),
         otel.modelCalls,
       ),
-      fact("otel_tool_definitions", otel.modelCallsWithMenu, otel.modelCalls),
     );
+    // An import cannot send what the source did not record as a definition: nothing the customer can turn on (RC-256).
+    const onlyBraintrustImport =
+      (otel.braintrustImportRows ?? 0) >= otel.toolRows + otel.modelCalls;
+    if (!onlyBraintrustImport)
+      facts.push(fact("otel_tool_definitions", otel.modelCallsWithMenu, otel.modelCalls));
     // Each tool call in its own trace (an MCP server without trace context): one request is not one run.
     const shape = oneToolPerTrace({
       toolRows: otel.toolRows,

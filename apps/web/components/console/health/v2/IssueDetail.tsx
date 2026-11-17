@@ -83,7 +83,7 @@ export function IssueDetail({
 
   return (
     <div className="flex flex-col gap-6" data-issue-detail={row.kind}>
-      {/* Where it came from (RC-45, behind FF_STAGE_SPINE). */}
+      {/* Where it came from (RC-45). */}
       <InsightSource projectId={projectId} signalId={(selected ?? lead).id} />
       <Subject projectId={projectId} row={row} member={several ? selected : lead} />
       <section aria-label="What to do" className="flex flex-col gap-3">

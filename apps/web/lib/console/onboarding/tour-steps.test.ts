@@ -68,13 +68,13 @@ test("every navigation step names an item of the project rail", () => {
     navSteps.map((step) => step.target),
     ["nav-overview", "nav-traces", "nav-catalog", "nav-quality"],
   );
-  for (const stageSpine of [false, true]) {
-    const rail = consoleNav({ projectId: "project", additions: [], stageSpine });
+  {
+    const rail = consoleNav({ projectId: "project", additions: [] });
     const anchors = new Set(flattenNav(rail).map((item) => `nav-${item.id}`));
     for (const step of navSteps)
       assert.ok(
         anchors.has(step.target),
-        `${step.id} points at ${step.target}, which the rail does not render (stage spine ${stageSpine})`,
+        `${step.id} points at ${step.target}, which the rail does not render`,
       );
   }
 });
@@ -96,8 +96,8 @@ test("the sidebar renders an anchor for every step that is not about the demo pr
     slug: "agent",
     isDemo: false,
   };
-  const sidebar = (collapsed: boolean, stageSpine: boolean) => {
-    const items = consoleNav({ projectId: project.id, additions: [], stageSpine });
+  const sidebar = (collapsed: boolean) => {
+    const items = consoleNav({ projectId: project.id, additions: [] });
     return renderToStaticMarkup(
       createElement(
         AppRouterContext.Provider,
@@ -130,17 +130,15 @@ test("the sidebar renders an anchor for every step that is not about the demo pr
     );
   };
   const steps = TOUR_STEPS.filter((step) => !step.demoOnly);
-  for (const stageSpine of [false, true]) {
-    const html = sidebar(false, stageSpine);
-    for (const step of steps)
-      assert.match(
-        html,
-        new RegExp(`data-tour="${step.target}"`),
-        `${step.id}: no ${step.target} anchor in the rail (stage spine ${stageSpine})`,
-      );
-  }
+  const html = sidebar(false);
+  for (const step of steps)
+    assert.match(
+      html,
+      new RegExp(`data-tour="${step.target}"`),
+      `${step.id}: no ${step.target} anchor in the rail`,
+    );
   // Collapsed, the rail is icons only: the top-level items and the search keep their anchors.
-  const collapsed = sidebar(true, false);
+  const collapsed = sidebar(true);
   for (const target of ["nav-overview", "agent-health", "nav-traces", "nav-catalog"])
     assert.match(collapsed, new RegExp(`data-tour="${target}"`));
   assert.match(collapsed, /data-tour="command-palette"/);

@@ -3,13 +3,6 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { fixesSummary } from "@/lib/mcp/operations/loop/eval-sets";
 import {
-  experimentRef,
-  fixRef,
-  fixSource,
-  insightIdOf,
-  shipmentRef,
-} from "@/lib/mcp/operations/loop/lineage";
-import {
   type InsightView,
   loadInsight,
   loadOpenInsights,
@@ -53,10 +46,18 @@ import {
   listProjectShipments,
   type ShippedFixRow,
 } from "@/lib/views/fixes/loop-queries";
+import { recordFixShipment, shipmentFields } from "@/lib/views/fixes/record-shipment";
 import type { FixExperimentRow, FixShipmentRow } from "@/lib/views/fixes/schema";
 import { filterFixes, findFix } from "@/lib/views/fixes/select";
 import { type FixShipped, shippedByFix, shippedFor } from "@/lib/views/fixes/shipped";
 import type { Fix, FixesModel } from "@/lib/views/fixes/types";
+import {
+  experimentRef,
+  fixRef,
+  fixSource,
+  insightIdOf,
+  shipmentRef,
+} from "@/lib/views/lineage/loop-refs";
 import { fixSourceRef } from "@/lib/views/lineage/refs";
 import type { LineageRef } from "@/lib/views/lineage/types";
 import { taskShipmentsFor } from "@/lib/views/task-evals/post-ship";
@@ -81,12 +82,10 @@ import "@/lib/views/task-evals/ship";
  * lives in `lib/mcp/stages.ts`, not here, so regrouping the stages changes
  * metadata and never a tool.
  *
- * Behind `FF_MCP_LOOP` (see `lib/mcp/loop-flag.ts`): off, none of these is
- * listed. `run_eval` and `get_eval` also need `FF_EVAL_GATE`; off, they refuse
- * with `forbidden` (`eval_gate_off`).
+ * Listed for everyone with app access, as the console's Fixes and Tasks are. `run_eval` and
+ * `get_eval` need `FF_EVAL_GATE`; off, they refuse with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): the gates are env flags (upstream retired its loop flag in
- * RC-234 and lists these for everyone with app access). `list_tasks` and
+ * Owned (ADR-0030): the eval gate is an env flag. `list_tasks` and
  * `get_task` read the Tasks page's model and one task's page; a task's scorers,
  * scores, eval set and shipments only with `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
  * eval set (`lib/views/task-evals`); other fixes on their own eval set.
@@ -988,18 +987,13 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
       params: z.object({
         ...projectScoped,
         fixId: fixIdParam,
-        version: z
-          .string()
-          .trim()
-          .min(1)
-          .max(100)
-          .describe(
-            "The agent version or release that carries the fix, e.g. v1.4.2 or a commit sha.",
-          ),
+        version: shipmentFields.shape.version.describe(
+          "The agent version or release that carries the fix, e.g. v1.4.2 or a commit sha.",
+        ),
         experimentId: uuidParam()
           .optional()
           .describe("The experiment from create_experiment that tested it."),
-        notes: z.string().max(1_000).optional(),
+        notes: shipmentFields.shape.notes,
       }),
       async execute(ctx, params) {
         const fix = await requireFix(deps, ctx.projectId, params.fixId);
@@ -1009,33 +1003,20 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
           if (!experiment || experiment.fixId !== fix.id) throw notFound("experiment for this fix");
         }
         const insightId = insightIdOf(fix);
-        const row = await deps.createFixShipment({
-          projectId: ctx.projectId,
-          fixId: fix.id,
-          insightId,
-          experimentId: experiment?.id ?? null,
-          version: params.version,
-          notes: params.notes ?? null,
-          shippedBy: actorOf(ctx.auth, ctx.projectId),
-        });
-
         const self = fixRef(ctx.projectId, fix);
-        const source = experiment ? experimentRef(ctx.projectId, experiment) : self;
-        await recordFixSource(deps, ctx, fix, self);
-        await deps.recordLineage({
-          projectId: ctx.projectId,
-          object: shipmentRef(ctx.projectId, row),
-          source,
-          actor: eventContext(ctx),
-        });
-        await deps.trackServerEvent("fix_shipped", eventContext(ctx), {
-          object_action: "fix_shipped",
-          fix_id: fix.id,
-          shipment_id: row.id,
-          has_insight: insightId !== null,
-          has_experiment: experiment !== null,
-          surface: "mcp",
-        });
+        const { row, source } = await recordFixShipment(
+          {
+            projectId: ctx.projectId,
+            fix,
+            experiment,
+            version: params.version,
+            notes: params.notes ?? null,
+            shippedBy: actorOf(ctx.auth, ctx.projectId),
+            actor: eventContext(ctx),
+            surface: "mcp",
+          },
+          deps,
+        );
 
         return {
           data: {

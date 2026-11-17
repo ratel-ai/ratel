@@ -35,7 +35,6 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
     perKeyLimiter: createTokenBucketRateLimiter({ limitPerMinute: 60, burst: 120 }),
     globalLimiter: createTokenBucketRateLimiter({ limitPerMinute: 600, burst: 900 }),
     trackServerEvent: (async () => undefined) as never,
-    loopEnabled: async () => true,
     launchAccess: async () => true,
     ...overrides,
   };
@@ -186,6 +185,32 @@ test("each tool publishes a schema and a read-only or mutating annotation", asyn
   assert.equal(write?.annotations?.readOnlyHint, false, "writes must not claim to be read-only");
 });
 
+test("each tool carries the annotations the Claude directory reviews", async () => {
+  const { body } = await call("tools/list");
+  const tools: Array<{
+    name: string;
+    title?: string;
+    annotations?: { title?: string; readOnlyHint?: boolean; destructiveHint?: boolean };
+  }> = body.result.tools;
+
+  for (const tool of tools) {
+    assert.ok(tool.annotations?.title, `${tool.name} needs an annotations title`);
+    assert.equal(tool.annotations?.title, tool.title, `${tool.name} has one title`);
+    assert.equal(
+      tool.annotations?.destructiveHint,
+      tool.annotations?.readOnlyHint ? undefined : true,
+      `${tool.name}: every write prompts, a read does not claim the hint`,
+    );
+  }
+});
+
+test("no tool description tells the model what to do first", async () => {
+  const { body } = await call("tools/list");
+  for (const tool of body.result.tools as Array<{ name: string; description: string }>) {
+    assert.doesNotMatch(tool.description, /\bcall (this|it) first\b/i, tool.name);
+  }
+});
+
 test("calling a tool runs its operation and reports failures in-band", async () => {
   const { response, body } = await call("tools/call", {
     name: "get_skill",
@@ -273,11 +298,10 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
   // Owned: the deployment's FF_* switches, not upstream's flag service.
   assert.deepEqual(keys, [
     "FF_EVAL_GATE",
+    "FF_HEALTH_IMPORT_FIRST_READING",
     "FF_HEALTH_SCORE",
-    "FF_MCP_LOOP",
     "FF_QUICK_FIRST_READING",
     "FF_SESSION_REPLAY",
-    "FF_STAGE_SPINE",
   ]);
 });
 
@@ -492,24 +516,4 @@ test("an unconfigured database does not spend the caller's failure budget", asyn
 
   assert.equal(second.status, 503);
   assert.equal((await second.json()).error, "unavailable");
-});
-
-test("with the loop off (FF_MCP_LOOP), the loop tools are not listed and the rest is unchanged", async () => {
-  const handler = createMcpRouteHandler(deps({ loopEnabled: async () => false }));
-  const body = await (await handler(rpc("tools/list"))).json();
-  const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
-  for (const hidden of [
-    "list_insights",
-    "get_fix",
-    "run_eval",
-    "create_experiment",
-    "mark_fix_shipped",
-    "list_tasks",
-    "change_task_scorer",
-    "change_fix_eval_set",
-  ]) {
-    assert.ok(!names.includes(hidden), `${hidden} should be hidden without the flag`);
-  }
-  assert.ok(names.includes("list_traces"));
-  assert.ok(names.includes("get_agent_health"), "the other surfaces are not loop tools");
 });

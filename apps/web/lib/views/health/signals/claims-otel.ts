@@ -1,3 +1,7 @@
+import {
+  type ExistingToolStanding,
+  existingToolStanding,
+} from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type { SignalKind } from "@/lib/readings/trace-signals/view";
 import {
   type Ctx,
@@ -72,6 +76,33 @@ function longTurnTools(ids: readonly string[]): Part[] {
   return [" They lean on ", ...chips, "."];
 }
 
+/**
+ * An `unknown_tool` about a tool that exists (`withToolStandings`): not a tool to add, so it says what was actually seen. An ok
+ * call only shows no error was seen, and with none it can only say the catalog
+ * has the tool.
+ */
+function existingToolCopy(
+  standing: ExistingToolStanding,
+  { m, name, a, period }: Pick<Ctx, "m" | "name" | "a" | "period">,
+): Omit<KindCopy, "figure"> {
+  const works = standing === "succeeded";
+  const said = works ? " returned without an error" : " is in the catalog";
+  if (num(m, "byMenu") > 0) {
+    return {
+      parts: [{ chip: a }, `${said} but was missing from the captured tool list.`],
+      cost: `${plural(num(m, "byMenu"), "call", "calls")} named a tool missing from the captured tool list ${period}.`,
+      fix: works
+        ? "No tool to add. Check that your tracing captures the full tool list on each model call."
+        : `No tool to add. Check that ${name(a)} reaches the agent, and that your tracing captures the full tool list on each model call.`,
+    };
+  }
+  return {
+    parts: [{ chip: a }, `${said}, but some calls fail as if it did not exist.`],
+    cost: `${plural(num(m, "unknown"), "call", "calls")} failed with a tool-not-found error ${period}.`,
+    fix: `No tool to add. Check that ${name(a)} is available everywhere the agent runs.`,
+  };
+}
+
 export const OTEL_COPY: Pick<Record<SignalKind, (c: Ctx) => KindCopy>, OtelKind> = {
   tool_switch: ({ m, name, a, b, period }) => ({
     parts: [
@@ -109,20 +140,25 @@ export const OTEL_COPY: Pick<Record<SignalKind, (c: Ctx) => KindCopy>, OtelKind>
     fix: `Rewrite ${name(a)}'s description to say what input it needs and when it finds nothing, so the agent stops sending asks it cannot answer.`,
     caveat: "Counted only on calls whose results were captured.",
   }),
-  unknown_tool: ({ m, name, a, period }) => ({
-    parts:
-      num(m, "byMenu") > 0
-        ? ["The agent calls ", { chip: a }, ", a tool that was not in the list it was given."]
-        : ["The agent calls ", { chip: a }, ", and the call fails because no such tool exists."],
-    figure: {
+  unknown_tool: ({ m, name, a, period }) => {
+    const figure: KindCopy["figure"] = {
       value: num(m, "unknown"),
       unit: "count",
       display: count(num(m, "unknown")),
       raw: `of ${plural(num(m, "calls"), "call", "calls")}`,
-    },
-    cost: `${plural(num(m, "unknown"), "call", "calls")} went to a tool that does not exist ${period}.`,
-    fix: `Add ${name(a)} if the agent needs it, or fix the prompt or tool list that makes the agent expect it.`,
-  }),
+    };
+    const standing = existingToolStanding(m);
+    if (standing) return { ...existingToolCopy(standing, { m, name, a, period }), figure };
+    return {
+      parts:
+        num(m, "byMenu") > 0
+          ? ["The agent calls ", { chip: a }, ", a tool that was not in the list it was given."]
+          : ["The agent calls ", { chip: a }, ", and the call fails because no such tool exists."],
+      figure,
+      cost: `${plural(num(m, "unknown"), "call", "calls")} went to a tool that does not exist ${period}.`,
+      fix: `Add ${name(a)} if the agent needs it, or fix the prompt or tool list that makes the agent expect it.`,
+    };
+  },
   unused_tool: ({ r, m, period }) => ({
     parts: [
       `${plural(num(m, "tools"), "tool was", "tools were")} offered to the model on up to ${plural(num(m, "modelCalls"), "call", "calls")} and never called: `,

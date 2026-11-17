@@ -1,6 +1,10 @@
 import { type TaskColorSlot, taskColors } from "@ratel/design-system/task-colors";
 import { TOPIC_WINDOW_DAYS } from "@/lib/readings/topics/types";
 import {
+  catalogIdentities,
+  unknownToolStanding,
+} from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
+import {
   EVIDENCE_LABEL,
   fixShortTitle,
   fixTitle,
@@ -64,6 +68,8 @@ import type {
  *    first, `trace_signals.proposal_kind/_id`, else by subject, `resolvesIssue`). One that none
  *    resolves and that names a concrete change becomes a fix of its own, grouped with the other
  *    issues asking for the same change of the same thing.
+ *    Skipping an issue here only costs it its fix: it stays on Agent health.
+ *    Fixes are derived on every read, so nothing stored has to change.
  * 3. Each fix gets its subject (tools, the tasks that run them, the topics those serve), its
  *    why (the worst issue it resolves, else the source's own evidence), its effect, evidence,
  *    actions and rank.
@@ -159,6 +165,12 @@ export interface FixesInput {
   intentWindowDays?: number;
   overridesAdopted: boolean | null;
   failed?: readonly FixSource[];
+  /**
+   * Tools with ok calls the stored metrics of their `unknown_tool` may not show
+   * (`unknown-tool-standing.ts`). A tool these, its metrics or the catalog vouch
+   * for is no tool to build.
+   */
+  succeededToolIds?: ReadonlySet<string>;
 }
 
 /**
@@ -290,6 +302,10 @@ export function buildFixes(raw: FixesInput): FixesModel {
 
   // 2. Issues: attach to the fixes that resolve them, or raise their own.
   const own = new Map<string, Seed>();
+  const toolEvidence = {
+    catalog: catalogIdentities(input.names),
+    succeededToolIds: input.succeededToolIds ?? new Set<string>(),
+  };
   for (const issue of input.issues) {
     const linked = issue.proposal ? linkedSeed(seeds, issue.proposal) : null;
     const resolvers = linked
@@ -323,6 +339,12 @@ export function buildFixes(raw: FixesInput): FixesModel {
     }
     const kind = issueFixKind({ kind: issue.kind, route: issue.route, toolIds, fix: issue.fix });
     if (kind === null) continue;
+    if (
+      issue.kind === "unknown_tool" &&
+      toolIds.length > 0 &&
+      toolIds.every((id) => unknownToolStanding(id, issue.metrics, toolEvidence) !== "missing")
+    )
+      continue;
     if (
       kind === "rewrite" &&
       toolIds.some((id) => dismissedSince(id, Date.parse(issue.firstSeenAt)))

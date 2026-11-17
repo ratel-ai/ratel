@@ -411,3 +411,36 @@ test("session and user from the AI SDK 7 runtime context and OpenLLMetry associa
   ]);
   assert.deepEqual([traceloop.sessionId, traceloop.endUserId], ["sess-tl", "user-tl"]);
 });
+
+test("a plain-text result that says the tool does not exist is recorded beside the ok outcome", () => {
+  const rowFor = (result: string) =>
+    deriveToolInvocations([
+      span({
+        attributes: {
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "search_v2",
+          "gen_ai.tool.call.result": result,
+        },
+      }),
+    ])[0]!;
+  for (const said of [
+    "Tool search_v2 not found",
+    "Error: search_v2 is not a valid tool, try one of [search].",
+    "Unknown tool: search_v2",
+    "no such tool",
+    "Error: function 'search_v2' does not exist",
+  ]) {
+    const row = rowFor(said);
+    assert.equal(row.type, "invoke_end", said);
+    assert.equal(row.payload.result_no_such_tool, true, said);
+  }
+  for (const fine of [
+    "User not found",
+    "No results",
+    "Tool hammer is in stock",
+    "The order was found",
+    '{"tool":"search_v2 not found"}',
+  ]) {
+    assert.equal(rowFor(fine).payload.result_no_such_tool, undefined, fine);
+  }
+});

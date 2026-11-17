@@ -9,7 +9,6 @@ import { reportServerException, trackServerEvent } from "@/lib/platform/telemetr
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { loadFixContext } from "@/lib/views/eval-gate/service";
 import { createFixShipment } from "@/lib/views/fixes/loop-queries";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 import { runTaskSimulation } from "@/lib/views/task-evals/simulation";
 import {
   changeTaskSimulation,
@@ -19,8 +18,7 @@ import {
 import "@/lib/views/task-evals/ship";
 
 /**
- * Owned (ADR-0030): the project comes from the console scope; the stage spine is `FF_STAGE_SPINE`
- * (`stage-spine-flag.ts`) in place of the Cloud flag.
+ * Owned (ADR-0030): the project comes from the console scope.
  */
 
 const logger = getLogger("task-evals/simulation-actions");
@@ -33,8 +31,7 @@ export async function changeTaskSimulationAction(
     const result = await changeTaskSimulation(input, {
       getSession: getSessionContext,
       findProjectScope,
-      enabled: async (projectId, actor) =>
-        stageSpineEnabled() && (await evalGateEnabledForActor(projectId, actor)),
+      enabled: evalGateEnabledForActor,
       ship: createFixShipment,
       loadFix: loadFixContext,
       run: async (fixId, options) => {

@@ -25,6 +25,8 @@ function inWindow(projectId: string, window: { start: Date; end: Date }, types: 
   );
 }
 
+const BRAINTRUST_IMPORT = sql`${traceEvents.sourceId} = 'braintrust-import'`;
+
 async function otelCounts(projectId: string, window: { start: Date; end: Date }, db: SetupDb) {
   const [tools] = await db
     .select({
@@ -36,6 +38,7 @@ async function otelCounts(projectId: string, window: { start: Date; end: Date },
       rootSession: n(
         sql`${traceEvents.payload} ->> 'root_tool' = 'true' and ${traceEvents.payload} ->> 'has_session' = 'true'`,
       ),
+      braintrust: n(BRAINTRUST_IMPORT),
     })
     .from(traceEvents)
     .where(
@@ -49,6 +52,7 @@ async function otelCounts(projectId: string, window: { start: Date; end: Date },
       rows: n(),
       prompt: n(sql`${traceEvents.payload} ? 'prompt'`),
       menu: n(sql`${traceEvents.payload} ? 'menu'`),
+      braintrust: n(BRAINTRUST_IMPORT),
     })
     .from(traceEvents)
     .where(inWindow(projectId, window, [OTLP_MODEL_CALL]));
@@ -62,6 +66,7 @@ async function otelCounts(projectId: string, window: { start: Date; end: Date },
     modelCalls: calls?.rows ?? 0,
     modelCallsWithPrompt: calls?.prompt ?? 0,
     modelCallsWithMenu: calls?.menu ?? 0,
+    braintrustImportRows: (tools?.braintrust ?? 0) + (calls?.braintrust ?? 0),
   };
 }
 

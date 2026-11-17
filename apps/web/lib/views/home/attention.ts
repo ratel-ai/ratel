@@ -4,9 +4,14 @@ import { fmtCount } from "@/lib/platform/format";
 import {
   figureCaption,
   formatSharePercent,
-  signalTitle,
+  signalsTitle,
 } from "@/lib/readings/trace-signals/claims";
-import type { SignalFixRoute, SignalKind, SignalSubject } from "@/lib/readings/trace-signals/view";
+import type {
+  SignalFixRoute,
+  SignalKind,
+  SignalSubject,
+  SignalView,
+} from "@/lib/readings/trace-signals/view";
 import type { Suggestion } from "@/lib/synthesis/dashboard";
 import { productWords } from "@/lib/views/fixes/copy";
 import type { TaskRef, UnansweredIntent } from "@/lib/views/home/glance";
@@ -65,6 +70,7 @@ export interface AttentionItem {
 export interface AttentionIssue {
   id: string;
   kind: SignalKind;
+  toolStanding?: SignalView["toolStanding"];
   subject: Pick<SignalSubject, "kind" | "key" | "label" | "chips">;
   figure: { display: string; caption?: string };
   fixRoute: SignalFixRoute;
@@ -254,7 +260,7 @@ function issueItem(group: IssueGroup, input: AttentionInput): AttentionItem {
     key: `${ISSUE_KEY}${lead.id}`,
     tone: "warning",
     mark: markOf(group.kind),
-    title: productWords(signalTitle(group.kind)),
+    title: productWords(signalsTitle(group.kind, group.members)),
     subject: subjectOf(group, input.tasks),
     figure: {
       value: lead.figure.display,

@@ -397,3 +397,71 @@ test("self-corrections: a task's claim names the task, and its fix the tool or t
     "no topic known: the task stands in",
   );
 });
+
+const unknownTool = (metrics: Record<string, unknown>) =>
+  claimModel(
+    record("unknown_tool", {
+      subjectIds: ["lookup_order"],
+      metrics: { unknown: 8, calls: 8, byError: 0, byMenu: 8, ...metrics },
+    }),
+    new Map(),
+    30,
+  );
+
+test("an unknown_tool told as stored keeps its missing-tool copy, with okCalls or without", () => {
+  for (const metrics of [{}, { okCalls: 8 }]) {
+    const claim = unknownTool(metrics);
+    assert.equal(
+      claim.claim,
+      "The agent calls lookup_order, a tool that was not in the list it was given.",
+    );
+    assert.equal(claim.cost, "8 calls went to a tool that does not exist in the last 30 days.");
+    assert.equal(
+      claim.fix,
+      "Add lookup_order if the agent needs it, or fix the prompt or tool list that makes the agent expect it.",
+    );
+  }
+});
+
+test("an unknown_tool that succeeded says it ran and was missing from the captured list, not to add it", () => {
+  const claim = unknownTool({ toolStanding: "succeeded" });
+  assert.equal(
+    claim.claim,
+    "lookup_order returned without an error but was missing from the captured tool list.",
+  );
+  assert.equal(
+    claim.cost,
+    "8 calls named a tool missing from the captured tool list in the last 30 days.",
+  );
+  assert.equal(
+    claim.fix,
+    "No tool to add. Check that your tracing captures the full tool list on each model call.",
+  );
+  assert.equal(claim.figure.raw, "of 8 calls");
+});
+
+test("an unknown_tool only the catalog vouches for does not claim it succeeded", () => {
+  const claim = unknownTool({ toolStanding: "in_catalog" });
+  assert.equal(
+    claim.claim,
+    "lookup_order is in the catalog but was missing from the captured tool list.",
+  );
+  assert.doesNotMatch(claim.claim, /without an error/);
+  assert.equal(
+    claim.fix,
+    "No tool to add. Check that lookup_order reaches the agent, and that your tracing captures the full tool list on each model call.",
+  );
+});
+
+test("an unknown_tool in the catalog failing as not found says so, without saying to add it", () => {
+  const claim = unknownTool({ toolStanding: "in_catalog", byError: 8, byMenu: 0 });
+  assert.equal(
+    claim.claim,
+    "lookup_order is in the catalog, but some calls fail as if it did not exist.",
+  );
+  assert.equal(claim.cost, "8 calls failed with a tool-not-found error in the last 30 days.");
+  assert.equal(
+    claim.fix,
+    "No tool to add. Check that lookup_order is available everywhere the agent runs.",
+  );
+});

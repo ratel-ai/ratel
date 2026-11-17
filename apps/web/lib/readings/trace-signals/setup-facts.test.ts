@@ -60,6 +60,49 @@ test("an OpenTelemetry project with content off and no conversation id is told e
   );
 });
 
+const IMPORT_COUNTS = {
+  toolRows: 40,
+  toolRowsWithSession: 40,
+  toolRowsWithUser: 40,
+  toolRowsWithResult: 40,
+  modelCalls: 60,
+  modelCallsWithPrompt: 60,
+  modelCallsWithMenu: 0,
+};
+
+test("a Braintrust import is not asked for tool definitions it cannot send (RC-256)", () => {
+  const setup = buildSetupFacts({ ...NONE, otel: { ...IMPORT_COUNTS, braintrustImportRows: 100 } });
+  assert.equal(
+    setup.facts.some((f) => f.key === "otel_tool_definitions"),
+    false,
+  );
+  assert.deepEqual(missingSetup(setup), []);
+  const noModelCalls = buildSetupFacts({
+    ...NONE,
+    otel: { ...IMPORT_COUNTS, modelCalls: 0, modelCallsWithPrompt: 0, braintrustImportRows: 40 },
+  });
+  assert.equal(
+    noModelCalls.facts.some((f) => f.key === "otel_tool_definitions"),
+    false,
+  );
+});
+
+test("live runs beside a Braintrust import, other sources and live projects keep the warning (RC-256)", () => {
+  const keeps = (otel: SetupCounts["otel"]) =>
+    buildSetupFacts({ ...NONE, otel }).facts.find((f) => f.key === "otel_tool_definitions")?.status;
+  assert.equal(
+    keeps({ ...IMPORT_COUNTS, braintrustImportRows: 99 }),
+    "off",
+    "one live row among them",
+  );
+  assert.equal(
+    keeps({ ...IMPORT_COUNTS, braintrustImportRows: 0 }),
+    "off",
+    "another import source",
+  );
+  assert.equal(keeps(IMPORT_COUNTS), "off", "a live project, and a count an older shape left out");
+});
+
 test("an SDK project gets SDK facts only; a partial share reads as partial", () => {
   const setup = buildSetupFacts({
     ...NONE,

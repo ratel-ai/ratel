@@ -42,7 +42,7 @@ export default async function ScopedCalibrationDetailPage({
   const view = resolveTraceListView({ ...query, project: project.slug });
   const window = { since: view.range.since, until: view.range.until };
 
-  // Where the experiment came from (RC-45, behind FF_STAGE_SPINE).
+  // Where the experiment came from (RC-45).
   const lineage = <ExperimentSource projectId={project.id} name={name} />;
   const kind = await resolveKind(query, project.id, name, window);
   if (kind !== "ranking-shadow")

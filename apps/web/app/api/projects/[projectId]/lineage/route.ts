@@ -12,7 +12,6 @@ import { lineageShowsTraces } from "@/lib/views/lineage/plan";
 import { chainOf, sourceOf } from "@/lib/views/lineage/resolve";
 import { lineageResponse } from "@/lib/views/lineage/route";
 import type { LineageRef } from "@/lib/views/lineage/types";
-import { stageSpineEnabled } from "@/lib/views/stage-spine-flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +22,8 @@ const logger = getLogger("lineage/route");
  * GET /api/projects/:projectId/lineage?kind=insight&id=<id>[&chain=1]: where an
  * object came from, one step back (`source`), or the whole way back to
  * Monitor (`chain`), as `LineageRef`s (RC-45). Read by an issue's panel when
- * it opens. Behind `FF_STAGE_SPINE`. A read; no product event. Owned (ADR-0030):
- * the project comes from the console scope.
+ * it opens. A read; no product event. Owned (ADR-0030): the project comes from the console
+ * scope.
  */
 export const GET = withRequestLog(handleGet);
 
@@ -42,7 +41,6 @@ async function handleGet(
       chain: url.searchParams.get("chain") === "1",
     },
     {
-      enabled: async () => stageSpineEnabled(),
       dbConfigured: isDbConfigured,
       getSession: async () => {
         const session = await getSessionContext();
