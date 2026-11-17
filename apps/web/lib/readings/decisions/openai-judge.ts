@@ -53,6 +53,8 @@ export const OPENAI_MAX_CONSECUTIVE_FAILURES = 20;
 
 export interface OpenAIJudgeConfig {
   apiKey: string;
+  /** What the questions are for, on each `model_call` log line. */
+  feature?: string;
   /** Another question than the tuned tool-search one. Absent keeps the tuned framing. */
   framing?: JudgeFraming;
   baseUrl?: string;
@@ -92,6 +94,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
     fetchImpl: config.fetchImpl,
     sleep: config.sleep,
     retryRateLimit: true,
+    ...(config.feature ? { feature: config.feature } : {}),
   });
   const model = config.model || OPENAI_DECISIONS_MODEL;
   const framing = judgeFraming(config.framing);

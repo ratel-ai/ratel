@@ -1,4 +1,3 @@
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
 /**
  * One closed-set decision ("which of these tools does this query want"),
  * answered by OpenAI's Decisions API (`POST /v1/decisions`, a `choice` question).
@@ -29,6 +28,8 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * name replaced by a role. `decideChoice` walks that chain, least invasive
  * first, and only then reports a refusal.
  */
+import { type ModelCallPayer, trackModelCall } from "@/lib/platform/model-call";
+import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
 export const OPENAI_DECISIONS_MODEL = "gpt-6-luna";
 export const OPENAI_DEFAULT_BASE_URL = "https://api.openai.com";
@@ -93,7 +94,14 @@ export interface DecisionClientConfig {
   attempts?: number;
   /** True waits out a 429 and retries (background work); false throws `rate_limited`. */
   retryRateLimit?: boolean;
+  /** What the questions are for, on each `model_call` log line. */
+  feature?: string;
+  /** Who pays for the questions in the end (Tool Picker's are charged to the customer). */
+  payer?: ModelCallPayer;
 }
+
+/** The feature a decision client logs when its caller names none. */
+export const DEFAULT_DECISION_FEATURE = "decision";
 
 interface ChoiceRequest {
   input: string;
@@ -242,8 +250,26 @@ export function decisionClient(config: DecisionClientConfig) {
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const attempts = Math.max(1, config.attempts ?? DEFAULT_ATTEMPTS);
 
+  const meta = {
+    provider: "openai" as const,
+    model,
+    feature: config.feature ?? DEFAULT_DECISION_FEATURE,
+    payer: config.payer ?? "ratel",
+  };
+
+  /** One question, retries included, logged as one `model_call` (a refusal is billed, so it logs ok). */
+  function ask(request: ChoiceRequest): Promise<{ answer: RawAnswer; inputTokens: number }> {
+    return trackModelCall(
+      meta,
+      () => askOnce(request),
+      (asked) => ({ inputTokens: asked.inputTokens }),
+    );
+  }
+
   /** One HTTP question. Throws `DecisionCallError`; a refusal is an answer, not an error. */
-  async function ask(request: ChoiceRequest): Promise<{ answer: RawAnswer; inputTokens: number }> {
+  async function askOnce(
+    request: ChoiceRequest,
+  ): Promise<{ answer: RawAnswer; inputTokens: number }> {
     const body = JSON.stringify(wellFormedJson(buildDecisionRequest(request, model)));
     let lastFailure: DecisionCallError | null = null;
 

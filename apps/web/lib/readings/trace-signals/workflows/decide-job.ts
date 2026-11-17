@@ -81,6 +81,9 @@ export interface DecideResult {
   skipped: "no_judge" | "no_workflows" | "no_asks" | "failed" | null;
 }
 
+/** The decision step's questions, on each `model_call` log line. */
+const WORKFLOW_DECIDE_FEATURE = "workflow_decide";
+
 /**
  * The decision engine (`readings/decisions/engine.ts`) with the workflow framing, or with
  * `tools` its tuned tool framing; null without a usable key.
@@ -93,6 +96,7 @@ export function workflowJudgeFromEnv(env: Env = process.env, tools = false): Jud
     baseUrl: configured(env.OPENAI_BASE_URL),
     model: configured(env.OPENAI_DECISIONS_MODEL),
     ...(tools ? {} : { framing: WORKFLOW_FRAMING }),
+    feature: WORKFLOW_DECIDE_FEATURE,
     maxInputTokens: DECIDE_MAX_INPUT_TOKENS,
   });
 }

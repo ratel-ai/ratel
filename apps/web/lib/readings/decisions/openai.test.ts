@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setModelCallSink } from "@/lib/platform/model-call";
 import {
   buildDecisionRequest,
   catalogText,
@@ -448,4 +449,61 @@ test("a lone surrogate in a query or an option never reaches the provider", asyn
   );
   assert.ok(body.includes("find"));
   assert.doesNotMatch(body, /\\ud[89ab-f]/i);
+});
+
+/** The `model_call` lines a block of work logs, through the seam's sink. */
+async function modelCallLines(work: () => Promise<unknown>): Promise<Record<string, unknown>[]> {
+  const lines: Record<string, unknown>[] = [];
+  const restore = setModelCallSink({
+    info: (fields, message) => {
+      if (message === "model_call") lines.push(fields);
+    },
+    warn: () => {},
+  });
+  try {
+    await work().catch(() => {});
+  } finally {
+    restore();
+  }
+  return lines;
+}
+
+test("each decision question is one model call with its feature and payer, refusals included", async () => {
+  const { fetchImpl } = scriptedFetch([
+    refusalResponse(40),
+    choiceResponse("a", { a: 0.9, b: 0.1 }, 200),
+  ]);
+  const client = decisionClient({
+    apiKey: "k",
+    fetchImpl,
+    sleep: noSleep,
+    feature: "match_quality_judge",
+  });
+  const lines = await modelCallLines(() => client.decideChoice("find alpha", TWO, FRAMING));
+  assert.deepEqual(
+    lines.map((line) => [
+      line.provider,
+      line.model,
+      line.feature,
+      line.payer,
+      line.outcome,
+      line.input_tokens,
+    ]),
+    [
+      ["openai", OPENAI_DECISIONS_MODEL, "match_quality_judge", "ratel", "ok", 40],
+      ["openai", OPENAI_DECISIONS_MODEL, "match_quality_judge", "ratel", "ok", 200],
+    ],
+  );
+});
+
+test("a rejected key is one error call, under the default feature", async () => {
+  const { fetchImpl } = scriptedFetch([new Response("no", { status: 401 })]);
+  const client = decisionClient({ apiKey: "k", fetchImpl, sleep: noSleep });
+  const lines = await modelCallLines(() =>
+    client.ask({ input: "q", instructions: "i", options: [{ id: "a", does: "A" }] }),
+  );
+  assert.deepEqual(
+    lines.map((line) => [line.feature, line.outcome, line.error_type]),
+    [["decision", "error", "DecisionCallError"]],
+  );
 });

@@ -35,11 +35,6 @@ const defaultDeps: ImportedRunsDeps = {
 };
 
 /**
- * The core's ingest and job queue for imported runs, lent to the edition at startup
- * (`instrumentation.node.ts`). The bodies are upstream's `storeDeps` in
- * `lib/health-imports/start.ts`, which the edition calls through this port.
- */
-/**
  * How an import stores its spans. No quotaOrgId: an import never spends the monthly event allowance, so it can
  * never lock out live ingest. It is bounded by its own caps instead. No fold kick either: the cron drain's
  * safety net folds imported runs paced. A span already stored is rewritten: a reprocess after a mapper fix
@@ -51,6 +46,11 @@ export const IMPORT_PERSIST_CONTEXT = {
   spanConflict: "update",
 } as const satisfies Omit<PersistSpansContext, "projectId" | "organization">;
 
+/**
+ * The core's ingest and job queue for imported runs, lent to the edition at startup
+ * (`instrumentation.node.ts`). The bodies are upstream's `storeDeps` in
+ * `lib/health-imports/start.ts`, which the edition calls through this port.
+ */
 export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): ImportedRunsPort {
   return {
     persist: (projectId, organization, spans, report) =>
