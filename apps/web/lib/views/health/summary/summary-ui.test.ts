@@ -1121,3 +1121,75 @@ test("the loading state and the page without a database keep the header", () => 
   const noDb = render(createElement(SummaryNoDatabase));
   assert.match(noDb, /<h1[^>]*>Agent health<\/h1>[^]*No database connected yet/);
 });
+
+test("tool calls inferred from imported span shape: one callout near the top says so, and the asks say why they are empty", () => {
+  const noAsks: HealthPageModel = {
+    ...READY_MODEL,
+    sourceMode: "otel",
+    workflows: { ...WORKFLOWS, unserved: [] },
+  };
+  const html = page({ model: noAsks, inferredTools: true });
+  assertHouseStyle(html, "inferred tools");
+  const text = visibleText(html);
+  assert.match(text, /Tool calls inferred from span shape · content not captured/);
+  assert.equal((html.match(/data-health-inferred-tools=""/g) ?? []).length, 1, "one callout");
+  assert.match(
+    html,
+    /href="https:\/\/www\.ratel\.sh\/docs\/cloud\/import-tool-calls"/,
+    "it links the guide",
+  );
+  assert.ok(
+    html.indexOf("<h2") > 0 && html.indexOf("data-health-inferred-tools") < html.indexOf("<h2"),
+    "above every section",
+  );
+  assert.match(html, /data-unserved="content_not_captured"/);
+  assert.match(text, /Empty: content not captured/);
+
+  const off = page({ model: noAsks });
+  assert.doesNotMatch(off, /data-health-inferred-tools/, "recorded tool calls: no callout");
+  assert.doesNotMatch(
+    off,
+    /content_not_captured/,
+    "recorded tool calls: the asks section as before",
+  );
+});
+
+test("with the score shown and the tool calls inferred, the score card says what it could not check", () => {
+  const issues = scoredIssues(
+    READY_MODEL.signals.map((signal) => ({
+      id: signal.id,
+      kind: signal.kind,
+      severity: signal.severity,
+      totalTurns: signal.evidence.totalTurns,
+    })),
+  );
+  const score = healthScoreView(issues, READY_MODEL.turns);
+  const line = /Read from tool calls inferred from span shape\. Asks and answers are not checked\./;
+  const inferred = page({
+    model: { ...READY_MODEL, score },
+    scoreLeads: true,
+    inferredTools: true,
+  });
+  assertHouseStyle(inferred, "inferred score");
+  assert.match(visibleText(inferred), line);
+  assert.ok(
+    inferred.indexOf("data-health-score-inferred") > inferred.indexOf("data-health-score="),
+    "inside the score card",
+  );
+  assert.match(
+    inferred,
+    new RegExp(`data-health-score="${score.value}"`),
+    "the score itself is unchanged",
+  );
+
+  assert.doesNotMatch(
+    visibleText(page({ model: { ...READY_MODEL, score }, scoreLeads: true })),
+    line,
+    "recorded tool calls: no line",
+  );
+  assert.doesNotMatch(
+    visibleText(page({ model: { ...READY_MODEL, score }, inferredTools: true })),
+    line,
+    "no score: no line",
+  );
+});

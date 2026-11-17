@@ -3,9 +3,9 @@ import type { getDb } from "@/lib/platform/db/client";
 import { type ChangedTrace, recomputeTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
 
 /**
- * One-off backfill of the trace filter columns (RC-505, migration 0095).
+ * One-off backfill of the trace filter columns (RC-505, migration 0097).
  *
- * Migration 0095 adds `models`, `tools`, `service_name` and `environment` to
+ * Migration 0097 adds `models`, `tools`, `service_name` and `environment` to
  * `otel_trace_summaries` at their defaults. The sweep fills them for every
  * trace it touches after the deploy; this fills the older rows. It walks the
  * summaries in `(project_id, trace_id)` keyset batches on the primary key and
@@ -20,7 +20,7 @@ import { type ChangedTrace, recomputeTraceSummaries } from "@/lib/synthesis/trac
 export type SummaryFiltersBackfillDb = Pick<ReturnType<typeof getDb>, "execute">;
 
 export interface SummaryFiltersBackfillOptions {
-  /** Rows written at or after this already carry the columns (the 0095 deploy time). */
+  /** Rows written at or after this already carry the columns (the 0097 deploy time). */
   before: Date;
   /** Traces per batch. */
   batchSize?: number;

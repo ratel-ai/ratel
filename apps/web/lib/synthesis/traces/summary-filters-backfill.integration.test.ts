@@ -7,7 +7,7 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { backfillTraceSummaryFilters } from "@/lib/synthesis/traces/summary-filters-backfill";
 
 /**
- * RC-505 m1: summary rows written before migration 0095 carry the column
+ * RC-505 m1: summary rows written before migration 0097 carry the column
  * defaults (no models, tools, service or environment). The one-off backfill
  * recomputes them in (project_id, trace_id) batches, never through the sweep
  * cursor.
@@ -105,7 +105,7 @@ async function seeded(): Promise<{ client: PGlite; db: Db }> {
     [PROJECT_B, "b1", "s5", null, "chat", "llm_call", "gpt-4o-mini", "billing", {}],
     [PROJECT_B, "b2", "s6", null, "chat", "llm_call", "gpt-4o", "billing", {}],
   ]);
-  // Summary rows as migration 0095 leaves them: the new columns at their defaults.
+  // Summary rows as migration 0097 leaves them: the new columns at their defaults.
   const old = new Date(CUTOFF.getTime() - 86_400_000).toISOString();
   const fresh = new Date(CUTOFF.getTime() + 60_000).toISOString();
   await client.exec(`

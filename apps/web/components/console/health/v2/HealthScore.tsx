@@ -59,6 +59,7 @@ export function HealthScore({
   early = false,
   progress = null,
   shared = false,
+  inferredTools = false,
 }: {
   score: HealthScoreView;
   next?: readonly ScoreFix[];
@@ -67,6 +68,8 @@ export function HealthScore({
   progress?: EarlyProgress | null;
   /** A public link (RC-226): a change is still shown, the team's own "first reading" line is not. */
   shared?: boolean;
+  /** The reading's tool calls were inferred from span shape (an importer in privacy mode): the score could not check asks or answers. */
+  inferredTools?: boolean;
 }) {
   const copy = scoreCopy(score);
   return (
@@ -126,6 +129,14 @@ export function HealthScore({
         <div className="border-t border-line px-5 py-4 sm:px-6">
           <NextFixes fixes={next} />
         </div>
+      ) : null}
+      {inferredTools ? (
+        <p
+          className="border-t border-line px-5 py-2.5 text-xs text-fg-subtle sm:px-6"
+          data-health-score-inferred=""
+        >
+          Read from tool calls inferred from span shape. Asks and answers are not checked.
+        </p>
       ) : null}
       <p className="border-t border-line px-5 py-2.5 text-xs text-fg-subtle sm:px-6">
         {copy.basis}

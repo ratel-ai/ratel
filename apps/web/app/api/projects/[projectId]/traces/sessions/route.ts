@@ -6,7 +6,6 @@ import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import { loadSessionListPage } from "@/lib/synthesis/traces/v2/sessions-list";
 import { tracesSessionsResponse } from "@/lib/synthesis/traces-sessions/route";
 import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
-import { tracesSessionsEnabled } from "@/lib/synthesis/traces-sessions-flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

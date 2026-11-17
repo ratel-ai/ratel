@@ -1,5 +1,6 @@
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
 import Anthropic from "@anthropic-ai/sdk";
+import { asModelNotEnabled } from "@/lib/platform/anthropic-errors";
 import { configured } from "@/lib/platform/env-configured";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
@@ -24,9 +25,14 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * On Bedrock a call retries a 503 or a throttle at least `BEDROCK_MIN_RETRIES`
  * times, whatever the caller asked for: those errors are the shared EU
  * profiles' capacity, not the request. The API path keeps the caller's setting.
+ *
+ * On Bedrock a 403 for a model whose AWS Marketplace agreement is not accepted
+ * comes back as `ModelNotEnabledError` (a `PermissionDeniedError`). A streamed
+ * call keeps the SDK's own error.
  */
 
 export { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
+export { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 
 /** What the call sites use of a client. Both backends provide it. */
 export type AnthropicClient = {
@@ -99,11 +105,17 @@ function euBedrockClient(options: AnthropicClientOptions): AnthropicClient {
   const create = async (
     params: Anthropic.MessageCreateParams,
     requestOptions?: Anthropic.RequestOptions,
-  ) =>
-    client.messages.create(
-      wellFormedJson({ ...params, model: euProfile(params.model) }),
-      requestOptions,
-    );
+  ) => {
+    const profile = euProfile(params.model);
+    try {
+      return await client.messages.create(
+        wellFormedJson({ ...params, model: profile }),
+        requestOptions,
+      );
+    } catch (err) {
+      throw asModelNotEnabled(err, params.model, profile);
+    }
+  };
   const stream = (
     params: Anthropic.MessageStreamParams,
     requestOptions?: Anthropic.RequestOptions,

@@ -8,7 +8,9 @@ import {
 } from "@opentelemetry/api";
 import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
 import { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
+import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 import { currentLogContext } from "@/lib/platform/logger";
+import { reportServerException } from "@/lib/platform/telemetry";
 
 /**
  * The model-call seam: where a module says "a model was called" (or refused, or skipped for want
@@ -16,7 +18,10 @@ import { currentLogContext } from "@/lib/platform/logger";
  * names writes a spend line per call and prices it; here the line goes to a sink that is unset, so
  * with nothing installed a tracked call only runs. An edition that tracks spend installs its sink
  * with `setModelCallSink` and prices the line itself. The fields carry ids, a model name, numbers
- * and an outcome; never a prompt or an answer.
+ * and an outcome; never a prompt or an answer: only the error's class name, or
+ * `model_not_enabled` for a Claude model this AWS account may not call on Bedrock yet. That
+ * failure also goes to the exception reporter, once per call, with the feature, model and Bedrock
+ * profile.
  *
  * `backend` says which endpoint served the call: `bedrock` for a Claude call when
  * `ANTHROPIC_BACKEND=bedrock`, else `api` (the provider's own API). It is read here once, so call
@@ -87,6 +92,7 @@ function tokens(value: number | null | undefined): number | null {
 
 function errorType(error: unknown): string | undefined {
   if (error === undefined || error === null) return undefined;
+  if (error instanceof ModelNotEnabledError) return error.errorType;
   if (error instanceof Error) return error.constructor?.name || error.name || "Error";
   return typeof error;
 }
@@ -149,6 +155,7 @@ export async function trackModelCall<T>(
   } catch (error) {
     endModelCallSpan(span, {}, error);
     recordModelCall({ ...meta, outcome: "error", durationMs: now() - startedAt, error });
+    if (error instanceof ModelNotEnabledError) reportNotEnabled(meta, error);
     throw error;
   }
   let usage: ModelCallUsage = {};
@@ -160,6 +167,43 @@ export async function trackModelCall<T>(
   endModelCallSpan(span, usage);
   recordModelCall({ ...meta, ...usage, outcome: "ok", durationMs: now() - startedAt });
   return result;
+}
+
+export type ModelCallExceptionReporter = (
+  error: unknown,
+  distinctId: string,
+  properties: Record<string, unknown>,
+) => void;
+
+let exceptionReporter: ModelCallExceptionReporter = reportServerException;
+
+/** Swap where a not-enabled model's exception goes (tests); returns a restore function. */
+export function setModelCallExceptionReporter(next: ModelCallExceptionReporter): () => void {
+  const previous = exceptionReporter;
+  exceptionReporter = next;
+  return () => {
+    exceptionReporter = previous;
+  };
+}
+
+/**
+ * A Claude model this AWS account may not call on Bedrock yet, as one reported
+ * exception per call: someone must accept its Marketplace agreement. Never throws.
+ */
+function reportNotEnabled(meta: ModelCallMeta, error: ModelNotEnabledError): void {
+  try {
+    const projectId = meta.projectId ?? currentLogContext().project_id ?? null;
+    exceptionReporter(error, projectId ? `project:${projectId}` : "system:model-call", {
+      operation: "model_call",
+      feature: meta.feature,
+      model: error.model,
+      bedrock_profile: error.bedrockProfile,
+      backend: backendOf(meta.provider),
+      ...(projectId ? { project_id: projectId } : {}),
+    });
+  } catch {
+    // A reporting failure is not the call's failure.
+  }
 }
 
 /*

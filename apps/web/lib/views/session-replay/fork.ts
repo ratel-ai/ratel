@@ -3,11 +3,12 @@ import { costFor, type PriceBook, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "@/lib/views/eval-gate/calls";
 import { emptyChange } from "@/lib/views/eval-gate/change";
-import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
+import { CANT_SIMULATE, notEnabledReason } from "@/lib/views/eval-gate/method";
 import {
   AGENT_MAX_TOKENS,
   type EvalModels,
   estimateTokens,
+  ModelNotEnabled,
   ModelRefused,
   recordBudgetRefusal,
   type SpendMeter,
@@ -125,6 +126,13 @@ export async function sampleStep(
     return { ok: true, method: "replay", k, recorded: step.recorded, before, after, note: null };
   } catch (err) {
     if (err instanceof BudgetSpent) return { ok: false, reason: CANT_SIMULATE.budget };
+    if (err instanceof ModelNotEnabled) {
+      logger.error(
+        { model: err.model, bedrock_profile: err.bedrockProfile, turn_id: run.turnId },
+        "bedrock model not enabled",
+      );
+      return { ok: false, reason: notEnabledReason(err.model) };
+    }
     if (err instanceof ModelRefused) {
       logger.error({ err, turn_id: run.turnId }, "what if model key refused");
       return { ok: false, reason: CANT_SIMULATE.refused };

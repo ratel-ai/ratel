@@ -2,7 +2,7 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
+import { CANT_SIMULATE, isNotEnabledReason } from "@/lib/views/eval-gate/method";
 import { DAILY_ORG_BUDGET_USD } from "@/lib/views/eval-gate/models";
 import {
   lockOrganizationSpend,
@@ -243,6 +243,7 @@ export async function contentOptIn(
 
 /** A failure reason as the code a run stores: the `CANT_SIMULATE` key, else `failed`. */
 export function errorCodeOf(reason: string): string {
+  if (isNotEnabledReason(reason)) return "notEnabled";
   const entry = Object.entries(CANT_SIMULATE).find(([, words]) => words === reason);
   return entry ? entry[0] : "failed";
 }

@@ -3,10 +3,11 @@ import { test } from "node:test";
 import type { CloudEvent, CloudMessage } from "@/lib/ingest/cloud-schema";
 import type { ModelCall } from "@/lib/views/eval-gate/calls";
 import { emptyChange } from "@/lib/views/eval-gate/change";
-import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
+import { CANT_SIMULATE, notEnabledReason } from "@/lib/views/eval-gate/method";
 import {
   type AgentModel,
   type EvalModels,
+  ModelNotEnabled,
   ModelRefused,
   type ReplayMessage,
   SpendMeter,
@@ -326,6 +327,25 @@ test("sampleStep: a refused key stops it", async () => {
     deps({ models: { agent: () => agent, tool: null, judge: null, standIn: false } }),
   );
   assert.deepEqual(sample, { ok: false, reason: CANT_SIMULATE.refused });
+});
+
+test("sampleStep: a model not enabled on Bedrock says which model", async () => {
+  const { run, calls } = recordedRun(["find_booking"], TOOLS);
+  const agent: AgentModel = {
+    model: MODEL,
+    standIn: false,
+    next: async () => {
+      throw new ModelNotEnabled(MODEL, `eu.anthropic.${MODEL}`);
+    },
+  };
+  const sample = await sampleStep(
+    run,
+    calls,
+    0,
+    { kind: "add_tool", tool: def("quote_fare") },
+    deps({ models: { agent: () => agent, tool: null, judge: null, standIn: false } }),
+  );
+  assert.deepEqual(sample, { ok: false, reason: notEnabledReason(MODEL) });
 });
 
 test("sampleStep: a change that touches nothing the step saw says so", async () => {
