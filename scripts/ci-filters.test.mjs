@@ -137,6 +137,14 @@ test("docker-compose.yml sets compose and platform", () => {
   assertFalse(r, ["sdk"]);
 });
 
+test("install.sh and its test set compose and platform", () => {
+  assertTrue(on(["install.sh"]), ["compose", "platform"]);
+  assertFalse(on(["install.sh"]), ["sdk", "rust", "python"]);
+  const r = on(["scripts/install.test.mjs"]);
+  assertTrue(r, ["platform"]);
+  assertFalse(r, ["sdk", "rust", "python"]);
+});
+
 test("lockfile and exceptions-file changes set lockfiles", () => {
   for (const f of ["pnpm-lock.yaml", "Cargo.lock", ".trivyignore.yaml"]) {
     assertTrue(on([f]), ["lockfiles"]);

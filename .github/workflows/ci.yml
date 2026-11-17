@@ -250,6 +250,9 @@ jobs:
           scripts/link-ee.test.mjs
           scripts/platform-sync/sync.test.mjs
           scripts/quick-start.test.mjs
+          scripts/install.test.mjs
+      - name: Shellcheck install.sh
+        run: shellcheck -s sh install.sh
 
   # @ratel/platform tests (PGlite), sharded like private platform-tests. A WASM crash
   # then hits one shard. Shard names stay off the ruleset; ci-gate needs this job id.
