@@ -14,6 +14,7 @@ import { GEN_AI } from "./constants";
 import {
   type MappedContent,
   mapMessages,
+  mapSettings,
   mapToolDefinitions,
   systemFromInstructions,
 } from "./content";
@@ -35,6 +36,16 @@ import type { AttrMap, DecodedSpan, GroupedCall } from "./types";
 // window.
 const MIN_TS_MS = Date.parse("2020-01-01T00:00:00Z");
 const FUTURE_SKEW_MS = 2 * 86_400_000; // tolerate ~2 days of clock skew
+
+/**
+ * What a call's payload keeps beyond the categorizer's input. `captureReply`
+ * is flag `cloud-session-replay` (RC-280): the call's own reply as `output` and
+ * its request settings as `settings`, only on a call that carries content.
+ * Off, the payload is exactly as before.
+ */
+export interface PayloadCapture {
+  captureReply?: boolean;
+}
 
 const VALID_FINISH = new Set(["stop", "length", "tool_call", "content_filter", "refusal"]);
 const FINISH_ALIASES: Record<string, string> = {
@@ -367,9 +378,9 @@ export function idlessKey(b: ToolCallBlock): string {
 }
 
 /** Reconstruct a `CloudEvent` from a grouped OTLP call. */
-export function toCloudEvent(call: GroupedCall): CloudEvent {
+export function toCloudEvent(call: GroupedCall, capture: PayloadCapture = {}): CloudEvent {
   const content = callContent(call);
-  return buildEvent(call, content, traceScope([content]));
+  return buildEvent(call, content, traceScope([content]), capture);
 }
 
 /** Map one call's input and output messages. */
@@ -387,10 +398,17 @@ function callContent(call: GroupedCall): MappedContent {
   );
 }
 
-function buildEvent(call: GroupedCall, content: MappedContent, scope: ToolSpanScope): CloudEvent {
+function buildEvent(
+  call: GroupedCall,
+  content: MappedContent,
+  scope: ToolSpanScope,
+  capture: PayloadCapture,
+): CloudEvent {
   const a = call.anchor.attributes;
   const details = call.detailsEvent?.attributes ?? {};
   const messages: CloudMessage[] = content.messages;
+  // Read before `assembleTools` and the placeholder change `messages`.
+  const reply = capture.captureReply ? replyCapture(content, [details, a]) : {};
 
   const systemFromEvent = systemFromInstructions(
     attrStructured(details, GEN_AI.systemInstructions) ??
@@ -424,8 +442,23 @@ function buildEvent(call: GroupedCall, content: MappedContent, scope: ToolSpanSc
     messages,
     input_message_count: content.inputCount,
     ...(params ? { params } : {}),
+    ...reply,
     ...(usage ? { usage } : {}),
     ...(finish ? { finish_reason: finish } : {}),
+  };
+}
+
+/** The call's own reply and its settings, or nothing for a call with no content. */
+function replyCapture(
+  content: MappedContent,
+  maps: AttrMap[],
+): Pick<CloudEvent, "output" | "settings"> {
+  if (content.messages.length === 0) return {};
+  const output = content.messages.slice(content.inputCount);
+  const settings = mapSettings(maps);
+  return {
+    ...(output.length > 0 ? { output } : {}),
+    ...(settings ? { settings } : {}),
   };
 }
 
@@ -472,14 +505,18 @@ export function toRow(projectId: string, call: GroupedCall): EventWithMetric {
  * batch than its producer counts once more, and a history call that a batch's first
  * call shows first is not recovered.
  */
-export function toRows(projectId: string, calls: GroupedCall[]): EventWithMetric[] {
+export function toRows(
+  projectId: string,
+  calls: GroupedCall[],
+  capture: PayloadCapture = {},
+): EventWithMetric[] {
   const contents = calls.map(callContent);
   const scopes = toolSpanScopes(calls, contents);
   // Read before `buildEvent`: it appends the span calls and a placeholder message.
   const traces = callsWithContentByTrace(calls, contents);
   const hadOutput = contents.map((c) => producedMessages(c.messages, c.inputCount).length > 0);
   const events = calls.map((call, i) =>
-    buildEvent(call, contents[i], scopes.get(call.anchor.traceId)!),
+    buildEvent(call, contents[i], scopes.get(call.anchor.traceId)!, capture),
   );
 
   const recovered = new Map<number, ToolCallBlock[]>();

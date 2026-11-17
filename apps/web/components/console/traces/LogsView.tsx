@@ -12,6 +12,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
 import { formatAttributeValue } from "@/lib/synthesis/traces/format";
 import type { TraceFacetValue } from "@/lib/synthesis/traces/queries";
 import { withCursor, withoutCursor, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
@@ -133,6 +134,7 @@ export function LogsView(props: LogsViewProps) {
         onSearchChange={go}
       />
       <PageBody wide className="gap-6">
+        <TabSummary projectId={projectId} tab="logs" />
         <TraceFilterBar
           tab="logs"
           search={search}

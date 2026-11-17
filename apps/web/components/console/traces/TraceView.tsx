@@ -54,6 +54,8 @@ export interface TraceViewProps {
   initialTab: TraceTab;
   initialSpanId: string | null;
   runtimeEventsRoot: string | null;
+  /** Inside another page (the session replay's Trace view): no page frame, a heading row instead. */
+  embedded?: boolean;
 }
 
 /**
@@ -126,130 +128,148 @@ export function TraceView(props: TraceViewProps) {
 
   const kindSummary = useMemo(() => summarizeKinds(rows.map((row) => stepKind(row.span))), [rows]);
 
+  const description = `Started ${formatTimestamp(props.startedAt)}${props.service ? ` in ${props.service}` : ""}`;
+  const actions = (
+    <>
+      <CopyButton text={props.traceId} label="Copy trace ID" />
+      <Link
+        href={props.compareHref}
+        className={buttonVariants({ variant: "secondary", size: "sm" })}
+      >
+        Compare
+      </Link>
+    </>
+  );
+  const body = (
+    <>
+      {props.truncated ? (
+        <Callout tone="warning" title="This run is longer than 5,000 spans">
+          The timeline shows its first 5,000 spans.
+        </Callout>
+      ) : null}
+
+      <StatRow
+        stats={[
+          {
+            label: "Status",
+            value: (
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden className={cn("size-2 rounded-full", STATUS_DOT[props.status])} />
+                {RUN_STATUS_LABEL[props.status]}
+              </span>
+            ),
+            hint:
+              totals.failedSpans > 0
+                ? `${formatInteger(totals.failedSpans)} of ${formatInteger(totals.spanCount)} spans failed`
+                : props.status === "incomplete"
+                  ? INCOMPLETE_HINT
+                  : "Every span succeeded",
+          },
+          { label: "Duration", value: formatDuration(totals.durationMs) },
+          {
+            label: "Spans",
+            value: formatInteger(totals.spanCount),
+            hint: kindSummary || undefined,
+          },
+          {
+            label: "Tokens",
+            value: formatInteger(totals.tokens),
+            hint:
+              totals.tokens > 0
+                ? `${formatInteger(totals.inputTokens)} in, ${formatInteger(totals.outputTokens)} out`
+                : undefined,
+          },
+          { label: "Cost", value: formatMoney(totals.costUsd) },
+        ]}
+      />
+
+      <Tabs
+        value={tab}
+        onValueChange={changeTab}
+        items={[
+          {
+            value: "timeline",
+            label: "Timeline",
+            content: (
+              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+                <TraceTimeline
+                  rows={rows}
+                  durationMs={waterfall.durationMs}
+                  shape={shape}
+                  collapsed={collapsed}
+                  selected={shown}
+                  onSelect={select}
+                  onToggle={toggle}
+                />
+                {selectedRow ? (
+                  <SpanInspector
+                    span={selectedRow.span}
+                    offsetMs={Math.max(0, Date.parse(selectedRow.span.startedAt) - traceStart)}
+                    runtimeEventsRoot={props.runtimeEventsRoot}
+                    onShowDetails={() => changeTab("details")}
+                  />
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            value: "conversation",
+            label: "Conversation",
+            content: <TraceConversation content={content} />,
+          },
+          {
+            value: "details",
+            label: "Details",
+            content: selectedRow ? (
+              <div className="flex max-w-5xl flex-col gap-4">
+                <p className="text-ui text-fg-muted">
+                  {STEP_KIND_LABEL[stepKind(selectedRow.span)]}{" "}
+                  <span className="font-mono text-xs text-fg">{selectedRow.span.name}</span>
+                  <span className="text-fg-subtle">
+                    . Pick another step in the timeline to see its attributes.
+                  </span>
+                </p>
+                <SpanDetails span={selectedRow.span} traceId={props.traceId} />
+              </div>
+            ) : null,
+          },
+          ...(props.lifecycle.length > 0
+            ? [
+                {
+                  value: "ranking",
+                  label: "Ranking",
+                  content: <TraceRanking records={props.lifecycle} />,
+                },
+              ]
+            : []),
+        ]}
+      />
+    </>
+  );
+  if (props.embedded) {
+    return (
+      <div className="flex flex-col gap-6" data-trace-embedded={props.traceId}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-semibold text-fg">{props.title}</h2>
+            <p className="text-ui text-fg-muted">{description}</p>
+          </div>
+          <div className="flex items-center gap-2">{actions}</div>
+        </div>
+        {body}
+      </div>
+    );
+  }
   return (
     <Page>
       <PageHeader
         crumbs={[{ label: "Traces", href: props.listHref }]}
         title={props.title}
-        description={`Started ${formatTimestamp(props.startedAt)}${props.service ? ` in ${props.service}` : ""}`}
-        actions={
-          <>
-            <CopyButton text={props.traceId} label="Copy trace ID" />
-            <Link
-              href={props.compareHref}
-              className={buttonVariants({ variant: "secondary", size: "sm" })}
-            >
-              Compare
-            </Link>
-          </>
-        }
+        description={description}
+        actions={actions}
       />
       <PageBody wide className="gap-6">
-        {props.truncated ? (
-          <Callout tone="warning" title="This run is longer than 5,000 spans">
-            The timeline shows its first 5,000 spans.
-          </Callout>
-        ) : null}
-
-        <StatRow
-          stats={[
-            {
-              label: "Status",
-              value: (
-                <span className="inline-flex items-center gap-2">
-                  <span
-                    aria-hidden
-                    className={cn("size-2 rounded-full", STATUS_DOT[props.status])}
-                  />
-                  {RUN_STATUS_LABEL[props.status]}
-                </span>
-              ),
-              hint:
-                totals.failedSpans > 0
-                  ? `${formatInteger(totals.failedSpans)} of ${formatInteger(totals.spanCount)} spans failed`
-                  : props.status === "incomplete"
-                    ? INCOMPLETE_HINT
-                    : "Every span succeeded",
-            },
-            { label: "Duration", value: formatDuration(totals.durationMs) },
-            {
-              label: "Spans",
-              value: formatInteger(totals.spanCount),
-              hint: kindSummary || undefined,
-            },
-            {
-              label: "Tokens",
-              value: formatInteger(totals.tokens),
-              hint:
-                totals.tokens > 0
-                  ? `${formatInteger(totals.inputTokens)} in, ${formatInteger(totals.outputTokens)} out`
-                  : undefined,
-            },
-            { label: "Cost", value: formatMoney(totals.costUsd) },
-          ]}
-        />
-
-        <Tabs
-          value={tab}
-          onValueChange={changeTab}
-          items={[
-            {
-              value: "timeline",
-              label: "Timeline",
-              content: (
-                <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-                  <TraceTimeline
-                    rows={rows}
-                    durationMs={waterfall.durationMs}
-                    shape={shape}
-                    collapsed={collapsed}
-                    selected={shown}
-                    onSelect={select}
-                    onToggle={toggle}
-                  />
-                  {selectedRow ? (
-                    <SpanInspector
-                      span={selectedRow.span}
-                      offsetMs={Math.max(0, Date.parse(selectedRow.span.startedAt) - traceStart)}
-                      runtimeEventsRoot={props.runtimeEventsRoot}
-                      onShowDetails={() => changeTab("details")}
-                    />
-                  ) : null}
-                </div>
-              ),
-            },
-            {
-              value: "conversation",
-              label: "Conversation",
-              content: <TraceConversation content={content} />,
-            },
-            {
-              value: "details",
-              label: "Details",
-              content: selectedRow ? (
-                <div className="flex max-w-5xl flex-col gap-4">
-                  <p className="text-ui text-fg-muted">
-                    {STEP_KIND_LABEL[stepKind(selectedRow.span)]}{" "}
-                    <span className="font-mono text-xs text-fg">{selectedRow.span.name}</span>
-                    <span className="text-fg-subtle">
-                      . Pick another step in the timeline to see its attributes.
-                    </span>
-                  </p>
-                  <SpanDetails span={selectedRow.span} traceId={props.traceId} />
-                </div>
-              ) : null,
-            },
-            ...(props.lifecycle.length > 0
-              ? [
-                  {
-                    value: "ranking",
-                    label: "Ranking",
-                    content: <TraceRanking records={props.lifecycle} />,
-                  },
-                ]
-              : []),
-          ]}
-        />
+        {body}
       </PageBody>
     </Page>
   );

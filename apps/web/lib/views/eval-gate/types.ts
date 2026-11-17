@@ -360,6 +360,51 @@ export interface ReplayFacts {
   stops?: { before: ReplayStop; after: ReplayStop };
 }
 
+/**
+ * RC-288: where a replayed tool answer came from. `recorded`: the recording's
+ * call with the same tool and arguments; `composed`: a merged tool built from
+ * its sources' recorded results; `earlier`: a call the conversation answered
+ * before the run (a re-read); `stand-in`: none of those, so a model guessed it
+ * (or, without one, the call failed). RC-295 `mock`: a fixed answer the eval
+ * sets for the tool, checked before the recording.
+ */
+export const TOOL_ANSWER_SOURCES = ["recorded", "composed", "earlier", "stand-in", "mock"] as const;
+export type ToolAnswerSource = (typeof TOOL_ANSWER_SOURCES)[number];
+export const TOOL_ANSWER_REASONS = [
+  "matched_recording",
+  "merged_from_sources",
+  "answered_before_run",
+  "stand_in_model",
+  "no_stand_in",
+  "fixed_answer",
+] as const;
+export type ToolAnswerReason = (typeof TOOL_ANSWER_REASONS)[number];
+
+/** One replayed tool call. `args` and `result` are text: present only with `keepText`. */
+export interface ToolAnswerTrace {
+  tool: string;
+  source: ToolAnswerSource;
+  reason: ToolAnswerReason;
+  /** The tool time the replay counts for the call. */
+  ms: number;
+  /** RC-295: why the eval's author fixed this answer (a `mock` with a reason only). */
+  why?: string;
+  args?: Record<string, unknown>;
+  result?: string;
+  isError?: boolean;
+}
+
+export type ReplayTranscriptStep =
+  | { role: "assistant"; text: string; calls: { name: string; args: Record<string, unknown> }[] }
+  | { role: "tool"; tool: string; content: string; isError: boolean };
+
+/** One side of a traced replay. `transcript` is present only with `keepText`. */
+export interface SideTrace {
+  toolsOffered: string[];
+  answers: ToolAnswerTrace[];
+  transcript?: ReplayTranscriptStep[];
+}
+
 export const REPLAY_STOPS = ["answered", "step-cap", "not-run"] as const;
 export type ReplayStop = (typeof REPLAY_STOPS)[number];
 

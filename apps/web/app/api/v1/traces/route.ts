@@ -5,6 +5,7 @@ import {
 } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
+import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
@@ -67,5 +68,8 @@ async function handlePost(req: Request) {
       findTracesWithModelCalls: (projectId, traceIds) =>
         findTracesWithModelCalls(projectId, traceIds),
     },
+    // Session chat: each call's payload keeps its reply and request settings.
+    sessionChatCapture: (projectId, organization) =>
+      sessionChatCaptureEnabled(projectId, organization),
   });
 }

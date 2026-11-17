@@ -78,6 +78,16 @@ export interface ToolStandIn {
   }): Promise<{ content: string; isError: boolean; usage: ModelUsage }>;
 }
 
+/** RC-296: writes the next message of a simulated person that follows a description. */
+export interface PersonModel {
+  model: string;
+  standIn: boolean;
+  write(input: {
+    description: string;
+    messages: readonly ReplayMessage[];
+  }): Promise<{ text: string; usage: ModelUsage }>;
+}
+
 export interface JudgeModel {
   model: string;
   standIn: boolean;
@@ -102,6 +112,8 @@ export interface EvalModels {
   agent: ((context: AgentContext) => AgentModel | null) | null;
   tool: ToolStandIn | null;
   judge: JudgeModel | null;
+  /** RC-296: the simulated person of a multi-turn eval; absent or null when none can write. */
+  person?: PersonModel | null;
   /** True when these are the local deterministic stand-ins. */
   standIn: boolean;
 }
@@ -307,6 +319,7 @@ export function resolveEvalModels(
       ),
     tool: anthropicToolStandIn(client, small),
     judge: anthropicJudge(client, small, judgeFeature),
+    person: anthropicPerson(client, small),
     standIn: false,
   };
 }
@@ -680,6 +693,50 @@ export function anthropicToolStandIn(client: Anthropic, model: string): ToolStan
   };
 }
 
+const PERSON_SYSTEM =
+  "You play the person talking to an AI agent in a test. Follow the description of the person. Reply with only the person's next message " +
+  "to the agent, in their words: one short message, no commentary, no quotes.";
+
+/** RC-296: the simulated person, on the stand-in route (the small model, logged as a stand-in call). */
+export function anthropicPerson(client: Anthropic, model: string): PersonModel {
+  return {
+    model,
+    standIn: false,
+    async write({ description, messages }) {
+      const conversation = messages
+        .flatMap((message) =>
+          message.role === "user"
+            ? [`Person: ${message.text}`]
+            : message.role === "assistant" && message.text.trim()
+              ? [`Agent: ${message.text}`]
+              : [],
+        )
+        .join("\n");
+      const message = await guarded(() =>
+        tracked(model, "eval_gate_stand_in", () =>
+          client.messages.create(
+            wellFormedJson({
+              model,
+              max_tokens: SMALL_MAX_TOKENS,
+              system: PERSON_SYSTEM,
+              messages: [
+                {
+                  role: "user",
+                  content: `The person: ${description}\n\nThe conversation so far:\n${conversation}\n\nWrite the person's next message.`,
+                },
+              ],
+              ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
+            }),
+          ),
+        ),
+      );
+      if (message.stop_reason === "refusal")
+        throw new Error("the simulated person declined the request");
+      return { text: textOf(message).trim(), usage: usageOf(message) };
+    },
+  };
+}
+
 const JUDGE_SCHEMA = {
   type: "object",
   properties: {
@@ -796,6 +853,17 @@ export function echoToolStandIn(model = STAND_IN_MODEL): ToolStandIn {
   };
 }
 
+/** RC-296: a simulated person that says its description back, for tests and local demos. */
+export function scriptedPerson(model = STAND_IN_MODEL): PersonModel {
+  return {
+    model,
+    standIn: true,
+    async write({ description }) {
+      return { text: description, usage: { inputTokens: 60, outputTokens: 10 } };
+    },
+  };
+}
+
 /** Passes a run that ends without a failed call. */
 export function ruleJudge(model = STAND_IN_MODEL): JudgeModel {
   return {
@@ -816,6 +884,7 @@ export function standInModels(): EvalModels {
     agent: ({ recorded }) => scriptedAgent(recorded),
     tool: echoToolStandIn(),
     judge: ruleJudge(),
+    person: scriptedPerson(),
     standIn: true,
   };
 }

@@ -31,6 +31,7 @@ import {
 import { persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
+import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 
 /**
  * The monthly event cap, through the entitlements port: `checkEventQuota` before the
@@ -102,6 +103,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe; absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings; absent, off. */
+  sessionChatCapture?: SessionChatCaptureEnabled;
 }
 
 export async function handleTracesRequest(

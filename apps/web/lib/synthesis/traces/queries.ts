@@ -854,10 +854,13 @@ export async function getTraceFacets(
   return facets;
 }
 
-/** Span-grain totals and UTC-day volume for the active workspace filters. */
+/**
+ * Span-grain totals for the active workspace filters. Volume is per UTC day,
+ * or per UTC hour of each day with `volumeBucket: "hour"`.
+ */
 export async function getSpanAggregates(
   projectId: string,
-  options: TraceFacetOptions = {},
+  options: TraceFacetOptions & TraceVolumeOptions = {},
   db: TraceQueriesDb = getDb(),
 ): Promise<TraceAggregateSummary> {
   const count = sql<number>`count(*)::int`;
@@ -865,6 +868,7 @@ export async function getSpanAggregates(
   const totalTokens = sql<number>`coalesce(sum(coalesce(${otelSpans.inputTokens}, 0) + coalesce(${otelSpans.outputTokens}, 0)), 0)::float8`;
   const where = and(eq(otelSpans.projectId, projectId), spanFacetFilter(options));
   const day = sql<string>`to_char(date_trunc('day', ${otelSpans.startedAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
+  const hour = sql<number>`extract(hour from ${otelSpans.startedAt} at time zone 'UTC')::int`;
   const [totals, volume] = await Promise.all([
     db
       .select({
@@ -884,7 +888,19 @@ export async function getSpanAggregates(
       })
       .from(otelSpans)
       .where(where),
-    db.select({ day, count, errorCount }).from(otelSpans).where(where).groupBy(day).orderBy(day),
+    options.volumeBucket === "hour"
+      ? db
+          .select({ day, hour, count, errorCount })
+          .from(otelSpans)
+          .where(where)
+          .groupBy(day, hour)
+          .orderBy(day, hour)
+      : db
+          .select({ day, count, errorCount })
+          .from(otelSpans)
+          .where(where)
+          .groupBy(day)
+          .orderBy(day),
   ]);
   const row = totals[0];
   const aggregateCount = row?.count ?? 0;
