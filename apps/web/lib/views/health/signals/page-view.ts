@@ -167,8 +167,6 @@ export interface PageInputs {
   floor?: number;
   /** Earlier readings' stored Health scores, newest first (`listEarlierHealthScores`). */
   scoreHistory?: readonly unknown[];
-  /** `cloud-health-import-first-reading`: mark an early reading that read no turns (`emptyEarlyReading`). */
-  holdEmptyEarlyReading?: boolean;
 }
 
 function toSignalView(
@@ -327,10 +325,7 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
       ? { unbuiltAtReading: summary.unbuiltAtStart }
       : {}),
     ...(summary.earlyReading === true ? { earlyReading: true as const } : {}),
-    ...(inputs.holdEmptyEarlyReading &&
-    summary.earlyReading === true &&
-    inputs.run.turnsScanned === 0 &&
-    total.turns > 0
+    ...(summary.earlyReading === true && inputs.run.turnsScanned === 0 && total.turns > 0
       ? { emptyEarlyReading: true as const }
       : {}),
     score: scoreFor(inputs),

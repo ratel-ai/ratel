@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
-import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
+import {
+  findTracesWithModelCalls,
+  insertEventsWithMetrics,
+  insertOtelSpans,
+} from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest, type TracesHandlerDeps } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
@@ -62,6 +66,10 @@ function routeDeps(db: Db): TracesHandlerDeps {
     traceTurns: {
       enqueueBuild: async () => null,
       scheduleProjectDrain: () => {},
+    },
+    agentSpanDedupe: {
+      findTracesWithModelCalls: (projectId, traceIds) =>
+        findTracesWithModelCalls(projectId, traceIds, db),
     },
   };
 }

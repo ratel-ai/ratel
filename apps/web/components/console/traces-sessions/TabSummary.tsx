@@ -15,7 +15,6 @@ import {
   withTracesWindow,
 } from "@/lib/synthesis/traces-sessions/timeframe";
 import { MiniVolume } from "./MiniVolume";
-import { useTracesSessions } from "./sessions-context";
 
 /** A tab's summary as the tab holds it: loading until the first answer arrives. */
 export type TabSummaryState =
@@ -42,17 +41,12 @@ const VOLUME_UNIT: Readonly<Record<TracesTab, { unit: string; errors: string }>>
 const TOP_GROUPS = 3;
 
 /**
- * The summary at the top of a Traces tab (`cloud-traces-sessions`, RC-331):
+ * The summary at the top of a Traces tab (RC-331):
  * a timeframe and that tab's own numbers and volume. The timeframe lives in
  * `?window=` and changes in place (a history update, not a navigation), so
- * the tab's list under it is not read again. Flag off, it renders nothing
- * and the tab is as before.
+ * the tab's list under it is not read again.
  */
 export function TabSummary({ projectId, tab }: { projectId: string; tab: TracesTab }) {
-  return useTracesSessions() ? <LoadedTabSummary projectId={projectId} tab={tab} /> : null;
-}
-
-function LoadedTabSummary({ projectId, tab }: { projectId: string; tab: TracesTab }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const window = parseTracesWindow(searchParams.getAll(TRACES_WINDOW_PARAM));

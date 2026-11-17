@@ -9,7 +9,6 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import {
@@ -67,8 +66,6 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
-  const holdEmptyEarlyReading = experimentalFeatureEnabled("FF_HEALTH_IMPORT_FIRST_READING");
-  const scoreLeads = experimentalFeatureEnabled("FF_HEALTH_SCORE");
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
   const [loaded, imports, share, tasks, fixes, corrections] = await Promise.all([
@@ -78,11 +75,9 @@ export default async function AgentHealthPage({
       fallback: fallbackModel,
       // Example turns are not read with the page: an issue reads its own when opened.
       load: () =>
-        loadHealthPageModel(
-          { projectId: project.id, windowDays, holdEmptyEarlyReading },
-          process.env.NODE_ENV,
-          { getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }) },
-        ),
+        loadHealthPageModel({ projectId: project.id, windowDays }, process.env.NODE_ENV, {
+          getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
+        }),
     }),
     loadImportState(project.id, importsSlot),
     loadShareState(project.id, editionUi?.HealthShare),
@@ -178,7 +173,6 @@ export default async function AgentHealthPage({
       reportHref={healthReportHref(project.id, windowDays)}
       imports={imports}
       share={share}
-      scoreLeads={scoreLeads}
       partial={partial}
       inferredTools={inferredTools}
     />

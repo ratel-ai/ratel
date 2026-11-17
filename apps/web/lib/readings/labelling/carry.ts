@@ -8,8 +8,7 @@ import type {
 import { AUDIT_SAMPLE, auditVerdict, spreadPick } from "./adaptive";
 
 /**
- * Decisions that survive a change of options (RC-395, behind
- * `cloud-adaptive-labelling`).
+ * Decisions that survive a change of options (RC-395).
  *
  * Topic placement and workflow decisions are cached by a hash of the WHOLE
  * option list, so one new or renamed topic or task re-asked every ask (up to

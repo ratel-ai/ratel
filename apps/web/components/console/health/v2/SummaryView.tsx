@@ -98,8 +98,6 @@ export interface SummaryViewProps {
   imports: SummaryImports | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;
-  /** `cloud-health-score` (RC-225): the Health score leads the page and the issues say what each is worth. */
-  scoreLeads?: boolean;
   /**
    * What the stored spans of imported runs with no tool calls say, drawn in
    * place of the `imported_no_tools` block. Null when the read failed.
@@ -227,7 +225,6 @@ function Ready({
   fixes,
   corrections,
   imports,
-  scoreLeads = false,
   inferredTools = false,
 }: SummaryViewProps) {
   const gap = pageGap(model);
@@ -240,7 +237,7 @@ function Ready({
   const signals = signalsForGap(model.signals, gap);
   const taskSteps = taskLookups(tasks, model.workflows);
   // A gap in the data hides the run-based issues, so a score over them would claim too much.
-  const score = scoreLeads && !gap ? (model.score ?? null) : null;
+  const score = gap ? null : (model.score ?? null);
   const rows = issueRows({
     projectId,
     signals,

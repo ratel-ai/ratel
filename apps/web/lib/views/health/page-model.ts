@@ -213,11 +213,7 @@ async function limitsFor(projectId: string): Promise<AgentHealthLimits> {
 }
 
 export async function loadHealthPageModel(
-  {
-    projectId,
-    windowDays,
-    holdEmptyEarlyReading,
-  }: { projectId: string; windowDays: WindowDays; holdEmptyEarlyReading?: boolean },
+  { projectId, windowDays }: { projectId: string; windowDays: WindowDays },
   nodeEnv: string | undefined = process.env.NODE_ENV,
   overrides: Partial<PageModelDeps> = {},
 ): Promise<HealthPageModel> {
@@ -312,7 +308,6 @@ export async function loadHealthPageModel(
       labels,
       insights,
       scoreHistory,
-      holdEmptyEarlyReading,
     },
     now,
   );

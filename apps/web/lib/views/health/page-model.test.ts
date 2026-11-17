@@ -138,9 +138,9 @@ test("before a first run the live turn count decides collecting or ready", () =>
 
 /** The full local import: every run is older than the first reading's week, so the daily counts have them and the reading read none. */
 function emptyEarlyInputs(
-  over: { turnsScanned?: number; earlyReading?: boolean; hold?: boolean } = {},
+  over: { turnsScanned?: number; earlyReading?: boolean } = {},
 ): PageInputs {
-  const { turnsScanned = 0, earlyReading = true, hold } = over;
+  const { turnsScanned = 0, earlyReading = true } = over;
   const old = windowDays(RUN_END, 30)
     .slice(0, 10)
     .map((day) => ({ ...emptyBucket(day), turns: 10 }));
@@ -156,12 +156,11 @@ function emptyEarlyInputs(
     signals: [],
     evidence: new Map(),
     names: new Map(),
-    ...(hold === undefined ? {} : { holdEmptyEarlyReading: hold }),
   };
 }
 
-test("the flag marks an early reading that read none of the runs the page counts (RC-255)", () => {
-  const held = buildHealthPageModel(emptyEarlyInputs({ hold: true }), RUN_END);
+test("the page model marks an early reading that read none of the runs the page counts (RC-255)", () => {
+  const held = buildHealthPageModel(emptyEarlyInputs(), RUN_END);
   assert.equal(held.emptyEarlyReading, true);
   assert.equal(held.turns, 100, "the daily counts have the runs");
   assert.equal(
@@ -171,27 +170,19 @@ test("the flag marks an early reading that read none of the runs the page counts
   );
 });
 
-test("with the flag off the page model does not change (RC-255)", () => {
-  const off = buildHealthPageModel(emptyEarlyInputs({ hold: false }), RUN_END);
-  assert.deepEqual(off, buildHealthPageModel(emptyEarlyInputs(), RUN_END));
-  assert.equal("emptyEarlyReading" in off, false);
-});
-
-test("the flag leaves a reading alone once it has read turns, and a full reading always (RC-255)", () => {
-  const read = buildHealthPageModel(emptyEarlyInputs({ hold: true, turnsScanned: 73 }), RUN_END);
+test("the mark leaves a reading alone once it has read turns, and a full reading always (RC-255)", () => {
+  const read = buildHealthPageModel(emptyEarlyInputs({ turnsScanned: 73 }), RUN_END);
   assert.equal("emptyEarlyReading" in read, false);
-  assert.deepEqual(read, buildHealthPageModel(emptyEarlyInputs({ turnsScanned: 73 }), RUN_END));
   assert.notEqual(read.score, null);
   // The next reading after an early one is the full window; a full one that reads nothing must not promise another.
   assert.equal(
-    "emptyEarlyReading" in
-      buildHealthPageModel(emptyEarlyInputs({ hold: true, earlyReading: false }), RUN_END),
+    "emptyEarlyReading" in buildHealthPageModel(emptyEarlyInputs({ earlyReading: false }), RUN_END),
     false,
   );
 });
 
-test("a window with no turns gets no mark, flag on or off (RC-255)", () => {
-  const inputs = emptyEarlyInputs({ hold: true });
+test("a window with no turns gets no mark (RC-255)", () => {
+  const inputs = emptyEarlyInputs();
   const empty = {
     ...inputs,
     run: { ...inputs.run!, summary: { ...inputs.run!.summary, daily: [] } },

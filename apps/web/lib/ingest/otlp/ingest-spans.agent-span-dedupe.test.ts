@@ -14,7 +14,10 @@ interface Harness {
   failures: unknown[];
 }
 
-function harness(dedupe?: Partial<AgentSpanDedupeDeps> & { stored?: string[] }): Harness {
+/** `null` turns the dedupe off, as only the health importer does. */
+function harness(
+  dedupe: (Partial<AgentSpanDedupeDeps> & { stored?: string[] }) | null = {},
+): Harness {
   const h: Harness = {
     deps: {} as PersistSpansDeps,
     spanRows: [],
@@ -31,16 +34,14 @@ function harness(dedupe?: Partial<AgentSpanDedupeDeps> & { stored?: string[] }):
     },
     logError: (message) => h.errors.push(message),
     captureFailure: (err) => h.failures.push(err),
-    ...(dedupe && {
-      agentSpanDedupe: {
-        findTracesWithModelCalls: async (_projectId, traceIds) => {
-          h.lookups.push(traceIds);
-          return new Set(traceIds.filter((id) => dedupe.stored?.includes(id)));
-        },
-        ...dedupe,
+    agentSpanDedupe: dedupe && {
+      findTracesWithModelCalls: async (_projectId, traceIds) => {
+        h.lookups.push(traceIds);
+        return new Set(traceIds.filter((id) => dedupe.stored?.includes(id)));
       },
-    }),
-  } as PersistSpansDeps;
+      ...dedupe,
+    },
+  };
   return h;
 }
 
@@ -62,8 +63,17 @@ test("a full LangGraph batch stores 2 calls and no storage lookup", async () => 
   assert.equal(h.spanRows[0].inputTokens, null);
 });
 
-test("without the storage lookup wired, the LangGraph root is a third call", async () => {
-  assert.equal(await persist(langGraphTrace(), harness()), 3);
+test("every ingest lane must choose the dedupe: it has no default", () => {
+  const { agentSpanDedupe: _omitted, ...rest } = harness().deps;
+  // @ts-expect-error `agentSpanDedupe` is required: absent no longer means off.
+  const deps: PersistSpansDeps = rest;
+  assert.ok(deps);
+});
+
+test("with the dedupe off (the health importer), the LangGraph root is a third call", async () => {
+  const h = harness(null);
+  assert.equal(await persist(langGraphTrace(), h), 3);
+  assert.deepEqual(h.lookups, []);
 });
 
 test("a root exported after its stored model calls is not counted", async () => {

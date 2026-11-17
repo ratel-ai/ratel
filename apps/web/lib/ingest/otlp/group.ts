@@ -10,9 +10,9 @@ import {
 import type { DecodedSpan, GroupedCall } from "./types";
 
 /**
- * Flag `cloud-otlp-agent-span-dedupe` on: the traces known to hold a model
- * call, in this batch or already stored. An agent wrapper span in one of them
- * is not a call (see {@link isDedupedAgentSpan}). Absent = flag off.
+ * The traces known to hold a model call, in this batch or already stored. An
+ * agent wrapper span in one of them is not a call (see
+ * {@link isDedupedAgentSpan}). Absent: no dedupe, as for health imports.
  */
 export interface AgentSpanDedupe {
   modelCallTraces: ReadonlySet<string>;
@@ -85,7 +85,7 @@ export function isDedupedAgentSpan(span: DecodedSpan, dedupe?: AgentSpanDedupe):
 
 /**
  * Walk a tool span up to the anchor that owns it, else the trace's sole anchor.
- * A chain through a deduped agent wrapper (`isDeduped`, flag on only) falls to
+ * A chain through a deduped agent wrapper (`isDeduped`) falls to
  * the trace's model call that started last at or before the tool.
  */
 function findOwningAnchor(

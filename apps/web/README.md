@@ -55,14 +55,14 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
-`RATEL_EXPERIMENTAL_FEATURES=1` turns on every experimental feature in the open-source edition
-(the eval gate, the Traces Sessions tab, the Health score and the early readings); Cloud ignores
-it and reads each feature's own `FF_*` flag. The eval gate's pages live in the route group
-`app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above the
-project's loading boundary. Session replay (with What-if and the session chat), the redesigned
-trace views and raw OTLP capture are on for everyone, as upstream retired their flags (#416, #417);
-the session pages keep their route group `(session-replay)`. `(stage-spine)` (Tasks and Ship) is on
-for everyone, and the Traces Sessions tab is a switch inside the page.
+`RATEL_EXPERIMENTAL_FEATURES=1` turns on the one experimental feature left, the eval gate, in the
+open-source edition; Cloud ignores it and reads `FF_EVAL_GATE`. The eval gate's pages live in the
+route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
+the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
+session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,
+Traces Sessions, adaptive labelling, the Health score and the quick and import first readings. The
+session pages keep their route group `(session-replay)`, and `(stage-spine)` (Tasks and Ship) is on
+for everyone.
 
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise.

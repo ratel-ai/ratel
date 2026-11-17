@@ -46,8 +46,8 @@ export interface ReprocessOptions {
 export interface ReprocessIngestFlags {
   /** Payloads keep each call's reply and settings, as ingest does (RC-280). */
   captureReply: boolean;
-  /** `cloud-otlp-agent-span-dedupe` storage lookup; absent, the flag is off. */
-  agentSpanDedupe?: AgentSpanDedupeDeps;
+  /** The agent-span dedupe's storage lookup: a rebuild always dedupes, as `/v1/traces` does. */
+  agentSpanDedupe: AgentSpanDedupeDeps;
   /** The project's price book (RC-482); absent, the current built-in prices. */
   prices?: PriceBook;
 }

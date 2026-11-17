@@ -5,7 +5,7 @@ import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import type { SessionsDb } from "./sessions";
+import type { SessionsDb } from "./cursor";
 import { getLogsAggregate, getSessionsAggregate, getSpansAggregate } from "./tab-aggregates";
 
 /**

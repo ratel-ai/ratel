@@ -739,12 +739,15 @@ test("a run stores both engines' numbers against the key, including its own new 
     arms: { arm: string; tier: string; top1?: number; n: number }[];
     answers: { answered: number; searches: number };
   };
+  // The judge stops once the share's margin is met, so it may leave a few unread.
+  const answered = persisted[0]?.labels.length ?? 0;
+  assert.ok(answered > 0 && answered <= 30, `answered ${answered}`);
   const judged = scores.arms.filter((line) => line.tier === "judged");
   assert.deepEqual(judged.map((line) => [line.arm, line.top1, line.n]).sort(), [
-    ["legacy", 1, 30],
-    ["ratel", 0, 30],
+    ["legacy", 1, answered],
+    ["ratel", 0, answered],
   ]);
-  assert.deepEqual(scores.answers, { searches: 30, answered: 30, unclear: 0, unread: 0 });
+  assert.deepEqual(scores.answers, { searches: 30, answered, unclear: 0, unread: 30 - answered });
 });
 
 /** Search telemetry: one engine (ratel), no calibration, no invocation. */
@@ -787,7 +790,10 @@ test("without a calibration, a run judges, measures, backtests and proposes from
   const input = persisted[0]!;
   assert.equal(input.census.baselineArm, null);
   assert.equal(input.census.tunedArm, "ratel");
-  assert.equal(input.labels.length, 30);
+  assert.ok(
+    input.labels.length > 0 && input.labels.length <= 30,
+    `labelled ${input.labels.length}`,
+  );
   const scores = input.scores as { arms: { arm: string; tier: string; top1?: number }[] };
   assert.deepEqual(
     scores.arms.filter((line) => line.tier === "judged").map((line) => [line.arm, line.top1]),

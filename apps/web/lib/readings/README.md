@@ -12,7 +12,7 @@ explorer; match quality follows.
 | `intent-types/` | `wire.ts`, the intent graph's wire format (SDK push/pull, validation, ETags, caps); `engine-types.ts`, the engine's cluster, level and assignment shapes | — |
 | `text/` | `cluster.ts`, the symmetric-BM25 clusterer the query intents and the engine share; `well-formed.ts`, a cut that never leaves half an emoji in text sent to a model, and `wellFormedJson`, which every Anthropic request in `lib/` goes through (`provider-guards.test.ts` fails on one that does not) | — |
 | `decisions/` | `openai.ts`, the OpenAI Decisions client; `engine.ts`, which engine answers closed-set questions (OpenAI only here); `judge.ts`, the judge contract and helpers the readings share (cases, verdicts, corpus entries, option narrowing); `openai-judge.ts`, the one judge engine | — |
-| `labelling/` | adaptive labelling (RC-392): `adaptive` (the stratified share, its margin and the Neyman allocation of the labels still needed, and the audit verdict) and `carry` (a decision kept across an option change while its option is unchanged, behind a re-asked audit); copies. `gate.ts` (owned) is the deployment switch `FF_ADAPTIVE_LABELLING` in place of upstream's flag service. Match quality, topics and the workflow decisions read it | none |
+| `labelling/` | adaptive labelling (RC-392): `adaptive` (the stratified share, its margin and the Neyman allocation of the labels still needed, and the audit verdict) and `carry` (a decision kept across an option change while its option is unchanged, behind a re-asked audit); copies. Match quality, topics and the workflow decisions label adaptively, for every project (upstream retired its flag) | none |
 | `model-defaults.ts` | `DEFAULT_LABEL_MODEL`, the naming model when the operator sets none | — |
 | `stats.ts` | `wilsonInterval`, `CONFIDENT_SCORE_RATIO`: the two statistics the detectors share with the quality meter (L5) | — |
 | `match-quality/` | `sweep.ts`: the project rotation the signal sweep reuses; match quality itself is in `synthesis/` | — |
@@ -49,10 +49,9 @@ Each completed full reading stores its Health score (`trace-signals/health-score
 its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs
 went and 40% the open issues: `trace-signals/health-outcomes.ts` reads five measured rates from
 what the reading stored (runs end well, right tool in the top 5, no self-corrections, tasks
-finish, calls work), each left out below 20 observations. `trace-signals/health-score-flag.ts`
-(owned) is whether a public link carries the score: the deployment switch `FF_HEALTH_SCORE`,
-in place of upstream's flag service. `trace-signals/signals/early-reading.ts` is the
-quick first reading (RC-224), behind `FF_QUICK_FIRST_READING`: a new project's first run reads
+finish, calls work), each left out below 20 observations; the score shows on the page and on a public link for every
+project. `trace-signals/signals/early-reading.ts` is the
+quick first reading (RC-224), for every project: a new project's first run reads
 a week, is marked early, and queues the `full_reading` run; a reading made while an import runs
 (`composition.importRunning`, the edition's) stays early too.
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading

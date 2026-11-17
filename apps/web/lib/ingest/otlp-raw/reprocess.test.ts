@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
+import { LANGGRAPH_TRACE, langGraphTrace } from "@/lib/ingest/otlp/agent-span-fixtures";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
 import { groupSpans } from "@/lib/ingest/otlp/group";
 import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
@@ -19,7 +20,10 @@ import type { OtlpRawExportBody } from "./store";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
 const SINCE = new Date("2026-11-01T00:00:00.000Z");
-const FLAGS: ReprocessIngestFlags = { captureReply: false };
+const FLAGS: ReprocessIngestFlags = {
+  captureReply: false,
+  agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
+};
 
 test("a dry run reports the cache tokens a new alias reads, and writes nothing", async () => {
   const store = storeIngestedBeforeAliases([chatExport("a1")]);
@@ -344,4 +348,33 @@ test("a stored row of another trace with the same span id is not matched", async
 
   assert.equal(plan.updates.length, 0);
   assert.equal(plan.inserts.length, 1);
+});
+
+test("a rebuild always dedupes: the agent wrapper over its model calls is no row", async () => {
+  const rows = await rebuildEventRows(PROJECT_ID, langGraphTrace(), FLAGS);
+  assert.deepEqual(
+    rows.map((r) => r.event.spanId),
+    ["1000000000000002", "1000000000000003"],
+  );
+});
+
+test("a rebuild asks storage for a wrapper exported after its model calls", async () => {
+  const asked: string[][] = [];
+  const flags: ReprocessIngestFlags = {
+    ...FLAGS,
+    agentSpanDedupe: {
+      findTracesWithModelCalls: async (_projectId, traceIds) => {
+        asked.push(traceIds);
+        return new Set(traceIds);
+      },
+    },
+  };
+  assert.deepEqual(await rebuildEventRows(PROJECT_ID, langGraphTrace().slice(0, 1), flags), []);
+  assert.deepEqual(asked, [[LANGGRAPH_TRACE]]);
+});
+
+test("a rebuild has no dedupe-off mode", () => {
+  // @ts-expect-error `agentSpanDedupe` is required: absent no longer means off.
+  const flags: ReprocessIngestFlags = { captureReply: false };
+  assert.ok(flags);
 });
