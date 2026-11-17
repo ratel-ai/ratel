@@ -2,6 +2,13 @@ import type { StepContentRequest } from "./inspect-load";
 import type { SessionPanelChatResult, StepContentResult } from "./panel-route";
 
 /**
+ * The inspector's port (RC-646): load the stored content of one step. The
+ * Traces replay reads it from the trace tables (the default adapter in
+ * `StepInspector`); an eval run reads it from its own transcript.
+ */
+export type StepContentSource = (request: StepContentRequest) => Promise<StepContentResult>;
+
+/**
  * The browser's loaders for the session chat's GET routes (panel-route.ts).
  * A route's own error answer is passed through; a network failure or a body
  * that is not an answer reads as the same retryable error the route gives.

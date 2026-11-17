@@ -55,8 +55,10 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
-`RATEL_EXPERIMENTAL_FEATURES=1` turns on the one experimental feature left, the eval gate, in the
-open-source edition; Cloud ignores it and reads `FF_EVAL_GATE`. The eval gate's pages live in the
+`RATEL_EXPERIMENTAL_FEATURES=1` turns on the experimental features left in the open-source
+edition: the eval gate and adaptive ranking's catalog drift (the gone-tool warning only for tools a
+published catalog dropped, closable warnings, gone tools pruned on rebuild). Cloud ignores it and
+reads `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,

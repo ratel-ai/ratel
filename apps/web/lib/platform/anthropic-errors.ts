@@ -34,10 +34,18 @@ export class ModelNotEnabledError extends PermissionDeniedError {
 /** Bedrock's AccessDenied words for a model with no Marketplace agreement. */
 const MARKETPLACE_DENIED = /aws marketplace|aws-marketplace:/i;
 
+/** RC-653: the models this process saw refused with `model_not_enabled`, so a model list stops offering them. */
+const seenNotEnabled = new Set<string>();
+
 /** `err` as `ModelNotEnabledError` when it is Bedrock's 403 for a missing Marketplace agreement, else `err` unchanged. */
 export function asModelNotEnabled(err: unknown, model: string, bedrockProfile: string): unknown {
   if (!(err instanceof PermissionDeniedError) || err instanceof ModelNotEnabledError) return err;
-  return MARKETPLACE_DENIED.test(err.message)
-    ? new ModelNotEnabledError(model, bedrockProfile, err)
-    : err;
+  if (!MARKETPLACE_DENIED.test(err.message)) return err;
+  seenNotEnabled.add(model.replace(/-\d{8}$/, ""));
+  return new ModelNotEnabledError(model, bedrockProfile, err);
+}
+
+/** The models this process saw refused with `model_not_enabled`. */
+export function modelsSeenNotEnabled(): ReadonlySet<string> {
+  return seenNotEnabled;
 }

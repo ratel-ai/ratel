@@ -65,6 +65,8 @@ export interface AgentReply {
 export interface AgentModel {
   model: string;
   standIn: boolean;
+  /** RC-653: the most one answer may be; absent: `AGENT_MAX_TOKENS`. */
+  maxTokens?: number;
   next(input: {
     system: string | undefined;
     tools: readonly ToolDef[];

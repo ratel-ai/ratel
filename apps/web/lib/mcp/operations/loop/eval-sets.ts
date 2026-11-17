@@ -410,16 +410,16 @@ export function loopEvalSetReadOperations(
     defineOperation({
       id: "get_fix_eval_set",
       domain: "improvement",
-      title: "Get a fix's eval set",
+      title: "Get the evals of a fix",
       description:
-        "Read the runs a fix is simulated on: each case's expected outcome, role (holdout or evidence) and latest result, the change, method, why it is blocked, the latest simulation with interval, evidence, breakdown and judge, and earlier runs. Edit with change_fix_eval_set; simulate with run_eval.",
+        "Read the evals that a fix is simulated on. Each eval has its expected outcome, role (holdout or evidence) and latest result. The result also has the change, method, block reason, latest simulation (interval, evidence, breakdown, judge) and earlier runs. Use change_fix_eval_set to edit the evals. Use run_eval to simulate the fix.",
       keywords: ["fix eval set", "expected outcome", "holdout runs"],
       scope: "project",
       mutates: false,
       params: z.object({
         ...projectScoped,
         fixId: fixIdParam,
-        limit: limitParam.describe("Maximum cases to return (max 50)."),
+        limit: limitParam.describe("Maximum evals to return (max 50)."),
       }),
       async execute(ctx, params) {
         const actor = await requireEvalGate(deps, ctx);

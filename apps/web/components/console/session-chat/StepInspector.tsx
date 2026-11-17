@@ -5,7 +5,7 @@ import { Button, IconButton } from "@ratel/design-system/button";
 import { Checkbox } from "@ratel/design-system/checkbox";
 import { cn } from "@ratel/design-system/cn";
 import { Check, ChevronLeft, ChevronRight, Copy, ListTree, TriangleAlert } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { DecisionChip } from "@/components/console/session-replay/DecisionChip";
 import { WhatIfPanel } from "@/components/console/session-replay/WhatIfPanel";
 import { loadStepContentAction } from "@/lib/views/session-chat/actions";
@@ -24,10 +24,11 @@ import {
   type SessionChat,
   type TrackSegment,
 } from "@/lib/views/session-chat/model";
+import type { StepContentSource } from "@/lib/views/session-chat/panel-client";
 import type { ChatPeek } from "@/lib/views/session-chat/peek";
 import { LENS_PARTS, type LensPart } from "@/lib/views/session-replay/composition";
 import { segmentTime } from "./format";
-import type { ChatWhatIf } from "./SessionChatView";
+import type { ChatWhatIf, InspectorActions } from "./SessionChatView";
 
 /**
  * One step in the side panel (RC-284, A6, A7). A model call shows its tokens,
@@ -37,7 +38,9 @@ import type { ChatWhatIf } from "./SessionChatView";
  * that chose it; a search shows its query and ranked results. Text is read
  * on demand through `loadStepContentAction`, never with the opt-in off.
  * Each step shows its tool-choice verdicts, and a model call What if… when
- * the page gave it (RC-524: what the step-by-step view had).
+ * the page gave it (RC-524: what the step-by-step view had). The text comes
+ * from `source` when the page gives one (an eval run's transcript, RC-646),
+ * and `actions` adds the page's own actions under the step.
  */
 
 export interface StepInspectorProps {
@@ -47,6 +50,9 @@ export interface StepInspectorProps {
   follow: boolean;
   onFollowChange: (follow: boolean) => void;
   whatIf?: ChatWhatIf;
+  /** Where the step's text is read; absent, from the trace tables. */
+  source?: StepContentSource;
+  actions?: InspectorActions;
   onOpen: (peek: ChatPeek) => void;
 }
 
@@ -86,7 +92,7 @@ const TAG_WORDS: Record<ToolTag, string> = {
 };
 
 export function StepInspector(props: StepInspectorProps) {
-  const { chat, segment } = props;
+  const { chat, segment, actions } = props;
   const verdicts = segment.stepIndex !== null ? (chat.verdicts?.[segment.stepIndex] ?? []) : [];
   return (
     <div className="flex flex-col gap-4">
@@ -98,6 +104,7 @@ export function StepInspector(props: StepInspectorProps) {
         </section>
       ) : null}
       <StepBody {...props} />
+      {actions ? <div data-inspector-actions>{actions(segment)}</div> : null}
     </div>
   );
 }
@@ -123,6 +130,7 @@ function CallInspector({
   follow,
   onFollowChange,
   whatIf,
+  source,
   onOpen,
 }: StepInspectorProps) {
   const at = chat.calls.findIndex((c) => c.stepIndex === segment.stepIndex);
@@ -130,6 +138,7 @@ function CallInspector({
   const previous = at > 0 ? chat.calls[at - 1]! : null;
   const content = useStepContent(
     projectId,
+    source,
     chat.textOff
       ? null
       : { eventIds: [call?.eventId, previous?.eventId].filter((id): id is string => !!id) },
@@ -431,13 +440,14 @@ export function RawRequest({ raw }: { raw: unknown }) {
 }
 
 /** A tool step: why it was flagged, its arguments and result, and the call that chose it. */
-function ToolStep({ projectId, chat, segment, onOpen }: StepInspectorProps) {
+function ToolStep({ projectId, chat, segment, source, onOpen }: StepInspectorProps) {
   const turnCalls = chat.calls.filter((c) => c.turnIndex === segment.turnIndex);
   const chooser =
     [...turnCalls].reverse().find((c) => c.stepIndex < (segment.stepIndex ?? 0)) ?? null;
   const after = turnCalls.find((c) => c.stepIndex > (segment.stepIndex ?? 0)) ?? null;
   const content = useStepContent(
     projectId,
+    source,
     chat.textOff
       ? null
       : { eventIds: [chooser?.eventId, after?.eventId].filter((id): id is string => !!id) },
@@ -497,9 +507,10 @@ function ToolStep({ projectId, chat, segment, onOpen }: StepInspectorProps) {
 }
 
 /** A search: its query (opt-in on) and its ranked results. */
-function SearchStep({ projectId, chat, segment }: StepInspectorProps) {
+function SearchStep({ projectId, chat, segment, source }: StepInspectorProps) {
   const content = useStepContent(
     projectId,
+    source,
     chat.textOff ? null : { eventIds: [], searchEventId: segment.eventId },
   );
   return (
@@ -615,11 +626,17 @@ function Loading({ error }: { error: string | null }) {
   );
 }
 
-/** The stored text behind a view, read on demand; a null request reads nothing. */
+/** The stored text behind a view, read on demand from `source` (default: the trace tables); a null request reads nothing. */
 function useStepContent(
   projectId: string,
+  source: StepContentSource | undefined,
   request: StepContentRequest | null,
 ): { data: StepContent | null; error: string | null } {
+  const traceSource = useCallback<StepContentSource>(
+    (req) => loadStepContentAction(projectId, req),
+    [projectId],
+  );
+  const load = source ?? traceSource;
   const key = request ? JSON.stringify(request) : null;
   const [state, setState] = useState<{
     key: string | null;
@@ -629,7 +646,7 @@ function useStepContent(
   useEffect(() => {
     if (!key) return;
     let live = true;
-    loadStepContentAction(projectId, JSON.parse(key) as StepContentRequest).then(
+    load(JSON.parse(key) as StepContentRequest).then(
       (result) => {
         if (!live) return;
         setState(
@@ -648,6 +665,6 @@ function useStepContent(
     return () => {
       live = false;
     };
-  }, [projectId, key]);
+  }, [load, key]);
   return state.key === key ? { data: state.data, error: state.error } : { data: null, error: null };
 }

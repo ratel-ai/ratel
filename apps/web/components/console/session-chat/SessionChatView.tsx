@@ -18,6 +18,7 @@ import {
   type SessionChat,
   type TrackSegment,
 } from "@/lib/views/session-chat/model";
+import type { StepContentSource } from "@/lib/views/session-chat/panel-client";
 import { type ChatPeek, chatPeekId, parseChatPeek } from "@/lib/views/session-chat/peek";
 import {
   adjacentStop,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/views/session-chat/playback";
 import { clockTime, segmentTime, stepWords } from "./format";
 import { SessionChatPanel } from "./SessionChatPanel";
-import { SessionTrack, type Speed } from "./SessionTrack";
+import { SessionTrack, type Speed, type TrackMarker } from "./SessionTrack";
 
 /**
  * The session as a chat (RC-282, RC-283; A1–A5, A9): the person's messages on
@@ -54,6 +55,9 @@ import { SessionTrack, type Speed } from "./SessionTrack";
 /** What the inspector needs to fork a model call: the targets come with the chat. */
 export type ChatWhatIf = Omit<WhatIfSetup, "targets">;
 
+/** Extra actions under one step in the inspector (an eval run's edit and Simulate again). */
+export type InspectorActions = (segment: TrackSegment) => ReactNode;
+
 export interface SessionChatViewProps {
   projectId: string;
   chat: SessionChat;
@@ -63,6 +67,14 @@ export interface SessionChatViewProps {
   synced?: boolean;
   /** What if… in the model call inspector; absent, the inspector has none. */
   whatIf?: ChatWhatIf;
+  /** Where the inspector reads a step's content; absent, from the trace tables. */
+  source?: StepContentSource;
+  /** Actions under a step in the inspector; absent, the inspector has none. */
+  inspectorActions?: InspectorActions;
+  /** A line on the track at one step; absent, none. */
+  marker?: TrackMarker;
+  /** "Open full trace" on a work line; off for a chat with no trace (an eval run). */
+  traceLinks?: boolean;
 }
 
 export function SessionChatView({
@@ -71,6 +83,10 @@ export function SessionChatView({
   settingsHref,
   synced = false,
   whatIf,
+  source,
+  inspectorActions,
+  marker,
+  traceLinks = true,
 }: SessionChatViewProps) {
   const { id, open: openPeek, close: closePeek } = usePeek();
   // Closed once, the default inspector stays closed until a click opens a panel.
@@ -274,6 +290,7 @@ export function SessionChatView({
             const call = callAt(chat, t) ?? chat.calls[0]?.stepIndex;
             if (call !== undefined) open({ kind: "step", stepIndex: call });
           }}
+          marker={marker}
         />
       </div>
       {peek ? (
@@ -284,6 +301,9 @@ export function SessionChatView({
           follow={follow}
           onFollowChange={onFollowChange}
           whatIf={whatIf}
+          source={source}
+          inspectorActions={inspectorActions}
+          traceLinks={traceLinks}
           onOpen={open}
           onClose={close}
         />

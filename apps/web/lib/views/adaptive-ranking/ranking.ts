@@ -6,6 +6,7 @@
  * versions tell the same numbers. Recall@k, nDCG and MRR stay behind Details.
  */
 import { APP_NAME } from "@/lib/platform/app-config";
+import { GONE_TOOL_GRACE_DAYS } from "@/lib/readings/intent-graph/catalog-drift";
 import {
   type IntentGraphProducer,
   MAX_INTENT_GRAPH_BYTES,
@@ -434,6 +435,94 @@ export function rankingWarnings(input: {
   const boostWarning = buildBoostWarning(rankingVerdict(input.view));
   if (boostWarning) warnings.push(boostWarning);
   return warnings;
+}
+
+/** One warning with `cloud-ranking-catalog-drift` on (RC-721): a sentence, and the tools it counts kept apart. */
+export interface RankingWarning {
+  id: "gone_tools" | "no_catalog" | "stale" | "boost";
+  text: string;
+  /** The tools the sentence counts, shown on demand rather than inline. */
+  tools?: string[];
+  /** Changes whenever the warning says something new, so a closed warning returns then. */
+  fingerprint: string;
+}
+
+/** Tools named after a warning's sentence for an agent reading it; the rest are counted. */
+export const WARNING_TOOLS_SHOWN = 10;
+
+/**
+ * `rankingWarnings` under the catalog-drift rule (./catalog-drift.ts): only
+ * tools a published catalog dropped and the agent stopped calling count, a
+ * project with no catalog is asked to send one, and the tool list is kept
+ * out of the sentence.
+ */
+export function rankingWarningItems(input: {
+  producer: IntentGraphProducer;
+  updatedAt: Date;
+  /** Tool ids the gone rule flags, and whether the project has a catalog at all. */
+  drift: { hasCatalog: boolean; gone: ReadonlySet<string> };
+  /** Whether the graph lifts any tool: without one, a missing catalog is not worth a word. */
+  hasToolEdges: boolean;
+  lastEventAt: Date | null;
+  view: BoostView;
+}): RankingWarning[] {
+  const items: Array<Omit<RankingWarning, "fingerprint">> = [];
+  const gone = [...input.drift.gone].sort();
+  if (gone.length > 0) {
+    const one = gone.length === 1;
+    const leaves =
+      input.producer === "cloud"
+        ? `${one ? "it leaves" : "they leave"} the graph when it next rebuilds`
+        : `${one ? "it leaves" : "they leave"} the graph as new traffic replaces ${one ? "it" : "them"}`;
+    items.push({
+      id: "gone_tools",
+      text: `It lifts ${one ? "a tool that is" : `${gone.length} tools that are`} no longer in your catalog and unused for ${GONE_TOOL_GRACE_DAYS_LABEL}. The agent cannot call ${one ? "it" : "them"}; ${leaves}.`,
+      tools: gone,
+    });
+  } else if (!input.drift.hasCatalog && input.hasToolEdges) {
+    items.push({
+      id: "no_catalog",
+      text: `${APP_NAME} has no tool catalog for this project, so it cannot tell when a tool this graph lifts is removed. Send your runtime's tool catalog to ${APP_NAME} to turn this check on.`,
+    });
+  }
+  if (
+    input.producer === "cloud" &&
+    input.lastEventAt !== null &&
+    input.lastEventAt.getTime() - input.updatedAt.getTime() > STALE_GRAPH_MS
+  ) {
+    items.push({
+      id: "stale",
+      text: "The graph has not caught up with recent searches. Events are arriving but it stopped updating; tell us if this persists.",
+    });
+  }
+  const boostWarning = buildBoostWarning(rankingVerdict(input.view));
+  if (boostWarning) items.push({ id: "boost", text: boostWarning });
+  return items.map((item) => ({ ...item, fingerprint: warningFingerprint(item) }));
+}
+
+/** A warning as one string, for an agent: the sentence, then at most `shown` tools and a count of the rest. */
+export function warningText(
+  warning: Pick<RankingWarning, "text" | "tools">,
+  shown: number = WARNING_TOOLS_SHOWN,
+): string {
+  const tools = warning.tools ?? [];
+  if (tools.length === 0) return warning.text;
+  const named = tools.slice(0, shown).join(", ");
+  const rest = tools.length - Math.min(tools.length, shown);
+  return `${warning.text} Tools: ${named}${rest > 0 ? `, and ${rest.toLocaleString("en-US")} more` : ""}.`;
+}
+
+const GONE_TOOL_GRACE_DAYS_LABEL = `${GONE_TOOL_GRACE_DAYS} days`;
+
+/** FNV-1a over the warning's words and tools: stable across renders, cheap, and safe in the browser. */
+function warningFingerprint(item: Omit<RankingWarning, "fingerprint">): string {
+  const input = [item.id, item.text, ...(item.tools ?? [])].join("\u0000");
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${item.id}:${(hash >>> 0).toString(36)}`;
 }
 
 /* - Setup checklist, in the page's words ------------------------------------ */

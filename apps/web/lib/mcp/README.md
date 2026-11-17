@@ -17,7 +17,7 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches), `get_quota_status` (the entitlements port; the sample project is free), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`), `get_quota_status` (the entitlements port; the sample project is free), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
