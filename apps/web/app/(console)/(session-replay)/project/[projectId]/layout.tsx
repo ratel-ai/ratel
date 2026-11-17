@@ -1,16 +1,14 @@
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import ProjectLayout from "@/app/(console)/project/[projectId]/layout";
-import { sessionReplayEnabled } from "@/lib/views/session-replay-flag";
 
 /**
- * Session replay: the project layout, above the project's loading boundary, so with the
- * feature off the page answers a real 404 before anything streams.
+ * Session replay sits in a route group of its own, so it takes the project layout here. It was
+ * the place a switched-off replay answered a 404; upstream reads session replay for everyone
+ * since #417, and so does this edition.
  */
-export default function GatedProjectLayout(props: {
+export default function SessionReplayProjectLayout(props: {
   children: ReactNode;
   params: Promise<{ projectId: string }>;
 }) {
-  if (!sessionReplayEnabled()) notFound();
   return ProjectLayout(props);
 }

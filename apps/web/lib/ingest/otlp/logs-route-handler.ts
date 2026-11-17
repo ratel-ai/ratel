@@ -57,7 +57,7 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
   setRequestLogContext?: typeof setRequestLogContextFn;
-  /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
+  /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
   genAiLogJoin?: GenAiLogJoinDeps;

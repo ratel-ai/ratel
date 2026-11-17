@@ -18,6 +18,7 @@ import type { TraceFacetValue } from "@/lib/synthesis/traces/queries";
 import { withCursor, withoutCursor, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
 import { formatTimestamp, shortId } from "@/lib/synthesis/traces/v2/format";
 import { experimentLabel, logPresentation } from "@/lib/synthesis/traces/v2/logs";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import { RelativeTime, TruncatedText } from "./cells";
 import { useTraceNavigation } from "./navigation";
 import { ListFooter } from "./RunsTable";
@@ -25,7 +26,6 @@ import { SpanAttributesList } from "./SpanInspector";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TRACES_DOCS } from "./TracesEmpty";
 import { type TimeWindow, TracesHeader } from "./TracesHeader";
-import { useRunNoun } from "./views-v3-context";
 
 /** A log row as the page sends it: dates as ISO strings. */
 export interface LogRow {
@@ -71,7 +71,7 @@ export function LogsView(props: LogsViewProps) {
   const { projectId, now, timeWindow, logs } = props;
   const { pathname, search, pending, go } = useTraceNavigation();
   const peek = usePeek();
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const [lastId, setLastId] = useState(peek.id);
   if (peek.id && peek.id !== lastId) setLastId(peek.id);
   const tracesPath = `/project/${encodeURIComponent(projectId)}/traces`;

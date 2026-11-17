@@ -11,7 +11,7 @@ export const SESSIONS_FILTERS = ["all", "failed"] as const;
 export type SessionsFilter = (typeof SESSIONS_FILTERS)[number];
 
 /** Columns hidden until toggled, in the order they show. */
-export const SESSION_COLUMNS = ["tools", "tokens", "cost"] as const;
+export const SESSION_COLUMNS = ["tools", "tokens"] as const;
 export type SessionColumn = (typeof SESSION_COLUMNS)[number];
 
 export const SESSIONS_FILTER_PARAM = "show";
@@ -24,7 +24,6 @@ export const SESSIONS_FILTER_LABEL: Readonly<Record<SessionsFilter, string>> = {
 export const SESSION_COLUMN_LABEL: Readonly<Record<SessionColumn, string>> = {
   tools: "Tools",
   tokens: "Tokens",
-  cost: "Cost",
 };
 
 /** A repeated or unknown value reads as its first known value, else All. */
@@ -69,23 +68,15 @@ export function sessionRowKey(row: Pick<SessionRow, "kind" | "id">): string {
 }
 
 /** What the row reads as: the ask, else the intent (text off), else what it is. */
-export function sessionTitle(
-  row: Pick<SessionRow, "kind" | "id" | "ask" | "intent">,
-  viewsV3 = false,
-): { text: string; source: "ask" | "intent" | "id" } {
+export function sessionTitle(row: Pick<SessionRow, "kind" | "id" | "ask" | "intent">): {
+  text: string;
+  source: "ask" | "intent" | "id";
+} {
   const ask = row.ask?.replace(/\s+/g, " ").trim();
   if (ask) return { text: ask, source: "ask" };
   const intent = row.intent?.trim();
   if (intent) return { text: intent, source: "intent" };
-  if (viewsV3)
-    return {
-      text: untitledTitle(row.kind === "session" ? "session" : "turn", row.id),
-      source: "id",
-    };
-  return {
-    text: row.kind === "session" ? `Session ${row.id}` : `Run ${row.id.slice(0, 8)}`,
-    source: "id",
-  };
+  return { text: untitledTitle(row.kind === "session" ? "session" : "turn", row.id), source: "id" };
 }
 
 /** The list after the next page: its rows after the ones shown (a row already shown is not repeated), and its cursor. */

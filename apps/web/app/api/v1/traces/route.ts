@@ -7,8 +7,6 @@ import {
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
-import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
-import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
@@ -74,16 +72,10 @@ async function handlePost(req: Request) {
       findTracesWithModelCalls: (projectId, traceIds) =>
         findTracesWithModelCalls(projectId, traceIds),
     },
-    // Session chat: each call's payload keeps its reply and request settings.
-    sessionChatCapture: (projectId, organization) =>
-      sessionChatCaptureEnabled(projectId, organization),
     // Content sent as gen_ai log records joins its model call.
     genAiLogs: createGenAiLogStore(),
-    // Raw request bodies for the organizations that have the flag.
-    otlpRawCapture: {
-      isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
-      store: createOtlpRawStore(),
-    },
+    // Raw request bodies, within the daily byte cap.
+    otlpRawCapture: { store: createOtlpRawStore() },
     // The project's own prices, read once per batch (RC-482).
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),

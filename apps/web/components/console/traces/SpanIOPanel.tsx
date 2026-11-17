@@ -30,7 +30,7 @@ const MODES = [
 ] as const satisfies readonly { value: Mode; label: string }[];
 
 /**
- * The selected span's content (RC-412, `cloud-trace-views-v3`): its input and
+ * The selected span's content (RC-412): its input and
  * output (messages for a model call, arguments and result for a tool call),
  * then every attribute, the resource and the events. The raw export wins over
  * the stored span; the run's payload fills in what both lack. Formatted or

@@ -24,22 +24,16 @@ export function chatPeekId(peek: ChatPeek): string {
   return peek.kind === "step" ? `step:${peek.stepIndex}` : `${peek.kind}:${peek.turnIndex}`;
 }
 
-/** The page's view from `?view=`: the chat, today's step list (`steps`), or a turn's full trace (`trace`). */
-export type SessionPageView = "chat" | "steps" | "trace";
+/** The page's view from `?view=`: the chat, or a turn's full trace (`trace`). */
+export type SessionPageView = "chat" | "trace";
 
 /**
- * The chat unless `?view=steps` or `?view=trace`; a repeated `?view=` reads as
- * its first value. With views v3 (RC-524) there is no step list: `steps` is
- * the chat, whose inspector shows the steps. The page itself exists only with
- * `cloud-session-replay` on.
+ * The chat unless `?view=trace`; a repeated `?view=` reads as its first value.
+ * There is no step list (RC-524): `?view=steps` is the chat, whose inspector
+ * shows the steps.
  */
-export function sessionPageView(
-  view: string | readonly string[] | undefined,
-  viewsV3 = false,
-): SessionPageView {
-  const first = firstOf(view);
-  if (first === "steps") return viewsV3 ? "chat" : "steps";
-  return first === "trace" ? first : "chat";
+export function sessionPageView(view: string | readonly string[] | undefined): SessionPageView {
+  return firstOf(view) === "trace" ? "trace" : "chat";
 }
 
 /** The Trace view's turn: `?turn=` when the session has it, else its last turn; null without turns. */

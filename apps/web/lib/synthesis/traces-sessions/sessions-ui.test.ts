@@ -1,6 +1,5 @@
 // The runner only picks up `.ts`, so views are built with createElement.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import {
@@ -109,10 +108,9 @@ function render(search: string, props: Partial<SessionsViewProps> = {}): string 
   );
 }
 
-test("the first tab is Sessions, and rows read by day: the ask, Failed, turns, time and start", () => {
+test("the tabs are Sessions and Turns, and rows read by day: the ask, Failed, turns, cost, time and start", () => {
   const html = render("");
-  assert.match(text(html), /Sessions Spans Logs/);
-  assert.doesNotMatch(text(html), /\bRuns\b Spans/);
+  assert.match(text(html), /Sessions Turns Spans Logs/);
   assert.doesNotMatch(
     html,
     /aria-label="Time window/,
@@ -120,8 +118,11 @@ test("the first tab is Sessions, and rows read by day: the ask, Failed, turns, t
   );
   const days = [...html.matchAll(/data-day="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(days, ["2026-11-03", "2026-11-02"]);
-  assert.match(text(html), /Tuesday 3 November .*Ask of s-3 Failed 3 1\D+min\D+4\D+s 09:00/);
-  assert.match(text(html), /Monday 2 November .*Run bbbbbbbb/);
+  assert.match(
+    text(html),
+    /Tuesday 3 November .*Ask of s-3 Failed 3 \$0\.02 1\D+min\D+4\D+s 09:00/,
+  );
+  assert.match(text(html), /Monday 2 November .*Untitled turn · bbbbbbbb/);
   assert.match(html, /data-title-source="id"/, "a run with no ask reads as what it is");
 });
 
@@ -203,15 +204,5 @@ test("the panel: a short chat preview and Open session replay; a run opens its f
       onRetry: null,
     }),
   );
-  assert.match(text(noRun), /no run to preview/);
-});
-
-// Owned (ADR-0030): the switch is FF_TRACES_SESSIONS, read in the owned page.
-test("switch off renders RunsPageV2; switch on renders the Sessions page", () => {
-  const source = readFileSync(
-    new URL("../../../app/(console)/project/[projectId]/traces/(tabs)/page.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(source, /const sessions = !viewsV3 && tracesSessionsEnabled\(\)/);
-  assert.match(source, /sessions \?\s*\(\s*<SessionsPage[\s\S]*\) : \(\s*<RunsPageV2/);
+  assert.match(text(noRun), /no turn to preview/);
 });

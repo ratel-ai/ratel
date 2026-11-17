@@ -370,7 +370,6 @@ export function ExampleRuns({
   focusTools,
   now,
   testRuns,
-  sessionReplay = false,
 }: {
   projectId: string;
   taskId: string;
@@ -379,8 +378,6 @@ export function ExampleRuns({
   focusTools: readonly string[];
   now: Date;
   testRuns?: readonly string[];
-  /** `cloud-session-replay` is on: each run links its session replay. */
-  sessionReplay?: boolean;
 }) {
   return (
     <Section
@@ -408,7 +405,6 @@ export function ExampleRuns({
               focusTools={focusTools}
               now={now}
               testRuns={testRuns}
-              sessionReplay={sessionReplay}
             />
           ))}
         </ul>
@@ -425,7 +421,6 @@ function ExampleRow({
   focusTools,
   now,
   testRuns,
-  sessionReplay,
 }: {
   projectId: string;
   taskId: string;
@@ -434,7 +429,6 @@ function ExampleRow({
   focusTools: readonly string[];
   now: Date;
   testRuns?: readonly string[];
-  sessionReplay: boolean;
 }) {
   const status = run?.status ?? (example.why === "failed" ? "failed" : null);
   const mark = status ? EXAMPLE_STATUS_ICONS[status] : null;
@@ -517,7 +511,7 @@ function ExampleRow({
           <SquareArrowOutUpRight aria-hidden className="size-3" />
           Open in Traces
         </Link>
-        {run && sessionReplay ? (
+        {run ? (
           <Link
             href={sessionReplayHref(projectId, run.sessionId)}
             className={LINK_SMALL}

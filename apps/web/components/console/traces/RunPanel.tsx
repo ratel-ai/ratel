@@ -16,6 +16,7 @@ import {
   formatInteger,
   formatRelativeTime,
 } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import {
   isFreshSummary,
   SUMMARY_READ_DELAY_MS,
@@ -26,7 +27,6 @@ import type { RunStep, RunSummary } from "@/lib/synthesis/traces/v2/run-summary"
 import type { RunSummaryResult } from "@/lib/synthesis/traces/v2/run-summary-route";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { KIND_DOT } from "./kind";
-import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
 
 export const CONTENT_CAPTURE_DOCS = "https://docs.ratel.sh/observability#content-capture";
 
@@ -71,8 +71,6 @@ export function RunPanel({
   onOpen: (id: string) => void;
   onClose: () => void;
 }) {
-  const noun = useRunNoun();
-  const viewsV3 = useTraceViewsV3();
   // Keep showing the last run while the Panel animates closed.
   const [lastId, setLastId] = useState(openId);
   if (openId && openId !== lastId) setLastId(openId);
@@ -131,22 +129,12 @@ export function RunPanel({
           </>
         ) : undefined
       }
-      actions={
-        // RC-527: views v3 opens the trace from the body, like the Sessions panel's replay.
-        shownId && !viewsV3 ? (
-          <Link
-            href={traceHref(shownId)}
-            className={buttonVariants({ variant: "secondary", size: "sm" })}
-          >
-            Open full trace
-          </Link>
-        ) : null
-      }
       onPrevious={index > 0 ? () => step(-1) : undefined}
       onNext={index >= 0 && index < rows.length - 1 ? () => step(1) : undefined}
     >
       <div className="flex flex-col gap-5">
-        {viewsV3 && shownId ? <OpenFullTraceLink href={traceHref(shownId)} /> : null}
+        {/* RC-527: the trace opens from the body, like the Sessions panel's replay. */}
+        {shownId ? <OpenFullTraceLink href={traceHref(shownId)} /> : null}
         {!result ? (
           <RunSummarySkeleton />
         ) : result.ok ? (
@@ -203,7 +191,6 @@ export function RunSummaryBody({
   truncated: boolean;
   fullTraceHref: string | null;
 }) {
-  const noun = useRunNoun();
   const stepCount = summary.steps.length + summary.hiddenStepCount;
   return (
     <div className="flex flex-col gap-5" data-run-summary>
@@ -338,7 +325,6 @@ function StepRow({ step, last }: { step: RunStep; last: boolean }) {
 }
 
 function RunSummarySkeleton() {
-  const noun = useRunNoun();
   return (
     <div className="flex flex-col gap-5" aria-busy="true">
       <span className="sr-only">Loading the {noun.lower}…</span>

@@ -43,8 +43,8 @@ export function SpanInspector({
   offsetMs: number;
   runtimeEventsRoot: string | null;
   onShowDetails: () => void;
-  /** The span's content pane (`cloud-trace-views-v3`); in its place, the tool arguments and result. */
-  children?: ReactNode;
+  /** The span's content pane: input, output and raw attributes (RC-412). */
+  children: ReactNode;
 }) {
   const kind = stepKind(span);
   const failed = span.statusCode === 2;
@@ -73,8 +73,6 @@ export function SpanInspector({
       : []),
     ...(span.serviceName ? [{ label: "Service", value: span.serviceName }] : []),
   ];
-  const toolArguments = span.attributes["gen_ai.tool.call.arguments"];
-  const toolResult = span.attributes["gen_ai.tool.call.result"];
 
   return (
     <section
@@ -103,12 +101,7 @@ export function SpanInspector({
         ))}
       </dl>
 
-      {children ?? (
-        <>
-          {toolArguments !== undefined ? <Payload label="Arguments" value={toolArguments} /> : null}
-          {toolResult !== undefined ? <Payload label="Result" value={toolResult} /> : null}
-        </>
-      )}
+      {children}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={onShowDetails}>
@@ -125,21 +118,6 @@ export function SpanInspector({
         ) : null}
       </div>
     </section>
-  );
-}
-
-function Payload({ label, value }: { label: string; value: unknown }) {
-  const text = formatAttributeValue(value);
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-fg-subtle">{label}</span>
-        <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} />
-      </div>
-      <pre className="max-h-40 overflow-auto rounded-md border border-line bg-rail p-2 font-mono text-xs leading-5 whitespace-pre-wrap break-words text-fg">
-        {text}
-      </pre>
-    </div>
   );
 }
 

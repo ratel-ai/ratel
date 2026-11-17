@@ -40,7 +40,6 @@ function deps(overrides: Partial<PanelRouteDeps> = {}) {
     getSession: async () => ({ userId: "user-1", externalId: "user_clerk" }),
     findProject: async (projectId) =>
       projectId === PROJECT ? { projectId, organizationId: "org-1" } : null,
-    enabled: async () => true,
     readContent: async () => true,
     loadChat: async (projectId, sessionId, readContent) => {
       calls.loaded.push({ projectId, sessionId, readContent });
@@ -107,26 +106,6 @@ test("another project reads like a missing one", async () => {
   assert.deepEqual(calls.loaded, []);
 });
 
-test("with the flag off the session panel chat is not found", async () => {
-  const seen: unknown[] = [];
-  const { value, calls } = deps({
-    enabled: async (projectId, externalId, surface) => {
-      seen.push({ projectId, externalId, surface });
-      return false;
-    },
-  });
-  const response = await sessionPanelChatResponse(
-    { projectId: PROJECT, sessionId: "ses_1" },
-    value,
-  );
-  assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { ok: false, error: "Not found." });
-  assert.deepEqual(seen, [
-    { projectId: PROJECT, externalId: "user_clerk", surface: "trace-views-v3" },
-  ]);
-  assert.deepEqual(calls.loaded, []);
-});
-
 test("a failed read is logged, reported and answered with a retryable error", async () => {
   const { value, calls } = deps({
     loadChat: async () => {
@@ -146,24 +125,17 @@ test("a failed read is logged, reported and answered with a retryable error", as
   assert.equal(calls.reported, 1);
 });
 
-test("a member gets a step's stored content, read with the session replay flag", async () => {
-  const seen: unknown[] = [];
-  const { value, calls } = deps({
-    enabled: async (_projectId, _clerkId, surface) => {
-      seen.push(surface);
-      return true;
-    },
-  });
+test("a member gets a step's stored content", async () => {
+  const { value, calls } = deps();
   const request = { eventIds: [EVENT], searchEventId: null };
   const response = await stepContentResponse({ projectId: PROJECT }, request, value);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(await response.json(), { ok: true, content: CONTENT });
-  assert.deepEqual(seen, ["session-replay"]);
   assert.deepEqual(calls.loaded, [{ projectId: PROJECT, request, readContent: true }]);
 });
 
-test("step content keeps the action's answers: signed out, another project, flag off, failure", async () => {
+test("step content keeps the action's answers: signed out, another project, failure", async () => {
   const request = { eventIds: [EVENT] };
   const signedOut = await stepContentResponse(
     { projectId: PROJECT },
@@ -178,17 +150,6 @@ test("step content keeps the action's answers: signed out, another project, flag
   assert.deepEqual(await other.json(), {
     ok: false,
     error: "No project you belong to has that ID.",
-  });
-
-  const off = await stepContentResponse(
-    { projectId: PROJECT },
-    request,
-    deps({ enabled: async () => false }).value,
-  );
-  assert.equal(off.status, 404);
-  assert.deepEqual(await off.json(), {
-    ok: false,
-    error: "Session replay is off for this organization.",
   });
 
   const failing = deps({

@@ -25,7 +25,7 @@ import {
  * file only binds the signed-in session to them.
  */
 
-/** Turn content reading on or off for a project. Admin-only, behind `cloud-session-replay`. */
+/** Turn content reading on or off for a project. Admin-only. */
 export async function setContentOptInAction(
   projectId: string,
   readContent: boolean,

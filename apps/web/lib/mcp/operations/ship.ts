@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import { invalidParams, notFound } from "@/lib/mcp/errors";
 import { credentialMayReadContent, withheldMarker } from "@/lib/mcp/operations/content-access";
 import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
@@ -31,7 +31,6 @@ import { loadShipments, type ShipmentRow } from "@/lib/views/lineage/shipments";
 import { shipmentTrail } from "@/lib/views/lineage/trail";
 import { LINEAGE_KINDS, type LineageRef, stageOfKind } from "@/lib/views/lineage/types";
 import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
-import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
 import { loadSessionTimeline } from "@/lib/views/session-replay/load";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { loadStepTexts, type StepText } from "@/lib/views/session-replay/settings";
@@ -56,9 +55,9 @@ import {
  * where any object came from (`get_lineage`), how fresh the analysis is
  * (`get_analysis_freshness`) and one session step by step (`get_session`).
  *
- * Gates follow the console. Ship and lineage are open to anyone who reaches
- * the project; session replay is behind `cloud-session-replay`. A bearer caller has no cookie
- * session, so each flag is decided for the caller acting in the project's
+ * Gates follow the console. Ship, lineage and session replay are open to
+ * anyone who reaches the project. A bearer caller has no cookie session, so
+ * each flag is decided for the caller acting in the project's
  * organization, as `loop/index.ts` decides the eval gate: an OAuth user as
  * their Clerk id with their email, an API key as `project:<id>` with the
  * organization's properties. Whether an insight may name the run it came from
@@ -101,7 +100,6 @@ export interface ShipOperationDeps {
     projectId: string,
     section: AnalysisSection | null,
   ) => Promise<{ freshness: AnalysisFreshness; progress: SectionProgress | null }>;
-  sessionReplayEnabled: (projectId: string, actor: string) => Promise<boolean>;
   /** `textWindow` names the steps whose message text to read; null reads none. */
   loadSession: (
     projectId: string,
@@ -201,7 +199,6 @@ export const defaultShipDeps: ShipOperationDeps = {
       }),
       { operation: "analysis_freshness", timeoutMs: supplementaryReadTimeoutMs() },
     ),
-  sessionReplayEnabled: (projectId, actor) => sessionReplayEnabledForActor(projectId, actor),
   loadSession: readSession,
   loadWhatIfOptions: (projectId, organization) =>
     loadWhatIfOptions(
@@ -468,14 +465,6 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
           ),
       }),
       async execute(ctx, params) {
-        const actor = mcpActor(ctx.auth, ctx.projectId);
-        if (!(await deps.sessionReplayEnabled(ctx.projectId, actor))) {
-          throw new McpOperationError(
-            "forbidden",
-            "Session replay is not enabled for this organization.",
-            { reason: "session_replay_off" },
-          );
-        }
         const organization = await requireOrganization(deps, ctx.projectId);
         // The key's own content scope first (RC-585), then the page's opt-in rule.
         const credentialText = credentialMayReadContent(ctx.auth);

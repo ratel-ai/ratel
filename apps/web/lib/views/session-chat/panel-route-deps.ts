@@ -3,12 +3,10 @@ import { getLogger } from "@/lib/platform/logger";
 import { setRequestLogContext } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { loadStepContent } from "@/lib/views/session-chat/inspect-load";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
 import type { PanelChat, PanelRouteDeps } from "@/lib/views/session-chat/panel-route";
 import { loadTurnTraceIds } from "@/lib/views/session-chat/turn-traces";
-import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 const logger = getLogger("session-chat/panel-route");
@@ -26,10 +24,6 @@ export function panelRouteDeps(request: Request): PanelRouteDeps {
       const scope = await findProjectScope(projectId);
       return scope ? { projectId: scope.project.id, organizationId: scope.organization.id } : null;
     },
-    enabled: (projectId, externalId, surface) =>
-      surface === "trace-views-v3"
-        ? traceViewsV3EnabledForActor(projectId, externalId)
-        : sessionReplayEnabledForActor(projectId, externalId),
     readContent: (projectId) => contentOptIn(projectId),
     loadChat: loadPanelChat,
     loadStepContent: (projectId, stepRequest, readContent) =>

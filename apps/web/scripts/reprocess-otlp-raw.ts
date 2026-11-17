@@ -2,11 +2,8 @@
 /**
  * Re-run today's span-to-event mapping over one project's stored raw OTLP
  * trace exports (`otlp_raw_exports`) and patch the `events` and
- * `event_metrics` rows they derive (usage, cost, payload, categorize). The ingest
- * switches are decided as `/v1/traces` decides them, and printed first.
- *
- * Owned (ADR-0030): upstream decides its ingest flags through its flag service and aborts when it
- * cannot; here they are the deployment's switches, which always answer.
+ * `event_metrics` rows they derive (usage, cost, payload, categorize), as
+ * `/v1/traces` would today: each call's payload keeps its reply.
  *
  * A dry run by default: it reads in a read-only transaction and prints how many
  * events would change, with the before/after input, cached and cost totals.
@@ -30,7 +27,6 @@ import {
   reprocessOtlpRawExports,
   type UsageTotals,
 } from "@/lib/ingest/otlp-raw/reprocess";
-import { decideReprocessFlags } from "@/lib/ingest/otlp-raw/reprocess-flags";
 import {
   applyReprocessPlan,
   findStoredEvents,
@@ -59,17 +55,10 @@ async function main() {
   const projectId = values.project;
   const apply = values.apply;
 
-  const organization = await getOrganizationByProjectId(projectId);
-  if (!organization) throw new Error(`no project ${projectId}`);
-  const decided = await decideReprocessFlags(projectId, organization);
-  for (const { flag, enabled, source } of decided.decisions) {
-    console.error(
-      `flag ${flag} = ${enabled ? "on" : "off"} from ${source}, organization ${organization.id}`,
-    );
-  }
+  if (!(await getOrganizationByProjectId(projectId))) throw new Error(`no project ${projectId}`);
   const db = getDb();
   const flags: ReprocessIngestFlags = {
-    ...decided.flags,
+    captureReply: true,
     agentSpanDedupe: {
       findTracesWithModelCalls: (id, traceIds) => findTracesWithModelCalls(id, traceIds),
     },

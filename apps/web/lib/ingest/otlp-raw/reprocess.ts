@@ -44,7 +44,7 @@ export interface ReprocessOptions {
 
 /** What ingest would decide for this project today. */
 export interface ReprocessIngestFlags {
-  /** `cloud-session-replay`: payloads keep each call's reply and settings. */
+  /** Payloads keep each call's reply and settings, as ingest does (RC-280). */
   captureReply: boolean;
   /** `cloud-otlp-agent-span-dedupe` storage lookup; absent, the flag is off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;

@@ -5,13 +5,12 @@ import { getLogger } from "@/lib/platform/logger";
 import { getSessionContext } from "@/lib/platform/session";
 import { loadStepContent, type StepContentRequest } from "@/lib/views/session-chat/inspect-load";
 import type { StepContentResult } from "@/lib/views/session-chat/panel-route";
-import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 /**
  * The session chat's server action. RC-284: the stored text behind an
- * inspector view, read on demand; it checks membership, `FF_SESSION_REPLAY`
- * and the content opt-in, and `inspect-load.ts` scopes every read to the
+ * inspector view, read on demand; it checks membership and the content
+ * opt-in, and `inspect-load.ts` scopes every read to the
  * project. RC-530: a read-only support session refuses Server Actions, so the
  * reads move to GET routes (`panel-route.ts`): the side panel's chat already
  * did, and this action goes once `StepInspector` uses `fetchStepContent`.
@@ -35,10 +34,6 @@ export async function loadStepContentAction(
     if (!session) return { ok: false, error: "Sign in to see this step." };
     const scope = await findProjectScope(projectId);
     if (!scope) return { ok: false, error: "No project you belong to has that ID." };
-    const actor = session.user.externalId;
-    if (!(await sessionReplayEnabledForActor(scope.project.id, actor))) {
-      return { ok: false, error: "Session replay is off for this organization." };
-    }
     const content = await loadStepContent(scope.project.id, request, {
       readContent: await contentOptIn(scope.project.id),
     });

@@ -6,11 +6,10 @@ import { PageHeader } from "@ratel/design-system/page-header";
 import { TabNav } from "@ratel/design-system/tabs";
 import { CalendarRange, Check, ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
-import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
-import { useTracesSessions } from "@/components/console/traces-sessions/sessions-context";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/synthesis/dashboard";
 import { tabSearch, withRangePreset } from "@/lib/synthesis/traces/v2/filters";
 import { formatDayRange } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import type { SearchUpdate } from "./navigation";
 
@@ -45,16 +44,11 @@ export function TracesHeader({
 }) {
   const root = `/project/${encodeURIComponent(projectId)}/traces`;
   const carried = tabSearch(search);
-  const sessions = useTracesSessions();
-  const noun = useRunNoun();
-  const viewsV3 = useTraceViewsV3();
-  // RC-503: with `cloud-trace-views-v3`, Sessions is the first tab and Turns the second.
-  const first = viewsV3
-    ? [
-        { href: `${root}${carried}`, label: "Sessions", exact: true },
-        { href: `${root}/turns${carried}`, label: noun.many },
-      ]
-    : [{ href: `${root}${carried}`, label: sessions ? "Sessions" : noun.many, exact: true }];
+  // RC-503: Sessions is the first tab and Turns the second.
+  const first = [
+    { href: `${root}${carried}`, label: "Sessions", exact: true },
+    { href: `${root}/turns${carried}`, label: noun.many },
+  ];
   return (
     <PageHeader
       title="Traces"

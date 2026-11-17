@@ -57,7 +57,7 @@ const EXPORT: IExportTraceServiceRequest = {
   ],
 };
 
-test("a member with the flag on gets each span's full attributes, resource and events, credentials redacted", async () => {
+test("a member gets each span's full attributes, resource and events, credentials redacted", async () => {
   const response = await traceRawResponse(
     request(),
     { projectId: PROJECT_ID, traceId: TRACE_ID.toUpperCase() },
@@ -165,7 +165,7 @@ test("a download cut at the read bounds is marked partial", async () => {
   );
 });
 
-test("no session is 401, an unknown project and a flag off are 404", async () => {
+test("no session is 401 and an unknown project is 404", async () => {
   const params = { projectId: PROJECT_ID, traceId: TRACE_ID };
   assert.equal(
     (await traceRawResponse(request(), params, deps({ getSession: async () => null }))).status,
@@ -173,10 +173,6 @@ test("no session is 401, an unknown project and a flag off are 404", async () =>
   );
   assert.equal(
     (await traceRawResponse(request(), params, deps({ findProject: async () => null }))).status,
-    404,
-  );
-  assert.equal(
-    (await traceRawResponse(request(), params, deps({ flagEnabled: async () => false }))).status,
     404,
   );
 });
@@ -205,7 +201,6 @@ function deps(overrides: Partial<TraceRawRouteDeps> = {}): TraceRawRouteDeps {
   return {
     getSession: async () => ({ userId: "u1", externalId: "user_1" }),
     findProject: async (projectId) => ({ projectId }),
-    flagEnabled: async () => true,
     readContent: async () => true,
     loadRawOtlp: async () => ({ requests: [EXPORT], exports: 1, undecodable: 0, truncated: false }),
     loadRaw: async () => ({ spans: [SPAN], exports: 1, undecodable: 0, truncated: false }),

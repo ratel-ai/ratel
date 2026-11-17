@@ -40,7 +40,6 @@ import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
-import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 
 /**
  * The monthly event cap, through the entitlements port: `checkEventQuota` before the
@@ -117,11 +116,9 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe; absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
-  /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings; absent, off. */
-  sessionChatCapture?: SessionChatCaptureEnabled;
   /** Stored `gen_ai` log records join their spans; absent, none are read. */
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
-  /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
+  /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
   modelPricing?: PersistSpansDeps["modelPricing"];

@@ -1,9 +1,7 @@
 import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
-import { TRACE_VIEWS_V3_FLAG } from "@/lib/synthesis/traces/v2/views-flag";
 import { CANT_SIMULATE } from "@/lib/views/eval-gate/method";
 import { DAILY_ORG_BUDGET_USD } from "@/lib/views/eval-gate/models";
 import {
@@ -12,11 +10,6 @@ import {
   STALE_EVAL_RUN_MS,
 } from "@/lib/views/eval-gate/store";
 import { DEFAULT_K, MAX_K, type WhatIfMethod } from "@/lib/views/session-replay/fork";
-import {
-  defaultOrganizationFlagDeps,
-  type OrganizationFlagDeps,
-  sessionReplayEnabledForActor,
-} from "@/lib/views/session-replay/gate";
 import {
   type SessionReplayRunRow,
   sessionReplayRuns,
@@ -45,15 +38,9 @@ const LIVE = ["queued", "running"] as const;
 const DAY_MS = 86_400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export type WhatIfRefusal =
-  | "flag_off"
-  | "not_found"
-  | "bad_step"
-  | "content_opt_in_off"
-  | "budget_spent";
+export type WhatIfRefusal = "not_found" | "bad_step" | "content_opt_in_off" | "budget_spent";
 
 const REFUSALS: Record<WhatIfRefusal, string> = {
-  flag_off: "Session replay is off for this organization.",
   not_found: "No run in this project has that ID.",
   bad_step: "The step must be a model call of the run (0 or more).",
   content_opt_in_off:
@@ -87,7 +74,6 @@ export interface WhatIfRequest {
 
 export interface RequestWhatIfDeps {
   db?: RunsDb;
-  flagDeps?: OrganizationFlagDeps;
   enqueue?: (projectId: string, payload: WhatIfJobPayload) => Promise<string | null>;
   dailyBudgetUsd?: number;
   now?: () => Date;
@@ -107,15 +93,6 @@ export async function requestWhatIf(
 ): Promise<{ run: SessionReplayRunRow; created: boolean }> {
   const db = deps.db ?? getDb();
   const { projectId, actor } = request;
-  if (
-    !(await sessionReplayEnabledForActor(
-      projectId,
-      actor,
-      db,
-      deps.flagDeps ?? defaultOrganizationFlagDeps,
-    ))
-  )
-    throw refuse("flag_off", request);
   const turn = UUID.test(request.turnId)
     ? (
         await db
@@ -250,22 +227,18 @@ export async function pruneWhatIfRuns(
 
 /**
  * Whether the project lets session replay read captured content. An admin's
- * choice (a settings row) wins. Without one (RC-471), content is on where
- * `FF_TRACE_VIEWS_V3` is on, else off as before.
+ * choice (a settings row) wins. Without one, content is on (RC-471).
  */
 export async function contentOptIn(
   projectId: string,
   db: Pick<RunsDb, "select"> = getDb(),
-  flagDeps: OrganizationFlagDeps = defaultOrganizationFlagDeps,
 ): Promise<boolean> {
   const [row] = await db
     .select({ readContent: sessionReplaySettings.readContent })
     .from(sessionReplaySettings)
     .where(eq(sessionReplaySettings.projectId, projectId))
     .limit(1);
-  if (row) return row.readContent;
-  // Owned: the v3 views are the deployment switch FF_TRACE_VIEWS_V3, read from `flagDeps`.
-  return experimentalFeatureEnabled(TRACE_VIEWS_V3_FLAG, flagDeps);
+  return row ? row.readContent : true;
 }
 
 /** A failure reason as the code a run stores: the `CANT_SIMULATE` key, else `failed`. */

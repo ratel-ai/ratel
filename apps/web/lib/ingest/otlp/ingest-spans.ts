@@ -30,7 +30,6 @@ import { normalizeSemconvAliases } from "./semconv/aliases";
 import { rejoinStoredModelCalls } from "./semconv/gen-ai-log-join";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
 import { attachGenAiLogEvents, distinctSpanKeys } from "./semconv/gen-ai-logs";
-import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
@@ -77,8 +76,6 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    * them and the current prices. Absent, the current built-in prices.
    */
   modelPricing?: ModelPricingIngestDeps;
-  /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings. Absent, off. */
-  sessionChatCapture?: SessionChatCaptureEnabled;
   /**
    * The stored `gen_ai` log records of the batch's spans. Absent, none are read. With `findSpans` and `restateCalls`, a log
    * export stored while the batch was stored joins too.
@@ -153,12 +150,9 @@ export async function persistDecodedSpans(
 
   // Group into LLM calls, reconstruct rows, and persist under the project.
   const calls = groupSpans(spans, dedupe);
-  const captureReply =
-    calls.length > 0 && deps.sessionChatCapture
-      ? await deps.sessionChatCapture(projectId, organization)
-      : false;
+  // RC-280: each call's payload keeps its own reply and settings for the session chat.
   const prices = await batchPrices(spans, projectId, deps);
-  const rows = toRows(projectId, calls, { captureReply }, prices);
+  const rows = toRows(projectId, calls, { captureReply: true }, prices);
 
   let accepted = 0;
   if (rows.length > 0) {
@@ -290,7 +284,6 @@ async function rejoinLateGenAiLogs(
     if (logs.length <= logsRead) return;
     await rejoinStoredModelCalls(projectId, organization, distinctSpanKeys(logs), {
       store: { findLogs, findSpans, restateCalls },
-      sessionChatCapture: deps.sessionChatCapture,
       ...(deps.modelPricing ? { modelPricing: deps.modelPricing } : {}),
       captureFailure: deps.captureFailure,
     });

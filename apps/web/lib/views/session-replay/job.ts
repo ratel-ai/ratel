@@ -11,11 +11,6 @@ import { loadRuns } from "@/lib/views/eval-gate/runs";
 import type { Ranker } from "@/lib/views/eval-gate/simulate";
 import type { FixChange, RunRecord } from "@/lib/views/eval-gate/types";
 import { type StepSample, sampleStep } from "@/lib/views/session-replay/fork";
-import {
-  defaultOrganizationFlagDeps,
-  type OrganizationFlagDeps,
-  sessionReplayEnabledForActor,
-} from "@/lib/views/session-replay/gate";
 import { contentOptIn, errorCodeOf } from "@/lib/views/session-replay/runs";
 import { type SessionReplayRunRow, sessionReplayRuns } from "@/lib/views/session-replay/schema";
 import { parseVariant } from "@/lib/views/session-replay/variant";
@@ -32,7 +27,6 @@ type JobDb = ReturnType<typeof getDb>;
 
 export interface WhatIfJobDeps {
   db?: JobDb;
-  flagDeps?: OrganizationFlagDeps;
   models?: EvalModels;
   /** The run and its model calls; with their payloads only when content may be read. */
   loadStep?: (
@@ -71,15 +65,6 @@ export async function whatIfStepJob(
   const spend = new SpendMeter(run.spend.capUsd);
   try {
     if (!variant) return await fail(run, "bad_variant", 0, started, now(), db);
-    if (
-      !(await sessionReplayEnabledForActor(
-        projectId,
-        run.requestedBy,
-        db,
-        deps.flagDeps ?? defaultOrganizationFlagDeps,
-      ))
-    )
-      return await fail(run, "flag_off", 0, started, now(), db);
     // The opt-in may have been turned off since: then it re-ranks, without reading content.
     const withPayload = run.method === "replay" && (await contentOptIn(projectId, db));
     const step = await (deps.loadStep ?? ((p, t, w) => loadStep(p, t, w, db)))(

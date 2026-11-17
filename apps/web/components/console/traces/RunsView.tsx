@@ -20,6 +20,7 @@ import {
   withRangePreset,
   withViewParam,
 } from "@/lib/synthesis/traces/v2/filters";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import {
   compareHref,
   compareSelection,
@@ -41,7 +42,6 @@ import { TraceFilterBar } from "./TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "./TracesEmpty";
 import { isToday, type TimeWindow, TracesHeader } from "./TracesHeader";
 import { VolumeChart } from "./VolumeChart";
-import { useRunNoun } from "./views-v3-context";
 
 /** A calibration running in this window, in plain words (DESIGN.md, Glossary: arm is "variant"). */
 export interface RunningExperiment {
@@ -66,7 +66,7 @@ export interface RunsViewProps {
     TraceFacets,
     "model" | "tool" | "service" | "environment" | "experiment" | "arm" | "name"
   >;
-  /** `rollup` with `cloud-traces-filters` (RC-506): the property bar on the trace rollup. */
+  /** `rollup` (RC-506): the property bar on the trace rollup. */
   filterTab?: "runs" | "rollup";
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */
@@ -94,7 +94,7 @@ export function RunsView(props: RunsViewProps) {
   const { projectId, now, timeWindow, rows, stats, volume, facets, sort, empty } = props;
   const { pathname, search, pending, go, refresh, replaceView } = useTraceNavigation();
   const peek = usePeek();
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const tracesPath = `/project/${encodeURIComponent(projectId)}/traces`;
   const picked = compareSelection(search);
   const params = new URLSearchParams(search);

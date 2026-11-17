@@ -4,8 +4,7 @@ import type { TraceFacetValue } from "@/lib/synthesis/traces/queries";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
 
 /**
- * Property filters on the Sessions and Turns lists (RC-505, behind
- * `cloud-traces-filters`). Every filter and every facet value reads the
+ * Property filters on the Sessions and Turns lists (RC-505). Every filter and every facet value reads the
  * per-trace rollup `otel_trace_summaries`, never `otel_spans`: models and
  * tools match on its GIN-indexed arrays, the rest on its columns.
  *

@@ -34,11 +34,11 @@ test("changing the filter drops the open row and keeps the rest, the timeframe t
   assert.equal(withSessionsFilter("?show=failed", "all"), "");
 });
 
-test("tools, tokens and cost are hidden until the URL lists them, in a stable order", () => {
-  assert.deepEqual(sessionColumnsFrom("?columns=cost,tools,experiment"), ["tools", "cost"]);
+test("tools and tokens are hidden until the URL lists them, in a stable order", () => {
+  assert.deepEqual(sessionColumnsFrom("?columns=tokens,tools,experiment"), ["tools", "tokens"]);
   assert.equal(
-    withSessionColumns("?show=failed", ["cost", "tokens"]),
-    "?show=failed&columns=tokens%2Ccost",
+    withSessionColumns("?show=failed", ["tokens", "tools"]),
+    "?show=failed&columns=tools%2Ctokens",
   );
   assert.equal(withSessionColumns("?columns=tools", []), "");
 });
@@ -52,27 +52,15 @@ test("a row reads as its ask, else its intent, else what it is", () => {
     text: "Orders",
     source: "intent",
   });
+  // RC-413: no raw id as a title.
   assert.deepEqual(sessionTitle({ kind: "session", id: "s1", ask: null, intent: null }), {
-    text: "Session s1",
-    source: "id",
-  });
-  assert.deepEqual(sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "", intent: null }), {
-    text: "Run abcdef01",
-    source: "id",
-  });
-  // RC-413, `cloud-trace-views-v3`: no raw id as a title.
-  assert.deepEqual(sessionTitle({ kind: "session", id: "s1", ask: null, intent: null }, true), {
     text: "Untitled session · s1",
     source: "id",
   });
-  assert.deepEqual(
-    sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "", intent: null }, true),
-    { text: "Untitled turn · abcdef01", source: "id" },
-  );
-  assert.deepEqual(
-    sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "Hi", intent: null }, true),
-    { text: "Hi", source: "ask" },
-  );
+  assert.deepEqual(sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "", intent: null }), {
+    text: "Untitled turn · abcdef01",
+    source: "id",
+  });
   assert.notEqual(
     sessionRowKey({ kind: "session", id: "x" }),
     sessionRowKey({ kind: "run", id: "x" }),

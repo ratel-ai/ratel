@@ -25,7 +25,6 @@ export type TraceRawRouteResponse =
 export interface TraceRawRouteDeps {
   getSession(): Promise<{ userId: string; externalId: string } | null>;
   findProject(projectId: string, userId: string): Promise<{ projectId: string } | null>;
-  flagEnabled(projectId: string, actor: string): Promise<boolean>;
   /** The project's `session_replay_settings.read_content`: off, content keys are left out. */
   readContent(projectId: string): Promise<boolean>;
   loadRaw(projectId: string, traceId: string): Promise<TraceRawSpans>;
@@ -39,7 +38,7 @@ const NOT_FOUND = "This run isn't available.";
 
 /**
  * GET one run's raw spans from `otlp_raw_exports` (RC-412), for a member of
- * its project with `cloud-trace-views-v3` on. `?format=otlp` answers the
+ * its project. `?format=otlp` answers the
  * whole trace as an OTLP/JSON file. A project without raw capture gets no
  * spans, not an error. With the project's `read_content` off, both leave
  * content keys out. Both always
@@ -56,11 +55,7 @@ export async function traceRawResponse(
     return Response.json({ ok: false, message: "Sign in to see this run." }, { status: 401 });
   const scope = await deps.findProject(params.projectId, session.userId);
   const traceId = params.traceId.toLowerCase();
-  if (
-    !scope ||
-    !TRACE_ID.test(traceId) ||
-    !(await deps.flagEnabled(scope.projectId, session.externalId))
-  ) {
+  if (!scope || !TRACE_ID.test(traceId)) {
     return Response.json({ ok: false, message: NOT_FOUND }, { status: 404 });
   }
   const format = new URL(request.url).searchParams.get("format") === "otlp" ? "otlp" : "spans";

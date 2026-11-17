@@ -5,7 +5,6 @@ import type { OtelSpan } from "@/lib/ingest/otlp/schema";
 import { normalizeSemconvAliases } from "@/lib/ingest/otlp/semconv/aliases";
 import type { GenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { attachGenAiLogEvents, type SpanKey } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
-import type { SessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 import type { PriceBook } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
@@ -38,8 +37,6 @@ const BUILT_IN_RESTATE: RestatePrices = { prices: undefined, keepCost: false };
 
 export interface GenAiLogJoinDeps {
   store: GenAiLogStore;
-  /** Flag `cloud-session-replay`, as span ingest reads it: the payload keeps the reply. */
-  sessionChatCapture?: SessionChatCaptureEnabled;
   /** The project's own prices, as span ingest reads them (RC-482): the restated cost uses the same prices. Absent, the current built-in prices. */
   modelPricing?: ModelPricingIngestDeps;
   /** Reports a failed price read, as span ingest reports its own. */
@@ -64,15 +61,12 @@ export async function rejoinStoredModelCalls(
   attachGenAiLogEvents(spans, await deps.store.findLogs(projectId, keys));
   normalizeSemconvAliases(spans);
   const calls = groupSpans(spans);
-  const captureReply =
-    calls.length > 0 && deps.sessionChatCapture
-      ? await deps.sessionChatCapture(projectId, organization)
-      : false;
   const { prices, keepCost } =
     calls.length > 0 && deps.modelPricing
       ? await restatePrices(projectId, deps.modelPricing, deps.captureFailure)
       : BUILT_IN_RESTATE;
-  const rows = toRows(projectId, calls, { captureReply }, prices).filter(
+  // As span ingest: the payload keeps the call's reply (RC-280).
+  const rows = toRows(projectId, calls, { captureReply: true }, prices).filter(
     (row) =>
       row.event.traceId &&
       row.event.spanId &&

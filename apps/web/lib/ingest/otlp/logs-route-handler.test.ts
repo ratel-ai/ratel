@@ -603,10 +603,9 @@ test("accepted log events follow the injected success sampler", async () => {
   ]);
 });
 
-function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
+function rawCapture(store?: OtlpRawStore["store"]) {
   const stored: OtlpRawExportInput[] = [];
   const capture: OtlpRawCaptureDeps = {
-    isEnabled: async () => enabled,
     store: {
       store:
         store ??
@@ -621,23 +620,8 @@ function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
 
 const LIFECYCLE = ["ratel.experiment.results", "ratel.experiment.skip"];
 
-test("raw capture off: no store call and the same response", async () => {
-  const { capture, stored } = rawCapture(false);
-  const response = await handleLogsRequest(
-    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
-    makeDeps({ otlpRawCapture: capture }),
-  );
-  const baseline = await handleLogsRequest(
-    request(otlpLogsJson(LIFECYCLE), { Authorization: "Bearer rtl_test" }),
-    makeDeps(),
-  );
-  assert.equal(response.status, baseline.status);
-  assert.deepEqual(await response.json(), await baseline.json());
-  assert.equal(stored.length, 0);
-});
-
 test("raw capture on: one stored export whose body decodes back to the same records", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const body = otlpLogsProto(LIFECYCLE);
   const response = await handleLogsRequest(
     request(body, { Authorization: "Bearer rtl_test", "Content-Type": "application/x-protobuf" }),
@@ -659,7 +643,7 @@ test("raw capture on: one stored export whose body decodes back to the same reco
 
 test("a throwing raw store still returns the same log response", async () => {
   const logged: string[] = [];
-  const { capture } = rawCapture(true, async () => {
+  const { capture } = rawCapture(async () => {
     throw new Error("raw store down");
   });
   const response = await handleLogsRequest(
@@ -739,7 +723,7 @@ test("a corrupt gzip body returns 400 and an unknown encoding 415", async () => 
 });
 
 test("raw capture of a gzip export keeps the inflated body and the sent gzip", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const sent = gzipSync(otlpLogsJson(LIFECYCLE));
   await handleLogsRequest(
     request(sent, { Authorization: "Bearer rtl_test", "Content-Encoding": "gzip" }),

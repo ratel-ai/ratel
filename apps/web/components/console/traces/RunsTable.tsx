@@ -5,7 +5,7 @@ import { Button } from "@ratel/design-system/button";
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { Checkbox } from "@ratel/design-system/checkbox";
 import { cn } from "@ratel/design-system/cn";
-import { type Column, DataTable, type SortDirection } from "@ratel/design-system/data-table";
+import type { Column, SortDirection } from "@ratel/design-system/data-table";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -13,10 +13,10 @@ import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import { withSort } from "@/lib/synthesis/traces/v2/filters";
 import { formatDuration, formatInteger } from "@/lib/synthesis/traces/v2/format";
 import { experimentLabel } from "@/lib/synthesis/traces/v2/logs";
+import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import { RUN_STATUS_LABEL, RUN_STATUS_TONE, type RunRow } from "@/lib/synthesis/traces/v2/runs";
 import { RelativeTime, ToolBadges, TruncatedText } from "./cells";
 import { TracesListTable } from "./TracesListTable";
-import { useRunNoun, useTraceViewsV3 } from "./views-v3-context";
 
 export type RunSort = "started" | "duration" | "tokens" | "cost";
 
@@ -51,8 +51,6 @@ export function RunsTable({
   onTogglePick: (id: string) => void;
   empty?: ReactNode;
 }) {
-  const noun = useRunNoun();
-  const viewsV3 = useTraceViewsV3();
   const sortHref = (id: RunSort) => (direction: SortDirection) =>
     `${pathname}${withSort(search, id, direction)}`;
   const full = picked.length >= 2;
@@ -172,9 +170,8 @@ export function RunsTable({
     sort,
     empty,
   };
-  // RC-503: with the redesign, Turns shares the Sessions layout, its ID first.
-  if (viewsV3) return <TracesListTable {...table} idOf={(row) => row.id} columns={columns} />;
-  return <DataTable {...table} columns={columns} />;
+  // RC-503: Turns shares the Sessions layout, its ID first.
+  return <TracesListTable {...table} idOf={(row) => row.id} columns={columns} />;
 }
 
 /**
@@ -190,7 +187,6 @@ export function CompareBar({
   href: string | null;
   onClear: () => void;
 }) {
-  const noun = useRunNoun();
   if (picked.length === 0) return null;
   return (
     <div className="pointer-events-none sticky bottom-6 z-sticky flex justify-center">

@@ -11,7 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SessionListView } from "@/components/console/traces-sessions/SessionListView";
 import { EMPTY_TRACE_FILTER_FACETS } from "@/lib/synthesis/traces/trace-filters";
 
-/** RC-506: the property bar on Sessions shows only with `cloud-traces-filters` (filter facets given). */
+/** RC-506: the property bar on Sessions shows when its filter facets are given. */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
 const ROOT = `/project/${PROJECT}/traces`;

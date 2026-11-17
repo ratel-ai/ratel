@@ -11,7 +11,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { RunsTable } from "@/components/console/traces/RunsTable";
 import { TraceSessionBar } from "@/components/console/traces/TraceSessionBar";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
-import { TraceViewsV3Provider } from "@/components/console/traces/views-v3-context";
 import {
   SessionListPanelBody,
   SessionListTable,
@@ -20,7 +19,7 @@ import { TracesSessionsProvider } from "@/components/console/traces-sessions/ses
 import type { RunRow } from "@/lib/synthesis/traces/v2/runs";
 import type { SessionListRow } from "@/lib/synthesis/traces/v2/sessions-list";
 
-/** RC-472: with `cloud-trace-views-v3`, Traces lists turns and has a Sessions tab; a turn's trace links to its session. */
+/** RC-472: Traces lists turns and has a Sessions tab; a turn's trace links to its session. */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";
 const ROOT = `/project/${PROJECT}/traces`;
@@ -45,31 +44,25 @@ function inRouter(pathname: string, children: ReactNode): ReactElement {
   );
 }
 
-function tabs(viewsV3: boolean, sessions: boolean): string[] {
+function tabs(sessions: boolean): string[] {
   const header = createElement(TracesHeader, {
     projectId: PROJECT,
     search: "",
     timeWindow: null,
     onSearchChange: () => {},
   });
-  // The providers hold no hooks, so they are called directly with their children.
-  const framed = sessions ? TracesSessionsProvider({ children: header }) : header;
+  // The provider holds no hooks, so it is called directly with its children.
   const html = renderToStaticMarkup(
-    inRouter(ROOT, TraceViewsV3Provider({ enabled: viewsV3, children: framed })),
+    inRouter(ROOT, sessions ? TracesSessionsProvider({ children: header }) : header),
   );
   return [...html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)</g)].map(
     ([, href, label]) => `${label} ${href.replace(ROOT, "") || "/"}`,
   );
 }
 
-test("with the redesign, the tabs are Sessions (first), Turns, Spans and Logs, even with cloud-traces-sessions on (RC-503)", () => {
-  assert.deepEqual(tabs(true, false), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
-  assert.deepEqual(tabs(true, true), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
-});
-
-test("without the redesign, the tabs are as before", () => {
-  assert.deepEqual(tabs(false, false), ["Runs /", "Spans /spans", "Logs /logs"]);
-  assert.deepEqual(tabs(false, true), ["Sessions /", "Spans /spans", "Logs /logs"]);
+test("the tabs are Sessions (first), Turns, Spans and Logs, with cloud-traces-sessions on or off (RC-503)", () => {
+  assert.deepEqual(tabs(false), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
+  assert.deepEqual(tabs(true), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
 });
 
 test("a turn's trace says which session it is part of and links each turn to its own trace", () => {
@@ -168,7 +161,7 @@ test("the Sessions table puts the ID first, then status, first message, last tur
   assert.match(html, /Refund it/);
 });
 
-test("with the redesign the Turns table starts with the same ID column; without it, as before", () => {
+test("the Turns table starts with the same ID column as Sessions", () => {
   const row: RunRow = {
     id: "abcdef0123456789abcdef0123456789",
     status: "completed",
@@ -196,20 +189,9 @@ test("with the redesign the Turns table starts with the same ID column; without 
     picked: [],
     onTogglePick: () => {},
   });
-  const on = headers(
-    renderToStaticMarkup(inRouter(ROOT, TraceViewsV3Provider({ enabled: true, children: table }))),
-  );
-  const off = headers(
-    renderToStaticMarkup(inRouter(ROOT, TraceViewsV3Provider({ enabled: false, children: table }))),
-  );
-  assert.equal(on[0], "ID");
-  assert.equal(on[3], "Turn");
-  assert.ok(!off.includes("ID"));
-  // Only the noun differs: "Turn" with the redesign, "Run" without.
-  assert.deepEqual(
-    on.slice(1),
-    off.map((header) => (header === "Run" ? "Turn" : header)),
-  );
+  const html = headers(renderToStaticMarkup(inRouter(ROOT, table)));
+  assert.equal(html[0], "ID");
+  assert.equal(html[3], "Turn");
 });
 
 test("the session Panel shows every turn of the session as chat, each linking to its trace", () => {

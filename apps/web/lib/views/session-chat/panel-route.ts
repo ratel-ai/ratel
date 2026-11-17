@@ -6,9 +6,9 @@ import type { ChatTurn } from "./model";
  * the project.
  *
  * - `GET /api/projects/:projectId/sessions/:sessionId/chat`: the whole session
- *   as chat for the Sessions tab's side panel, behind `cloud-trace-views-v3`.
+ *   as chat for the Sessions tab's side panel.
  * - `GET /api/projects/:projectId/session-steps?event=…&search=…`: the stored
- *   text behind an inspector view, behind `cloud-session-replay`.
+ *   text behind an inspector view.
  *
  * Routes rather than Server Actions: a read-only support session refuses every
  * Server Action (a POST) in the browser, and an action from a tab of an older
@@ -34,16 +34,12 @@ export type StepContentResult =
   | { ok: true; content: StepContent | null }
   | { ok: false; error: string };
 
-/** The flag each read sits behind. */
-export type PanelSurface = "trace-views-v3" | "session-replay";
-
 export interface PanelRouteDeps {
   getSession: () => Promise<{ userId: string; externalId: string } | null>;
   findProject: (
     projectId: string,
     userId: string,
   ) => Promise<{ projectId: string; organizationId: string } | null>;
-  enabled: (projectId: string, externalId: string, surface: PanelSurface) => Promise<boolean>;
   /** The project's content opt-in: without it no stored text is read. */
   readContent: (projectId: string) => Promise<boolean>;
   loadChat: (
@@ -71,7 +67,7 @@ export async function sessionPanelChatResponse(
   params: { projectId: string; sessionId: string },
   deps: PanelRouteDeps,
 ): Promise<Response> {
-  const access = await authorize(params.projectId, "trace-views-v3", deps);
+  const access = await authorize(params.projectId, deps);
   if (!access.ok) {
     return json(access.status, {
       ok: false,
@@ -101,12 +97,10 @@ export async function stepContentResponse(
   request: StepContentRequest,
   deps: PanelRouteDeps,
 ): Promise<Response> {
-  const access = await authorize(params.projectId, "session-replay", deps);
+  const access = await authorize(params.projectId, deps);
   if (!access.ok) {
     const error =
-      access.status === 401
-        ? "Sign in to see this step."
-        : (access.missing ?? "Session replay is off for this organization.");
+      access.status === 401 ? "Sign in to see this step." : (access.missing ?? "Not found.");
     return json(access.status, { ok: false, error });
   }
   try {
@@ -136,11 +130,7 @@ export function stepContentRequestFromUrl(url: URL): StepContentRequest {
 
 type Access = { ok: true; projectId: string } | { ok: false; status: 401 | 404; missing?: string };
 
-async function authorize(
-  projectId: string,
-  surface: PanelSurface,
-  deps: PanelRouteDeps,
-): Promise<Access> {
+async function authorize(projectId: string, deps: PanelRouteDeps): Promise<Access> {
   const session = await deps.getSession();
   if (!session) return { ok: false, status: 401 };
   const project = await deps.findProject(projectId, session.userId);
@@ -150,8 +140,6 @@ async function authorize(
     org_id: project.organizationId,
     distinct_id: session.externalId,
   });
-  if (!(await deps.enabled(project.projectId, session.externalId, surface)))
-    return { ok: false, status: 404 };
   return { ok: true, projectId: project.projectId };
 }
 
