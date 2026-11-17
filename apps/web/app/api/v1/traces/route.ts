@@ -1,3 +1,4 @@
+import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import {
   findTracesWithModelCalls,
   insertEventsWithMetrics,
@@ -5,12 +6,15 @@ import {
 } from "@/lib/ingest/otlp/queries";
 import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
+import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
+import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
+import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { hashApiKey } from "@/lib/platform/api-keys";
-import { isDbConfigured } from "@/lib/platform/db/client";
+import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { checkEventQuota, incrementEventUsage } from "@/lib/platform/entitlements";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { findActiveApiKeyByHash, touchApiKey } from "@/lib/platform/projects/queries";
@@ -71,5 +75,16 @@ async function handlePost(req: Request) {
     // Session chat: each call's payload keeps its reply and request settings.
     sessionChatCapture: (projectId, organization) =>
       sessionChatCaptureEnabled(projectId, organization),
+    // Content sent as gen_ai log records joins its model call.
+    genAiLogs: createGenAiLogStore(),
+    // Raw request bodies for the organizations that have the flag.
+    otlpRawCapture: {
+      isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
+      store: createOtlpRawStore(),
+    },
+    // The project's own prices, read once per batch (RC-482).
+    modelPricing: {
+      loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
+    },
   });
 }

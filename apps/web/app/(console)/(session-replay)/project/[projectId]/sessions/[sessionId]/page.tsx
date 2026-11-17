@@ -16,6 +16,8 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
+import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
+import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadSessionChat } from "@/lib/views/session-chat/load";
 import {
@@ -70,8 +72,22 @@ export default async function SessionReplayPage({
   const { projectId, sessionId } = await params;
   if (!sessionReplayEnabled() || !isDbConfigured()) notFound();
   const { project, organization } = await requireProjectScope(projectId);
+  // RC-413: titled by the first ask, Step by step reads as Replay.
+  const viewsV3 = await traceViewsV3EnabledForActor(project.id, `project:${project.id}`);
+  const header = (asks: readonly (string | null)[]) => ({
+    title: viewsV3 ? (
+      sessionPageTitle(sessionId, asks, true)
+    ) : (
+      <span className="font-mono">{sessionId}</span>
+    ),
+    description: viewsV3 ? `Session ${sessionId}` : undefined,
+  });
   const projectHref = `/project/${encodeURIComponent(project.id)}`;
   const sessionHref = `${projectHref}/sessions/${encodeURIComponent(sessionId)}`;
+  // RC-472: with the redesign a session is opened from the Sessions tab, and goes back there.
+  const crumbs = viewsV3
+    ? [{ label: "Sessions", href: `${projectHref}/traces` }]
+    : [{ label: "Traces", href: `${projectHref}/traces` }];
   const query = await searchParams;
   const pageView = sessionPageView(query.view);
   if (pageView === "trace") {
@@ -111,22 +127,24 @@ export default async function SessionReplayPage({
     // The run reads with its own statement timeouts, outside the page's read.
     const trace = traceId
       ? await loadTraceViewProps(project.id, traceId, {
-          listHref: `${projectHref}/traces`,
-          compareHref: `${projectHref}/traces?compare=${encodeURIComponent(traceId)}`,
+          listHref: runsListPath(`${projectHref}/traces`, viewsV3),
+          compareHref: `${runsListPath(`${projectHref}/traces`, viewsV3)}?compare=${encodeURIComponent(traceId)}`,
           tab: firstParam(query.tab),
           spanId: firstParam(query.span) ?? null,
+          actor: `project:${project.id}`,
         })
       : null;
     return (
       <Page>
         <PageHeader
-          title={<span className="font-mono">{sessionId}</span>}
-          crumbs={[{ label: "Traces", href: `${projectHref}/traces` }]}
+          {...header(turns.map((turn) => turn.ask))}
+          crumbs={crumbs}
           actions={
             <ViewLinks
               current="trace"
               sessionHref={sessionHref}
               traceHref={sessionTraceHref(project.id, sessionId, turnIndex ?? 1)}
+              viewsV3={viewsV3}
             />
           }
         />
@@ -138,6 +156,7 @@ export default async function SessionReplayPage({
             turnIndex={turnIndex}
             traceId={traceId}
             trace={trace}
+            viewsV3={viewsV3}
           />
         </PageBody>
       </Page>
@@ -159,8 +178,8 @@ export default async function SessionReplayPage({
     return (
       <Page>
         <PageHeader
-          title={<span className="font-mono">{sessionId}</span>}
-          crumbs={[{ label: "Traces", href: `${projectHref}/traces` }]}
+          {...header(chat.turns.map((turn) => turn.ask))}
+          crumbs={crumbs}
           actions={
             <>
               <span className="text-ui text-fg-muted tabular-nums">
@@ -174,6 +193,7 @@ export default async function SessionReplayPage({
                   sessionId,
                   chat.turns.at(-1)?.turnIndex ?? 1,
                 )}
+                viewsV3={viewsV3}
               />
             </>
           }
@@ -200,7 +220,13 @@ export default async function SessionReplayPage({
         tools: sessionTools(timeline),
         runs: await listWhatIfRuns(project.id, sessionId, db),
       };
-      if (!readContent) return { view, readContent, texts: {}, whatIf };
+      // The title's first ask: the steps hold no message text, the chat does.
+      const asks = viewsV3
+        ? ((await loadSessionChat(project.id, sessionId, { readContent }, db))?.turns.map(
+            (turn) => turn.ask,
+          ) ?? [])
+        : [];
+      if (!readContent) return { view, readContent, texts: {}, whatIf, asks };
       const calls = timeline.steps.flatMap((step) =>
         step.kind === "model_call" && step.coverage === "content"
           ? [{ index: step.index, eventId: step.eventId }]
@@ -216,7 +242,7 @@ export default async function SessionReplayPage({
         const text = byEvent.get(call.eventId);
         if (text) texts[call.index] = text;
       }
-      return { view, readContent, texts, whatIf };
+      return { view, readContent, texts, whatIf, asks };
     },
     { operation: "session_replay_page" },
   );
@@ -239,13 +265,14 @@ export default async function SessionReplayPage({
   return (
     <Page>
       <PageHeader
-        title={<span className="font-mono">{sessionId}</span>}
-        crumbs={[{ label: "Traces", href: `/project/${encodeURIComponent(project.id)}/traces` }]}
+        {...header(loaded.asks)}
+        crumbs={crumbs}
         actions={
           <ViewLinks
             current="steps"
             sessionHref={sessionHref}
             traceHref={`${sessionHref}?view=trace`}
+            viewsV3={viewsV3}
           />
         }
         description="Each step of this session, what the context held at each model call, and why each tool choice was good or bad. Fork a model call with a change to see what the agent picks then."
@@ -277,14 +304,26 @@ function ViewLinks({
   current,
   sessionHref,
   traceHref,
+  viewsV3,
 }: {
   current: SessionPageView;
   sessionHref: string;
   traceHref: string;
+  viewsV3: boolean;
 }) {
   const views = [
-    { view: "chat", label: "Chat", href: sessionHref, icon: MessagesSquare },
-    { view: "steps", label: "Step by step", href: `${sessionHref}?view=steps`, icon: List },
+    {
+      view: "chat",
+      label: viewsV3 ? "Conversation" : "Chat",
+      href: sessionHref,
+      icon: MessagesSquare,
+    },
+    {
+      view: "steps",
+      label: viewsV3 ? "Replay" : "Step by step",
+      href: `${sessionHref}?view=steps`,
+      icon: List,
+    },
     { view: "trace", label: "Trace", href: traceHref, icon: ChartGantt },
   ] as const;
   return (

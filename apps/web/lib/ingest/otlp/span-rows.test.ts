@@ -104,7 +104,8 @@ test("promotes service and GenAI fields and computes model cost", () => {
   assert.equal(row.outputTokens, 200);
   assert.equal(row.cachedTokens, 400);
   assert.equal(row.reasoningTokens, 32);
-  assert.equal(row.costUsd, "0.004");
+  // No price book: current gpt-5.5 at $5 in, $0.50 cached, $30 out: 600 * 5 + 400 * 0.5 + 200 * 30, per 1M.
+  assert.equal(row.costUsd, "0.0092");
 });
 
 test("prices cache writes and long-context Haiku 5.5 calls", () => {
@@ -434,7 +435,7 @@ for (const [label, build, children] of [
   });
 }
 
-test("flag on: an agent span with no model call in its trace keeps class, tokens and cost", () => {
+test("an agent span with no model call in its trace keeps class, tokens and cost", () => {
   const spans = agentOnlyTrace();
   const [root] = toOtelSpanRows("project-1", spans, dedupe(spans));
   assert.equal(root.spanClass, "llm_call");
@@ -442,7 +443,7 @@ test("flag on: an agent span with no model call in its trace keeps class, tokens
   assert.ok(Number(root.costUsd) > 0);
 });
 
-test("flag on: a root alone in its batch drops its tokens when storage has the model calls", () => {
+test("a root alone in its batch drops its tokens when storage has the model calls", () => {
   const [root] = langGraphTrace();
   const [stored] = toOtelSpanRows("project-1", [root], dedupe([root], [LANGGRAPH_TRACE]));
   assert.equal(stored.spanClass, "other");
@@ -450,4 +451,58 @@ test("flag on: a root alone in its batch drops its tokens when storage has the m
   const [lone] = toOtelSpanRows("project-1", [root], dedupe([root]));
   assert.equal(lone.spanClass, "llm_call");
   assert.equal(lone.inputTokens, 300);
+});
+
+/* --- resource environment ---------------------------------------------------- */
+
+const PROD_RESOURCE = {
+  "service.name": "agent",
+  "deployment.environment.name": "prod",
+  "service.version": "1.4.2",
+};
+
+test("the resource environment and service version are stored", () => {
+  const [row] = toOtelSpanRows("project-1", [span({ resourceAttributes: PROD_RESOURCE })]);
+  assert.equal(row.attributes["deployment.environment.name"], "prod");
+  assert.equal(row.attributes["service.version"], "1.4.2");
+  assert.equal(row.attributes["deployment.environment"], undefined);
+});
+
+test("a span attribute of the same key wins over the resource", () => {
+  const [row] = toOtelSpanRows("project-1", [
+    span({
+      resourceAttributes: PROD_RESOURCE,
+      attributes: { "deployment.environment.name": "canary" },
+    }),
+  ]);
+  assert.equal(row.attributes["deployment.environment.name"], "canary");
+});
+
+test("the legacy deployment.environment is kept when .name is absent", () => {
+  const [row] = toOtelSpanRows("project-1", [
+    span({ resourceAttributes: { "deployment.environment": "staging" } }),
+  ]);
+  assert.equal(row.attributes["deployment.environment"], "staging");
+  assert.equal(row.attributes["deployment.environment.name"], undefined);
+  assert.equal(row.attributes["service.version"], undefined);
+});
+
+test("a span pays the project's own price (RC-482)", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [
+      span({
+        attributes: {
+          "gen_ai.response.model": "gpt-5.5",
+          "gen_ai.usage.input_tokens": 1_000,
+          "gen_ai.usage.output_tokens": 200,
+          "gen_ai.usage.cache_read.input_tokens": 400,
+        },
+      }),
+    ],
+    undefined,
+    { prices: { overrides: { "gpt-5.5": { input: 1, output: 1 } } } },
+  );
+  // The project's gpt-5.5 at $1 in (cached at input), $1 out: (1,000 + 200) / 1M.
+  assert.equal(row.costUsd, "0.0012");
 });

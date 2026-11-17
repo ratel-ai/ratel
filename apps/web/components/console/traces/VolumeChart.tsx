@@ -28,6 +28,7 @@ import {
   type VolumeBucket,
   type VolumeModel,
 } from "@/lib/synthesis/traces/v2/volume";
+import { useRunNoun } from "./views-v3-context";
 
 /** Room above the top gridline for its label. */
 const PLOT_TOP = 18;
@@ -63,13 +64,14 @@ export function VolumeChart({
   onSelectDays: (days: { from: string; to: string }) => void;
   onReset: () => void;
 }) {
+  const noun = useRunNoun();
   const [showTable, setShowTable] = useState(false);
   const { buckets, totals } = model;
   const completed = totals.count - totals.errorCount;
 
   return (
     <Section
-      title="Runs over time"
+      title={`${noun.many} over time`}
       actions={
         <>
           {zoomed ? (
@@ -129,6 +131,7 @@ function VolumePlot({
   const hostRef = useRef<HTMLDivElement>(null);
   // Mirrors the drag so pointerup reads the live gesture, not the last render.
   const dragRef = useRef<Drag | null>(null);
+  const noun = useRunNoun();
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
@@ -268,7 +271,7 @@ function VolumePlot({
         ref={hostRef}
         role="listbox"
         tabIndex={0}
-        aria-label={`Runs over time: ${formatInteger(totals.count)} runs, ${formatInteger(totals.errorCount)} failed.`}
+        aria-label={`${noun.many} over time: ${formatInteger(totals.count)} ${noun.lowerMany}, ${formatInteger(totals.errorCount)} failed.`}
         aria-describedby={descriptionId}
         aria-multiselectable={selectable || undefined}
         aria-readonly={selectable ? undefined : true}
@@ -351,7 +354,7 @@ function VolumePlot({
             aria-selected={inSelection(index)}
             className="sr-only"
           >
-            {`${bucketLabel(bucket, stepHours)}: ${formatInteger(bucket.count)} runs, ${formatInteger(bucket.errorCount)} failed`}
+            {`${bucketLabel(bucket, stepHours)}: ${formatInteger(bucket.count)} ${noun.lowerMany}, ${formatInteger(bucket.errorCount)} failed`}
           </div>
         ))}
 
@@ -439,7 +442,7 @@ function VolumePlot({
       </figcaption>
       <p role="status" className="sr-only">
         {selection && readoutTotals && targetLabel
-          ? `${readoutTitle} selected: ${formatInteger(readoutTotals.count)} runs, ${formatInteger(readoutTotals.errorCount)} failed. Press Enter to show ${targetLabel}.`
+          ? `${readoutTitle} selected: ${formatInteger(readoutTotals.count)} ${noun.lowerMany}, ${formatInteger(readoutTotals.errorCount)} failed. Press Enter to show ${targetLabel}.`
           : ""}
       </p>
     </figure>
@@ -518,11 +521,12 @@ function VolumeTable({
   buckets: readonly VolumeBucket[];
   stepHours: number;
 }) {
+  const noun = useRunNoun();
   const busy = buckets.filter((bucket) => bucket.count > 0);
   return (
     <div className="max-h-64 overflow-y-auto rounded-lg border border-line">
       <table className="w-full border-separate border-spacing-0 text-ui">
-        <caption className="sr-only">Runs per time bucket</caption>
+        <caption className="sr-only">{noun.many} per time bucket</caption>
         <thead>
           <tr>
             <th
@@ -535,7 +539,7 @@ function VolumeTable({
               scope="col"
               className="sticky top-0 h-8 border-b border-line bg-app px-3 text-right text-xs font-medium text-fg-subtle"
             >
-              Runs
+              {noun.many}
             </th>
             <th
               scope="col"

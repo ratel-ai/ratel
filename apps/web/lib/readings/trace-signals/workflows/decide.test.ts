@@ -323,3 +323,49 @@ test("a long ask with an emoji at the cut never leaves half of it in the questio
   assert.equal(row?.query, "a".repeat(MAX_ASK_CHARS - 1));
   assert.equal(row?.id, askHash({ ask }));
 });
+
+test("behind the flag, a decision whose workflow is unchanged is carried to a new option list and stored under it", async () => {
+  const { optionPrint } = await import("@/lib/readings/labelling/carry");
+  // 30 asks about the release workflow, decided against an older list (before wf-sprint was named).
+  const many: AskGroup[] = Array.from({ length: 30 }, (_, index) => ({
+    ask: `close out release 4.${index}`,
+    turns: [turn(`r${index}`, RELEASE)],
+  }));
+  const release = decisionOptions(WORKFLOWS, LABELS)[0]!;
+  const previous = decisionCases(many).map((c) => ({
+    promptHash: c.id,
+    optionId: "wf-release",
+    optionPrint: optionPrint("workflow", release),
+  }));
+  const { d, saved, calls } = deps({
+    loadRecentAskGroups: async () => many,
+    adaptive: async () => true,
+    loadCarried: async () => previous,
+  });
+  const result = await decideProjectWorkflows("p1", WORKFLOWS, LABELS, d);
+  assert.equal(calls.flat().length, 20, "only the audit sample is re-asked");
+  assert.equal(result.judged, 20);
+  const rows = saved.verdicts as {
+    verdict: string;
+    workflowId: string | null;
+    optionPrint?: string | null;
+  }[];
+  assert.equal(rows.length, 30, "fresh and carried decisions are both stored under the new list");
+  assert.ok(
+    rows.every(
+      (row) =>
+        row.verdict === "workflow" &&
+        row.workflowId === "wf-release" &&
+        row.optionPrint === optionPrint("workflow", release),
+    ),
+  );
+
+  // Flag off: every uncached ask is put to the engine, as before.
+  const off = deps({
+    loadRecentAskGroups: async () => many,
+    adaptive: async () => false,
+    loadCarried: async () => previous,
+  });
+  await decideProjectWorkflows("p1", WORKFLOWS, LABELS, off.d);
+  assert.equal(off.calls.flat().length, 30);
+});

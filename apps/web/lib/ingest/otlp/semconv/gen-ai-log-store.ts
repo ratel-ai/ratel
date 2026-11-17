@@ -1,0 +1,146 @@
+import { and, eq, inArray } from "drizzle-orm";
+import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
+import { eventMetrics, events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/schema";
+import { getDb } from "@/lib/platform/db/client";
+import { GEN_AI_LOG_EVENT_NAMES } from "../log-rows";
+import type { SpanKey, StoredGenAiLog } from "./gen-ai-logs";
+
+/**
+ * The storage half of the `gen_ai` log join:
+ * read the stored log records and spans of a batch, and restate a stored model
+ * call. Every read is scoped to one project and uses `*_project_trace_idx`.
+ */
+export interface GenAiLogStore {
+  findLogs(projectId: string, keys: SpanKey[]): Promise<StoredGenAiLog[]>;
+  findSpans(projectId: string, traceIds: string[]): Promise<OtelSpan[]>;
+  /**
+   * Restate the stored calls of `rows` (matched by dedupe hash); never inserts
+   * one, and never drops content: a call whose stored payload has text the
+   * row lacks keeps its payload. With `keepCost`, each call keeps its stored
+   * cost (RC-482). Returns the count restated.
+   */
+  restateCalls(
+    projectId: string,
+    rows: EventWithMetric[],
+    options?: RestateOptions,
+  ): Promise<number>;
+}
+
+export interface RestateOptions {
+  /** Keep each call's stored cost: the restate cannot tell which prices the project pays. */
+  keepCost?: boolean;
+}
+
+type Db = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
+
+export function createGenAiLogStore(db: () => Db = getDb): GenAiLogStore {
+  return {
+    findLogs: (projectId, keys) => findGenAiLogs(projectId, keys, db()),
+    findSpans: (projectId, traceIds) => findOtelSpans(projectId, traceIds, db()),
+    restateCalls: (projectId, rows, options) => restateCalls(projectId, rows, db(), options),
+  };
+}
+
+async function findGenAiLogs(
+  projectId: string,
+  keys: SpanKey[],
+  db: Db,
+): Promise<StoredGenAiLog[]> {
+  if (keys.length === 0) return [];
+  const wanted = new Set(keys.map((key) => `${key.traceId}:${key.spanId}`));
+  const rows = await db
+    .select({
+      traceId: otelLogs.traceId,
+      spanId: otelLogs.spanId,
+      eventName: otelLogs.eventName,
+      occurredAt: otelLogs.occurredAt,
+      attributes: otelLogs.attributes,
+      body: otelLogs.body,
+    })
+    .from(otelLogs)
+    .where(
+      and(
+        eq(otelLogs.projectId, projectId),
+        inArray(otelLogs.traceId, [...new Set(keys.map((key) => key.traceId))]),
+        inArray(otelLogs.spanId, [...new Set(keys.map((key) => key.spanId))]),
+        inArray(otelLogs.eventName, [...GEN_AI_LOG_EVENT_NAMES]),
+      ),
+    );
+  return rows.flatMap((row) =>
+    row.traceId && row.spanId && wanted.has(`${row.traceId}:${row.spanId}`)
+      ? [{ ...row, traceId: row.traceId, spanId: row.spanId }]
+      : [],
+  );
+}
+
+async function findOtelSpans(projectId: string, traceIds: string[], db: Db): Promise<OtelSpan[]> {
+  if (traceIds.length === 0) return [];
+  return db
+    .select()
+    .from(otelSpans)
+    .where(and(eq(otelSpans.projectId, projectId), inArray(otelSpans.traceId, traceIds)));
+}
+
+async function restateCalls(
+  projectId: string,
+  rows: EventWithMetric[],
+  db: Db,
+  { keepCost = false }: RestateOptions = {},
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  return db.transaction(async (tx) => {
+    let restated = 0;
+    for (const { event, metric } of rows) {
+      if (!event.dedupeHash) continue;
+      // Lock the row: of two restates of one call, the second reads what the
+      // first wrote. A row built from fewer log records (an older export) or
+      // from content-free `otel_spans` (the span carried the content) does
+      // not cover the stored payload and is skipped.
+      const [current] = await tx
+        .select({ payload: events.payload, costUsd: events.costUsd })
+        .from(events)
+        .where(and(eq(events.projectId, projectId), eq(events.dedupeHash, event.dedupeHash)))
+        .for("update");
+      if (!current || !payloadCovers(event.payload, current.payload)) continue;
+      const costUsd = keepCost ? current.costUsd : event.costUsd;
+      const [stored] = await tx
+        .update(events)
+        .set({
+          provider: event.provider,
+          model: event.model,
+          stream: event.stream,
+          finishReason: event.finishReason,
+          latencyMs: event.latencyMs,
+          inputTokens: event.inputTokens,
+          outputTokens: event.outputTokens,
+          cachedTokens: event.cachedTokens,
+          reasoningTokens: event.reasoningTokens,
+          costUsd,
+          payload: event.payload,
+          categorizerVersion: event.categorizerVersion,
+        })
+        .where(and(eq(events.projectId, projectId), eq(events.dedupeHash, event.dedupeHash)))
+        .returning({ id: events.id });
+      if (!stored) continue;
+      await tx
+        .insert(eventMetrics)
+        .values({ ...metric, costUsd, eventId: stored.id, projectId })
+        .onConflictDoUpdate({ target: eventMetrics.eventId, set: { ...metric, costUsd } });
+      restated += 1;
+    }
+    return restated;
+  });
+}
+
+/** Every non-empty text of `stored` is also in `next`. */
+function payloadCovers(next: unknown, stored: unknown): boolean {
+  const texts = new Set(textsOf(next));
+  return textsOf(stored).every((text) => texts.has(text));
+}
+
+function textsOf(value: unknown): string[] {
+  if (typeof value === "string") return value ? [value] : [];
+  if (Array.isArray(value)) return value.flatMap(textsOf);
+  if (value && typeof value === "object") return Object.values(value).flatMap(textsOf);
+  return [];
+}

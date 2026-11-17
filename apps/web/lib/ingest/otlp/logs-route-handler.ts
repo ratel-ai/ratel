@@ -1,8 +1,15 @@
 import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queries";
+import { inflateBody, isGzipEncoding, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
+import {
+  type GenAiLogJoinDeps,
+  rejoinStoredModelCalls,
+} from "@/lib/ingest/otlp/semconv/gen-ai-log-join";
+import { distinctSpanKeys } from "@/lib/ingest/otlp/semconv/gen-ai-logs";
+import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
 import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
-import { getLogger, type LogError } from "@/lib/platform/logger";
+import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type {
   findActiveApiKeyByHash as findActiveApiKeyByHashFn,
@@ -25,6 +32,7 @@ export const MAX_LOG_RECORDS = 5_000;
 const logger = getLogger("otlp/logs");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);
+const defaultLogWarn: LogWarn = (message, fields) => logger.warn(fields, message);
 
 export interface LogsHandlerDeps extends IngestObservabilityDeps {
   isDbConfigured: typeof isDbConfiguredFn;
@@ -38,6 +46,10 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
   setRequestLogContext?: typeof setRequestLogContextFn;
+  /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
+  otlpRawCapture?: OtlpRawCaptureDeps;
+  /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
+  genAiLogJoin?: GenAiLogJoinDeps;
 }
 
 export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Promise<Response> {
@@ -122,11 +134,35 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
     );
   }
 
+  // The OpenTelemetry Collector's otlphttp exporter gzips by default.
+  const inflated = inflateBody(read.bytes, req.headers.get("content-encoding"));
+  if (!inflated.ok) {
+    return rejectLogsRequest(
+      inflated.reason === "too_large"
+        ? json({ error: `Decompressed body too large (max ${MAX_INFLATED_BYTES} bytes).` }, 413)
+        : inflated.reason === "unsupported"
+          ? json(
+              {
+                error:
+                  "Unsupported Content-Encoding. Send OTLP uncompressed, or with gzip or deflate.",
+              },
+              415,
+            )
+          : json({ error: "Malformed compressed body." }, 400),
+      inflated.reason === "too_large" ? "oversized" : "malformed",
+      startedAt,
+      deps,
+      apiKey.projectId,
+      organization?.id,
+    );
+  }
+  const bytes = inflated.bytes;
+
   let records: ReturnType<typeof decodeOtlpLogs>;
   try {
     records = decodeOtlpLogs(
       transport === "json" ? "application/json" : "application/x-protobuf",
-      read.bytes,
+      bytes,
     );
   } catch (error) {
     if (error instanceof OtlpDecodeError) {
@@ -171,6 +207,42 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
       );
     }
   }
+
+  // Spans before logs: restate the model calls these records belong to.
+  // Fails open: the logs are stored, and a retry of the export joins again.
+  if (deps.genAiLogJoin) {
+    const keys = distinctSpanKeys(rows.filter((row) => row.eventName.startsWith("gen_ai.")));
+    try {
+      await rejoinStoredModelCalls(apiKey.projectId, organization, keys, {
+        ...deps.genAiLogJoin,
+        captureFailure: (failure) => captureInsertFailure(failure, apiKey.projectId, deps),
+      });
+    } catch (error) {
+      logError("gen_ai log join failed", error, { project_id: apiKey.projectId });
+      captureInsertFailure(error, apiKey.projectId, deps);
+    }
+  }
+
+  // Raw capture after a stored export; fails open, never changes the response.
+  await captureOtlpRawExport(
+    {
+      projectId: apiKey.projectId,
+      signal: "logs",
+      contentType: transport === "json" ? "application/json" : "application/x-protobuf",
+      body: bytes,
+      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+      itemCount: records.length,
+      traceIds: [...new Set(records.flatMap((record) => (record.traceId ? [record.traceId] : [])))],
+    },
+    organization,
+    deps.otlpRawCapture,
+    {
+      logError,
+      logWarn: deps.logWarn ?? defaultLogWarn,
+      captureFailure: (error) => captureInsertFailure(error, apiKey.projectId, deps),
+      trackServerEvent: deps.trackServerEvent,
+    },
+  );
 
   await deps.touchApiKey(apiKey.id).catch(() => {});
 

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
+import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
@@ -70,14 +71,19 @@ export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] 
   const client = anthropicClient();
   if (!client) return null;
   return async (system, user) => {
-    const msg = await client.messages.create(
-      wellFormedJson({
-        model,
-        max_tokens: LABEL_MAX_TOKENS,
-        system,
-        messages: [{ role: "user", content: user }],
-        output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
-      }),
+    const msg = await trackModelCall(
+      { provider: "anthropic", model, feature: "workflow_label", payer: "ratel" },
+      () =>
+        client.messages.create(
+          wellFormedJson({
+            model,
+            max_tokens: LABEL_MAX_TOKENS,
+            system,
+            messages: [{ role: "user", content: user }],
+            output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
+          }),
+        ),
+      anthropicUsage,
     );
     if (msg.stop_reason === "refusal")
       throw new Error("workflow label declined by the model's safety filter");

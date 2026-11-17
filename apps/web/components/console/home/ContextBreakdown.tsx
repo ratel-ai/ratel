@@ -10,17 +10,23 @@ const DOCS_URL = "https://docs.ratel.sh";
 /**
  * What used to be the Dashboards page, at the depth it deserves: the prompt
  * split by source with the measurable waste inside each, then what to do
- * about the biggest parts.
+ * about the biggest parts. It also says how much of the input the prompt
+ * cache served (`promptCacheHitRate`).
  */
 export function ContextBreakdown({
   split,
   suggestions,
+  promptCacheHitRate = null,
 }: {
   split: ContextSplit | null;
   suggestions: readonly Suggestion[];
+  /** 0 to 1; null hides the line (flag off, or no input in the window). */
+  promptCacheHitRate?: number | null;
 }) {
+  const cacheLine =
+    promptCacheHitRate === null ? null : <PromptCacheLine rate={promptCacheHitRate} />;
   if (!split) {
-    return (
+    const empty = (
       <EmptyState
         emblem
         title="No context breakdown yet"
@@ -37,6 +43,15 @@ export function ContextBreakdown({
         }
       />
     );
+    // Runs sent over OpenTelemetry alone have no split, but can still report cache use.
+    return cacheLine ? (
+      <div className="flex flex-col gap-6">
+        {cacheLine}
+        {empty}
+      </div>
+    ) : (
+      empty
+    );
   }
 
   const perRun = split.runs > 0 ? split.totalTokens / split.runs : null;
@@ -48,6 +63,7 @@ export function ContextBreakdown({
         {split.runs === 1 ? "run" : "runs"}
         {perRun === null ? "" : `, about ${fmtTokens(perRun)} per run`}.
       </p>
+      {cacheLine}
 
       <ul className="flex flex-col gap-3">
         {split.rows.map((row) => (
@@ -102,5 +118,14 @@ export function ContextBreakdown({
         </section>
       ) : null}
     </div>
+  );
+}
+
+function PromptCacheLine({ rate }: { rate: number }) {
+  return (
+    <p className="text-sm text-fg-muted">
+      <span className="font-medium text-fg tabular-nums">{formatSharePercent(rate)}</span> of input
+      served from the prompt cache.
+    </p>
   );
 }

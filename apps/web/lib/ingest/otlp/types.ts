@@ -119,16 +119,27 @@ export interface RawSpan {
   attributes?: RawKeyValue[];
   events?: RawSpanEvent[];
   status?: { code?: number; message?: string };
+  traceState?: string;
+  links?: RawSpanLink[];
+}
+
+export interface RawSpanLink {
+  traceId?: string | Uint8Array | number[];
+  spanId?: string | Uint8Array | number[];
+  traceState?: string;
+  attributes?: RawKeyValue[];
 }
 
 export interface RawScopeSpans {
-  scope?: { name?: string };
+  scope?: { name?: string; version?: string; attributes?: RawKeyValue[] };
   spans?: RawSpan[];
+  schemaUrl?: string;
 }
 
 export interface RawResourceSpans {
   resource?: { attributes?: RawKeyValue[] };
   scopeSpans?: RawScopeSpans[];
+  schemaUrl?: string;
 }
 
 export interface IExportTraceServiceRequest {

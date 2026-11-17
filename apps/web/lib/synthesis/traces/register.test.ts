@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runDrainTick } from "@/lib/jobs/drain";
 import type { BackgroundObservabilityDeps } from "@/lib/jobs/observability";
-import { refreshStep, retentionSteps, tracesRegistration } from "./register";
+import { otlpRawPruneStep, refreshStep, retentionSteps, tracesRegistration } from "./register";
 import type { TraceSummaryRefreshResult } from "./summary-refresh";
 
 const result = (spansScanned: number): TraceSummaryRefreshResult => ({
@@ -13,11 +13,12 @@ const result = (spansScanned: number): TraceSummaryRefreshResult => ({
   lockContended: false,
 });
 
-test("traces register the refresh between upstream's retention prunes, and no job", () => {
+test("traces register the raw prune, then the refresh between upstream's retention prunes, and no job", () => {
   assert.deepEqual(Object.keys(tracesRegistration.jobs ?? {}), []);
   assert.deepEqual(
     (tracesRegistration.drainSteps ?? []).map((s) => [s.name, s.phase, s.retentionOnly ?? false]),
     [
+      ["otlp_raw_prune", "after", false],
       ["otel_spans_prune", "after", true],
       ["otel_logs_prune", "after", true],
       ["trace_summary_refresh", "after", false],
@@ -54,8 +55,9 @@ async function tick(retentionEnabled: boolean) {
     },
     async () => {},
   );
+  const raw = otlpRawPruneStep(prune("raw", 3));
   const summary = await runDrainTick({
-    steps: [spans, logs, refresh, summaries],
+    steps: [raw, spans, logs, refresh, summaries],
     drainProjectJobs: async () => ({ done: 0, failed: 0 }),
     retentionEnabled,
     observability,
@@ -65,7 +67,8 @@ async function tick(retentionEnabled: boolean) {
 
 test("with retention on, a tick prunes spans and logs before the refresh and summaries after it", async () => {
   const { calls, heartbeat } = await tick(true);
-  assert.deepEqual(calls, ["spans", "logs", "refresh", "summaries"]);
+  assert.deepEqual(calls, ["raw", "spans", "logs", "refresh", "summaries"]);
+  assert.equal(heartbeat.otlpRawExportsPruned, 3);
   assert.equal(heartbeat.otelSpansPruned, 14);
   assert.equal(heartbeat.otelLogsPruned, 15);
   assert.equal(heartbeat.traceSummariesPruned, 20);
@@ -73,7 +76,9 @@ test("with retention on, a tick prunes spans and logs before the refresh and sum
 
 test("with retention off, a tick deletes nothing and still refreshes", async () => {
   const { calls, heartbeat, summary } = await tick(false);
-  assert.deepEqual(calls, ["refresh"]);
+  // Raw OTLP bodies expire whatever retention says, as upstream prunes them.
+  assert.deepEqual(calls, ["raw", "refresh"]);
+  assert.equal(heartbeat.otlpRawExportsPruned, 3);
   assert.equal(heartbeat.otelSpansPruned, undefined);
   assert.equal(heartbeat.otelLogsPruned, undefined);
   assert.equal(heartbeat.traceSummariesPruned, undefined);

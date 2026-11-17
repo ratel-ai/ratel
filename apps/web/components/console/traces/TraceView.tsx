@@ -10,13 +10,15 @@ import { Tabs } from "@ratel/design-system/tabs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { buildTraceContentView } from "@/lib/synthesis/traces/content-view";
+import type { RawSpanView, TraceRawRouteResponse } from "@/lib/ingest/otlp-raw/trace-raw-route";
 import {
-  formatDuration,
-  formatInteger,
-  formatMoney,
-  formatTimestamp,
-} from "@/lib/synthesis/traces/v2/format";
+  buildTraceContentView,
+  preferSpanContent,
+  type TraceContentView,
+} from "@/lib/synthesis/traces/content-view";
+import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
+import { formatDuration, formatInteger, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import { runNoun } from "@/lib/synthesis/traces/v2/run-noun";
 import type { RunTotals } from "@/lib/synthesis/traces/v2/run-summary";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunStatus } from "@/lib/synthesis/traces/v2/runs";
 import { STEP_KIND_LABEL, type StepKind, stepKind } from "@/lib/synthesis/traces/v2/span-kind";
@@ -27,11 +29,15 @@ import {
   withQueryUpdates,
 } from "@/lib/synthesis/traces/v2/url-writer";
 import type { TraceWaterfallView } from "@/lib/synthesis/traces/waterfall";
+import type { TraceSession } from "@/lib/views/session-chat/trace-session";
 import { KIND_ORDER } from "./kind";
 import { SpanDetails, SpanInspector } from "./SpanInspector";
+import { type RawState, SpanIOPanel } from "./SpanIOPanel";
 import { TraceConversation } from "./TraceConversation";
 import { type LifecycleRecord, TraceRanking } from "./TraceRanking";
+import { TraceSessionBar } from "./TraceSessionBar";
 import { TraceTimeline } from "./TraceTimeline";
+import { TraceViewsV3Provider } from "./views-v3-context";
 
 export type TraceTab = "timeline" | "conversation" | "details" | "ranking";
 
@@ -46,6 +52,8 @@ export interface TraceViewProps {
   totals: RunTotals;
   waterfall: TraceWaterfallView;
   truncated: boolean;
+  /** The run's `events.payload` content, read on the server; the spans' own content wins when they carry any. */
+  payloadContent?: TraceContentView | null;
   lifecycle: readonly LifecycleRecord[];
   /** The list this trace was opened from, filters and page included. */
   listHref: string;
@@ -56,6 +64,10 @@ export interface TraceViewProps {
   runtimeEventsRoot: string | null;
   /** Inside another page (the session replay's Trace view): no page frame, a heading row instead. */
   embedded?: boolean;
+  /** `cloud-trace-views-v3`: the span pane shows input, output and raw attributes (RC-412). */
+  viewsV3?: boolean;
+  /** `cloud-trace-views-v3`: the session this turn is part of, and its turns (RC-472). */
+  session?: TraceSession | null;
 }
 
 /**
@@ -68,7 +80,11 @@ export function TraceView(props: TraceViewProps) {
   const { waterfall, totals } = props;
   const rows = waterfall.rows;
   const shape = useMemo(() => timelineShape(rows.map((row) => row.depth)), [rows]);
-  const content = useMemo(() => buildTraceContentView(rows.map((row) => row.span)), [rows]);
+  const { payloadContent = null } = props;
+  const content = useMemo(
+    () => preferSpanContent(buildTraceContentView(rows.map((row) => row.span)), payloadContent),
+    [rows, payloadContent],
+  );
   const [tab, setTab] = useState<TraceTab>(
     props.lifecycle.length === 0 && props.initialTab === "ranking" ? "timeline" : props.initialTab,
   );
@@ -109,6 +125,32 @@ export function TraceView(props: TraceViewProps) {
     [rows, writer],
   );
 
+  const raw = useTraceRaw(props.projectId, props.traceId, props.viewsV3 === true);
+  // RC-501: a wrapper step shows its nearest model call's content, and links to it.
+  const descendants = useMemo(() => {
+    const out = [];
+    for (
+      let index = shown + 1;
+      index < rows.length && rows[index]!.depth > rows[shown]!.depth;
+      index += 1
+    ) {
+      const span = rows[index]!.span;
+      out.push({
+        spanId: span.spanId,
+        spanClass: span.spanClass,
+        attributes: { ...span.attributes, ...raw.spans.get(span.spanId)?.attributes },
+      });
+    }
+    return out;
+  }, [rows, shown, raw.spans]);
+  const selectSpan = useCallback(
+    (spanId: string) => {
+      const index = rows.findIndex((row) => row.span.spanId === spanId);
+      if (index >= 0) select(index);
+    },
+    [rows, select],
+  );
+
   const toggle = useCallback((index: number) => {
     setCollapsed((current) => {
       const next = new Set(current);
@@ -126,12 +168,23 @@ export function TraceView(props: TraceViewProps) {
     [writer],
   );
 
+  const noun = runNoun(props.viewsV3 === true);
+
   const kindSummary = useMemo(() => summarizeKinds(rows.map((row) => stepKind(row.span))), [rows]);
 
   const description = `Started ${formatTimestamp(props.startedAt)}${props.service ? ` in ${props.service}` : ""}`;
   const actions = (
     <>
       <CopyButton text={props.traceId} label="Copy trace ID" />
+      {raw.state === "ready" && raw.spans.size > 0 ? (
+        <a
+          href={`${rawUrl(props.projectId, props.traceId)}?format=otlp`}
+          download
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          Download OTLP JSON
+        </a>
+      ) : null}
       <Link
         href={props.compareHref}
         className={buttonVariants({ variant: "secondary", size: "sm" })}
@@ -143,7 +196,7 @@ export function TraceView(props: TraceViewProps) {
   const body = (
     <>
       {props.truncated ? (
-        <Callout tone="warning" title="This run is longer than 5,000 spans">
+        <Callout tone="warning" title={`This ${noun.lower} is longer than 5,000 spans`}>
           The timeline shows its first 5,000 spans.
         </Callout>
       ) : null}
@@ -179,7 +232,7 @@ export function TraceView(props: TraceViewProps) {
                 ? `${formatInteger(totals.inputTokens)} in, ${formatInteger(totals.outputTokens)} out`
                 : undefined,
           },
-          { label: "Cost", value: formatMoney(totals.costUsd) },
+          { label: "Cost", value: costLabel(totals.costUsd, totals.unpricedCalls ?? 0) },
         ]}
       />
 
@@ -191,7 +244,14 @@ export function TraceView(props: TraceViewProps) {
             value: "timeline",
             label: "Timeline",
             content: (
-              <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <div
+                className={cn(
+                  "grid items-start gap-4",
+                  props.viewsV3
+                    ? "xl:grid-cols-[minmax(0,1fr)_28rem] 2xl:grid-cols-[minmax(0,1fr)_34rem]"
+                    : "xl:grid-cols-[minmax(0,1fr)_22rem]",
+                )}
+              >
                 <TraceTimeline
                   rows={rows}
                   durationMs={waterfall.durationMs}
@@ -207,7 +267,20 @@ export function TraceView(props: TraceViewProps) {
                     offsetMs={Math.max(0, Date.parse(selectedRow.span.startedAt) - traceStart)}
                     runtimeEventsRoot={props.runtimeEventsRoot}
                     onShowDetails={() => changeTab("details")}
-                  />
+                  >
+                    {props.viewsV3 ? (
+                      <SpanIOPanel
+                        key={selectedRow.span.spanId}
+                        span={selectedRow.span}
+                        raw={raw.spans.get(selectedRow.span.spanId) ?? null}
+                        rawState={raw.state}
+                        payload={payloadContent}
+                        descendants={descendants}
+                        turnHasContent={content.contentCaptured}
+                        onSelectSpan={selectSpan}
+                      />
+                    ) : undefined}
+                  </SpanInspector>
                 ) : null}
               </div>
             ),
@@ -246,33 +319,81 @@ export function TraceView(props: TraceViewProps) {
       />
     </>
   );
+  // The context gives the conversation its noun ("Turn" with the redesign on).
   if (props.embedded) {
     return (
-      <div className="flex flex-col gap-6" data-trace-embedded={props.traceId}>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold text-fg">{props.title}</h2>
-            <p className="text-ui text-fg-muted">{description}</p>
+      <TraceViewsV3Provider enabled={props.viewsV3 === true}>
+        <div className="flex flex-col gap-6" data-trace-embedded={props.traceId}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-base font-semibold text-fg">{props.title}</h2>
+              <p className="text-ui text-fg-muted">{description}</p>
+            </div>
+            <div className="flex items-center gap-2">{actions}</div>
           </div>
-          <div className="flex items-center gap-2">{actions}</div>
+          {body}
         </div>
-        {body}
-      </div>
+      </TraceViewsV3Provider>
     );
   }
   return (
-    <Page>
-      <PageHeader
-        crumbs={[{ label: "Traces", href: props.listHref }]}
-        title={props.title}
-        description={description}
-        actions={actions}
-      />
-      <PageBody wide className="gap-6">
-        {body}
-      </PageBody>
-    </Page>
+    <TraceViewsV3Provider enabled={props.viewsV3 === true}>
+      <Page>
+        <PageHeader
+          crumbs={[{ label: "Traces", href: props.listHref }]}
+          title={props.title}
+          description={description}
+          actions={actions}
+        />
+        <PageBody wide className="gap-6">
+          {props.session ? (
+            <TraceSessionBar projectId={props.projectId} session={props.session} />
+          ) : null}
+          {body}
+        </PageBody>
+      </Page>
+    </TraceViewsV3Provider>
   );
+}
+
+/**
+ * The run's raw spans from `otlp_raw_exports`, fetched once when the views
+ * redesign is on. A failed read leaves the pane on the stored spans.
+ */
+function useTraceRaw(
+  projectId: string,
+  traceId: string,
+  enabled: boolean,
+): { state: RawState; spans: ReadonlyMap<string, RawSpanView> } {
+  const [result, setResult] = useState<{
+    state: RawState;
+    spans: ReadonlyMap<string, RawSpanView>;
+  }>(() => ({
+    state: enabled ? "loading" : "ready",
+    spans: new Map(),
+  }));
+  useEffect(() => {
+    if (!enabled) return;
+    const controller = new AbortController();
+    fetch(rawUrl(projectId, traceId), { signal: controller.signal })
+      .then(async (response) => {
+        const body = (await response.json()) as TraceRawRouteResponse;
+        if (!body.ok) throw new Error("trace raw read failed");
+        setResult({
+          state: "ready",
+          spans: new Map(body.spans.map((span) => [span.spanId, span])),
+        });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setResult({ state: "error", spans: new Map() });
+      });
+    return () => controller.abort();
+  }, [projectId, traceId, enabled]);
+  return result;
+}
+
+function rawUrl(projectId: string, traceId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/traces/${encodeURIComponent(traceId)}/raw`;
 }
 
 /** Status is a dot plus its word; an unfinished run is neither good nor bad. */

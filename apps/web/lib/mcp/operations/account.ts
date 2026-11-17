@@ -34,6 +34,10 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
  * `RATEL_EXPERIMENTAL_FEATURES`).
  */
 const DEPLOYMENT_SWITCHES = [
+  {
+    key: "FF_ADAPTIVE_LABELLING",
+    note: "labelling asks in rounds until the number's margin is met, and decisions carry over unchanged options",
+  },
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
   { key: "FF_SESSION_REPLAY", note: "session replay as a chat, and What-if, in the console" },
   {
@@ -44,6 +48,14 @@ const DEPLOYMENT_SWITCHES = [
   {
     key: "FF_HEALTH_IMPORT_FIRST_READING",
     note: "no score or verdict before a reading has scanned the imported runs",
+  },
+  {
+    key: "FF_OTLP_RAW_CAPTURE",
+    note: "each accepted OTLP export is kept, gzipped, within a daily byte cap per project",
+  },
+  {
+    key: "FF_TRACE_VIEWS_V3",
+    note: "the redesigned trace and session views: Turn naming, the span pane and raw view, a Sessions tab",
   },
   {
     key: "FF_QUICK_FIRST_READING",

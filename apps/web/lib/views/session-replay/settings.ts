@@ -12,7 +12,8 @@ import { sessionReplayEnabledForActor } from "./gate";
 /**
  * The per-project content opt-in (RC-177). On, the session page shows the
  * message text of the model calls that kept it, and a What-if run may replay
- * the model on it. Off (the default), both stay text-free. Only an admin of
+ * the model on it (RC-471: with no admin choice, on where `cloud-trace-views-v3` is
+ * on for the organization). Off, both stay text-free. Only an admin of
  * the project's organization changes it, and only with `cloud-session-replay` on.
  */
 

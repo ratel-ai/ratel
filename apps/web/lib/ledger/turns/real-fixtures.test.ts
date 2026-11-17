@@ -325,3 +325,22 @@ test("MCP server-only calls carry the root-tool mark and the MCP session", () =>
   const noSession = resultOf("mcp-python-sdk-native-server-only").toolRows;
   assert.ok(noSession.every((row) => row.sessionId === row.traceId));
 });
+
+// OpenInference spans carry usage only under `llm.*`; the semconv aliases make
+// each innermost model call one row: a `generation` around a `ChatCompletion` adds none.
+const OPENINFERENCE = new Set([
+  "langgraph-openinference",
+  "openai-agents-openinference",
+  "openai-agents-openinference-plus-openai",
+]);
+
+for (const name of OPENINFERENCE) {
+  test(`${name}: events rows per trace with the semconv aliases`, () => {
+    const result = resultOf(name);
+    const traces = ordered(result).map((turn) => turn.turnKey.slice("otlp:".length));
+    assert.deepEqual(
+      traces.map((id) => result.llmCallsByTrace.get(id) ?? 0),
+      EXPECTED[name].modelCalls,
+    );
+  });
+}

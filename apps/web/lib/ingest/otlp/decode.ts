@@ -64,6 +64,45 @@ export function decodeOtlp(contentType: string, bytes: Uint8Array): DecodedSpan[
   return contentType.includes("application/json") ? decodeJson(bytes) : decodeProtobuf(bytes);
 }
 
+/**
+ * An export request as OTLP/JSON with every field kept (RC-454): trace state,
+ * links, status message, scope version, nanosecond times as decimal strings,
+ * doubles as doubles. Ids are lowercase hex; a protobuf `bytesValue` is base64.
+ */
+export function decodeOtlpRequest(
+  contentType: string,
+  bytes: Uint8Array,
+): IExportTraceServiceRequest {
+  let request: IExportTraceServiceRequest;
+  if (contentType.includes("application/json")) {
+    request = JSON.parse(Buffer.from(bytes).toString("utf8")) as IExportTraceServiceRequest;
+    if (typeof request !== "object" || request === null)
+      throw new OtlpDecodeError("OTLP/JSON body must be an object.");
+  } else {
+    request = RequestType.toObject(RequestType.decode(bytes), {
+      longs: String,
+      bytes: String,
+      defaults: false,
+      arrays: true,
+      enums: Number,
+    }) as IExportTraceServiceRequest;
+  }
+  for (const span of (request.resourceSpans ?? []).flatMap((rs) =>
+    (rs.scopeSpans ?? []).flatMap((ss) => ss.spans ?? []),
+  )) {
+    hexIds(span);
+    for (const link of span.links ?? []) hexIds(link);
+  }
+  return request;
+}
+
+/** Ids as lowercase hex: protobufjs gives base64 (`bytes: String`), and OTLP/JSON may send either. */
+function hexIds(item: Pick<RawSpan, "traceId" | "spanId" | "parentSpanId">): void {
+  for (const key of ["traceId", "spanId", "parentSpanId"] as const) {
+    if (item[key] !== undefined) item[key] = toHexId(item[key]);
+  }
+}
+
 /* --- normalization ------------------------------------------------------------ */
 
 function normalize(request: IExportTraceServiceRequest): DecodedSpan[] {

@@ -1159,3 +1159,18 @@ test("the scripted stand-in replays the recording in order and skips tools it is
     ["a", "b", 0],
   );
 });
+
+test("a replay's cost uses the project's price book for the recorded model when it has one (RC-482)", async () => {
+  const fail = { name: "hold_fare", result: { error: "fare_no_longer_available" } };
+  const { run, calls } = recordedRun([fail, fail, fail], ["hold_fare", "escalate"], "my-own-model");
+  // Without a book the recorded model has no price, nor has the stand-in agent: no cost.
+  const legacy = await replayRun(run, calls, failClearly("hold_fare"), deps());
+  assert.ok(legacy.ok);
+  assert.equal(legacy.before.costUsd, null);
+  const own = await replayRun(run, calls, failClearly("hold_fare"), {
+    ...deps(),
+    prices: { overrides: { "my-own-model": { input: 0, output: 0 } } },
+  });
+  assert.ok(own.ok);
+  assert.equal(own.before.costUsd, 0);
+});

@@ -55,21 +55,58 @@ function deps(
   };
 }
 
-test("an admin turns content reading on and off, and each change is tracked", async () => {
+/** `FF_TRACE_VIEWS_V3`, the deployment switch (owned: upstream reads its flag service). */
+function viewsV3(on: boolean): OrganizationFlagDeps {
+  return on ? { FF_TRACE_VIEWS_V3: "1" } : {};
+}
+
+test("RC-471: with FF_TRACE_VIEWS_V3 on, a new project reads content as on", async () => {
+  const { client, db } = await setup();
+  try {
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), true);
+  } finally {
+    await client.close();
+  }
+});
+
+test("RC-471: with FF_TRACE_VIEWS_V3 off, a new project reads content as off, as before", async () => {
+  const { client, db } = await setup();
+  try {
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(false)), false);
+    assert.equal(await contentOptIn(PROJECT, db), false, "no switch: off by default");
+  } finally {
+    await client.close();
+  }
+});
+
+test("RC-471: a project an admin turned off by hand stays off with the flag on, and one turned on stays on with it off", async () => {
+  const { client, db } = await setup();
+  try {
+    await client.exec(
+      `insert into session_replay_settings (project_id, read_content) values ('${PROJECT}', false), ('${OTHER_PROJECT}', true)`,
+    );
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), false);
+    assert.equal(await contentOptIn(OTHER_PROJECT, db, viewsV3(false)), true);
+  } finally {
+    await client.close();
+  }
+});
+
+test("an admin turns content reading off and on, and each change is tracked", async () => {
   const { client, db } = await setup();
   try {
     const admin = deps(db, "admin");
-    assert.equal(await contentOptIn(PROJECT, db), false);
-    assert.deepEqual(await setContentOptIn(PROJECT, true, admin), { ok: true, readContent: true });
-    assert.equal(await contentOptIn(PROJECT, db), true);
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), true);
     assert.deepEqual(await setContentOptIn(PROJECT, false, admin), {
       ok: true,
       readContent: false,
     });
-    assert.equal(await contentOptIn(PROJECT, db), false);
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), false);
+    assert.deepEqual(await setContentOptIn(PROJECT, true, admin), { ok: true, readContent: true });
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), true);
     assert.deepEqual(admin.tracked, [
-      { externalId: "user_1", projectId: PROJECT, readContent: true },
       { externalId: "user_1", projectId: PROJECT, readContent: false },
+      { externalId: "user_1", projectId: PROJECT, readContent: true },
     ]);
   } finally {
     await client.close();
@@ -80,11 +117,11 @@ test("a member who is not an admin cannot change it", async () => {
   const { client, db } = await setup();
   try {
     const member = deps(db, "member");
-    assert.deepEqual(await setContentOptIn(PROJECT, true, member), {
+    assert.deepEqual(await setContentOptIn(PROJECT, false, member), {
       ok: false,
       error: CONTENT_OPT_IN_ERRORS.not_admin,
     });
-    assert.equal(await contentOptIn(PROJECT, db), false);
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), true);
     assert.equal(member.tracked.length, 0);
   } finally {
     await client.close();
@@ -94,23 +131,23 @@ test("a member who is not an admin cannot change it", async () => {
 test("a non-member, a signed-out caller, the flag off and a support session are refused", async () => {
   const { client, db } = await setup();
   try {
-    assert.deepEqual(await setContentOptIn(PROJECT, true, deps(db, null)), {
+    assert.deepEqual(await setContentOptIn(PROJECT, false, deps(db, null)), {
       ok: false,
       error: CONTENT_OPT_IN_ERRORS.not_found,
     });
     assert.deepEqual(
-      await setContentOptIn(PROJECT, true, { ...deps(db, "admin"), getActor: async () => null }),
+      await setContentOptIn(PROJECT, false, { ...deps(db, "admin"), getActor: async () => null }),
       { ok: false, error: CONTENT_OPT_IN_ERRORS.signed_out },
     );
-    assert.deepEqual(await setContentOptIn(PROJECT, true, deps(db, "admin", { flag: false })), {
+    assert.deepEqual(await setContentOptIn(PROJECT, false, deps(db, "admin", { flag: false })), {
       ok: false,
       error: CONTENT_OPT_IN_ERRORS.flag_off,
     });
     assert.deepEqual(
-      await setContentOptIn(PROJECT, true, deps(db, "admin", { restricted: true })),
+      await setContentOptIn(PROJECT, false, deps(db, "admin", { restricted: true })),
       { ok: false, error: CONTENT_OPT_IN_ERRORS.restricted },
     );
-    assert.equal(await contentOptIn(PROJECT, db), false);
+    assert.equal(await contentOptIn(PROJECT, db, viewsV3(true)), true);
   } finally {
     await client.close();
   }

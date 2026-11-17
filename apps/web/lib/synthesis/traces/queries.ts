@@ -18,9 +18,12 @@ import {
 } from "drizzle-orm";
 import { alias, unionAll } from "drizzle-orm/pg-core";
 import { events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/schema";
+import { OTLP_RAW_PRUNE_BATCH_SIZE, otlpRawRetentionDays } from "@/lib/ingest/otlp-raw/domain";
+import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
 import { containsText } from "./query-text";
+import { isUnpricedCall } from "./v2/cost-label";
 
 export type TraceQueriesDb = Pick<ReturnType<typeof getDb>, "select" | "selectDistinctOn">;
 
@@ -34,6 +37,12 @@ export interface PruneExpiredOtelSpansOptions {
 export interface PruneExpiredOtelLogsOptions {
   now?: Date;
   retentionDays?: number;
+}
+
+export interface PruneExpiredOtlpRawExportsOptions {
+  now?: Date;
+  retentionDays?: number;
+  batchSize?: number;
 }
 
 export interface PruneExpiredTraceSummariesOptions {
@@ -172,6 +181,8 @@ export interface SpanSummary {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  /** A model call with tokens and no cost: its model has no price (RC-482). */
+  unpriced?: boolean;
   experimentName: string | null;
 }
 
@@ -254,6 +265,8 @@ export interface TraceSummary {
   outputTokens: number;
   totalTokens: number;
   costUsd: number;
+  /** Model calls with tokens and no cost: their model has no price (RC-482). */
+  unpricedCalls?: number;
   experimentName: string | null;
   experimentArm: string | null;
 }
@@ -649,6 +662,7 @@ export async function listTraces(
       costUsd: windowBounds
         ? sql<string>`coalesce(sum(${otelSpans.costUsd}) filter (where ${windowBounds}), 0)::text`
         : sql<string>`coalesce(sum(${otelSpans.costUsd}), 0)::text`,
+      unpricedCalls: sql<number>`count(*) filter (where ${and(unpricedCall(), windowBounds)})::int`,
       experimentName: rankedExperimentPairs.experimentName,
       experimentArm: rankedExperimentPairs.experimentArm,
     })
@@ -679,6 +693,7 @@ export async function listTraces(
       outputTokens,
       totalTokens: inputTokens + outputTokens,
       costUsd: Number(aggregate?.costUsd ?? 0),
+      unpricedCalls: aggregate?.unpricedCalls ?? 0,
       experimentName: aggregate?.experimentName ?? null,
       experimentArm: aggregate?.experimentArm ?? null,
     };
@@ -782,6 +797,7 @@ export async function listSpans(
       outputTokens,
       totalTokens: inputTokens + outputTokens,
       costUsd: Number(row.costUsd ?? 0),
+      unpriced: isUnpricedCall(row),
     };
   });
   const last = items.at(-1);
@@ -1318,6 +1334,34 @@ export async function pruneExpiredOtelLogs(
 }
 
 /**
+ * Delete one bounded batch of raw OTLP exports whose server receipt time has
+ * expired (`OTLP_RAW_RETENTION_DAYS`, default 30). Rows hold whole request
+ * bodies, so the batch is smaller than the span and log batches.
+ */
+export async function pruneExpiredOtlpRawExports(
+  options: PruneExpiredOtlpRawExportsOptions = {},
+  db: TraceMaintenanceDb = getDb(),
+): Promise<number> {
+  const cutoff = new Date(
+    (options.now?.getTime() ?? Date.now()) -
+      otlpRawRetentionDays(options.retentionDays) * MILLISECONDS_PER_DAY,
+  );
+  // cross-project: a bounded retention batch over every project (lib/db/tenant-scope.test.ts).
+  const expiredIds = db
+    .select({ id: otlpRawExports.id })
+    .from(otlpRawExports)
+    .where(lt(otlpRawExports.receivedAt, cutoff))
+    .orderBy(asc(otlpRawExports.receivedAt), asc(otlpRawExports.id))
+    .limit(options.batchSize ?? OTLP_RAW_PRUNE_BATCH_SIZE);
+  const deleted = await db
+    .delete(otlpRawExports)
+    .where(inArray(otlpRawExports.id, expiredIds))
+    .returning({ id: otlpRawExports.id });
+
+  return deleted.length;
+}
+
+/**
  * Delete one bounded batch of trace summaries whose spans have all expired.
  *
  * Keyed on the same server-receipt clock and retention window as
@@ -1846,4 +1890,13 @@ function isValidRetentionDays(value: number | undefined): value is number {
     value > 0 &&
     value <= MAX_SAFE_RETENTION_DAYS
   );
+}
+
+/** A model call that reported tokens and stored no cost: its model has no price (RC-482). */
+function unpricedCall() {
+  return and(
+    isNull(otelSpans.costUsd),
+    isNotNull(otelSpans.model),
+    or(isNotNull(otelSpans.inputTokens), isNotNull(otelSpans.outputTokens)),
+  )!;
 }

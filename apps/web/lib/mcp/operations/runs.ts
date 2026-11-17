@@ -21,7 +21,7 @@ import {
 } from "@/lib/mcp/windows";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { summarizeTraceForComparison } from "@/lib/synthesis/traces/comparison";
-import { buildTraceContentView } from "@/lib/synthesis/traces/content-view";
+import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
 import {
   type ListProjectEventsOptions,
   listProjectEvents,
@@ -37,6 +37,10 @@ import {
   formatSpanKind,
   formatSpanStatus,
 } from "@/lib/synthesis/traces/format";
+import {
+  loadPayloadContentSafely,
+  type PayloadContent,
+} from "@/lib/synthesis/traces/payload-content";
 import {
   getTraceAggregates,
   getTraceSpansWithTruncation,
@@ -131,6 +135,8 @@ export interface RunsOperationDeps extends ContentAccessDeps {
   loadTurnDetail: (projectId: string, turnId: string) => Promise<TurnDetail | null>;
   /** The turn page's gate. Retired to always-on, kept so the two cannot drift. */
   agentHealthEnabled: (projectId: string, organizationId: string | null) => Promise<boolean>;
+  /** The trace's `events.payload` content, as the pages read it; null when nothing is stored or the read fails. */
+  loadPayloadContent: (projectId: string, traceId: string) => Promise<PayloadContent | null>;
 }
 
 export const defaultRunsDeps: RunsOperationDeps = {
@@ -159,6 +165,8 @@ export const defaultRunsDeps: RunsOperationDeps = {
       operation: "mcp_trace_turn_detail",
     }),
   agentHealthEnabled: (projectId, organizationId) => agentHealthEnabled(projectId, organizationId),
+  loadPayloadContent: (projectId, traceId) =>
+    loadPayloadContentSafely(projectId, traceId, "mcp_trace_payload"),
   contentOptIn: readContentOptIn,
 };
 
@@ -492,7 +500,8 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
       }),
       async execute(ctx, params) {
         const { traceId, load } = await loadTrace(ctx.projectId, params.traceId, "run");
-        const summary = buildRunSummary(load.spans, params.maxSteps);
+        const payload = await deps.loadPayloadContent(ctx.projectId, traceId);
+        const summary = buildRunSummary(load.spans, params.maxSteps, payload);
         const content = await mayReadContent(ctx, deps);
         const tracker = new TruncationTracker();
         tracker.mark(load.truncated || summary.hiddenStepCount > 0);
@@ -695,7 +704,8 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
         const { traceId, load } = await loadTrace(ctx.projectId, params.traceId);
         // The tab reads the spans in timeline order, so this does too.
         const ordered = buildTraceWaterfall(load.spans).rows.map((row) => row.span);
-        const content = buildTraceContentView(ordered);
+        const payload = await deps.loadPayloadContent(ctx.projectId, traceId);
+        const content = preferSpanContent(buildTraceContentView(ordered), payload?.view ?? null);
         const messages = conversationMessages(content.messages);
         const readable = await mayReadContent(ctx, deps);
 

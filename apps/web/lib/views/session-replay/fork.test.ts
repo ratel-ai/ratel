@@ -825,3 +825,19 @@ test("what_if_variant_built logs the change kind and method, never the definitio
   );
   assert.deepEqual(fields, { change_kind: "definition", method: "replay" });
 });
+
+test("sampleStep: a side's cost uses the project's price book when it has one (RC-482)", async () => {
+  const { run, calls } = recordedRun(["find_booking", "hold_fare"], TOOLS);
+  const models = fakeModels(["hold_fare"]);
+  const prices = { overrides: { [MODEL]: { input: 1, output: 0 } } };
+  const sample = await sampleStep(
+    run,
+    calls,
+    1,
+    { kind: "add_tool", tool: def("quote_fare") },
+    deps({ models, prices }),
+  );
+  assert.ok(sample.ok);
+  // 3 samples of 1,000 input tokens at the project's $1 per 1M.
+  assert.equal(sample.before.costUsd, 0.003);
+});

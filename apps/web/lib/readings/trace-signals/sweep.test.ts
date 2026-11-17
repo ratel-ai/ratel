@@ -13,13 +13,14 @@ import {
 import {
   enqueueComputeJob,
   latestRunByProject,
-  listProjectsWithRecentTurns,
+  listSweepCandidates,
   type RunTrigger,
   reapAllStaleSignalRuns,
   startSignalRun,
 } from "@/lib/readings/trace-signals/signals/queries";
 import { fresh, times } from "@/lib/readings/trace-signals/signals/test-fixtures";
 import {
+  CLOSED_SINCE_SLACK_MS,
   dueSignalProjects,
   effectiveLastRunAt,
   MAX_SIGNAL_RUNS_PER_TICK,
@@ -101,6 +102,39 @@ test("the rotation: never-run first, live runs skipped, thin runs and first read
     NOW.getTime() - 5 * 60_000,
   );
   assert.equal(dueSignalProjects(["a", "b", "c"], new Map(), NOW, { cap: 2 }).length, 2);
+});
+
+test("a thin or first reading repeats only when turns closed after it ran", () => {
+  const ago = (ms: number) => new Date(NOW.getTime() - ms);
+  const at = ago(THIN_RUN_RETRY_MS + 60_000);
+  const latest = new Map([
+    ["thin-quiet", { at, status: "completed", turnsScanned: 12, trigger: "scheduled" }],
+    ["thin-busy", { at, status: "completed", turnsScanned: 12, trigger: "scheduled" }],
+    ["first-quiet", { at, status: "completed", turnsScanned: 96, trigger: "first_build" }],
+    ["thin-late", { at, status: "completed", turnsScanned: 12, trigger: "scheduled" }],
+    ["thin-unknown", { at, status: "completed", turnsScanned: 12, trigger: "scheduled" }],
+  ]);
+  // Receipt time of the newest event built into turns.
+  const builtThrough = new Map([
+    // Nothing arrived since well before the run: nothing can have closed since.
+    ["thin-quiet", new Date(at.getTime() - CLOSED_SINCE_SLACK_MS - 60_000)],
+    // An event arrived inside the idle window before the run, so its turn closed after it.
+    ["thin-busy", new Date(at.getTime() - TURN_IDLE_CLOSE_MS)],
+    ["first-quiet", new Date(at.getTime() - 2 * HOUR)],
+    // Old runs relayed late: received after the run, whatever their event time.
+    ["thin-late", new Date(at.getTime() + 5 * 60_000)],
+  ]);
+  const due = dueSignalProjects([...latest.keys()], latest, NOW, { builtThrough });
+  assert.deepEqual(
+    due.sort(),
+    ["thin-busy", "thin-late", "thin-unknown"],
+    "quiet ones wait for the daily rotation; unknown keeps the retry",
+  );
+  const tomorrow = new Date(at.getTime() + 25 * HOUR);
+  assert.ok(
+    dueSignalProjects(["thin-quiet"], latest, tomorrow, { builtThrough }).includes("thin-quiet"),
+    "still read daily",
+  );
 });
 
 test("a live run counts from when it started, so one a crash left behind ages out", () => {
@@ -213,7 +247,7 @@ test("a plan upgrade reads the new window at once instead of climbing to it", ()
 
 function sweepDeps(db: Db, now: Date) {
   return {
-    listCandidates: (since: Date) => listProjectsWithRecentTurns(since, db),
+    listCandidates: (since: Date) => listSweepCandidates(since, db),
     latestRuns: () => latestRunByProject(db),
     enqueue: (p: string, trigger: RunTrigger) => enqueueComputeJob(p, trigger, db),
     reapStale: (before: Date, at: Date) => reapAllStaleSignalRuns(before, db, at),
@@ -311,4 +345,30 @@ test("the sweep enqueues due projects once, and not again after a full run", asy
   const tomorrow = new Date(NOW.getTime() + 25 * HOUR);
   assert.equal((await sweepTraceSignals(sweepDeps(db, tomorrow))).runsEnqueued, 1);
   assert.ok(MAX_SIGNAL_RUNS_PER_TICK >= 1);
+});
+
+test("sweep candidates carry when their latest closed turn ended", async () => {
+  const { client, db } = await setupDb();
+  await seedLedger(
+    client,
+    db,
+    times(3, () => fresh().search(["a"]).invoke("a")),
+  );
+  const candidates = await listSweepCandidates(new Date(0), db);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.projectId, PROJECT_ID);
+  const { rows } = await client.query<{ ms: number | string }>(
+    `select (extract(epoch from max(ended_at)) * 1000)::bigint as ms from trace_turns where status = 'closed'`,
+  );
+  assert.equal(candidates[0]?.lastTurnEndedAt.getTime(), Number(rows[0]?.ms));
+  const { rows: built } = await client.query<{ ms: number | string }>(
+    `select (extract(epoch from trace_turns_built_through) * 1000)::bigint as ms from projects where id = $1`,
+    [PROJECT_ID],
+  );
+  assert.equal(candidates[0]?.builtThrough.getTime(), Number(built[0]?.ms));
+  assert.deepEqual(
+    await listSweepCandidates(new Date(Date.now() + 365 * 24 * HOUR), db),
+    [],
+    "too old to be a candidate",
+  );
 });

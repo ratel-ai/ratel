@@ -12,6 +12,7 @@ import {
   formatSpanKind,
   formatSpanStatus,
 } from "@/lib/synthesis/traces/format";
+import { isUnpricedCall } from "@/lib/synthesis/traces/v2/cost-label";
 import {
   formatDuration,
   formatInteger,
@@ -36,11 +37,14 @@ export function SpanInspector({
   offsetMs,
   runtimeEventsRoot,
   onShowDetails,
+  children,
 }: {
   span: TraceSpanView;
   offsetMs: number;
   runtimeEventsRoot: string | null;
   onShowDetails: () => void;
+  /** The span's content pane (`cloud-trace-views-v3`); in its place, the tool arguments and result. */
+  children?: ReactNode;
 }) {
   const kind = stepKind(span);
   const failed = span.statusCode === 2;
@@ -61,6 +65,7 @@ export function SpanInspector({
     ...(span.costUsd !== null && Number(span.costUsd) > 0
       ? [{ label: "Cost", value: formatMoney(span.costUsd) }]
       : []),
+    ...(isUnpricedCall(span) ? [{ label: "Cost", value: "Unpriced" }] : []),
     ...(span.searchQuery ? [{ label: "Query", value: span.searchQuery }] : []),
     ...(span.searchTarget ? [{ label: "Searched", value: span.searchTarget }] : []),
     ...(span.searchHitCount !== null
@@ -98,8 +103,12 @@ export function SpanInspector({
         ))}
       </dl>
 
-      {toolArguments !== undefined ? <Payload label="Arguments" value={toolArguments} /> : null}
-      {toolResult !== undefined ? <Payload label="Result" value={toolResult} /> : null}
+      {children ?? (
+        <>
+          {toolArguments !== undefined ? <Payload label="Arguments" value={toolArguments} /> : null}
+          {toolResult !== undefined ? <Payload label="Result" value={toolResult} /> : null}
+        </>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={onShowDetails}>

@@ -183,6 +183,10 @@ export const traceWorkflowVerdicts = pgTable(
     workflowId: text("workflow_id"),
     confidence: doublePrecision("confidence"),
     model: text("model"),
+    // The chosen option's own fingerprint (lib/readings/labelling/carry.ts), so a
+    // verdict can be carried to a new option set that still holds that
+    // option unchanged. Null for none/unclear and for rows before RC-395.
+    optionPrint: text("option_print"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.projectId, t.promptHash, t.optionsHash] })],

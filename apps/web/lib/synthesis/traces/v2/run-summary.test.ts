@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildRunSummary, preview, type RunSpan, runAsk } from "./run-summary";
+import { buildPayloadContent } from "@/lib/synthesis/traces/payload-content";
+import { buildRunSummary, MAX_SUMMARY_STEPS, preview, type RunSpan, runAsk } from "./run-summary";
 
 const T0 = Date.parse("2026-09-03T10:43:35.413Z");
 
@@ -183,4 +184,45 @@ test("previews collapse whitespace and cut at a word", () => {
   assert.equal(preview("  hello\n\n world  "), "hello world");
   assert.equal(preview("one two three four five", 16), "one two three…");
   assert.equal(preview(""), null);
+});
+
+test("spans without content take the ask, the answer and the content from the trace's payload", () => {
+  const spans = [
+    root,
+    span({ spanId: "s1", at: 1, spanClass: "llm_call", name: "chat", model: "gpt-5" }),
+  ];
+  const payload = buildPayloadContent([
+    {
+      eventId: "e1",
+      spanId: "s1",
+      occurredAt: new Date(T0 + 1),
+      latencyMs: 900,
+      payload: {
+        provider: "openai",
+        model: "gpt-5",
+        ts: new Date(T0 + 1).toISOString(),
+        messages: [
+          { role: "user", content: "Where is order 1234?" },
+          { role: "assistant", content: "It shipped yesterday." },
+        ],
+        input_message_count: 1,
+      },
+    },
+  ]);
+
+  const withPayload = buildRunSummary(spans, MAX_SUMMARY_STEPS, payload);
+  assert.equal(withPayload.title, "Where is order 1234?");
+  assert.equal(withPayload.ask, "Where is order 1234?");
+  assert.equal(withPayload.answer, "It shipped yesterday.");
+  assert.equal(withPayload.contentCaptured, true);
+
+  const derivedOnly = buildRunSummary(spans, MAX_SUMMARY_STEPS, {
+    view: { messages: [], toolCalls: [], contentCaptured: false },
+    ask: "Summarize the ticket",
+  });
+  assert.equal(derivedOnly.ask, "Summarize the ticket");
+
+  const without = buildRunSummary(spans);
+  assert.equal(without.ask, null);
+  assert.equal(without.contentCaptured, false, "no captured content keeps the callout");
 });

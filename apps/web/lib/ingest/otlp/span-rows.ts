@@ -1,5 +1,5 @@
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
-import { costFor } from "@/lib/ingest/pricing";
+import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { deterministicEventId, MAX_QUERY } from "@/lib/ingest/trace-events/parse";
 import { attrNumber, attrString } from "./anyvalue";
 import { GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
@@ -66,12 +66,25 @@ const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   RATEL.searchQuery,
 ]);
 const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.address"]);
+/**
+ * Resource keys a span row keeps: the environment facet in `lib/traces/queries.ts` reads them from `attributes`.
+ * The legacy `deployment.environment` is kept only without the `.name` key.
+ */
+const ENVIRONMENT_KEY = "deployment.environment.name";
+const LEGACY_ENVIRONMENT_KEY = "deployment.environment";
+const SERVICE_VERSION_KEY = "service.version";
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
+
+export interface OtelSpanRowOptions {
+  /** The project's price book (RC-482); absent, the current built-in prices; unknown, no cost. */
+  prices?: BatchPrices;
+}
 
 export function toOtelSpanRows(
   projectId: string,
   spans: DecodedSpan[],
   dedupe?: AgentSpanDedupe,
+  options: OtelSpanRowOptions = {},
 ): OtelSpanRow[] {
   const normalizedSpans = spans.map(normalizeParentSpanId);
   return normalizedSpans.filter(isPersistableSpan).map((span) => {
@@ -111,18 +124,24 @@ export function toOtelSpanRows(
     const outputTokens = usage(GEN_AI.usageOutputTokens);
     const cachedTokens = usage(GEN_AI.usageCacheRead);
     const hasCostUsage = inputTokens !== null || outputTokens !== null;
-    const cost = costFor(
-      model,
-      hasCostUsage
-        ? {
-            input_tokens: inputTokens,
-            output_tokens: outputTokens,
-            cached_tokens: cachedTokens,
-            cache_write_tokens: intColumn(attrNumber(span.attributes, GEN_AI.usageCacheCreation)),
-          }
-        : null,
-    );
-    const retained = retainedAttributes(span.attributes);
+    const cost =
+      options.prices === PRICES_UNKNOWN
+        ? null
+        : costFor(
+            model,
+            hasCostUsage
+              ? {
+                  input_tokens: inputTokens,
+                  output_tokens: outputTokens,
+                  cached_tokens: cachedTokens,
+                  cache_write_tokens: intColumn(
+                    attrNumber(span.attributes, GEN_AI.usageCacheCreation),
+                  ),
+                }
+              : null,
+            options.prices,
+          );
+    const retained = retainedAttributes(span.attributes, environmentAttributes(span));
     const experiment = experimentAttributes(span);
 
     return {
@@ -215,23 +234,45 @@ function experimentAttributes(span: DecodedSpan): {
   );
 }
 
-function stripContentAttributes(attributes: AttrMap): AttrMap {
-  return Object.fromEntries(
-    Object.entries(attributes).filter(
-      ([key]) =>
-        SAFE_ATTRIBUTE_KEYS.has(key) ||
-        ((key.startsWith("gen_ai.") || key.startsWith("ratel.")) &&
-          !CONTENT_ATTRIBUTE_KEYS.has(key) &&
-          !LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN.test(key)),
-    ),
+/** A key `otel_spans` keeps: a safe key, or a `gen_ai.*` / `ratel.*` key that carries no content. */
+export function isContentFreeAttributeKey(key: string): boolean {
+  return (
+    SAFE_ATTRIBUTE_KEYS.has(key) ||
+    ((key.startsWith("gen_ai.") || key.startsWith("ratel.")) &&
+      !CONTENT_ATTRIBUTE_KEYS.has(key) &&
+      !LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN.test(key))
   );
 }
 
-function retainedAttributes(attributes: AttrMap): {
+function stripContentAttributes(attributes: AttrMap): AttrMap {
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([key]) => isContentFreeAttributeKey(key)),
+  );
+}
+
+/** The environment and service version, a span attribute winning over the resource's. */
+function environmentAttributes(span: DecodedSpan): AttrMap {
+  const read = (key: string) =>
+    attrString(span.attributes, key) ?? attrString(span.resourceAttributes, key);
+  const out: AttrMap = {};
+  const environment = read(ENVIRONMENT_KEY);
+  const legacy = environment === undefined ? read(LEGACY_ENVIRONMENT_KEY) : undefined;
+  const version = read(SERVICE_VERSION_KEY);
+  if (environment !== undefined) out[ENVIRONMENT_KEY] = environment;
+  if (legacy !== undefined) out[LEGACY_ENVIRONMENT_KEY] = legacy;
+  if (version !== undefined) out[SERVICE_VERSION_KEY] = version;
+  return out;
+}
+
+/** `extra` goes first, so the size bound drops span attributes before it. */
+function retainedAttributes(
+  attributes: AttrMap,
+  extra: AttrMap,
+): {
   attributes: AttrMap;
   truncated: boolean;
 } {
-  return boundedAttributes(stripContentAttributes(attributes));
+  return boundedAttributes({ ...extra, ...stripContentAttributes(attributes) });
 }
 
 function boundedAttributes(attributes: AttrMap): {

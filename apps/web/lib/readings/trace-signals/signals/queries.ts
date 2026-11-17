@@ -254,21 +254,47 @@ export async function latestRunByProject(
   );
 }
 
-/** Projects with closed turns ending at or after `since`: the sweep's candidates. */
+/** A sweep candidate, when its latest closed turn ended, and how far its turns are built (receipt time). */
+export interface SweepCandidate {
+  projectId: string;
+  lastTurnEndedAt: Date;
+  /** `projects.trace_turns_built_through`: the receipt time of the newest event built into turns. */
+  builtThrough: Date;
+}
+
+/**
+ * Projects with closed turns ending at or after `since`, with when the latest
+ * one ended: the sweep's candidates. The latest end is one backward step on
+ * `trace_turns_closed_ended_idx` per project, so this costs what the plain
+ * existence check it replaced did.
+ */
+export async function listSweepCandidates(
+  since: Date,
+  db: Pick<SignalsQueryDb, "select"> = getDb(),
+): Promise<SweepCandidate[]> {
+  // Spelled out: in a select list drizzle leaves columns unqualified, and a bare
+  // "id" inside the subquery would be the turn's, not the project's.
+  const lastEnd =
+    sql<Date | null>`(select max(t.ended_at) from trace_turns t where t.project_id = ${projects}.id and t.status = 'closed')`.mapWith(
+      traceTurns.endedAt,
+    );
+  const rows = await db
+    .select({ id: projects.id, lastEnd, builtThrough: projects.traceTurnsBuiltThrough })
+    .from(projects)
+    .where(isNotNull(projects.traceTurnsBuiltThrough));
+  return rows.flatMap((r) =>
+    r.lastEnd !== null && r.builtThrough !== null && r.lastEnd.getTime() >= since.getTime()
+      ? [{ projectId: r.id, lastTurnEndedAt: r.lastEnd, builtThrough: r.builtThrough }]
+      : [],
+  );
+}
+
+/** Projects with closed turns ending at or after `since`. */
 export async function listProjectsWithRecentTurns(
   since: Date,
   db: Pick<SignalsQueryDb, "select"> = getDb(),
 ): Promise<string[]> {
-  const rows = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(
-      and(
-        isNotNull(projects.traceTurnsBuiltThrough),
-        sql`exists (select 1 from ${traceTurns} where ${traceTurns.projectId} = ${projects.id} and ${traceTurns.status} = 'closed' and ${traceTurns.endedAt} >= ${since})`,
-      ),
-    );
-  return rows.map((r) => r.id);
+  return (await listSweepCandidates(since, db)).map((c) => c.projectId);
 }
 
 // --- persist -------------------------------------------------------------------

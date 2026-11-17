@@ -3,6 +3,7 @@ import type {
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
+import { captureOtlpRawExport, type OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
 import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold-schedule";
 import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trace-events/queries";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
@@ -10,7 +11,7 @@ import type { hashApiKey as hashApiKeyFn } from "@/lib/platform/api-keys";
 import type { isDbConfigured as isDbConfiguredFn } from "@/lib/platform/db/client";
 import type { EventQuotaResult, OrgLimitView } from "@/lib/platform/entitlements";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
-import { getLogger, type LogError } from "@/lib/platform/logger";
+import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
 import type { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import type {
   findActiveApiKeyByHash as findActiveApiKeyByHashFn,
@@ -28,9 +29,10 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import { persistDecodedSpans } from "./ingest-spans";
+import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
+import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
 import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 
 /**
@@ -79,6 +81,7 @@ export const MAX_SPANS = 5_000;
 const logger = getLogger("otlp/traces");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);
+const defaultLogWarn: LogWarn = (message, fields) => logger.warn(fields, message);
 
 export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphFoldScheduleDeps {
   isDbConfigured: typeof isDbConfiguredFn;
@@ -105,6 +108,12 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   agentSpanDedupe?: AgentSpanDedupeDeps;
   /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings; absent, off. */
   sessionChatCapture?: SessionChatCaptureEnabled;
+  /** Stored `gen_ai` log records join their spans; absent, none are read. */
+  genAiLogs?: Pick<GenAiLogStore, "findLogs">;
+  /** Flag `cloud-otlp-raw-capture` and the raw body store; absent, off. */
+  otlpRawCapture?: OtlpRawCaptureDeps;
+  /** The project's own prices (RC-482); absent, the current built-in prices. */
+  modelPricing?: PersistSpansDeps["modelPricing"];
 }
 
 export async function handleTracesRequest(
@@ -289,6 +298,28 @@ export async function handleTracesRequest(
   }
   const { accepted, calls } = persisted;
 
+  // Raw capture after a stored export, so garbage and retried failures are
+  // never kept. Fails open: it never changes the response.
+  await captureOtlpRawExport(
+    {
+      projectId: apiKey.projectId,
+      signal: "traces",
+      contentType: transport === "json" ? "application/json" : "application/x-protobuf",
+      body: bytes,
+      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+      itemCount: spans.length,
+      traceIds: [...new Set(spans.map((span) => span.traceId))],
+    },
+    organization,
+    deps.otlpRawCapture,
+    {
+      logError,
+      logWarn: deps.logWarn ?? defaultLogWarn,
+      captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
+      trackServerEvent: deps.trackServerEvent,
+    },
+  );
+
   // Best-effort heartbeat; must never turn a successful insert into a 500.
   await deps.touchApiKey(apiKey.id).catch(() => {});
 
@@ -317,6 +348,11 @@ export async function handleTracesRequest(
     calls,
     spans: spans.length,
   });
+}
+
+export function isGzipEncoding(contentEncoding: string | null): boolean {
+  const encoding = (contentEncoding ?? "").trim().toLowerCase();
+  return encoding === "gzip" || encoding === "x-gzip";
 }
 
 function json(body: unknown, status: number): Response {

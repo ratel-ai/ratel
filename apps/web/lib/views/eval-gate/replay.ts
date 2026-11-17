@@ -1,5 +1,5 @@
 import type { CloudMessage, ContentBlock } from "@/lib/ingest/cloud-schema";
-import { costFor, priceFor } from "@/lib/ingest/pricing";
+import { costFor, type PriceBook, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "./calls";
 import { CANT_SIMULATE } from "./method";
@@ -530,6 +530,8 @@ export interface ReplayDeps {
   budgetNote?: string;
   /** RC-288: return each side's trace. Text (args, results, transcript) only with `keepText`. Absent: today's output. */
   trace?: { keepText: boolean };
+  /** RC-482: the project's price book for the side's cost (the customer's model). Absent: the current built-in prices. The meter's budget never reads it. */
+  prices?: PriceBook;
 }
 
 interface SideRun {
@@ -683,7 +685,8 @@ async function replaySide(
     };
   // The caller sees the side even when a later step throws or a check rejects it.
   onSide?.(side);
-  const priced = recording.model && priceFor(recording.model) ? recording.model : agent.model;
+  const priced =
+    recording.model && priceFor(recording.model, deps.prices) ? recording.model : agent.model;
   for (let step = 0; step < deps.maxSteps; step += 1) {
     // Room for the worst case first (the recorded prompt size or this one, whichever is larger, and a full answer): other runs are calling at the same time.
     const estimate = {
@@ -708,11 +711,15 @@ async function replaySide(
     deps.spend.settle(hold, reply.model, reply.usage);
     side.steps += 1;
     side.model = reply.model;
-    const cost = costFor(priced, {
-      input_tokens: reply.usage.inputTokens,
-      output_tokens: reply.usage.outputTokens,
-      cached_tokens: reply.usage.cachedTokens,
-    });
+    const cost = costFor(
+      priced,
+      {
+        input_tokens: reply.usage.inputTokens,
+        output_tokens: reply.usage.outputTokens,
+        cached_tokens: reply.usage.cachedTokens,
+      },
+      deps.prices,
+    );
     side.costUsd = side.costUsd === null || cost === null ? null : side.costUsd + cost;
     side.latencyMs += reply.latencyMs;
     messages.push({

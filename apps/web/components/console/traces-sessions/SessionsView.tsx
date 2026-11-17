@@ -16,6 +16,7 @@ import type { LoadRunSummary } from "@/components/console/traces/RunPanel";
 import { fetchRunSummary } from "@/components/console/traces/run-summary-client";
 import { TracesEmpty, type TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
+import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import type { SessionRow, SessionsPage } from "@/lib/synthesis/traces-sessions/sessions";
 import {
   appendSessionsPage,
@@ -67,6 +68,11 @@ export function SessionsView(props: SessionsViewProps) {
   const { projectId, filter, empty, experiment } = props;
   const { search, pending, go, replaceView } = useTraceNavigation();
   const columns = sessionColumnsFrom(search);
+  const noun = useRunNoun();
+  // RC-472: with the redesign cost always shows, so it is no toggle.
+  const toggles = useTraceViewsV3()
+    ? SESSION_COLUMNS.filter((column) => column !== "cost")
+    : SESSION_COLUMNS;
   const toggleColumn = (column: (typeof SESSION_COLUMNS)[number]) =>
     replaceView(
       withSessionColumns(
@@ -95,7 +101,7 @@ export function SessionsView(props: SessionsViewProps) {
               render={<IconButton label="Columns" size="icon-sm" icon={<SlidersHorizontal />} />}
             />
             <MenuContent align="start">
-              {SESSION_COLUMNS.map((column) => (
+              {toggles.map((column) => (
                 <MenuItem
                   key={column}
                   icon={
@@ -124,7 +130,7 @@ export function SessionsView(props: SessionsViewProps) {
           <div className="rounded-lg border border-line" data-sessions-empty="no-failed">
             <EmptyState
               title="No failed sessions"
-              description="No session or run ended in an error or had a failed tool call."
+              description={`No session or ${noun.lower} ended in an error or had a failed tool call.`}
               action={
                 <Button
                   variant="secondary"

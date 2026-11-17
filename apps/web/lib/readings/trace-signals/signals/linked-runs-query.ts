@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { loadPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
@@ -228,10 +229,12 @@ export async function linkRunsPage(
     const runTraces: RunTraces =
       runIds.length > 0 ? await loadRunTraces(projectId, runIds, db) : new Map();
     const traceIds = [...runTraces.values()].flatMap((ids) => [...ids]);
+    const calls = await loadLinkCandidates(projectId, turns, db, MAX_LINK_ROWS, traceIds);
     return linkTurns(
       turns,
-      await loadLinkCandidates(projectId, turns, db, MAX_LINK_ROWS, traceIds),
+      calls,
       runTraces,
+      calls.length > 0 ? await loadPriceBook(projectId, db) : undefined,
     );
   } catch (err) {
     logger.error({ err, project_id: projectId }, "linked model calls unreadable for trace signals");

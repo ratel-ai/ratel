@@ -8,6 +8,7 @@ import type {
   ListProjectEventsOptions,
   ProjectEventSummary,
 } from "@/lib/synthesis/traces/events-queries";
+import { buildPayloadContent } from "@/lib/synthesis/traces/payload-content";
 import type {
   ListSpansOptions,
   SpanSummary,
@@ -144,6 +145,7 @@ function fakeDeps(overrides: Partial<RunsOperationDeps> = {}): RunsOperationDeps
     }),
     loadTurnDetail: async () => null,
     agentHealthEnabled: async () => true,
+    loadPayloadContent: async () => null,
     contentOptIn: async () => true,
     ...overrides,
   };
@@ -369,6 +371,64 @@ test("get_trace_conversation without captured content says so instead of returni
   assert.equal(result.data.contentCaptured, false);
   assert.deepEqual(result.data.messages, []);
   assert.match(result.hint ?? "", /get_run_summary/);
+});
+
+test("spans without content read the trace's payload content: the same messages, tool calls and ask as the page", async () => {
+  const bare = [root, span({ spanId: "llm1", spanClass: "llm_call", name: "chat" })];
+  const asked: string[] = [];
+  const payload = buildPayloadContent([
+    {
+      eventId: "e1",
+      spanId: "llm1",
+      occurredAt: new Date(T0),
+      latencyMs: 400,
+      payload: {
+        provider: "openai",
+        model: "gpt-5",
+        ts: new Date(T0).toISOString(),
+        messages: [
+          { role: "user", content: "Where is order 1234?" },
+          {
+            role: "assistant",
+            content: [
+              { type: "tool_call", id: "c1", name: "lookup_order", arguments: { orderId: "1234" } },
+            ],
+          },
+          { role: "tool", tool_call_id: "c1", content: '{"status":"shipped"}' },
+          { role: "assistant", content: "It shipped yesterday." },
+        ],
+        input_message_count: 3,
+      },
+    },
+  ]);
+  const overrides: Partial<RunsOperationDeps> = {
+    getTraceSpansWithTruncation: async () => ({ spans: bare, truncated: false }),
+    loadPayloadContent: async (_project, traceId) => {
+      asked.push(traceId);
+      return payload;
+    },
+  };
+
+  const conversation = ok<
+    ConversationData & { toolCalls: { name: string; arguments: string; result: string }[] }
+  >(await run("get_trace_conversation", { traceId: TRACE }, overrides));
+  assert.equal(conversation.data.contentCaptured, true);
+  assert.deepEqual(
+    conversation.data.messages.map(({ role, text }) => [role, text]),
+    [
+      ["user", "Where is order 1234?"],
+      ["tool", '{"status":"shipped"}'],
+      ["assistant", "It shipped yesterday."],
+    ],
+  );
+  assert.equal(conversation.data.toolCalls[0].name, "lookup_order");
+  assert.match(conversation.data.toolCalls[0].arguments, /1234/);
+  assert.match(conversation.data.toolCalls[0].result, /shipped/);
+
+  const summary = ok<SummaryData>(await run("get_run_summary", { traceId: TRACE }, overrides));
+  assert.equal(summary.data.ask, "Where is order 1234?");
+  assert.equal(summary.data.answer, "It shipped yesterday.");
+  assert.deepEqual(asked, [TRACE, TRACE]);
 });
 
 const SPAN_ROW: SpanSummary = {

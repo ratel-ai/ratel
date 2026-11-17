@@ -60,6 +60,19 @@ test("a row reads as its ask, else its intent, else what it is", () => {
     text: "Run abcdef01",
     source: "id",
   });
+  // RC-413, `cloud-trace-views-v3`: no raw id as a title.
+  assert.deepEqual(sessionTitle({ kind: "session", id: "s1", ask: null, intent: null }, true), {
+    text: "Untitled session · s1",
+    source: "id",
+  });
+  assert.deepEqual(
+    sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "", intent: null }, true),
+    { text: "Untitled turn · abcdef01", source: "id" },
+  );
+  assert.deepEqual(
+    sessionTitle({ kind: "run", id: "abcdef0123456789", ask: "Hi", intent: null }, true),
+    { text: "Hi", source: "ask" },
+  );
   assert.notEqual(
     sessionRowKey({ kind: "session", id: "x" }),
     sessionRowKey({ kind: "run", id: "x" }),

@@ -2,6 +2,7 @@ import type {
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
+import type { BatchPrices } from "@/lib/ingest/pricing";
 import {
   FOLD_TRIGGER_TYPES,
   type IntentGraphFoldScheduleDeps,
@@ -18,11 +19,17 @@ import type { Organization } from "@/lib/platform/organizations";
 import { agentHealthToolRows } from "./agent-health-bridge";
 import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-dedupe";
 import { attrString } from "./anyvalue";
+import { type ModelPricingIngestDeps, resolveBatchPrices } from "./batch-prices";
+import { GEN_AI } from "./constants";
 import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
+import { normalizeSemconvAliases } from "./semconv/aliases";
+import { rejoinStoredModelCalls } from "./semconv/gen-ai-log-join";
+import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
+import { attachGenAiLogEvents, distinctSpanKeys } from "./semconv/gen-ai-logs";
 import type { SessionChatCaptureEnabled } from "./session-chat-capture";
 import { toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
@@ -65,8 +72,19 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** Storage lookup for agent-wrapper span dedupe. Absent, off. */
   agentSpanDedupe?: AgentSpanDedupeDeps;
+  /**
+   * The project's own prices (RC-482), read once per batch: the batch pays
+   * them and the current prices. Absent, the current built-in prices.
+   */
+  modelPricing?: ModelPricingIngestDeps;
   /** Switch `FF_SESSION_REPLAY`: payloads keep each call's reply and settings. Absent, off. */
   sessionChatCapture?: SessionChatCaptureEnabled;
+  /**
+   * The stored `gen_ai` log records of the batch's spans. Absent, none are read. With `findSpans` and `restateCalls`, a log
+   * export stored while the batch was stored joins too.
+   */
+  genAiLogs?: Pick<GenAiLogStore, "findLogs"> &
+    Partial<Pick<GenAiLogStore, "findSpans" | "restateCalls">>;
   logError: LogError;
   /** Report a processing failure that did not stop the batch (or did). */
   captureFailure: (error: unknown) => void;
@@ -98,6 +116,28 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
+  // Logs before spans: content sent as `gen_ai` log records that are already
+  // stored joins its span as span events. Fail open: the call stays without them.
+  let genAiLogsRead: number | null = null;
+  if (deps.genAiLogs) {
+    try {
+      const logs = await deps.genAiLogs.findLogs(projectId, distinctSpanKeys(spans));
+      genAiLogsRead = logs.length;
+      attachGenAiLogEvents(spans, logs);
+    } catch (err) {
+      logError("gen_ai log lookup failed", err, { project_id: projectId });
+      deps.captureFailure(err);
+    }
+  }
+  // Deprecated gen_ai keys and OpenLLMetry aliases onto the canonical keys.
+  // Fail open, like the AI SDK pass above.
+  try {
+    normalizeSemconvAliases(spans);
+  } catch (err) {
+    logError("semconv alias normalization failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
+
   const dedupe = await resolveAgentSpanDedupe(
     spans,
     projectId,
@@ -117,7 +157,8 @@ export async function persistDecodedSpans(
     calls.length > 0 && deps.sessionChatCapture
       ? await deps.sessionChatCapture(projectId, organization)
       : false;
-  const rows = toRows(projectId, calls, { captureReply });
+  const prices = await batchPrices(spans, projectId, deps);
+  const rows = toRows(projectId, calls, { captureReply }, prices);
 
   let accepted = 0;
   if (rows.length > 0) {
@@ -212,7 +253,7 @@ export async function persistDecodedSpans(
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
   try {
-    const spanRows = toOtelSpanRows(projectId, spans, dedupe);
+    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices });
     if (spanRows.length > 0) {
       await deps.insertOtelSpans(projectId, spanRows);
     }
@@ -223,5 +264,63 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
+  await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
+
   return { ok: true, accepted, calls: calls.length };
+}
+
+/**
+ * A log export stored while this batch was stored: its restate read no
+ * `otel_spans` yet, and this batch read no logs. Both sides store first and
+ * read after, so at least one of them sees the other: here, more log records
+ * than the first read means the export missed the call, so restate it.
+ * Fails open, like the first read.
+ */
+async function rejoinLateGenAiLogs(
+  spans: DecodedSpan[],
+  logsRead: number | null,
+  projectId: string,
+  organization: Organization | null,
+  deps: PersistSpansDeps,
+): Promise<void> {
+  const { findLogs, findSpans, restateCalls } = deps.genAiLogs ?? {};
+  if (logsRead === null || !findLogs || !findSpans || !restateCalls) return;
+  try {
+    const logs = await findLogs(projectId, distinctSpanKeys(spans));
+    if (logs.length <= logsRead) return;
+    await rejoinStoredModelCalls(projectId, organization, distinctSpanKeys(logs), {
+      store: { findLogs, findSpans, restateCalls },
+      sessionChatCapture: deps.sessionChatCapture,
+      ...(deps.modelPricing ? { modelPricing: deps.modelPricing } : {}),
+      captureFailure: deps.captureFailure,
+    });
+  } catch (err) {
+    deps.logError("gen_ai log rejoin failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
+}
+
+/**
+ * What this batch is priced with: the project's book, read only when the
+ * batch has a model call; the current built-in prices (undefined) without
+ * one. A failed price read stores no cost (`PRICES_UNKNOWN`) and logs the
+ * error: a wrong cost would never be repaired, a missing one
+ * `backfill:costs` prices later.
+ */
+async function batchPrices(
+  spans: DecodedSpan[],
+  projectId: string,
+  deps: PersistSpansDeps,
+): Promise<BatchPrices> {
+  if (!deps.modelPricing) return undefined;
+  const hasModel = spans.some(
+    (span) =>
+      attrString(span.attributes, GEN_AI.responseModel) ??
+      attrString(span.attributes, GEN_AI.requestModel),
+  );
+  if (!hasModel) return undefined;
+  return resolveBatchPrices(projectId, deps.modelPricing, {
+    logError: deps.logError,
+    captureFailure: deps.captureFailure,
+  });
 }

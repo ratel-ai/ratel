@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { costFor } from "@/lib/ingest/pricing";
+import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { getDb } from "@/lib/platform/db/client";
@@ -137,7 +137,7 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
   const now = (deps.now ?? (() => new Date()))();
   // UTF-8 bytes bound input tokens. The allowance covers message framing.
   const inputBound = Buffer.byteLength(prompt.system + prompt.user, "utf8") + 1024;
-  const worstCost = costFor(model.model, {
+  const worstCost = ratelBudgetCostFor(model.model, {
     input_tokens: inputBound,
     output_tokens: DRAFT_MAX_TOKENS,
   });
@@ -169,7 +169,7 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
     const reply = await model.complete({ ...prompt, maxTokens: DRAFT_MAX_TOKENS });
     actualSpend = {
       usd:
-        costFor(model.model, {
+        ratelBudgetCostFor(model.model, {
           input_tokens: reply.usage.inputTokens,
           output_tokens: reply.usage.outputTokens,
         }) ?? DRAFT_BUDGET_USD,

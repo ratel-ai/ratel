@@ -3,7 +3,12 @@ import { test } from "node:test";
 import { anthropicUsage, recordModelCall, setModelCallSink, trackModelCall } from "./model-call";
 import { withProjectLogContext } from "./project-log-context";
 
-const META = { provider: "anthropic", model: "claude-haiku-5-5", feature: "eval_gate_judge" };
+const META = {
+  provider: "anthropic",
+  model: "claude-haiku-5-5",
+  feature: "eval_gate_judge",
+  payer: "ratel" as const,
+};
 
 function capture() {
   const lines: { fields: Record<string, unknown>; message: string }[] = [];
@@ -46,6 +51,7 @@ test("a sink gets one model_call line per call, with tokens, duration and outcom
           provider: "anthropic",
           model: "claude-haiku-5-5",
           feature: "eval_gate_judge",
+          payer: "ratel",
           organization_id: "o1",
           project_id: "p1",
           input_tokens: 16,

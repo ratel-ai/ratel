@@ -185,7 +185,7 @@ test("requestWhatIf refuses a run of another project", async () => {
 });
 
 test("requestWhatIf refuses a model replay while the content opt-in is off, and re-ranks by default", async () => {
-  const { client, db } = await setup();
+  const { client, db } = await setup({ readContent: false });
   try {
     assert.equal(
       await refusal(

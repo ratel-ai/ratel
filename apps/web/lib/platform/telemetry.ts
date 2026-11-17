@@ -11,6 +11,7 @@ import { getLogger, type LogError } from "@/lib/platform/logger";
 /** Every typed business event the open-source modules emit. */
 export const SERVER_EVENT_NAMES = [
   "otlp_ingest_request",
+  "otlp_raw_capture_skipped",
   "runtime_events_ingested",
   "catalog_snapshot_synced",
   "runtime_catalog_override_updated",

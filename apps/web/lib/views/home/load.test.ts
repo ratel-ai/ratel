@@ -343,3 +343,37 @@ test("the tiles read intents, tasks, self-corrections and fixes, each failing on
   assert.equal(failed.glance.intents.state, "failed");
   assert.equal(failed.glance.tasks.state, "failed");
 });
+
+/* - Prompt cache hit rate (RC-382) ------------------------------------------- */
+
+test("without the prompt cache read (flag off) the page has no hit rate", () => {
+  assert.equal(
+    assembleOverview({ project: PROJECT, window: 7, days: DAYS, reads: reads() })
+      .promptCacheHitRate,
+    null,
+  );
+});
+
+test("a project that caches only its system prompt shows a hit rate while history-cached stays 0", () => {
+  const day = {
+    day: "2026-10-14",
+    spend: { skills: 0, tools: 0, history: 400, memory: 0, user_input: 100 },
+    splits: { history_cached: 0, history_uncached: 400, tools_used: 0, tools_unused: 0 },
+    outputTokens: 50,
+    latencyMs: 900,
+    costUsd: 0.1,
+    runs: 2,
+  };
+  const data = assembleOverview({
+    project: PROJECT,
+    window: 7,
+    days: DAYS,
+    reads: reads({
+      dailyAggregates: [day],
+      promptCache: { cachedTokens: 3_000, inputTokens: 4_000 },
+    }),
+  });
+  assert.equal(data.promptCacheHitRate, 0.75);
+  const history = data.context?.rows.find((row) => row.source === "history");
+  assert.deepEqual(history?.waste, { label: "re-read uncached", share: 1 });
+});

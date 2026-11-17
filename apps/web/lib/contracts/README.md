@@ -28,6 +28,11 @@ the product events) and answers with the key once and the send-your-first-trace 
 `ensureSampleProject` gives an empty organization its sample project. The edition resolves the
 session and refuses a support session before it calls either.
 
+`self-telemetry.ts` holds the names both editions share for Ratel's own model calls as telemetry:
+`MODEL_CALL_TRACER` (the tracer whose spans the self-telemetry export selects) and
+`selfTelemetryProjectId` (the project those calls are not exported for). The core's model-call seam
+and the edition's copy start their spans with it, and `platform/otel/ratel-export.ts` selects them.
+
 `mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to

@@ -7,6 +7,7 @@ import { deriveModelCalls, OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-mode
 import { deriveToolInvocations } from "@/lib/ingest/otlp/derive-tools";
 import { groupSpans } from "@/lib/ingest/otlp/group";
 import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
+import { normalizeSemconvAliases } from "@/lib/ingest/otlp/semconv/aliases";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 import type { ParsedTraceEvent } from "@/lib/ingest/trace-events/parse";
 import { DEV_TRACE_SIGNALS_HASH_SALT } from "@/lib/ledger/hash";
@@ -63,6 +64,8 @@ export interface PipelineResult {
   spans: DecodedSpan[];
   /** LLM calls the events table gets (`groupSpans`). */
   llmCalls: number;
+  /** The same, per trace id. */
+  llmCallsByTrace: Map<string, number>;
   toolRows: ParsedTraceEvent[];
   modelRows: ParsedTraceEvent[];
   turns: TurnDraft[];
@@ -123,6 +126,7 @@ export function runPipeline(bodies: readonly FixtureBody[]): PipelineResult {
   const modelRows: ParsedTraceEvent[] = [];
   const eventRows: TurnEventRow[] = [];
   let llmCalls = 0;
+  const llmCallsByTrace = new Map<string, number>();
   // The store keeps one row per client event id, the first to arrive.
   const seen = new Set<string>();
   const fresh = (row: ParsedTraceEvent): boolean =>
@@ -130,7 +134,12 @@ export function runPipeline(bodies: readonly FixtureBody[]): PipelineResult {
   for (const body of bodies) {
     const decoded = decodeOtlp(body.contentType, body.bytes);
     normalizeAiSdkSpans(decoded);
-    llmCalls += groupSpans(decoded).length;
+    normalizeSemconvAliases(decoded);
+    const calls = groupSpans(decoded);
+    llmCalls += calls.length;
+    for (const call of calls) {
+      llmCallsByTrace.set(call.anchor.traceId, (llmCallsByTrace.get(call.anchor.traceId) ?? 0) + 1);
+    }
     const tools = deriveToolInvocations(decoded).filter(fresh);
     const models = deriveModelCalls(decoded).filter(fresh);
     const latest = Math.max(0, ...decoded.map((s) => s.endUnixMs));
@@ -146,7 +155,7 @@ export function runPipeline(bodies: readonly FixtureBody[]): PipelineResult {
   );
   const { turns } = buildTurns({ stored: [], events: normalized, now });
   const facts = buildOtelFacts([...toolRows, ...modelRows].map(factRowOf));
-  return { spans, llmCalls, toolRows, modelRows, turns, facts };
+  return { spans, llmCalls, llmCallsByTrace, toolRows, modelRows, turns, facts };
 }
 
 /** A turn's tool calls in order, as `name` or `name!` for a failed call. */

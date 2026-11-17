@@ -1,6 +1,11 @@
 import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { projectRoot } from "@/lib/console/navigation";
-import { type DailyAggregateRow, getDailyAggregates } from "@/lib/ingest/otlp/queries";
+import {
+  type DailyAggregateRow,
+  getDailyAggregates,
+  getPromptCacheTotals,
+  type PromptCacheTotals,
+} from "@/lib/ingest/otlp/queries";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
 import {
@@ -20,7 +25,12 @@ import {
   parseWindowDays,
   type WindowDays,
 } from "@/lib/readings/trace-signals/view";
-import { buildDashboardModel, buildSuggestions, type Suggestion } from "@/lib/synthesis/dashboard";
+import {
+  buildDashboardModel,
+  buildSuggestions,
+  promptCacheHitRate,
+  type Suggestion,
+} from "@/lib/synthesis/dashboard";
 import { matchQualityProposals } from "@/lib/synthesis/match-quality/schema";
 import {
   getTraceAggregates,
@@ -148,6 +158,8 @@ export interface OverviewData {
   glance: Glance;
   context: ContextSplit | null;
   contextSuggestions: Suggestion[];
+  /** Share of input tokens served from the prompt cache; null with the flag off, no input or a failed read. */
+  promptCacheHitRate?: number | null;
 }
 
 /** Everything the page reads, with each degradable read already null (or failed) on failure. */
@@ -162,6 +174,8 @@ export interface OverviewReads {
   /** Null when the read failed: then nobody is sent to the setup guide by mistake. */
   telemetry: TracesIngestDiagnostics | null;
   dailyAggregates: DailyAggregateRow[];
+  /** The window's cached and input tokens for the prompt cache hit rate. Absent or null when unread. */
+  promptCache?: PromptCacheTotals | null;
   /** Null when Agent health is off. */
   health: HealthPageModel | null;
   healthLimits: AgentHealthPlanLimits;
@@ -266,6 +280,7 @@ export async function loadOverview({
     intents,
     tasks,
     corrections,
+    promptCache,
   ] = await Promise.all([
     bounded<TraceAggregateSummary | null>("overview_trace_aggregate", null, (db) =>
       getTraceAggregates(project.id, current, db),
@@ -361,6 +376,12 @@ export async function loadOverview({
       fallback: unavailableSelfCorrectionsCard(project.id, healthWindow),
       load: () => loadSelfCorrectionsCard(project.id, healthWindow),
     }),
+    bounded<PromptCacheTotals | null>(
+      "overview_prompt_cache",
+      null,
+      (db) => getPromptCacheTotals(project.id, range.since, range.until, db),
+      supplementary,
+    ),
   ]);
 
   return assembleOverview({
@@ -386,6 +407,7 @@ export async function loadOverview({
       intents,
       tasks,
       corrections,
+      promptCache,
     },
   });
 }
@@ -546,6 +568,7 @@ export function assembleOverview({
     glance,
     context,
     contextSuggestions,
+    promptCacheHitRate: promptCacheHitRate(reads.promptCache ?? null),
   };
 }
 

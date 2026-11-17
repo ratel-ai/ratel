@@ -179,3 +179,18 @@ test("a call linked by trace keeps the run's chain going for the session's later
   );
   assert.deepEqual(ids(assigned, "r1"), ["traced", "chained"]);
 });
+
+test("a linked run's cost uses the project's price book: its own prices with the flag on (RC-482)", () => {
+  const calls = [
+    call("a", "s-1", 10, {
+      model: "my-own-model",
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+    }),
+  ];
+  assert.equal(linkedFactOf(calls).costUsd, null);
+  assert.equal(
+    linkedFactOf(calls, { overrides: { "my-own-model": { input: 1, output: 2 } } }).costUsd,
+    3,
+  );
+});

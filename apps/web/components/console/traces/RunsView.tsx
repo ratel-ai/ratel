@@ -41,6 +41,7 @@ import { TraceFilterBar } from "./TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "./TracesEmpty";
 import { isToday, type TimeWindow, TracesHeader } from "./TracesHeader";
 import { VolumeChart } from "./VolumeChart";
+import { useRunNoun } from "./views-v3-context";
 
 /** A calibration running in this window, in plain words (DESIGN.md, Glossary: arm is "variant"). */
 export interface RunningExperiment {
@@ -91,6 +92,7 @@ export function RunsView(props: RunsViewProps) {
   const { projectId, now, timeWindow, rows, stats, volume, facets, sort, empty } = props;
   const { pathname, search, pending, go, refresh, replaceView } = useTraceNavigation();
   const peek = usePeek();
+  const noun = useRunNoun();
   const tracesPath = `/project/${encodeURIComponent(projectId)}/traces`;
   const picked = compareSelection(search);
   const params = new URLSearchParams(search);
@@ -220,10 +222,10 @@ export function RunsView(props: RunsViewProps) {
                 Reading this window took too long. The list below still works.
               </Callout>
             )}
-            <section aria-label="Runs" className="flex flex-col gap-3">
+            <section aria-label={noun.many} className="flex flex-col gap-3">
               {props.detailsUnavailable ? (
                 <p role="status" className="flex min-h-8 items-center gap-2 text-ui text-fg-muted">
-                  Tools and asks did not load for these runs.
+                  Tools and asks did not load for these {noun.lowerMany}.
                   <Button variant="ghost" size="sm" onClick={refresh}>
                     Try again
                   </Button>
@@ -245,7 +247,7 @@ export function RunsView(props: RunsViewProps) {
               />
               <ListFooter
                 count={rows.length}
-                noun="run"
+                noun={noun.lower}
                 nextHref={
                   props.nextCursor !== null
                     ? `${pathname}${withCursor(search, props.nextCursor)}`

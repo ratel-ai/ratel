@@ -18,7 +18,9 @@ import { FIRST_READING_FLOOR } from "@/lib/readings/trace-signals/view";
  *   rather than a day later. The first reading lands as soon as the floor's
  *   worth of turns has closed, often while a first burst of traffic is still
  *   open; this one follow-up reads that burst in full, and from then on the
- *   project is on the daily rotation.
+ *   project is on the daily rotation. The follow-up needs a turn that closed
+ *   after the run (`closedSince`, by receipt time): a quiet project under the floor is read
+ *   daily, not every 35 minutes for the same handful of turns.
  */
 
 export const SIGNAL_RUN_INTERVAL_MS = 24 * 60 * 60_000;
@@ -28,6 +30,13 @@ export const SIGNAL_RUN_INTERVAL_MS = 24 * 60 * 60_000;
  * the drain to have built them.
  */
 export const THIN_RUN_RETRY_MS = TURN_IDLE_CLOSE_MS + 5 * 60_000;
+/**
+ * How long before a run an event may have been received and still have its
+ * turn close after it. An idle turn closes `TURN_IDLE_CLOSE_MS` after its
+ * last event arrived, and the cron's build closes it within minutes of that;
+ * ten minutes covers the lag.
+ */
+export const CLOSED_SINCE_SLACK_MS = TURN_IDLE_CLOSE_MS + 10 * 60_000;
 /** Runs one tick may enqueue. */
 export const MAX_SIGNAL_RUNS_PER_TICK = 10;
 /** Due projects one tick looks at (flag checks are per project). */
@@ -45,11 +54,25 @@ export interface LatestRun {
   trigger?: string;
 }
 
+/**
+ * Whether turns may have closed since the run: an event was built into turns
+ * that arrived within the idle window before it, or after it. Receipt time,
+ * not event time, so a late relay or an import of old runs still counts, and
+ * a client clock set in the future does not keep the retry going. Unknown
+ * (no candidate fact) counts as yes, so a caller that does not say keeps the
+ * old behaviour.
+ */
+export function closedSince(run: Pick<LatestRun, "at">, builtThrough: Date | undefined): boolean {
+  if (builtThrough === undefined) return true;
+  return builtThrough.getTime() > run.at.getTime() - CLOSED_SINCE_SLACK_MS;
+}
+
 /** The effective "last run" time per project the rotation compares against. */
 export function effectiveLastRunAt(
   latest: ReadonlyMap<string, LatestRun>,
   now: Date,
   floor: number = FIRST_READING_FLOOR,
+  builtThrough: ReadonlyMap<string, Date> = new Map(),
 ): Map<string, Date> {
   const out = new Map<string, Date>();
   for (const [projectId, run] of latest) {
@@ -58,7 +81,8 @@ export function effectiveLastRunAt(
       out.set(projectId, started.getTime() > now.getTime() ? now : started);
     } else if (
       run.status === "completed" &&
-      (run.turnsScanned < floor || run.trigger === "first_build")
+      (run.turnsScanned < floor || run.trigger === "first_build") &&
+      closedSince(run, builtThrough.get(projectId))
     ) {
       out.set(projectId, new Date(run.at.getTime() - (SIGNAL_RUN_INTERVAL_MS - THIN_RUN_RETRY_MS)));
     } else {
@@ -73,12 +97,17 @@ export function dueSignalProjects(
   candidates: readonly string[],
   latest: ReadonlyMap<string, LatestRun>,
   now: Date,
-  opts: { cap?: number; floor?: number } = {},
+  opts: { cap?: number; floor?: number; builtThrough?: ReadonlyMap<string, Date> } = {},
 ): string[] {
-  return dueProjectsInRotation(candidates, effectiveLastRunAt(latest, now, opts.floor), now, {
-    intervalMs: SIGNAL_RUN_INTERVAL_MS,
-    cap: opts.cap ?? MAX_SIGNAL_PROJECTS_SCANNED,
-  });
+  return dueProjectsInRotation(
+    candidates,
+    effectiveLastRunAt(latest, now, opts.floor, opts.builtThrough),
+    now,
+    {
+      intervalMs: SIGNAL_RUN_INTERVAL_MS,
+      cap: opts.cap ?? MAX_SIGNAL_PROJECTS_SCANNED,
+    },
+  );
 }
 
 export interface SignalSweepResult {

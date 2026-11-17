@@ -297,12 +297,15 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     .sort();
   // Owned: the deployment's FF_* switches, not upstream's flag service.
   assert.deepEqual(keys, [
+    "FF_ADAPTIVE_LABELLING",
     "FF_EVAL_GATE",
     "FF_HEALTH_IMPORT_FIRST_READING",
     "FF_HEALTH_SCORE",
+    "FF_OTLP_RAW_CAPTURE",
     "FF_QUICK_FIRST_READING",
     "FF_SESSION_REPLAY",
     "FF_TRACES_SESSIONS",
+    "FF_TRACE_VIEWS_V3",
   ]);
 });
 

@@ -1,3 +1,4 @@
+import type { PriceBook } from "@/lib/ingest/pricing";
 import { rebaseScorers, scoreReplaySide } from "@/lib/views/task-scorers/replay";
 import type { Scorer, ScorerResult } from "@/lib/views/task-scorers/types";
 import type { ModelCall } from "./calls";
@@ -51,6 +52,8 @@ export interface SimulationBudget {
   judgeUsd?: number;
   judgeFeature?: EvalGateFeature;
   maxSteps?: number;
+  /** RC-482: the project's price book for the replayed sides' cost. Absent: the current built-in prices. */
+  prices?: PriceBook;
 }
 
 export interface CaseSimulation {
@@ -149,6 +152,7 @@ export async function simulateCases(
       maxSteps: budget.maxSteps ?? REPLAY_MAX_STEPS,
       toolDefs: change.toolDefs ?? new Map(),
       halt,
+      ...(budget.prices ? { prices: budget.prices } : {}),
       ...(dailyLeft < replayCap ? { budgetNote: CANT_SIMULATE.dailyBudget } : {}),
     });
     if (!outcome.ok) {

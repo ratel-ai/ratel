@@ -15,7 +15,7 @@ import { test } from "node:test";
 
 const ROOTS = ["lib", "app"];
 const TABLE_READ =
-  /\.from\((traceEvents|otelSpans|otelLogs|events)\)|from (trace_events|otel_spans|otel_logs)\b/g;
+  /\.from\((traceEvents|otelSpans|otelLogs|otlpRawExports|events)\)|from (trace_events|otel_spans|otel_logs|otlp_raw_exports)\b/g;
 const PROJECT_FILTER = /project_?id|projectId/i;
 const MARKER = "// cross-project:";
 /** How far around a match the statement is looked for. */
