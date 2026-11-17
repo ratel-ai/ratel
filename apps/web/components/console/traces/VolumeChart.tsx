@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { formatDayRange, formatInteger } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import {
   axisLabels,
   BAR_RADIUS,
@@ -28,7 +29,6 @@ import {
   type VolumeBucket,
   type VolumeModel,
 } from "@/lib/synthesis/traces/v2/volume";
-import { useRunNoun } from "./views-v3-context";
 
 /** Room above the top gridline for its label. */
 const PLOT_TOP = 18;
@@ -64,7 +64,7 @@ export function VolumeChart({
   onSelectDays: (days: { from: string; to: string }) => void;
   onReset: () => void;
 }) {
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const [showTable, setShowTable] = useState(false);
   const { buckets, totals } = model;
   const completed = totals.count - totals.errorCount;
@@ -131,7 +131,7 @@ function VolumePlot({
   const hostRef = useRef<HTMLDivElement>(null);
   // Mirrors the drag so pointerup reads the live gesture, not the last render.
   const dragRef = useRef<Drag | null>(null);
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const [drag, setDrag] = useState<Drag | null>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [cursor, setCursor] = useState<number | null>(null);
@@ -521,7 +521,7 @@ function VolumeTable({
   buckets: readonly VolumeBucket[];
   stepHours: number;
 }) {
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const busy = buckets.filter((bucket) => bucket.count > 0);
   return (
     <div className="max-h-64 overflow-y-auto rounded-lg border border-line">

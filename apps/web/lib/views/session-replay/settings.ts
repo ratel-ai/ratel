@@ -2,19 +2,14 @@ import { and, eq, inArray } from "drizzle-orm";
 import { events } from "@/lib/ingest/otlp/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import {
-  defaultOrganizationFlagDeps,
-  type OrganizationFlagDeps,
-} from "@/lib/views/session-replay/gate";
 import { sessionReplaySettings } from "@/lib/views/session-replay/schema";
-import { sessionReplayEnabledForActor } from "./gate";
 
 /**
  * The per-project content opt-in (RC-177). On, the session page shows the
  * message text of the model calls that kept it, and a What-if run may replay
- * the model on it (RC-471: with no admin choice, on where `cloud-trace-views-v3` is
- * on for the organization). Off, both stay text-free. Only an admin of
- * the project's organization changes it, and only with `cloud-session-replay` on.
+ * the model on it (RC-471: on with no admin choice). Off, both stay
+ * text-free. Only an admin of
+ * the project's organization changes it.
  */
 
 export type ContentOptInState = { ok: true; readContent: boolean } | { ok: false; error: string };
@@ -29,7 +24,6 @@ export interface StepText {
 
 export interface ContentOptInDeps {
   db?: SettingsDb;
-  flagDeps?: OrganizationFlagDeps;
   /** The signed-in person, or null. */
   getActor: () => Promise<{ userId: string; externalId: string } | null>;
   /** The person's role in the project's organization, or null when they are not a member. */
@@ -49,7 +43,6 @@ const logger = getLogger("session-replay/settings");
 export const CONTENT_OPT_IN_ERRORS = {
   signed_out: "Sign in to change this setting.",
   not_found: "No project you belong to has that ID.",
-  flag_off: "Session replay is off for this organization.",
   not_admin: "Only organization admins can change content reading.",
   restricted: "A support session cannot change settings.",
 } as const;
@@ -65,15 +58,6 @@ export async function setContentOptIn(
   const role = await deps.findRole(projectId, actor.userId);
   if (role === null) return refuse("not_found", projectId);
   const db = deps.db ?? getDb();
-  if (
-    !(await sessionReplayEnabledForActor(
-      projectId,
-      actor.externalId,
-      db,
-      deps.flagDeps ?? defaultOrganizationFlagDeps,
-    ))
-  )
-    return refuse("flag_off", projectId);
   if (role !== "admin") return refuse("not_admin", projectId);
   if (await deps.isRestricted?.()) return refuse("restricted", projectId);
   await db

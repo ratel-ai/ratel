@@ -191,10 +191,6 @@ function harness(
       freshness: { updatedAt: "2026-11-04T23:50:00.000Z", working: true, importing: null },
       progress: section ? { lastDoneAt: "2026-11-04T23:00:00.000Z", pending: 2 } : null,
     }),
-    sessionReplayEnabled: async (_projectId, actor) => {
-      calls.actors.push(actor);
-      return true;
-    },
     loadSession: async (_projectId, _sessionId, textWindow) => {
       calls.sessionText.push(textWindow);
       return loaded(true);
@@ -296,13 +292,6 @@ test("get_analysis_freshness rejects an unknown section", async () => {
   const { run } = harness();
   const result = await run("get_analysis_freshness", { section: "billing" });
   assert.equal(result.ok === false && result.error, "invalid_params");
-});
-
-test("get_session is forbidden when session replay is off for the caller", async () => {
-  const { run } = harness({ sessionReplayEnabled: async () => false });
-  const result = await run("get_session", { sessionId: "sess-1" });
-  assert.equal(result.ok === false && result.error, "forbidden");
-  assert.equal(result.ok === false && result.reason, "session_replay_off");
 });
 
 test("get_session returns the timeline without text unless asked", async () => {

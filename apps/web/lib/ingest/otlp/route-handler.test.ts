@@ -1058,10 +1058,9 @@ test("nothing is counted without a quota gate, or when nothing was stored", asyn
   assert.deepEqual(increments, []);
 });
 
-function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
+function rawCapture(store?: OtlpRawStore["store"]) {
   const stored: OtlpRawExportInput[] = [];
   const capture: OtlpRawCaptureDeps = {
-    isEnabled: async () => enabled,
     store: {
       store:
         store ??
@@ -1074,17 +1073,8 @@ function rawCapture(enabled: boolean, store?: OtlpRawStore["store"]) {
   return { capture, stored };
 }
 
-test("raw capture off: no store call and the same response", async () => {
-  const { capture, stored } = rawCapture(false);
-  const { deps } = makeDeps({ otlpRawCapture: capture });
-  const res = await handleTracesRequest(req(otlpJson(2), auth), deps);
-  assert.equal(res.status, 202);
-  assert.deepEqual(await res.json(), { accepted: 2, calls: 2, spans: 2 });
-  assert.equal(stored.length, 0);
-});
-
 test("raw capture on: one stored export whose body decodes back to the same spans", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });
   const wire = gzipSync(otlpProto(3));
   const res = await handleTracesRequest(
@@ -1107,7 +1097,7 @@ test("raw capture on: one stored export whose body decodes back to the same span
 });
 
 test("raw capture is not attempted for a rejected export", async () => {
-  const { capture, stored } = rawCapture(true);
+  const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });
   assert.equal((await handleTracesRequest(req("{not json", auth), deps)).status, 400);
   assert.equal(stored.length, 0);
@@ -1115,7 +1105,7 @@ test("raw capture is not attempted for a rejected export", async () => {
 
 test("a throwing raw store still returns the same 202 and logs sizes, not the body", async () => {
   const logged: Array<{ message: string; fields: unknown }> = [];
-  const { capture } = rawCapture(true, async () => {
+  const { capture } = rawCapture(async () => {
     throw new Error("raw store down");
   });
   const { deps } = makeDeps({

@@ -11,15 +11,15 @@ import { resolveEvalModels } from "@/lib/views/eval-gate/models";
 import { organizationModelSpendSince } from "@/lib/views/eval-gate/store";
 import type { RunRecord } from "@/lib/views/eval-gate/types";
 import { whatIfStepJob } from "./job";
-import { requestWhatIf, WhatIfError } from "./runs";
+import { requestWhatIf } from "./runs";
 import { sessionReplayRuns } from "./schema";
 import type { Variant } from "./variant";
 
 /**
  * With no model key a What-if run calls nothing: the replay has no agent, so the run fails
  * `noModel` and frees its hold, and the network is never touched. `EVAL_GATE_MOCK_MODEL=1`
- * gives the eval gate's deterministic stand-ins locally, so a replay completes. With
- * `FF_SESSION_REPLAY` off no run can start. No upstream counterpart (the sibling of
+ * gives the eval gate's deterministic stand-ins locally, so a replay completes. No upstream
+ * counterpart (the sibling of
  * `views/eval-gate/no-outbound-without-key.test.ts`).
  */
 
@@ -27,7 +27,6 @@ const ORG = "22222222-2222-4222-8222-222222222221";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const TURN = "33333333-3333-4333-8333-333333333331";
 const MODEL = "claude-sonnet-4-6";
-const ON = { FF_SESSION_REPLAY: "1" };
 const NO_KEYS = { ANTHROPIC_API_KEY: undefined, OPENAI_API_KEY: undefined };
 
 type Db = ReturnType<typeof getDb>;
@@ -118,14 +117,13 @@ function recorded(): { run: RunRecord; calls: ModelCall[] } {
 async function runOnce(db: Db, env: Record<string, string | undefined>) {
   const { run } = await requestWhatIf(
     { projectId: PROJECT, actor: "user_1", turnId: TURN, step: 0, variant: ADD, replay: true },
-    { db, flagDeps: ON, enqueue: async () => null },
+    { db, enqueue: async () => null },
   );
   const result = await whatIfStepJob(
     PROJECT,
     { runId: run.id, variant: ADD },
     {
       db,
-      flagDeps: ON,
       models: resolveEvalModels(env, "eval_gate_judge", "development", "eval_gate_what_if"),
       loadStep: async () => recorded(),
       loadCorpus: async () => [],
@@ -158,23 +156,6 @@ test("EVAL_GATE_MOCK_MODEL=1 completes a replay on the stand-ins, with no outbou
     assert.equal(saved.recordedTool, "find_booking");
     assert.ok(saved.distribution);
     assert.equal(saved.spend.reserved, false);
-    assert.equal(fetches, 0);
-  } finally {
-    await client.close();
-  }
-});
-
-test("with FF_SESSION_REPLAY off no run starts and nothing is saved", async () => {
-  const { client, db } = await setup();
-  try {
-    await assert.rejects(
-      requestWhatIf(
-        { projectId: PROJECT, actor: "user_1", turnId: TURN, step: 0, variant: ADD },
-        { db, flagDeps: {}, enqueue: async () => assert.fail("nothing is queued") },
-      ),
-      (err: unknown) => err instanceof WhatIfError && err.code === "flag_off",
-    );
-    assert.equal((await db.select().from(sessionReplayRuns)).length, 0);
     assert.equal(fetches, 0);
   } finally {
     await client.close();

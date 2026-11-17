@@ -8,7 +8,7 @@ import { setContentOptInAction } from "@/app/(console)/(session-replay)/session-
 /**
  * The per-project content opt-in (RC-177), on Settings > General. On, the
  * session page shows message text and What-if may replay the model. Admins
- * change it; members see it read-only. Rendered only with `cloud-session-replay` on.
+ * change it; members see it read-only.
  */
 export function ContentOptIn({
   projectId,

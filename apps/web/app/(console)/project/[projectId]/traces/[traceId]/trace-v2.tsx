@@ -16,11 +16,9 @@ import {
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath } from "@/lib/synthesis/traces/v2/run-noun";
 import { buildRunSummary } from "@/lib/synthesis/traces/v2/run-summary";
-import { traceViewsV3EnabledForActor } from "@/lib/synthesis/traces/v2/views-flag";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
 import { loadTraceSession } from "@/lib/views/session-chat/trace-session";
-import { sessionReplayEnabledForActor } from "@/lib/views/session-replay/gate";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 
 const TABS: ReadonlySet<string> = new Set(["timeline", "conversation", "details", "ranking"]);
@@ -55,35 +53,24 @@ export async function TracePageV2({
     compareHref: `${tracesPath}${searchFromParams({ ...listParams, peek: undefined, project: undefined, compare: id })}`,
     tab: requestedTab,
     spanId: firstParam(span) ?? null,
-    actor: `project:${project.id}`,
   });
   if (!props) notFound();
-  // RC-503: with the redesign Traces opens on Sessions, so the crumb and Compare go back to the Turns tab.
-  if (props.viewsV3) {
-    const list = runsListPath(tracesPath, true);
-    props.listHref = props.listHref.replace(tracesPath, list);
-    props.compareHref = props.compareHref.replace(tracesPath, list);
-  }
-  // RC-472: a turn links to its full session, and keeps the session's turns on top. The session page needs session replay.
-  const traceSession =
-    props.viewsV3 && (await sessionReplayEnabledForActor(project.id, `project:${project.id}`))
-      ? await loadOrFallback({
-          operation: "trace_session",
-          distinctId: `project:${project.id}`,
-          fallback: null,
-          load: () =>
-            withStatementTimeout(
-              async (db) =>
-                loadTraceSession(
-                  project.id,
-                  id,
-                  { readContent: await contentOptIn(project.id, db) },
-                  db,
-                ),
-              { operation: "trace_session" },
-            ),
-        })
-      : null;
+  // RC-503: Traces opens on Sessions, so the crumb and Compare go back to the Turns tab.
+  const list = runsListPath(tracesPath);
+  props.listHref = props.listHref.replace(tracesPath, list);
+  props.compareHref = props.compareHref.replace(tracesPath, list);
+  // RC-472: a turn links to its full session, and keeps the session's turns on top.
+  const traceSession = await loadOrFallback({
+    operation: "trace_session",
+    distinctId: `project:${project.id}`,
+    fallback: null,
+    load: () =>
+      withStatementTimeout(
+        async (db) =>
+          loadTraceSession(project.id, id, { readContent: await contentOptIn(project.id, db) }, db),
+        { operation: "trace_session" },
+      ),
+  });
   return <TraceView {...props} session={traceSession} />;
 }
 
@@ -101,11 +88,10 @@ export async function loadTraceViewProps(
     compareHref: string;
     tab: string | undefined;
     spanId: string | null;
-    actor: string;
   },
 ): Promise<TraceViewProps | null> {
   const id = traceId.toLowerCase();
-  const [load, lifecycle, payload, viewsV3] = await Promise.all([
+  const [load, lifecycle, payload] = await Promise.all([
     withStatementTimeout((db) => getTraceSpansWithTruncation(projectId, id, db), {
       operation: "trace_detail",
     }),
@@ -113,7 +99,6 @@ export async function loadTraceViewProps(
       operation: "trace_lifecycle",
     }),
     loadPayloadContentSafely(projectId, id, "trace_payload"),
-    traceViewsV3EnabledForActor(projectId, options.actor),
   ]);
   if (load.spans.length === 0) return null;
   const summary = buildRunSummary(load.spans, 0, payload);
@@ -142,7 +127,6 @@ export async function loadTraceViewProps(
     compareHref: options.compareHref,
     initialTab: options.tab && TABS.has(options.tab) ? (options.tab as TraceTab) : "timeline",
     initialSpanId: options.spanId,
-    viewsV3,
     runtimeEventsRoot: `/project/${encodeURIComponent(projectId)}/runtime-events`,
   };
 }

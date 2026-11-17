@@ -2,8 +2,6 @@ import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { handleLogsRequest } from "@/lib/ingest/otlp/logs-route-handler";
 import { insertOtelLogs } from "@/lib/ingest/otlp/queries";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
-import { sessionChatCaptureEnabled } from "@/lib/ingest/otlp/session-chat-capture";
-import { otlpRawCaptureEnabled } from "@/lib/ingest/otlp-raw/flag";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
 import { hashApiKey } from "@/lib/platform/api-keys";
 import { BEARER_ROUTE_SCOPES } from "@/lib/platform/api-keys/routes";
@@ -29,14 +27,9 @@ async function handlePost(req: Request) {
     trackServerEvent,
     getOrganizationByProjectId,
     setRequestLogContext,
-    otlpRawCapture: {
-      isEnabled: (projectId, organization) => otlpRawCaptureEnabled(projectId, organization),
-      store: createOtlpRawStore(),
-    },
+    otlpRawCapture: { store: createOtlpRawStore() },
     genAiLogJoin: {
       store: createGenAiLogStore(),
-      sessionChatCapture: (projectId, organization) =>
-        sessionChatCaptureEnabled(projectId, organization),
       // As span ingest reads them: a restated call keeps the project's prices (RC-482).
       modelPricing: {
         loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),

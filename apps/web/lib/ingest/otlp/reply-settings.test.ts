@@ -5,7 +5,7 @@ import { toCloudEvent, toRows } from "./reconstruct";
 import type { AttrMap, AttrValue, DecodedEvent, DecodedSpan, GroupedCall } from "./types";
 
 /**
- * RC-280: with `cloud-session-replay` on, a call's payload keeps its own reply
+ * RC-280: a call's payload keeps its own reply
  * (`output`) and its request settings (`settings`), so the session chat shows
  * the last reply of a turn and the inspector shows the settings. Off, the
  * payload is exactly as before. A call without content never gets either.
@@ -204,7 +204,7 @@ test("privacy: a call with no content gets no output and no settings", () => {
 
 /* --- ingest wiring --------------------------------------------------------- */
 
-async function persistedPayloads(sessionChatCapture?: PersistSpansDeps["sessionChatCapture"]) {
+async function persistedPayloads() {
   const stored: unknown[] = [];
   const deps = {
     insertEventsWithMetrics: async (
@@ -218,7 +218,6 @@ async function persistedPayloads(sessionChatCapture?: PersistSpansDeps["sessionC
     insertOtelSpans: async (_projectId: string, rows: unknown[]) => ({ accepted: rows.length }),
     logError: () => {},
     captureFailure: () => {},
-    ...(sessionChatCapture ? { sessionChatCapture } : {}),
   } as unknown as PersistSpansDeps;
   const result = await persistDecodedSpans(
     [spanCall().anchor],
@@ -229,23 +228,8 @@ async function persistedPayloads(sessionChatCapture?: PersistSpansDeps["sessionC
   return stored as Record<string, unknown>[];
 }
 
-test("ingest with the flag on stores output and settings", async () => {
-  const asked: string[] = [];
-  const [payload] = await persistedPayloads(async (projectId) => {
-    asked.push(projectId);
-    return true;
-  });
-  assert.deepEqual(asked, ["project-1"]);
+test("ingest stores each call's output and settings (RC-280)", async () => {
+  const [payload] = await persistedPayloads();
   assert.deepEqual(payload.output, expectedOutput);
   assert.deepEqual(payload.settings, expectedSettings);
-});
-
-test("ingest with the flag off or not wired stores today's payload", async () => {
-  for (const payload of [
-    ...(await persistedPayloads(async () => false)),
-    ...(await persistedPayloads()),
-  ]) {
-    assert.equal("output" in payload, false);
-    assert.equal("settings" in payload, false);
-  }
 });

@@ -30,25 +30,16 @@ test("anything else is no peek", () => {
     assert.equal(parseChatPeek(id), null);
 });
 
-test("the page view: the chat unless ?view=steps or ?view=trace (session replay on is the page's own gate)", () => {
+test("the page view: the chat unless ?view=trace; ?view=steps is the chat (RC-524)", () => {
   assert.equal(sessionPageView(undefined), "chat");
   assert.equal(sessionPageView("chat"), "chat");
-  assert.equal(sessionPageView("steps"), "steps");
+  assert.equal(sessionPageView("steps"), "chat");
   assert.equal(sessionPageView("trace"), "trace");
   assert.equal(sessionPageView("nope"), "chat");
 });
 
-test("views v3 (RC-524): ?view=steps is the chat, the trace stays", () => {
-  assert.equal(sessionPageView("steps", true), "chat");
-  assert.equal(sessionPageView(["steps", "trace"], true), "chat");
-  assert.equal(sessionPageView("trace", true), "trace");
-  assert.equal(sessionPageView(undefined, true), "chat");
-  assert.equal(sessionPageView("steps", false), "steps");
-});
-
 test("a repeated ?view= reads as its first value (review finding session F2)", () => {
-  assert.equal(sessionPageView(["steps", "steps"]), "steps");
-  assert.equal(sessionPageView(["steps", "chat"]), "steps");
+  assert.equal(sessionPageView(["steps", "trace"]), "chat");
   assert.equal(sessionPageView(["trace", "steps"]), "trace");
   assert.equal(sessionPageView([]), "chat");
 });

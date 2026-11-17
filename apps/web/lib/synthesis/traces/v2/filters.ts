@@ -20,7 +20,7 @@ import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { formatDuration, formatInteger, formatMoney } from "./format";
 
 /**
- * `rollup` is the bar on Sessions and Turns with `cloud-traces-filters`
+ * `rollup` is the bar on Sessions and Turns
  * (RC-506): every field matches the per-trace rollup.
  */
 export type TraceTab = "runs" | "spans" | "logs" | "rollup";
@@ -388,8 +388,8 @@ export function withFilterToggled(
 }
 
 /**
- * The Sessions and Turns property filters in the URL (RC-505, with
- * `cloud-traces-filters`), as the rollup query reads them. Status reads
+ * The Sessions and Turns property filters in the URL (RC-505), as the
+ * rollup query reads them. Status reads
  * `errorOnly` (what v1 links write) or `status=ok|failed`.
  */
 export function traceFilterFromSearch(search: string): TraceFilter {

@@ -80,8 +80,8 @@ export interface CloudParams {
 
 /**
  * Every request setting a call's source sent (RC-280): the `params` keys plus
- * the sampling and choice settings `params` does not keep. Stored only with
- * `cloud-session-replay` on and only on a call that carries content.
+ * the sampling and choice settings `params` does not keep. Stored only on a
+ * call that carries content.
  */
 export interface CloudSettings extends CloudParams {
   top_k?: number;
@@ -119,8 +119,8 @@ export interface CloudEvent {
   params?: CloudParams;
   /**
    * The call's own reply: the output messages its source sent, without the tool
-   * calls ingest adds from tool spans. Stored only with `cloud-session-replay` on
-   * and only when the source sent output (RC-280).
+   * calls ingest adds from tool spans. Stored only when the source sent output
+   * (RC-280).
    */
   output?: CloudMessage[];
   settings?: CloudSettings;

@@ -13,7 +13,7 @@ import {
 import type { SessionsFilter } from "@/lib/synthesis/traces-sessions/view";
 
 /**
- * The Sessions tab with `cloud-trace-views-v3` (RC-502, decisions
+ * The Sessions tab (RC-502, decisions
  * sessions-first and session-status): one row per session id, newest last
  * update first, paged by a cursor. A turn with no session id (OTLP ingest
  * keys it by its own trace id) is not a session and is not listed.
@@ -62,7 +62,7 @@ export interface ListSessionListOptions {
   limit?: number;
   /** The clock the Active status reads; tests pin it. */
   now?: Date;
-  /** RC-505 property filters (`cloud-traces-filters`): a session matches when any of its turns does. */
+  /** RC-505 property filters: a session matches when any of its turns does. */
   traces?: TraceFilter;
 }
 

@@ -3,13 +3,13 @@
 import { StatusDot } from "@ratel/design-system/badge";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ToolBadges, TruncatedText } from "@/components/console/traces/cells";
-import { useRunNoun, useTraceViewsV3 } from "@/components/console/traces/views-v3-context";
 import {
   formatClock,
   formatDuration,
   formatInteger,
   formatMoney,
 } from "@/lib/synthesis/traces/v2/format";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 import type { SessionRow } from "@/lib/synthesis/traces-sessions/sessions";
 import {
   groupSessionsByDay,
@@ -54,8 +54,7 @@ export function SessionsTable({
   openKey: string | null;
   onOpen: (key: string) => void;
 }) {
-  const viewsV3 = useTraceViewsV3();
-  const noun = useRunNoun();
+  const noun = TURN_NOUN;
   const tableColumns: Column<SessionRow>[] = [
     {
       id: "ask",
@@ -63,16 +62,14 @@ export function SessionsTable({
       // The flexible column: it takes the room left and truncates inside it.
       className: "w-full max-w-0 min-w-48",
       cell: (row) => {
-        const title = sessionTitle(row, viewsV3);
+        const title = sessionTitle(row);
         return (
           <span className="flex min-w-0 items-center gap-2" data-title-source={title.source}>
             <TruncatedText
               text={title.text}
               className={
                 title.source === "id"
-                  ? viewsV3
-                    ? "text-fg-muted"
-                    : "font-mono text-fg-muted"
+                  ? "text-fg-muted"
                   : title.source === "intent"
                     ? "text-fg-muted"
                     : "text-fg"
@@ -135,18 +132,14 @@ export function SessionsTable({
           },
         ]
       : []),
-    // RC-472: with the redesign a session row always shows what it cost.
-    ...(viewsV3 || columns.includes("cost")
-      ? [
-          {
-            id: "cost",
-            header: "Cost",
-            align: "right" as const,
-            width: "6rem",
-            cell: (row: SessionRow) => formatMoney(row.costUsd),
-          },
-        ]
-      : []),
+    // RC-472: a session row always shows what it cost.
+    {
+      id: "cost",
+      header: "Cost",
+      align: "right" as const,
+      width: "6rem",
+      cell: (row: SessionRow) => formatMoney(row.costUsd),
+    },
     {
       id: "duration",
       header: "Time",

@@ -2771,7 +2771,7 @@
   {
     "name": "get_flag_status",
     "title": "Feature flag status",
-    "description": "The deployment's feature switches and whether each is on: the eval gate, session replay, the Traces Sessions view and the Agent health readings. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+    "description": "The deployment's feature switches and whether each is on: the eval gate, the Traces Sessions view and the Agent health readings. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

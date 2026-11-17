@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { EMPTY_TRACE_AGGREGATE } from "@/lib/synthesis/traces/queries";
 import type { TraceSummaryView } from "@/lib/synthesis/traces/view";
-import { TURN_NOUN } from "./run-noun";
 import {
   HIGH_ERROR_RATE,
   RUN_STATUS_LABEL,
@@ -87,7 +86,7 @@ test("the key numbers are five, with p95 beside the median and a danger mark onl
       stat.tone,
     ]),
     [
-      ["Runs", "12.4K", undefined, undefined],
+      ["Turns", "12.4K", undefined, undefined],
       ["Error rate", "6%", "744 failed", "danger"],
       ["Median duration", "1.8 s", "p95 6.1 s", undefined],
       ["Tokens", "724.1K", undefined, undefined],
@@ -102,7 +101,7 @@ test("the key numbers are five, with p95 beside the median and a danger mark onl
     p50DurationMs: 0,
     p95DurationMs: 0,
   });
-  assert.equal(calm[1].hint, "No failed runs");
+  assert.equal(calm[1].hint, "No failed turns");
   assert.equal(calm[1].tone, undefined);
   const justBelow = runStats({
     ...EMPTY_TRACE_AGGREGATE,
@@ -111,10 +110,4 @@ test("the key numbers are five, with p95 beside the median and a danger mark onl
     errorRate: HIGH_ERROR_RATE - 0.01,
   });
   assert.equal(justBelow[1].tone, undefined);
-  // RC-413: with `cloud-trace-views-v3` the stats say turns.
-  const turns = runStats(
-    { ...EMPTY_TRACE_AGGREGATE, count: 60, errorCount: 0, errorRate: 0 },
-    TURN_NOUN,
-  );
-  assert.deepEqual([turns[0].label, turns[1].hint], ["Turns", "No failed turns"]);
 });

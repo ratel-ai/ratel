@@ -6,7 +6,7 @@ import { EmptyState } from "@ratel/design-system/states";
 import { CalendarRange, SearchX } from "lucide-react";
 import Link from "next/link";
 import { formatTimestamp } from "@/lib/synthesis/traces/v2/format";
-import { useRunNoun } from "./views-v3-context";
+import { TURN_NOUN } from "@/lib/synthesis/traces/v2/run-noun";
 
 export const TRACES_DOCS = "https://docs.ratel.sh/observability";
 
@@ -36,7 +36,7 @@ export function TracesEmpty({
   /** Widen the window, when a wider preset exists. */
   onWiden?: { label: string; run: () => void };
 }) {
-  const runNoun = useRunNoun();
+  const runNoun = TURN_NOUN;
   const noun = unit === "runs" ? runNoun.lowerMany : NOUN[unit];
   const docs = (
     <a

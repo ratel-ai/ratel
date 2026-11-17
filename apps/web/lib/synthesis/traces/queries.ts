@@ -249,7 +249,7 @@ export interface ListTracesOptions extends TraceFacetFilters {
   direction?: SortDirection;
   cursor?: TraceCursor;
   limit?: number;
-  /** RC-505 property filters, matched on the per-trace rollup (`cloud-traces-filters`). */
+  /** RC-505 property filters, matched on the per-trace rollup. */
   traces?: TraceFilter;
 }
 

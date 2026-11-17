@@ -67,14 +67,14 @@ export interface SessionListViewProps {
   /** The request's time, for relative times. */
   now: string;
   empty: TracesEmptyKind | "no-failed" | null;
-  /** With `cloud-traces-filters` (RC-506): the property bar's values; null hides the bar. */
+  /** The property bar's values (RC-506); null hides the bar. */
   filterFacets?: TraceFilterFacets | null;
   loadPage?: LoadSessionListPage;
   loadChat?: LoadSessionPanelChat;
 }
 
 /**
- * Traces, Sessions tab with `cloud-trace-views-v3` (RC-503, decisions
+ * Traces, Sessions tab (RC-503, decisions
  * sessions-first and session-status): the first tab. One row per session,
  * newest last update first, in the table layout Turns shares (ID first). A
  * row opens the whole session as chat in the Panel.

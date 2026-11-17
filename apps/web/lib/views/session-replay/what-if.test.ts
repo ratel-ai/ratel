@@ -7,7 +7,6 @@ import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { emptyChange } from "@/lib/views/eval-gate/change";
-import type { OrganizationFlagDeps } from "@/lib/views/session-replay/gate";
 import { sessionReplayRuns } from "@/lib/views/session-replay/schema";
 import type { WhatIfJobPayload } from "./runs";
 import type { TimelineStep } from "./timeline";
@@ -57,16 +56,13 @@ async function setup(options: { readContent?: boolean } = {}): Promise<{ client:
   return { client, db: drizzle(client, { schema }) as unknown as Db };
 }
 
-function deps(db: Db, over: Partial<WhatIfDeps> & { flag?: boolean; memberOf?: string[] } = {}) {
+function deps(db: Db, over: Partial<WhatIfDeps> & { memberOf?: string[] } = {}) {
   const queued: WhatIfJobPayload[] = [];
   const tracked: unknown[] = [];
   const added: unknown[] = [];
-  // Owned: the flag is the deployment's FF_SESSION_REPLAY value, not a flag-service answer.
-  const flagDeps: OrganizationFlagDeps = { FF_SESSION_REPLAY: (over.flag ?? true) ? "1" : "0" };
   const memberOf = over.memberOf ?? [PROJECT];
   const value: WhatIfDeps = {
     db,
-    flagDeps,
     getSession: async () => ({ user: { id: "u1", externalId: "user_1" } }),
     findProjectScope: async (projectId) =>
       memberOf.includes(projectId)
@@ -180,7 +176,7 @@ test("submitting the same change again returns the live run and tracks nothing n
   }
 });
 
-test("a non-member, a signed-out caller and the flag off are refused, and nothing is queued", async () => {
+test("a non-member and a signed-out caller are refused, and nothing is queued", async () => {
   const { client, db } = await setup();
   try {
     const input = { projectId: PROJECT, turnId: TURN, step: 0, change: OVERRIDE };
@@ -193,12 +189,7 @@ test("a non-member, a signed-out caller and the flag off are refused, and nothin
       ok: false,
       error: "Sign in to use What-if.",
     });
-    const off = deps(db, { flag: false });
-    assert.deepEqual(await submitWhatIf(input, off.deps), {
-      ok: false,
-      error: "Session replay is off for this organization.",
-    });
-    assert.equal(outsider.queued.length + off.queued.length, 0);
+    assert.equal(outsider.queued.length, 0);
     assert.equal((await db.select().from(sessionReplayRuns)).length, 0);
   } finally {
     await client.close();
@@ -367,10 +358,6 @@ test("Add to eval set adds the forked run to its task's eval set; a run with no 
       ok: false,
       error: "This run belongs to no task, so it has no eval set.",
     });
-    assert.deepEqual(
-      await addWhatIfToEvalSet(PROJECT, inTask.value.id, deps(db, { flag: false }).deps),
-      { ok: false, error: "Session replay is off for this organization." },
-    );
   } finally {
     await client.close();
   }

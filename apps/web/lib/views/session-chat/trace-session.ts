@@ -8,7 +8,7 @@ import { loadSessionChat } from "./load";
 import { loadTurnTraceIds } from "./turn-traces";
 
 /**
- * The session a turn's trace belongs to (RC-472, `cloud-trace-views-v3`): the
+ * The session a turn's trace belongs to (RC-472): the
  * trace page links to the full session and keeps the session's turns on top,
  * each opening its own trace. An OTLP turn is its `otlp:<trace id>` run; a
  * runtime-lane turn is found through the trace's events in its steps.
@@ -54,7 +54,6 @@ export async function loadTraceSession(
     title: sessionPageTitle(
       turn.sessionId,
       chat.turns.map((item) => item.ask),
-      true,
     ),
     turnIndex: chat.turns.find((item) => item.turnId === turn.id)?.turnIndex ?? null,
     turns: chat.turns.map((item) => ({

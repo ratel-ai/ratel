@@ -7,12 +7,12 @@ import type { OtlpRawExportInput, OtlpRawStore } from "@/lib/ingest/otlp-raw/dom
 import type { LogError, LogWarn } from "@/lib/platform/logger";
 
 /**
- * Switch `FF_OTLP_RAW_CAPTURE` at ingest: keep the raw body of an accepted
- * export. It fails open: a flag, cap or store problem never changes the
- * ingest response. Logs carry the project id and sizes, never the body.
+ * Raw OTLP capture at ingest (RC-405): keep the raw body of every accepted
+ * export, within the daily byte cap. It fails open: a cap or store problem
+ * never changes the ingest response. Logs carry the project id and sizes,
+ * never the body.
  */
 export interface OtlpRawCaptureDeps {
-  isEnabled: (projectId: string, organization: IngestFlagOrganizationInput) => Promise<boolean>;
   store: OtlpRawStore;
 }
 
@@ -31,7 +31,6 @@ export async function captureOtlpRawExport(
 ): Promise<void> {
   if (!deps) return;
   try {
-    if (!(await deps.isEnabled(input.projectId, organization))) return;
     const result = await deps.store.store(input);
     if (result.stored) return;
     const sizes = {

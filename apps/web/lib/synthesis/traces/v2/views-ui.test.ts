@@ -107,7 +107,11 @@ function runsProps(overrides: Partial<RunsViewProps> = {}): RunsViewProps {
 
 function renderRuns(search = "", overrides: Partial<RunsViewProps> = {}): string {
   return renderToStaticMarkup(
-    inRouter(`/project/${PROJECT}/traces`, search, createElement(RunsView, runsProps(overrides))),
+    inRouter(
+      `/project/${PROJECT}/traces/turns`,
+      search,
+      createElement(RunsView, runsProps(overrides)),
+    ),
   );
 }
 
@@ -117,23 +121,23 @@ test("the Runs page is one frame: a single h1, its tabs, one filter row, the num
   assert.match(html, /<h1[^>]*>Traces<\/h1>/);
   assert.match(html, /data-page="v2"/);
   assert.match(html, /<nav aria-label="Traces sections"/);
-  assert.match(html, /<a[^>]*aria-current="page"[^>]*>Runs<\/a>/, "the Runs tab is current");
+  assert.match(html, /<a[^>]*aria-current="page"[^>]*>Turns<\/a>/, "the Turns tab is current");
   assert.match(html, /href="\/project\/[^"]+\/traces\/spans\?range=7d"/, "tabs carry the window");
   assert.equal(html.match(/role="toolbar"/g)?.length, 1, "one filter row, not three");
   assert.match(html, /role="search"/);
   assert.equal(html.match(/<dt/g)?.length, 5, "five key numbers");
   assert.match(
     html,
-    /role="listbox"[^>]*aria-label="Runs over time: 60 runs, 2 failed\."[^>]*aria-multiselectable="true"/,
+    /role="listbox"[^>]*aria-label="Turns over time: 60 turns, 2 failed\."[^>]*aria-multiselectable="true"/,
   );
   assert.doesNotMatch(html, /role="img"/, "an interactive chart is not an image");
   assert.match(html, /class="[^"]*touch-pan-y/, "vertical swipes still scroll the page on phones");
   assert.match(
     html,
-    /role="option" aria-selected="false" class="sr-only">Oct 9, 10:00 to 12:00\u00a0UTC: 36 runs, 2 failed</,
+    /role="option" aria-selected="false" class="sr-only">Oct 9, 10:00 to 12:00\u00a0UTC: 36 turns, 2 failed</,
   );
   assert.match(html, />Times in UTC</);
-  assert.match(html, /<caption class="sr-only">Runs<\/caption>/);
+  assert.match(html, /<caption class="sr-only">Turns<\/caption>/);
   assert.match(html, /aria-label="Time window: Last 7 days"/);
   assert.doesNotMatch(html, /uppercase/, "no tracked eyebrows");
   assert.doesNotMatch(html, /text-\[(?:9|10|11)px\]/, "nothing under 12px");
@@ -202,7 +206,7 @@ test("active filters are chips with their own remove buttons", () => {
 
 test("two picked runs offer Compare, linking to the existing compare page", () => {
   const html = renderRuns(`?range=7d&compare=${TRACE_A},${TRACE_B}`);
-  assert.match(html, /role="region" aria-label="Compare runs"/);
+  assert.match(html, /role="region" aria-label="Compare turns"/);
   assert.match(
     html,
     new RegExp(
@@ -211,19 +215,19 @@ test("two picked runs offer Compare, linking to the existing compare page", () =
   );
   const one = renderRuns(`?compare=${TRACE_A}`);
   assert.match(one, /Pick one more to compare/);
-  assert.doesNotMatch(renderRuns(), /aria-label="Compare runs"/, "nothing picked, no bar");
+  assert.doesNotMatch(renderRuns(), /aria-label="Compare turns"/, "nothing picked, no bar");
 });
 
 test("numbers that did not load say so with a retry, never as zeros; the list still shows", () => {
   const html = renderRuns("?range=7d", { stats: null, volume: null });
   assert.match(html, /These numbers did not load/);
   assert.match(html, />Try again</);
-  assert.doesNotMatch(html, /No failed runs/);
+  assert.doesNotMatch(html, /No failed turns/);
   assert.doesNotMatch(html, /role="listbox"/);
   assert.equal(html.match(/<dt/g), null, "no key numbers at all");
-  assert.match(html, /<caption class="sr-only">Runs<\/caption>/);
+  assert.match(html, /<caption class="sr-only">Turns<\/caption>/);
   const bare = renderRuns("?range=7d", { detailsUnavailable: true });
-  assert.match(bare, /Tools and asks did not load for these runs\./);
+  assert.match(bare, /Tools and asks did not load for these turns\./);
 });
 
 test("a run whose top-level span has not arrived reads as incomplete, with a neutral dot", () => {
@@ -237,7 +241,7 @@ test("a run whose top-level span has not arrived reads as incomplete, with a neu
 
 test("an empty project teaches the first step; a filtered-out list offers to clear", () => {
   const first = renderRuns("", { rows: [], empty: "no-telemetry" });
-  assert.match(first, /No runs yet/);
+  assert.match(first, /No turns yet/);
   assert.match(
     first,
     new RegExp(`href="/project/${PROJECT}/settings/api-keys"[^>]*>Create API key`),
@@ -245,7 +249,7 @@ test("an empty project teaches the first step; a filtered-out list offers to cle
   assert.match(first, /href="https:\/\/docs\.ratel\.sh\/observability"/);
   assert.doesNotMatch(first, /role="toolbar"/, "nothing to filter yet");
   const filtered = renderRuns("?errorOnly=1", { rows: [], empty: "filtered" });
-  assert.match(filtered, /No runs match/);
+  assert.match(filtered, /No turns match/);
   assert.match(filtered, />Clear filters</);
   assert.match(filtered, /role="toolbar"/);
 });
@@ -457,7 +461,7 @@ test("Conversation says plainly when content isn't captured", () => {
   const html = renderTrace({ initialTab: "conversation" });
   assert.match(html, /data-conversation/);
   assert.match(html, /Message content isn(?:&#x27;|')t captured/);
-  assert.match(html, /This run called no tools\./);
+  assert.match(html, /This turn called no tools\./);
 });
 
 test("Conversation shows the run's payload content when its spans carry none (RC-393)", () => {
@@ -488,7 +492,7 @@ test("Conversation shows the run's payload content when its spans carry none (RC
   assert.match(html, /lookup_order/);
 });
 
-test("a later turn's Conversation folds what earlier turns sent again, with the redesign on only (RC-500)", () => {
+test("a later turn's Conversation folds what earlier turns sent again (RC-500)", () => {
   const payloadContent = {
     messages: [
       { id: "p:0", role: "user" as const, text: "Where is order 1234?", earlier: true },
@@ -498,14 +502,11 @@ test("a later turn's Conversation folds what earlier turns sent again, with the 
     toolCalls: [],
     contentCaptured: true,
   };
-  const on = renderTrace({ initialTab: "conversation", payloadContent, viewsV3: true });
-  assert.match(on, /Earlier in the session/);
-  assert.match(on, /2 messages sent again as history/);
-  assert.equal(on.match(/data-earlier="true"/g)?.length, 2);
-  assert.match(on, /And order 99\?/);
-  const off = renderTrace({ initialTab: "conversation", payloadContent });
-  assert.doesNotMatch(off, /Earlier in the session|data-earlier/);
-  assert.match(off, /Where is order 1234\?/);
+  const html = renderTrace({ initialTab: "conversation", payloadContent });
+  assert.match(html, /Earlier in the session/);
+  assert.match(html, /2 messages sent again as history/);
+  assert.equal(html.match(/data-earlier="true"/g)?.length, 2);
+  assert.match(html, /And order 99\?/);
 });
 
 test("the run Panel reads like a conversation: the ask, the steps in order, the failures, the answer", () => {
