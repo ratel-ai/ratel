@@ -109,6 +109,19 @@ test("the playground rank route and the traces routes resolve the project throug
   }
 });
 
+test("the Sessions page checks the project scope itself, as its two routes do", () => {
+  assert.match(
+    source("components/console/traces-sessions/SessionsPage.tsx"),
+    /\brequireProjectScope\(projectId\)/,
+  );
+});
+
+test("both ingest paths wire the session chat's reply capture", () => {
+  for (const file of ["app/api/v1/traces/route.ts", "lib/ledger/imported-runs.ts"]) {
+    assert.match(source(file), /sessionChatCapture: \(.*\) =>\s*sessionChatCaptureEnabled\(/, file);
+  }
+});
+
 test("root metadata sets a title template on the product name, a description and an icon", () => {
   const layout = source("app/layout.tsx");
   // biome-ignore lint/suspicious/noTemplateCurlyInString: the placeholder as it is written in the source file

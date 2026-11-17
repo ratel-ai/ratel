@@ -34,7 +34,8 @@ async function main() {
   const noModels = argv.includes("--no-models");
   if (noModels) {
     process.env.EVAL_GATE_MOCK_MODEL = "1";
-    for (const key of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]) delete process.env[key];
+    for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_BACKEND", "OPENAI_API_KEY"])
+      delete process.env[key];
   }
   await seedTaskLoop(getDb(), ref, {
     noModels,

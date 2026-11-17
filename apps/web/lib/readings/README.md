@@ -35,6 +35,13 @@ exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 `views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
+`anthropic/client.ts` (a copy) is the one place the platform gets a Claude client:
+`anthropicClient` and `anthropicConfigured`. With `ANTHROPIC_BACKEND` unset, `ANTHROPIC_API_KEY`
+selects the Anthropic API. `ANTHROPIC_BACKEND=bedrock` serves every call from Amazon Bedrock
+through an EU inference profile with the AWS credential chain and never reads the key; a model
+with no EU profile fails as not found, and any other value gives no client. Every call site in
+`readings/`, `synthesis/` and `views/` builds its client there. `pnpm bedrock:smoke` checks the
+request shapes against Bedrock with made-up text.
 Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
 its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs
 went and 40% the open issues: `trace-signals/health-outcomes.ts` reads five measured rates from

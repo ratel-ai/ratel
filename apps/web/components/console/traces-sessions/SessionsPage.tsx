@@ -4,6 +4,7 @@ import {
   type RunningSearchExperiment,
   SessionsView,
 } from "@/components/console/traces-sessions/SessionsView";
+import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import {
   supplementaryReadTimeoutMs,
@@ -37,8 +38,8 @@ export async function SessionsPage({
   searchParams: { [SESSIONS_FILTER_PARAM]?: string | string[] };
 }) {
   if (!isDbConfigured()) return <TracesUnavailable />;
-  // The project layout already guarded the id against the session.
-  const project = { id: projectId };
+  // Checked here too, as upstream does: the list shows each session's ask.
+  const { project } = await requireProjectScope(projectId);
 
   const filter = parseSessionsFilter(searchParams[SESSIONS_FILTER_PARAM]);
   const now = new Date();

@@ -1,0 +1,182 @@
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
+import Anthropic from "@anthropic-ai/sdk";
+import { anthropicAgent } from "@/lib/views/eval-gate/models";
+import { anthropicClient, anthropicConfigured } from "./client";
+
+const message = {
+  id: "msg_1",
+  type: "message",
+  role: "assistant",
+  model: "claude-sonnet-5-5",
+  content: [{ type: "text", text: "ok" }],
+  stop_reason: "end_turn",
+  stop_sequence: null,
+  usage: { input_tokens: 1, output_tokens: 1 },
+};
+
+type Seen = { url: string; body: Record<string, unknown>; headers: Headers };
+
+/** A fake network that records each request and answers one message. */
+function fakeFetch(status = 200): { fetch: typeof fetch; seen: Seen[] } {
+  const seen: Seen[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    seen.push({
+      url: String(input),
+      body: JSON.parse(String(init?.body)),
+      headers: new Headers(init?.headers),
+    });
+    return new Response(
+      status === 200 ? JSON.stringify(message) : JSON.stringify({ message: "no" }),
+      {
+        status,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }) as typeof fetch;
+  return { fetch: fetchImpl, seen };
+}
+
+const AWS_VARIABLES = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] as const;
+const savedAws = AWS_VARIABLES.map((name) => process.env[name]);
+
+before(() => {
+  for (const name of AWS_VARIABLES) process.env[name] = "test";
+});
+
+after(() => {
+  AWS_VARIABLES.forEach((name, index) => {
+    if (savedAws[index] === undefined) delete process.env[name];
+    else process.env[name] = savedAws[index];
+  });
+});
+
+const params = { max_tokens: 10, messages: [{ role: "user" as const, content: "hi" }] };
+
+test("without a backend, a key selects the Anthropic API", async () => {
+  const { fetch, seen } = fakeFetch();
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_API_KEY: "sk-test" });
+
+  await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
+
+  assert.equal(new URL(seen[0]!.url).hostname, "api.anthropic.com");
+  assert.equal(seen[0]!.body.model, "claude-sonnet-5-5");
+});
+
+test("without a backend, a missing or placeholder key gives no client", () => {
+  assert.equal(anthropicClient({}, {}), null);
+  assert.equal(anthropicClient({}, { ANTHROPIC_API_KEY: "REPLACE_ME" }), null);
+  assert.equal(anthropicConfigured({}), false);
+  assert.equal(anthropicConfigured({ ANTHROPIC_API_KEY: "REPLACE_ME" }), false);
+  assert.equal(anthropicConfigured({ ANTHROPIC_API_KEY: "sk-test" }), true);
+});
+
+test("on Bedrock, a call goes to the EU profile in Frankfurt and never uses the API key", async () => {
+  const { fetch, seen } = fakeFetch();
+  const client = anthropicClient(
+    { fetch, maxRetries: 0 },
+    { ANTHROPIC_BACKEND: "bedrock", ANTHROPIC_API_KEY: "sk-must-not-leak" },
+  );
+
+  const reply = await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
+
+  const url = new URL(seen[0]!.url);
+  assert.equal(url.hostname, "bedrock-runtime.eu-central-1.amazonaws.com");
+  assert.equal(decodeURIComponent(url.pathname), "/model/eu.anthropic.claude-sonnet-5-5/invoke");
+  assert.equal(seen[0]!.headers.get("x-api-key"), null);
+  assert.match(seen[0]!.headers.get("authorization") ?? "", /^AWS4-HMAC-SHA256 /);
+  assert.equal(reply.stop_reason, "end_turn");
+});
+
+test("on Bedrock, the deployment is configured without any API key", () => {
+  assert.equal(anthropicConfigured({ ANTHROPIC_BACKEND: "bedrock" }), true);
+});
+
+test("on Bedrock, a dated snapshot of a model reaches that model's EU profile", async () => {
+  const { fetch, seen } = fakeFetch();
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+  await client!.messages.create({ ...params, model: "claude-haiku-4-5-20251001" });
+
+  assert.equal(
+    decodeURIComponent(new URL(seen[0]!.url).pathname),
+    "/model/eu.anthropic.claude-haiku-4-5-20251001-v1:0/invoke",
+  );
+});
+
+test("on Bedrock, a model with no EU profile fails as not found, with no request", async () => {
+  const { fetch, seen } = fakeFetch();
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+  await assert.rejects(
+    client!.messages.create({ ...params, model: "claude-fable-5-1" }),
+    Anthropic.NotFoundError,
+  );
+  assert.equal(seen.length, 0);
+});
+
+test("a Bedrock refusal is the same error class the call sites catch", async () => {
+  const { fetch } = fakeFetch(403);
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+  await assert.rejects(
+    client!.messages.create({ ...params, model: "claude-sonnet-5-5" }),
+    Anthropic.PermissionDeniedError,
+  );
+});
+
+test("on Bedrock, a streamed message reaches the EU profile", async () => {
+  const { fetch, seen } = fakeFetch(500);
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+  await assert.rejects(
+    client!.messages.stream({ ...params, model: "claude-opus-5-5" }).finalMessage(),
+  );
+
+  assert.equal(
+    decodeURIComponent(new URL(seen[0]!.url).pathname),
+    "/model/eu.anthropic.claude-opus-5-5/invoke-with-response-stream",
+  );
+});
+
+test("on Bedrock, a replay recorded on a model with no EU profile continues on the EU fallback", async () => {
+  const { fetch, seen } = fakeFetch();
+  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const agent = anthropicAgent(client!, "claude-fable-5-1", "claude-opus-5-5");
+
+  await agent.next({ system: undefined, tools: [], messages: [{ role: "user", text: "hi" }] });
+
+  assert.equal(seen.length, 1);
+  assert.equal(
+    decodeURIComponent(new URL(seen[0]!.url).pathname),
+    "/model/eu.anthropic.claude-opus-5-5/invoke",
+  );
+});
+
+test("on Bedrock, a base URL in the environment cannot move the host out of Frankfurt", async () => {
+  const saved = process.env.ANTHROPIC_BEDROCK_BASE_URL;
+  process.env.ANTHROPIC_BEDROCK_BASE_URL = "https://outside-eu.example.invalid";
+  try {
+    const { fetch, seen } = fakeFetch();
+    const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+
+    await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
+
+    assert.equal(new URL(seen[0]!.url).hostname, "bedrock-runtime.eu-central-1.amazonaws.com");
+  } finally {
+    if (saved === undefined) delete process.env.ANTHROPIC_BEDROCK_BASE_URL;
+    else process.env.ANTHROPIC_BEDROCK_BASE_URL = saved;
+  }
+});
+
+test("on Bedrock, a bearer token gives no client, because it would replace the task role", () => {
+  const env = { ANTHROPIC_BACKEND: "bedrock", AWS_BEARER_TOKEN_BEDROCK: "token" };
+  assert.equal(anthropicClient({}, env), null);
+  assert.equal(anthropicConfigured(env), false);
+});
+
+test("an unknown backend gives no client, even with a key, and no call can leave", () => {
+  const env = { ANTHROPIC_BACKEND: "bedrok", ANTHROPIC_API_KEY: "sk-test" };
+  assert.equal(anthropicClient({}, env), null);
+  assert.equal(anthropicConfigured(env), false);
+});

@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { configured } from "@/lib/readings/decisions/engine";
+import { anthropicClient } from "@/lib/readings/anthropic/client";
 import type { ActionKey } from "@/lib/readings/intent-engine/actions";
 import {
   buildNamesPrompt,
@@ -139,14 +139,13 @@ export function maxNamesPerRun(env: Record<string, string | undefined> = process
   return Math.floor(envNumber("INTENT_ENGINE_MAX_NAMES", DEFAULT_MAX_NAMES, (n) => n >= 0, env));
 }
 
-/** A structured-output Anthropic completion, or null without an API key. */
+/** A structured-output Anthropic completion, or null without a Claude backend. */
 export function anthropicNamesComplete(
   model: string,
   env: Record<string, string | undefined> = process.env,
 ): NamesComplete | null {
-  const apiKey = configured(env.ANTHROPIC_API_KEY);
-  if (!apiKey) return null;
-  const client = new Anthropic({ apiKey, timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES });
+  const client = anthropicClient({ timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES }, env);
+  if (!client) return null;
   return async (system, user, keyed) => {
     const message = await client.messages.create(
       wellFormedJson({
