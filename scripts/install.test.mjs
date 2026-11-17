@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -188,6 +188,7 @@ test("write_env fills every server secret with a fresh random value and prints n
     return secret;
   });
   assert.equal(new Set(secrets).size, secrets.length);
+  assert.equal(statSync(join(dir, ".env")).mode & 0o777, 0o600, "only the owner reads .env");
   assert.equal(value(text, "BASE_URL"), "http://localhost:3000", "the rest of .env.example stays");
 
   const other = checkout();

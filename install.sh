@@ -220,7 +220,7 @@ ensure_git() {
     manager=$(package_manager)
     [ -n "$manager" ] && confirm "git is not installed. Install it now with $manager?" &&
       case "$manager" in
-        apt-get) as_root apt-get update -qq && as_root apt-get install -y -qq git ;;
+        apt-get) as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git ;;
         apk) as_root apk add --no-cache git ;;
         *) as_root "$manager" install -y git ;;
       esac
@@ -352,16 +352,19 @@ write_env() {
     return 0
   fi
   tmp="$1/.env.tmp.$$"
-  cp "$1/.env.example" "$tmp"
-  chmod 600 "$tmp"
-  for name in $ENV_SECRETS; do
-    secret=$(random_hex)
-    if grep -q "^$name=" "$tmp"; then
-      sed "s/^$name=.*/$name=$secret/" "$tmp" >"$tmp.next" && mv "$tmp.next" "$tmp"
-    else
-      printf '\n%s=%s\n' "$name" "$secret" >>"$tmp"
-    fi
-  done
+  # A subshell, so the owner-only umask covers every file written here and nothing after.
+  (
+    umask 077
+    cat "$1/.env.example" >"$tmp"
+    for name in $ENV_SECRETS; do
+      secret=$(random_hex)
+      if grep -q "^$name=" "$tmp"; then
+        sed "s/^$name=.*/$name=$secret/" "$tmp" >"$tmp.next" && mv "$tmp.next" "$tmp"
+      else
+        printf '\n%s=%s\n' "$name" "$secret" >>"$tmp"
+      fi
+    done
+  )
   mv "$tmp" "$1/.env"
   ok "Created .env with new random secrets ($(echo "$ENV_SECRETS" | sed 's/ /, /g'))."
   info "Keep a copy of .env: a lost TRACE_SIGNALS_HASH_SALT splits old hashes from new."
