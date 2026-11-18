@@ -20,16 +20,50 @@ async function setup(sqlText: string): Promise<BoundReadDb> {
   return drizzle(client, { schema }) as unknown as BoundReadDb;
 }
 
-test("a project with nothing analyzed reads as no update and idle", async () => {
+/** The edition's running import, as `runningImport` answers it: one count per project. */
+function importing(counts: Record<string, number>) {
+  return async (projectId: string) =>
+    projectId in counts ? { runsImported: counts[projectId] as number } : null;
+}
+
+test("a project with nothing analyzed reads as no update, idle, not importing", async () => {
   const db = await setup("");
   assert.deepEqual(await loadAnalysisFreshness(db, PROJ), {
     updatedAt: null,
     working: false,
     importing: null,
   });
+  assert.deepEqual(await loadAnalysisFreshness(db, PROJ, importing({})), {
+    updatedAt: null,
+    working: false,
+    importing: null,
+  });
 });
 
-test("the latest finished job of this project and its queued work", async () => {
+test("an import in progress reads as its runs so far, from the edition's running import", async () => {
+  const db = await setup("");
+  const freshness = await loadAnalysisFreshness(db, PROJ, importing({ [PROJ]: 1240, [OTHER]: 5 }));
+  assert.deepEqual(freshness.importing, { runsImported: 1240 });
+});
+
+test("a running import that cannot be read leaves the freshness line as it is, not importing", async () => {
+  const db = await setup(`
+    insert into jobs (project_id, kind, status, created_at, finished_at) values
+      ('${PROJ}', 'craft_tools', 'queued', now(), null);
+  `);
+  const freshness = await loadAnalysisFreshness(db, PROJ, async () => {
+    throw new Error("imports unreadable");
+  });
+  assert.equal(freshness.working, true);
+  assert.equal(freshness.importing, null);
+});
+
+test("without an edition (no running-import read) nothing is ever importing", async () => {
+  const db = await setup("");
+  assert.equal((await loadAnalysisFreshness(db, PROJ, undefined)).importing, null);
+});
+
+test("the latest finished job of this project, its queued work and its running import", async () => {
   const db = await setup(`
     insert into jobs (project_id, kind, status, created_at, finished_at) values
       ('${PROJ}', 'match_quality_run', 'done', now() - interval '20 minutes', now() - interval '10 minutes'),
@@ -37,22 +71,24 @@ test("the latest finished job of this project and its queued work", async () => 
       ('${PROJ}', 'craft_tools', 'queued', now(), null),
       ('${OTHER}', 'match_quality_run', 'done', now(), now());
   `);
-  const freshness = await loadAnalysisFreshness(db, PROJ);
+  const freshness = await loadAnalysisFreshness(db, PROJ, importing({ [PROJ]: 1240 }));
   const age = Date.now() - Date.parse(freshness.updatedAt!);
   assert.ok(
     age > 2.5 * 60_000 && age < 3.5 * 60_000,
     "the newest of this project's jobs, not another project's",
   );
   assert.equal(freshness.working, true);
+  assert.deepEqual(freshness.importing, { runsImported: 1240 });
 });
 
-test("only finished jobs read as idle", async () => {
+test("a finished import and only finished jobs read as idle", async () => {
   const db = await setup(`
     insert into jobs (project_id, kind, status, created_at, finished_at) values
       ('${PROJ}', 'match_quality_run', 'done', now() - interval '2 minutes', now() - interval '1 minute');
   `);
-  const freshness = await loadAnalysisFreshness(db, PROJ);
+  const freshness = await loadAnalysisFreshness(db, PROJ, importing({}));
   assert.equal(freshness.working, false);
+  assert.equal(freshness.importing, null);
 });
 
 test("a page's progress counts only its own kinds and this project's jobs", async () => {

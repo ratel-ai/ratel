@@ -54,7 +54,7 @@ finish, calls work), each left out below 20 observations; the score shows on the
 project. `trace-signals/signals/early-reading.ts` is the
 quick first reading (RC-224), for every project: a new project's first run reads
 a week, is marked early, and queues the `full_reading` run; a reading made while an import runs
-(`composition.importRunning`, the edition's) stays early too.
+(`composition.importRunning`, the edition's, else its `runningImport`) stays early too.
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading
 of the explorer's reading, so its registration fills the seam when it lands; unset, a completed
 explorer run queues nothing. `intent-graph/fold-job.ts` exports `foldSeams.loadShadow`: the two
