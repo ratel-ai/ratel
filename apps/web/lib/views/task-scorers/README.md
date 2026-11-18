@@ -11,15 +11,20 @@ is on (`FF_EVAL_GATE`, `eval-gate/gate.ts`).
 | `schema.ts` | `task_scorers` (a task's scorers: kind, config, enabled, `default` or `user`, version) and `task_scores_daily` (per UTC day and scorer kind, plus `overall`: runs scored and passed, and the live judge's `judge_spend`). The task-scorers partition of the upstream schema hub, column for column, because production already has the tables |
 | `store.ts` | `scorersFor` (the task's defaults until a person edits one), `upsertScorer`, `resetScorer`, `dailyScoresFor`, `upsertDailyScores` |
 | `actions.ts` | a person's scorer changes, checked and applied (the pages' server action calls it) |
-| `job.ts` | `scoreTasksJob` (the `score_tasks` handler: every closed run of each task scored by UTC day, today's judged by `judge.ts`, then the due eval sets queued) and `enqueueScoreTasksJob` |
+| `job.ts` | `scoreTasksJob` (the `score_tasks` handler: every closed run of each task scored by UTC day, today's judged by `judge.ts`, then the due eval sets queued), `enqueueScoreTasksJob`, and `enqueueDueTaskScores`, the drain's daily sweep: up to 25 projects a tick with a closed task run in the last 7 days and no score job since the start of the UTC day. A gate refusal is recorded as a finished job, with one `task_scores_skipped` event |
 | `judge.ts` | `judgeTaskSample`: a `judge_criteria` scorer judged on a daily sample (`TASK_JUDGE_SAMPLE`, 20) under its own cap (`TASK_JUDGE_BUDGET_USD`, $0.50) and the organization's daily budget, reserved before any call |
-| `register.ts` | the `score_tasks` registration, and the fill of `computeSeams.enqueueTaskScores`: a completed signal run queues the project's live scores |
+| `register.ts` | the `score_tasks` registration, and the fill of `computeSeams.enqueueTaskScores`: a completed signal run queues the project's live scores; and the drain's `task_scores_enqueue` before-step (heartbeat `taskScoresEnqueued`), so tasks are scored daily without waiting for a signal run |
 
 With no `ANTHROPIC_API_KEY` the judge is skipped (no row, no call) and the deterministic scorers
 still write their counts; `EVAL_GATE_MOCK_MODEL=1` judges with a rule stand-in outside
 production. As upstream, `score_tasks` is not coalesced: each completed signal run queues one.
+With `FF_EVAL_GATE` off, the sweep still records one refusal per project with task runs a day,
+as upstream does for an organization without the gate.
 
-**Owned (ADR-0030).** `schema.ts` and `register.ts`; `job.ts` and `job.integration.test.ts` (the
-gate is the `FF_EVAL_GATE` env value, carried in upstream's `flagDeps`); `judge.ts` (the core has
+**Owned (ADR-0030).** `schema.ts` and `register.ts`; `job.ts` and its tests (the
+gate is the `FF_EVAL_GATE` env value, carried in upstream's `flagDeps`; the user scorers that
+upstream's job also runs are Evals' and are left out); `sweep.integration.test.ts` and
+`drain-task-scores*.test.ts` (upstream's sweep and drain tests, on the env switch and the
+drain-step registry); `judge.ts` (the core has
 no `organizations` table, so the budget lock is `eval-gate/store.ts#lockOrganizationSpend`, and
 it loads `task-evals/spend.ts` so the budget counts the judge). The rest are copies.
