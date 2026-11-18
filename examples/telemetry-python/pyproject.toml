@@ -9,8 +9,11 @@ dependencies = [
     # The console exporter + TracerProvider the demo wires by hand. Bounded to the
     # same line as ratel-ai-telemetry[otlp] (it caps OTel below 1.42 to keep py3.9).
     "opentelemetry-sdk>=1.41.0,<1.42",
+    # experimental_with_variant + ExperimentalVariantSpanProcessor tag one run.
+    "ratel-ai",
 ]
 
 [tool.uv.sources]
 # Use the local telemetry helper from this monorepo rather than PyPI.
 ratel-ai-telemetry = { path = "../../src/telemetry/python" }
+ratel-ai = { path = "../../src/sdk/python" }

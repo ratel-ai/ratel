@@ -109,6 +109,7 @@ from .skill_tools import GET_SKILL_CONTENT_ID, get_skill_content_tool
 # (needs the [otlp] extra).
 from .telemetry import configure_telemetry
 from .turns import TURN_USER_MESSAGE_MAX_BYTES, Turn, current_turn_id
+from .variant import ExperimentalVariantSpanProcessor, experimental_with_variant
 
 __all__ = [
     "AdaptiveRankingStatus",
@@ -181,6 +182,8 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
+    "experimental_with_variant",
+    "ExperimentalVariantSpanProcessor",
     "define_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
