@@ -21,7 +21,7 @@ npm packages.
 | `projects/names.ts` | project name limits and normalization, safe for client components |
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
 | `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request |
-| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
+| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port; `planSummary`, `planWithWindow`, `planName`, `planLabel` and `billingSelfServe` over its optional `plans` (no summary, no plan named and no self-serve billing without them) |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
 | `edition-telemetry.ts` | what the instrumentation hands the telemetry port: an uncaught request error (`onRequestError`) and the analytics flush at shutdown, the port loaded only when called; the open-source port has neither, so nothing happens |
 | `track-client.ts` | the browser's `track` and `captureClientException` over the browser seam (`contracts/client-analytics.ts`): silent until an edition installs its client, never throwing |

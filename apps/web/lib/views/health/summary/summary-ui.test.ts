@@ -1,7 +1,7 @@
 // First: lets node load the components' stylesheet imports, and gives the router contexts.
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { type TestContext, test } from "node:test";
 import { createElement } from "react";
 import { IssueDetail } from "@/components/console/health/v2/IssueDetail";
 import { issueRows, rowOfIssue } from "@/components/console/health/v2/issue-rows";
@@ -15,6 +15,7 @@ import {
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { findDsViolations } from "@/eslint-rules/ds-tokens.mjs";
+import { composition } from "@/lib/composition/ports";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
   HEALTH_SCORE_VERSION,
@@ -278,6 +279,7 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     model: READY_MODEL,
     state: { kind: "ready" },
     windowOptions: windowOptionsForPlan(30),
+    billingHref: null,
     tasks: TASKS,
     fixes: { open: [FIX, REWRITE, COMBINE], applied: [] },
     corrections: CARD,
@@ -767,6 +769,86 @@ test("a plan without example turns says how many there are and where to get them
   assert.match(page, /data-signals-locked="3"/);
   assert.match(visibleText(page), /3 more issues outside this project(?:'|&#x27;)s limits\./);
   assert.doesNotMatch(page, /See plans/);
+});
+
+/** An edition's plan table, as upstream's (Hobby 7 days, Plus 30, Pro 90), for one test. */
+function withPlans(t: TestContext): void {
+  const previous = composition.entitlements;
+  composition.entitlements = {
+    ...previous,
+    plans: {
+      summary: () => {
+        throw new Error("not read by the Summary");
+      },
+      withAgentHealthWindow: (days) => (days <= 7 ? "free" : days <= 30 ? "plus" : "pro"),
+      name: (planId) => ({ free: "Hobby", plus: "Plus", pro: "Pro" })[planId] ?? planId,
+    },
+  };
+  t.after(() => {
+    composition.entitlements = previous;
+  });
+}
+
+test("with self-serve billing: the plan a window needs is named, and See plans links to Billing", (t) => {
+  withPlans(t);
+  const billingHref = "/org/acme/billing";
+  const ready = render(createElement(SummaryView, props({ billingHref })), {
+    pathname: `${ROOT}/health`,
+  });
+  // The window as links, the plan's longest one locked with the plan that has it.
+  assert.match(ready, /data-health-window-locked="90"[^]*90 days[^]*, on Pro/);
+
+  const locked = render(
+    createElement(
+      SummaryView,
+      props({
+        billingHref,
+        model: { ...READY_MODEL, evidenceTurnsPerSignal: 0, lockedCount: 3 },
+      }),
+    ),
+    { pathname: `${ROOT}/health` },
+  );
+  assert.match(locked, /data-signals-locked="3"[^]*href="\/org\/acme\/billing"[^>]*>See plans/);
+
+  const tooFew = render(
+    createElement(
+      SummaryView,
+      props({
+        billingHref,
+        state: {
+          kind: "too_few",
+          turns: 12,
+          floor: 50,
+          imported: false,
+          wider: { days: 30, plan: "plus" },
+        },
+      }),
+    ),
+    { pathname: `${ROOT}/health` },
+  );
+  assert.match(visibleText(tooFew), /The last 30 days have enough, and Plus includes them\./);
+  assert.match(tooFew, /data-health-see-plans="true"[^>]*>See plans/);
+  assert.match(tooFew, /href="\/org\/acme\/billing"/);
+  assert.doesNotMatch(tooFew, /data-health-window-switch=/, "no link to a window the plan lacks");
+
+  // Billing off: no plan is named and nothing links to Billing.
+  const off = render(
+    createElement(
+      SummaryView,
+      props({
+        billingHref: null,
+        state: {
+          kind: "too_few",
+          turns: 12,
+          floor: 50,
+          imported: false,
+          wider: { days: 30, plan: "plus" },
+        },
+      }),
+    ),
+    { pathname: `${ROOT}/health` },
+  );
+  assert.doesNotMatch(off, /See plans|Plus includes/);
 });
 
 function otelTile(

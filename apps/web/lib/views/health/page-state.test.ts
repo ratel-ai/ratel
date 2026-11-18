@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { type TestContext, test } from "node:test";
+import { composition } from "@/lib/composition/ports";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import type { ImportSummary } from "@/lib/views/health/imports-types";
 import {
@@ -651,3 +652,86 @@ function dayText(n: number): string {
     timeZone: "UTC",
   });
 }
+
+/**
+ * An edition's plan table, as upstream's: Hobby 7 days, Plus 30, Pro 90. Installed for one
+ * test, so the cases below are upstream's own, with plan names.
+ */
+function withPlans(t: TestContext): void {
+  const windows: ReadonlyArray<[string, number]> = [
+    ["free", 7],
+    ["plus", 30],
+    ["pro", 90],
+  ];
+  const names: Record<string, string> = { free: "Hobby", plus: "Plus", pro: "Pro" };
+  const previous = composition.entitlements;
+  composition.entitlements = {
+    ...previous,
+    plans: {
+      summary: () => {
+        throw new Error("not read by the page state");
+      },
+      withAgentHealthWindow: (days) =>
+        windows.find(([, window]) => window >= days)?.[0] ?? "enterprise",
+      name: (planId) => names[planId] ?? "Enterprise",
+    },
+  };
+  t.after(() => {
+    composition.entitlements = previous;
+  });
+}
+
+test("with an edition's plans: the cheapest plan with a window", (t) => {
+  withPlans(t);
+  assert.equal(planWithWindow(7), "free");
+  assert.equal(planWithWindow(30), "plus");
+  assert.equal(planWithWindow(90), "pro");
+});
+
+test("with an edition's plans: outside the window the plan lacks, names the plan", (t) => {
+  withPlans(t);
+  const ledger = facts([day(20, { closed: 30 }), day(40, { closed: 5 })]);
+  const free = state({ ledger, planWindowDays: 7 });
+  assert.equal(free.kind === "outside_window" && free.suggestion?.days, 30);
+  assert.equal(free.kind === "outside_window" && free.suggestion?.plan, "plus");
+  assert.equal(
+    copyOf(free).body,
+    `Your 30 turns are from ${dayText(20)}. Plus includes 30\u00a0days.`,
+  );
+
+  const plus = state({
+    ledger: facts([day(40, { closed: 5 }), day(60, { closed: 3 })]),
+    windowDays: 30,
+    planWindowDays: 30,
+  });
+  assert.equal(plus.kind === "outside_window" && plus.suggestion?.plan, "pro");
+  assert.match(
+    copyOf(plus, 30).body,
+    new RegExp(
+      `^Your 8 turns are from ${dayText(60)} to ${dayText(40)}\\. Pro includes 90\u00a0days\\.$`,
+    ),
+  );
+});
+
+test("with an edition's plans: too few, and the plan that has a window with enough", (t) => {
+  withPlans(t);
+  const ledger = facts([day(2, { closed: 12 }), day(20, { closed: 60 })]);
+  assert.deepEqual(state({ ledger }), {
+    kind: "too_few",
+    turns: 12,
+    floor: 50,
+    imported: false,
+    wider: { days: 30, plan: null },
+  });
+  const locked = state({ ledger, planWindowDays: 7 });
+  assert.equal(locked.kind === "too_few" && locked.wider?.plan, "plus");
+  assert.equal(
+    copyOf(locked).body,
+    "A reading needs 50. The last 30\u00a0days have enough, and Plus includes them.",
+  );
+  // Billing off: no plan can be picked, so none is named.
+  assert.equal(
+    healthStateCopy(locked, { windowDays: 7, now: NOW, plans: false }).body,
+    "A reading needs 50. It appears on its own once there are enough.",
+  );
+});
