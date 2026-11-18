@@ -44,7 +44,13 @@ test("the list shows each key's access, and which keys are safe in an app (RC-58
     }),
   ];
   const html = renderWithRouter(
-    createElement(ApiKeysTable, { keys, projectSlug: "demo", organizationId: "o1", now: NOW }),
+    createElement(ApiKeysTable, {
+      keys,
+      projectSlug: "demo",
+      organizationId: "o1",
+      restricted: false,
+      now: NOW,
+    }),
   );
   assert.match(html, />Access</);
   assert.match(html, />Full access</);
