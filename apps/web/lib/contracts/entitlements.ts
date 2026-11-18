@@ -51,7 +51,43 @@ export type EventQuotaResult =
   | { ok: true }
   | { ok: false; plan: string; limit: number; used: number; message: string };
 
+/**
+ * An organization's plan and subscription state as the console and the MCP server report it.
+ * Only an edition that sells plans has one.
+ */
+export type PlanSummary = {
+  /** The plan identifier, as `planId` answers it. */
+  id: string;
+  /** Its display name ("Plus"). */
+  name: string;
+  /** Whether the plan is a paid one. */
+  paid: boolean;
+  /** The billing provider's subscription status, null with no subscription. */
+  subscriptionStatus: string | null;
+  /** Paid, with a failed renewal still being retried. */
+  pastDue: boolean;
+  /** End of the current paid period (ISO 8601), null when unknown. */
+  currentPeriodEnd: string | null;
+  /** Whether the organization picks and changes its own plan; false when it is set by hand. */
+  selfServeBilling: boolean;
+};
+
+/** The plan table of an edition that sells plans. */
+export type PlanCatalog = {
+  /** The organization's plan and subscription state. */
+  summary(org: OrgLimitView): PlanSummary;
+  /** The cheapest plan whose Agent health window reaches `days`: its id. */
+  withAgentHealthWindow(days: number): string;
+  /** A plan's display name, by id. */
+  name(planId: string): string;
+};
+
 export type EntitlementsPort = {
+  /**
+   * The edition's plans, when it sells them. Absent in the open-source edition: no plan is
+   * named, no billing is self-serve, and the quota tool carries no plan block.
+   */
+  plans?: PlanCatalog;
   /** A short plan identifier for display and analytics (`"oss"`, `"free"`, `"pro"`, ...). */
   planId(org: OrgLimitView): string;
   getLimits(org: OrgLimitView): PlanLimits;

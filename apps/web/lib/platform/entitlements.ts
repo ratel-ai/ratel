@@ -5,6 +5,7 @@ import type {
   MeteredFeatureKey,
   OrgLimitView,
   PlanLimits,
+  PlanSummary,
   QuotaKey,
   QuotaResult,
 } from "@/lib/contracts/entitlements";
@@ -20,6 +21,7 @@ export type {
   MeteredFeatureKey,
   OrgLimitView,
   PlanLimits,
+  PlanSummary,
   QuotaKey,
   QuotaResult,
 };
@@ -40,14 +42,34 @@ export function hasPaidAccess(org: OrgLimitView): boolean {
   return resolvePlanId(org) !== "free";
 }
 
-/** Whether the workspace can change its own plan; only a billing edition can. */
-export function billingSelfServe(_org: OrgLimitView): boolean {
-  return false;
+/** Whether the workspace can change its own plan; only an edition with plans can. */
+export function billingSelfServe(org: OrgLimitView): boolean {
+  return composition.entitlements.plans?.summary(org).selfServeBilling ?? false;
 }
 
+/** Display label for the organization's plan ("Plus"; "Oss" in the open-source edition). */
 export function planLabel(org: OrgLimitView): string {
-  const id = resolvePlanId(org);
-  return id.charAt(0).toUpperCase() + id.slice(1);
+  return planName(resolvePlanId(org));
+}
+
+/** A plan's display name, by id; without an edition's plans, the id capitalized. */
+export function planName(planId: string): string {
+  const plans = composition.entitlements.plans;
+  if (plans) return plans.name(planId);
+  return planId.charAt(0).toUpperCase() + planId.slice(1);
+}
+
+/** The plan and subscription state, or null when the edition has no plans. */
+export function planSummary(org: OrgLimitView): PlanSummary | null {
+  return composition.entitlements.plans?.summary(org) ?? null;
+}
+
+/**
+ * The cheapest plan whose Agent health window reaches `days`, or null when the edition has no
+ * plans (a window the limits do not include is then not offered by name).
+ */
+export function planWithWindow(days: number): string | null {
+  return composition.entitlements.plans?.withAgentHealthWindow(days) ?? null;
 }
 
 /** Effective limits for an organization: the edition's defaults overlaid with its overrides. */

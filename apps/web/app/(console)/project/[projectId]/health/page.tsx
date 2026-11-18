@@ -8,7 +8,7 @@ import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { billingSelfServe, getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import {
@@ -47,8 +47,8 @@ export const metadata = { title: "Agent health" };
  * the issues open, and self-corrections. Each read degrades on its own.
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
- * organization, a 404 otherwise); the limits from the entitlements port.
- * No plan to pick here; the importer and the share dialog are the edition's.
+ * organization, a 404 otherwise); the limits and plans from the entitlements port.
+ * The importer and the share dialog are the edition's.
  */
 export default async function AgentHealthPage({
   params,
@@ -66,6 +66,7 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
+  const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
   const [loaded, imports, share, tasks, fixes, corrections] = await Promise.all([
@@ -167,6 +168,7 @@ export default async function AgentHealthPage({
       model={model}
       state={state}
       windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
+      billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
       tasks={tasks}
       fixes={fixes}
       corrections={corrections}

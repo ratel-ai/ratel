@@ -6,14 +6,21 @@ import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import {
-  billableProjectCount,
+  checkMeteredFeature,
   checkQuota,
   getLimits,
+  type OrgLimitView,
+  type PlanLimits,
+  planSummary,
   type QuotaKey,
 } from "@/lib/platform/entitlements";
 import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { projectCapacity } from "@/lib/platform/projects/capacity";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
+import { countRunsSince } from "@/lib/synthesis/match-quality/queries";
+import { nextBillingPeriodStart, startOfBillingPeriod } from "@/lib/synthesis/match-quality/window";
+import { budgetLine, type RunBudget } from "@/lib/views/quality/run-menu";
 
 /**
  * Account status: the "why is my call failing" domain.
@@ -48,6 +55,9 @@ export interface AccountOperationDeps {
   listProjectsForOrganization: typeof listProjectsForOrganization;
   getJobForProject: typeof getJobForProject;
   listInFlightJobs: typeof listInFlightJobs;
+  /** Match quality runs the project started since a date (the console's run budget count). */
+  countMatchQualityRunsSince: (projectId: string, since: Date) => Promise<number>;
+  now: () => Date;
 }
 
 export const defaultAccountDeps: AccountOperationDeps = {
@@ -57,9 +67,69 @@ export const defaultAccountDeps: AccountOperationDeps = {
   listProjectsForOrganization,
   getJobForProject,
   listInFlightJobs,
+  countMatchQualityRunsSince: (projectId, since) => countRunsSince(projectId, since),
+  now: () => new Date(),
 };
 
 const QUOTA_KEYS: readonly QuotaKey[] = ["maxProjects", "maxSkillsPerProject", "maxMembers"];
+
+/* ---------------------------------- quota --------------------------------- */
+
+/** JSON has no Infinity: an unlimited limit would serialize as null and read as "no limit known". */
+function limitValue(value: number): number | "unlimited" {
+  return Number.isFinite(value) ? value : "unlimited";
+}
+
+function serializeLimits(limits: PlanLimits): Record<keyof PlanLimits, number | "unlimited"> {
+  return Object.fromEntries(
+    Object.entries(limits).map(([key, value]) => [key, limitValue(value)]),
+  ) as Record<keyof PlanLimits, number | "unlimited">;
+}
+
+/** The match quality run budget as the Quality page's menu words it (`lib/views/quality`). */
+function matchQualityBudget(organization: OrgLimitView, used: number, now: Date) {
+  const access = checkMeteredFeature(
+    organization,
+    "matchQualityRunsPerMonth",
+    used,
+    "Match quality",
+  );
+  const resetsAt = nextBillingPeriodStart(now);
+  if (access.ok) {
+    const unlimited = !Number.isFinite(access.limit);
+    const budget: RunBudget = { spent: false, remaining: access.remaining };
+    return {
+      included: true,
+      used,
+      limit: unlimited ? null : access.limit,
+      remaining: unlimited ? null : access.remaining,
+      unlimited,
+      resetsAt: resetsAt.toISOString(),
+      summary: budgetLine(budget),
+    };
+  }
+  if (access.reason === "not_on_plan") {
+    return {
+      included: false,
+      used,
+      limit: 0,
+      remaining: 0,
+      unlimited: false,
+      resetsAt: null,
+      summary: access.message,
+    };
+  }
+  const budget: RunBudget = { spent: true, limit: access.limit, resetsAt };
+  return {
+    included: true,
+    used,
+    limit: access.limit,
+    remaining: 0,
+    unlimited: false,
+    resetsAt: resetsAt.toISOString(),
+    summary: budgetLine(budget),
+  };
+}
 
 export function accountOperations(deps: AccountOperationDeps = defaultAccountDeps): McpOperation[] {
   return [
@@ -88,10 +158,19 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
     defineOperation({
       id: "get_quota_status",
       domain: "account",
-      title: "Plan limits",
+      title: "Plan and limits",
       description:
-        "The organization's plan, its numeric limits (projects, skills per project, members), and usage against each quota counted as the console counts it (the sample project is free). Explains quota_exceeded errors on writes.",
-      keywords: ["plan limit", "quota", "plan", "tier", "near the limit"],
+        "The organization's plan and subscription state (paid, past due, period end), its limits, usage against each quota (projects, skills per project, members) counted as the console counts them, and this project's match quality runs left this month. Explains quota_exceeded errors on writes.",
+      keywords: [
+        "plan limit",
+        "quota",
+        "plan",
+        "tier",
+        "near the limit",
+        "subscription",
+        "past due",
+        "billing",
+      ],
       scope: "organization",
       mutates: false,
       params: z.object({ ...projectScoped }),
@@ -99,17 +178,20 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
         const organization = await deps.getOrganizationByProjectId(ctx.projectId);
         if (!organization) throw notFound("organization");
 
-        const [skills, members, projects] = await Promise.all([
+        const now = deps.now();
+        const [skills, members, projects, matchQualityRuns] = await Promise.all([
           deps.countSkills(ctx.projectId),
           deps.countMemberships(organization.id),
           deps.listProjectsForOrganization(organization.id),
+          deps.countMatchQualityRunsSince(ctx.projectId, startOfBillingPeriod(now)),
         ]);
         const limits = getLimits(organization);
-        // The sample project does not count against maxProjects, exactly as on the Projects page.
-        const billable = billableProjectCount(projects);
-        const hasSampleProject = projects.some((project) => project.isDemo);
+        // The demo project does not count against maxProjects, exactly as on the Projects page.
+        const capacity = projectCapacity(organization, projects);
+        // Owned: only an edition with plans has a plan block; the open-source edition has none.
+        const plan = planSummary(organization);
         const counts: Record<QuotaKey, number> = {
-          maxProjects: billable,
+          maxProjects: capacity.used,
           maxSkillsPerProject: skills,
           maxMembers: members,
         };
@@ -117,7 +199,8 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
         return {
           data: {
             organization: { id: organization.id, slug: organization.slug },
-            limits,
+            ...(plan ? { plan } : {}),
+            limits: serializeLimits(limits),
             quotas: QUOTA_KEYS.map((key) => {
               const result = checkQuota(organization, key, counts[key]);
               const unlimited = !Number.isFinite(limits[key]);
@@ -127,12 +210,13 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
                 limit: unlimited ? null : limits[key],
                 unlimited,
                 withinLimit: result.ok,
-                ...(key === "maxProjects" && hasSampleProject
+                ...(key === "maxProjects" && capacity.hasDemoProject
                   ? { note: "The demo project does not count toward this limit." }
                   : {}),
                 ...(result.ok ? {} : { message: result.message }),
               };
             }),
+            matchQualityRuns: matchQualityBudget(organization, matchQualityRuns, now),
           },
         };
       },

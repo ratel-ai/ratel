@@ -17,7 +17,7 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`), `get_quota_status` (the entitlements port; the sample project is free), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `telemetry/` | each tool call as an `execute_tool` span with its arguments and result (`trace-tool-call.ts`, owned for one comment; `session.ts`: the client, credential and session ids), sent only to a Ratel project of its own (`export.ts`, owned: off unless `RATEL_SELF_TELEMETRY_MCP_API_KEY` and `RATEL_SELF_TELEMETRY_ENDPOINT` are both set, no default destination; ratel-cloud #482) |
@@ -63,8 +63,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   ledger stay private. `operations/health.ts`: imports come from the edition
   (`EditionUi.HealthImports`). `operations/loop/read.ts`: an unknown organization reads the
   entitlements port's default limits. `operations/ranking.ts`: the Boost reads come from
-  `views/adaptive-ranking/queries.ts`. Upstream's `account.test.ts` (its flag service, wallets and
-  embedding usage) is not here.
+  `views/adaptive-ranking/queries.ts`. `operations/account.test.ts` keeps upstream's quota cases
+  with a stand-in plan table on the entitlements port; its flag service, wallet and embedding
+  usage cases are not here.
 - `connect/snippets.ts` and `snippets.test.ts`: every client carries the project key (Claude
   Code through `--header`, Cursor and VS Code through `${env:RATEL_API_KEY}` in `mcp.json`,
   Claude Desktop through the `mcp-remote` bridge in its config, CI as upstream), because there is

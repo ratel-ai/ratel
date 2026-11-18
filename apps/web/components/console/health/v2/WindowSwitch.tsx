@@ -2,6 +2,7 @@ import { cn } from "@ratel/design-system/cn";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { Lock } from "lucide-react";
 import Link from "next/link";
+import { planName, planWithWindow } from "@/lib/platform/entitlements";
 import {
   agentHealthHref,
   type WindowDays,
@@ -10,8 +11,9 @@ import {
 
 /**
  * 7, 30 or 90 days, as links (the window is URL state, `?days=`), in the segmented look every
- * page uses. A window the organization's limits exclude is not a link: it says so. Owned
- * (ADR-0030): upstream names the plan that includes it; there is no plan table here.
+ * page uses. A window the organization's limits exclude is not a link: it says which plan has
+ * it. Owned (ADR-0030): the plan comes from the edition's plans; without them, the window is
+ * said to be outside the limits.
  */
 export function WindowSwitch({
   projectId,
@@ -33,10 +35,16 @@ export function WindowSwitch({
     >
       {options.map((option) => {
         if (option.locked) {
+          const plan = planWithWindow(option.days);
+          const name = plan ? planName(plan) : null;
           return (
             <Tooltip
               key={option.days}
-              content={`${option.days} days are outside this project's limits`}
+              content={
+                name
+                  ? `${option.days} days are on ${name}`
+                  : `${option.days} days are outside this project's limits`
+              }
             >
               <span
                 tabIndex={0}
@@ -46,7 +54,7 @@ export function WindowSwitch({
               >
                 {option.days} days
                 <Lock aria-hidden className="size-3" />
-                <span className="sr-only">, not included</span>
+                <span className="sr-only">{name ? `, on ${name}` : ", not included"}</span>
               </span>
             </Tooltip>
           );
