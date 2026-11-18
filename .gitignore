@@ -43,6 +43,9 @@ src/rankers/ts/dist/
 # scripts/link-ee.mjs copies its route stubs to apps/web/app/(ee)
 ee/src
 apps/web/app/(ee)
+# ...and places its public/ files under apps/web/public, listed in .ee-public.json
+apps/web/public/email/
+apps/web/.ee-public.json
 
 apps/web/proxy.ts
 # Next.js

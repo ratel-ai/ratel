@@ -1,7 +1,7 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout } from "@ratel/design-system/states";
-import { notFound } from "next/navigation";
 import { startProjectCreationAction } from "@/app/(console)/org/[orgSlug]/actions";
+import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import {
   PROJECT_SEARCH_PARAM,
   projectListItems,
@@ -14,7 +14,6 @@ import {
   projectLimitMessage,
 } from "@/lib/platform/projects/capacity";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
-import { getSessionContext } from "@/lib/platform/session";
 import { NewProjectButton } from "./NewProjectButton";
 import { ProjectsList } from "./ProjectsList";
 
@@ -35,9 +34,7 @@ export async function ProjectsPage({
   slug: string;
   searchParams: SearchParams;
 }) {
-  const context = await getSessionContext();
-  if (!context || context.organization.slug !== slug) notFound();
-  const { organization } = context;
+  const { organization } = await requireOrganizationScope(slug);
   const projects = await listProjectsForOrganization(organization.id);
   const capacity = projectCapacity(organization, projects);
   const createProject = startProjectCreationAction.bind(null, organization.slug);

@@ -17,7 +17,7 @@ export default async function ToolsCatalogPage({
     );
   }
   const { projectId } = await params;
-  // The project layout already guarded the id against the session organization.
+  // The project layout already checked the reader may see the project (a member of its organization).
   const project = await getProjectById(projectId);
   if (!project) notFound();
   return <ToolsV2Page project={project} />;

@@ -1,17 +1,19 @@
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import type { SessionUser } from "@/lib/contracts/session";
+import type { Session, SessionUser } from "@/lib/contracts/session";
 import type { Organization } from "@/lib/platform/organizations";
 import { getProjectById, parseProjectUuid } from "@/lib/platform/projects/queries";
 import type { Project } from "@/lib/platform/projects/schema";
-import { getSessionContext } from "@/lib/platform/session";
+import { getSessionContext, membershipIn } from "@/lib/platform/session";
 
 /**
  * The reader's view of one project: the project, the organization it belongs to and the
- * reader's role in it. Pages and API routes read it through one function each, so the rule
- * (the project is the session organization's, or it does not exist) is written once. Same
- * return shape as upstream's project scope, so copied call sites read `organization` and
- * `project` unchanged.
+ * reader's role in it. Pages and API routes read it through one function each, so the rule is
+ * written once: upstream's (`resolvers.ts`, `resolveProjectScopeOrNull`), the project's own
+ * organization, authorized by the reader's membership in it. The active organization is neither
+ * consulted nor changed, so a link into any organization the reader belongs to opens. Same return
+ * shape as upstream's project scope, so copied call sites read `organization` and `project`
+ * unchanged.
  */
 
 export type OrgRole =
@@ -28,15 +30,34 @@ export interface ProjectScope {
   user: SessionUser;
 }
 
-/** Null when nobody is signed in, the id is not a project id, or the project is another organization's. */
+/**
+ * The rule, given the session and the project read: null when the id is not a project id, there
+ * is no such project, or the reader is not a member of its organization.
+ */
+export async function resolveProjectScope(
+  projectId: string,
+  session: Session,
+  getProject: (id: string) => Promise<Project | null>,
+): Promise<ProjectScope | null> {
+  const id = parseProjectUuid(projectId);
+  if (!id) return null;
+  const project = await getProject(id);
+  if (!project) return null;
+  const membership = membershipIn(session, project.organizationId);
+  if (!membership) return null;
+  return {
+    project,
+    organization: membership.organization,
+    role: membership.role,
+    user: session.user,
+  };
+}
+
+/** Null when nobody is signed in, or under `resolveProjectScope`'s rule. */
 export const findProjectScope = cache(async (projectId: string): Promise<ProjectScope | null> => {
   const session = await getSessionContext();
   if (!session) return null;
-  const id = parseProjectUuid(projectId);
-  if (!id) return null;
-  const project = await getProjectById(id);
-  if (!project || project.organizationId !== session.organization.id) return null;
-  return { project, organization: session.organization, role: session.role, user: session.user };
+  return resolveProjectScope(projectId, session, (id) => getProjectById(id));
 });
 
 /** What a page calls: the scope, or a 404. */

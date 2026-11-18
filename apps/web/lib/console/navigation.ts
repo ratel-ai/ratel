@@ -573,6 +573,27 @@ export function entryHref(
   return organizationSlug ? ONBOARDING_ROUTE : null;
 }
 
+/**
+ * The organization the shell shows (upstream's `AppFrame`): the open project's own, else the one
+ * the route names, else the active one, else the first. The reader may be in a project or an
+ * organization page of any organization they belong to; the active one is only the fallback.
+ */
+export function shellOrganization<O extends { id: string; slug: string }>(
+  organizations: readonly O[],
+  projects: readonly { id: string; organizationId: string }[],
+  pathname: string,
+  activeSlug?: string | null,
+): O | undefined {
+  const project = findProject(projects, projectIdFromPath(pathname));
+  const routeSlug = organizationSlugFromPath(pathname);
+  return (
+    organizations.find(({ id }) => id === project?.organizationId) ??
+    organizations.find(({ slug }) => slug === routeSlug) ??
+    organizations.find(({ slug }) => slug === activeSlug) ??
+    organizations[0]
+  );
+}
+
 /** The edition's organization pages without the paths it hides for this organization. */
 export function visibleOrganizationNav(
   nav: readonly OrganizationNavItem[],

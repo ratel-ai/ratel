@@ -1,9 +1,8 @@
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { getConsoleScope } from "@/lib/console/shell-data";
+import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 
-/** One organization per session: any other slug is a 404, never a page. */
+/** Any organization the reader belongs to opens, as upstream; any other slug is a 404, never a page. */
 export default async function OrganizationLayout({
   children,
   params,
@@ -12,7 +11,7 @@ export default async function OrganizationLayout({
   params: Promise<{ orgSlug: string }>;
 }) {
   if (!isDbConfigured()) return children;
-  const [{ orgSlug }, scope] = await Promise.all([params, getConsoleScope()]);
-  if (!scope || scope.organizationSlug !== orgSlug) notFound();
+  const { orgSlug } = await params;
+  await requireOrganizationScope(orgSlug);
   return children;
 }

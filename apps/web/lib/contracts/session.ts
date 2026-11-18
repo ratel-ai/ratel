@@ -56,6 +56,13 @@ export type SessionPort = {
   /** For the `maxMembers` quota. */
   countMembers(organizationId: string): Promise<number>;
   actingAs(): Promise<ActingAs>;
+  /**
+   * Remembers the project the reader just opened, called by the project layout after the reader
+   * may see it. The edition decides where it is kept and when it is not written (Cloud keeps a
+   * pointer on the user row and writes nothing in a support session). Absent, nothing is
+   * remembered beyond the last-project cookie.
+   */
+  rememberProject?(projectId: string): Promise<void>;
   /** Throws when the deployment cannot authenticate anyone. Called once, at boot. */
   assertConfigured?(): void;
 };
