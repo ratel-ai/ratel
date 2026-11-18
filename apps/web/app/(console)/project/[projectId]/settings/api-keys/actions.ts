@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { composition } from "@/lib/composition/ports";
 import {
   type ApiKeyActionContextResult,
   type ApiKeyActionDeps,
@@ -22,6 +21,7 @@ import {
   revokeApiKey,
 } from "@/lib/platform/projects/queries";
 import { getSessionContext, sessionForOrganization } from "@/lib/platform/session";
+import { supportSessionActingAs } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 
 export type {
@@ -35,7 +35,7 @@ const logger = getLogger("settings/api-keys");
 const apiKeyActionDeps: ApiKeyActionDeps = {
   isDbConfigured,
   getContext: getApiKeyActionContext,
-  actingAs: () => composition.session.actingAs(),
+  actingAs: () => supportSessionActingAs(),
   getProjectBySlug,
   listApiKeysForProject,
   findApiKeyForProject,

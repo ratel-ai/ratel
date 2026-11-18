@@ -7,6 +7,7 @@ import "@/components/console/health/report/health-report.css";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { afterOutsideSupportSession } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import { applyPlanLimits, parseWindowDays } from "@/lib/readings/trace-signals/view";
 import { loadHealthPageModel } from "@/lib/views/health/page-model";
@@ -47,10 +48,14 @@ export default async function HealthReportPage({
     applyPlanLimits(loaded, { ...limits, agentHealthEvidenceTurns: 0 }),
   );
 
-  await trackProductEvent(
-    "health_report_opened",
-    { externalId: user.externalId, orgId: organization.id, projectId: project.id },
-    { window_days: windowDays, surface: "member" },
+  // Never inside an admin support session: the event would describe the
+  // operator, or the customer they are viewing as, doing something they did not.
+  await afterOutsideSupportSession(() =>
+    trackProductEvent(
+      "health_report_opened",
+      { externalId: user.externalId, orgId: organization.id, projectId: project.id },
+      { window_days: windowDays, surface: "member" },
+    ),
   );
 
   const report = buildHealthReport(model, {

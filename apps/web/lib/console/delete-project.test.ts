@@ -88,3 +88,23 @@ test("no project is deleted in any support session, editable included", async ()
   });
   assert.deepEqual(deleted, []);
 });
+
+test("a deleted project is reported after the delete; a refused one is not", async () => {
+  const order: string[] = [];
+  const d = {
+    ...deps().deps,
+    deleteProject: async (id: string) => {
+      order.push(`delete:${id}`);
+    },
+    projectDeleted: async (id: string) => {
+      order.push(`deleted:${id}`);
+    },
+  };
+  await deleteConsoleProject(P1, "One", d);
+  assert.deepEqual(order, [`delete:${P1}`, `deleted:${P1}`]);
+  order.length = 0;
+  await deleteConsoleProject(P1, "Two", d);
+  const support: ActingAs = { kind: "organization", targetId: "o1", readOnly: true };
+  await deleteConsoleProject(P1, "One", { ...d, actingAs: async () => support });
+  assert.deepEqual(order, []);
+});

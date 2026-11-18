@@ -5,11 +5,12 @@
  * the value of this page is that the snippet already contains the reader's own
  * endpoint, so a wrong string here is a support ticket rather than a typo.
  *
- * Every client sends a project API key. This edition has no browser sign-in,
- * so the OAuth path upstream offers its interactive clients does not exist
- * here: a client that connected without a key would get a 401 and nowhere to
- * go. Where upstream's snippet differs from the one below, the difference is
- * exactly the key.
+ * Owned: with `browserSignIn` (an edition that supplies the `mcpOAuth` port)
+ * the snippets are upstream's: Claude Code, Claude Desktop and Cursor sign in
+ * through a browser and carry no key, and only CI keeps one. Without it (the
+ * open-source edition) every client sends a project API key, because a client
+ * that connected without one would get a 401 and nowhere to go; there the
+ * difference from upstream is exactly the key.
  */
 export const MCP_CLIENTS = ["claude-code", "claude-desktop", "cursor", "cli"] as const;
 export type McpClient = (typeof MCP_CLIENTS)[number];
@@ -44,6 +45,11 @@ export interface McpSnippetTarget {
   endpoint: string;
   /** A freshly minted key, shown once. Omitted leaves the placeholder. */
   apiKey?: string | null;
+  /**
+   * Whether the server signs people in through a browser (the edition's
+   * `mcpOAuth` port). Then the interactive clients carry no key.
+   */
+  browserSignIn?: boolean;
 }
 
 export interface McpSnippet {
@@ -54,9 +60,9 @@ export interface McpSnippet {
   /**
    * How this client proves who it is.
    *
-   * `key` is the only value this edition produces: every client carries a
-   * project key. `oauth` stays in the type for the connect component, which
-   * draws a different panel for a client that signs in through a browser.
+   * `oauth` means no key: the client discovers the login server from the
+   * endpoint and sends the user to a browser. `key` is for somewhere with no
+   * browser to send them to (CI), and for every client without browser sign-in.
    */
   auth: "oauth" | "key";
 }
@@ -163,15 +169,72 @@ function cli(target: McpSnippetTarget): McpSnippet {
   };
 }
 
-const BUILDERS: Record<McpClient, (target: McpSnippetTarget) => McpSnippet> = {
+/* Browser sign-in: upstream's snippets, word for word. */
+
+function claudeCodeSignIn({ endpoint }: McpSnippetTarget): McpSnippet {
+  return {
+    client: "claude-code",
+    note: "Run this once, then /mcp inside Claude Code to sign in. No key to paste.",
+    auth: "oauth",
+    code: [
+      `claude mcp add --transport http ${SERVER_NAME} ${endpoint}`,
+      "",
+      "# then, inside Claude Code:",
+      "#   /mcp  ->  ratel  ->  Authenticate",
+    ].join("\n"),
+  };
+}
+
+/**
+ * Desktop and claude.ai take the URL directly: no config file, no secret on
+ * disk, no npx.
+ */
+function claudeDesktopSignIn({ endpoint }: McpSnippetTarget): McpSnippet {
+  return {
+    client: "claude-desktop",
+    note: "Settings -> Connectors -> Add custom connector, then paste this URL.",
+    auth: "oauth",
+    code: endpoint,
+  };
+}
+
+function cursorSignIn({ endpoint }: McpSnippetTarget): McpSnippet {
+  return {
+    client: "cursor",
+    note: "Add to .cursor/mcp.json, or .vscode/mcp.json for VS Code. Sign in when prompted.",
+    auth: "oauth",
+    // No key in the file. This one is commonly committed, so keeping a secret
+    // out of it matters more here than anywhere else on this page.
+    code: JSON.stringify({ mcpServers: { [SERVER_NAME]: { url: endpoint } } }, null, 2),
+  };
+}
+
+/** The only path that still wants a key once the others sign in. */
+function cliSignIn(target: McpSnippetTarget): McpSnippet {
+  return {
+    ...cli(target),
+    note: "For CI and headless runs, where there is no browser to sign in with.",
+  };
+}
+
+type Builders = Record<McpClient, (target: McpSnippetTarget) => McpSnippet>;
+
+const BUILDERS: Builders = {
   "claude-code": claudeCode,
   "claude-desktop": claudeDesktop,
   cursor,
   cli,
 };
 
+const SIGN_IN_BUILDERS: Builders = {
+  "claude-code": claudeCodeSignIn,
+  "claude-desktop": claudeDesktopSignIn,
+  cursor: cursorSignIn,
+  cli: cliSignIn,
+};
+
 export function buildMcpSnippet(client: McpClient, target: McpSnippetTarget): McpSnippet {
-  return BUILDERS[client](target);
+  return (target.browserSignIn ? SIGN_IN_BUILDERS : BUILDERS)[client](target);
 }
 
 export function buildMcpSnippetSet(target: McpSnippetTarget): Record<McpClient, McpSnippet> {

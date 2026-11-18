@@ -1,3 +1,4 @@
+import type { RequestErrorContext, RequestErrorRequest } from "@/lib/contracts/telemetry";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 import type { TelemetryShutdown } from "@/lib/platform/otel/shutdown";
 
@@ -51,6 +52,7 @@ export async function registerNodeInstrumentation(
     { appRole },
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
+    { editionAnalyticsShutdown },
   ] = await Promise.all([
     import("@opentelemetry/api-logs"),
     import("@opentelemetry/context-async-hooks"),
@@ -70,6 +72,7 @@ export async function registerNodeInstrumentation(
     import("@/lib/jobs/role"),
     import("@/lib/platform/otel/ratel-export"),
     import("@/lib/mcp/telemetry/export"),
+    import("@/lib/platform/edition-telemetry"),
   ]);
 
   const resource = resourceFromAttributes(config.resourceAttributes);
@@ -133,7 +136,9 @@ export async function registerNodeInstrumentation(
   registeredShutdown = createTelemetryShutdown({
     tracerProvider,
     loggerProvider,
-    shutdownAnalytics: () => {},
+    // The edition's analytics flush, its port loaded only now: the composition loads after
+    // this registration, so its modules see the patched `pg` and `fetch`.
+    shutdownAnalytics: editionAnalyticsShutdown(EXPORT_TIMEOUT_MS),
     reportError: (error) => {
       console.warn("[otel] telemetry shutdown failed", error);
     },
@@ -146,6 +151,19 @@ export async function registerNodeInstrumentation(
   if (appRole(environment) !== "worker") registerTelemetryShutdownHandlers(registeredShutdown);
   registered = true;
   return registeredShutdown;
+}
+
+/**
+ * Upstream's `onRequestError` body, without its vendor: the edition's port reports the error,
+ * the open-source edition has none and reports nothing.
+ */
+export async function reportRequestError(
+  error: unknown,
+  request: RequestErrorRequest,
+  context: RequestErrorContext,
+): Promise<void> {
+  const { forwardRequestError } = await import("@/lib/platform/edition-telemetry");
+  await forwardRequestError(error, request, context);
 }
 
 /**
@@ -182,6 +200,11 @@ export async function assertComposition(): Promise<void> {
         importedRuns: createImportedRuns(),
         onboarding: createOnboardingService(),
       });
+    }
+    // An edition's MCP tools are checked now, so a bad one stops startup, not a client's call.
+    if (composition.registry.registrations().some((r) => r.mcpOperations?.length)) {
+      const { assembleOperations } = await import("@/lib/mcp/operations");
+      assembleOperations();
     }
     const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
     configuredOrganizationName();

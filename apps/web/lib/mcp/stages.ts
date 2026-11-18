@@ -1,3 +1,5 @@
+import type { Registration } from "@/lib/contracts/registry";
+import { editionToolStage } from "@/lib/mcp/operations/edition";
 import type { LineageStage } from "@/lib/views/lineage/types";
 
 /**
@@ -12,8 +14,9 @@ import type { LineageStage } from "@/lib/views/lineage/types";
  * `null` marks tools that sit outside the loop (identity, account, catalog
  * authoring). `stages.test.ts` fails when a tool is missing from the map.
  *
- * Owned (ADR-0030): the map names the tools this build has. The embedding
- * usage tool is not here.
+ * Owned (ADR-0030): the map names the core's tools. A tool an edition adds
+ * (upstream's embedding and Tool Picker usage) carries its own stage, which
+ * `toolStage` reads.
  */
 export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   // Outside the loop: who you are, what you can reach, limits, background jobs.
@@ -119,8 +122,22 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
 
 export const STAGE_META_KEY = "sh.ratel/stage";
 
+/**
+ * A tool's stage: the map above for a core tool, the tool's own `stage` for one an edition adds
+ * (`operations/edition.ts`), null outside the loop or for an unknown tool.
+ */
+export function toolStage(
+  toolId: string,
+  registrations?: readonly Registration[],
+): LineageStage | null {
+  return TOOL_STAGES[toolId] ?? editionToolStage(toolId, registrations) ?? null;
+}
+
 /** The `_meta` a tool is published with; empty for tools outside the loop. */
-export function stageMeta(toolId: string): Record<string, unknown> {
-  const stage = TOOL_STAGES[toolId];
+export function stageMeta(
+  toolId: string,
+  registrations?: readonly Registration[],
+): Record<string, unknown> {
+  const stage = toolStage(toolId, registrations);
   return stage ? { [STAGE_META_KEY]: stage } : {};
 }

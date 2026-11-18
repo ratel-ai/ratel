@@ -15,5 +15,6 @@ paths = [
   '''^apps/web/lib/platform/api-key-actions\.test\.ts$''',
   '''^apps/web/lib/console/settings/api-keys\.test\.ts$''',
   '''^apps/web/lib/console/settings/api-key-access-ui\.test\.ts$''',
+  '''^apps/web/lib/console/settings/support-session-ui\.test\.ts$''',
   '''^apps/web/lib/platform/otel/config\.test\.ts$''',
 ]

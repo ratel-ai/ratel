@@ -1,12 +1,16 @@
+import { buttonVariants } from "@ratel/design-system/button-variants";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout } from "@ratel/design-system/states";
+import Link from "next/link";
 import { startProjectCreationAction } from "@/app/(console)/org/[orgSlug]/actions";
+import { organizationRoot } from "@/lib/console/navigation";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import {
   PROJECT_SEARCH_PARAM,
   projectListItems,
   projectUsageLabel,
 } from "@/lib/console/settings/projects";
+import { billingSelfServe } from "@/lib/platform/entitlements";
 import {
   PROJECT_LIMIT_PARAM,
   PROJECT_LIMIT_VALUE,
@@ -25,7 +29,8 @@ function first(value: string | string[] | undefined): string {
 
 /**
  * The organization's home: its projects, searchable, and the one primary action, New project. At
- * the plan's cap the action is off and a single notice says why.
+ * the plan's cap the action is off and a single notice says why and what to do (upgrade, where the
+ * workspace can change its own plan).
  */
 export async function ProjectsPage({
   slug,
@@ -36,6 +41,7 @@ export async function ProjectsPage({
 }) {
   const { organization } = await requireOrganizationScope(slug);
   const projects = await listProjectsForOrganization(organization.id);
+  const billingEnabled = billingSelfServe(organization);
   const capacity = projectCapacity(organization, projects);
   const createProject = startProjectCreationAction.bind(null, organization.slug);
   // Set by whichever surface refused: the action behind the button, or /onboarding.
@@ -50,8 +56,19 @@ export async function ProjectsPage({
           <Callout
             tone={refused ? "warning" : "info"}
             title={refused ? "You're at your plan's project limit" : undefined}
+            action={
+              billingEnabled ? (
+                <Link
+                  href={`${organizationRoot(organization.slug)}/billing`}
+                  className={buttonVariants({ variant: "secondary", size: "sm" })}
+                >
+                  See plans
+                </Link>
+              ) : null
+            }
           >
-            {projectLimitMessage(capacity)} Delete a project to add another.
+            {projectLimitMessage(capacity)} Delete a project{billingEnabled ? " or upgrade" : ""} to
+            add another.
           </Callout>
         ) : null}
         <ProjectsList

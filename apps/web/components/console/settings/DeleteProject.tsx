@@ -18,9 +18,12 @@ import { DangerRow } from "./DangerRow";
 export function DeleteProject({
   projectId,
   projectName,
+  restricted,
 }: {
   projectId: string;
   projectName: string;
+  /** Inside an admin support session: deleting is refused, so it is not offered. */
+  restricted: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,13 +49,19 @@ export function DeleteProject({
     <>
       <DangerRow
         action={
-          <Button onClick={() => setOpen(true)} className="text-danger">
+          <Button onClick={() => setOpen(true)} disabled={restricted} className="text-danger">
             Delete project…
           </Button>
         }
       >
-        Deletes <span className="font-medium text-fg">{projectName}</span> with its API keys and
-        every event it received.
+        {restricted ? (
+          "Not available during an admin support session."
+        ) : (
+          <>
+            Deletes <span className="font-medium text-fg">{projectName}</span> with its API keys and
+            every event it received.
+          </>
+        )}
       </DangerRow>
       <ConfirmDialog
         open={open}

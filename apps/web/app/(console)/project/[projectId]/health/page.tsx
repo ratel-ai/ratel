@@ -8,8 +8,12 @@ import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { billingSelfServe, getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import {
+  afterOutsideSupportSession,
+  isRestrictedBySupportSession,
+} from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import {
   type InferredToolShare,
@@ -47,8 +51,8 @@ export const metadata = { title: "Agent health" };
  * the issues open, and self-corrections. Each read degrades on its own.
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
- * organization, a 404 otherwise); the limits from the entitlements port.
- * No plan to pick here; the importer and the share dialog are the edition's.
+ * organization, a 404 otherwise); the limits and plans from the entitlements port.
+ * The importer and the share dialog are the edition's.
  */
 export default async function AgentHealthPage({
   params,
@@ -66,9 +70,10 @@ export default async function AgentHealthPage({
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
+  const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
-  const [loaded, imports, share, tasks, fixes, corrections] = await Promise.all([
+  const [loaded, imports, share, inSupportSession, tasks, fixes, corrections] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
       distinctId,
@@ -81,6 +86,7 @@ export default async function AgentHealthPage({
     }),
     loadImportState(project.id, importsSlot),
     loadShareState(project.id, editionUi?.HealthShare),
+    isRestrictedBySupportSession(),
     loadOrFallback<TaskListModel | null>({
       operation: "agent_health_tasks",
       distinctId,
@@ -114,7 +120,8 @@ export default async function AgentHealthPage({
     // Without an edition importer: none, which the state reads as none.
     imports: imports ? imports.list : importsSlot ? null : [],
     planWindowDays: limits.agentHealthWindowDays,
-    readOnly: false,
+    // An operator's view queues no reading.
+    readOnly: inSupportSession,
   });
 
   // Imported runs with no tool calls: read what their spans still say.
@@ -147,17 +154,21 @@ export default async function AgentHealthPage({
         )
       : false;
 
-  // Best-effort analytics through the telemetry port; a failure never reaches the page.
-  await trackProductEvent(
-    "health_viewed",
-    { externalId: user.externalId, orgId: organization.id, projectId: project.id },
-    {
-      has_signals: hasSignals(model),
-      capture_level: model.captureLevel,
-      ...(state ? { page_state: state.kind } : {}),
-      ...(partial ? { partial_reading: true } : {}),
-      ...(inferredTools ? { inferred_tools: true } : {}),
-    },
+  // Best-effort analytics after the response streams. Never inside an admin
+  // support session: the event would describe the operator, or the customer
+  // they are viewing as, doing something they did not.
+  await afterOutsideSupportSession(() =>
+    trackProductEvent(
+      "health_viewed",
+      { externalId: user.externalId, orgId: organization.id, projectId: project.id },
+      {
+        has_signals: hasSignals(model),
+        capture_level: model.captureLevel,
+        ...(state ? { page_state: state.kind } : {}),
+        ...(partial ? { partial_reading: true } : {}),
+        ...(inferredTools ? { inferred_tools: true } : {}),
+      },
+    ),
   );
 
   return (
@@ -167,6 +178,7 @@ export default async function AgentHealthPage({
       model={model}
       state={state}
       windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
+      billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
       tasks={tasks}
       fixes={fixes}
       corrections={corrections}

@@ -1,3 +1,4 @@
+import { planName } from "@/lib/platform/entitlements";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import { SOURCE_LABEL } from "@/lib/views/health/imports-types";
@@ -60,7 +61,7 @@ export function windowActionLabel(days: WindowDays): string {
  */
 export function planNote(suggestion: WindowSuggestion | null, plans = true): string | null {
   if (!suggestion?.plan || !plans) return null;
-  return `A larger plan includes ${daysText(suggestion.days)}.`;
+  return `${planName(suggestion.plan)} includes ${daysText(suggestion.days)}.`;
 }
 
 /**
@@ -71,7 +72,7 @@ export function planNote(suggestion: WindowSuggestion | null, plans = true): str
 export function widerLine(wider: WindowSuggestion | null, plans = true): string | null {
   if (!wider || (wider.plan && !plans)) return null;
   const enough = `The last ${daysText(wider.days)} have enough`;
-  return wider.plan ? `${enough}, and a larger plan includes them.` : `${enough}.`;
+  return wider.plan ? `${enough}, and ${planName(wider.plan)} includes them.` : `${enough}.`;
 }
 
 /** After "A reading needs 50.": where there are enough, or that it comes on its own. */

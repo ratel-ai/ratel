@@ -87,6 +87,8 @@ export interface SummaryViewProps {
   /** What the route decided is true for this window; null when the ledger could not be read. */
   state: HealthPageState | null;
   windowOptions: readonly WindowOption[];
+  /** Where a plan can be picked (billing is self-serve); null names no plan and hides the links. */
+  billingHref: string | null;
   /** Null when the task list could not be read. */
   tasks: TaskListModel | null;
   /** Null when Fixes could not be read: no issue then claims a fix. */
@@ -191,6 +193,7 @@ export function SummaryView(props: SummaryViewProps) {
 function NotReady({
   projectId,
   model,
+  billingHref,
   state,
   canImport,
   imports,
@@ -209,6 +212,7 @@ function NotReady({
           state={state}
           windowDays={model.windowDays}
           canImport={canImport}
+          billingHref={billingHref}
           sourceLabel={imports?.sourceLabel}
         />
       )}
@@ -224,6 +228,7 @@ function Ready({
   tasks,
   fixes,
   corrections,
+  billingHref,
   imports,
   inferredTools = false,
 }: SummaryViewProps) {
@@ -255,7 +260,7 @@ function Ready({
       windowLabel={runLabel}
       examplesAllowed={model.evidenceTurnsPerSignal > 0}
       lockedCount={model.lockedCount}
-      upgradeHref={null}
+      upgradeHref={billingHref}
       dismissed={model.dismissed ?? []}
       calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
     />

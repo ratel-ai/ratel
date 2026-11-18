@@ -17,6 +17,8 @@ export type DeleteProjectDeps = {
   /** The session port's support session; any value refuses the delete, as upstream. */
   actingAs: () => Promise<ActingAs>;
   deleteProject: (projectId: string) => Promise<void>;
+  /** Reports the delete (upstream's `project_deleted`), after it happened. */
+  projectDeleted?: (projectId: string) => Promise<void>;
 };
 
 /**
@@ -37,6 +39,7 @@ export async function deleteConsoleProject(
     return { ok: false, error: "The name you typed doesn't match this project." };
   }
   await deps.deleteProject(project.id);
+  await deps.projectDeleted?.(project.id);
   const remaining = scope.projects.find((candidate) => candidate.id !== project.id);
   return {
     ok: true,

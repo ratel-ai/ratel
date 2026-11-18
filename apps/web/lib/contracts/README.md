@@ -8,6 +8,11 @@ nothing from the application.
 `composition.ts` declares `CompositionPorts`, the full set a composition must supply; the private
 side annotates against it, so the two shapes cannot drift.
 
+`entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
+table of an edition that sells plans: the organization's plan and subscription state
+(`summary`), the cheapest plan whose Agent health window reaches a number of days, and a plan's
+name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
+
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool
@@ -18,8 +23,10 @@ the ledger and Agent health treat as imports (any other id is live telemetry). `
 ingest types.
 
 The optional `importRunning` port answers whether an import is storing runs for a project right
-now, so an Agent health reading made meanwhile is marked early; the open-source edition has no
-importer and leaves it out.
+now, so an Agent health reading made meanwhile is marked early. The optional `runningImport`
+names the running import with how many runs it has stored, for Agent health's "Importing
+history" freshness line; the signal run asks it only when `importRunning` is absent. The
+open-source edition has no importer and leaves both out.
 
 `CoreServices.onboarding` (`onboarding.ts`) is project creation for a page the edition owns, such
 as Cloud's invitation page: `createFirstProject` takes a name, the organization and the person,
@@ -38,6 +45,15 @@ the reader belongs to opens, whichever is active.
 `MODEL_CALL_TRACER` (the tracer whose spans the self-telemetry export selects) and
 `selfTelemetryProjectId` (the project those calls are not exported for). The core's model-call seam
 and the edition's copy start their spans with it, and `platform/otel/ratel-export.ts` selects them.
+
+`registry.ts` is what a module contributes to the background machinery (job handlers, drain
+steps) and, from an edition only, `mcpOperations`: MCP tools over data only the edition holds
+(Cloud's wallets and API usage). Each names its id, title, description, keywords, scope (project
+or organization), loop stage and the core tool it is listed `after`, and its params without
+`projectId`; the core adds that, resolves the project and publishes the tool read-only
+(`lib/mcp/operations/edition.ts`). Its `execute` gets the project, its organization and the
+core's `notFound`. The open-source edition registers none, so its tool list is unchanged.
+`session.ts` also has the optional `supportSessionPresent`: whether the request carries a support-session marker at all, valid or not, since upstream refuses writes on the marker alone. And it carries `SUPPORT_BLOCKED_MESSAGE` and `isSupportBlockedError`, the message an edition's refused support-session write throws with, so the core's error page shows it as such instead of reporting a fault.
 
 `telemetry.ts` also carries the core's model calls to an edition that accounts for spend: the
 optional `recordModelCall` takes each raw `ModelCallRecord` (ids, a model name, tokens, an outcome;
@@ -82,3 +98,15 @@ report stays the members'.
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from
 `composition.projectNav`. The open-source edition has neither.
+
+`TelemetryPort` has two optional members for the edition's analytics. `reportRequestError` takes an
+uncaught server-side request error with its request (path, method, headers) and route; the headers
+are only for tying the error to the edition's own analytics identity and must never be logged.
+`shutdown(timeoutMs)` flushes what the edition still buffers when the process stops. Without them
+(the open-source edition) nothing is reported or flushed.
+
+`client-analytics.ts` is the browser seam: an edition installs its `ClientAnalytics` (`track`,
+`captureException`) with `installClientAnalytics`, and the core's `platform/track-client.ts`
+forwards to it. Nothing is installed in the open-source edition, so the browser sends nothing.
+It installs with the edition's provider, not before hydration: a root layout crash on a hard load
+can happen first and then goes unreported.

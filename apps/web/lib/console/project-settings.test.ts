@@ -8,9 +8,9 @@ type Role = "admin" | "member";
 
 /** The reader: admin of P1's organization, member of P2's; any other id is an organization they are not in. */
 const P2 = "22222222-2222-4222-8222-222222222222";
-const scopes: Record<string, { project: { id: string }; role: Role }> = {
-  [P1]: { project: { id: P1 }, role: "admin" },
-  [P2]: { project: { id: P2 }, role: "member" },
+const scopes: Record<string, { project: { id: string; name: string }; role: Role }> = {
+  [P1]: { project: { id: P1, name: "One" }, role: "admin" },
+  [P2]: { project: { id: P2, name: "Two" }, role: "member" },
 };
 
 function deps(signedIn = true, roles: Record<string, Role> = {}) {
@@ -58,5 +58,40 @@ test("an empty or overlong name is refused", async () => {
   const { updates, deps: d } = deps();
   assert.equal((await renameProject(P1, "   ", d)).ok, false);
   assert.equal((await renameProject(P1, "x".repeat(61), d)).ok, false);
+  assert.deepEqual(updates, []);
+});
+
+test("a changed name reports the rename once, after the write; an unchanged one reports nothing", async () => {
+  const order: string[] = [];
+  const d = {
+    scope: async (id: string) => scopes[id] ?? null,
+    updateProjectName: async () => {
+      order.push("write");
+    },
+    projectRenamed: async (id: string) => {
+      order.push(`renamed:${id}`);
+    },
+  };
+  await renameProject(P1, "Two", d);
+  assert.deepEqual(order, ["write", `renamed:${P1}`]);
+  order.length = 0;
+  await renameProject(P1, " One ", d);
+  assert.deepEqual(order, []);
+  await renameProject(P1, "   ", d);
+  assert.deepEqual(order, []);
+});
+
+test("a member who is not an admin is told only admins can rename, as upstream; nothing is written", async () => {
+  const asMember = deps();
+  assert.deepEqual(await renameProject(P2, "Other", asMember.deps), {
+    ok: false,
+    error: "Only organization admins can rename projects.",
+  });
+  assert.deepEqual(asMember.updates, []);
+});
+
+test("an unchanged name writes nothing and reports nothing, as upstream", async () => {
+  const { updates, deps: d } = deps();
+  assert.deepEqual(await renameProject(P1, "  One ", d), { ok: true, name: "One" });
   assert.deepEqual(updates, []);
 });

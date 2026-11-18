@@ -1,3 +1,5 @@
+import type { Instrumentation } from "next";
+
 /**
  * Product events, exception reports and model-call records. The open-source edition writes log
  * lines for the first two and nothing for model calls; the Cloud edition sends events to its
@@ -74,9 +76,32 @@ export type TelemetryPort = {
   ): Promise<void>;
   reportException(error: unknown, distinctId: string, properties?: Record<string, unknown>): void;
   /**
+   * An uncaught server-side request error (the framework's `onRequestError`), Node runtime only.
+   * `request.headers` are handed over so the edition can tie the error to its own analytics
+   * identity (a cookie it set); they are for that only and must never be logged or sent on.
+   * The path may carry a query string. Absent in the open-source edition: nothing is reported.
+   */
+  reportRequestError?(
+    error: unknown,
+    request: RequestErrorRequest,
+    context: RequestErrorContext,
+  ): Promise<void>;
+  /**
+   * Flush and close whatever the edition still buffers, within `timeoutMs`. Called once when the
+   * process stops, from the instrumentation's shutdown, which runs in a separate module instance
+   * from the routes: the edition must reach the client its routes created. Absent: nothing to flush.
+   */
+  shutdown?(timeoutMs: number): Promise<void>;
+  /**
    * An edition that accounts for model spend takes every model call the core records here and
    * writes its own line (it prices the call). Absent, the core writes nothing: a recorded call
    * only runs. Must not throw; the core guards the call either way.
    */
   recordModelCall?(record: ModelCallRecord, context: ModelCallLogContext): void;
 };
+
+/** The request an uncaught error happened on, as the framework describes it. */
+export type RequestErrorRequest = Parameters<Instrumentation.onRequestError>[1];
+
+/** Where in the app the error happened: the route pattern and its kind. */
+export type RequestErrorContext = Parameters<Instrumentation.onRequestError>[2];

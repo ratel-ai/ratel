@@ -1,7 +1,12 @@
 import { sql } from "drizzle-orm";
+import { composition } from "@/lib/composition/ports";
+import type { CompositionPorts } from "@/lib/contracts/composition";
 import type { JobKind } from "@/lib/jobs/runner";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
+import { getLogger } from "@/lib/platform/logger";
 import type { AnalysisFreshness, SectionProgress } from "@/lib/views/freshness/model";
+
+const logger = getLogger("freshness/load");
 
 /** How far back "last updated" looks; older than this reads as no recent analysis. */
 const LOOKBACK = "30 days";
@@ -20,18 +25,25 @@ export const PENDING_WINDOW = "6 hours";
  */
 const CHANGED_SOMETHING = sql`coalesce(result->>'outcome', '') <> 'waiting'`;
 
+/** The edition's running import of past runs; absent in the open-source edition. */
+export type RunningImportRead = CompositionPorts["runningImport"];
+
 /**
- * A project's analysis freshness: its latest finished job, and whether any are
- * queued or running (and not stuck). Two small reads on the project's slice of
- * jobs_project_status_idx. Owned (ADR-0030): this edition has no health
- * imports, so `importing` is always null.
+ * A project's analysis freshness: its latest finished job, whether any are
+ * queued or running (and not stuck), and an import in progress. Two small
+ * reads on the project's slice of jobs_project_status_idx, and the edition's
+ * running import. Owned (ADR-0030): imports are the edition's, so upstream's
+ * `health_imports` read is the `runningImport` port. Without it (the
+ * open-source edition) `importing` is null; a port that throws answers null
+ * too, so the freshness line never breaks.
  */
 export async function loadAnalysisFreshness(
   db: BoundReadDb,
   projectId: string,
+  runningImport: RunningImportRead = composition.runningImport,
 ): Promise<AnalysisFreshness> {
-  const [jobs] = (
-    await db.execute(sql`
+  const [result, importing] = await Promise.all([
+    db.execute(sql`
       select
         (select max(finished_at) from jobs
           where project_id = ${projectId} and status = 'done' and ${CHANGED_SOMETHING}
@@ -39,8 +51,10 @@ export async function loadAnalysisFreshness(
         exists (select 1 from jobs
           where project_id = ${projectId} and status in ('queued', 'running')
             and created_at > now() - ${PENDING_WINDOW}::interval) as working
-    `)
-  ).rows as Array<{
+    `),
+    readRunningImport(projectId, runningImport),
+  ]);
+  const [jobs] = result.rows as Array<{
     updated_at: string | Date | null;
     working: boolean;
   }>;
@@ -48,8 +62,22 @@ export async function loadAnalysisFreshness(
   return {
     updatedAt,
     working: Boolean(jobs?.working),
-    importing: null,
+    importing,
   };
+}
+
+async function readRunningImport(
+  projectId: string,
+  runningImport: RunningImportRead,
+): Promise<{ runsImported: number } | null> {
+  if (!runningImport) return null;
+  try {
+    const running = await runningImport(projectId);
+    return running ? { runsImported: Number(running.runsImported) } : null;
+  } catch (err) {
+    logger.warn({ err, project_id: projectId }, "running import unreadable for freshness");
+    return null;
+  }
 }
 
 /**
