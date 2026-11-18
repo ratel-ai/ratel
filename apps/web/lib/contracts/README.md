@@ -88,6 +88,11 @@ console's own. An action is plain data (`EditionCommandAction`: id, label, keywo
 event name), so it crosses to the client; running it dispatches the event and the overlay answers.
 Without them the shell renders as before.
 
+The account menu takes two edition slots: `AccountMenuItems` above the docs and the keyboard
+shortcuts, and the optional `AccountMenuEndItems` after them, so an edition can keep Cloud's order
+(its profile and feedback first, its tools and sign-out last). Without `AccountMenuEndItems`
+nothing follows the shortcuts.
+
 `OperatorConsole` is the console of whoever runs the service across every tenant (Cloud's admin
 console). The core draws the operator's Quality pages (`/admin/quality` and a project's page);
 `authorize` resolves only for an operator and runs before any read, and `Frame` is the console's

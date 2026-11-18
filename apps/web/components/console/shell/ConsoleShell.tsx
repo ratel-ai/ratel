@@ -13,6 +13,7 @@ import type { EditionUi } from "@/lib/contracts/composition";
 export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
   const [scope, cookieStore] = await Promise.all([getConsoleScope(), cookies()]);
   const AccountMenuItems = ui?.AccountMenuItems;
+  const AccountMenuEndItems = ui?.AccountMenuEndItems;
   const ConsoleBoundary = ui?.ConsoleBoundary;
   const ConsoleOverlays = ui?.ConsoleOverlays;
   const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
@@ -53,6 +54,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
               }
             : null,
           accountMenuItems: AccountMenuItems ? <AccountMenuItems /> : null,
+          accountMenuEndItems: AccountMenuEndItems ? <AccountMenuEndItems /> : null,
           overlays: ConsoleOverlays ? <ConsoleOverlays /> : null,
           commandActions: ui?.commandActions ?? [],
           initiallyCollapsed: parseSidebarCollapsedCookie(
