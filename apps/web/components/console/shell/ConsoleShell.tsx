@@ -15,6 +15,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   const [scope, cookieStore] = await Promise.all([getConsoleScope(), cookies()]);
   const AccountMenuItems = ui?.AccountMenuItems;
   const ConsoleBoundary = ui?.ConsoleBoundary;
+  const ConsoleOverlays = ui?.ConsoleOverlays;
   const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
   const projects = scope?.projects ?? [];
   const hidden =
@@ -45,6 +46,8 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
               }
             : null,
           accountMenuItems: AccountMenuItems ? <AccountMenuItems /> : null,
+          overlays: ConsoleOverlays ? <ConsoleOverlays /> : null,
+          commandActions: ui?.commandActions ?? [],
           initiallyCollapsed: parseSidebarCollapsedCookie(
             cookieStore.get(SIDEBAR_COLLAPSED_COOKIE)?.value,
           ),

@@ -55,6 +55,12 @@ the reader may manage it (null when sharing is not offered to this reader); `Dia
 the core's and show the redacted report; without the slot they answer 404 and the page offers no
 sharing.
 
+`ConsoleOverlays` is mounted once in the console shell, after its dialogs (Cloud's feedback dialog
+and diagnostics menu), and `commandActions` adds entries to the command palette, before the
+console's own. An action is plain data (`EditionCommandAction`: id, label, keywords and a window
+event name), so it crosses to the client; running it dispatches the event and the overlay answers.
+Without them the shell renders as before.
+
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from
 `composition.projectNav`. The open-source edition has neither.

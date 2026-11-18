@@ -75,6 +75,18 @@ export type SharedHealthLink = {
 };
 
 /**
+ * An entry an edition adds to the command palette. Running it dispatches `event` on `window`; the
+ * edition's overlay (`EditionUi.ConsoleOverlays`) listens for it. Plain data, so it crosses from
+ * the server to the client.
+ */
+export type EditionCommandAction = {
+  id: string;
+  label: string;
+  keywords?: readonly string[];
+  event: string;
+};
+
+/**
  * What an edition adds to the console's UI. Loaded by the layouts, never at boot. Each optional
  * component replaces what the open-source console shows in its place, which is the default.
  */
@@ -120,6 +132,14 @@ export type EditionUi = {
    * an admin support session here, so the page and the banner stay on screen.
    */
   ConsoleBoundary?: ComponentType<{ children: ReactNode }>;
+  /**
+   * Mounted once in the console shell, after the page and its dialogs, absent otherwise (Cloud's
+   * feedback dialog and diagnostics menu). It opens on the window events its command actions and
+   * account menu items dispatch.
+   */
+  ConsoleOverlays?: ComponentType;
+  /** Entries the edition adds to the command palette, before the console's own; none otherwise. */
+  commandActions?: readonly EditionCommandAction[];
   /** `/`, in place of the console's entry redirect. */
   RootPage?: ComponentType;
   /**
