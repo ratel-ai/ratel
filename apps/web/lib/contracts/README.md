@@ -53,6 +53,8 @@ or organization), loop stage and the core tool it is listed `after`, and its par
 `projectId`; the core adds that, resolves the project and publishes the tool read-only
 (`lib/mcp/operations/edition.ts`). Its `execute` gets the project, its organization and the
 core's `notFound`. The open-source edition registers none, so its tool list is unchanged.
+`session.ts` also has the optional `supportSessionPresent`: whether the request carries a support-session marker at all, valid or not, since upstream refuses writes on the marker alone. And it carries `SUPPORT_BLOCKED_MESSAGE` and `isSupportBlockedError`, the message an edition's refused support-session write throws with, so the core's error page shows it as such instead of reporting a fault.
+
 `telemetry.ts` also carries the core's model calls to an edition that accounts for spend: the
 optional `recordModelCall` takes each raw `ModelCallRecord` (ids, a model name, tokens, an outcome;
 never a prompt or an answer) with the core's log context, and the edition writes and prices its own

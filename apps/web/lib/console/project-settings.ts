@@ -1,5 +1,8 @@
 import { normalizeProjectName } from "@/lib/platform/projects/names";
 
+/** Upstream's refusal for a member who is not an admin (`lib/settings/action-handlers.ts`). */
+const ADMIN_PROJECT_RENAME_ERROR = "Only organization admins can rename projects.";
+
 export type RenameProjectResult = { ok: true; name: string } | { ok: false; error: string };
 
 export type RenameProjectDeps = {
@@ -25,10 +28,14 @@ export async function renameProject(
   deps: RenameProjectDeps,
 ): Promise<RenameProjectResult> {
   const scope = await deps.scope(projectId);
-  if (!scope || scope.role !== "admin") return { ok: false, error: "Project not found." };
+  if (!scope) return { ok: false, error: "Project not found." };
+  if (scope.role !== "admin") return { ok: false, error: ADMIN_PROJECT_RENAME_ERROR };
   const normalized = normalizeProjectName(name);
   if (!normalized.ok) return normalized;
-  await deps.updateProjectName(scope.project.id, normalized.name);
-  if (normalized.name !== scope.project.name) await deps.projectRenamed?.(scope.project.id);
+  // Upstream writes and reports only a changed name.
+  if (normalized.name !== scope.project.name) {
+    await deps.updateProjectName(scope.project.id, normalized.name);
+    await deps.projectRenamed?.(scope.project.id);
+  }
   return { ok: true, name: normalized.name };
 }
