@@ -50,13 +50,16 @@ reports what is emitted; closing the drift is a follow-up on the emit side, not 
 
 ### MCP server spans
 
-`instrumentMcpServer` (TypeScript only) emits one more shape, `SpanKind.SERVER` on scope
-`@ratel-ai/sdk`: one span per MCP message an MCP server receives, named `<method> <target>`
+`instrumentMcpServer` (TypeScript) and `instrument_mcp_server` (Python) emit one more shape,
+`SpanKind.SERVER`: one span per MCP message an MCP server receives, named `<method> <target>`
 (`tools/call get_forecast`, `prompts/get <name>`, `resources/read <uri>`, else the method alone).
-The keys are OpenTelemetry's MCP semconv, borrowed verbatim; the TS constants are in
-`@ratel-ai/telemetry` (`MCP_METHOD_NAME`, `MCP_SESSION_ID`, ...). Ratel Cloud reads them with the
-same rules as third-party MCP instrumentation. The contract fixtures are in
-[`conformance/mcp-server/`](conformance/mcp-server/README.md).
+Both emit the same attribute set below. The span is on scope `@ratel-ai/sdk` (TS) or `ratel-ai`
+(Python), except on Python mcp 2.x: that SDK's own `OpenTelemetryMiddleware` (on by default)
+already makes the SERVER span (scope `mcp-python-sdk`), so the wrapper adds its attributes to that
+span and makes none of its own. The keys are OpenTelemetry's MCP semconv, borrowed verbatim; the
+constants are in `@ratel-ai/telemetry` and `ratel_ai_telemetry` (`MCP_METHOD_NAME`,
+`MCP_SESSION_ID`, ...). Ratel Cloud reads them with the same rules as third-party MCP
+instrumentation. The contract fixtures are in [`conformance/mcp-server/`](conformance/mcp-server/README.md).
 
 | attribute | when it is set |
 | --- | --- |
@@ -65,18 +68,20 @@ same rules as third-party MCP instrumentation. The contract fixtures are in
 | `mcp.session.id` | HTTP: the transport session id (absent in stateless mode). stdio: one generated UUID per connection, `initialize` included |
 | `mcp.protocol.version` | every span once known: `initialize` params, then the negotiated version from its result (HTTP falls back to the `mcp-protocol-version` header) |
 | `mcp.client.name` / `mcp.client.version` | `initialize` and every later span of the connection (`params.clientInfo`) |
-| `mcp.server.name` / `mcp.server.version` | `initialize` only (`result.serverInfo`) |
+| `mcp.server.name` / `mcp.server.version` | `initialize` only (`result.serverInfo`); Python also on `server/discover` of the 2026-07-28 protocol, which has no `initialize` (the `serverInfo` stamp in `result._meta`) |
 | `network.transport` | `pipe` on stdio, `tcp` on HTTP |
 | `network.protocol.name` | `http` on HTTP |
 | `user_agent.original` | HTTP, from the `User-Agent` header |
-| `client.address` | HTTP, only with `captureClientAddress: true` (the request socket's peer address) |
+| `client.address` | HTTP, only with `captureClientAddress: true` / `capture_client_address=True` (the request socket's peer address) |
 | `gen_ai.operation.name` / `gen_ai.tool.name` | `tools/call`: `execute_tool` and the tool name |
 | `error.type` + status ERROR | a JSON-RPC error (the error code, e.g. `-32601`) or a tool result with `isError: true` (`tool_error`) |
 | gated `gen_ai.tool.call.arguments` / `.result` | `tools/call`, only when content capture selects a span mode |
 
 Known gaps: client capabilities from `initialize` are not recorded, because ingest reads no
 attribute for them. `mcp.server.name` is on `initialize` only, so set `service.name` on the
-resource to name the server on every span.
+resource to name the server on every span. Python on mcp 1.x Streamable HTTP: the `initialize`
+span has no `mcp.session.id`, because that SDK assigns the session outside the server; the later
+spans of the session have it.
 
 The emitted content half rides the Logs data model as `ratel.search.results` and
 `ratel.tool.execution.details`; experimental changed catalog definitions use

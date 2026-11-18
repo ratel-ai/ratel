@@ -1,0 +1,20 @@
+[project]
+name = "ratel-example-mcp-server-wrapper"
+version = "0.0.0"
+description = "A stdio MCP server traced with instrument_mcp_server (OTLP or a JSON-lines spans file)"
+requires-python = ">=3.10"
+dependencies = [
+    "ratel-ai",
+    # Direct so uv applies the local source to ratel-ai's unreleased telemetry floor.
+    "ratel-ai-telemetry>=0.1.3",
+    "mcp>=1.0",
+    # The host owns the provider: the SDK plus the OTLP/HTTP exporter. Bounded to the
+    # line ratel-ai-telemetry[otlp] uses.
+    "opentelemetry-sdk>=1.41.0,<1.42",
+    "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
+]
+
+[tool.uv.sources]
+# Use the local SDK and its unreleased telemetry floor from this monorepo.
+ratel-ai = { path = "../../src/sdk/python" }
+ratel-ai-telemetry = { path = "../../src/telemetry/python" }

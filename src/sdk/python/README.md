@@ -251,6 +251,33 @@ the authoritative full replacement for removals and recovery. They contain sorte
 definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
 applications may publish these events and snapshots through their own adapter.
 
+## Instrument your MCP server
+
+`instrument_mcp_server(server, capture_client_address=False)` wraps a server of the official MCP Python SDK (`mcp`, extra `ratel-ai[mcp]`): the high-level `MCPServer` (mcp 2.x) or `FastMCP` (mcp 1.x), or the low-level `Server`, on stdio or Streamable HTTP. It returns the same server. Each MCP message the server receives becomes one OpenTelemetry SERVER span, which Ratel Cloud reads like any other MCP instrumentation (the server is your `service.name`, the caller is `mcp.client.name`). It is the twin of the TypeScript `instrumentMcpServer` and emits the same attributes.
+
+```python
+from mcp.server.mcpserver import MCPServer  # mcp 1.x: from mcp.server.fastmcp import FastMCP
+from ratel_ai import instrument_mcp_server
+
+server = instrument_mcp_server(MCPServer("weather", version="1.0.0"))
+
+@server.tool()
+def get_forecast(city: str) -> str:
+    return "sunny"
+
+server.run("stdio")
+```
+
+- Call it before the server runs. It hooks every later connection, and calling it twice is a no-op.
+- The span name is `<method> <target>` (`initialize`, `tools/list`, `tools/call get_forecast`). Notifications get a span too. The span is active while the handler runs, so spans the handler starts are its children. A `traceparent` in `params._meta` becomes the parent.
+- `initialize` names the client (`mcp.client.name` / `.version`, then on every span of the connection) and the server (`mcp.server.name` / `.version`). On the 2026-07-28 protocol, which has no `initialize`, the client comes from each request and the server from `server/discover`. `mcp.session.id` is the transport session id on HTTP and one generated id per connection on stdio. Stateless HTTP has no session id.
+- HTTP spans carry `user_agent.original`. `client.address` is personal data: it is recorded only with `capture_client_address=True`, from the socket peer of the HTTP request (`X-Forwarded-For` is not read).
+- Tool arguments and results are recorded only when content capture selects a span mode (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY` or `set_content_capture()`).
+- mcp 2.x has its own OpenTelemetry middleware, on by default. Its SERVER span gets the wrapper's attributes, and the wrapper makes no second span. The same applies to any other MCP instrumentation whose SERVER span is active for the message.
+- The SDK registers no provider: with none registered, every span is a no-op.
+
+The full attribute table and the known gaps are in [`src/telemetry/`](../../telemetry/README.md#mcp-server-spans). A runnable stdio example is in [`examples/mcp-server-wrapper-python`](../../../examples/mcp-server-wrapper-python/README.md).
+
 ## Facts (experimental)
 
 Tools and skills are **pulled** — a query ranks them and only the winners reach the model. Facts are the opposite: constant content the agent should always work from (a shop's address, hours, a brand's voice), **pushed** into the context and deduplicated so it is injected once rather than every turn.

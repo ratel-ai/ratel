@@ -473,3 +473,38 @@ def test_experiment_drop_reason_maps_to_wire_strings() -> None:
     assert ExperimentDropReason.SELECTION_FAILED == "selection-failed"
     assert ExperimentDropReason.SERVED_RANKING_FAILED == "served-ranking-failed"
     assert ExperimentDropReason.COMPARISON_FAILED == "comparison-failed"
+
+
+def test_borrows_the_mcp_server_span_semconv_keys_verbatim() -> None:
+    from ratel_ai_telemetry import (
+        CLIENT_ADDRESS,
+        ERROR_TYPE,
+        JSONRPC_REQUEST_ID,
+        MCP_CLIENT_NAME,
+        MCP_CLIENT_VERSION,
+        MCP_METHOD_NAME,
+        MCP_PROTOCOL_VERSION,
+        MCP_SERVER_NAME,
+        MCP_SERVER_VERSION,
+        MCP_SESSION_ID,
+        NETWORK_PROTOCOL_NAME,
+        NETWORK_TRANSPORT,
+        USER_AGENT_ORIGINAL,
+        NetworkTransport,
+    )
+
+    assert MCP_METHOD_NAME == "mcp.method.name"
+    assert MCP_SESSION_ID == "mcp.session.id"
+    assert MCP_PROTOCOL_VERSION == "mcp.protocol.version"
+    assert MCP_CLIENT_NAME == "mcp.client.name"
+    assert MCP_CLIENT_VERSION == "mcp.client.version"
+    assert MCP_SERVER_NAME == "mcp.server.name"
+    assert MCP_SERVER_VERSION == "mcp.server.version"
+    assert JSONRPC_REQUEST_ID == "jsonrpc.request.id"
+    assert NETWORK_TRANSPORT == "network.transport"
+    assert NETWORK_PROTOCOL_NAME == "network.protocol.name"
+    assert USER_AGENT_ORIGINAL == "user_agent.original"
+    assert CLIENT_ADDRESS == "client.address"
+    assert ERROR_TYPE == "error.type"
+    assert NetworkTransport.PIPE == "pipe"
+    assert NetworkTransport.TCP == "tcp"

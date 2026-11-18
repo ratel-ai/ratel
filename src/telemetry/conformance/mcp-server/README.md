@@ -28,3 +28,6 @@ Check: `shasum -a 256 *` in this folder.
 (kind SERVER with `mcp.method.name`), it requires a span with the same name, kind SERVER, every
 attribute key of the fixture span, and `mcp.client.name` / `mcp.client.version` (plus
 `mcp.server.name` / `.version` on `initialize`). Values may differ.
+
+`../../../sdk/python/tests/test_mcp_server.py` runs the same check for `instrument_mcp_server`
+(Python), over Streamable HTTP and a real stdio child process.
