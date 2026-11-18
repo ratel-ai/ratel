@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { captureClientException } from "@/lib/platform/track-client";
 
 /** Last-resort root boundary: every visual dependency is inline. */
 export default function GlobalError({
@@ -12,6 +13,11 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[global] render error:", error);
+    captureClientException(error, {
+      digest: error.digest ?? null,
+      pathname: window.location.pathname,
+      boundary: "global",
+    });
   }, [error]);
 
   return (

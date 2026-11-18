@@ -2,8 +2,10 @@
 
 import { BadgerMark } from "@ratel/design-system/badger-mark";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { HoneybadgerImage } from "@/components/console/badgers/honeybadger-image";
+import { captureClientException } from "@/lib/platform/track-client";
 
 type BoundaryError = Error & {
   digest?: string;
@@ -18,11 +20,17 @@ type BoundaryError = Error & {
  * home instead of offering a button that cannot help.
  */
 export default function AppError({ error, reset }: { error: BoundaryError; reset: () => void }) {
+  const pathname = usePathname();
   const retryable = isRetryable(error);
 
   useEffect(() => {
     console.error("[app] render error:", error);
-  }, [error]);
+    captureClientException(error, {
+      digest: error.digest ?? null,
+      pathname,
+      boundary: "app",
+    });
+  }, [error, pathname]);
 
   return (
     <main className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-canvas px-6 py-12 text-center">

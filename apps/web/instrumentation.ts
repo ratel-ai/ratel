@@ -1,3 +1,5 @@
+import type { Instrumentation } from "next";
+
 /**
  * Next runs register() once at server startup, before the first request, which is where an
  * invalid composition has to be caught: without this, the server reports itself ready and then
@@ -25,3 +27,13 @@ export async function register() {
     await bootBackground(flushTelemetry);
   }
 }
+
+/**
+ * Uncaught server-side request errors (upstream's `onRequestError`), handed to the edition's
+ * telemetry port. Node runtime only; the open-source edition reports nothing.
+ */
+export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  const { reportRequestError } = await import("./instrumentation.node");
+  await reportRequestError(error, request, context);
+};
