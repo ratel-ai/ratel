@@ -33,6 +33,11 @@ session and refuses a support session before it calls either.
 `selfTelemetryProjectId` (the project those calls are not exported for). The core's model-call seam
 and the edition's copy start their spans with it, and `platform/otel/ratel-export.ts` selects them.
 
+`telemetry.ts` also carries the core's model calls to an edition that accounts for spend: the
+optional `recordModelCall` takes each raw `ModelCallRecord` (ids, a model name, tokens, an outcome;
+never a prompt or an answer) with the core's log context, and the edition writes and prices its own
+line. The open-source edition leaves it out, and a recorded call only runs.
+
 `mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to
