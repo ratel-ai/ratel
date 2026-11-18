@@ -13,12 +13,15 @@ export function AccountMenu({
   account,
   collapsed,
   editionItems,
+  editionEndItems,
   onShortcuts,
 }: {
   account: ConsoleAccount;
   collapsed: boolean;
   /** What the edition adds, such as profile and sign-out. */
   editionItems?: ReactNode;
+  /** What the edition adds after the shortcuts, such as its tools and sign-out. */
+  editionEndItems?: ReactNode;
   onShortcuts: () => void;
 }) {
   return (
@@ -53,6 +56,7 @@ export function AccountMenu({
         <MenuItem icon={<Keyboard />} shortcut="?" onClick={onShortcuts}>
           Keyboard shortcuts
         </MenuItem>
+        {editionEndItems}
       </MenuContent>
     </Menu>
   );

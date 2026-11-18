@@ -185,6 +185,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     project,
     account: data.account,
     accountMenuItems: data.accountMenuItems,
+    accountMenuEndItems: data.accountMenuEndItems,
     scopeSwitcher: data.scopeSwitcher,
     onSearch: () => setCommandOpen(true),
     onShortcuts: () => setShortcutsOpen(true),
