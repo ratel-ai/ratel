@@ -23,8 +23,10 @@ the ledger and Agent health treat as imports (any other id is live telemetry). `
 ingest types.
 
 The optional `importRunning` port answers whether an import is storing runs for a project right
-now, so an Agent health reading made meanwhile is marked early; the open-source edition has no
-importer and leaves it out.
+now, so an Agent health reading made meanwhile is marked early. The optional `runningImport`
+names the running import with how many runs it has stored, for Agent health's "Importing
+history" freshness line; the signal run asks it only when `importRunning` is absent. The
+open-source edition has no importer and leaves both out.
 
 `CoreServices.onboarding` (`onboarding.ts`) is project creation for a page the edition owns, such
 as Cloud's invitation page: `createFirstProject` takes a name, the organization and the person,

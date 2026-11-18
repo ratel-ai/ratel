@@ -251,7 +251,8 @@ describe("registry root", () => {
       "what_if_step",
     ]);
     // Before-steps in layer order: the ledger's build, then each reading's enqueue, so one tick
-    // can carry events through turns, recurring asks, the graph and the engine. After-steps are
+    // can carry events through turns, recurring asks, the graph and the engine, then the daily
+    // task-score sweep, as upstream orders them. After-steps are
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
     // What-if's prune runs with retention off: a timed-out run must free its budget hold.
     assert.deepEqual(
@@ -261,6 +262,7 @@ describe("registry root", () => {
         "before:query_categorizations_enqueue",
         "before:intent_graph_fold_enqueue",
         "before:intent_engine_enqueue",
+        "before:task_scores_enqueue",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
         "after:intent_graph_revisions_prune:retention",

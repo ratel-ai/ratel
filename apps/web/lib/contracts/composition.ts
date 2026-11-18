@@ -189,6 +189,13 @@ export type CompositionPorts = {
    */
   importRunning?: (projectId: string) => Promise<boolean>;
   /**
+   * The import of past runs storing runs for the project right now, with how many it has stored
+   * so far (the newest, when several run); null when none is. Agent health's freshness line says
+   * "Importing history" from it, and the core prefers it to `importRunning`. Absent in the
+   * open-source edition, which has no importer.
+   */
+  runningImport?: (projectId: string) => Promise<{ runsImported: number } | null>;
+  /**
    * Absent in the open-source edition, where the MCP endpoint takes project API keys only. With
    * it, an MCP client may sign in through a browser and send the identity provider's token.
    */

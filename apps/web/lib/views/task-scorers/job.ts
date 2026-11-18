@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNotNull, lt, lte, notExists, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, isNotNull, lt, lte, notExists, sql } from "drizzle-orm";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -7,6 +7,7 @@ import { jobs } from "@/lib/jobs/schema";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
+import { projects } from "@/lib/platform/projects/schema";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { type EvalDb, loadRuns } from "@/lib/views/eval-gate/runs";
 import { recordedView } from "@/lib/views/eval-gate/simulate";
@@ -23,18 +24,36 @@ const logger = getLogger("task-scorers/job");
 const SYSTEM_ACTOR = "system:task-scorers";
 const DAY_MS = 86_400_000;
 const RUN_LIMIT = 500;
+/** The daily sweep's candidates: projects with a closed task run this recent. */
+const SWEEP_CANDIDATE_DAYS = 7;
+/** Projects one drain tick may queue or refuse. The rest wait for the next tick. */
+const MAX_SWEEP_PROJECTS_PER_TICK = 25;
 
-export interface ScoreTasksJobDeps extends TaskJudgeDeps {
+/** What asked for scoring: the signal run, the drain's daily sweep, or the queued job itself. */
+type ScoreTrigger = "signal_run" | "daily_sweep" | "job";
+
+interface ReportDeps {
+  observability?: Pick<BackgroundObservability, "trackSystemEvent">;
+  logger?: { info: (fields: Record<string, unknown>, message: string) => void };
+}
+
+export interface ScoreTasksJobDeps extends TaskJudgeDeps, ReportDeps {
   db?: ReturnType<typeof getDb>;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
-  observability?: Pick<BackgroundObservability, "trackSystemEvent">;
+}
+
+export interface EnqueueScoreTasksDeps extends ReportDeps {
+  db?: EvalDb;
+  flagDeps?: OrganizationFlagDeps;
+  now?: () => Date;
 }
 
 /** Score closed task runs by UTC day. Repeated jobs replace the current day's counts. */
 export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps = {}) {
   const db = deps.db ?? getDb();
   if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) {
+    await reportGateRefusal(projectId, "job", deps);
     return { scored: false, reason: "gate_off" };
   }
   const startedAt = Date.now();
@@ -160,18 +179,89 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
   return { scored: true, ...counts, orphaned: orphans.length };
 }
 
-/** Queue live scoring after a signal run. Check the project's organization without a session. */
+/**
+ * Queue live scoring for one project. The signal run calls it when it completes, and the daily sweep
+ * calls it for each project with task runs. A gate refusal is logged, tracked and recorded as a
+ * finished job, so the sweep refuses a project at most once a UTC day.
+ */
 export async function enqueueScoreTasksJob(
   projectId: string,
-  deps: { db?: EvalDb; flagDeps?: OrganizationFlagDeps } = {},
+  deps: EnqueueScoreTasksDeps = {},
+  trigger: Exclude<ScoreTrigger, "job"> = "signal_run",
 ): Promise<{ id: string } | null> {
   const db = deps.db ?? getDb();
-  if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) return null;
+  const now = deps.now?.() ?? new Date();
+  if (!(await evalGateEnabledForActor(projectId, SYSTEM_ACTOR, db, deps.flagDeps))) {
+    await db.insert(jobs).values({
+      projectId,
+      kind: "score_tasks",
+      status: "done",
+      result: { scored: false, reason: "gate_off", trigger },
+      createdAt: now,
+      finishedAt: now,
+    });
+    await reportGateRefusal(projectId, trigger, deps);
+    return null;
+  }
   const [job] = await db
     .insert(jobs)
-    .values({ projectId, kind: "score_tasks", status: "queued" })
+    .values({ projectId, kind: "score_tasks", status: "queued", createdAt: now })
     .returning({ id: jobs.id });
   return job!;
+}
+
+/**
+ * The drain's daily sweep: queue scoring for each project with a recent closed task run and no
+ * score job (queued, run or refused) since the start of the UTC day. It does not wait for a signal run.
+ */
+export async function enqueueDueTaskScores(
+  deps: EnqueueScoreTasksDeps = {},
+): Promise<{ enqueued: number; refused: number }> {
+  const db = deps.db ?? getDb();
+  const now = deps.now?.() ?? new Date();
+  const dayStart = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`);
+  const due = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(
+      and(
+        exists(
+          db
+            .select({ id: traceTurns.id })
+            .from(traceTurns)
+            .where(
+              and(
+                eq(traceTurns.projectId, projects.id),
+                isNotNull(traceTurns.workflowId),
+                eq(traceTurns.status, "closed"),
+                gte(traceTurns.endedAt, new Date(now.getTime() - SWEEP_CANDIDATE_DAYS * DAY_MS)),
+                lte(traceTurns.endedAt, now),
+              ),
+            ),
+        ),
+        notExists(
+          db
+            .select({ id: jobs.id })
+            .from(jobs)
+            .where(
+              and(
+                eq(jobs.projectId, projects.id),
+                eq(jobs.kind, "score_tasks"),
+                gte(jobs.createdAt, dayStart),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(asc(projects.id))
+    .limit(MAX_SWEEP_PROJECTS_PER_TICK);
+  const counts = { enqueued: 0, refused: 0 };
+  for (const project of due) {
+    if (await enqueueScoreTasksJob(project.id, { ...deps, db, now: () => now }, "daily_sweep"))
+      counts.enqueued++;
+    else counts.refused++;
+  }
+  return counts;
 }
 
 function dailyScores(runs: readonly RunRecord[], scorers: readonly Scorer[]): DailyScore[] {
@@ -201,6 +291,23 @@ function dailyScores(runs: readonly RunRecord[], scorers: readonly Scorer[]): Da
     }
   }
   return scores;
+}
+
+async function reportGateRefusal(
+  projectId: string,
+  trigger: ScoreTrigger,
+  deps: ReportDeps,
+): Promise<void> {
+  const fields = { project_id: projectId, reason: "gate_off", trigger };
+  (deps.logger ?? logger).info(fields, "skipped task scoring");
+  await (deps.observability ?? createBackgroundObservability()).trackSystemEvent(
+    "task_scores_skipped",
+    SYSTEM_ACTOR,
+    {
+      object_action: "task_scores_skipped",
+      ...fields,
+    },
+  );
 }
 
 function nextDay(day: string): string {
