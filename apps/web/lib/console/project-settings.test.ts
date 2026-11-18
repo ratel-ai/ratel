@@ -47,3 +47,23 @@ test("an empty or overlong name is refused", async () => {
   assert.equal((await renameProject(P1, "x".repeat(61), d)).ok, false);
   assert.deepEqual(updates, []);
 });
+
+test("a changed name reports the rename once, after the write; an unchanged one reports nothing", async () => {
+  const order: string[] = [];
+  const d = {
+    projects: async () => [project(P1, "One")],
+    updateProjectName: async () => {
+      order.push("write");
+    },
+    projectRenamed: async (id: string) => {
+      order.push(`renamed:${id}`);
+    },
+  };
+  await renameProject(P1, "Two", d);
+  assert.deepEqual(order, ["write", `renamed:${P1}`]);
+  order.length = 0;
+  await renameProject(P1, " One ", d);
+  assert.deepEqual(order, ["write"]);
+  await renameProject(P1, "   ", d);
+  assert.deepEqual(order, ["write"]);
+});

@@ -95,3 +95,11 @@ test("exporter origins are recognised so their own traffic is not re-traced", ()
   assert.equal(isTelemetryExportOrigin("https://api.example", config), false);
   assert.equal(isTelemetryExportOrigin("not a url", config), false);
 });
+
+test("the service name is OTEL_SERVICE_NAME when set, else ratel-platform", () => {
+  const named = (environment: Record<string, string>) =>
+    resolveSelfTelemetryConfig({ ...BOTH, ...environment }, {})?.resourceAttributes["service.name"];
+  assert.equal(named({}), "ratel-platform");
+  assert.equal(named({ OTEL_SERVICE_NAME: "ratel-cloud" }), "ratel-cloud");
+  assert.equal(named({ OTEL_SERVICE_NAME: "  " }), "ratel-platform");
+});
