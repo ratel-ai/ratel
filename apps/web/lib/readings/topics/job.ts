@@ -10,6 +10,7 @@ import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
@@ -21,7 +22,6 @@ import type {
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
 import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
-import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
@@ -168,9 +168,8 @@ export interface AssignTopicsDeps {
   loadReading: typeof loadTopicReadingFn;
   loadVerdicts: typeof loadVerdictsFn;
   saveVerdicts: typeof saveVerdictsFn;
-  /** `cloud-adaptive-labelling` for the project: placements survive topic changes behind an audit (RC-395). */
-  adaptive?: (projectId: string) => Promise<boolean>;
-  loadCarried?: typeof loadCarriedVerdictsFn;
+  /** Stored placements, so they survive topic changes behind an audit (RC-395). */
+  loadCarried: typeof loadCarriedVerdictsFn;
   saveReading: typeof saveTopicReadingFn;
   /** The decision engine with the topic framing; null without a key. */
   judge: JudgeEngine | null;
@@ -204,10 +203,11 @@ export interface AssignTopicsResult {
 /** Bound on the helper read: one row's JSON path, so a slow one is cut rather than holding the reading. */
 const HELPER_READ_TIMEOUT_MS = 5_000;
 
-/** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. */
+/** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. `feature` names its questions on `model_call` lines. */
 export function topicJudgeFromEnv(
   framing: JudgeFraming,
   env: Record<string, string | undefined> = process.env,
+  feature = "topics_place",
 ): JudgeEngine | null {
   const resolved = resolveDecisionEngine(env);
   if (!resolved) return null;
@@ -216,6 +216,7 @@ export function topicJudgeFromEnv(
     baseUrl: configured(env.OPENAI_BASE_URL),
     model: configured(env.OPENAI_DECISIONS_MODEL),
     framing,
+    feature,
     maxInputTokens: TOPICS_MAX_JUDGE_TOKENS,
   });
 }
@@ -229,18 +230,22 @@ export function anthropicTopicNamer(
   if (!client) return null;
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
+    const request: Anthropic.MessageCreateParamsNonStreaming = {
+      model,
+      max_tokens: NAME_MAX_TOKENS,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
+    };
     const message = await trackModelCall(
-      { provider: "anthropic", model, feature: "topics_names", payer: "ratel" },
-      () =>
-        client.messages.create(
-          wellFormedJson({
-            model,
-            max_tokens: NAME_MAX_TOKENS,
-            system,
-            messages: [{ role: "user", content: user }],
-            output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
-          }),
-        ),
+      {
+        provider: "anthropic",
+        model,
+        feature: "topics_names",
+        payer: "ratel",
+        content: anthropicContent(request),
+      },
+      () => client.messages.create(wellFormedJson(request)),
       anthropicUsage,
     );
     if (message.stop_reason === "refusal")
@@ -294,11 +299,13 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     loadReading: loadTopicReadingFn,
     loadVerdicts: loadVerdictsFn,
     saveVerdicts: saveVerdictsFn,
-    adaptive: (projectId) => adaptiveLabellingForProject(projectId),
     loadCarried: loadCarriedVerdictsFn,
     saveReading: saveTopicReadingFn,
     judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
-    sentimentJudge: "sentimentJudge" in overrides ? null : topicJudgeFromEnv(SENTIMENT_FRAMING),
+    sentimentJudge:
+      "sentimentJudge" in overrides
+        ? null
+        : topicJudgeFromEnv(SENTIMENT_FRAMING, process.env, "topics_sentiment"),
     name: "name" in overrides ? null : anthropicTopicNamer(nameModel),
     nameModel,
     observability: createBackgroundObservability(),
@@ -392,8 +399,10 @@ interface Judged {
 
 /**
  * Asks put to the decision engine against `options`, busiest first, at most
- * `budget` fresh ones; cached answers are free. A failed engine is logged and
- * reported, and the asks it did not answer are left to the wording.
+ * `budget` fresh ones; cached answers are free. With `loadCarried`, a stored
+ * decision whose option is unchanged is carried behind an audit (RC-395). A
+ * failed engine is logged and reported, and the asks it did not answer are
+ * left to the wording.
  */
 async function judgeAsks(
   projectId: string,
@@ -402,9 +411,9 @@ async function judgeAsks(
   options: readonly CorpusEntry[],
   optionsHash: string,
   budget: number,
-  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts" | "loadCarried">,
+  deps: Pick<AssignTopicsDeps, "loadVerdicts" | "saveVerdicts">,
   operation: string,
-  carry = false,
+  loadCarried?: AssignTopicsDeps["loadCarried"],
 ): Promise<Judged> {
   const cases = askCases(asks);
   const known = new Set(options.map((option) => option.entryId));
@@ -420,11 +429,11 @@ async function judgeAsks(
   );
   for (const [id, verdict] of cached) read(id, verdict.entryId);
   const capacity = judge.capacity ? judge.capacity(options) : budget;
-  if (carry && deps.loadCarried) {
+  if (loadCarried) {
     const missingIds = cases.filter((c) => !cached.has(c.id)).map((c) => c.id);
     if (missingIds.length === 0) return { choices, fresh: 0 };
     try {
-      const previous = await deps.loadCarried(projectId, missingIds);
+      const previous = await loadCarried(projectId, missingIds);
       const outcome = await decideWithCarry({
         family: TOPIC_FAMILY,
         cases,
@@ -654,10 +663,6 @@ async function read(
   const askedTurns = distinct.reduce((sum, ask) => sum + ask.turnIds.length, 0);
   let budget = MAX_JUDGED_ASKS;
   let judged = 0;
-  const carry =
-    deps.judge !== null && distinct.length > 0
-      ? ((await deps.adaptive?.(projectId)) ?? false)
-      : false;
 
   // Pass one: the topics there are.
   const current = stored.filter((topic) => topic.retiredAt === null);
@@ -672,7 +677,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
-          carry,
+          deps.loadCarried,
         )
       : null;
   budget -= first?.fresh ?? 0;
@@ -711,7 +716,7 @@ async function read(
           budget,
           deps,
           "topic_placement",
-          carry,
+          deps.loadCarried,
         )
       : null;
   judged += second?.fresh ?? 0;

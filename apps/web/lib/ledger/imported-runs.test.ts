@@ -10,7 +10,7 @@ function fakes(runsJobs: boolean) {
   const deps: ImportedRunsDeps = {
     persistDecodedSpans: async (spans, context, persistDeps) => {
       calls.push(["persist", spans, context, persistDeps]);
-      return { ok: true, accepted: 1, calls: 1 };
+      return { ok: true, accepted: 1, calls: 1, rows: [] };
     },
     enqueueBuildTraceTurnsJob: async (projectId, _db, request) => {
       calls.push(["build", projectId, request]);
@@ -34,7 +34,12 @@ describe("createImportedRuns", () => {
   it("stores spans as an import: no allowance spent, no fold kick, the build queued without a drain", async () => {
     const { calls, port } = fakes(true);
     const report = { logError: () => {}, captureFailure: () => {} };
-    assert.deepEqual(await port.persist("p", ORG, [], report), { ok: true, accepted: 1, calls: 1 });
+    assert.deepEqual(await port.persist("p", ORG, [], report), {
+      ok: true,
+      accepted: 1,
+      calls: 1,
+      rows: [],
+    });
     const [, , context, persistDeps] = calls[0] as [
       string,
       unknown,
@@ -47,6 +52,7 @@ describe("createImportedRuns", () => {
         logError: unknown;
         captureFailure: unknown;
         modelPricing?: { loadOverrides: unknown };
+        agentSpanDedupe: unknown;
       },
     ];
     assert.deepEqual(context, {
@@ -54,7 +60,11 @@ describe("createImportedRuns", () => {
       organization: ORG,
       endpoint: "health_import",
       foldIntentGraph: false,
+      // A reprocess after a mapper fix must reach the spans already stored (upstream #465).
+      spanConflict: "update",
     });
+    // An imported run's agent root carries no model or usage: no dedupe (upstream #461).
+    assert.equal(persistDeps.agentSpanDedupe, null);
     assert.equal(persistDeps.logError, report.logError);
     assert.equal(persistDeps.captureFailure, report.captureFailure);
     // An imported run is priced with the project's own prices, as live ingest prices it (RC-482).

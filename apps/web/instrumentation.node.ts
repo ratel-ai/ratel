@@ -50,6 +50,7 @@ export async function registerNodeInstrumentation(
     { createTelemetryShutdown, registerTelemetryShutdownHandlers },
     { appRole },
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
+    { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
   ] = await Promise.all([
     import("@opentelemetry/api-logs"),
     import("@opentelemetry/context-async-hooks"),
@@ -68,12 +69,15 @@ export async function registerNodeInstrumentation(
     import("@/lib/platform/otel/shutdown"),
     import("@/lib/jobs/role"),
     import("@/lib/platform/otel/ratel-export"),
+    import("@/lib/mcp/telemetry/export"),
   ]);
 
   const resource = resourceFromAttributes(config.resourceAttributes);
   // Ratel's own model calls go to a Ratel project (lib/platform/otel/ratel-export.ts),
   // and only there: the self-telemetry exporter keeps every other span, as before.
   const ratelExport = resolveRatelExportConfig(environment);
+  // Ratel's own MCP tool calls go to their own project (lib/mcp/telemetry/export.ts).
+  const mcpExport = resolveMcpExportConfig(environment);
   const tracerProvider = new NodeTracerProvider({
     resource,
     sampler: createSelfTelemetrySampler(config.tracesSamplerRatio),
@@ -83,7 +87,7 @@ export async function registerNodeInstrumentation(
         new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
           exportTimeoutMillis: EXPORT_TIMEOUT_MS,
         }),
-        (span) => !isModelCallSpan(span),
+        (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
       ),
       ...(ratelExport
         ? [
@@ -95,6 +99,7 @@ export async function registerNodeInstrumentation(
             ),
           ]
         : []),
+      ...mcpExportProcessors(mcpExport),
     ],
   });
   const loggerProvider = new LoggerProvider({
@@ -117,7 +122,8 @@ export async function registerNodeInstrumentation(
       new UndiciInstrumentation({
         ignoreRequestHook: ({ origin }) =>
           isTelemetryExportOrigin(origin, config) ||
-          (ratelExport !== null && sameOrigin(origin, ratelExport.url)),
+          (ratelExport !== null && sameOrigin(origin, ratelExport.url)) ||
+          (mcpExport !== null && sameOrigin(origin, mcpExport.url)),
       }),
       new PgInstrumentation({ requireParentSpan: true }),
       new PinoInstrumentation(),

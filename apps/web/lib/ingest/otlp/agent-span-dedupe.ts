@@ -4,7 +4,8 @@ import type { DecodedSpan } from "./types";
 /**
  * Decide, for one ingest batch, which traces already hold a model call, so an
  * agent wrapper span with the run's summed usage is not counted as one more
- * call (see `isDedupedAgentSpan`).
+ * call (see `isDedupedAgentSpan`). Always on since 2026-10-26; only the health
+ * importer opts out (`PersistSpansDeps.agentSpanDedupe`).
  *
  * The batch alone is not enough: BatchSpanProcessor often exports the child
  * `chat` spans in an earlier request than their root (children end first), so
@@ -22,15 +23,13 @@ export interface AgentSpanDedupeDeps {
   findTracesWithModelCalls: FindTracesWithModelCalls;
 }
 
-/** The batch's dedupe, or undefined when no storage lookup is wired (a test or a caller that does not dedupe). */
+/** The batch's dedupe: its own model-call traces, plus the stored ones its wrappers need. */
 export async function resolveAgentSpanDedupe(
   spans: DecodedSpan[],
   projectId: string,
-  deps: AgentSpanDedupeDeps | undefined,
+  deps: AgentSpanDedupeDeps,
   onLookupFailure: (err: unknown, traceIds: string[]) => void,
-): Promise<AgentSpanDedupe | undefined> {
-  if (!deps) return undefined;
-
+): Promise<AgentSpanDedupe> {
   const modelCallTraces = modelCallTraceIds(spans);
   // Only a wrapper that would otherwise count (it reports a model or usage) needs storage.
   const unresolved = [

@@ -153,6 +153,7 @@ function rankingGraph(): RankingGraphView {
       },
     ]),
     warnings: [],
+    catalogDrift: null,
     details: {
       searches: 100,
       estimated: true,
@@ -237,6 +238,53 @@ test("Adaptive ranking leads with whether it is served and one plain headline; t
   );
   assert.match(html.slice(details), /Recall@1[\s\S]*intent_63/, "they are all there behind it");
   assert.doesNotMatch(html, /\u2014/);
+});
+
+test("with catalog drift on, a gone-tool warning is one sentence, its tools behind a toggle, and it can be closed", () => {
+  const tools = Array.from({ length: 117 }, (_, index) => `mcp__srv__tool_${index}`);
+  const html = renderToStaticMarkup(
+    inApp(
+      `/project/${PROJECT}/improvement/adaptive-ranking`,
+      createElement(RankingView, {
+        title: "Adaptive ranking",
+        crumbs: [{ label: "Improvements", href: `/project/${PROJECT}/improvement` }],
+        choices: [],
+        defaultKey: "cloud",
+        graph: {
+          ...rankingGraph(),
+          warnings: ["the legacy sentence"],
+          catalogDrift: {
+            projectId: PROJECT,
+            warnings: [
+              {
+                text: "It lifts 117 tools that are no longer in your catalog and unused for 14 days.",
+                tools,
+                fingerprint: "gone_tools:abc",
+              },
+            ],
+          },
+        },
+        intentsHref: `/project/${PROJECT}/intents`,
+        emptyChecklist: [],
+      }),
+    ),
+  );
+  assert.doesNotMatch(html, /the legacy sentence/, "the flagged view replaces the old callout");
+  assert.match(
+    html,
+    /<p>It lifts 117 tools that are no longer in your catalog and unused for 14 days\.<\/p>/,
+  );
+  assert.match(
+    html,
+    /<button[^>]*aria-expanded="false"[^>]*>(?:(?!<\/button>)[\s\S])*Show the 117 tools/,
+    "the list is closed by default",
+  );
+  assert.match(
+    html,
+    /<div[^>]*hidden=""[^>]*>[\s\S]*data-ranking-warning-tools=""[\s\S]*mcp__srv__tool_116/,
+    "every tool is there behind it",
+  );
+  assert.match(html, /aria-label="Close this warning"/);
 });
 
 // What people asked, as the engine read it: text in the panel, never an attribute.

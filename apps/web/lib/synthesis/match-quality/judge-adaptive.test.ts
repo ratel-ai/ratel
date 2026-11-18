@@ -12,7 +12,6 @@ import {
   labelPrint,
   readPrint,
   sampleAdaptively,
-  sampleForJudging,
 } from "@/lib/synthesis/match-quality/judge";
 import type { GroundTruthLabel } from "@/lib/synthesis/match-quality/labels";
 import type { EvalItem } from "@/lib/synthesis/match-quality/types";
@@ -130,21 +129,7 @@ test("a verdict printed per tool stays fresh when other tools change, and goes s
   });
 });
 
-test("the fixed-count sampler honours per-tool prints too, so turning the flag off does not re-buy the key", () => {
-  const ids = entryIdentities(CORPUS);
-  const grown = [...CORPUS, entry("tool_d")];
-  const key = new Map([
-    ["q1", judged("q1", "tool_a", labelPrint(ids, identityFingerprint(CORPUS), "tool_a"))],
-  ]);
-  const { cases } = sampleForJudging([item("1", { query: "q1" })], OURS, BASE, {
-    key,
-    fingerprint: identityFingerprint(grown),
-    identities: entryIdentities(grown),
-  });
-  assert.equal(cases.length, 0);
-});
-
-test("the adaptive sample asks what the margin needs, not 500 then a quarter", () => {
+test("the adaptive sample asks what the margin needs", () => {
   const rows = Array.from({ length: 2_000 }, (_, index) =>
     item(`s${index}`, { query: `q${index}` }),
   );
@@ -253,10 +238,7 @@ test("the adaptive judge respects the engine's capacity and a stop", async () =>
       return cases.slice(0, 5).map((row) => ({ id: row.id, entryId: "tool_a", confident: true }));
     },
   };
-  const stopped = await judgeTargets(rows, CORPUS, OURS, BASE, stopping, {
-    fingerprint: "fp",
-    adaptive: {},
-  });
+  const stopped = await judgeTargets(rows, CORPUS, OURS, BASE, stopping, { fingerprint: "fp" });
   assert.equal(stopped?.census.adaptive?.stopped, "engine_stopped");
   assert.equal(stopped?.census.adaptive?.rounds, 1);
 });
@@ -282,7 +264,6 @@ test("the audit re-asks carried verdicts after a catalog change, and a failed au
   const kept = await judgeTargets(rows, grown, OURS, BASE, agreeing, {
     key,
     fingerprint: identityFingerprint(grown),
-    adaptive: {},
   });
   assert.equal(kept?.census.adaptive?.audit, "trust");
   assert.equal(kept?.census.adaptive?.audited, 20);
@@ -297,30 +278,10 @@ test("the audit re-asks carried verdicts after a catalog change, and a failed au
   const reread = await judgeTargets(rows, grown, OURS, BASE, moving, {
     key,
     fingerprint: identityFingerprint(grown),
-    adaptive: {},
   });
   assert.equal(reread?.census.adaptive?.audit, "distrust");
   assert.ok(moving.batches.length > 1, "later rounds re-read the carried verdicts");
   assert.ok(moving.batches.reduce((a, b) => a + b, 0) > 20);
-});
-
-test("a run judges adaptively only when the project's flag is on, and a failed flag read keeps the fixed counts", async () => {
-  const { adaptiveLabellingForProject: adaptiveJudging } = await import(
-    "@/lib/readings/labelling/gate"
-  );
-  const noOrganization = async () => null;
-  assert.equal(await adaptiveJudging("p", async () => true, noOrganization), true);
-  assert.equal(await adaptiveJudging("p", async () => false, noOrganization), false);
-  assert.equal(
-    await adaptiveJudging(
-      "p",
-      async () => {
-        throw new Error("flag read failed");
-      },
-      noOrganization,
-    ),
-    false,
-  );
 });
 
 test("a later round that fails keeps what the earlier rounds bought; a first round that fails fails as before", async () => {
@@ -353,7 +314,7 @@ test("a later round that fails keeps what the earlier rounds bought; a first rou
     judge: async () => Promise.reject(new Error("no key")),
   };
   await assert.rejects(
-    judgeTargets(rows, CORPUS, OURS, BASE, broken, { fingerprint: "fp", adaptive: {} }),
+    judgeTargets(rows, CORPUS, OURS, BASE, broken, { fingerprint: "fp" }),
     /no key/,
   );
 });
@@ -417,7 +378,6 @@ test("the audit's answers refresh the key but are kept out of the census", async
   const result = await judgeTargets(rows, grown, OURS, BASE, recordingEngine(), {
     key,
     fingerprint: identityFingerprint(grown),
-    adaptive: {},
   });
   assert.equal(result?.census.adaptive?.audited, 20);
   assert.equal(

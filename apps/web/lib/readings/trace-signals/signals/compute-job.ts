@@ -57,8 +57,6 @@ import {
   earlyRefreshDue,
   isEarlyReading,
   QUICK_FIRST_READING_DAYS,
-  type QuickFirstReadingFlag,
-  quickFirstReadingEnabled,
   quickWindowDays,
   type ReadingFacts,
 } from "@/lib/readings/trace-signals/signals/early-reading";
@@ -152,8 +150,6 @@ export interface ComputeJobDeps {
   enqueueFixDrafts?: (projectId: string) => Promise<unknown>;
   /** Queue live task scores after placement and signal persistence. The queue checks the organization flag. */
   enqueueTaskScores?: (projectId: string) => Promise<unknown>;
-  /** `cloud-quick-first-reading` (RC-224, `early-reading.ts`). */
-  quickFirstReading: QuickFirstReadingFlag;
   /** Whether an import is storing runs for the project right now. */
   importRunning: (projectId: string) => Promise<boolean>;
   /** Queue the full-window run that follows a quick first reading. */
@@ -214,8 +210,6 @@ function defaultDeps(env: Env): ComputeJobDeps {
     writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),
     recordSelfCorrections: recordSelfCorrectionsForRun,
     ...computeSeams,
-    quickFirstReading: (projectId, organization) =>
-      quickFirstReadingEnabled(projectId, organization),
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: async (projectId) => (await composition.importRunning?.(projectId)) ?? false,
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
@@ -314,13 +308,7 @@ export async function computeProjectTraceSignals(
   );
   const previous = await deps.latestRun(projectId);
   const planDays = organization ? getAgentHealthLimits(organization).agentHealthWindowDays : 0;
-  const early = await earlyPlanFor(
-    projectId,
-    previous,
-    targetWindowDays(planDays),
-    organization,
-    deps,
-  );
+  const early = await earlyPlanFor(projectId, previous, targetWindowDays(planDays), deps);
   const days = early?.quickDays ?? resolveWindowDays(previous, planDays, deps.timeBudgetMs);
   // A quick first week is chosen, not cut by a time budget: it never climbs.
   const windowShrunk = !early?.quickDays && days < targetWindowDays(planDays);
@@ -671,18 +659,16 @@ interface EarlyPlan {
 }
 
 /**
- * Whether this run belongs to a project still waiting for its full reading,
- * with the quick first reading on. Best-effort: a failed check is a usual run.
+ * Whether this run belongs to a project still waiting for its full reading.
+ * Best-effort: a failed check is a usual run.
  */
 async function earlyPlanFor(
   projectId: string,
   previous: ReadingFacts | null,
   targetDays: number,
-  organization: unknown,
-  deps: Pick<ComputeJobDeps, "quickFirstReading" | "latestRun">,
+  deps: Pick<ComputeJobDeps, "latestRun">,
 ): Promise<EarlyPlan | null> {
   try {
-    if (!(await deps.quickFirstReading(projectId, organization))) return null;
     const latestCompleted =
       previous?.status === "completed"
         ? previous
@@ -854,22 +840,20 @@ export async function enqueueFirstSignalRun(
   }
 }
 
-export interface EarlyFirstReadingDeps
-  extends Pick<FirstBuildDeps, "latestRun" | "enqueue" | "countClosed" | "now" | "floor"> {
-  quickFirstReading: QuickFirstReadingFlag;
-}
+export type EarlyFirstReadingDeps = Pick<
+  FirstBuildDeps,
+  "latestRun" | "enqueue" | "countClosed" | "now" | "floor"
+>;
 
 /**
- * The turn builder's hook for a build that has NOT caught up (RC-224): with
- * the quick first reading on, a project still waiting for its first reading
- * gets one as soon as its last week holds the floor's worth of closed turns,
+ * The turn builder's hook for a build that has NOT caught up (RC-224): a
+ * project still waiting for its first reading gets one as soon as its last week holds the floor's worth of closed turns,
  * while the older backlog is still being built. That reading is early (the
  * backlog it missed marks it), and the full one follows once the build has
  * caught up (`enqueueFirstSignalRun`). Never throws, like its sibling.
  */
 export async function enqueueEarlyFirstReading(
   projectId: string,
-  organization: unknown,
   overrides: Partial<EarlyFirstReadingDeps> = {},
 ): Promise<boolean> {
   const deps: EarlyFirstReadingDeps = {
@@ -878,11 +862,9 @@ export async function enqueueEarlyFirstReading(
     countClosed: (id, from, to) => countClosedTurnsFn(id, from, to),
     now: () => new Date(),
     floor: FIRST_READING_FLOOR,
-    quickFirstReading: (id, org) => quickFirstReadingEnabled(id, org),
     ...overrides,
   };
   try {
-    if (!(await deps.quickFirstReading(projectId, organization))) return false;
     if (!awaitsFirstReading(await deps.latestRun(projectId), deps.floor)) return false;
     const now = deps.now();
     const closed = await deps.countClosed(

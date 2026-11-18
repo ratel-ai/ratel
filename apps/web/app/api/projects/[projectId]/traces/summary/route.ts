@@ -9,7 +9,6 @@ import {
   parseTracesWindow,
   TRACES_WINDOW_PARAM,
 } from "@/lib/synthesis/traces-sessions/timeframe";
-import { tracesSessionsEnabled } from "@/lib/synthesis/traces-sessions-flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +16,7 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/projects/:projectId/traces/summary?tab=sessions|spans|logs&window=24h|7d|30d:
  * the summary inside one Traces tab (RC-312, RC-331), in that tab's unit.
- * Behind `FF_TRACES_SESSIONS`. A slow aggregate answers
+ * A slow aggregate answers
  * `status: "unavailable"`, not an error. A read; no product event.
  */
 export const GET = withRequestLog(handleGet);
@@ -31,7 +30,6 @@ async function handleGet(
   const window = parseTracesWindow(query.getAll(TRACES_WINDOW_PARAM));
   const tab = parseTracesTab(query.getAll("tab"));
   return tracesSessionsResponse(projectId, (id) => loadTabSummary(id, tab, window), {
-    enabled: async () => tracesSessionsEnabled(),
     dbConfigured: isDbConfigured,
     getSession: async () => {
       const session = await getSessionContext();

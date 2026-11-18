@@ -5,7 +5,6 @@ import {
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
-import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import { JUDGE_BUDGET_USD } from "@/lib/synthesis/match-quality/judge";
 import { loadCorpusWithFingerprint } from "@/lib/synthesis/match-quality/service";
 import { type AnalystDeps, anthropicAnalystDeps, DEFAULT_ANALYST_MODEL } from "./analyst";
@@ -212,7 +211,6 @@ export async function executeMatchQualityRun(
   await markRunRunning(runId);
 
   try {
-    const adaptive = payload.judge === true && (await adaptiveLabellingForProject(projectId));
     const outcome = await runMatchQuality(
       {
         projectId,
@@ -223,7 +221,6 @@ export async function executeMatchQualityRun(
           until: new Date(payload.windowEnd),
         },
         mocked,
-        adaptive,
       },
       matchQualityRunDeps(
         analyst,
@@ -266,7 +263,6 @@ export async function executeMatchQualityRun(
         judged_n: outcome.census.judgedN,
         judge_changed: outcome.judge?.changed ?? 0,
         judge_abstained: outcome.judge?.abstained ?? 0,
-        judge_adaptive: outcome.judge?.adaptive !== undefined,
         judge_rounds: outcome.judge?.adaptive?.rounds ?? null,
         judge_margin: outcome.judge?.adaptive?.margin ?? null,
         judge_stopped: outcome.judge?.adaptive?.stopped ?? null,

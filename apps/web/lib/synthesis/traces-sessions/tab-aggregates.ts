@@ -8,12 +8,12 @@ import {
   type TraceWindow,
 } from "@/lib/synthesis/traces/queries";
 import type { VolumePoint } from "@/lib/synthesis/traces/v2/volume";
-import type { SessionsDb } from "./sessions";
+import type { SessionsDb } from "./cursor";
 
 /**
- * The aggregates behind the summary inside each Traces tab
- * (`cloud-traces-sessions`). Each reads one project and one window, in the
- * tab's own unit: sessions, spans or log records.
+ * The aggregates behind the summary inside each Traces tab (RC-331). Each
+ * reads one project and one window, in the tab's own unit: sessions, spans
+ * or log records.
  *
  * Sessions count as the Sessions list counts them: a session by its last
  * closed turn's end, and a run in no closed turn by its first top-level span's

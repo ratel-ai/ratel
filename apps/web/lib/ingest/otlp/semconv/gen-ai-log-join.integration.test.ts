@@ -364,6 +364,7 @@ async function persistSpan(
       insertTraceEvents: async () => ({ accepted: 0 }),
       insertOtelSpans: (projectId, rows) => insertOtelSpans(projectId, rows, db as never),
       genAiLogs,
+      agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
       ...(modelPricing ? { modelPricing } : {}),
       logError: (message, error) => {
         throw error instanceof Error ? error : new Error(message);

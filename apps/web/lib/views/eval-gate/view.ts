@@ -73,7 +73,7 @@ export interface HowItRanInput {
 const RERANK_WORDS =
   "Each run's own ask is ranked again with the fix applied, on both sides with the same search engine. No tool or live agent is called.";
 const REPLAY_WORDS =
-  "Each run's recorded conversation is replayed by a model twice, as it was and with the fix. Tool calls are answered from the recording, or by a stand-in where the recording has no answer. Nothing runs against your live agent or tools.";
+  "Each run's recorded conversation is replayed by a model twice, as it was and with the fix. Tool calls are answered from the recording, or by a simulated answer where the recording has none. Nothing runs against your live agent or tools.";
 const NEEDS_REPLAY_WORDS =
   "This kind of fix changes what the model does, so it needs model replay. Until a run can be replayed it reads “Can't simulate”, never a number.";
 

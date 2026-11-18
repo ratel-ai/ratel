@@ -8,6 +8,14 @@ import type { RankingGraphView } from "@/components/console/adaptive-ranking/Ran
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
+  type CatalogDrift,
+  missingCapabilityKeys,
+} from "@/lib/readings/intent-graph/catalog-drift";
+import {
+  catalogDriftEnabledForActor,
+  loadCatalogDrift,
+} from "@/lib/readings/intent-graph/catalog-drift-queries";
+import {
   getIntentGraphDetail,
   listIntentGraphRuntimeStatus,
   listIntentGraphSummaries,
@@ -34,6 +42,7 @@ import {
   rankingHeadline,
   rankingMetrics,
   rankingVerdict,
+  rankingWarningItems,
   rankingWarnings,
   servingState,
   toChecklistInput,
@@ -146,7 +155,15 @@ export async function loadRanking(input: {
     return { ...base, graph: null, intentsHref: intentsRoot };
   }
   const liveAt = detail.graph.producer === "cloud" ? detail.graph.liveAt : null;
-  const [boostSelections, onlineSince, outcomes] = await Promise.all([
+  const toolIds = [
+    ...new Set(
+      detail.edges.filter((edge) => edge.kind === "tool").map((edge) => edge.capabilityId),
+    ),
+  ];
+  const driftOn = await read("intent_graph_catalog_drift_flag", false, () =>
+    catalogDriftEnabledForActor(project.id, `project:${project.id}`),
+  );
+  const [boostSelections, onlineSince, outcomes, drift] = await Promise.all([
     read("intent_graph_boost", { selections: [], estimated: false, reportedCount: 0 }, () =>
       loadBoostSelections(project.id, choice.graphKey).then((result) => ({
         selections: result.selections,
@@ -164,6 +181,14 @@ export async function loadRanking(input: {
           { before: { turns: 0, recallAt5: null }, after: { turns: 0, recallAt5: null } },
           () => loadOutcomesAroundLive(project.id, choice.graphKey, liveAt),
         ),
+    // A failed read says nothing rather than calling every tool gone or the catalog absent.
+    driftOn
+      ? read<CatalogDrift>(
+          "intent_graph_catalog_drift",
+          { hasCatalog: true, gone: new Set() },
+          () => loadCatalogDrift(project.id, toolIds, now),
+        )
+      : Promise.resolve(null),
   ]);
   const boost = buildBoostView(boostSelections.selections, {
     onlineSince: boostSelections.estimated ? null : onlineSince,
@@ -195,6 +220,9 @@ export async function loadRanking(input: {
     (latest, source) => (latest === null || source.lastAt > latest ? source.lastAt : latest),
     null,
   );
+  const missing = drift
+    ? missingCapabilityKeys(detail.missingCapabilities, drift)
+    : detail.missingCapabilities;
   const warnings = rankingWarnings({
     producer: detail.graph.producer,
     updatedAt: detail.graph.updatedAt,
@@ -202,9 +230,26 @@ export async function loadRanking(input: {
     lastEventAt,
     view: boost,
   });
+  const catalogDrift = drift
+    ? {
+        projectId: project.id,
+        warnings: rankingWarningItems({
+          producer: detail.graph.producer,
+          updatedAt: detail.graph.updatedAt,
+          drift,
+          hasToolEdges: toolIds.length > 0,
+          lastEventAt,
+          view: boost,
+        }).map(({ text, tools, fingerprint }) => ({
+          text,
+          ...(tools ? { tools } : {}),
+          fingerprint,
+        })),
+      }
+    : null;
 
   const liveRecall = outcomes === null ? null : buildLiveRecall(outcomes);
-  const rows = buildClusterTableRows(detail.clusters, detail.edges, detail.missingCapabilities);
+  const rows = buildClusterTableRows(detail.clusters, detail.edges, missing);
   const clusters: RankingClusterRow[] = rows.slice(0, DETAIL_CLUSTERS).map((row) => ({
     id: row.clusterId,
     label: askGroupLabel({ label: row.displayLabel, terms: row.terms }),
@@ -256,6 +301,7 @@ export async function loadRanking(input: {
           ? rankingChecklist(graphSteps.steps.map(toChecklistInput))
           : null,
       warnings,
+      catalogDrift,
       details,
     },
   };

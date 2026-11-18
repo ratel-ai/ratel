@@ -1,5 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
-import { withProjectLogContext } from "@/lib/platform/project-log-context";
+import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { assignProjectTopics } from "./job";
 import { enqueueAssignTopicsJob } from "./queries";
@@ -24,7 +24,6 @@ fillComputeSeams();
 export const topicsRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    assign_topics: (job) =>
-      withProjectLogContext(job.projectId, () => assignProjectTopics(job.projectId)),
+    assign_topics: inProjectLogContext((job) => assignProjectTopics(job.projectId)),
   },
 };

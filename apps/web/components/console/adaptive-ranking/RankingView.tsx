@@ -17,6 +17,7 @@ import type {
 import type { GraphChoice } from "@/lib/views/intents/map/labels";
 import { RankingChart } from "./RankingChart";
 import { RankingDetails, type RankingDetailsData } from "./RankingDetails";
+import { RankingWarnings, type RankingWarningView } from "./RankingWarnings";
 import { SetupSteps } from "./SetupSteps";
 
 export const RANKING_DESCRIPTION =
@@ -31,6 +32,11 @@ export type RankingGraphView = {
   /** The steps still open for this graph, or null when it is served and current. */
   checklist: ChecklistStep[] | null;
   warnings: string[];
+  /**
+   * With `cloud-ranking-catalog-drift` on: the warnings as closable callouts
+   * with their tool lists, read instead of `warnings`. Null with it off.
+   */
+  catalogDrift: { projectId: string; warnings: RankingWarningView[] } | null;
   details: RankingDetailsData;
 };
 
@@ -97,7 +103,15 @@ function GraphReading({ graph }: { graph: RankingGraphView }) {
   const { headline, serving, growth } = graph;
   return (
     <>
-      {graph.warnings.length > 0 ? (
+      {graph.catalogDrift ? (
+        graph.catalogDrift.warnings.length > 0 ? (
+          <RankingWarnings
+            projectId={graph.catalogDrift.projectId}
+            graphKey={graph.choice.graphKey}
+            warnings={graph.catalogDrift.warnings}
+          />
+        ) : null
+      ) : graph.warnings.length > 0 ? (
         <Callout tone="warning" title="Worth a look">
           {graph.warnings.length === 1 ? (
             graph.warnings[0]

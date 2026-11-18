@@ -11,14 +11,15 @@ explorer; match quality follows.
 |---|---|---|
 | `intent-types/` | `wire.ts`, the intent graph's wire format (SDK push/pull, validation, ETags, caps); `engine-types.ts`, the engine's cluster, level and assignment shapes | — |
 | `text/` | `cluster.ts`, the symmetric-BM25 clusterer the query intents and the engine share; `well-formed.ts`, a cut that never leaves half an emoji in text sent to a model, and `wellFormedJson`, which every Anthropic request in `lib/` goes through (`provider-guards.test.ts` fails on one that does not) | — |
-| `decisions/` | `openai.ts`, the OpenAI Decisions client; `engine.ts`, which engine answers closed-set questions (OpenAI only here); `judge.ts`, the judge contract and helpers the readings share (cases, verdicts, corpus entries, option narrowing); `openai-judge.ts`, the one judge engine | — |
-| `labelling/` | adaptive labelling (RC-392): `adaptive` (the stratified share, its margin and the Neyman allocation of the labels still needed, and the audit verdict) and `carry` (a decision kept across an option change while its option is unchanged, behind a re-asked audit); copies. `gate.ts` (owned) is the deployment switch `FF_ADAPTIVE_LABELLING` in place of upstream's flag service. Match quality, topics and the workflow decisions read it | none |
+| `decisions/` | `openai.ts`, the OpenAI Decisions client (each question, retries included, is one `model_call` with its feature: `match_quality_judge`, `workflow_decide`, `topics_place`, `topics_sentiment`, else `decision`); `engine.ts`, which engine answers closed-set questions (OpenAI only here); `judge.ts`, the judge contract and helpers the readings share (cases, verdicts, corpus entries, option narrowing); `openai-judge.ts`, the one judge engine | — |
+| `labelling/` | adaptive labelling (RC-392): `adaptive` (the stratified share, its margin and the Neyman allocation of the labels still needed, and the audit verdict) and `carry` (a decision kept across an option change while its option is unchanged, behind a re-asked audit); copies. Match quality, topics and the workflow decisions label adaptively, for every project (upstream retired its flag) | none |
 | `model-defaults.ts` | `DEFAULT_LABEL_MODEL`, the naming model when the operator sets none | — |
 | `stats.ts` | `wilsonInterval`, `CONFIDENT_SCORE_RATIO`: the two statistics the detectors share with the quality meter (L5) | — |
 | `match-quality/` | `sweep.ts`: the project rotation the signal sweep reuses; match quality itself is in `synthesis/` | — |
 | `tool-explorer/` | `tool_explorer_runs`, `_edges`, `_sets`, `_intent_tools`: which tools run together and which comes next, per turn and per session, read off the closed turns of the signal run's window (`compute`, `analyze`, `cousage`, `transitions`, `intents`); `reliability`, `timing`, `units` are the per-call helpers the signals and self-corrections also read; its own `README.md` | `explore_tool_usage`, enqueued by each signal run through `computeSeams.enqueueExplore` |
 | `query-intents/` | `query_intents`, `query_intent_occurrences`: a project's searches folded into canonical recurring asks (`normalize` → `intent-text` → `resolve-canonicals`, `pipeline`) | `categorize_queries`; before-step `query_categorizations_enqueue` (count-based) |
 | `intent-graph/` | `intent_graphs`, `_revisions`, `_clusters`, `_edges`, `_shadow_turns`: a runtime's pushed graph and the Cloud-built one (`fold` over the foldable events, `compact`, `maintenance`); the `/api/v1/intent-graph` handlers | `fold_intent_graph`; before-step `intent_graph_fold_enqueue`, retention step `intent_graph_revisions_prune` |
+| `intent-graph/catalog-drift.ts`, `catalog-drift-queries.ts`, `prune-gone-tools.ts` | the gone-tool rule (ratel-cloud #474): a tool is gone only when the project's published catalog dropped it and it went unused past the grace period; the facts it reads, and the prune the fold runs on rebuild. Behind `FF_RANKING_CATALOG_DRIFT` (`catalogDriftEnabledForActor`, owned: upstream decides it per organization and person) |
 | `intent-graph/bound.ts` | a graph over a store cap is trimmed to its strongest clusters instead of failing the fold (ratel-cloud #456); the fold compacts under pressure past `COMPACT_PRESSURE_CLUSTERS` first |
 | `intent-engine/` | `intent_engine_state`, `intent_clusters`, `intent_cluster_assignments`: asks clustered by action and object (`engine`, `frames`, `levels`, `compact`, `names`), named with a model key | `cluster_intents`; before-step `intent_engine_enqueue`, retention step `intent_engine_expire` |
 | `trace-signals/` | `trace_signal_runs`, `trace_signals`, `trace_workflow_labels`, `_verdicts`, `_insights`, `trace_self_corrections`: signal runs over closed turns (`signals/`), mined workflows with model names and judge decisions (`workflows/`), self-corrections (`self-corrections/`); its own `README.md` | `compute_trace_signals`, `label_workflows`; after-step `trace_signal_sweep` |
@@ -49,10 +50,9 @@ Each completed full reading stores its Health score (`trace-signals/health-score
 its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs
 went and 40% the open issues: `trace-signals/health-outcomes.ts` reads five measured rates from
 what the reading stored (runs end well, right tool in the top 5, no self-corrections, tasks
-finish, calls work), each left out below 20 observations. `trace-signals/health-score-flag.ts`
-(owned) is whether a public link carries the score: the deployment switch `FF_HEALTH_SCORE`,
-in place of upstream's flag service. `trace-signals/signals/early-reading.ts` is the
-quick first reading (RC-224), behind `FF_QUICK_FIRST_READING`: a new project's first run reads
+finish, calls work), each left out below 20 observations; the score shows on the page and on a public link for every
+project. `trace-signals/signals/early-reading.ts` is the
+quick first reading (RC-224), for every project: a new project's first run reads
 a week, is marked early, and queues the `full_reading` run; a reading made while an import runs
 (`composition.importRunning`, the edition's) stays early too.
 `tool-explorer/job.ts` exports `exploreSeams.enqueueCraft`: the tool crafter (L5) is a reading

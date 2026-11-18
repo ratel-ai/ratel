@@ -15,7 +15,6 @@ import {
 } from "@/lib/readings/decisions/judge";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
 import { type CarryOutcome, decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
-import { adaptiveLabellingForProject } from "@/lib/readings/labelling/gate";
 import {
   type AskGroup,
   aggregateDecisions,
@@ -70,9 +69,8 @@ export interface DecideDeps {
   loadVerdicts: typeof loadVerdictsFn;
   saveVerdicts: typeof saveVerdictsFn;
   saveInsights: typeof saveInsightsFn;
-  /** `cloud-adaptive-labelling` for the project: carry decisions across option changes (RC-395). */
-  adaptive?: (projectId: string) => Promise<boolean>;
-  loadCarried?: typeof loadCarriedVerdictsFn;
+  /** Stored decisions to carry across option changes (RC-395). */
+  loadCarried: typeof loadCarriedVerdictsFn;
   now: () => Date;
 }
 
@@ -82,6 +80,9 @@ export interface DecideResult {
   cached: number;
   skipped: "no_judge" | "no_workflows" | "no_asks" | "failed" | null;
 }
+
+/** The decision step's questions, on each `model_call` log line. */
+const WORKFLOW_DECIDE_FEATURE = "workflow_decide";
 
 /**
  * The decision engine (`readings/decisions/engine.ts`) with the workflow framing, or with
@@ -95,6 +96,7 @@ export function workflowJudgeFromEnv(env: Env = process.env, tools = false): Jud
     baseUrl: configured(env.OPENAI_BASE_URL),
     model: configured(env.OPENAI_DECISIONS_MODEL),
     ...(tools ? {} : { framing: WORKFLOW_FRAMING }),
+    feature: WORKFLOW_DECIDE_FEATURE,
     maxInputTokens: DECIDE_MAX_INPUT_TOKENS,
   });
 }
@@ -116,7 +118,6 @@ export function defaultDecideDeps(env: Env = process.env): DecideDeps {
     loadVerdicts: loadVerdictsFn,
     saveVerdicts: saveVerdictsFn,
     saveInsights: saveInsightsFn,
-    adaptive: (projectId) => adaptiveLabellingForProject(projectId),
     loadCarried: loadCarriedVerdictsFn,
     now: () => new Date(),
   };
@@ -126,10 +127,10 @@ const WORKFLOW_FAMILY = "workflow";
 const TOOL_FAMILY = "tool";
 
 /**
- * Ask the engine about the asks the cache does not hold for this option list:
- * all of them as before, or (behind the flag) carrying the decisions whose
- * option is still here unchanged, checked by the audit. Returns the fresh
- * verdicts and what was carried, both to be stored under `hash`.
+ * Ask the engine about the asks the cache does not hold for this option list,
+ * carrying the decisions whose option is still here unchanged, checked by the
+ * audit (RC-395). Returns the fresh verdicts and what was carried, both to be
+ * stored under `hash`.
  */
 async function decideMissing(
   projectId: string,
@@ -139,13 +140,8 @@ async function decideMissing(
   options: readonly CorpusEntry[],
   cached: ReadonlyMap<string, { entryId: string }>,
   deps: DecideDeps,
-  adaptive: boolean,
-): Promise<Pick<CarryOutcome, "fresh" | "carried"> & { audit: CarryOutcome["audit"] | null }> {
+): Promise<Pick<CarryOutcome, "fresh" | "carried" | "audit">> {
   const missing = cases.filter((c) => !cached.has(c.id));
-  if (!adaptive || !deps.loadCarried) {
-    const fresh = missing.length > 0 ? await judge.judge(missing, options) : [];
-    return { fresh, carried: new Map(), audit: null };
-  }
   const previous = await deps.loadCarried(
     projectId,
     missing.map((c) => c.id),
@@ -212,7 +208,6 @@ async function checkTools(
   projectId: string,
   groups: readonly AskGroup[],
   deps: DecideDeps,
-  adaptive: boolean,
 ): Promise<Map<string, { entryId: string }>> {
   const { toolJudge } = deps;
   if (!toolJudge || groups.length === 0) return new Map();
@@ -234,7 +229,6 @@ async function checkTools(
     options,
     cached,
     deps,
-    adaptive,
   );
   const toolIds = new Set(corpus.map((entry) => entry.entryId));
   await deps.saveVerdicts(
@@ -284,7 +278,6 @@ export async function decideProjectWorkflows(
   );
   const workflowIds = new Set(workflows.map((w) => w.id));
   try {
-    const adaptive = (await deps.adaptive?.(projectId)) ?? false;
     const { fresh, carried } = await decideMissing(
       projectId,
       WORKFLOW_FAMILY,
@@ -293,7 +286,6 @@ export async function decideProjectWorkflows(
       options,
       cached,
       deps,
-      adaptive,
     );
     await deps.saveVerdicts(
       projectId,
@@ -307,7 +299,7 @@ export async function decideProjectWorkflows(
       ...[...carried].map(([id, entryId]) => [id, { entryId }] as const),
     ]);
     const unplaced = groups.filter((g) => all.get(askHash(g))?.entryId === NONE_OPTION_ID);
-    const tools = await checkTools(projectId, unplaced, deps, adaptive);
+    const tools = await checkTools(projectId, unplaced, deps);
     await deps.saveInsights(
       projectId,
       aggregateDecisions(groups, all, workflows, tools),

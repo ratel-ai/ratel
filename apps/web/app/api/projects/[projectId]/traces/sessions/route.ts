@@ -29,7 +29,6 @@ async function handleGet(
   const traces = traceFilterFromSearch(params.toString());
   const load = (id: string) => loadSessionListPage(id, { filter, cursor, traces });
   return tracesSessionsResponse(projectId, load, {
-    enabled: async () => true,
     dbConfigured: isDbConfigured,
     getSession: async () => {
       const session = await getSessionContext();

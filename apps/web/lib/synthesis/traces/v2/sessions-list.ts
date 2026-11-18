@@ -9,7 +9,7 @@ import {
   encodeSessionsCursor,
   type SessionsCursor,
   type SessionsDb,
-} from "@/lib/synthesis/traces-sessions/sessions";
+} from "@/lib/synthesis/traces-sessions/cursor";
 import type { SessionsFilter } from "@/lib/synthesis/traces-sessions/view";
 
 /**

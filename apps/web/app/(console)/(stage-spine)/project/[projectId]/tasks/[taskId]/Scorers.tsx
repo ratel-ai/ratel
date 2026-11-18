@@ -55,7 +55,7 @@ export function Scorers({
   );
 }
 
-function ScorerForm({
+export function ScorerForm({
   projectId,
   taskId,
   kind,

@@ -109,9 +109,9 @@ test("the playground rank route and the traces routes resolve the project throug
   }
 });
 
-test("the Sessions page checks the project scope itself, as its two routes do", () => {
+test("the Sessions list page checks the project scope itself, as its two routes do", () => {
   assert.match(
-    source("components/console/traces-sessions/SessionsPage.tsx"),
+    source("components/console/traces-sessions/SessionListPage.tsx"),
     /\brequireProjectScope\(projectId\)/,
   );
 });

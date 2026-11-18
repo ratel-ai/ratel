@@ -112,6 +112,7 @@ function setup(over: { invokes?: readonly RuntimeInvoke[] | Error; withTurns?: b
       return { accepted: events.length };
     },
     insertOtelSpans: async (_p, spans) => ({ accepted: spans.length }),
+    agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
     shouldSampleRejection: () => true,
     logError: () => {},
     logWarn: () => {},

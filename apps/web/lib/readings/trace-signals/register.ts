@@ -1,7 +1,7 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
+import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { ledgerSeams } from "@/lib/ledger/turns/build-job";
-import { withProjectLogContext } from "@/lib/platform/project-log-context";
 import {
   computeProjectTraceSignals,
   enqueueEarlyFirstReading,
@@ -23,8 +23,8 @@ type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackS
  * under upstream's heartbeat key.
  *
  * Loading this module also fills the ledger's seams: the turn build enqueues a run when a
- * page asked for one, kicks the first reading once enough turns have closed, and, with the
- * quick first reading on, starts it from the last week while an older backlog still builds. Only the
+ * page asked for one, kicks the first reading once enough turns have closed, and starts it
+ * from the last week while an older backlog still builds. Only the
  * job runner builds turns, and it loads the registry first, so the seams are set before
  * any build runs.
  */
@@ -33,8 +33,7 @@ type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackS
 export const ledgerSeamFills: Required<typeof ledgerSeams> = {
   enqueueReading: (projectId, trigger) => enqueueComputeJob(projectId, trigger),
   onBacklogDrained: (projectId) => enqueueFirstSignalRun(projectId),
-  // The quick first reading's switch is the deployment's, so no organization is read for it.
-  onBacklogProgress: (projectId) => enqueueEarlyFirstReading(projectId, null),
+  onBacklogProgress: (projectId) => enqueueEarlyFirstReading(projectId),
 };
 
 export function fillLedgerSeams(seams: Partial<typeof ledgerSeams> = ledgerSeams): void {
@@ -70,8 +69,7 @@ export const traceSignalsRegistration: Registration = {
     compute_trace_signals: (job) =>
       computeProjectTraceSignals(job.projectId, parseComputePayload(job.payload)),
     // In the project's log context, so `model_call` lines carry the project and organization.
-    label_workflows: (job) =>
-      withProjectLogContext(job.projectId, () => labelProjectWorkflows(job.projectId)),
+    label_workflows: inProjectLogContext((job) => labelProjectWorkflows(job.projectId)),
   },
   drainSteps: [sweepStep()],
 };

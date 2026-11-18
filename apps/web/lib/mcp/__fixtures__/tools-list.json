@@ -2771,7 +2771,7 @@
   {
     "name": "get_flag_status",
     "title": "Feature flag status",
-    "description": "The deployment's feature switches and whether each is on: the eval gate, the Traces Sessions view and the Agent health readings. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+    "description": "The deployment's feature switches and whether each is on: the eval gate and adaptive ranking's catalog drift. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3761,8 +3761,8 @@
   },
   {
     "name": "get_fix_eval_set",
-    "title": "Get a fix's eval set",
-    "description": "Read the runs a fix is simulated on: each case's expected outcome, role (holdout or evidence) and latest result, the change, method, why it is blocked, the latest simulation with interval, evidence, breakdown and judge, and earlier runs. Edit with change_fix_eval_set; simulate with run_eval.",
+    "title": "Get the evals of a fix",
+    "description": "Read the evals that a fix is simulated on. Each eval has its expected outcome, role (holdout or evidence) and latest result. The result also has the change, method, block reason, latest simulation (interval, evidence, breakdown, judge) and earlier runs. Use change_fix_eval_set to edit the evals. Use run_eval to simulate the fix.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -3780,7 +3780,7 @@
         },
         "limit": {
           "default": 25,
-          "description": "Maximum cases to return (max 50).",
+          "description": "Maximum evals to return (max 50).",
           "type": "integer",
           "minimum": 1,
           "maximum": 50
@@ -3791,7 +3791,7 @@
       ]
     },
     "annotations": {
-      "title": "Get a fix's eval set",
+      "title": "Get the evals of a fix",
       "readOnlyHint": true
     },
     "execution": {

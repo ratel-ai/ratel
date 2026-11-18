@@ -22,7 +22,6 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `traces/v2/` | the console Traces pages' models: filters, runs, run summary, timeline, volume |
 | `traces/payload-content.ts` | a trace's message text from `events.payload` when its spans carry none, and each run's ask from the first derived prompt; always read (upstream retired its flag in #402) |
 | `traces-sessions/` | the Traces Sessions tab (copies): `sessions` (one row per session, newest activity first, paged by a cursor, no timeframe), `summary`, `tab-aggregates` and `timeframe` (the summary inside each tab: its `?window=` and that tab's numbers and volume), `view` (All or Failed), `route` (the two API routes' shared guard) |
-| `traces-sessions-flag.ts` | `tracesSessionsEnabled`: the deployment switch `FF_TRACES_SESSIONS`, in place of upstream's `cloud-traces-sessions` flag. Off, Traces opens on Runs. The tabs layout, the Traces page and the two routes read it |
 
 The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and
 their services stay upstream until they land. Copies and owned files are listed in `scripts/platform-sync/map.json`.

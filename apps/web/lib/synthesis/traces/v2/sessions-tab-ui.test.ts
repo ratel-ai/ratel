@@ -15,7 +15,6 @@ import {
   SessionListPanelBody,
   SessionListTable,
 } from "@/components/console/traces-sessions/SessionListView";
-import { TracesSessionsProvider } from "@/components/console/traces-sessions/sessions-context";
 import type { RunRow } from "@/lib/synthesis/traces/v2/runs";
 import type { SessionListRow } from "@/lib/synthesis/traces/v2/sessions-list";
 
@@ -44,25 +43,21 @@ function inRouter(pathname: string, children: ReactNode): ReactElement {
   );
 }
 
-function tabs(sessions: boolean): string[] {
+function tabs(): string[] {
   const header = createElement(TracesHeader, {
     projectId: PROJECT,
     search: "",
     timeWindow: null,
     onSearchChange: () => {},
   });
-  // The provider holds no hooks, so it is called directly with its children.
-  const html = renderToStaticMarkup(
-    inRouter(ROOT, sessions ? TracesSessionsProvider({ children: header }) : header),
-  );
+  const html = renderToStaticMarkup(inRouter(ROOT, header));
   return [...html.matchAll(/<a[^>]*href="([^"]+)"[^>]*>([^<]+)</g)].map(
     ([, href, label]) => `${label} ${href.replace(ROOT, "") || "/"}`,
   );
 }
 
-test("the tabs are Sessions (first), Turns, Spans and Logs, with cloud-traces-sessions on or off (RC-503)", () => {
-  assert.deepEqual(tabs(false), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
-  assert.deepEqual(tabs(true), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
+test("the tabs are Sessions (first), Turns, Spans and Logs (RC-503)", () => {
+  assert.deepEqual(tabs(), ["Sessions /", "Turns /turns", "Spans /spans", "Logs /logs"]);
 });
 
 test("a turn's trace says which session it is part of and links each turn to its own trace", () => {

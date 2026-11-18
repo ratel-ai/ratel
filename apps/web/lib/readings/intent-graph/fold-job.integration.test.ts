@@ -12,6 +12,7 @@ import { deterministicEventId, parseTraceEvents } from "@/lib/ingest/trace-event
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import { loadCatalogDriftFacts } from "@/lib/readings/intent-graph/catalog-drift-queries";
 import {
   type FoldJobDeps,
   foldProjectIntentGraph,
@@ -140,6 +141,8 @@ function deps(db: Db, over: Partial<FoldJobDeps> = {}): Partial<FoldJobDeps> {
     },
     // These tests fold a few events per pass; batching has its own test.
     minBatch: 0,
+    catalogDriftEnabled: async () => false,
+    loadCatalogDriftFacts: (p, now) => loadCatalogDriftFacts(p, now, db),
     ...over,
   };
 }
@@ -175,6 +178,65 @@ test("first run seeds a cloud graph from stored events and sets the cursor to th
     `select max(received_at)::text as t from trace_events where project_id = '${PROJECT_ID}'`,
   );
   assert.equal(cursor, maxReceived.rows[0]!.t, "the cursor keeps Postgres's microseconds");
+});
+
+async function catalogTool(client: PGlite, entryId: string): Promise<void> {
+  await client.query(
+    `insert into runtime_catalog_entries
+       (project_id, kind, entry_id, name, description, searchable_description, searchable_description_overridden, content_hash)
+     values ($1, 'tool', $2, $2, '', '', false, $2)`,
+    [PROJECT_ID, entryId],
+  );
+}
+
+test("with catalog drift on, a tool the catalog dropped and nobody calls leaves the rebuilt graph", async () => {
+  const { client, db } = await setup();
+  await catalogTool(client, "gh_run_list");
+  await ingest(db, [
+    ...turn("why is the build broken", "gh_run_list"),
+    ...turn("send the weekly report", "send_email"),
+  ]);
+
+  const result = await foldProjectIntentGraph(
+    PROJECT_ID,
+    deps(db, { catalogDriftEnabled: async () => true }),
+  );
+
+  assert.equal(result.edgesPruned, 2, "send_email on the merged graph and on the source's own");
+  assert.equal(result.clustersPruned, 2);
+  const row = await getIntentGraph(PROJECT_ID, CLOUD_INTENT_GRAPH_KEY, db);
+  const tools = row!.document.intents.flatMap((intent) => Object.keys(intent.tools));
+  assert.deepEqual(tools, ["gh_run_list"]);
+});
+
+test("with catalog drift on, a project with no catalog keeps every tool", async () => {
+  const { db } = await setup();
+  await ingest(db, [
+    ...turn("why is the build broken", "gh_run_list"),
+    ...turn("send the weekly report", "send_email"),
+  ]);
+
+  const result = await foldProjectIntentGraph(
+    PROJECT_ID,
+    deps(db, { catalogDriftEnabled: async () => true }),
+  );
+
+  assert.equal(result.edgesPruned, 0);
+  assert.equal(result.clusterCount, 2);
+});
+
+test("with catalog drift off, a dropped tool stays in the graph", async () => {
+  const { client, db } = await setup();
+  await catalogTool(client, "gh_run_list");
+  await ingest(db, [
+    ...turn("why is the build broken", "gh_run_list"),
+    ...turn("send the weekly report", "send_email"),
+  ]);
+
+  const result = await foldProjectIntentGraph(PROJECT_ID, deps(db));
+
+  assert.equal(result.edgesPruned, 0);
+  assert.equal(result.clusterCount, 2);
 });
 
 test("a rerun with nothing new is a no-op that leaves rev and cursor alone", async () => {

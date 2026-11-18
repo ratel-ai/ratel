@@ -1,5 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
-import { withProjectLogContext } from "@/lib/platform/project-log-context";
+import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { whatIfStepJob } from "./job";
 import { pruneWhatIfRuns } from "./runs";
 import "./spend";
@@ -15,8 +15,7 @@ import "./spend";
 export const sessionReplayRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    what_if_step: (job) =>
-      withProjectLogContext(job.projectId, () => whatIfStepJob(job.projectId, job.payload)),
+    what_if_step: inProjectLogContext((job) => whatIfStepJob(job.projectId, job.payload)),
   },
   drainSteps: [
     {

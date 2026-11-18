@@ -1,6 +1,6 @@
 import type { ImportedRunsPort } from "@/lib/contracts/imported-runs";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
-import { persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
+import { type PersistSpansContext, persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
@@ -35,6 +35,18 @@ const defaultDeps: ImportedRunsDeps = {
 };
 
 /**
+ * How an import stores its spans. No quotaOrgId: an import never spends the monthly event allowance, so it can
+ * never lock out live ingest. It is bounded by its own caps instead. No fold kick either: the cron drain's
+ * safety net folds imported runs paced. A span already stored is rewritten: a reprocess after a mapper fix
+ * must reach `otel_spans`.
+ */
+export const IMPORT_PERSIST_CONTEXT = {
+  endpoint: "health_import",
+  foldIntentGraph: false,
+  spanConflict: "update",
+} as const satisfies Omit<PersistSpansContext, "projectId" | "organization">;
+
+/**
  * The core's ingest and job queue for imported runs, lent to the edition at startup
  * (`instrumentation.node.ts`). The bodies are upstream's `storeDeps` in
  * `lib/health-imports/start.ts`, which the edition calls through this port.
@@ -44,10 +56,7 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
     persist: (projectId, organization, spans, report) =>
       deps.persistDecodedSpans(
         spans,
-        // No quotaOrgId: an import never spends the monthly event allowance, so it can
-        // never lock out live ingest. It is bounded by its own caps instead.
-        // No fold kick either: the cron drain's safety net folds imported runs paced.
-        { projectId, organization, endpoint: "health_import", foldIntentGraph: false },
+        { projectId, organization, ...IMPORT_PERSIST_CONTEXT },
         {
           insertEventsWithMetrics,
           insertTraceEvents,
@@ -58,8 +67,9 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
             scheduleProjectDrain: () => {},
           },
           findRuntimeInvokes: (id, probe) => findRuntimeInvokes(id, probe),
-          // No agentSpanDedupe: an imported run's `invoke_agent` root carries no model or
+          // No dedupe: an imported run's `invoke_agent` root carries no model or
           // usage, so it is never a call to dedupe.
+          agentSpanDedupe: null,
           // The project's own model prices, as live ingest reads them (RC-482).
           modelPricing: { loadOverrides: (id) => loadPriceOverrides(id, getDb()) },
           logError: report.logError,

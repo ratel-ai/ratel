@@ -76,6 +76,8 @@ function makeDeps(over: Partial<TracesHandlerDeps> = {}): {
     // tests emit deterministically (the sampler itself is covered in
     // ingest-observability.test.ts). Individual tests can still override.
     shouldSampleRejection: () => true,
+    // The agent-span dedupe is always on; no stored trace has a model call.
+    agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
     logError: () => {},
     logWarn: () => {},
     ...over,
@@ -996,10 +998,8 @@ function agentRootJson(): string {
   });
 }
 
-test("agent span dedupe: the agent root is not a call of its own", async () => {
-  const { deps, inserted } = makeDeps({
-    agentSpanDedupe: { findTracesWithModelCalls: async () => new Set() },
-  });
+test("agent span dedupe: the agent root is not a call of its own, with no flag configured", async () => {
+  const { deps, inserted } = makeDeps();
   const res = await handleTracesRequest(req(agentRootJson(), auth), deps);
   assert.equal(res.status, 202);
   assert.equal(inserted[0].length, 1);
@@ -1056,6 +1056,13 @@ test("nothing is counted without a quota gate, or when nothing was stored", asyn
   });
   assert.equal((await handleTracesRequest(req(body, auth), empty.deps)).status, 202);
   assert.deepEqual(increments, []);
+});
+
+test("agent span dedupe: the route cannot be wired without it", () => {
+  const { agentSpanDedupe: _omitted, ...rest } = makeDeps().deps;
+  // @ts-expect-error `agentSpanDedupe` is required: absent no longer means off.
+  const deps: TracesHandlerDeps = rest;
+  assert.ok(deps);
 });
 
 function rawCapture(store?: OtlpRawStore["store"]) {
@@ -1167,4 +1174,43 @@ test("an ingest-only key over its shared-key budget gets 429 with Retry-After; a
 
   const secret = makeDeps({ publishableLimits: exhausted });
   assert.equal((await handleTracesRequest(req(otlpJson(1), auth), secret.deps)).status, 202);
+});
+
+test("a stored export logs its batch line and one line per trace, by project and org", async () => {
+  const lines: Array<[string, Record<string, unknown>]> = [];
+  const { deps } = makeDeps({
+    ingestLog: {
+      sink: { info: (fields, message) => lines.push([message, fields]) },
+      lookupLabels: async () => ({ org_id: "org-1", org_slug: "acme", project_path: "acme/agent" }),
+    },
+  });
+
+  const res = await handleTracesRequest(req(otlpJson(2), auth), deps);
+
+  assert.equal(res.status, 202);
+  assert.deepEqual(
+    lines.map(([message]) => message),
+    ["otlp_batch_ingested", "trace_ingested", "trace_ingested"],
+  );
+  const [, batch] = lines[0];
+  assert.equal(batch.project_path, "acme/agent");
+  assert.equal(batch.org_slug, "acme");
+  assert.equal(batch.traces, 2);
+  assert.equal(batch.model_calls, 2);
+  assert.deepEqual(lines[1][1].models, ["gpt-5.5"]);
+});
+
+test("a rejected export logs no ingest lines", async () => {
+  const lines: string[] = [];
+  const { deps } = makeDeps({
+    ingestLog: {
+      sink: { info: (_fields, message) => lines.push(message) },
+      lookupLabels: async () => null,
+    },
+  });
+
+  const res = await handleTracesRequest(req("{not json", auth), deps);
+
+  assert.equal(res.status, 400);
+  assert.deepEqual(lines, []);
 });

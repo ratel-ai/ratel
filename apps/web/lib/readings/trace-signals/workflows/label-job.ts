@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
@@ -71,18 +72,22 @@ export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] 
   const client = anthropicClient();
   if (!client) return null;
   return async (system, user) => {
+    const request: Anthropic.MessageCreateParamsNonStreaming = {
+      model,
+      max_tokens: LABEL_MAX_TOKENS,
+      system,
+      messages: [{ role: "user", content: user }],
+      output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
+    };
     const msg = await trackModelCall(
-      { provider: "anthropic", model, feature: "workflow_label", payer: "ratel" },
-      () =>
-        client.messages.create(
-          wellFormedJson({
-            model,
-            max_tokens: LABEL_MAX_TOKENS,
-            system,
-            messages: [{ role: "user", content: user }],
-            output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
-          }),
-        ),
+      {
+        provider: "anthropic",
+        model,
+        feature: "workflow_label",
+        payer: "ratel",
+        content: anthropicContent(request),
+      },
+      () => client.messages.create(wellFormedJson(request)),
       anthropicUsage,
     );
     if (msg.stop_reason === "refusal")

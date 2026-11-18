@@ -44,6 +44,13 @@ export interface SessionTrackProps {
   onOpenStep: (stepIndex: number) => void;
   /** Open the context inspector on the model call at the playhead. */
   onInspect: () => void;
+  /** A line at one step, with its words (an eval run: where it differs from the last run). */
+  marker?: TrackMarker;
+}
+
+export interface TrackMarker {
+  stepIndex: number;
+  label: string;
 }
 
 /** A click that moves less than this is a click, not a drag. */
@@ -79,6 +86,7 @@ export function SessionTrack({
   onZoomChange,
   onOpenStep,
   onInspect,
+  marker,
 }: SessionTrackProps) {
   const total = chat.trackTotalMs;
   const view = zoomWindow(total, zoom, t);
@@ -138,6 +146,9 @@ export function SessionTrack({
   const problem = here?.problem ? chat.problems.find((p) => p.stepIndex === here.stepIndex) : null;
   const next = nextProblem(chat, t);
   const ticks = axisTicks(view.startMs, view.endMs);
+  const markerAt = marker
+    ? chat.segments.find((s) => s.stepIndex === marker.stepIndex)?.trackStartMs
+    : undefined;
 
   return (
     <div data-session-track className="shrink-0 border-t border-line bg-raised px-4 pt-3 pb-2">
@@ -261,6 +272,14 @@ export function SessionTrack({
             </div>
           );
         })}
+        {marker && markerAt !== undefined && percent(markerAt) >= 0 && percent(markerAt) <= 100 ? (
+          <div
+            data-track-marker={marker.stepIndex}
+            title={marker.label}
+            className="pointer-events-none absolute inset-y-0 border-l-2 border-dashed border-info"
+            style={{ left: `${percent(markerAt)}%` }}
+          />
+        ) : null}
         <div
           data-playhead
           aria-hidden
@@ -286,6 +305,12 @@ export function SessionTrack({
             {item.label}
           </span>
         ))}
+        {marker ? (
+          <span className="inline-flex items-center gap-1.5 text-info">
+            <span aria-hidden className="h-2.5 border-l-2 border-dashed border-info" />
+            {marker.label}
+          </span>
+        ) : null}
         <span className="ml-auto">Drag, scroll or use ← → to move through it</span>
       </div>
     </div>

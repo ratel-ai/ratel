@@ -1,12 +1,10 @@
 /**
- * The Traces Sessions API reads (`cloud-traces-sessions`), for a member of
- * the project: the summary header's breakdown and the next page of the
- * Sessions list. Each read is project-scoped; a project the caller cannot
+ * The Traces Sessions API reads, for a member of the project: each tab's
+ * summary and the next page of the Sessions list. Each read is project-scoped; a project the caller cannot
  * see answers 404, as one that does not exist.
  */
 
 export interface TracesSessionsRouteDeps {
-  enabled: () => Promise<boolean>;
   dbConfigured: () => boolean;
   getSession: () => Promise<{ userId: string } | null>;
   findProject: (
@@ -22,7 +20,7 @@ export async function tracesSessionsResponse<T>(
   read: (projectId: string) => Promise<T>,
   deps: TracesSessionsRouteDeps,
 ): Promise<Response> {
-  if (!(await deps.enabled()) || !deps.dbConfigured())
+  if (!deps.dbConfigured())
     return Response.json({ ok: false, message: "Not found." }, { status: 404 });
   const session = await deps.getSession();
   if (!session)

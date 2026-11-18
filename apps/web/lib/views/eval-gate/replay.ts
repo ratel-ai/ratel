@@ -1,4 +1,3 @@
-import type { CloudMessage, ContentBlock } from "@/lib/ingest/cloud-schema";
 import { costFor, type PriceBook, priceFor } from "@/lib/ingest/pricing";
 import { getLogger } from "@/lib/platform/logger";
 import type { ModelCall } from "./calls";
@@ -18,12 +17,19 @@ import {
   type SpendMeter,
   type ToolStandIn,
 } from "./models";
+import {
+  type RecordedCall,
+  type Recording,
+  recordedScenario,
+  type ScenarioBuilder,
+  type ScenarioRequest,
+} from "./scenario";
 import type {
   CraftedToolDef,
   FixChange,
-  InvokeStep,
   ReplayFacts,
   ReplayStop,
+  ReplayTranscriptStep,
   RunRecord,
   RunView,
   SideTrace,
@@ -66,177 +72,18 @@ const logger = getLogger("eval-gate/replay");
 /** The tool stand-in's own instructions, on top of what it is given, for its estimate. */
 const STAND_IN_PROMPT_TOKENS = 500;
 
-/* - Reading the recording ---------------------------------------------------- */
+/* - The scenario ------------------------------------------------------------- */
 
-export interface RecordedCall extends ReplayCall {
-  result: string;
-  isError: boolean;
-}
-
-export interface Recording {
-  /** The conversation before the run's first decision. */
-  history: ReplayMessage[];
-  system: string | undefined;
-  /** Every tool the run was offered, deduped by name. */
-  tools: ToolDef[];
-  /** The calls the run made, with their recorded results. */
-  calls: RecordedCall[];
-  /** RC-76: calls the conversation made and answered before the run (earlier turns): a replay that repeats one gets the same answer. */
-  earlier: RecordedCall[];
-  model: string | null;
-  /** Mean recorded tool time per call, for the replay's time. */
-  toolMs: number;
-  /** The most input tokens one of the run's model calls recorded (0 when none did): the floor of a replay call's estimate. */
-  inputTokens: number;
-}
-
-function blocksOf(content: CloudMessage["content"]): ContentBlock[] {
-  return typeof content === "string"
-    ? [{ type: "text", text: content }]
-    : Array.isArray(content)
-      ? content
-      : [];
-}
-
-function textOf(blocks: readonly ContentBlock[]): string {
-  return blocks
-    .filter(
-      (block): block is Extract<ContentBlock, { type: "text" }> =>
-        block.type === "text" && typeof block.text === "string",
-    )
-    .map((block) => block.text)
-    .join("\n");
-}
-
-/** Recorded messages as the replay keeps them. A tool result says whether it failed (an `error` field). */
-export function toReplayMessages(messages: readonly CloudMessage[]): ReplayMessage[] {
-  return messages.flatMap((message): ReplayMessage[] => {
-    if (message.role === "tool")
-      return [
-        {
-          role: "tool",
-          callId: message.tool_call_id,
-          content: String(message.content ?? ""),
-          isError: looksFailed(String(message.content ?? "")),
-        },
-      ];
-    const blocks = blocksOf(message.content);
-    if (message.role === "user") return [{ role: "user", text: textOf(blocks) }];
-    const calls = blocks
-      .filter(
-        (block): block is Extract<ContentBlock, { type: "tool_call" }> =>
-          block.type === "tool_call" && typeof block.name === "string",
-      )
-      .map((block) => ({
-        id: String(block.id ?? ""),
-        name: block.name,
-        args: block.arguments && typeof block.arguments === "object" ? block.arguments : {},
-      }));
-    return [{ role: "assistant", text: textOf(blocks), calls }];
-  });
-}
-
-/** A recorded tool result that reports a failure: a JSON object with an `error` field. */
-export function looksFailed(content: string): boolean {
-  try {
-    const value = JSON.parse(content) as unknown;
-    return !!value && typeof value === "object" && !Array.isArray(value) && "error" in value;
-  } catch {
-    return false;
-  }
-}
-
-function captured(call: ModelCall): boolean {
-  const messages = call.payload?.messages ?? [];
-  return (
-    messages.length >= 2 ||
-    messages.some(
-      (message) => message.role !== "tool" && textOf(blocksOf(message.content)).trim().length > 0,
-    )
-  );
-}
-
-/**
- * The run's recording from its model calls, or null when its prompts weren't
- * captured. The last call's messages hold the whole conversation: everything
- * after the first call's input is what the run did.
- */
-export function readRecording(run: RunRecord, calls: readonly ModelCall[]): Recording | null {
-  const points = calls.filter((call) => call.payload && captured(call));
-  if (points.length === 0) return null;
-  const first = points[0]!.payload!;
-  const last = points[points.length - 1]!.payload!;
-  const historyLength = Math.max(0, first.messages.length - 1);
-  const history = toReplayMessages(first.messages.slice(0, historyLength));
-  const after = toReplayMessages(last.messages.slice(historyLength));
-  const results = new Map(
-    after
-      .filter(
-        (message): message is Extract<ReplayMessage, { role: "tool" }> => message.role === "tool",
-      )
-      .map((message) => [message.callId, message]),
-  );
-  const invokes = run.steps.filter((step): step is InvokeStep => step.kind === "invoke");
-  const recordedCalls: RecordedCall[] = [];
-  for (const message of after) {
-    if (message.role !== "assistant") continue;
-    for (const call of message.calls) {
-      const result = results.get(call.id);
-      if (!result) continue;
-      const step = invokes[recordedCalls.length];
-      const failed =
-        step && step.targetId === call.name ? step.outcome === "error" : result.isError;
-      recordedCalls.push({ ...call, result: result.content, isError: failed || result.isError });
-    }
-  }
-  const tools = new Map<string, ToolDef>();
-  for (const point of points) {
-    for (const tool of point.payload!.tools ?? []) {
-      if (!tools.has(tool.name))
-        tools.set(tool.name, {
-          name: tool.name,
-          description: tool.description ?? "",
-          parameters: tool.parameters ?? { type: "object", properties: {} },
-        });
-    }
-  }
-  const earlier = answeredCalls(history);
-  const modelMs = points.reduce((sum, call) => sum + (call.latencyMs ?? 0), 0);
-  const toolMs =
-    recordedCalls.length > 0 && run.durationMs
-      ? Math.max(0, (run.durationMs - modelMs) / recordedCalls.length)
-      : 0;
-  const inputTokens = Math.max(0, ...points.map((call) => call.inputTokens ?? 0));
-  return {
-    history,
-    system: first.system,
-    tools: [...tools.values()],
-    calls: recordedCalls,
-    earlier,
-    model: points[0]!.model ?? first.model ?? null,
-    toolMs,
-    inputTokens,
-  };
-}
-
-/** The calls `messages` made that have a result in them. */
-function answeredCalls(messages: readonly ReplayMessage[]): RecordedCall[] {
-  const results = new Map(
-    messages
-      .filter(
-        (message): message is Extract<ReplayMessage, { role: "tool" }> => message.role === "tool",
-      )
-      .map((message) => [message.callId, message]),
-  );
-  return messages.flatMap((message) =>
-    message.role !== "assistant"
-      ? []
-      : message.calls.flatMap((call) => {
-          const result = results.get(call.id);
-          return result ? [{ ...call, result: result.content, isError: result.isError }] : [];
-        }),
-  );
-}
+export {
+  looksFailed,
+  type RecordedCall,
+  type Recording,
+  readRecording,
+  recordedScenario,
+  type ScenarioBuilder,
+  type ScenarioRequest,
+  toReplayMessages,
+} from "./scenario";
 
 /**
  * An argument value only the conversation could have given the model: a
@@ -292,6 +139,8 @@ export interface ReplayInput {
   touched: boolean;
   /** RC-295: fixed answers, checked before the recording. */
   mocks?: readonly ToolMock[];
+  /** RC-654: steps the side plays before it asks the agent (see `ReplayExtras.opening`). */
+  opening?: readonly ReplayTranscriptStep[];
 }
 
 /**
@@ -320,6 +169,14 @@ export interface ReplayExtras {
   mocks?: readonly ToolMock[];
   after?: readonly ReplayMessage[];
   conversation?: boolean;
+  /**
+   * RC-654: steps the run starts with, after the ask: agent replies and tool
+   * answers a person kept or wrote. They go into the conversation and the
+   * transcript as they are. The calls of the last reply that have no answer
+   * are answered as any call is, then the agent goes on. A last reply with no
+   * calls ends the turn.
+   */
+  opening?: readonly ReplayTranscriptStep[];
 }
 
 const FAILS_CLEARLY = " When it fails, it says why and whether trying again can help.";
@@ -537,6 +394,8 @@ export interface ReplayDeps {
   trace?: { keepText: boolean };
   /** RC-482: the project's price book for the side's cost (the customer's model). Absent: the current built-in prices. The meter's budget never reads it. */
   prices?: PriceBook;
+  /** RC-607: builds what the replay's model sees. Absent: the recorded scenario (`recordedScenario`). */
+  scenario?: ScenarioBuilder;
 }
 
 interface SideRun {
@@ -635,7 +494,8 @@ async function answerCall(
     .map((recorded) => recorded.result);
   // Room for the worst case first: other runs are calling at the same time.
   const hold = await deps.spend.reserve(tool.model, {
-    inputTokens: STAND_IN_PROMPT_TOKENS + estimateTokens(def, call.args, examples),
+    inputTokens:
+      STAND_IN_PROMPT_TOKENS + estimateTokens(def, call.args, examples, recording.context ?? null),
     outputTokens: SMALL_MAX_TOKENS,
   });
   if (!hold) {
@@ -644,7 +504,13 @@ async function answerCall(
   }
   let answer: Awaited<ReturnType<ToolStandIn["answer"]>>;
   try {
-    answer = await tool.answer({ tool: def, name: call.name, args: call.args, examples });
+    answer = await tool.answer({
+      tool: def,
+      name: call.name,
+      args: call.args,
+      examples,
+      ...(recording.context ? { context: recording.context } : {}),
+    });
   } catch (err) {
     deps.spend.release(hold);
     throw err;
@@ -692,6 +558,44 @@ async function replaySide(
   onSide?.(side);
   const priced =
     recording.model && priceFor(recording.model, deps.prices) ? recording.model : agent.model;
+  const answerInSide = async (call: ReplayCall) => {
+    const answer = await answerCall(call, pool, input, recording, deps);
+    const content =
+      answer.isError && input.failClearly.has(call.name)
+        ? clearFailure(call.name, answer.content)
+        : answer.content;
+    if (answer.source === "stand-in") side.standIns += 1;
+    if (answer.source === "stand-in" && input.merged.has(call.name)) side.unverified += 1;
+    side.calls.push(call.name);
+    if (answer.source !== "earlier") side.fresh.push(call.name);
+    side.outcomes.push(answer.isError ? "error" : "ok");
+    side.latencyMs += recording.toolMs;
+    messages.push({ role: "tool", callId: call.id, content, isError: answer.isError });
+    if (side.trace) {
+      side.trace.answers.push({
+        tool: call.name,
+        source: answer.source,
+        reason: answer.reason,
+        ms: Math.round(recording.toolMs),
+        ...(answer.why ? { why: answer.why } : {}),
+        ...(keepText ? { args: call.args, result: content, isError: answer.isError } : {}),
+      });
+      side.trace.transcript?.push({
+        role: "tool",
+        tool: call.name,
+        content,
+        isError: answer.isError,
+      });
+    }
+  };
+  if (
+    input.opening &&
+    input.opening.length > 0 &&
+    (await playOpening(input.opening, messages, side, keepText, answerInSide))
+  ) {
+    side.answered = true;
+    return side;
+  }
   for (let step = 0; step < deps.maxSteps; step += 1) {
     // Room for the worst case first (the recorded prompt size or this one, whichever is larger, and a full answer): other runs are calling at the same time.
     const estimate = {
@@ -699,7 +603,7 @@ async function replaySide(
         recording.inputTokens,
         estimateTokens(input.system, input.tools, messages),
       ),
-      outputTokens: AGENT_MAX_TOKENS,
+      outputTokens: agent.maxTokens ?? AGENT_MAX_TOKENS,
     };
     const hold = await deps.spend.reserve(agent.model, estimate);
     if (!hold) {
@@ -742,39 +646,64 @@ async function replaySide(
       side.answered = true;
       return side;
     }
-    for (const call of reply.calls) {
-      const answer = await answerCall(call, pool, input, recording, deps);
-      const content =
-        answer.isError && input.failClearly.has(call.name)
-          ? clearFailure(call.name, answer.content)
-          : answer.content;
-      if (answer.source === "stand-in") side.standIns += 1;
-      if (answer.source === "stand-in" && input.merged.has(call.name)) side.unverified += 1;
-      side.calls.push(call.name);
-      if (answer.source !== "earlier") side.fresh.push(call.name);
-      side.outcomes.push(answer.isError ? "error" : "ok");
-      side.latencyMs += recording.toolMs;
-      messages.push({ role: "tool", callId: call.id, content, isError: answer.isError });
-      if (side.trace) {
-        side.trace.answers.push({
-          tool: call.name,
-          source: answer.source,
-          reason: answer.reason,
-          ms: Math.round(recording.toolMs),
-          ...(answer.why ? { why: answer.why } : {}),
-          ...(keepText ? { args: call.args, result: content, isError: answer.isError } : {}),
-        });
-        side.trace.transcript?.push({
-          role: "tool",
-          tool: call.name,
-          content,
-          isError: answer.isError,
-        });
-      }
-    }
+    for (const call of reply.calls) await answerInSide(call);
   }
   side.capped = true;
   return side;
+}
+
+/**
+ * RC-654: play the opening steps into the side: each reply and its answers as
+ * they are (an answer counts as one from before the run), then the calls of
+ * the last reply with no answer, answered as any call is. True when the last
+ * reply makes no call: it ends the turn.
+ */
+async function playOpening(
+  opening: readonly ReplayTranscriptStep[],
+  messages: ReplayMessage[],
+  side: SideRun,
+  keepText: boolean,
+  answer: (call: ReplayCall) => Promise<void>,
+): Promise<boolean> {
+  let pending: ReplayCall[] = [];
+  for (const [index, step] of opening.entries()) {
+    if (step.role === "assistant") {
+      pending = step.calls.map((call, at) => ({
+        id: `opening_${index}_${at}`,
+        name: call.name,
+        args: call.args,
+      }));
+      messages.push({ role: "assistant", text: step.text, calls: pending });
+      side.trace?.transcript?.push({
+        role: "assistant",
+        text: step.text,
+        calls: step.calls.map(({ name, args }) => ({ name, args })),
+      });
+      continue;
+    }
+    const call = pending.find((item) => item.name === step.tool) ?? pending[0];
+    if (!call) continue;
+    pending = pending.filter((item) => item !== call);
+    side.calls.push(call.name);
+    side.outcomes.push(step.isError ? "error" : "ok");
+    messages.push({ role: "tool", callId: call.id, content: step.content, isError: step.isError });
+    side.trace?.answers.push({
+      tool: call.name,
+      source: "earlier",
+      reason: "answered_before_run",
+      ms: 0,
+      ...(keepText ? { args: call.args, result: step.content, isError: step.isError } : {}),
+    });
+    side.trace?.transcript?.push({
+      role: "tool",
+      tool: call.name,
+      content: step.content,
+      isError: step.isError,
+    });
+  }
+  for (const call of pending) await answer(call);
+  const last = opening.at(-1);
+  return last?.role === "assistant" && last.calls.length === 0;
 }
 
 /** How a side ended. */
@@ -872,7 +801,7 @@ export async function replayRun(
   change: FixChange,
   deps: ReplayDeps,
 ): Promise<ReplayOutcome> {
-  const recording = readRecording(run, calls);
+  const recording = buildScenario(deps, { run, calls });
   if (!recording) return { ok: false, reason: CANT_SIMULATE.noPrompts };
   if (!deps.models.agent) return { ok: false, reason: CANT_SIMULATE.noModel };
   if (deps.halt?.reason) return { ok: false, reason: deps.halt.reason };
@@ -884,7 +813,8 @@ export async function replayRun(
       reason: "Nothing the fix changes in what this run's model saw",
       notAffected: true,
     };
-  if (ungroundedArgs(recording).length > 0) return { ok: false, reason: CANT_SIMULATE.ungrounded };
+  if (!recording.filled && ungroundedArgs(recording).length > 0)
+    return { ok: false, reason: CANT_SIMULATE.ungrounded };
   const context = {
     recordedModel: recording.model,
     recorded: recording.calls.map(({ id, name, args }) => ({ id, name, args })),
@@ -990,12 +920,17 @@ export async function replayAsRecorded(
   extras: ReplayExtras = {},
   change: FixChange | null = null,
 ): Promise<RecordedReplayOutcome> {
-  const read = readRecording(run, calls);
-  const recording = read && withEarlier(read, extras.history ?? [], extras.after ?? []);
+  const recording = buildScenario(deps, {
+    run,
+    calls,
+    history: extras.history,
+    after: extras.after,
+  });
   if (!recording) return { ok: false, reason: CANT_SIMULATE.noPrompts };
   if (!deps.models.agent) return { ok: false, reason: CANT_SIMULATE.noModel };
   if (deps.halt?.reason) return { ok: false, reason: deps.halt.reason };
-  if (ungroundedArgs(recording).length > 0) return { ok: false, reason: CANT_SIMULATE.ungrounded };
+  if (!recording.filled && ungroundedArgs(recording).length > 0)
+    return { ok: false, reason: CANT_SIMULATE.ungrounded };
   const agent = deps.models.agent({
     recordedModel: recording.model,
     recorded: recording.calls.map(({ id, name, args }) => ({ id, name, args })),
@@ -1010,6 +945,7 @@ export async function replayAsRecorded(
     const input = {
       ...replayInput(recording, change, deps.toolDefs),
       ...(extras.mocks?.length ? { mocks: extras.mocks } : {}),
+      ...(extras.opening?.length ? { opening: extras.opening } : {}),
     };
     const done = await replaySide(agent, recording, input, deps, (started) => {
       side = started;
@@ -1049,6 +985,11 @@ export async function replayAsRecorded(
   }
 }
 
+/** RC-607: the one place a replay's scenario is built. */
+function buildScenario(deps: ReplayDeps, request: ScenarioRequest): Recording | null {
+  return (deps.scenario ?? recordedScenario)(request);
+}
+
 /** A model not enabled on Bedrock: log it, stop later runs on that model only, and say which model. */
 function notEnabledStop(err: ModelNotEnabled, turnId: string, deps: ReplayDeps): string {
   logger.error(
@@ -1057,24 +998,6 @@ function notEnabledStop(err: ModelNotEnabled, turnId: string, deps: ReplayDeps):
   );
   if (deps.halt) (deps.halt.notEnabled ??= new Set()).add(err.model);
   return notEnabledReason(err.model);
-}
-
-/**
- * RC-295: the recording with `history` before its own and (RC-296) `after`
- * after it. Calls answered in them count as earlier ones (a re-read gets the
- * same answer, and isn't held to the recorded path).
- */
-function withEarlier(
-  recording: Recording,
-  history: readonly ReplayMessage[],
-  after: readonly ReplayMessage[],
-): Recording {
-  if (history.length === 0 && after.length === 0) return recording;
-  return {
-    ...recording,
-    history: [...history, ...recording.history, ...after],
-    earlier: [...answeredCalls(history), ...recording.earlier, ...answeredCalls(after)],
-  };
 }
 
 /** What the replay had to stand in for, in plain words; null when it stood in for nothing. */

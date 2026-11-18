@@ -3,6 +3,7 @@ import {
   type PublishableIngestLimits,
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
+import { type IngestLogDeps, logLogsIngested } from "@/lib/ingest/otlp/ingest-log";
 import type { insertOtelLogs as insertOtelLogsFn } from "@/lib/ingest/otlp/queries";
 import { inflateBody, isGzipEncoding, MAX_INFLATED_BYTES } from "@/lib/ingest/otlp/route-handler";
 import {
@@ -61,6 +62,8 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
   genAiLogJoin?: GenAiLogJoinDeps;
+  /** Where the Datadog ingest line goes; absent, the app log and the cached project lookup. */
+  ingestLog?: IngestLogDeps;
 }
 
 export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Promise<Response> {
@@ -308,6 +311,11 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
 
   await deps.touchApiKey(apiKey.id).catch(() => {});
 
+  await logLogsIngested(
+    apiKey.projectId,
+    { records: records.length, accepted, dropped },
+    deps.ingestLog,
+  );
   await trackAcceptedIngestRequest(
     { accepted, records: records.length, dropped },
     {

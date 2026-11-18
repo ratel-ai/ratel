@@ -103,10 +103,9 @@ export interface BuildJobDeps {
    */
   onBacklogDrained?: (projectId: string) => Promise<unknown>;
   /**
-   * Called when a run built pages but did NOT catch up (RC-224): with the
-   * quick first reading on, a project's first reading can start from the
-   * last week while the older backlog is still being built
-   * (`enqueueEarlyFirstReading`). Never throws.
+   * Called when a run built pages but did NOT catch up (RC-224): a
+   * project's first reading can start from the last week while the older
+   * backlog is still being built (`enqueueEarlyFirstReading`). Never throws.
    */
   onBacklogProgress?: (projectId: string) => Promise<unknown>;
   observability: Pick<BackgroundObservability, "trackSystemEvent">;
