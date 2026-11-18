@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
+import { composition } from "@/lib/composition";
+import type { ModelCallLogContext, ModelCallRecord } from "@/lib/contracts/telemetry";
 import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
+import { runWithLogContext } from "@/lib/platform/logger";
 import {
   anthropicUsage,
   recordModelCall,
+  recordTracedModelCall,
   setModelCallExceptionReporter,
   setModelCallSink,
   trackModelCall,
@@ -305,4 +309,98 @@ test("an exception reporter failure never breaks the call", async () => {
   } finally {
     restoreReporter();
   }
+});
+
+/** The edition's recorder on the telemetry port, for one block of work. */
+async function withRecorder(
+  recorder: NonNullable<typeof composition.telemetry.recordModelCall>,
+  work: () => Promise<void> | void,
+): Promise<void> {
+  const previous = composition.telemetry.recordModelCall;
+  composition.telemetry.recordModelCall = recorder;
+  try {
+    await work();
+  } finally {
+    composition.telemetry.recordModelCall = previous;
+  }
+}
+
+test("an edition's recorder gets the raw record and the log context of every call, made or not", async () => {
+  const seen: { record: ModelCallRecord; context: ModelCallLogContext }[] = [];
+  await withRecorder(
+    (record, context) => seen.push({ record, context }),
+    async () => {
+      await runWithLogContext(
+        { project_id: "p1", org_id: "o1", org_slug: "acme", project_path: "acme/app" },
+        async () => {
+          await trackModelCall(
+            META,
+            async () => ({ usage: { input_tokens: 10, output_tokens: 4 } }),
+            anthropicUsage,
+          );
+          await assert.rejects(
+            trackModelCall(META, async () => {
+              throw new TypeError("boom");
+            }),
+          );
+          recordModelCall({ ...META, outcome: "refused_budget", durationMs: 0, calls: 3 });
+          recordModelCall({ ...META, outcome: "skipped_no_key", durationMs: 0 });
+          recordTracedModelCall({ ...META, outcome: "ok", durationMs: 12, inputTokens: 5 }, 0);
+        },
+      );
+    },
+  );
+
+  assert.deepEqual(
+    seen.map(({ record }) => [record.outcome, record.inputTokens ?? null, record.calls ?? null]),
+    [
+      ["ok", 10, null],
+      ["error", null, null],
+      ["refused_budget", null, 3],
+      ["skipped_no_key", null, null],
+      ["ok", 5, null],
+    ],
+  );
+  assert.ok(seen[1]?.record.error instanceof TypeError, "the error itself, for its class only");
+  for (const { record, context } of seen) {
+    assert.deepEqual(
+      [record.provider, record.model, record.feature, record.payer],
+      [META.provider, META.model, META.feature, META.payer],
+    );
+    assert.deepEqual(context, {
+      project_id: "p1",
+      org_id: "o1",
+      org_slug: "acme",
+      project_path: "acme/app",
+    });
+  }
+});
+
+test("with an edition's recorder the sink is not written: the edition owns the line", async () => {
+  const { lines, restore } = capture();
+  try {
+    let recorded = 0;
+    await withRecorder(
+      () => {
+        recorded += 1;
+      },
+      () => recordModelCall({ ...META, outcome: "ok", durationMs: 1 }),
+    );
+    assert.equal(recorded, 1);
+    assert.equal(lines.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test("a recorder that throws never breaks the call it describes", async () => {
+  await withRecorder(
+    () => {
+      throw new Error("recorder down");
+    },
+    async () => {
+      assert.equal(await trackModelCall(META, async () => 7), 7);
+      assert.doesNotThrow(() => recordModelCall({ ...META, outcome: "ok", durationMs: 1 }));
+    },
+  );
 });

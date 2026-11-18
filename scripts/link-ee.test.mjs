@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, test } from "node:test";
@@ -55,4 +65,84 @@ test("a checkout with no proxy stub installs none", () => {
   link("--auto");
   assert.ok(existsSync(route()));
   assert.equal(existsSync(proxy()), false);
+});
+
+const placed = () => join(root, "apps/web/public/email/mark.png");
+const corePublic = () => join(root, "apps/web/public/icon.png");
+
+function publicFiles() {
+  mkdirSync(join(root, "ee/src/public/email"), { recursive: true });
+  writeFileSync(join(root, "ee/src/public/email/mark.png"), "edition mark");
+  mkdirSync(join(root, "apps/web/public"), { recursive: true });
+  writeFileSync(corePublic(), "core icon");
+}
+
+test("--auto places the edition's public files as real files beside the app's own", () => {
+  checkout();
+  publicFiles();
+  link("--auto");
+  assert.equal(readFileSync(placed(), "utf8"), "edition mark");
+  // A copy, not a link: the standalone image copies apps/web/public on its own.
+  assert.equal(lstatSync(placed()).isSymbolicLink(), false);
+  assert.equal(readFileSync(corePublic(), "utf8"), "core icon");
+});
+
+test("an edition file removed from the checkout goes from the app at the next run", () => {
+  checkout();
+  publicFiles();
+  link("--auto");
+  rmSync(join(root, "ee/src/public/email/mark.png"));
+  link("--auto");
+  assert.equal(existsSync(placed()), false);
+  assert.equal(existsSync(join(root, "apps/web/public/email")), false);
+});
+
+const placedGone = () => {
+  assert.equal(existsSync(placed()), false);
+  assert.equal(existsSync(join(root, "apps/web/public/email")), false);
+  assert.equal(readFileSync(corePublic(), "utf8"), "core icon");
+};
+
+test("--auto with no checkout removes the placed files and keeps the app's own", () => {
+  checkout();
+  publicFiles();
+  link("--auto");
+  rmSync(join(root, "ee"), { recursive: true });
+  link("--auto");
+  placedGone();
+});
+
+test("--unlink removes the placed files and keeps the app's own", () => {
+  checkout();
+  publicFiles();
+  link("--link");
+  link("--unlink");
+  placedGone();
+});
+
+test("an edition file never replaces one the app ships", () => {
+  checkout();
+  publicFiles();
+  writeFileSync(join(root, "ee/src/public/icon.png"), "edition icon");
+  link("--auto");
+  assert.equal(readFileSync(corePublic(), "utf8"), "core icon");
+  assert.equal(readFileSync(placed(), "utf8"), "edition mark");
+  link("--unlink");
+  assert.equal(readFileSync(corePublic(), "utf8"), "core icon");
+});
+
+test("with no edition, nothing is placed", () => {
+  mkdirSync(join(root, "apps/web/public"), { recursive: true });
+  writeFileSync(corePublic(), "core icon");
+  link("--auto");
+  assert.deepEqual(readdirSync(join(root, "apps/web/public")), ["icon.png"]);
+  assert.deepEqual(readdirSync(join(root, "apps/web")).sort(), ["app", "public"]);
+});
+
+test("the files placed in this repository are git-ignored", () => {
+  const repo = new URL("..", import.meta.url).pathname;
+  for (const file of ["apps/web/public/email/ratel-mark.png", "apps/web/.ee-public.json"]) {
+    const out = execFileSync("git", ["check-ignore", "--no-index", file], { cwd: repo, encoding: "utf8" });
+    assert.equal(out.trim(), file);
+  }
 });

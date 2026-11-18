@@ -1,13 +1,10 @@
 import { PageBody } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
-import { notFound } from "next/navigation";
-import { getSessionContext } from "@/lib/platform/session";
+import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 
 /** Organization settings > General: the name and the address, read-only (the edition owns them). */
 export async function OrgGeneralSettings({ slug }: { slug: string }) {
-  const context = await getSessionContext();
-  if (!context || context.organization.slug !== slug) notFound();
-  const { organization } = context;
+  const { organization } = await requireOrganizationScope(slug);
   return (
     <PageBody className="*:min-w-0">
       <Section title="Organization">

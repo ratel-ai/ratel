@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { cache } from "react";
 import { isApiKeyExpired } from "@/lib/platform/api-keys";
 import {
@@ -82,6 +82,22 @@ export async function listProjectsForOrganization(
     .select()
     .from(projects)
     .where(eq(projects.organizationId, organizationId))
+    .orderBy(asc(projects.createdAt));
+}
+
+/**
+ * The projects of several organizations in one read, oldest first: the shell's projects across
+ * every organization the reader belongs to (upstream reads them one organization at a time).
+ */
+export async function listProjectsForOrganizations(
+  organizationIds: readonly string[],
+  db: ProjectLookupDb = getDb(),
+): Promise<Project[]> {
+  if (organizationIds.length === 0) return [];
+  return db
+    .select()
+    .from(projects)
+    .where(inArray(projects.organizationId, [...organizationIds]))
     .orderBy(asc(projects.createdAt));
 }
 

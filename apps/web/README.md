@@ -67,7 +67,9 @@ session pages keep their route group `(session-replay)`, and `(stage-spine)` (Ta
 for everyone.
 
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
-route stubs when `ee/src` exists and removes them otherwise.
+route stubs when `ee/src` exists and removes them otherwise. It also copies the edition's static
+files (`ee/src/public/`) into `public/`, git-ignored and listed in `.ee-public.json`, never
+replacing a file the app ships.
 
 ## API keys and scopes
 

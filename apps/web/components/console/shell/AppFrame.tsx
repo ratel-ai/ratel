@@ -16,7 +16,9 @@ import {
   consoleNav,
   findProject,
   projectIdFromPath,
+  shellOrganization,
   shortcutHref,
+  visibleOrganizationNav,
 } from "@/lib/console/navigation";
 import { serializeSidebarCollapsedCookie } from "@/lib/console/sidebar-cookie";
 import { type CommandAction, CommandMenu } from "./CommandMenu";
@@ -48,16 +50,40 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const project = findProject(data.projects, projectIdFromPath(pathname));
+  // Upstream's choice: the project's organization, else the route's, else the active one.
+  const organization = shellOrganization(
+    data.organizations,
+    data.projects,
+    pathname,
+    data.organizationSlug,
+  );
+  const organizationSlug = organization?.slug ?? data.organizationSlug;
+  const organizationName = organization?.name ?? data.organizationName;
+  const organizationProjects = useMemo(
+    () =>
+      organization
+        ? data.projects.filter((candidate) => candidate.organizationId === organization.id)
+        : data.projects,
+    [organization, data.projects],
+  );
+  const organizationNav = useMemo(
+    () =>
+      visibleOrganizationNav(
+        data.organizationNav,
+        (organizationSlug && data.hiddenOrganizationNav[organizationSlug]) || [],
+      ),
+    [data.organizationNav, data.hiddenOrganizationNav, organizationSlug],
+  );
   const items = useMemo(
     () =>
       consoleNav({
         projectId: project?.id,
-        organizationSlug: data.organizationSlug ?? undefined,
+        organizationSlug: organizationSlug ?? undefined,
         additions: data.editionNav,
-        organizationAdditions: data.organizationNav,
+        organizationAdditions: organizationNav,
         projectGroups: data.projectNav,
       }),
-    [project, data.organizationSlug, data.editionNav, data.organizationNav, data.projectNav],
+    [project, organizationSlug, data.editionNav, organizationNav, data.projectNav],
   );
   const activeId = activeNavItemId(pathname, items);
   // Inside a project ⌘K reaches the organization's pages too.
@@ -66,12 +92,12 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       project
         ? consoleNav({
             projectId: undefined,
-            organizationSlug: data.organizationSlug ?? undefined,
+            organizationSlug: organizationSlug ?? undefined,
             additions: data.editionNav,
-            organizationAdditions: data.organizationNav,
+            organizationAdditions: organizationNav,
           })
         : [],
-    [project, data.organizationSlug, data.editionNav, data.organizationNav],
+    [project, organizationSlug, data.editionNav, organizationNav],
   );
   const entries = useMemo(
     () =>
@@ -79,11 +105,11 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         items,
         organizationItems,
         projectId: project?.id,
-        projects: data.projects,
+        projects: organizationProjects,
         pathname,
-        organizationSlug: data.organizationSlug ?? undefined,
+        organizationSlug: organizationSlug ?? undefined,
       }),
-    [items, organizationItems, project, data.projects, pathname, data.organizationSlug],
+    [items, organizationItems, project, organizationProjects, pathname, organizationSlug],
   );
 
   const toggleCollapsed = useCallback(() => {
@@ -153,9 +179,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   const sidebarProps = {
     items,
     activeId,
-    organizationName: data.organizationName,
-    organizationSlug: data.organizationSlug,
-    projects: data.projects,
+    organizationName,
+    organizationSlug,
+    projects: organizationProjects,
     project,
     account: data.account,
     accountMenuItems: data.accountMenuItems,
@@ -186,7 +212,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
           <div className="sticky top-[var(--support-bar,0px)] z-sticky flex h-12 items-center gap-2 border-b border-line bg-rail px-2 md:hidden">
             <IconButton label="Open menu" icon={<Menu />} onClick={() => setMobileOpen(true)} />
             <span className="min-w-0 flex-1 truncate text-ui font-semibold">
-              {project?.name ?? data.organizationName ?? "Ratel"}
+              {project?.name ?? organizationName ?? "Ratel"}
             </span>
             <IconButton label="Search" icon={<Search />} onClick={() => setCommandOpen(true)} />
           </div>

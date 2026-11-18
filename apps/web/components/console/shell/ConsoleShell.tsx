@@ -2,7 +2,6 @@ import { cookies } from "next/headers";
 import type { ReactNode } from "react";
 import { AppFrame } from "@/components/console/shell/AppFrame";
 import { composition } from "@/lib/composition";
-import { visibleOrganizationNav } from "@/lib/console/navigation";
 import { getConsoleScope } from "@/lib/console/shell-data";
 import {
   parseSidebarCollapsedCookie,
@@ -17,11 +16,17 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   const ConsoleBoundary = ui?.ConsoleBoundary;
   const ConsoleOverlays = ui?.ConsoleOverlays;
   const ScopeSwitcher = scope ? ui?.ScopeSwitcher : undefined;
-  const projects = scope?.projects ?? [];
-  const hidden =
-    scope?.organizationSlug && ui?.hiddenOrganizationNav
-      ? await ui.hiddenOrganizationNav(scope.organizationSlug)
-      : [];
+  // Every organization the reader belongs to and their projects: the frame picks the one shown.
+  const projects = scope?.memberProjects ?? [];
+  const organizations = scope?.organizations ?? [];
+  const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
+  const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
+    ? Object.fromEntries(
+        await Promise.all(
+          organizations.map(async ({ slug }) => [slug, await hiddenOrganizationNav(slug)] as const),
+        ),
+      )
+    : {};
   return (
     <>
       <a
@@ -34,10 +39,12 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
         data={{
           organizationName: scope?.organizationName ?? null,
           organizationSlug: scope?.organizationSlug ?? null,
+          organizations,
           projects,
           account: scope?.account ?? null,
           editionNav: composition.nav,
-          organizationNav: visibleOrganizationNav(composition.organizationNav, hidden),
+          organizationNav: composition.organizationNav,
+          hiddenOrganizationNav: hidden,
           projectNav: composition.projectNav,
           scopeSwitcher: ScopeSwitcher
             ? {

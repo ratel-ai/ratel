@@ -21,7 +21,7 @@ import {
   listApiKeysForProject,
   revokeApiKey,
 } from "@/lib/platform/projects/queries";
-import { getSessionContext } from "@/lib/platform/session";
+import { getSessionContext, sessionForOrganization } from "@/lib/platform/session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 
 export type {
@@ -82,12 +82,11 @@ export async function revokeApiKeyAction(
   return revokeApiKeyHandler(input, organizationId, apiKeyActionDeps);
 }
 
-/** The session organization; an id naming any other one resolves to nothing. */
+/** Any organization the reader belongs to, as upstream; an id naming any other one resolves to nothing. */
 async function getApiKeyActionContext(organizationId?: string): Promise<ApiKeyActionContextResult> {
   const session = await getSessionContext();
   if (!session) return { ok: false, error: "Your session has expired. Sign in again." };
-  if (organizationId && organizationId !== session.organization.id) {
-    return { ok: false, error: "Organization not found." };
-  }
-  return { ok: true, context: { user: session.user, organization: session.organization } };
+  const ctx = sessionForOrganization(session, organizationId);
+  if (!ctx) return { ok: false, error: "Organization not found." };
+  return { ok: true, context: { user: ctx.user, organization: ctx.organization } };
 }
