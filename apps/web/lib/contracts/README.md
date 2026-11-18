@@ -28,6 +28,12 @@ the product events) and answers with the key once and the send-your-first-trace 
 `ensureSampleProject` gives an empty organization its sample project. The edition resolves the
 session and refuses a support session before it calls either.
 
+The session port's optional `rememberProject` keeps the project a reader just opened, called by
+the project layout once the reader may see it. Cloud keeps it on the user row and writes nothing in
+a support session; the open-source edition leaves it out and keeps only the last-project cookie.
+A project or organization page is authorized by the session's `memberships`, so any organization
+the reader belongs to opens, whichever is active.
+
 `self-telemetry.ts` holds the names both editions share for Ratel's own model calls as telemetry:
 `MODEL_CALL_TRACER` (the tracer whose spans the self-telemetry export selects) and
 `selfTelemetryProjectId` (the project those calls are not exported for). The core's model-call seam

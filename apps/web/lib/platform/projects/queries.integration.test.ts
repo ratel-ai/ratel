@@ -14,6 +14,7 @@ import {
   getProjectById,
   listApiKeysForProject,
   listProjectsForOrganization,
+  listProjectsForOrganizations,
   type ProjectLookupDb,
   type ProjectSettingsDb,
   parseProjectUuid,
@@ -208,4 +209,24 @@ test("with only scoped keys, the newest one is still the primary", async () => {
     (await getPrimaryApiKeyForProject(PROJECT_ID, db as unknown as ApiKeyDb))?.name,
     "Only",
   );
+});
+
+test("the projects of several organizations come back in one read, oldest first, and of no other", async () => {
+  const { client, db } = await seed();
+  const BETA = "55555555-5555-4555-8555-555555555555";
+  const GAMMA = "66666666-6666-4666-8666-666666666666";
+  await client.exec(`
+    insert into organizations (id, name, slug) values ('${BETA}', 'Beta', 'beta'), ('${GAMMA}', 'Gamma', 'gamma');
+    insert into projects (id, organization_id, name, slug, created_at) values
+      ('77777777-7777-4777-8777-777777777777', '${BETA}', 'Beta agent', 'beta-agent', now() - interval '1 day'),
+      ('88888888-8888-4888-8888-888888888888', '${GAMMA}', 'Gamma agent', 'gamma-agent', now());
+  `);
+  const rows = await listProjectsForOrganizations([ORGANIZATION_ID, BETA], db as ProjectLookupDb);
+  assert.deepEqual(
+    rows.map((p) => p.organizationId).sort(),
+    [BETA, ORGANIZATION_ID, ORGANIZATION_ID].sort(),
+  );
+  assert.equal(rows[0].name, "Beta agent", "oldest first");
+  assert.deepEqual(await listProjectsForOrganizations([], db as ProjectLookupDb), []);
+  await client.close();
 });
