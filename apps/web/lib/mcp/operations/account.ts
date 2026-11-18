@@ -3,6 +3,7 @@ import { countSkills } from "@/lib/catalog/queries";
 import { composition } from "@/lib/composition/ports";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
+import { editionToolListed } from "@/lib/mcp/operations/edition";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import {
@@ -32,7 +33,9 @@ import { budgetLine, type RunBudget } from "@/lib/views/quality/run-menu";
  * so agents that call it get that answer.
  *
  * Upstream also answers `get_embedding_usage` here; the Embedding API and its
- * credit ledger are not part of this edition, so the tool is not registered.
+ * credit ledger belong to the edition, which adds that tool through
+ * `Registration.mcpOperations` (`edition.ts`). `get_quota_status` points at it
+ * only when it is listed.
  */
 /**
  * The deployment's switches, as `get_flag_status` reports them. Owned (ADR-0030): upstream
@@ -58,6 +61,8 @@ export interface AccountOperationDeps {
   /** Match quality runs the project started since a date (the console's run budget count). */
   countMatchQualityRunsSince: (projectId: string, since: Date) => Promise<number>;
   now: () => Date;
+  /** Whether the edition lists a tool, so a hint names only tools the caller has. */
+  editionToolListed: (id: string) => boolean;
 }
 
 export const defaultAccountDeps: AccountOperationDeps = {
@@ -69,6 +74,7 @@ export const defaultAccountDeps: AccountOperationDeps = {
   listInFlightJobs,
   countMatchQualityRunsSince: (projectId, since) => countRunsSince(projectId, since),
   now: () => new Date(),
+  editionToolListed: (id) => editionToolListed(id),
 };
 
 const QUOTA_KEYS: readonly QuotaKey[] = ["maxProjects", "maxSkillsPerProject", "maxMembers"];
@@ -218,6 +224,10 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
             }),
             matchQualityRuns: matchQualityBudget(organization, matchQualityRuns, now),
           },
+          // Upstream's hint, given only where the edition lists the wallet tool it names.
+          ...(deps.editionToolListed("get_embedding_usage")
+            ? { hint: "get_embedding_usage shows the Embeddings and Tool Picker wallets." }
+            : {}),
         };
       },
     }),

@@ -64,6 +64,7 @@ function deps(overrides: Partial<AccountOperationDeps> = {}): AccountOperationDe
     listInFlightJobs: async () => [],
     countMatchQualityRunsSince: async () => 0,
     now: () => NOW,
+    editionToolListed: () => false,
     ...overrides,
   };
 }

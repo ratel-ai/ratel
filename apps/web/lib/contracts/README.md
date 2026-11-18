@@ -40,6 +40,14 @@ session and refuses a support session before it calls either.
 `selfTelemetryProjectId` (the project those calls are not exported for). The core's model-call seam
 and the edition's copy start their spans with it, and `platform/otel/ratel-export.ts` selects them.
 
+`registry.ts` is what a module contributes to the background machinery (job handlers, drain
+steps) and, from an edition only, `mcpOperations`: MCP tools over data only the edition holds
+(Cloud's wallets and API usage). Each names its id, title, description, keywords, scope (project
+or organization), loop stage and the core tool it is listed `after`, and its params without
+`projectId`; the core adds that, resolves the project and publishes the tool read-only
+(`lib/mcp/operations/edition.ts`). Its `execute` gets the project, its organization and the
+core's `notFound`. The open-source edition registers none, so its tool list is unchanged.
+
 `mcpOAuth` (`mcp-oauth.ts`) is an optional port, not in the required set: browser sign-in for MCP
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to
