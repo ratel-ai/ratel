@@ -1,4 +1,5 @@
 import { composition } from "@/lib/composition/ports";
+import type { CompositionPorts } from "@/lib/contracts/composition";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -211,7 +212,7 @@ function defaultDeps(env: Env): ComputeJobDeps {
     recordSelfCorrections: recordSelfCorrectionsForRun,
     ...computeSeams,
     // Imports are the edition's: without an importer, no import is ever running.
-    importRunning: async (projectId) => (await composition.importRunning?.(projectId)) ?? false,
+    importRunning: (projectId) => editionImportRunning(projectId),
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
     storeHealthScore: async (projectId, runId, turnsRead, pillars) => {
       const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
@@ -223,6 +224,22 @@ function defaultDeps(env: Env): ComputeJobDeps {
     now: () => new Date(),
     timeBudgetMs: SIGNAL_TIME_BUDGET_MS,
   };
+}
+
+/**
+ * Whether the edition's importer is storing runs for the project right now. Its `importRunning`
+ * is upstream's own read for this job (a running import among the newest, one whose heartbeat
+ * stopped not counted), so it comes first; an edition that only says which import is running
+ * (`runningImport`, the freshness line's read) is asked that instead. Without an importer, no
+ * import is ever running.
+ */
+export async function editionImportRunning(
+  projectId: string,
+  edition: Pick<CompositionPorts, "importRunning" | "runningImport"> = composition,
+): Promise<boolean> {
+  if (edition.importRunning) return edition.importRunning(projectId);
+  if (edition.runningImport) return (await edition.runningImport(projectId)) !== null;
+  return false;
 }
 
 const SCORED_KINDS: ReadonlySet<string> = new Set(SIGNAL_KINDS);
