@@ -5,6 +5,7 @@ import type {
   ProjectNavGroup,
 } from "@/lib/composition/ports";
 import type { ConsoleAccount, ConsoleOrganization, ConsoleProject } from "@/lib/console/shell-data";
+import type { EditionCommandAction } from "@/lib/contracts/composition";
 
 /** Everything the client frame needs, resolved once per request on the server. */
 export type ShellData = {
@@ -29,5 +30,9 @@ export type ShellData = {
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
   accountMenuItems: ReactNode;
+  /** The edition's overlays, rendered on the server and mounted once after the shell's dialogs; null otherwise. */
+  overlays?: ReactNode;
+  /** Command palette entries the edition adds; none otherwise. */
+  commandActions?: readonly EditionCommandAction[];
   initiallyCollapsed: boolean;
 };
