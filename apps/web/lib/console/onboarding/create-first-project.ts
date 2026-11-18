@@ -31,9 +31,13 @@ export type CreateProjectState =
 
 export { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/api-key-actions";
 
+type FirstProjectOrganization = OrgLimitView & { slug: string };
+
 export type FirstProjectSession = {
   user: { externalId: string };
-  organization: OrgLimitView & { slug: string };
+  organization: FirstProjectOrganization;
+  /** Every organization the reader belongs to; a requested one must be among them. */
+  memberships?: readonly { organization: FirstProjectOrganization }[];
 };
 
 export type CreateFirstProjectDeps = {
@@ -94,8 +98,12 @@ export async function createFirstProject(
   if (!session) {
     return { ok: false, error: "Your session has expired. Sign in again." };
   }
-  const organization = session.organization;
-  if (input.organizationId && input.organizationId !== organization.id) {
+  // Upstream's `sessionForOrganization`: the active organization, or any other the reader belongs to.
+  const organization =
+    !input.organizationId || input.organizationId === session.organization.id
+      ? session.organization
+      : session.memberships?.find((m) => m.organization.id === input.organizationId)?.organization;
+  if (!organization) {
     return { ok: false, error: "Organization not found." };
   }
   const actor = { externalId: session.user.externalId, orgId: organization.id };

@@ -15,7 +15,7 @@ export async function startProjectCreationAction(orgSlug: string): Promise<void>
   if (!context) redirect("/");
 
   const destination = await startProjectCreation(orgSlug, {
-    organization: async () => context.organization,
+    organizations: async () => context.memberships.map(({ organization }) => organization),
     listProjects: (organizationId) => listProjectsForOrganization(organizationId),
     onRefused: async (organization, capacity) => {
       await trackProductEvent(

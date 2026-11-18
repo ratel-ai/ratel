@@ -1,7 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { CelebrationBadger } from "@/components/console/badgers/honeybadgers";
 import { OnboardingBackground } from "@/components/console/onboarding/OnboardingBackground";
 import { composition } from "@/lib/composition";
+import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
 import { apiUrl } from "@/lib/platform/app-config";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { billableProjectCount, checkQuota } from "@/lib/platform/entitlements";
@@ -51,14 +52,11 @@ export default async function OnboardingPage({
   if (isDbConfigured()) {
     const ctx = await getSessionContext();
     if (ctx) {
-      const organization = ctx.organization;
-      // One organization in this edition: a requested slug is the session's or nothing.
-      if (
-        typeof requestedOrganization === "string" &&
-        requestedOrganization !== organization.slug
-      ) {
-        notFound();
-      }
+      // Upstream's: a requested organization is any the reader belongs to, else a 404.
+      const organization =
+        typeof requestedOrganization === "string"
+          ? (await requireOrganizationScope(requestedOrganization)).organization
+          : ctx.organization;
       const projects = await listProjectsForOrganization(organization.id);
       const quota = checkQuota(organization, "maxProjects", billableProjectCount(projects));
       if (!quota.ok) {

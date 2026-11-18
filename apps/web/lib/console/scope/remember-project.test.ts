@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { LAST_PROJECT_COOKIE } from "@/lib/console/scope/cookie";
 import {
   lastProjectDiffers,
+  openProject,
   type RememberProjectDeps,
   rememberLastProject,
 } from "@/lib/console/scope/remember-project";
@@ -74,4 +75,37 @@ test("the shell asks for a write only when the cookie names another project or n
   assert.equal(lastProjectDiffers("not-a-uuid", PROJECT_ID), true);
   assert.equal(lastProjectDiffers(PROJECT_ID, PROJECT_ID), false);
   assert.equal(lastProjectDiffers(PROJECT_ID, "_"), false, "not a project id: nothing to remember");
+});
+
+test("the project layout opens a project the reader may see, then asks the edition to remember it", async () => {
+  const calls: string[] = [];
+  const scope = await openProject(PROJECT_ID, {
+    find: async (id) => {
+      calls.push(`find:${id}`);
+      return id === PROJECT_ID ? { project: { id } } : null;
+    },
+    remember: async (id) => {
+      calls.push(`remember:${id}`);
+    },
+  });
+  assert.deepEqual(scope, { project: { id: PROJECT_ID } });
+  assert.deepEqual(calls, [`find:${PROJECT_ID}`, `remember:${PROJECT_ID}`]);
+});
+
+test("a project the reader may not see is never remembered", async () => {
+  const remembered: string[] = [];
+  const scope = await openProject(OTHER_ID, {
+    find: async () => null,
+    remember: async (id) => {
+      remembered.push(id);
+    },
+  });
+  assert.equal(scope, null);
+  assert.deepEqual(remembered, []);
+});
+
+test("open source: with no edition to remember it, the project still opens", async () => {
+  assert.deepEqual(await openProject(PROJECT_ID, { find: async (id) => ({ project: { id } }) }), {
+    project: { id: PROJECT_ID },
+  });
 });

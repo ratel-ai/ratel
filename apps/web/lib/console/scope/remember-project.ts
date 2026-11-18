@@ -38,3 +38,25 @@ export async function rememberLastProject(
   deps.write(lastProjectCookie(open, deps.secure));
   return true;
 }
+
+export type OpenProjectDeps<S> = {
+  /** The project as this reader may see it (`findProjectScope`), or null. */
+  find(projectId: string): Promise<S | null>;
+  /** The edition's memory of the last project (`SessionPort.rememberProject`); absent in open source. */
+  remember?(projectId: string): Promise<void>;
+};
+
+/**
+ * What the project layout does when a project is opened: the scope check, then, only for a project
+ * the reader may see, the edition's last-project pointer. Upstream's project layout writes
+ * `users.last_project_id` the same way, after `getProjectScope` (`setLastProject`).
+ */
+export async function openProject<S extends { project: { id: string } }>(
+  projectId: string,
+  deps: OpenProjectDeps<S>,
+): Promise<S | null> {
+  const scope = await deps.find(projectId);
+  if (!scope) return null;
+  await deps.remember?.(scope.project.id);
+  return scope;
+}
