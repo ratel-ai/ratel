@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchDeps, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation, Registry } from "@/lib/mcp/registry";
-import { stageMeta, TOOL_STAGES } from "@/lib/mcp/stages";
+import { stageMeta, toolStage } from "@/lib/mcp/stages";
 
 export const MCP_SERVER_NAME = "ratel";
 export const MCP_SERVER_VERSION = "0.1.0";
@@ -109,7 +109,7 @@ export function createRatelMcpServer(deps: McpServerDeps): McpServer {
         inputSchema: operation.params,
         annotations: annotationsFor(operation),
         // Each staged tool publishes its loop stage from lib/mcp/stages.ts.
-        ...(TOOL_STAGES[operation.id] ? { _meta: stageMeta(operation.id) } : {}),
+        ...(toolStage(operation.id) ? { _meta: stageMeta(operation.id) } : {}),
       },
       async (args: Record<string, unknown>) => {
         // Params are re-validated inside dispatch. The SDK has already checked

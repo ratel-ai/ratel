@@ -24,10 +24,17 @@ const CLIENT_OPTIONS = MCP_CLIENTS.map((client) => ({
 /** What each snippet is, on the code block's bar. */
 const SNIPPET_KIND: Record<McpClient, string> = {
   "claude-code": "Shell",
-  "claude-desktop": "claude_desktop_config.json",
+  "claude-desktop": "URL",
   cursor: "mcp.json",
   cli: "Shell",
 };
+
+/** Without browser sign-in the Desktop snippet is the bridge's config file, not a URL. */
+function snippetKind(client: McpClient, auth: "oauth" | "key"): string {
+  return client === "claude-desktop" && auth === "key"
+    ? "claude_desktop_config.json"
+    : SNIPPET_KIND[client];
+}
 
 export interface McpProject {
   id: string;
@@ -48,6 +55,7 @@ export function McpConnect({
   projects,
   keyPrefixesByProject,
   restricted,
+  browserSignIn = false,
 }: {
   endpoint: string;
   organizationId: string;
@@ -57,6 +65,8 @@ export function McpConnect({
   keyPrefixesByProject: Readonly<Record<string, readonly string[]>>;
   /** Inside an admin support session no key is minted. */
   restricted: boolean;
+  /** The server signs people in through a browser, so the interactive clients need no key. */
+  browserSignIn?: boolean;
 }) {
   const [client, setClient] = useState<McpClient>("claude-code");
   const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
@@ -68,8 +78,8 @@ export function McpConnect({
   const project = projects.find((candidate) => candidate.id === projectId);
   const prefixes = keyPrefixesByProject[projectId] ?? [];
   const snippets = useMemo(
-    () => buildMcpSnippetSet({ endpoint, apiKey: mintedKey }),
-    [endpoint, mintedKey],
+    () => buildMcpSnippetSet({ endpoint, apiKey: mintedKey, browserSignIn }),
+    [endpoint, mintedKey, browserSignIn],
   );
   const { note, code, auth } = snippets[client];
   const keysHref = project
@@ -177,7 +187,7 @@ export function McpConnect({
 
       {note ? <p className="text-xs text-fg-subtle">{note}</p> : null}
       <CodeBlock
-        caption={SNIPPET_KIND[client]}
+        caption={snippetKind(client, auth)}
         samples={[{ label: MCP_CLIENT_LABELS[client], code }]}
         onCopy={() => track("mcp_snippet_copied", { client })}
       />

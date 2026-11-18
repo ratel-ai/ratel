@@ -17,7 +17,7 @@ import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/opera
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
-import { TOOL_STAGES } from "@/lib/mcp/stages";
+import { toolStage } from "@/lib/mcp/stages";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
 import { APP_NAME } from "@/lib/platform/app-config";
 import { clientAddress } from "@/lib/platform/http/client-address";
@@ -358,7 +358,7 @@ async function runMessages(
         {
           ...properties,
           loop: isLoopTool(outcome.operationId),
-          stage: TOOL_STAGES[outcome.operationId] ?? null,
+          stage: toolStage(outcome.operationId),
         },
         "mcp operation executed",
       );

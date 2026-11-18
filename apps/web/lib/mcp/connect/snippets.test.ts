@@ -104,3 +104,90 @@ test("the CI auth header is quoted so a shell cannot split it", () => {
 
   assert.match(code, /--header "Authorization: Bearer \$RATEL_API_KEY"/);
 });
+
+/*
+ * With browser sign-in (an edition that supplies the `mcpOAuth` port), upstream's
+ * cases: the interactive clients sign in and carry no key; only CI keeps one.
+ */
+const SIGN_IN = { endpoint: ENDPOINT, browserSignIn: true } as const;
+
+test("browser sign-in: every client still carries the endpoint and no key it was not given", () => {
+  const set = buildMcpSnippetSet(SIGN_IN);
+
+  for (const client of MCP_CLIENTS) {
+    assert.ok(set[client].code.includes(ENDPOINT), `${client} snippet must contain the endpoint`);
+    assert.ok(
+      !/rtl_[A-Za-z0-9_-]{20,}/.test(set[client].code),
+      `${client} must not contain a real-looking key`,
+    );
+  }
+});
+
+/**
+ * The browser clients stopped needing a key once the discovery chain existed.
+ * Pinned because it is the difference between "paste a URL" and "generate a
+ * credential, paste it into a config file", which is the whole friction budget.
+ */
+test("interactive clients authenticate through the browser, with no key at all", () => {
+  for (const client of ["claude-code", "claude-desktop", "cursor"] as const) {
+    const snippet = buildMcpSnippet(client, SIGN_IN);
+    assert.equal(snippet.auth, "oauth", `${client} should sign in, not carry a secret`);
+    assert.ok(!snippet.code.includes(MCP_KEY_ENV), `${client} must not mention a key env var`);
+    assert.ok(
+      !snippet.code.includes(MCP_KEY_PLACEHOLDER),
+      `${client} must not show a key placeholder`,
+    );
+  }
+});
+
+test("CI keeps the key path, because there is no browser to sign in with", () => {
+  const snippet = buildMcpSnippet("cli", SIGN_IN);
+
+  assert.equal(snippet.auth, "key");
+  assert.ok(snippet.code.includes(MCP_KEY_ENV));
+});
+
+test("a minted key reaches only the client that asked for one", () => {
+  const set = buildMcpSnippetSet({ ...SIGN_IN, apiKey: MINTED });
+
+  assert.ok(set.cli.code.includes(MINTED), "CI should carry the key");
+  for (const client of ["claude-code", "claude-desktop", "cursor"] as const) {
+    assert.ok(
+      !set[client].code.includes(MINTED),
+      `${client} signs in through the browser and must not be handed a secret`,
+    );
+  }
+});
+
+test("browser sign-in: the editor config is valid JSON and carries no secret", () => {
+  const { code } = buildMcpSnippet("cursor", { ...SIGN_IN, apiKey: MINTED });
+
+  assert.doesNotThrow(() => JSON.parse(code), "mcp.json must parse");
+  assert.deepEqual(JSON.parse(code), { mcpServers: { ratel: { url: ENDPOINT } } });
+  // This file is commonly committed, so it is the worst place for a secret.
+  assert.ok(!code.includes(MINTED));
+  assert.ok(!code.includes(MCP_KEY_ENV));
+});
+
+test("browser sign-in: Claude Code uses the http transport, not a stdio bridge", () => {
+  const { code } = buildMcpSnippet("claude-code", SIGN_IN);
+
+  assert.match(code, /--transport http/);
+  assert.ok(!code.includes("mcp-remote"), "native http support needs no bridge");
+});
+
+test("browser sign-in: Claude Desktop takes the URL itself", () => {
+  const snippet = buildMcpSnippet("claude-desktop", SIGN_IN);
+
+  assert.equal(snippet.code, ENDPOINT);
+  assert.equal(
+    snippet.note,
+    "Settings -> Connectors -> Add custom connector, then paste this URL.",
+  );
+});
+
+test("browser sign-in: the CI auth header is quoted so a shell cannot split it", () => {
+  const { code } = buildMcpSnippet("cli", SIGN_IN);
+
+  assert.match(code, /--header "Authorization: Bearer \$RATEL_API_KEY"/);
+});

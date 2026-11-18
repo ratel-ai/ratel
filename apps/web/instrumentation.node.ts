@@ -201,6 +201,11 @@ export async function assertComposition(): Promise<void> {
         onboarding: createOnboardingService(),
       });
     }
+    // An edition's MCP tools are checked now, so a bad one stops startup, not a client's call.
+    if (composition.registry.registrations().some((r) => r.mcpOperations?.length)) {
+      const { assembleOperations } = await import("@/lib/mcp/operations");
+      assembleOperations();
+    }
     const { configuredOrganizationName } = await import("@/lib/platform/deployment-config");
     configuredOrganizationName();
   } catch (error) {

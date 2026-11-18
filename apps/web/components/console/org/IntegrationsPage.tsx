@@ -64,6 +64,7 @@ export async function IntegrationsPage({ slug }: { slug: string }) {
             }))}
             keyPrefixesByProject={keyPrefixesByProject}
             restricted={actingAs !== null}
+            browserSignIn={composition.mcpOAuth !== undefined}
           />
         </Section>
         <Section title="Then ask it something">

@@ -1,7 +1,13 @@
+import type { Registration } from "@/lib/contracts/registry";
 import { accountOperations } from "@/lib/mcp/operations/account";
 import { calibrationOperations } from "@/lib/mcp/operations/calibration";
 import { catalogOperations } from "@/lib/mcp/operations/catalog";
 import { developerOperations } from "@/lib/mcp/operations/developer";
+import {
+  adaptEditionOperations,
+  editionRegistrations,
+  placeEditionOperations,
+} from "@/lib/mcp/operations/edition";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
 import { healthOperations } from "@/lib/mcp/operations/health";
 import { improvementOperations } from "@/lib/mcp/operations/improvement";
@@ -38,10 +44,17 @@ export interface AssembleOptions {
  * Every console surface's tools, in the order the console's navigation lists
  * them. A module may mix reads and writes; `includeWrites: false` drops every
  * operation that declares `mutates`, which the contract test pins.
+ *
+ * Owned (ADR-0030): an edition's tools (`registrations`, read through the
+ * composition) are listed after the core tool each names; `edition.ts` refuses
+ * a bad one. The open-source edition has none, so the list is the core's.
  */
-export function assembleOperations(options: AssembleOptions = {}): McpOperation[] {
+export function assembleOperations(
+  options: AssembleOptions = {},
+  registrations: readonly Registration[] = editionRegistrations(),
+): McpOperation[] {
   const includeWrites = options.includeWrites ?? true;
-  const operations = [
+  const core = [
     ...scopeOperations(),
     ...catalogOperations(),
     ...observabilityOperations(),
@@ -70,6 +83,7 @@ export function assembleOperations(options: AssembleOptions = {}): McpOperation[
     ...loopTaskWriteOperations(),
     ...loopEvalSetWriteOperations(),
   ];
+  const operations = placeEditionOperations(core, adaptEditionOperations(registrations, core));
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);
 }
 
