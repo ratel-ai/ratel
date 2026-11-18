@@ -2794,8 +2794,8 @@
   },
   {
     "name": "get_quota_status",
-    "title": "Plan limits",
-    "description": "The organization's plan, its numeric limits (projects, skills per project, members), and usage against each quota counted as the console counts it (the sample project is free). Explains quota_exceeded errors on writes.",
+    "title": "Plan and limits",
+    "description": "The organization's plan and subscription state (paid, past due, period end), its limits, usage against each quota (projects, skills per project, members) counted as the console counts them, and this project's match quality runs left this month. Explains quota_exceeded errors on writes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -2809,7 +2809,7 @@
       }
     },
     "annotations": {
-      "title": "Plan limits",
+      "title": "Plan and limits",
       "readOnlyHint": true
     },
     "execution": {

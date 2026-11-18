@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { composition } from "@/lib/composition/ports";
+import type { PlanCatalog } from "@/lib/contracts/entitlements";
 import {
   billableProjectCount,
+  billingSelfServe,
   checkEventQuota,
   checkMeteredFeature,
   checkQuota,
@@ -11,6 +14,9 @@ import {
   incrementEventUsage,
   mergeLimitOverrides,
   planLabel,
+  planName,
+  planSummary,
+  planWithWindow,
   resolvePlanId,
 } from "./entitlements";
 
@@ -53,4 +59,41 @@ test("limit overrides merge per editable field and collapse to null when empty",
 
 test("the demo project never counts against the project cap", () => {
   assert.equal(billableProjectCount([{ isDemo: true }, { isDemo: false }, {}]), 2);
+});
+
+test("without an edition's plans: no summary, no plan named, billing never self-serve", () => {
+  assert.equal(composition.entitlements.plans, undefined);
+  assert.equal(planSummary(org), null);
+  assert.equal(planWithWindow(30), null);
+  assert.equal(planName("plus"), "Plus");
+  assert.equal(billingSelfServe(org), false);
+});
+
+test("with an edition's plans, the shim answers from them", (t) => {
+  const plans: PlanCatalog = {
+    summary: (view) => ({
+      id: "plus",
+      name: "Plus",
+      paid: true,
+      subscriptionStatus: "active",
+      pastDue: false,
+      currentPeriodEnd: null,
+      selfServeBilling: view.id === "org_1",
+    }),
+    withAgentHealthWindow: (days) => (days <= 30 ? "plus" : "pro"),
+    name: (planId) => ({ plus: "Plus", pro: "Pro" })[planId] ?? "Hobby",
+  };
+  const previous = composition.entitlements;
+  composition.entitlements = { ...previous, planId: () => "pro", plans };
+  t.after(() => {
+    composition.entitlements = previous;
+  });
+
+  assert.equal(planSummary(org)?.name, "Plus");
+  assert.equal(billingSelfServe(org), true);
+  assert.equal(billingSelfServe({ id: "org_2" }), false);
+  assert.equal(planWithWindow(30), "plus");
+  assert.equal(planWithWindow(90), "pro");
+  assert.equal(planName("free"), "Hobby");
+  assert.equal(planLabel(org), "Pro");
 });

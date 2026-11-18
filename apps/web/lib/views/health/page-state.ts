@@ -1,3 +1,4 @@
+import { planWithWindow } from "@/lib/platform/entitlements";
 import {
   type HealthReadiness,
   WINDOW_DAY_OPTIONS,
@@ -32,7 +33,7 @@ import type { LedgerFacts, LedgerWindow, RunFacts } from "@/lib/views/health/led
 /** A wider window to offer, and the plan that includes it when the current one does not. */
 export interface WindowSuggestion {
   days: WindowDays;
-  /** The cheapest plan with this window; always null here, where no plan table exists. */
+  /** The cheapest plan with this window; null when the edition has no plans. */
   plan: string | null;
 }
 
@@ -120,12 +121,11 @@ export interface HealthStateInputs {
 const READY: HealthPageState = { kind: "ready" };
 
 /**
- * The plan whose Agent health window reaches `days`: none here. The open-source edition has
- * no plan table, so a window the limits do not include is simply not offered by name.
+ * The cheapest plan whose Agent health window reaches `days`, from the edition's plans. Null
+ * without them: the open-source edition has no plan table, so a window the limits do not
+ * include is not offered by name.
  */
-export function planWithWindow(_days: number): string | null {
-  return null;
-}
+export { planWithWindow };
 
 /** The smallest window wider than the selected one whose ledger passes `fits`. */
 function widerWindow(
