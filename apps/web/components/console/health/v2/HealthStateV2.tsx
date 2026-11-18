@@ -30,6 +30,8 @@ export interface HealthStateV2Props {
   windowDays: WindowDays;
   /** The importer is on the page, so "Import past runs" can open it. */
   canImport: boolean;
+  /** Where a plan that includes a longer window can be picked; null hides the link. */
+  billingHref: string | null;
   /** The edition's names for import sources, by id. */
   sourceLabel?: Readonly<Record<string, string>>;
   now?: Date;
@@ -40,18 +42,26 @@ export interface HealthStateV2Props {
  * block in the place the reading would take, saying what is true for the selected window and
  * the one thing to do about it (DESIGN.md, Empty states). The words come from `healthStateCopy`.
  *
- * Owned (ADR-0030): no plan to pick; the importer is the edition's, and without it the one
- * action besides a wider window is the API key.
+ * Owned (ADR-0030): the importer is the edition's, and without it the one action besides a
+ * wider window is the API key; the edition's source names reach the copy.
  */
 export function HealthStateV2({
   projectId,
   state,
   windowDays,
   canImport,
+  billingHref,
   sourceLabel,
   now = new Date(),
 }: HealthStateV2Props) {
-  const copy = healthStateCopy(state, { windowDays, now, canImport, plans: false, sourceLabel });
+  // With billing off no plan can be picked, so none is named.
+  const copy = healthStateCopy(state, {
+    windowDays,
+    now,
+    canImport,
+    plans: billingHref !== null,
+    sourceLabel,
+  });
   return (
     <section
       id="health-state"
@@ -61,7 +71,13 @@ export function HealthStateV2({
         state.kind === "unavailable" ? undefined : "rounded-lg border border-line bg-raised"
       }
     >
-      <StateBody projectId={projectId} state={state} copy={copy} canImport={canImport} />
+      <StateBody
+        projectId={projectId}
+        state={state}
+        copy={copy}
+        canImport={canImport}
+        billingHref={billingHref}
+      />
     </section>
   );
 }
@@ -71,11 +87,13 @@ function StateBody({
   state,
   copy,
   canImport,
+  billingHref,
 }: {
   projectId: string;
   state: HealthStateV2State;
   copy: StateCopy;
   canImport: boolean;
+  billingHref: string | null;
 }) {
   const getKey = <ApiKeyLink projectId={projectId} primary={!canImport} />;
   const importRuns = canImport ? <OpenImportButtonV2 variant="primary" /> : null;
@@ -123,7 +141,11 @@ function StateBody({
           <p className="text-sm font-semibold tabular-nums text-fg">{copy.title}</p>
           <p className="mt-1 max-w-sm text-sm text-fg-muted">{copy.body}</p>
           <Actions>
-            <WindowAction projectId={projectId} suggestion={state.wider} />
+            <WindowAction
+              projectId={projectId}
+              suggestion={state.wider}
+              billingHref={billingHref}
+            />
             {canImport && (
               <OpenImportButtonV2
                 variant={state.wider && !state.wider.plan ? "secondary" : "primary"}
@@ -140,7 +162,11 @@ function StateBody({
           description={copy.body}
           action={
             state.suggestion ? (
-              <WindowAction projectId={projectId} suggestion={state.suggestion} />
+              <WindowAction
+                projectId={projectId}
+                suggestion={state.suggestion}
+                billingHref={billingHref}
+              />
             ) : (
               (importRuns ?? getKey)
             )
@@ -178,23 +204,37 @@ function Actions({ children }: { children: ReactNode }) {
   );
 }
 
-/** "Show 30 days" for a wider window that has the turns; nothing when the limits exclude it. */
+/** "Show 30 days" for a window the plan includes; "See plans" for one it does not (the body names the plan). */
 function WindowAction({
   projectId,
   suggestion,
+  billingHref,
 }: {
   projectId: string;
   suggestion: WindowSuggestion | null;
+  billingHref: string | null;
 }) {
-  if (!suggestion || suggestion.plan) return null;
+  if (!suggestion) return null;
+  if (!suggestion.plan) {
+    return (
+      <Link
+        href={agentHealthHref(projectId, suggestion.days)}
+        scroll={false}
+        data-health-window-switch={suggestion.days}
+        className={buttonVariants({ variant: "primary" })}
+      >
+        {windowActionLabel(suggestion.days)}
+      </Link>
+    );
+  }
+  if (!billingHref) return null;
   return (
     <Link
-      href={agentHealthHref(projectId, suggestion.days)}
-      scroll={false}
-      data-health-window-switch={suggestion.days}
-      className={buttonVariants({ variant: "primary" })}
+      href={billingHref}
+      data-health-see-plans="true"
+      className={buttonVariants({ variant: "secondary" })}
     >
-      {windowActionLabel(suggestion.days)}
+      See plans
     </Link>
   );
 }

@@ -244,6 +244,8 @@ async function quotaHint(listed: boolean): Promise<string | undefined> {
     countSkills: async () => 0,
     countMemberships: async () => 1,
     listProjectsForOrganization: async () => [],
+    countMatchQualityRunsSince: async () => 0,
+    now: () => new Date("2026-11-05T12:00:00.000Z"),
     editionToolListed: (id) => listed && id === "get_embedding_usage",
   };
   const result = await dispatchOperation(

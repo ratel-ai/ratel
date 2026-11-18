@@ -8,6 +8,11 @@ nothing from the application.
 `composition.ts` declares `CompositionPorts`, the full set a composition must supply; the private
 side annotates against it, so the two shapes cannot drift.
 
+`entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
+table of an edition that sells plans: the organization's plan and subscription state
+(`summary`), the cheapest plan whose Agent health window reaches a number of days, and a plan's
+name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
+
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool

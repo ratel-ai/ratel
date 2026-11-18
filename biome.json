@@ -1071,6 +1071,7 @@
         "!apps/web/lib/mcp/operations/compatibility.test.ts",
         "!apps/web/lib/mcp/launch-access.ts",
         "!apps/web/lib/mcp/launch-access.test.ts",
+        "!apps/web/lib/mcp/operations/account.test.ts",
         "!apps/web/lib/mcp/operations/developer.ts",
         "!apps/web/lib/mcp/operations/developer.test.ts",
         "!apps/web/lib/mcp/operations/health.test.ts",
