@@ -4,21 +4,22 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { composition } from "@/lib/composition/ports";
 import { deleteConsoleProject } from "@/lib/console/delete-project";
+import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { deleteProject, listProjectsForOrganization } from "@/lib/platform/projects/queries";
-import { getSessionContext } from "@/lib/platform/session";
 
-/** Deletes a project of the session organization; on success the page moves on. */
+/** Deletes a project of any organization the reader belongs to; on success the page moves on. */
 export async function deleteProjectAction(
   projectId: string,
   confirmName: string,
 ): Promise<{ ok: false; error: string }> {
   const result = await deleteConsoleProject(projectId, confirmName, {
-    session: async () => {
-      const session = await getSessionContext();
-      if (!session) return null;
+    scope: async (id) => {
+      const scope = await findProjectScope(id);
+      if (!scope) return null;
       return {
-        organizationSlug: session.organization.slug,
-        projects: await listProjectsForOrganization(session.organization.id),
+        organizationSlug: scope.organization.slug,
+        project: scope.project,
+        projects: await listProjectsForOrganization(scope.organization.id),
       };
     },
     actingAs: () => composition.session.actingAs(),

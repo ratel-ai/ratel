@@ -16,11 +16,11 @@ npm packages.
 | `db/test-support.ts` | `createMigratedPGlite()`: one migrated snapshot per process, a fresh copy per test |
 | `db/tenant-scope.test.ts` | upstream's source check, a copy: every read of a big telemetry table names a project, or says why not with a `// cross-project:` comment |
 | `db/statement-timeout.ts` | bounded reads with `SET LOCAL statement_timeout` |
-| `projects/` | `schema.ts` and `queries.ts` for projects and API keys |
+| `projects/` | `schema.ts` and `queries.ts` for projects and API keys (`listProjectsForOrganizations`: the projects of every organization the reader belongs to, in one read, for the shell) |
 | `organizations.ts` | organizations by id or by project, through the session port: the edition owns the table |
 | `projects/names.ts` | project name limits and normalization, safe for client components |
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
-| `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request |
+| `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request; `membershipIn` and `membershipBySlug` (the reader's membership in one organization, which is what authorizes a project or an organization page, as upstream) and upstream's `sessionForOrganization` for actions that name an organization |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
 | `env-configured.ts`, `anthropic-backend.ts`, `anthropic-errors.ts` | `configured`: a setting's trimmed value, with the Terraform placeholder counted as unset; `anthropicBackend`: `bedrock` when `ANTHROPIC_BACKEND=bedrock`, else `api`. `ModelNotEnabledError`: a Claude model this AWS account may not call on Bedrock yet (its line says `error_type: model_not_enabled`, and it is reported as an exception once per call). Leaves, so the recorder below reads them without importing the clients |

@@ -1,6 +1,6 @@
 "use server";
 
-import { findProject } from "@/lib/console/navigation";
+import { findProjectScope } from "@/lib/console/scope/project-scope";
 import {
   PAYLOAD_READ_FAILED,
   readSdkEventPayload,
@@ -12,13 +12,12 @@ import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
-import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { getSessionContext } from "@/lib/platform/session";
 
 /**
  * The payload of one SDK event, for the Panel that just opened on Settings >
- * Developer. A read, not a mutation: scoped to a project of the session organization, bounded by a statement timeout, and a failed read
+ * Developer. A read, not a mutation: scoped to a project of an organization the reader belongs to, bounded by a statement timeout, and a failed read
  * is logged and reported before the Panel says so.
  */
 export async function readSdkEventPayloadAction(
@@ -30,12 +29,8 @@ export async function readSdkEventPayloadAction(
     {
       isDbConfigured,
       getUserId: async () => (await getSessionContext())?.user.id ?? null,
-      // The session organization's projects; the user id only proves there is a session.
-      findProject: async (id) => {
-        const session = await getSessionContext();
-        if (!session) return null;
-        return findProject(await listProjectsForOrganization(session.organization.id), id) ?? null;
-      },
+      // A project of any organization the reader belongs to; the user id only proves there is a session.
+      findProject: async (id) => (await findProjectScope(id))?.project ?? null,
       readEvent: (id, eventIdentifier) =>
         loadOrFallback<Awaited<ReturnType<typeof getRuntimeEvent>> | typeof PAYLOAD_READ_FAILED>({
           operation: "sdk_event_payload",
