@@ -1,15 +1,31 @@
 import { after } from "next/server";
 import { composition } from "@/lib/composition/ports";
+import type { ActingAs } from "@/lib/contracts/session";
 
 export { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/support-session-policy";
 
 /**
  * Upstream's `isRestrictedBySupportSession` (`lib/admin/support/guard.ts`) over the session
  * port, so copied actions that refuse writes in a support session keep their call. Any support
- * session restricts, read-only or not, as upstream's does; the open-source edition has none.
+ * session restricts, read-only or not, and so does a marker the edition can't resolve, as
+ * upstream's cookie check does; the open-source edition has none.
  */
 export async function isRestrictedBySupportSession(): Promise<boolean> {
-  return (await composition.session.actingAs()) !== null;
+  return (await supportSessionActingAs()) !== null;
+}
+
+/**
+ * The support session that restricts this request: the one the edition resolved, or, when it only
+ * sees a marker it can't resolve (a stale or forged cookie, which upstream also refuses on), a
+ * read-only session with no target. Null when there is none. What write paths that take an
+ * `actingAs` dependency pass, so they refuse exactly when upstream's cookie check does.
+ */
+export async function supportSessionActingAs(): Promise<ActingAs> {
+  const session = await composition.session.actingAs();
+  if (session) return session;
+  return (await composition.session.supportSessionPresent?.())
+    ? { kind: "organization", targetId: "", readOnly: true }
+    : null;
 }
 
 /**

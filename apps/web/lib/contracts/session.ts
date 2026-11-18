@@ -57,6 +57,12 @@ export type SessionPort = {
   countMembers(organizationId: string): Promise<number>;
   actingAs(): Promise<ActingAs>;
   /**
+   * Whether the request carries a support-session marker at all, valid or not. Upstream refuses
+   * writes on the marker alone, so a stale or forged one still restricts; `actingAs` answers only
+   * for a session it could resolve. Absent: only `actingAs` decides.
+   */
+  supportSessionPresent?(): Promise<boolean>;
+  /**
    * Remembers the project the reader just opened, called by the project layout after the reader
    * may see it. The edition decides where it is kept and when it is not written (Cloud keeps a
    * pointer on the user row and writes nothing in a support session). Absent, nothing is
@@ -66,3 +72,16 @@ export type SessionPort = {
   /** Throws when the deployment cannot authenticate anyone. Called once, at boot. */
   assertConfigured?(): void;
 };
+
+/**
+ * What an edition's refused support-session write throws with (upstream's `SUPPORT_BLOCKED_MESSAGE`,
+ * `lib/admin/support/policy.ts`), so the core's error boundaries tell it from a fault: the
+ * product working, not something to report.
+ */
+export const SUPPORT_BLOCKED_MESSAGE =
+  "We couldn't do that: this is a read-only admin support session. Nothing was changed.";
+
+/** Whether an error is a refused support-session write rather than a fault. */
+export function isSupportBlockedError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith(SUPPORT_BLOCKED_MESSAGE);
+}

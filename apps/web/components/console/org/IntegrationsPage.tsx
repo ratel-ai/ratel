@@ -9,6 +9,7 @@ import {
   listApiKeysForProject,
   listProjectsForOrganization,
 } from "@/lib/platform/projects/queries";
+import { supportSessionActingAs } from "@/lib/platform/support-session";
 import { McpConnect } from "./McpConnect";
 import { McpCapabilities, McpExample } from "./McpExample";
 
@@ -23,7 +24,7 @@ export async function IntegrationsPage({ slug }: { slug: string }) {
   const [origin, projects, actingAs] = await Promise.all([
     mcpOriginFromHeaders(),
     listProjectsForOrganization(organization.id),
-    composition.session.actingAs(),
+    supportSessionActingAs(),
   ]);
   const endpoint = `${origin}/api/mcp`;
   // Prefixes only, per project: enough to say whether the CI path has a key.

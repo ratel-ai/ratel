@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { composition } from "@/lib/composition/ports";
 import { deleteConsoleProject } from "@/lib/console/delete-project";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { deleteProject, listProjectsForOrganization } from "@/lib/platform/projects/queries";
+import { supportSessionActingAs } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 
 /** Deletes a project of any organization the reader belongs to; on success the page moves on. */
@@ -25,7 +25,7 @@ export async function deleteProjectAction(
       projects = await listProjectsForOrganization(found.organization.id);
       return { organizationSlug: found.organization.slug, project: found.project, projects };
     },
-    actingAs: () => composition.session.actingAs(),
+    actingAs: () => supportSessionActingAs(),
     deleteProject: (id) => deleteProject(id),
     projectDeleted: async (id) => {
       const project = projects.find((candidate) => candidate.id === id);

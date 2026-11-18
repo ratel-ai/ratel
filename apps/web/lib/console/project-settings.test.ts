@@ -76,7 +76,22 @@ test("a changed name reports the rename once, after the write; an unchanged one 
   assert.deepEqual(order, ["write", `renamed:${P1}`]);
   order.length = 0;
   await renameProject(P1, " One ", d);
-  assert.deepEqual(order, ["write"]);
+  assert.deepEqual(order, []);
   await renameProject(P1, "   ", d);
-  assert.deepEqual(order, ["write"]);
+  assert.deepEqual(order, []);
+});
+
+test("a member who is not an admin is told only admins can rename, as upstream; nothing is written", async () => {
+  const asMember = deps();
+  assert.deepEqual(await renameProject(P2, "Other", asMember.deps), {
+    ok: false,
+    error: "Only organization admins can rename projects.",
+  });
+  assert.deepEqual(asMember.updates, []);
+});
+
+test("an unchanged name writes nothing and reports nothing, as upstream", async () => {
+  const { updates, deps: d } = deps();
+  assert.deepEqual(await renameProject(P1, "  One ", d), { ok: true, name: "One" });
+  assert.deepEqual(updates, []);
 });

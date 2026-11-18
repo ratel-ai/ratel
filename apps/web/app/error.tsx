@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { HoneybadgerImage } from "@/components/console/badgers/honeybadger-image";
+import { isSupportBlockedError, SUPPORT_BLOCKED_MESSAGE } from "@/lib/contracts/session";
 import { captureClientException } from "@/lib/platform/track-client";
 
 type BoundaryError = Error & {
@@ -22,15 +23,37 @@ type BoundaryError = Error & {
 export default function AppError({ error, reset }: { error: BoundaryError; reset: () => void }) {
   const pathname = usePathname();
   const retryable = isRetryable(error);
+  const supportBlocked = isSupportBlockedError(error);
 
   useEffect(() => {
+    // A write refused inside a read-only admin support session is the
+    // product working, not a fault: nothing to log or report.
+    if (supportBlocked) return;
     console.error("[app] render error:", error);
     captureClientException(error, {
       digest: error.digest ?? null,
       pathname,
       boundary: "app",
     });
-  }, [error, pathname]);
+  }, [error, pathname, supportBlocked]);
+
+  if (supportBlocked) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-canvas px-6 py-12 text-center">
+        <div className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-amber-500/10 px-7 py-8">
+          <p className="eyebrow text-amber-200">Admin support session</p>
+          <p className="mt-3 text-sm leading-6 text-cream">{SUPPORT_BLOCKED_MESSAGE}</p>
+          <button
+            type="button"
+            onClick={() => reset()}
+            className="mt-6 inline-flex h-9 items-center justify-center rounded-lg bg-cream px-4 text-sm font-medium text-base-deep transition-colors hover:bg-cream-dim"
+          >
+            Back to the page
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden bg-canvas px-6 py-12 text-center">

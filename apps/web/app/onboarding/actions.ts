@@ -1,6 +1,5 @@
 "use server";
 
-import { composition } from "@/lib/composition/ports";
 import {
   createFirstProject,
   type CreateProjectState as FirstProjectState,
@@ -14,6 +13,7 @@ import {
   listProjectsForOrganization,
 } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
+import { supportSessionActingAs } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 
 // A declaration, not `export type { … }`: the server-action transform keeps a bare re-export as a
@@ -41,7 +41,7 @@ export async function createProjectAction(
     {
       dbConfigured: isDbConfigured,
       session: async () => (await getSessionContext()) ?? null,
-      actingAs: () => composition.session.actingAs(),
+      actingAs: () => supportSessionActingAs(),
       listProjects: (id) => listProjectsForOrganization(id),
       createProject: (input) => createProject(input),
       createApiKey: (input) => createApiKey(input),
