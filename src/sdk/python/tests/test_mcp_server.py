@@ -34,12 +34,9 @@ from mcp.client.session import ClientSession  # noqa: E402
 from mcp.client.stdio import StdioServerParameters, stdio_client  # noqa: E402
 from mcp.shared.memory import create_client_server_memory_streams  # noqa: E402
 from opentelemetry import trace  # noqa: E402
-from opentelemetry.sdk.trace import ReadableSpan, TracerProvider  # noqa: E402
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E402
-    InMemorySpanExporter,
-)
+from opentelemetry.sdk.trace import ReadableSpan  # noqa: E402
 from opentelemetry.trace import SpanKind, StatusCode  # noqa: E402
+from otel_support import SPAN_EXPORTER  # noqa: E402
 from ratel_ai_telemetry import ContentCapture, set_content_capture  # noqa: E402
 
 from ratel_ai import instrument_mcp_server  # noqa: E402
@@ -54,20 +51,11 @@ USER_AGENT = "claude-code/2.1.3 (external, cli)"
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 TOOLS = ("get_forecast", "search_notes")
 
-# OpenTelemetry forbids replacing the global provider, so join the one another
-# test module registered, or register one.
-_EXPORTER = InMemorySpanExporter()
-_PROVIDER = trace.get_tracer_provider()
-if not isinstance(_PROVIDER, TracerProvider):
-    _PROVIDER = TracerProvider()
-    trace.set_tracer_provider(_PROVIDER)
-_PROVIDER.add_span_processor(SimpleSpanProcessor(_EXPORTER))
-
 
 @pytest.fixture(autouse=True)
-def _clean(monkeypatch: pytest.MonkeyPatch) -> Any:
+def _clean(monkeypatch: pytest.MonkeyPatch, otel_exporters: Any) -> Any:
+    """Each test reads its spans from the session's shared provider (conftest `otel_exporters`)."""
     monkeypatch.delenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", raising=False)
-    _EXPORTER.clear()
     yield
     set_content_capture(None)
 
@@ -266,7 +254,7 @@ async def test_makes_the_request_span_the_parent_of_spans_the_handler_starts(
         await session.call_tool("nested", {})
 
     call = _span_named("tools/call nested")
-    child = next(span for span in _EXPORTER.get_finished_spans() if span.name == "inner work")
+    child = next(span for span in SPAN_EXPORTER.get_finished_spans() if span.name == "inner work")
     assert child.parent is not None
     assert child.parent.span_id == call.context.span_id
 
@@ -284,7 +272,7 @@ async def test_continues_a_traceparent_sent_in_params_meta(tmp_path: Path) -> No
     sent = next(
         (
             s
-            for s in _EXPORTER.get_finished_spans()
+            for s in SPAN_EXPORTER.get_finished_spans()
             if s.kind == SpanKind.CLIENT and "tools/call" in s.name
         ),
         None,
@@ -536,7 +524,7 @@ async def _run_stdio(
 def _server_spans() -> list[ReadableSpan]:
     return [
         span
-        for span in _EXPORTER.get_finished_spans()
+        for span in SPAN_EXPORTER.get_finished_spans()
         if span.kind == SpanKind.SERVER and "mcp.method.name" in (span.attributes or {})
     ]
 

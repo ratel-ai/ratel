@@ -20,18 +20,9 @@ import rfc8785
 pytest.importorskip("opentelemetry.sdk.trace", reason="OpenTelemetry SDK not installed")
 pytest.importorskip("ratel_ai_telemetry", reason="ratel-ai telemetry vocabulary not installed")
 
-from opentelemetry import _logs, trace  # noqa: E402
-from opentelemetry.sdk._logs import LoggerProvider  # noqa: E402
-from opentelemetry.sdk._logs.export import (  # noqa: E402
-    InMemoryLogRecordExporter,
-    SimpleLogRecordProcessor,
-)
-from opentelemetry.sdk.trace import TracerProvider  # noqa: E402
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor  # noqa: E402
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import (  # noqa: E402
-    InMemorySpanExporter,
-)
+from opentelemetry import _logs  # noqa: E402
 from opentelemetry.trace import StatusCode  # noqa: E402
+from otel_support import LOG_EXPORTER  # noqa: E402
 from ratel_ai_telemetry import set_content_capture  # noqa: E402
 
 from ratel_ai import (  # noqa: E402
@@ -48,26 +39,17 @@ from ratel_ai.experimental import Fact, FactCatalog  # noqa: E402
 CAPTURE_ENV = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
 EXPERIMENTAL_CATALOG_DEFINITIONS_ENV = "RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS"
 
-# OpenTelemetry forbids overriding the global provider once set, so register one
-# provider for the whole module and give each test a clean exporter via clear().
-_EXPORTER = InMemorySpanExporter()
-_PROVIDER = TracerProvider()
-_PROVIDER.add_span_processor(SimpleSpanProcessor(_EXPORTER))
-trace.set_tracer_provider(_PROVIDER)
-_LOG_EXPORTER = InMemoryLogRecordExporter()
-_LOG_PROVIDER = LoggerProvider()
-_LOG_PROVIDER.add_log_record_processor(SimpleLogRecordProcessor(_LOG_EXPORTER))
-_logs.set_logger_provider(_LOG_PROVIDER)
+# OpenTelemetry sets the global providers once per process, so every test of
+# this module uses the session's shared providers (conftest `otel_exporters`).
+pytestmark = pytest.mark.usefixtures("otel_exporters")
 
 
 @pytest.fixture()
-def exporter(monkeypatch: pytest.MonkeyPatch) -> Any:
+def exporter(monkeypatch: pytest.MonkeyPatch, otel_exporters: Any) -> Any:
     """The shared in-memory exporter, cleared so each test sees only its own spans."""
     monkeypatch.delenv(CAPTURE_ENV, raising=False)
     monkeypatch.delenv(EXPERIMENTAL_CATALOG_DEFINITIONS_ENV, raising=False)
-    _EXPORTER.clear()
-    _LOG_EXPORTER.clear()
-    return _EXPORTER
+    return otel_exporters.SPAN_EXPORTER
 
 
 def _read_file() -> ExecutableTool:
@@ -97,7 +79,7 @@ def _event_named(span: Any, name: str) -> Any:
 def _log_events_named(name: str) -> list[Any]:
     return [
         readable.log_record
-        for readable in _LOG_EXPORTER.get_finished_logs()
+        for readable in LOG_EXPORTER.get_finished_logs()
         if readable.log_record.event_name == name
     ]
 
