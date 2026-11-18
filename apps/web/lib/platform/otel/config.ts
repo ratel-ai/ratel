@@ -32,7 +32,13 @@ export type SelfTelemetryConfig = {
   logs: OtlpSignalConfig;
 };
 
+/** The service name when `OTEL_SERVICE_NAME` (the OpenTelemetry standard variable) is unset. */
 export const SERVICE_NAME = "ratel-platform";
+
+/** `OTEL_SERVICE_NAME`, else `ratel-platform`. A deployment keeps its dashboards' name with it. */
+export function serviceName(environment: Environment): string {
+  return environment.OTEL_SERVICE_NAME?.trim() || SERVICE_NAME;
+}
 
 function sdkDisabled(environment: Environment): boolean {
   return environment.OTEL_SDK_DISABLED?.trim().toLowerCase() === "true";
@@ -58,7 +64,7 @@ export function resolveSelfTelemetryConfig(
 
   return {
     resourceAttributes: {
-      [ATTR_SERVICE_NAME]: SERVICE_NAME,
+      [ATTR_SERVICE_NAME]: serviceName(environment),
       [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: staticEnvironment.deploymentEnvironment || "development",
     },
     tracesSamplerRatio: resolveTracesSamplerRatio(environment.OTEL_TRACES_SAMPLER_ARG),

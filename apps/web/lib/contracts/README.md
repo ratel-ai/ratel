@@ -58,3 +58,15 @@ sharing.
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from
 `composition.projectNav`. The open-source edition has neither.
+
+`TelemetryPort` has two optional members for the edition's analytics. `reportRequestError` takes an
+uncaught server-side request error with its request (path, method, headers) and route; the headers
+are only for tying the error to the edition's own analytics identity and must never be logged.
+`shutdown(timeoutMs)` flushes what the edition still buffers when the process stops. Without them
+(the open-source edition) nothing is reported or flushed.
+
+`client-analytics.ts` is the browser seam: an edition installs its `ClientAnalytics` (`track`,
+`captureException`) with `installClientAnalytics`, and the core's `platform/track-client.ts`
+forwards to it. Nothing is installed in the open-source edition, so the browser sends nothing.
+It installs with the edition's provider, not before hydration: a root layout crash on a hard load
+can happen first and then goes unreported.

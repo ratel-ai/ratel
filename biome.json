@@ -1045,6 +1045,7 @@
         "apps/web/components/console/errors/BrandedNotFound.tsx",
         "apps/web/components/console/errors/StatusLink.tsx",
         "apps/web/app/not-found.tsx",
+        "apps/web/app/global-error.tsx",
         "apps/web/app/(console)/not-found.tsx",
         "apps/web/app/(console)/org/\\[orgSlug\\]/not-found.tsx",
         "apps/web/app/(console)/project/\\[projectId\\]/not-found.tsx",
