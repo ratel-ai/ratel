@@ -8,6 +8,8 @@ export type RenameProjectDeps = {
   /** The session organization's projects; null without a session. */
   projects: () => Promise<ConsoleProject[] | null>;
   updateProjectName: (projectId: string, name: string) => Promise<void>;
+  /** Reports the rename (upstream's `project_settings_updated`); called only when the name changed. */
+  projectRenamed?: (projectId: string) => Promise<void>;
 };
 
 /** Renames a project of the session organization; any other id is refused before a write. */
@@ -16,11 +18,13 @@ export async function renameProject(
   name: string,
   deps: RenameProjectDeps,
 ): Promise<RenameProjectResult> {
-  if (!findProject((await deps.projects()) ?? [], projectId)) {
+  const project = findProject((await deps.projects()) ?? [], projectId);
+  if (!project) {
     return { ok: false, error: "Project not found." };
   }
   const normalized = normalizeProjectName(name);
   if (!normalized.ok) return normalized;
   await deps.updateProjectName(projectId, normalized.name);
+  if (normalized.name !== project.name) await deps.projectRenamed?.(projectId);
   return { ok: true, name: normalized.name };
 }
