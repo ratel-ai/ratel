@@ -6,8 +6,9 @@ import { getSessionContext } from "@/lib/platform/session";
 /**
  * The last project a reader was in. Owned (ADR-0030): upstream also keeps a pointer on the
  * users row; identity is the edition's here, so the memory is the cookie, checked against the
- * session organization's projects, and the stored pointer is the organization's first project,
- * so an old link always lands somewhere live.
+ * projects the reader may see (any organization they belong to), and the stored pointer is the
+ * active organization's first project, so an old link always lands somewhere live. An edition
+ * that keeps its own pointer reads it in its own landing page.
  */
 
 export type LastProjectResolverDeps = {

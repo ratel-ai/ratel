@@ -573,7 +573,6 @@ export function entryHref(
   return organizationSlug ? ONBOARDING_ROUTE : null;
 }
 
-/** The edition's organization pages without the paths it hides for this organization. */
 /**
  * The organization the shell shows (upstream's `AppFrame`): the open project's own, else the one
  * the route names, else the active one, else the first. The reader may be in a project or an
@@ -595,6 +594,7 @@ export function shellOrganization<O extends { id: string; slug: string }>(
   );
 }
 
+/** The edition's organization pages without the paths it hides for this organization. */
 export function visibleOrganizationNav(
   nav: readonly OrganizationNavItem[],
   hidden: readonly string[],

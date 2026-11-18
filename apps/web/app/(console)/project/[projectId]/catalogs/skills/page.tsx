@@ -22,7 +22,7 @@ export default async function ScopedSkillsCatalogPage({
   const { projectId } = await params;
   const context = await getSessionContext();
   if (!context) notFound();
-  // The project layout already guarded the id against the session organization.
+  // The project layout already checked the reader may see the project (a member of its organization).
   const project = await getProjectById(projectId);
   if (!project) notFound();
   const { organization } = context;
