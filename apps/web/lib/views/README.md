@@ -148,6 +148,11 @@ Fix leads point at `/improvement/fixes` and `/quality/descriptions`, as upstream
 `fixSeams.loadRewrites` and `fixSeams.loadOverrideAdoption` when `fixes/load.ts` loads it. `quality/report-href.ts` (owned, new) is
 the link to the printable Quality report, the sibling of `health/report-href.ts`; the
 calibration detail offers it, where upstream reaches the report from its admin console.
+`quality/operator-console.ts` reads the edition's `OperatorConsole`: who may open the printable
+report (the operator with one, a member of the project's organization without) and whether the
+calibration detail links it. `quality/operator-pages.ts` holds the reads of the operator's Quality
+pages (`app/(operator)/admin/quality`): a 404 without the slot, `authorize` before any read, and
+the cross-tenant project list, which no other route imports (`operator-reach.test.ts`).
 
 `calibration/` holds the render tests of the calibration pages' components (the comparison
 browser, rows, census tiles, ranking diff, arm mix, and the generic experiment detail's

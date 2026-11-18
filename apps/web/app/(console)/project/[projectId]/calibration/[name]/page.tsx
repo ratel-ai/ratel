@@ -15,10 +15,14 @@ import type { ExperimentKind } from "@/lib/synthesis/experiments/ranking";
 import { singleSearchParam } from "@/lib/synthesis/traces/calibration-view";
 import { experimentNameFromPathSegment } from "@/lib/synthesis/traces/experiment-view";
 import { resolveTraceListView, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
+import { memberQualityReportOffered } from "@/lib/views/quality/operator-console";
 
 export const metadata = { title: "Calibration comparison" };
 
-/** Owned (ADR-0030): the project comes from the guarded route, a 404 outside the organization. */
+/**
+ * Owned (ADR-0030): the project comes from the guarded route, a 404 outside the organization.
+ * The ranking view links the printable report unless an edition's operator console owns it.
+ */
 export default async function ScopedCalibrationDetailPage({
   params,
   searchParams,
@@ -85,6 +89,7 @@ export default async function ScopedCalibrationDetailPage({
         projectId={project.id}
         projectSlug={project.slug}
         view={view}
+        offerReport={await memberQualityReportOffered()}
       />
     </>
   );

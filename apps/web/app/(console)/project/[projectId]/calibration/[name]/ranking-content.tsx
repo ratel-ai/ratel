@@ -19,6 +19,8 @@ import { qualityReportHref, reportWindowDays } from "@/lib/views/quality/report-
  *
  * Owned (ADR-0030): adds the member's link to the printable Quality report for
  * this calibration and window, which upstream offers only from its admin console.
+ * The link is left out where an edition's operator console makes the report the
+ * operator's (`offerReport`), as upstream has it.
  */
 export function RankingCalibrationContent({
   calibration,
@@ -27,6 +29,7 @@ export function RankingCalibrationContent({
   projectId,
   projectSlug,
   view,
+  offerReport,
 }: {
   calibration: RankingCalibrationView;
   experimentName: string;
@@ -34,6 +37,8 @@ export function RankingCalibrationContent({
   projectId: string;
   projectSlug: string;
   view: TraceListView;
+  /** Whether to link the printable Quality report: false when only an operator may open it. */
+  offerReport: boolean;
 }) {
   const rangeSearch = rangeParams(projectSlug, view);
   const indexHref = `${basePath}?${rangeSearch.toString()}`;
@@ -81,14 +86,16 @@ export function RankingCalibrationContent({
             </span>
             <span aria-hidden>→</span>
           </Link>
-          <Link
-            href={reportHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-8 items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-coral transition-colors hover:bg-coral/20"
-          >
-            Partner report (PDF)
-          </Link>
+          {offerReport && (
+            <Link
+              href={reportHref}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-8 items-center gap-2 rounded-lg border border-coral/40 bg-coral/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-coral transition-colors hover:bg-coral/20"
+            >
+              Partner report (PDF)
+            </Link>
+          )}
           <DateRangeControl
             preset={view.range.preset}
             from={view.range.from}

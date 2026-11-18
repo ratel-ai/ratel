@@ -61,6 +61,13 @@ console's own. An action is plain data (`EditionCommandAction`: id, label, keywo
 event name), so it crosses to the client; running it dispatches the event and the overlay answers.
 Without them the shell renders as before.
 
+`OperatorConsole` is the console of whoever runs the service across every tenant (Cloud's admin
+console). The core draws the operator's Quality pages (`/admin/quality` and a project's page);
+`authorize` resolves only for an operator and runs before any read, and `Frame` is the console's
+chrome around them. With it, the printable Quality report is the operator's too, and the
+calibration page no longer links members to it. Without it the operator pages answer 404 and the
+report stays the members'.
+
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. Its rail entries come from
 `composition.projectNav`. The open-source edition has neither.
