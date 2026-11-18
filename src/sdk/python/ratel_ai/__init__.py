@@ -77,6 +77,7 @@ from .exceptions import (
     IncompatibleMergeError,
     RetrieverError,
 )
+from .feedback import FeedbackResult, experimental_feedback
 from .intent_graph_storage import (
     IntentGraphStorage,
     LocalFileIntentGraphStorage,
@@ -115,6 +116,7 @@ __all__ = [
     "ArtifactError",
     "ArtifactWarmError",
     "ExperimentalEmbeddingArtifact",
+    "FeedbackResult",
     "IntentGraph",
     "IncompatibleMergeError",
     "GET_SKILL_CONTENT_ID",
@@ -181,6 +183,7 @@ __all__ = [
     "configure_telemetry",
     "current_turn_id",
     "experimental_build_embedding_artifact",
+    "experimental_feedback",
     "define_plugin",
     "format_upstream_line",
     "get_skill_content_tool",

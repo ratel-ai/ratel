@@ -591,6 +591,24 @@ deep snapshot of accepted serializable metadata, so later caller-object mutation
 snapshots nor override restoration; explicitly re-register to adopt a changed value. Tool executor
 and validator function identities are retained.
 
+## Feedback (experimental)
+
+`experimentalFeedback` sends one piece of human feedback (a thumbs, a rating, a comment) to Ratel Cloud (`POST /api/v1/feedback`):
+
+```ts
+import { experimentalFeedback } from "@ratel-ai/sdk";
+
+const result = await experimentalFeedback({ name: "thumbs", value: false, traceId });
+if (!result.ok) console.log("feedback not sent:", result.error);
+```
+
+- **Links.** Give at least one of `traceId`, `spanId`, `turnId`, `sessionId` or `endUserId`. Inside a turn scope, `turnId` and `endUserId` default from the turn (the server accepts only a UUID turn id, so a non-UUID turn id is not sent). Inside an active OTel span, `traceId` and `spanId` default from the span. Explicit values win.
+- **Defaults.** `idempotencyKey` defaults to a fresh UUID: pass your own to retry without duplicates. `observedAt` defaults to now.
+- **Config.** `apiKey` defaults to `RATEL_API_KEY`. The base URL is `endpoint`, else `RATEL_OTLP_ENDPOINT` without its `/v1/traces` suffix, else `RATEL_URL`, else `https://cloud.ratel.sh`.
+- **Errors.** Invalid input or a missing API key throws synchronously, before any request. A network error, a timeout (`timeoutMs`, default 10 s) or a non-2xx answer never throws: the promise resolves `{ ok: false, status?, error }` and the SDK writes a `console.warn`.
+
+Feedback is not a runtime event: it goes to the cloud API only.
+
 ## Telemetry
 
 Telemetry is emit-only and always on: the SDK writes `ratel.*` / `gen_ai.*` spans and EventRecords to whatever OpenTelemetry providers are registered globally, and registers none itself — with no provider wired, every span is a no-op, so there is nothing to configure or switch off. Delivery is yours:

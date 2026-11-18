@@ -111,6 +111,17 @@ export type {
 // on this unstable surface is explicit: `experimental.FactCatalog`.
 export * as experimental from "./experimental.js";
 export type {
+  ExperimentalFeedbackFailed,
+  ExperimentalFeedbackItemResult,
+  ExperimentalFeedbackOptions,
+  ExperimentalFeedbackResponseBody,
+  ExperimentalFeedbackResult,
+  ExperimentalFeedbackSent,
+  ExperimentalFeedbackValue,
+} from "./feedback.js";
+/** Human feedback (thumbs, rating, comment) sent to Ratel Cloud. Not a runtime event. */
+export { experimentalFeedback } from "./feedback.js";
+export type {
   IntentGraphStorage,
   LocalFileIntentGraphStorageOptions,
   S3IntentGraphStorageCredentials,

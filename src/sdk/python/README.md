@@ -251,6 +251,32 @@ the authoritative full replacement for removals and recovery. They contain sorte
 definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
 applications may publish these events and snapshots through their own adapter.
 
+## Feedback (experimental)
+
+`experimental_feedback` sends one feedback item (a thumbs, a rating or a comment) to Ratel Cloud
+(`POST /api/v1/feedback`). It may change without a major version bump.
+
+```python
+from ratel_ai import experimental_feedback
+
+result = experimental_feedback(name="thumbs", value=False, trace_id=trace_id, comment="wrong tool")
+if not result.ok:
+    print(result.status, result.error)
+```
+
+- **Links:** give at least one of `trace_id`, `span_id`, `turn_id`, `session_id` or
+  `end_user_id`. Inside `catalog.turn(...)`, `turn_id` (only when it is a UUID) and `end_user_id`
+  come from the turn. `trace_id` and `span_id` come from the current OpenTelemetry span, when one
+  exists. Explicit arguments win.
+- **Defaults:** `idempotency_key` is a new UUID and `observed_at` is now (ISO 8601, UTC). Pass
+  your own `idempotency_key` to make a retry safe.
+- **Configuration:** `api_key=`, else `RATEL_API_KEY`. The base URL is `endpoint=`, else
+  `RATEL_OTLP_ENDPOINT` without its `/v1/traces` suffix, else `RATEL_URL`, else
+  `https://cloud.ratel.sh`.
+- **Errors:** a bad argument or a missing API key raises `ValueError` before any request. A
+  network error, a timeout or a non-2xx answer never raises: you get a `FeedbackResult` with
+  `ok=False` and a `RuntimeWarning`.
+
 ## Facts (experimental)
 
 Tools and skills are **pulled** — a query ranks them and only the winners reach the model. Facts are the opposite: constant content the agent should always work from (a shop's address, hours, a brand's voice), **pushed** into the context and deduplicated so it is injected once rather than every turn.

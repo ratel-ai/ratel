@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `experimental_feedback(name=, value=, ...)` sends one feedback item (thumbs, rating, comment) to Ratel Cloud and returns a `FeedbackResult`. It fills `turn_id` / `end_user_id` from the active turn and `trace_id` / `span_id` from the current OTel span, and never raises on a network error or a non-2xx answer.
+
 ## [0.13.0-rc.12] - 2026-10-16
 
 ### Added

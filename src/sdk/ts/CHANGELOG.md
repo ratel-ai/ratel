@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `experimentalFeedback({ name, value, traceId, ... })` sends one feedback item (thumbs, rating, comment) to Ratel Cloud's `POST /api/v1/feedback`. Ids default from the active turn and OTel span. A network error or a non-2xx answer resolves `{ ok: false }` and never throws.
+
 ## [0.13.0-rc.12] - 2026-10-16
 
 ### Added
