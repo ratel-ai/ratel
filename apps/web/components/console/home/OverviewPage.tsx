@@ -10,21 +10,21 @@ import { parseOverviewWindow } from "@/lib/views/home/overview-model";
 type LoadOrganization = Parameters<typeof loadOverview>[0]["organization"];
 
 /**
- * Overview: reads its window from the URL, loads, renders.
- *
- * Owned (ADR-0030): no support session in this edition, so the tour always
- * records how it ended.
+ * Overview: reads its window from the URL, loads, renders. Inside an admin support session the
+ * tour records nothing.
  */
 export async function OverviewPage({
   project,
   organization,
   range,
   offerTour,
+  inSupportSession,
 }: {
   project: OverviewProject;
   organization: LoadOrganization;
   range: string | string[] | undefined;
   offerTour: boolean;
+  inSupportSession: boolean;
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
@@ -40,6 +40,7 @@ export async function OverviewPage({
             autoStart={offerTour}
             isDemoProject={project.isDemo}
             surface="project_home"
+            record={!inSupportSession}
           />
         </span>
       }

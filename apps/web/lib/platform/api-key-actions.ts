@@ -15,6 +15,7 @@ import {
   type ApiKeyPreset,
   resolveScopeChoice,
 } from "@/lib/platform/api-keys/scopes";
+import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/support-session-policy";
 
 /**
  * Create/revoke logic for a project's API keys, split from the `"use server"` wrappers in
@@ -56,8 +57,7 @@ export type ApiKeyRecord = {
 };
 
 /** Upstream's refusal text: a time-boxed support session must not mint or revoke credentials. */
-export const SUPPORT_SESSION_RESTRICTED_MESSAGE =
-  "Not available during an admin support session. End the session first.";
+export { SUPPORT_SESSION_RESTRICTED_MESSAGE };
 
 export type CreateApiKeyState =
   | { ok: true; plaintext: string; key: ApiKeySummary }

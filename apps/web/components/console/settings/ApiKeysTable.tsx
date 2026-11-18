@@ -5,7 +5,7 @@ import { Button, IconButton } from "@ratel/design-system/button";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ConfirmDialog } from "@ratel/design-system/dialog";
 import { Section } from "@ratel/design-system/section";
-import { EmptyState } from "@ratel/design-system/states";
+import { Callout, EmptyState } from "@ratel/design-system/states";
 import { toast } from "@ratel/design-system/toast";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -14,6 +14,7 @@ import {
   revokeApiKeyAction,
 } from "@/app/(console)/project/[projectId]/settings/api-keys/actions";
 import { type ApiKeyRow, apiKeyDisplayName, apiKeyRow } from "@/lib/console/settings/api-keys";
+import { SUPPORT_SESSION_RESTRICTED_MESSAGE } from "@/lib/platform/support-session-policy";
 import { CreateApiKeyDialog } from "./CreateApiKeyDialog";
 
 /**
@@ -27,11 +28,14 @@ export function ApiKeysTable({
   keys,
   projectSlug,
   organizationId,
+  restricted,
   now,
 }: {
   keys: readonly ApiKeySummary[];
   projectSlug: string;
   organizationId: string;
+  /** Inside an admin support session: no key is created or revoked. */
+  restricted: boolean;
   /** ISO time the page was rendered, so relative times agree on server and client. */
   now: string;
 }) {
@@ -155,6 +159,7 @@ export function ApiKeysTable({
           label={`Revoke ${row.label}`}
           size="icon-sm"
           icon={<Trash2 />}
+          disabled={restricted}
           onClick={() => {
             const target = keys.find((key) => key.id === row.id);
             if (!target) return;
@@ -167,7 +172,7 @@ export function ApiKeysTable({
   ];
 
   const createButton = (
-    <Button variant="primary" onClick={openCreate}>
+    <Button variant="primary" onClick={openCreate} disabled={restricted}>
       <Plus aria-hidden />
       Create API key
     </Button>
@@ -180,6 +185,7 @@ export function ApiKeysTable({
         description="One key per environment or integration, so each can be revoked on its own."
         actions={keys.length > 0 ? createButton : null}
       >
+        {restricted ? <Callout tone="info">{SUPPORT_SESSION_RESTRICTED_MESSAGE}</Callout> : null}
         <DataTable
           caption="API keys"
           columns={columns}

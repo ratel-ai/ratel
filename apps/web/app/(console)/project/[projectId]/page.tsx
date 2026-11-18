@@ -5,6 +5,7 @@ import { TOUR_STATUS_COOKIE } from "@/lib/console/onboarding/tour-cookie";
 import { shouldOfferTour } from "@/lib/console/onboarding/tour-state";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
+import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 
 export const metadata = { title: "Project home" };
 
@@ -13,8 +14,7 @@ export const metadata = { title: "Project home" };
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
  * organization, a 404 otherwise). How a person left the guided tour is read
- * from a cookie (upstream reads the users table, the private edition's); no
- * support session here.
+ * from a cookie (upstream reads the users table, the private edition's).
  */
 export default async function ProjectHomePage({
   params,
@@ -35,13 +35,17 @@ export default async function ProjectHomePage({
   const { project, organization } = await requireProjectScope(projectId);
   // Auto-start only for somebody who has never finished it. Everyone else keeps
   // the button and decides for themselves.
+  // Inside an admin support session the operator came to look at the data,
+  // not to be onboarded: no auto-start, and finishing records nothing.
   const tourStatus = (await cookies()).get(TOUR_STATUS_COOKIE)?.value;
+  const inSupportSession = await isRestrictedBySupportSession();
   return (
     <OverviewPage
       project={project}
       organization={organization}
       range={(await searchParams).range}
-      offerTour={shouldOfferTour(tourStatus)}
+      offerTour={!inSupportSession && shouldOfferTour(tourStatus)}
+      inSupportSession={inSupportSession}
     />
   );
 }
