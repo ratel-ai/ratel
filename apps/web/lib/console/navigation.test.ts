@@ -12,6 +12,7 @@ import {
   organizationSlugFromPath,
   projectIdFromPath,
   projectRoot,
+  shellOrganization,
   shortcutHref,
   switchProjectHref,
   visibleOrganizationNav,
@@ -568,4 +569,23 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
     pathname: `/project/${P1}`,
   }).map((entry) => entry.href);
   assert.ok(hrefs.includes(`/project/${P1}/ship`), "⌘K reaches Ship");
+});
+
+test("the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame)", () => {
+  const organizations = [
+    { id: "o-acme", slug: "acme" },
+    { id: "o-beta", slug: "beta" },
+  ];
+  const projects = [
+    { id: "11111111-1111-4111-8111-111111111111", organizationId: "o-acme" },
+    { id: "22222222-2222-4222-8222-222222222222", organizationId: "o-beta" },
+  ];
+  const pick = (pathname: string, active?: string) =>
+    shellOrganization(organizations, projects, pathname, active)?.slug;
+  assert.equal(pick("/project/22222222-2222-4222-8222-222222222222/traces", "acme"), "beta");
+  assert.equal(pick("/org/beta/settings", "acme"), "beta");
+  assert.equal(pick("/org/other", "acme"), "acme", "an unknown slug falls back to the active one");
+  assert.equal(pick("/project/99999999-9999-4999-8999-999999999999", "beta"), "beta");
+  assert.equal(pick("/organizations"), "acme", "with nothing else, the first");
+  assert.equal(shellOrganization([], projects, "/org/acme", "acme"), undefined);
 });

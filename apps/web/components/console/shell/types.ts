@@ -4,12 +4,16 @@ import type {
   OrganizationNavItem,
   ProjectNavGroup,
 } from "@/lib/composition/ports";
-import type { ConsoleAccount, ConsoleProject } from "@/lib/console/shell-data";
+import type { ConsoleAccount, ConsoleOrganization, ConsoleProject } from "@/lib/console/shell-data";
 
 /** Everything the client frame needs, resolved once per request on the server. */
 export type ShellData = {
+  /** The session's active organization: the shell's fallback when the route names none. */
   organizationName: string | null;
   organizationSlug: string | null;
+  /** Every organization the reader belongs to; the frame shows the one `shellOrganization` picks. */
+  organizations: ConsoleOrganization[];
+  /** The projects of every organization the reader belongs to. */
   projects: ConsoleProject[];
   /** Null without a session. */
   account: ConsoleAccount | null;
@@ -17,6 +21,8 @@ export type ShellData = {
   editionNav: EditionNavItem[];
   /** Organization pages the edition adds (`composition.organizationNav`). */
   organizationNav: OrganizationNavItem[];
+  /** The edition's `hiddenOrganizationNav` paths, per organization slug. */
+  hiddenOrganizationNav: Record<string, readonly string[]>;
   /** Project page groups the edition adds (`composition.projectNav`). */
   projectNav: ProjectNavGroup[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */

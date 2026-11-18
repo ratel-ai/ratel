@@ -20,7 +20,7 @@ import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
  * resolves to a single candidate so the open-source build excludes the private modules, which
  * means this shared type is what keeps the two shapes from drifting.
  */
-/** A project as the shell lists it: the session organization's, from the core. */
+/** A project as the shell lists it, from the core: one of any organization the reader belongs to. */
 export type EditionProject = {
   id: string;
   organizationId: string;
@@ -83,7 +83,10 @@ export type EditionUi = {
   RootProvider: ComponentType<{ children: ReactNode }>;
   /** Menu items above the docs in the account menu. */
   AccountMenuItems: ComponentType;
-  /** The top of the rail, in place of the project switcher: organizations and projects. */
+  /**
+   * The top of the rail, in place of the project switcher: organizations and projects. Given the
+   * projects of every organization the reader belongs to.
+   */
   ScopeSwitcher?: ComponentType<{ projects: readonly EditionProject[]; collapsed: boolean }>;
   /** `/organizations`, which otherwise redirects to the console's entry. */
   OrganizationsPage?: ComponentType;

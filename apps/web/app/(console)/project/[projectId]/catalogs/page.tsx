@@ -20,7 +20,7 @@ export default async function CatalogsPage({ params }: { params: Promise<{ proje
   if (!context) notFound();
 
   const { projectId } = await params;
-  // The project layout already guarded the id against the session organization.
+  // The project layout already checked the reader may see the project (a member of its organization).
   const project = await getProjectById(projectId);
   if (!project) notFound();
   const { organization } = context;

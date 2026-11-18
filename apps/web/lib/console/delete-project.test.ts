@@ -7,18 +7,35 @@ import { deleteConsoleProject } from "./delete-project";
 const P1 = "11111111-1111-4111-8111-111111111111";
 const P2 = "22222222-2222-4222-8222-222222222222";
 
-function deps(
-  projects = [
-    { id: P1, name: "One" },
-    { id: P2, name: "Two" },
-  ],
-  actingAs: ActingAs = null,
-) {
+const P3 = "33333333-3333-4333-8333-333333333333";
+
+/** The reader's organizations: Acme (active) with P1 and P2, Beta (not active) with P3 alone. */
+const organizations = [
+  {
+    slug: "acme",
+    projects: [
+      { id: P1, name: "One" },
+      { id: P2, name: "Two" },
+    ],
+  },
+  { slug: "beta", projects: [{ id: P3, name: "Three" }] },
+];
+
+function deps(projects = organizations[0].projects, actingAs: ActingAs = null, signedIn = true) {
   const deleted: string[] = [];
+  const orgs = [{ ...organizations[0], projects }, organizations[1]];
   return {
     deleted,
     deps: {
-      session: async () => ({ organizationSlug: "acme", projects }),
+      scope: async (id: string) => {
+        const organization = signedIn
+          ? orgs.find((o) => o.projects.some((p) => p.id === id))
+          : undefined;
+        const project = organization?.projects.find((p) => p.id === id);
+        return organization && project
+          ? { organizationSlug: organization.slug, project, projects: organization.projects }
+          : null;
+      },
       actingAs: async () => actingAs,
       deleteProject: async (id: string) => {
         deleted.push(id);
@@ -41,14 +58,22 @@ test("deleting the last project goes to the projects page", async () => {
   assert.deepEqual(await deleteConsoleProject(P1, "One", d), { ok: true, next: "/org/acme" });
 });
 
-test("a wrong name or another organization's project deletes nothing", async () => {
+test("a wrong name, a project of an organization the reader is not in, or no session deletes nothing", async () => {
   const { deleted, deps: d } = deps();
   assert.equal((await deleteConsoleProject(P1, "Two", d)).ok, false);
   assert.equal(
-    (await deleteConsoleProject("33333333-3333-4333-8333-333333333333", "One", d)).ok,
+    (await deleteConsoleProject("44444444-4444-4444-8444-444444444444", "One", d)).ok,
     false,
   );
-  assert.deepEqual(deleted, []);
+  const signedOut = deps(undefined, null, false);
+  assert.equal((await deleteConsoleProject(P1, "One", signedOut.deps)).ok, false);
+  assert.deepEqual([...deleted, ...signedOut.deleted], []);
+});
+
+test("a project of a non-active organization is deleted, and the next page is in its own organization", async () => {
+  const { deleted, deps: d } = deps();
+  assert.deepEqual(await deleteConsoleProject(P3, "Three", d), { ok: true, next: "/org/beta" });
+  assert.deepEqual(deleted, [P3]);
 });
 
 test("no project is deleted in any support session, editable included", async () => {

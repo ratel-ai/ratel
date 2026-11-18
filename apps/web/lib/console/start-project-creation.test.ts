@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { type StartProjectCreationDeps, startProjectCreation } from "./start-project-creation";
 
 const ORG = { id: "22222222-2222-4222-8222-222222222222", slug: "acme", limitOverrides: null };
+const OTHER = { id: "33333333-3333-4333-8333-333333333333", slug: "beta", limitOverrides: null };
 
 function harness(
   projects: { isDemo?: boolean }[] = [],
@@ -11,7 +12,7 @@ function harness(
 ) {
   const refusals: { organizationId: string; cap: number }[] = [];
   const deps: StartProjectCreationDeps = {
-    organization: async () => (session ? { ...ORG, limitOverrides: limits } : null),
+    organizations: async () => (session ? [{ ...ORG, limitOverrides: limits }, OTHER] : null),
     listProjects: async () => projects,
     onRefused: async (organization, capacity) => {
       refusals.push({ organizationId: organization.id, cap: capacity.limit });
@@ -43,7 +44,14 @@ test("the demo project does not count toward the cap", async () => {
   });
 });
 
-test("another organization's slug is not found; no session goes home", async () => {
+test("any organization the reader belongs to opens its onboarding, active or not", async () => {
+  const h = harness();
+  assert.deepEqual(await startProjectCreation("beta", h.deps), {
+    redirect: "/onboarding?organization=beta",
+  });
+});
+
+test("an organization the reader is not a member of is not found; no session goes home", async () => {
   assert.deepEqual(await startProjectCreation("globex", harness().deps), { notFound: true });
   assert.deepEqual(await startProjectCreation("acme", harness([], null, false).deps), {
     redirect: "/",

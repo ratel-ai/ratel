@@ -10,8 +10,8 @@ import {
 type Organization = OrgLimitView & AccountPlanView & { id: string; slug: string };
 
 export type StartProjectCreationDeps = {
-  /** The session organization; null without a session. */
-  organization: () => Promise<Organization | null>;
+  /** The organizations the reader belongs to (the session's memberships); null without a session. */
+  organizations: () => Promise<readonly Organization[] | null>;
   listProjects: (organizationId: string) => Promise<ReadonlyArray<{ isDemo?: boolean | null }>>;
   /** Reports a click that met the cap (`quota_limit_hit`). */
   onRefused: (organization: Organization, capacity: ProjectCapacity) => Promise<void>;
@@ -23,16 +23,18 @@ export type StartProjectCreation = { redirect: string } | { notFound: true };
  * Where "New project" goes (owned port of upstream's action): onboarding for this organization,
  * which creates the project and its API key and shows the key once. At the plan's cap it goes
  * back to the projects page with the reason instead, rather than letting onboarding's own guard
- * bounce the request: only this side can say why. One organization here, so there is nothing to
- * switch to: a slug that is not the session's is not found.
+ * bounce the request: only this side can say why. Any organization the reader belongs to, as
+ * upstream; a slug they are not a member of is not found. Upstream also makes that organization
+ * the active one first; the core has no port to change it, and onboarding accepts any membership.
  */
 export async function startProjectCreation(
   organizationSlug: string,
   deps: StartProjectCreationDeps,
 ): Promise<StartProjectCreation> {
-  const organization = await deps.organization();
-  if (!organization) return { redirect: "/" };
-  if (organization.slug !== organizationSlug) return { notFound: true };
+  const organizations = await deps.organizations();
+  if (!organizations) return { redirect: "/" };
+  const organization = organizations.find(({ slug }) => slug === organizationSlug);
+  if (!organization) return { notFound: true };
   const capacity = projectCapacity(organization, await deps.listProjects(organization.id));
   if (capacity.atCap) {
     await deps.onRefused(organization, capacity);

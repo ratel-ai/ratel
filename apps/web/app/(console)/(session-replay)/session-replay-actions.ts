@@ -35,7 +35,7 @@ export async function setContentOptInAction(
       const session = await getSessionContext();
       return session ? { userId: session.user.id, externalId: session.user.externalId } : null;
     },
-    // The scope is the session organization's project, so the reader is the one asking.
+    // The scope is a project of an organization the reader belongs to, so the reader is the one asking.
     findRole: async (id) => (await findProjectScope(id))?.role ?? null,
     isRestricted: isRestrictedBySupportSession,
     track: ({ externalId, projectId: id, readContent: on }) =>

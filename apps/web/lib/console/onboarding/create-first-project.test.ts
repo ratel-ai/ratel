@@ -9,6 +9,11 @@ import {
 
 const ORG = { id: "22222222-2222-4222-8222-222222222222", slug: "acme", limitOverrides: null };
 const USER = { externalId: "user_1" };
+const OTHER_ORG = {
+  id: "33333333-3333-4333-8333-333333333333",
+  slug: "beta",
+  limitOverrides: null,
+};
 
 function harness({
   projects = [],
@@ -20,7 +25,11 @@ function harness({
   projects?: { slug: string; isDemo?: boolean }[];
   quota?: { ok: true } | { ok: false; plan: string; limit: number; message: string };
   actingAs?: ActingAs;
-  session?: { user: { externalId: string }; organization: typeof ORG } | null;
+  session?: {
+    user: { externalId: string };
+    organization: typeof ORG;
+    memberships?: { organization: typeof ORG }[];
+  } | null;
   dbConfigured?: boolean;
 } = {}) {
   const created: { organizationId: string; name: string; slug: string }[] = [];
@@ -167,4 +176,33 @@ test("no session, or another organization's id, creates nothing", async () => {
   );
   assert.equal(ok?.ok, true);
   assert.deepEqual([...signedOut.created, ...other.created], []);
+});
+
+test("a non-active organization the reader belongs to gets the project, as upstream's sessionForOrganization", async () => {
+  const h = harness({
+    session: {
+      user: USER,
+      organization: ORG,
+      memberships: [{ organization: ORG }, { organization: OTHER_ORG }],
+    },
+  });
+  const result = await createFirstProject(
+    { name: "Support Copilot", organizationId: OTHER_ORG.id },
+    h.deps,
+  );
+  assert.equal(result?.ok, true);
+  assert.deepEqual(
+    h.created.map((p) => p.organizationId),
+    [OTHER_ORG.id],
+  );
+  const outsider = harness({
+    session: { user: USER, organization: ORG, memberships: [{ organization: ORG }] },
+  });
+  assert.deepEqual(
+    await createFirstProject(
+      { name: "Support Copilot", organizationId: OTHER_ORG.id },
+      outsider.deps,
+    ),
+    { ok: false, error: "Organization not found." },
+  );
 });
