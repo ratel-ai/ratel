@@ -6,7 +6,14 @@ import {
   type Tracer,
   trace,
 } from "@opentelemetry/api";
+import { composition } from "@/lib/composition/ports";
 import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
+import type {
+  ModelCallMeta,
+  ModelCallRecord,
+  ModelCallUsage,
+  ModelProvider,
+} from "@/lib/contracts/telemetry";
 import { agentRunParent } from "@/lib/platform/agent-run";
 import { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
 import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
@@ -17,9 +24,10 @@ import { reportServerException } from "@/lib/platform/telemetry";
 /**
  * The model-call seam: where a module says "a model was called" (or refused, or skipped for want
  * of a key), with what it cost in tokens and time. Owned (ADR-0030): upstream's module of the same
- * names writes a spend line per call and prices it; here the line goes to a sink that is unset, so
- * with nothing installed a tracked call only runs. An edition that tracks spend installs its sink
- * with `setModelCallSink` and prices the line itself. The fields carry ids, a model name, numbers
+ * names writes a spend line per call and prices it; here the open-source edition writes nothing,
+ * so a tracked call only runs. An edition that tracks spend takes each record through the
+ * telemetry port (`recordModelCall` in `lib/contracts/telemetry.ts`) and writes and prices the
+ * line itself; `setModelCallSink` is the unpriced line, for tests and for a deployment's own use. The fields carry ids, a model name, numbers
  * and an outcome; never a prompt or an answer: only the error's class name, or
  * `model_not_enabled` for a Claude model this AWS account may not call on Bedrock yet. That
  * failure also goes to the exception reporter, once per call, with the feature, model and Bedrock
@@ -34,41 +42,14 @@ import { reportServerException } from "@/lib/platform/telemetry";
  * (`lib/platform/otel/ratel-export.ts`).
  */
 
-/** `anthropic`, `openai`, or whatever an edition's own clients name. */
-export type ModelProvider = string;
-
-export type ModelCallOutcome = "ok" | "error" | "refused_budget" | "skipped_no_key";
-
-/** Who pays for the call: Ratel's own analysis, or a customer's traffic through Ratel. */
-export type ModelCallPayer = "ratel" | "customer";
-
-export interface ModelCallMeta {
-  provider: ModelProvider;
-  model: string;
-  /** What the call is for, snake_case: `eval_gate_replay`, `eval_gate_judge`. */
-  feature: string;
-  payer: ModelCallPayer;
-  organizationId?: string | null;
-  projectId?: string | null;
-}
-
-export interface ModelCallUsage {
-  inputTokens?: number | null;
-  outputTokens?: number | null;
-  /** Prompt tokens read from the provider's cache (a subset of input). */
-  cachedTokens?: number | null;
-  /** Prompt tokens written to the provider's cache (a subset of input). */
-  cacheWriteTokens?: number | null;
-}
-
-export interface ModelCallRecord extends ModelCallMeta, ModelCallUsage {
-  outcome: ModelCallOutcome;
-  durationMs: number;
-  /** The thrown error, for its class name only. */
-  error?: unknown;
-  /** How many calls the line stands for: refusals in one simulation are one line with their count. */
-  calls?: number;
-}
+export type {
+  ModelCallMeta,
+  ModelCallOutcome,
+  ModelCallPayer,
+  ModelCallRecord,
+  ModelCallUsage,
+  ModelProvider,
+} from "@/lib/contracts/telemetry";
 
 export interface ModelCallSink {
   info(fields: Record<string, unknown>, message: string): void;
@@ -104,8 +85,23 @@ function backendOf(provider: ModelProvider): AnthropicBackend {
   return provider === "anthropic" ? anthropicBackend() : "api";
 }
 
-/** Hand one `model_call` line to the sink. Never throws: reporting must not break the call it describes. */
+/**
+ * Report one model call. An edition that accounts for spend takes the raw record with the log
+ * context (`TelemetryPort.recordModelCall`) and writes its own line; otherwise one `model_call`
+ * line goes to the sink, when one is set. Never throws: reporting must not break the call it
+ * describes.
+ */
 export function recordModelCall(record: ModelCallRecord): void {
+  try {
+    const recorder = composition.telemetry.recordModelCall;
+    if (recorder) {
+      recorder.call(composition.telemetry, record, currentLogContext());
+      return;
+    }
+  } catch {
+    // A reporting failure is not the call's failure.
+    return;
+  }
   const out = sink;
   if (!out) return;
   try {
