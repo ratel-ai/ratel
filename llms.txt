@@ -56,6 +56,8 @@ On a server, run `cp .env.example .env` first, then set these before the first s
 
 Create an API key in the project's Settings, set it as `RATEL_API_KEY` where the agent runs, and export OpenTelemetry to the deployment. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
 
+- **An MCP server in TypeScript:** `instrumentMcpServer(server, { captureClientAddress? })` from `@ratel-ai/sdk` wraps an `McpServer` or `Server` of `@modelcontextprotocol/sdk` 1.x (stdio or Streamable HTTP) and emits one SERVER span per MCP message, with the client name and version and the session id. Tool arguments and results stay off unless content capture is on. See the [SDK README](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md#instrument-your-mcp-server).
+
 ## Optional
 
 - [ADR-0029](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0029-platform-cloud-modules-private-repository.md) and [ADR-0030](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md): how the platform is built.

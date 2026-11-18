@@ -591,6 +591,31 @@ deep snapshot of accepted serializable metadata, so later caller-object mutation
 snapshots nor override restoration; explicitly re-register to adopt a changed value. Tool executor
 and validator function identities are retained.
 
+## Instrument your MCP server
+
+`instrumentMcpServer(server, options?)` wraps a server of the official MCP TypeScript SDK (`@modelcontextprotocol/sdk` 1.x): the high-level `McpServer` or the low-level `Server`, on stdio or Streamable HTTP. It returns the same server. Each MCP message the server receives becomes one OpenTelemetry SERVER span, which Ratel Cloud reads like any other MCP instrumentation (the server is your `service.name`, the caller is `mcp.client.name`).
+
+```ts
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { instrumentMcpServer } from "@ratel-ai/sdk";
+
+const server = instrumentMcpServer(new McpServer({ name: "weather", version: "1.0.0" }));
+server.registerTool("get_forecast", { description: "Forecast" }, async () => ({
+  content: [{ type: "text", text: "sunny" }],
+}));
+await server.connect(new StdioServerTransport());
+```
+
+- Call it before `connect()`. It hooks every later connection, and calling it twice is a no-op.
+- The span name is `<method> <target>` (`initialize`, `tools/list`, `tools/call get_forecast`). Notifications get a span too. The span is active while the handler runs, so spans the handler starts are its children. A `traceparent` in `params._meta` becomes the parent through your registered propagator.
+- `initialize` names the client (`mcp.client.name` / `.version`, then on every span of the connection) and the server (`mcp.server.name` / `.version`). `mcp.session.id` is the transport session id on HTTP and one generated id per connection on stdio. Stateless HTTP has no session id.
+- HTTP spans carry `user_agent.original`. `client.address` is personal data: it is recorded only with `instrumentMcpServer(server, { captureClientAddress: true })`, from the socket of the request given to `transport.handleRequest(req, res)` (`X-Forwarded-For` is not read).
+- Tool arguments and results are recorded only when content capture selects a span mode (`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY` or `setContentCapture()`).
+- If another MCP instrumentation has an active MCP span for the message, the attributes go on that span and no second span is made.
+
+The full attribute table is in [`src/telemetry/`](../../telemetry/README.md#mcp-server-spans). A runnable stdio example is in [`examples/mcp-server-wrapper-ts`](../../../examples/mcp-server-wrapper-ts/README.md).
+
 ## Telemetry
 
 Telemetry is emit-only and always on: the SDK writes `ratel.*` / `gen_ai.*` spans and EventRecords to whatever OpenTelemetry providers are registered globally, and registers none itself — with no provider wired, every span is a no-op, so there is nothing to configure or switch off. Delivery is yours:
