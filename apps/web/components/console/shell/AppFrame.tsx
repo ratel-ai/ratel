@@ -9,6 +9,7 @@ import { TooltipProvider } from "@ratel/design-system/tooltip";
 import { Menu, Search } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { consoleCommandActions } from "@/lib/console/command-actions";
 import {
   activeNavItemId,
   commandEntries,
@@ -121,23 +122,14 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   }, []);
 
   const actions = useMemo<CommandAction[]>(
-    () => [
-      {
-        id: "shortcuts",
-        label: "Keyboard shortcuts",
-        group: "Actions",
-        keywords: ["keys", "hotkeys", "help"],
-        run: () => setShortcutsOpen(true),
-      },
-      {
-        id: "sidebar",
-        label: collapsed ? "Expand sidebar" : "Collapse sidebar",
-        group: "Actions",
-        keywords: ["rail", "menu"],
-        run: toggleCollapsed,
-      },
-    ],
-    [collapsed, toggleCollapsed],
+    () =>
+      consoleCommandActions({
+        edition: data.commandActions,
+        collapsed,
+        openShortcuts: () => setShortcutsOpen(true),
+        toggleCollapsed,
+      }),
+    [data.commandActions, collapsed, toggleCollapsed],
   );
 
   useEffect(() => {
@@ -257,6 +249,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         actions={actions}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} items={items} />
+      {data.overlays}
       <Toaster />
     </TooltipProvider>
   );
