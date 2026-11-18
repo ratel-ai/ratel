@@ -3,6 +3,8 @@
 Each constant is asserted against the vocabulary pinned in ../CONVENTIONS.md.
 """
 
+import re
+
 from ratel_ai_telemetry import (
     CAPTURE_CONTENT_ENV,
     EXECUTE_TOOL,
@@ -98,6 +100,15 @@ from ratel_ai_telemetry import (
     RATEL_UPSTREAM_SERVER,
     RATEL_UPSTREAM_TOOL_COUNT,
     RATEL_UPSTREAM_TRANSPORT,
+    RATEL_VARIANT_BAGGAGE_PREFIX,
+    RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+    RATEL_VARIANT_EXPERIMENT,
+    RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY,
+    RATEL_VARIANT_MAX_DESCRIPTORS,
+    RATEL_VARIANT_MAX_VALUE_LENGTH,
+    RATEL_VARIANT_NAME,
+    RATEL_VARIANT_NAME_BAGGAGE_KEY,
+    RATEL_VARIANT_PREFIX,
     SEMCONV_VERSION,
     AuthOutcome,
     ExperimentArmOutcome,
@@ -201,10 +212,7 @@ def test_ratel_attribute_keys_match_the_pin() -> None:
     assert RATEL_EXPERIMENT_DURATION_MS == "ratel.experiment.duration_ms"
     assert RATEL_EXPERIMENT_HIT_COUNT == "ratel.experiment.hit_count"
     assert RATEL_EXPERIMENT_RANKING_ERROR == "ratel.experiment.ranking_error"
-    assert (
-        RATEL_EXPERIMENT_RESULT_ATTRIBUTES_ERROR
-        == "ratel.experiment.result_attributes_error"
-    )
+    assert RATEL_EXPERIMENT_RESULT_ATTRIBUTES_ERROR == "ratel.experiment.result_attributes_error"
     assert (
         RATEL_EXPERIMENT_RESULT_ATTRS_ENCODING_ERROR
         == "ratel.experiment.result_attrs_encoding_error"
@@ -221,44 +229,20 @@ def test_ratel_attribute_keys_match_the_pin() -> None:
     assert RATEL_EXPERIMENT_SHADOW_DURATION_MS == "ratel.experiment.shadow.duration_ms"
     assert RATEL_EXPERIMENT_SHADOW_HIT_COUNT == "ratel.experiment.shadow.hit_count"
     assert RATEL_EXPERIMENT_AGREEMENT_TOP1 == "ratel.experiment.agreement.top1"
-    assert (
-        RATEL_EXPERIMENT_AGREEMENT_EXACT_ORDER
-        == "ratel.experiment.agreement.exact_order"
-    )
-    assert (
-        RATEL_EXPERIMENT_AGREEMENT_OVERLAP_COUNT
-        == "ratel.experiment.agreement.overlap_count"
-    )
-    assert (
-        RATEL_EXPERIMENT_AGREEMENT_JACCARD_AT_K
-        == "ratel.experiment.agreement.jaccard_at_k"
-    )
+    assert RATEL_EXPERIMENT_AGREEMENT_EXACT_ORDER == "ratel.experiment.agreement.exact_order"
+    assert RATEL_EXPERIMENT_AGREEMENT_OVERLAP_COUNT == "ratel.experiment.agreement.overlap_count"
+    assert RATEL_EXPERIMENT_AGREEMENT_JACCARD_AT_K == "ratel.experiment.agreement.jaccard_at_k"
     assert RATEL_EXPERIMENT_AGREEMENT_K == "ratel.experiment.agreement.k"
-    assert (
-        RATEL_EXPERIMENT_AGREEMENT_ITEM_ATTRS
-        == "ratel.experiment.agreement.item_attrs"
-    )
-    assert (
-        RATEL_EXPERIMENT_AGREEMENT_RESULT_ATTRS
-        == "ratel.experiment.agreement.result_attrs"
-    )
+    assert RATEL_EXPERIMENT_AGREEMENT_ITEM_ATTRS == "ratel.experiment.agreement.item_attrs"
+    assert RATEL_EXPERIMENT_AGREEMENT_RESULT_ATTRS == "ratel.experiment.agreement.result_attrs"
     assert RATEL_EXPERIMENT_EFFECTIVE_ARM == "ratel.experiment.effective_arm"
     assert RATEL_EXPERIMENT_SKIP_ARM == "ratel.experiment.skip.arm"
     assert RATEL_EXPERIMENT_SKIP_CONCURRENCY == "ratel.experiment.skip.concurrency"
     assert RATEL_EXPERIMENT_SKIP_REASON == "ratel.experiment.skip.reason"
-    assert (
-        RATEL_EXPERIMENT_FALLBACK_EFFECTIVE_ARM
-        == "ratel.experiment.fallback.effective_arm"
-    )
-    assert (
-        RATEL_EXPERIMENT_FALLBACK_REUSED_SHADOW
-        == "ratel.experiment.fallback.reused_shadow"
-    )
+    assert RATEL_EXPERIMENT_FALLBACK_EFFECTIVE_ARM == "ratel.experiment.fallback.effective_arm"
+    assert RATEL_EXPERIMENT_FALLBACK_REUSED_SHADOW == "ratel.experiment.fallback.reused_shadow"
     assert RATEL_EXPERIMENT_DROP_REASON == "ratel.experiment.drop.reason"
-    assert (
-        RATEL_EXPERIMENT_INVOCATION_ATTRIBUTED
-        == "ratel.experiment.invocation.attributed"
-    )
+    assert RATEL_EXPERIMENT_INVOCATION_ATTRIBUTED == "ratel.experiment.invocation.attributed"
     assert RATEL_EXPERIMENT_INVOCATION_RANK == "ratel.experiment.invocation.rank"
     assert RATEL_EXPERIMENT_INVOCATION_AGE_MS == "ratel.experiment.invocation.age_ms"
     assert RATEL_EXPERIMENT_TURN == "ratel.experiment.turn"
@@ -272,6 +256,24 @@ def test_experiment_baggage_keys_alias_matching_span_attributes() -> None:
     assert RATEL_EXPERIMENT_ARM_BAGGAGE_KEY == RATEL_EXPERIMENT_ARM
     assert RATEL_EXPERIMENT_ROLE_BAGGAGE_KEY == RATEL_EXPERIMENT_ROLE
     assert RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY == RATEL_EXPERIMENT_UNIT
+
+
+def test_variant_keys_baggage_aliases_and_bounds_are_pinned() -> None:
+    assert RATEL_VARIANT_PREFIX == "ratel.variant."
+    assert RATEL_VARIANT_EXPERIMENT == "ratel.variant.experiment"
+    assert RATEL_VARIANT_NAME == "ratel.variant.name"
+    assert RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY == RATEL_VARIANT_EXPERIMENT
+    assert RATEL_VARIANT_NAME_BAGGAGE_KEY == RATEL_VARIANT_NAME
+    assert RATEL_VARIANT_BAGGAGE_PREFIX == RATEL_VARIANT_PREFIX
+    assert RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN == "^[a-z][a-z0-9_]{0,63}$"
+    assert RATEL_VARIANT_MAX_DESCRIPTORS == 16
+    assert RATEL_VARIANT_MAX_VALUE_LENGTH == 128
+    descriptor_key = re.compile(RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN)
+    assert descriptor_key.match("model")
+    assert descriptor_key.match("prompt_version")
+    assert not descriptor_key.match("Model")
+    assert not descriptor_key.match("prompt.version")
+    assert not descriptor_key.match("x" * 65)
 
 
 def test_gen_ai_interop_keys_stay_under_gen_ai_never_renamed_into_ratel() -> None:

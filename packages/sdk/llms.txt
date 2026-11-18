@@ -162,6 +162,18 @@ log-record processor. Ratel registers neither. See
 the [SDK guide](https://github.com/ratel-ai/ratel/blob/main/src/sdk/ts/README.md#retrieval-experiments-experimental),
 and the [telemetry scenario](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/README.md#retrieval-experiment-telemetry).
 
+### Agent variant tags are not retrieval experiments
+
+To compare variants of the agent itself (a model, a prompt version, any setting), wrap a run in
+`experimentalWithVariant({ experiment, name, ...descriptors }, fn)` (TypeScript) or
+`with experimental_with_variant(experiment=..., name=..., **descriptors):` (Python). Each span
+that starts inside carries `ratel.variant.experiment`, `ratel.variant.name` and one
+`ratel.variant.<key>` per descriptor. Descriptor values are content-free strings, numbers or
+booleans. A tag on the root span alone is sufficient for Ratel. Do not use
+`experimentalDefineExperiment` for this: that one compares retrieval selectors. The contract is
+the `ratel.variant.*` section of
+[src/telemetry/CONVENTIONS.md](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/CONVENTIONS.md).
+
 ### Seeding adaptive ranking: experimental, and the distributed seam is TypeScript-only
 
 Adaptive usage ranking learns from what the agent invokes after a search

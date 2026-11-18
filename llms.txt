@@ -56,6 +56,8 @@ On a server, run `cp .env.example .env` first, then set these before the first s
 
 Create an API key in the project's Settings, set it as `RATEL_API_KEY` where the agent runs, and export OpenTelemetry to the deployment. See the [telemetry guide](https://docs.ratel.sh/docs/telemetry).
 
+To compare variants of an agent (a model, a prompt version, any setting), tag each run with the `ratel.variant.*` span attributes: `ratel.variant.experiment`, `ratel.variant.name` and optional content-free descriptors `ratel.variant.<key>`. A tag on the root span is sufficient. The SDK helper `experimentalWithVariant` (TypeScript) or `experimental_with_variant` (Python) puts the tags on every span of a run. The contract, with its bounds and baggage keys, is in [src/telemetry/CONVENTIONS.md](https://github.com/ratel-ai/ratel/blob/main/src/telemetry/CONVENTIONS.md).
+
 ## Optional
 
 - [ADR-0029](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0029-platform-cloud-modules-private-repository.md) and [ADR-0030](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md): how the platform is built.

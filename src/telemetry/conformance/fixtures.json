@@ -1,6 +1,17 @@
 {
   "semconv_version": "1.42.0",
   "description": "Contract-against-the-pin fixtures shared across the language helpers. Each fixture names a scenario, the span to open, span attributes to set, optional OpenTelemetry EventRecords to emit through the Logs API with structured attributes, and the exact wire output required by CONVENTIONS.md.",
+  "variant": {
+    "attribute_prefix": "ratel.variant.",
+    "baggage_prefix": "ratel.variant.",
+    "experiment_key": "ratel.variant.experiment",
+    "name_key": "ratel.variant.name",
+    "reserved_descriptor_keys": ["experiment", "name"],
+    "descriptor_key_pattern": "^[a-z][a-z0-9_]{0,63}$",
+    "descriptor_value_types": ["string", "number", "boolean"],
+    "max_descriptors": 16,
+    "max_value_length": 128
+  },
   "runtime_events": {
     "version": 2,
     "max_payload_bytes": 65536,

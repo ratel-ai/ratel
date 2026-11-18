@@ -38,6 +38,13 @@ payload fields an oversized event keeps when it is trimmed (beside the envelope 
 fields), so the two SDKs' trimming cannot drift apart. Both SDKs' `RuntimeEvent`-conformance tests
 assert this block against their own frozen constants.
 
+## Agent variant tags
+
+The `variant` block pins the `ratel.variant.*` contract (CONVENTIONS.md): the attribute and
+baggage prefix, the two required keys, the reserved descriptor keys, the descriptor key pattern,
+the allowed value types and the bounds. The TS and Python conformance tests assert this block
+against their `RATEL_VARIANT_*` constants, and the SDK helpers enforce these bounds.
+
 ## Consumers
 
 - **TS** — `../ts/src/conformance.test.ts`
