@@ -150,3 +150,12 @@ test('the playground page is headed "Test a search", under Catalog', () => {
   assert.match(page, /title="Test a search"/);
   assert.match(page, /crumbs=\{\[\{ label: "Catalog"/);
 });
+
+test("the shell hands the edition's overlays and palette actions to the frame, which mounts the overlays after the shortcuts dialog", () => {
+  const shell = source("components/console/shell/ConsoleShell.tsx");
+  assert.match(shell, /overlays: ConsoleOverlays \? <ConsoleOverlays \/> : null/);
+  assert.match(shell, /commandActions: ui\?\.commandActions \?\? \[\]/);
+  const frame = source("components/console/shell/AppFrame.tsx");
+  assert.match(frame, /edition: data\.commandActions/);
+  assert.match(frame, /<ShortcutsDialog [^\n]*\/>\s*\{data\.overlays\}\s*<Toaster \/>/);
+});
