@@ -46,6 +46,9 @@ Copied rather than symlinked, because Turbopack rejects symlinks leaving the pro
 `next dev` does not discover routes behind a symlink. With the checkout absent, every command
 builds Ratel OSS; nobody runs a step to get the right tree. The proxy is the same case: Next.js reads it only from
 `apps/web/proxy.ts`, so the script copies a stub there, and the open-source edition has none.
+Static files too: Next.js serves only `apps/web/public`, so the script copies the edition's
+`public/` files there (real files, which the image keeps; ignored by git), never over one the app
+ships, and removes them without the checkout.
 
 **One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
 suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`
