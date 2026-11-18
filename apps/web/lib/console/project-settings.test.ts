@@ -8,9 +8,9 @@ type Role = "admin" | "member";
 
 /** The reader: admin of P1's organization, member of P2's; any other id is an organization they are not in. */
 const P2 = "22222222-2222-4222-8222-222222222222";
-const scopes: Record<string, { project: { id: string }; role: Role }> = {
-  [P1]: { project: { id: P1 }, role: "admin" },
-  [P2]: { project: { id: P2 }, role: "member" },
+const scopes: Record<string, { project: { id: string; name: string }; role: Role }> = {
+  [P1]: { project: { id: P1, name: "One" }, role: "admin" },
+  [P2]: { project: { id: P2, name: "Two" }, role: "member" },
 };
 
 function deps(signedIn = true, roles: Record<string, Role> = {}) {
@@ -64,7 +64,7 @@ test("an empty or overlong name is refused", async () => {
 test("a changed name reports the rename once, after the write; an unchanged one reports nothing", async () => {
   const order: string[] = [];
   const d = {
-    projects: async () => [project(P1, "One")],
+    scope: async (id: string) => scopes[id] ?? null,
     updateProjectName: async () => {
       order.push("write");
     },
