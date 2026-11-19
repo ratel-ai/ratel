@@ -756,6 +756,8 @@
         "apps/web/components/console/health/v2/summary-model.ts",
         "apps/web/components/console/health/v2/OpenImportButtonV2.tsx",
         "apps/web/components/console/health/imports/open-import.ts",
+        "apps/web/components/console/health/imports/OpenImportButton.tsx",
+        "apps/web/components/console/health/share/SharedPageActions.tsx",
         "apps/web/components/console/tasks/SessionView.tsx",
         "apps/web/components/console/tasks/StepPins.tsx",
         "apps/web/components/console/tasks/TaskFlowDiagram.tsx",
@@ -792,6 +794,7 @@
         "apps/web/app/(console)/project/\\[projectId\\]/improvement/health/page.tsx",
         "apps/web/app/(report)/report.css",
         "apps/web/lib/views/health/public-model.ts",
+        "apps/web/lib/views/health/share-paths.ts",
         "apps/web/lib/views/health/flow-journey-focus.test.ts",
         "apps/web/lib/views/health/flow-journey-workflow.test.ts",
         "apps/web/lib/views/health/summary/issue-rows.test.ts",
@@ -1160,7 +1163,48 @@
         "apps/web/lib/console/onboarding/tour-state.test.ts",
         "apps/web/lib/console/onboarding/tour-geometry.ts",
         "apps/web/lib/console/onboarding/tour-geometry.test.ts",
+        "apps/web/app/share/(view)/layout.tsx",
+        "apps/web/components/console/health/primitives/button.tsx",
+        "apps/web/components/console/health/primitives/tooltip.tsx",
+        "apps/web/components/console/health/primitives/match-quality-tiers.tsx",
         "apps/web/app/api/v1/events/route.test.ts",
+        "apps/web/components/console/health/primitives/Sparkline.tsx",
+        "apps/web/components/console/health/CaptureNudge.tsx",
+        "apps/web/components/console/health/CollectingState.tsx",
+        "apps/web/components/console/health/EntranceMotion.tsx",
+        "apps/web/components/console/health/EvidenceChart.tsx",
+        "apps/web/components/console/health/ExampleList.tsx",
+        "apps/web/components/console/health/FixLead.tsx",
+        "apps/web/components/console/health/HealthBand.tsx",
+        "apps/web/components/console/health/HealthPageView.tsx",
+        "apps/web/components/console/health/HealthReadings.tsx",
+        "apps/web/components/console/health/ProblemCard.tsx",
+        "apps/web/components/console/health/SectionPreview.tsx",
+        "apps/web/components/console/health/SetupCard.tsx",
+        "apps/web/components/console/health/SetupGuidePanel.tsx",
+        "apps/web/components/console/health/SignalCard.tsx",
+        "apps/web/components/console/health/SignalGroups.tsx",
+        "apps/web/components/console/health/SignalList.tsx",
+        "apps/web/components/console/health/SlowByDesign.tsx",
+        "apps/web/components/console/health/ToolFilter.tsx",
+        "apps/web/components/console/health/ToolFlowCanvas.tsx",
+        "apps/web/components/console/health/ToolFlowCard.tsx",
+        "apps/web/components/console/health/ToolFlowLegend.tsx",
+        "apps/web/components/console/health/ToolFlowMap.tsx",
+        "apps/web/components/console/health/ToolFlowParts.tsx",
+        "apps/web/components/console/health/ToolSpansMissing.tsx",
+        "apps/web/components/console/health/TurnShapes.tsx",
+        "apps/web/components/console/health/TurnShapesLegend.tsx",
+        "apps/web/components/console/health/TurnShapesLoop.tsx",
+        "apps/web/components/console/health/UnservedAsks.tsx",
+        "apps/web/components/console/health/WorkflowDetails.tsx",
+        "apps/web/components/console/health/WorkflowRow.tsx",
+        "apps/web/components/console/health/WorkflowsView.tsx",
+        "apps/web/components/console/health/example-page-size.ts",
+        "apps/web/components/console/health/setup-guide-events.ts",
+        "apps/web/components/console/health/surface.tsx",
+        "apps/web/components/console/health/tiers.tsx",
+        "apps/web/components/console/health/workflow-icons.ts",
         "apps/web/lib/console/badgers.test.ts",
         "apps/web/lib/platform/db/tenant-scope.test.ts",
         "apps/web/lib/ingest/otlp/otel-spans.integration.test.ts",
@@ -1389,6 +1433,22 @@
         "rules": {
           "suspicious": {
             "noArrayIndexKey": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "apps/web/components/console/health/share/SharedPageActions.tsx",
+        "apps/web/components/console/health/workflow-icons.ts"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useAnchorContent": "off"
+          },
+          "suspicious": {
+            "noShadowRestrictedNames": "off"
           }
         }
       }
