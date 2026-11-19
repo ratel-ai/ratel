@@ -89,6 +89,8 @@ export interface SummaryViewProps {
   windowOptions: readonly WindowOption[];
   /** Where a plan can be picked (billing is self-serve); null names no plan and hides the links. */
   billingHref: string | null;
+  /** The plan that shows every issue and its turns ("Plus"), named by the locks; null without plans. */
+  lockedPlan?: string | null;
   /** Null when the task list could not be read. */
   tasks: TaskListModel | null;
   /** Null when Fixes could not be read: no issue then claims a fix. */
@@ -229,6 +231,7 @@ function Ready({
   fixes,
   corrections,
   billingHref,
+  lockedPlan = null,
   imports,
   inferredTools = false,
 }: SummaryViewProps) {
@@ -261,6 +264,7 @@ function Ready({
       examplesAllowed={model.evidenceTurnsPerSignal > 0}
       lockedCount={model.lockedCount}
       upgradeHref={billingHref}
+      lockedPlan={lockedPlan}
       dismissed={model.dismissed ?? []}
       calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
     />

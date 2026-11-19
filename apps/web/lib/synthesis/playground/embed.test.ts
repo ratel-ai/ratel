@@ -181,3 +181,37 @@ test("embedTexts sends no lone surrogate upstream", async () => {
   assert.equal(calls.length, 1);
   assert.ok(calls[0]?.[0]?.isWellFormed());
 });
+
+test("a provider that answers with a refusal or with no vectors says so, as upstream's logs do", async () => {
+  const failing = (reason: string) =>
+    fakeProvider({
+      embed: async () => {
+        throw Object.assign(new Error("embeddings provider failed"), { reason });
+      },
+    }).provider;
+  const rejected = await embedTexts(["a"], {
+    provider: failing("upstream_rejected"),
+    cache: new Map(),
+  });
+  assert.equal(rejected.ok === false && rejected.reason, "upstream_rejected");
+  assert.equal(rejected.ok === false && rejected.status, 502);
+  const unreadable = await embedTexts(["a"], {
+    provider: failing("upstream_unreadable"),
+    cache: new Map(),
+  });
+  assert.equal(unreadable.ok === false && unreadable.reason, "upstream_unreadable");
+  const other = await embedTexts(["a"], { provider: failing("something_else"), cache: new Map() });
+  assert.equal(other.ok === false && other.reason, "upstream_unreachable");
+});
+
+test("an unavailable provider is told, so an edition can record the call it skipped", async () => {
+  let noted = 0;
+  const { provider } = fakeProvider({
+    isAvailable: () => false,
+    noteUnavailable: () => {
+      noted += 1;
+    },
+  });
+  await embedTexts(["a"], { provider, cache: new Map() });
+  assert.equal(noted, 1);
+});

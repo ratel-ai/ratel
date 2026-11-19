@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { setEditionServiceName } from "@/lib/platform/app-config";
 import type { StoredTopicPattern } from "@/lib/readings/topics/types";
-import { buildFixes } from "./build";
+import { buildFixes, notReachingRuntime } from "./build";
 import { filterFixes, findFix, fixesForSubject } from "./select";
 import type { IntentGapInput } from "./skill-gaps";
 import {
@@ -968,4 +969,17 @@ test("a lookup folded into the next call makes the steps one call too: the skill
   );
   assert.equal(findFix(built.open, "intent:t_handover"), null);
   assert.equal(findFix(built.open, "craft:c-fold")?.intent?.id, "t_handover");
+});
+
+test("the caveat beside Apply names the edition's overrides, and no product without one", (t) => {
+  assert.equal(
+    notReachingRuntime(),
+    "Nothing has fetched this project's overrides recently, so an applied rewrite may not reach your agent yet.",
+  );
+  setEditionServiceName("Cloud");
+  t.after(() => setEditionServiceName(undefined));
+  assert.equal(
+    notReachingRuntime(),
+    "Nothing has fetched this project's Cloud overrides recently, so an applied rewrite may not reach your agent yet.",
+  );
 });

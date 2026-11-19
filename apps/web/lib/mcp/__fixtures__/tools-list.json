@@ -2833,8 +2833,8 @@
         "jobId": {
           "description": "A specific job id, as returned by an operation that enqueues work.",
           "type": "string",
-          "format": "uuid",
-          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          "minLength": 36,
+          "maxLength": 36
         }
       }
     },

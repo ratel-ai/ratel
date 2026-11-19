@@ -4,7 +4,7 @@ import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, round, TruncationTracker } from "@/lib/mcp/serialize";
-import { APP_NAME } from "@/lib/platform/app-config";
+import { serviceName } from "@/lib/platform/app-config";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   type CatalogDrift,
@@ -166,7 +166,7 @@ const graphKeyParam = z
   .string()
   .min(1)
   .max(200)
-  .describe(`A graphKey from list_ranking_graphs. Omit for the merged ${APP_NAME} graph.`);
+  .describe(`A graphKey from list_ranking_graphs. Omit for the merged ${serviceName()} graph.`);
 
 export function rankingOperations(deps: RankingOperationDeps = defaultRankingDeps): McpOperation[] {
   const now = () => deps.now?.() ?? new Date();
@@ -239,7 +239,7 @@ export function rankingOperations(deps: RankingOperationDeps = defaultRankingDep
           hint:
             graphs.length > 0
               ? "Call get_ranking_graph with a graphKey for its with-and-without comparison, warnings and setup."
-              : `No graph yet. Follow the setup steps: ${APP_NAME} builds one once searches and tool calls arrive.`,
+              : `No graph yet. Follow the setup steps: ${serviceName()} builds one once searches and tool calls arrive.`,
         };
       },
     }),

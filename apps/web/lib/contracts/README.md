@@ -6,12 +6,14 @@ declared here and implemented twice, in `lib/adapters/oss` and in the private ch
 nothing from the application.
 
 `composition.ts` declares `CompositionPorts`, the full set a composition must supply; the private
-side annotates against it, so the two shapes cannot drift.
+side annotates against it, so the two shapes cannot drift. Its optional `productName` is how the
+edition names the product in copy (`full` for the MCP server, `short` for the service in a
+sentence); without it the copy keeps its neutral words.
 
 `entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
 table of an edition that sells plans: the organization's plan and subscription state
-(`summary`), the cheapest plan whose Agent health window reaches a number of days, and a plan's
-name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
+(`summary`), the cheapest plan whose Agent health window reaches a number of days, the cheapest
+that shows Agent health in full (optional, named by the locks), and a plan's name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
 
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
@@ -118,3 +120,7 @@ are only for tying the error to the edition's own analytics identity and must ne
 forwards to it. Nothing is installed in the open-source edition, so the browser sends nothing.
 It installs with the edition's provider, not before hydration: a root layout crash on a hard load
 can happen first and then goes unreported.
+
+`embedding-provider.ts` is the Playground's vectors. A provider that answered but was refused or
+unreadable sets `reason` on the error it throws; its optional `noteUnavailable` is told when a
+run wanted vectors with no key, so the edition can record the call it skipped.

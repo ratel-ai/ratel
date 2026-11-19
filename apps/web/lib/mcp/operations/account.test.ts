@@ -255,3 +255,18 @@ test("without an edition's plans: no plan block, and every limit is unlimited", 
     { included: true, used: 2, unlimited: true, summary: "Unlimited runs" },
   );
 });
+
+test("get_job_status refuses a job id that is not a UUID as the other id params do", async () => {
+  const result = await dispatchOperation(
+    "get_job_status",
+    { projectId: PROJECT, jobId: "not-a-job" },
+    {
+      registry: buildRegistry(accountOperations(deps())),
+      auth: keyAuth,
+      projectOwner: async () => ({ organizationId: "org-1" }),
+      logger: quiet,
+    },
+  );
+  assert.equal(result.ok, false);
+  assert.match(JSON.stringify(result), /Must be a UUID\./);
+});

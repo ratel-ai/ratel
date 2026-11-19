@@ -72,6 +72,16 @@ export function planWithWindow(days: number): string | null {
   return composition.entitlements.plans?.withAgentHealthWindow(days) ?? null;
 }
 
+/**
+ * The name of the cheapest plan that shows Agent health in full ("Plus"), for the locks on hidden
+ * issues and example turns; null when the edition has no plans to name.
+ */
+export function fullAgentHealthPlanName(): string | null {
+  const plans = composition.entitlements.plans;
+  const planId = plans?.withFullAgentHealth?.();
+  return plans && planId ? plans.name(planId) : null;
+}
+
 /** Effective limits for an organization: the edition's defaults overlaid with its overrides. */
 export function getLimits(org: OrgLimitView): PlanLimits {
   return composition.entitlements.getLimits(org);

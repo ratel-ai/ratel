@@ -155,7 +155,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
           consecutiveFailures += 1;
           if (consecutiveFailures >= OPENAI_MAX_CONSECUTIVE_FAILURES) {
             throw new OpenAIJudgeUnavailableError(
-              `OpenAI answered none of the last ${consecutiveFailures} asks`,
+              `OpenAI answered none of the last ${consecutiveFailures} searches`,
             );
           }
         }
@@ -180,7 +180,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
       await Promise.all(Array.from({ length: concurrency }, worker));
       if (fatal !== null) throw fatal;
       if (verdicts.length === 0 && unanswered > 0) {
-        throw new OpenAIJudgeUnavailableError(`OpenAI answered none of ${unanswered} asks`);
+        throw new OpenAIJudgeUnavailableError(`OpenAI answered none of ${unanswered} searches`);
       }
 
       const answered = verdicts.filter((verdict) => verdict.entryId !== "").length;
