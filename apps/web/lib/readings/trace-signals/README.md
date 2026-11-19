@@ -28,7 +28,8 @@ when it found workflows and a model key is set, and the readings that follow thr
 **Model use.** Workflow names need `ANTHROPIC_API_KEY` (`TRACE_WORKFLOW_LABEL_MODEL`, default
 `readings/model-defaults.ts`); the placement of recent asks in workflows and the "does any tool
 do this" check need `OPENAI_API_KEY` through `readings/decisions` (OpenAI is the one judge
-engine in this edition; `TRACE_WORKFLOW_MAX_JUDGE_TOKENS` caps a job's spend). With no key the
+engine in this edition; `TRACE_WORKFLOW_MAX_JEV_TOKENS`, upstream's name, caps a job's spend,
+and `TRACE_WORKFLOW_MAX_JUDGE_TOKENS` is read as an alias). With no key the
 run completes, workflows keep their tool-order names, and the label job reports `no_model` and
 `no_judge`; nothing leaves the process (`readings/no-outbound-without-key.test.ts`).
 

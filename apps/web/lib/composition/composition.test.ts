@@ -4,7 +4,7 @@ import type { CompositionPorts } from "@/lib/contracts/composition";
 
 process.env.RATEL_COMPOSITION = "oss";
 const { createComposition } = await import("@/lib/composition");
-const { drainSteps, jobHandlers } = await import("@/lib/composition/registry");
+const { drainSteps, jobHandlers, liveJobIds } = await import("@/lib/composition/registry");
 const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
@@ -91,16 +91,41 @@ describe("createComposition", () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
     assert.deepEqual(composition.organizationNav, [
-      { path: "team", label: "Members", icon: "members" },
-      { path: "billing", label: "Billing", icon: "billing" },
+      {
+        path: "team",
+        label: "Members",
+        icon: "members",
+        shortcut: "m",
+        keywords: ["team", "invite", "people"],
+      },
+      {
+        path: "billing",
+        label: "Billing",
+        icon: "billing",
+        shortcut: "b",
+        keywords: ["plan", "credits", "invoices"],
+      },
     ]);
     assert.deepEqual(composition.projectNav, [
       {
         id: "apis",
         label: "APIs",
+        row: { in: "setup", icon: "apis", keywords: ["hosted apis", "embeddings", "tool picker"] },
         items: [
-          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
-          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
+          {
+            path: "models/embeddings",
+            label: "Embeddings",
+            icon: "embeddings",
+            shortcut: "e",
+            keywords: ["vectors", "usage", "api"],
+          },
+          {
+            path: "models/tool-picker",
+            label: "Tool Picker",
+            icon: "tool-picker",
+            shortcut: "p",
+            keywords: ["pick", "routing", "decision", "api"],
+          },
         ],
       },
     ]);
@@ -296,4 +321,18 @@ describe("registry root", () => {
     ];
     assert.throws(() => drainSteps(steps), /drain step registered twice: s/);
   });
+});
+
+it("live job ids are the union of what registrations vouch for; a failed read vouches for none", async () => {
+  const ids = await liveJobIds([
+    { liveJobs: async () => ["a", "b"] },
+    {},
+    {
+      liveJobs: async () => {
+        throw new Error("read failed");
+      },
+    },
+    { liveJobs: async () => ["b", "c"] },
+  ]);
+  assert.deepEqual(ids.sort(), ["a", "b", "c"]);
 });

@@ -88,12 +88,29 @@ export type EditionCommandAction = {
 };
 
 /**
+ * How a shared link to the app previews (OpenGraph, Twitter card): the canonical origin and the
+ * words a chat or social card shows.
+ */
+export type LinkPreview = {
+  /** The public origin, e.g. `https://app.example.com`: the base for metadata URLs. */
+  origin: string;
+  siteName: string;
+  title: string;
+  description: string;
+};
+
+/**
  * What an edition adds to the console's UI. Loaded by the layouts, never at boot. Each optional
  * component replaces what the open-source console shows in its place, which is the default.
  */
 export type EditionUi = {
   /** Wraps the whole app, in the root layout. */
   RootProvider: ComponentType<{ children: ReactNode }>;
+  /**
+   * The link preview, read per request by the root layout. Absent, it names this deployment
+   * (`APP_NAME`, `BASE_URL`).
+   */
+  linkPreview?: () => LinkPreview;
   /** Menu items above the docs in the account menu. */
   AccountMenuItems: ComponentType;
   /**
@@ -106,6 +123,19 @@ export type EditionUi = {
    * projects of every organization the reader belongs to.
    */
   ScopeSwitcher?: ComponentType<{ projects: readonly EditionProject[]; collapsed: boolean }>;
+  /**
+   * The first-run screen's art (`/onboarding`): the full-bleed backdrop and the badge heading its
+   * cards (`tone` "mint" on the key-issued step). Without it, the static dot field and the mark.
+   */
+  OnboardingArt?: {
+    Backdrop: ComponentType;
+    Emblem: ComponentType<{ tone?: "coral" | "mint" }>;
+  };
+  /**
+   * A short line under the signed-in person's name and email at the top of the account menu (Cloud:
+   * "Local session (auth bypassed)" under its local sign-in bypass), or null for none.
+   */
+  accountNote?: () => Promise<string | null>;
   /** `/organizations`, which otherwise redirects to the console's entry. */
   OrganizationsPage?: ComponentType;
   /** `/org/<slug>/team`, a 404 otherwise. */
@@ -127,6 +157,11 @@ export type EditionUi = {
   ProjectPages?: Readonly<
     Record<string, { title: string; Page: ComponentType<{ projectId: string }> }>
   >;
+  /**
+   * What `/project/<id>/models/<key>` shows while an edition project page loads, in place of the
+   * project Overview's skeleton (the nearest loading state otherwise). Nothing without it.
+   */
+  ProjectPageSkeleton?: ComponentType;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */
@@ -246,6 +281,14 @@ export type CompositionPorts = {
    * a later reveal on its own pages, and the core's copy says the key can be revealed later.
    */
   apiKeySecrets?: ApiKeySecretsPort;
+  /**
+   * How the edition names the product in copy. `full` opens the MCP server's instructions and,
+   * as a slug, names the server and its 401 realm ("Ratel Cloud", `ratel-cloud`); `short` is the
+   * service doing the work in a sentence ("Cloud builds one once searches arrive", "Cloud
+   * override"). Absent in the open-source edition, whose copy keeps its neutral words ("Ratel",
+   * `APP_NAME`).
+   */
+  productName?: { full: string; short: string };
 };
 
 export const PORT_NAMES = [

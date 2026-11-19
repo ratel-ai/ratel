@@ -117,11 +117,13 @@ test("the Sessions list page checks the project scope itself, as its two routes 
 });
 
 test("root metadata sets a title template on the product name, a description and an icon", () => {
-  const layout = source("app/layout.tsx");
+  // The layout builds it per request (`generateMetadata`) from `siteMetadata`, on APP_NAME.
+  assert.match(source("app/layout.tsx"), /siteMetadata\(APP_NAME,/);
+  const metadata = source("lib/platform/site-metadata.ts");
   // biome-ignore lint/suspicious/noTemplateCurlyInString: the placeholder as it is written in the source file
-  assert.equal(layout.match(/template:\s*[`"']([^`"']*)[`"']/)?.[1], "%s · ${APP_NAME}");
-  assert.match(layout, /\bdescription:/);
-  assert.match(layout, /\bicons:/);
+  assert.equal(metadata.match(/template:\s*[`"']([^`"']*)[`"']/)?.[1], "%s · ${appName}");
+  assert.match(metadata, /\bdescription:/);
+  assert.match(metadata, /\bicons:/);
 });
 
 test("every job that works on one project runs in the project log context", () => {

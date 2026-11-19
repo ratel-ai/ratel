@@ -31,6 +31,22 @@ import type { ShellData } from "./types";
  * Owns the global keyboard (⌘K, `[`, `?`, `g` then a letter), the mobile drawer and the
  * app-wide overlays (command menu, shortcuts, toasts).
  */
+/**
+ * A screen ported unchanged brings its own layout and wants the padding; a design system <Page>
+ * (data-page) owns its edges and, as upstream's, fills the height in a flex column.
+ */
+export const MAIN_CLASS_NAME =
+  "min-w-0 flex-1 px-6 py-8 outline-none lg:px-10 has-[>[data-page]]:flex has-[>[data-page]]:flex-col has-[>[data-page]]:p-0";
+
+/** The mobile bar's title: the project, else the organization, else the edition's product name. */
+export function mobileTitle(
+  project: { name: string } | undefined,
+  organizationName: string | null | undefined,
+  productName: string,
+): string {
+  return project?.name ?? organizationName ?? productName;
+}
+
 /** How long `g` waits for its second key. */
 const JUMP_WINDOW_MS = 1200;
 
@@ -213,17 +229,11 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
           <div className="sticky top-[var(--support-bar,0px)] z-sticky flex h-12 items-center gap-2 border-b border-line bg-rail px-2 md:hidden">
             <IconButton label="Open menu" icon={<Menu />} onClick={() => setMobileOpen(true)} />
             <span className="min-w-0 flex-1 truncate text-ui font-semibold">
-              {project?.name ?? organizationName ?? "Ratel"}
+              {mobileTitle(project, organizationName, data.productName)}
             </span>
             <IconButton label="Search" icon={<Search />} onClick={() => setCommandOpen(true)} />
           </div>
-          {/* A screen ported unchanged brings its own layout and wants the padding; a design system
-              <Page> (data-page) owns its edges. */}
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="min-w-0 flex-1 px-6 py-8 outline-none lg:px-10 has-[>[data-page]]:p-0"
-          >
+          <main id="main-content" tabIndex={-1} className={MAIN_CLASS_NAME}>
             {children}
           </main>
         </div>
@@ -248,6 +258,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         onOpenChange={setCommandOpen}
         entries={entries}
         actions={actions}
+        projectsInSwitcher={Boolean(data.scopeSwitcher)}
       />
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} items={items} />
       {data.overlays}

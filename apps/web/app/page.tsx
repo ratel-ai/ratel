@@ -2,6 +2,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { EmptyState } from "@ratel/design-system/states";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { ConsoleFrame } from "@/components/console/shell/ConsoleFrame";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition";
 import { entryHref, projectRoot } from "@/lib/console/navigation";
@@ -18,17 +19,21 @@ export const dynamic = "force-dynamic";
 /**
  * The console entry: the project the reader was last in (the same resolution as `/project/_`:
  * the cookie when it names a live project, else the first project), else onboarding. An edition
- * may replace it.
+ * may replace it. Outside the console layout, as upstream's `/`: its redirects answer before any
+ * byte is sent, never from inside the shell skeleton's Suspense boundary, so they stay HTTP
+ * redirects. The states it shows in place of a redirect sit in the console frame.
  */
 export default async function HomePage() {
   const RootPage = (await composition.ui?.())?.RootPage;
   if (RootPage) return <RootPage />;
   if (!isDbConfigured()) {
     return (
-      <DatabaseUnavailable title="Ratel">
-        Set <code>DATABASE_URL</code> and restart; projects appear here once the database is
-        reachable.
-      </DatabaseUnavailable>
+      <ConsoleFrame>
+        <DatabaseUnavailable title="Ratel">
+          Set <code>DATABASE_URL</code> and restart; projects appear here once the database is
+          reachable.
+        </DatabaseUnavailable>
+      </ConsoleFrame>
     );
   }
   // The scope first: an empty organization gets its sample project there.
@@ -42,15 +47,17 @@ export default async function HomePage() {
     : entryHref(scope?.projects ?? [], scope?.organizationSlug);
   if (href) redirect(href);
   return (
-    <Page>
-      <PageHeader title="Ratel" />
-      <PageBody>
-        <EmptyState
-          emblem
-          title="No session"
-          description="The console could not resolve who is signed in, so it has no organization to show."
-        />
-      </PageBody>
-    </Page>
+    <ConsoleFrame>
+      <Page>
+        <PageHeader title="Ratel" />
+        <PageBody>
+          <EmptyState
+            emblem
+            title="No session"
+            description="The console could not resolve who is signed in, so it has no organization to show."
+          />
+        </PageBody>
+      </Page>
+    </ConsoleFrame>
   );
 }

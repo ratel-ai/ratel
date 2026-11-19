@@ -10,10 +10,9 @@ import { readOldestQueuedJobAgeMs } from "./queries";
  * oldest queued job has waited too long. The deployment's Datadog drain monitors match these
  * codes as bare text, so renaming one silences its alert.
  *
- * Upstream also holds a per-task slot, because its tick answers at once and drains after the
- * response; here the tick runs inside the request, so that does not apply. Its watchdog does
- * (`timedDrain`): the worker's loop runs one step at a time, so a sweep that never settles would
- * stop the analysis lane behind it.
+ * The cron route's tick holds a per-process slot and its own watchdog (`background-drain.ts`); the
+ * worker's sweep has `timedDrain`: the worker's loop runs one step at a time, so a sweep that
+ * never settles would stop the analysis lane behind it.
  */
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -43,6 +42,7 @@ export type DrainLogCode =
   | "drain_completed"
   | "drain_failed"
   | "drain_timed_out"
+  | "drain_skipped_busy"
   | "drain_skipped_hung"
   | "drain_queue_lag_read_failed"
   | "job_queue_lagging";
@@ -160,7 +160,7 @@ export function timedDrain<T extends { ok: boolean; error?: string }>(
 }
 
 /** The limit that each finished job restarts; it fires once, and never with `limitMs` of 0. */
-function progressWatchdog(
+export function progressWatchdog(
   limitMs: number,
   startedAt: number,
   deps: Pick<DrainObserverDeps, "log">,

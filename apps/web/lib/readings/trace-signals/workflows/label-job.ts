@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
@@ -184,7 +184,19 @@ async function writeLabels(
   deps: LabelJobDeps,
 ): Promise<Pick<LabelJobResult, "labelled" | "failed" | "skipped">> {
   const { complete } = deps;
-  if (!complete) return { labelled: 0, failed: 0, skipped: "no_model" };
+  if (!complete) {
+    if (workflows.length > 0) {
+      recordModelCall({
+        provider: "anthropic",
+        model: deps.model,
+        feature: "workflow_label",
+        payer: "ratel",
+        outcome: "skipped_no_key",
+        durationMs: 0,
+      });
+    }
+    return { labelled: 0, failed: 0, skipped: "no_model" };
+  }
   const known = await deps.loadLabelHashes(projectId);
   let labelled = 0;
   let failed = 0;

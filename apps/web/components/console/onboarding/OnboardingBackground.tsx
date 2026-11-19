@@ -3,8 +3,8 @@
  * canvas, carrying the console's instrument-panel language onto the empty onboarding canvas.
  *
  * Upstream animates a WebGL field of light streaks over this texture and drains it on exit; that
- * field needs the `ogl` package and a shader this edition does not carry, so every reader gets
- * what upstream shows under reduced motion. The exit veil in `CreateProjectForm` still dissolves
+ * field needs the `ogl` package and a shader the open-source edition does not carry, so without an
+ * edition (`EditionUi.OnboardingArt`) every reader gets what upstream shows under reduced motion. The exit veil in `CreateProjectForm` still dissolves
  * the scene on the same timings.
  *
  * Rendered as a positive-z layer at the bottom of the stack (the page content sits above it via

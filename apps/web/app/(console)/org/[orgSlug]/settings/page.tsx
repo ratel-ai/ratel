@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { OrgGeneralSettings } from "@/components/console/org/OrgGeneralSettings";
+import { OrgSkeleton } from "@/components/console/org/OrgSkeleton";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -20,5 +22,9 @@ export default async function OrganizationSettingsPage({
   const [{ orgSlug }, ui] = await Promise.all([params, composition.ui?.()]);
   // The edition's own (rename for admins), or the read-only one.
   const General = ui?.OrganizationGeneralSettings ?? OrgGeneralSettings;
-  return <General slug={orgSlug} />;
+  return (
+    <Suspense fallback={<OrgSkeleton variant="settings" body />}>
+      <General slug={orgSlug} />
+    </Suspense>
+  );
 }

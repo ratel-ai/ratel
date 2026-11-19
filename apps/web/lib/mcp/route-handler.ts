@@ -23,6 +23,7 @@ import { APP_NAME } from "@/lib/platform/app-config";
 import { clientAddress } from "@/lib/platform/http/client-address";
 import { readBodyWithCap } from "@/lib/platform/http/read-body-with-cap";
 import { currentLogContext, getLogger, setLogContext } from "@/lib/platform/logger";
+import { productSlug } from "@/lib/platform/product-name";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext } from "@/lib/platform/request-log";
@@ -148,7 +149,7 @@ function errorResponse(error: McpOperationError, status: number, request?: Reque
     // at the origin the client actually used, or discovery walks off this
     // server and the client stalls with no browser ever opening.
     headers["www-authenticate"] =
-      `Bearer realm="ratel", resource_metadata="${mcpResourceMetadataUrl(request)}"`;
+      `Bearer realm="${productSlug()}", resource_metadata="${mcpResourceMetadataUrl(request)}"`;
   }
   return new Response(JSON.stringify(body), { status, headers });
 }

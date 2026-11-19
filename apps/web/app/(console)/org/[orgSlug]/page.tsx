@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { OrgSkeleton } from "@/components/console/org/OrgSkeleton";
 import { ProjectsPage } from "@/components/console/org/ProjectsPage";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -19,5 +21,9 @@ export default async function OrganizationProjectsPage({
     );
   }
   const [{ orgSlug }, search] = await Promise.all([params, searchParams]);
-  return <ProjectsPage slug={orgSlug} searchParams={search} />;
+  return (
+    <Suspense fallback={<OrgSkeleton variant="projects" />}>
+      <ProjectsPage slug={orgSlug} searchParams={search} />
+    </Suspense>
+  );
 }

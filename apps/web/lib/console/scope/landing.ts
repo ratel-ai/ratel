@@ -1,14 +1,17 @@
+import { composition } from "@/lib/composition";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
+import type { SessionPort } from "@/lib/contracts/session";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
 /**
- * The last project a reader was in. Owned (ADR-0030): upstream also keeps a pointer on the
- * users row; identity is the edition's here, so the memory is the cookie, checked against the
- * projects the reader may see (any organization they belong to), and the stored pointer is the
- * active organization's first project, so an old link always lands somewhere live. An edition
- * that keeps its own pointer reads it in its own landing page.
+ * The last project a reader was in. Owned (ADR-0030): upstream keeps a pointer on the users row
+ * and falls back to it when the cookie names no project the reader may see. Identity is the
+ * edition's here, so the pointer is too (`SessionPort.lastProject`); without one, the stored
+ * pointer is the active organization's first project, so an old link always lands somewhere live.
+ * Either way the pointer is checked against the projects the reader may see (any organization
+ * they belong to).
  */
 
 export type LastProjectResolverDeps = {
@@ -23,8 +26,19 @@ async function firstProjectId(): Promise<string | null> {
   return first?.id ?? null;
 }
 
+/**
+ * The stored pointer: the edition's, where it keeps one (upstream's `getLastProjectId`, with no
+ * further fallback), else `fallback`.
+ */
+export function storedLastProject(
+  session: Pick<SessionPort, "lastProject">,
+  fallback: () => Promise<string | null>,
+): (userId: string) => Promise<string | null> {
+  return () => (session.lastProject ? session.lastProject() : fallback());
+}
+
 const DEFAULT_LAST_PROJECT_RESOLVER_DEPS: LastProjectResolverDeps = {
-  getLastProjectId: firstProjectId,
+  getLastProjectId: (userId) => storedLastProject(composition.session, firstProjectId)(userId),
   resolveProjectScope: (projectId) => findProjectScope(projectId),
 };
 

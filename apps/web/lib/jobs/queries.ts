@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, getTableColumns, gt, inArray, lt, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  lt,
+  notInArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
@@ -40,16 +52,25 @@ export async function listInFlightJobs(
 /**
  * Fail jobs stuck in `running` since before `olderThan`: zombies left when a process died
  * mid-handler. The claim only ever takes `queued` rows, so a dead `running` row would otherwise
- * read as in flight forever. Returns how many were reaped.
+ * read as in flight forever. `spare` are jobs known to be alive however long they have run
+ * (`Registration.liveJobs`): upstream spares an import whose own heartbeat is fresh, and reaps it
+ * like any job once that stops. Returns how many were reaped.
  */
 export async function reapStaleRunningJobs(
   olderThan: Date,
   db: ReturnType<typeof getDb> = getDb(),
+  spare: readonly string[] = [],
 ): Promise<number> {
   const rows = await db
     .update(jobs)
     .set({ status: "error", error: "Timed out — no result was recorded.", finishedAt: new Date() })
-    .where(and(eq(jobs.status, "running"), lt(jobs.startedAt, olderThan)))
+    .where(
+      and(
+        eq(jobs.status, "running"),
+        lt(jobs.startedAt, olderThan),
+        spare.length > 0 ? notInArray(jobs.id, [...spare]) : undefined,
+      ),
+    )
     .returning({ id: jobs.id });
   return rows.length;
 }

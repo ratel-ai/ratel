@@ -37,4 +37,6 @@ export type ShellData = {
   /** Command palette entries the edition adds; none otherwise. */
   commandActions?: readonly EditionCommandAction[];
   initiallyCollapsed: boolean;
+  /** The edition's product name (`lib/platform/product-name`): the mobile bar's fallback title. */
+  productName: string;
 };

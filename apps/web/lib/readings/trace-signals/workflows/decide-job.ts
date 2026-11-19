@@ -50,10 +50,18 @@ import type { WorkflowLabels } from "./name";
 const DAY_MS = 86_400_000;
 export const DECIDE_WINDOW_DAYS = 30;
 export const MAX_ASKS_PER_JOB = Math.floor(envNumber("TRACE_WORKFLOW_MAX_ASKS", 300));
-/** About $0.30 at the engine's input price; a full job of 300 asks uses a fraction of it. */
-export const DECIDE_MAX_INPUT_TOKENS = Math.floor(
-  envNumber("TRACE_WORKFLOW_MAX_JUDGE_TOKENS", 3_000_000),
-);
+/**
+ * The job's input-token cap: upstream's `TRACE_WORKFLOW_MAX_JEV_TOKENS`, or this tree's earlier
+ * name `TRACE_WORKFLOW_MAX_JUDGE_TOKENS`, kept as an alias. About $0.30 at the engine's input
+ * price; a full job of 300 asks uses a fraction of it.
+ */
+export function decideMaxInputTokens(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const alias = envNumber("TRACE_WORKFLOW_MAX_JUDGE_TOKENS", 3_000_000, undefined, env);
+  return Math.floor(envNumber("TRACE_WORKFLOW_MAX_JEV_TOKENS", alias, undefined, env));
+}
+export const DECIDE_MAX_INPUT_TOKENS = decideMaxInputTokens();
 const logger = getLogger("trace-signals/decide-workflows");
 
 type Env = Record<string, string | undefined>;

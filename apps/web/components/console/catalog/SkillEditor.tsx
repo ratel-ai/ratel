@@ -136,6 +136,9 @@ export function SkillEditor({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4" aria-label="Skill">
+      <h3 className="text-lg font-semibold text-fg">
+        {mode === "create" || !skill ? "New skill" : `Edit ${skill.name}`}
+      </h3>
       {notice ? <Callout tone="warning">{notice}</Callout> : null}
 
       <Field

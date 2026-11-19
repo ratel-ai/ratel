@@ -8,6 +8,7 @@ import {
   checkEventQuota,
   checkMeteredFeature,
   checkQuota,
+  fullAgentHealthPlanName,
   getAgentHealthLimits,
   getLimits,
   hasPaidAccess,
@@ -65,6 +66,7 @@ test("without an edition's plans: no summary, no plan named, billing never self-
   assert.equal(composition.entitlements.plans, undefined);
   assert.equal(planSummary(org), null);
   assert.equal(planWithWindow(30), null);
+  assert.equal(fullAgentHealthPlanName(), null);
   assert.equal(planName("plus"), "Plus");
   assert.equal(billingSelfServe(org), false);
 });
@@ -81,6 +83,7 @@ test("with an edition's plans, the shim answers from them", (t) => {
       selfServeBilling: view.id === "org_1",
     }),
     withAgentHealthWindow: (days) => (days <= 30 ? "plus" : "pro"),
+    withFullAgentHealth: () => "plus",
     name: (planId) => ({ plus: "Plus", pro: "Pro" })[planId] ?? "Hobby",
   };
   const previous = composition.entitlements;
@@ -96,4 +99,10 @@ test("with an edition's plans, the shim answers from them", (t) => {
   assert.equal(planWithWindow(90), "pro");
   assert.equal(planName("free"), "Hobby");
   assert.equal(planLabel(org), "Pro");
+  assert.equal(fullAgentHealthPlanName(), "Plus");
+  composition.entitlements = {
+    ...previous,
+    plans: { ...plans, withFullAgentHealth: undefined },
+  };
+  assert.equal(fullAgentHealthPlanName(), null, "a catalog from an older edition names no plan");
 });

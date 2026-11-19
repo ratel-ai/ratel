@@ -2,7 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
+import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
@@ -347,7 +347,19 @@ export async function nameEngineClusters(
   candidates: readonly NameCandidate[],
 ): Promise<NameJobResult> {
   const result = emptyNameResult();
-  if (!deps.complete) return { ...result, skipped: "no_model" };
+  if (!deps.complete) {
+    if (candidates.length > 0 && deps.maxNames > 0) {
+      recordModelCall({
+        provider: "anthropic",
+        model: deps.model,
+        feature: "intent_names",
+        payer: "ratel",
+        outcome: "skipped_no_key",
+        durationMs: 0,
+      });
+    }
+    return { ...result, skipped: "no_model" };
+  }
   if (deps.maxNames <= 0) return { ...result, skipped: "disabled" };
   const complete = deps.complete;
   const keys = deps.keys ?? null;
