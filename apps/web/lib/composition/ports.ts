@@ -89,8 +89,6 @@ export type ProjectNavGroup = {
 
 export type Composition = CompositionPorts & {
   edition: string;
-  /** The product's name where the shell has no project or organization to show. */
-  productName: string;
   nav: NavItem[];
   organizationNav: OrganizationNavItem[];
   projectNav: ProjectNavGroup[];
@@ -120,7 +118,6 @@ export function createComposition(
 
   let base: CompositionPorts;
   let edition: string;
-  let productName: string;
   let nav: NavItem[];
   let organizationNav: OrganizationNavItem[] = [];
   let projectNav: ProjectNavGroup[] = [];
@@ -128,7 +125,6 @@ export function createComposition(
   if (editionKey === "oss") {
     base = OSS_PORTS;
     edition = "Ratel OSS";
-    productName = "Ratel";
     nav = [];
   } else if (editionKey === "cloud") {
     if (ee == null) {
@@ -138,7 +134,6 @@ export function createComposition(
     }
     base = ee;
     edition = "Ratel Cloud";
-    productName = "Ratel Cloud";
     // The admin console is reached from the account menu, for allowlisted admins only.
     nav = [];
     organizationNav = [
@@ -194,7 +189,7 @@ export function createComposition(
   }
 
   // The edition's own fields last: a ports object never overrides the edition's nav.
-  return { ...(ports as CompositionPorts), edition, productName, nav, organizationNav, projectNav };
+  return { ...(ports as CompositionPorts), edition, nav, organizationNav, projectNav };
 }
 
 export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");
