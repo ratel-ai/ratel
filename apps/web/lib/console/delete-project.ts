@@ -23,8 +23,8 @@ export type DeleteProjectDeps = {
 
 /**
  * Deletes a project of any organization the reader belongs to once its name is typed back, as
- * upstream. Answers where to go next: another project of that organization, or its projects page
- * when none is left.
+ * upstream. Answers where to go next: another project's Dashboards in that organization (upstream's
+ * `deleteProjectAction`), or its projects page when none is left.
  */
 export async function deleteConsoleProject(
   projectId: string,
@@ -43,6 +43,8 @@ export async function deleteConsoleProject(
   const remaining = scope.projects.find((candidate) => candidate.id !== project.id);
   return {
     ok: true,
-    next: remaining ? projectRoot(remaining.id) : organizationRoot(scope.organizationSlug),
+    next: remaining
+      ? `${projectRoot(remaining.id)}/dashboards`
+      : organizationRoot(scope.organizationSlug),
   };
 }

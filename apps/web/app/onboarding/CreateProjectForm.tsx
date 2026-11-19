@@ -46,11 +46,17 @@ function Card({ children, size = "default" }: { children: ReactNode; size?: "def
 export function CreateProjectForm({
   ingestUrl,
   keyIssuedCameo,
+  emblem,
+  keyIssuedEmblem,
   organization,
 }: {
   ingestUrl: string;
   /** Rendered by the server because optional badger assets are resolved from disk. */
   keyIssuedCameo?: ReactNode;
+  /** The badge heading the naming step: the edition's (`EditionUi.OnboardingArt`), else the mark. */
+  emblem?: ReactNode;
+  /** The success step's badge when there is no cameo, likewise. */
+  keyIssuedEmblem?: ReactNode;
   organization?: {
     id: string;
     name: string;
@@ -71,7 +77,7 @@ export function CreateProjectForm({
         slug={state.slug}
         apiKey={state.apiKey}
         ingestUrl={ingestUrl}
-        cameo={keyIssuedCameo}
+        cameo={keyIssuedCameo ?? keyIssuedEmblem}
         showCaptureConsent={state.showCaptureConsent}
       />
     );
@@ -89,7 +95,7 @@ export function CreateProjectForm({
         </Link>
       )}
       <header className="flex flex-col items-center gap-4 text-center">
-        <OnboardingEmblem />
+        {emblem ?? <OnboardingEmblem />}
         <div className="eyebrow flex items-center gap-1.5">
           <span className="inline-block size-1.5 rounded-full bg-coral" aria-hidden />
           {organization ? organization.name : `${APP_NAME}`}

@@ -62,6 +62,17 @@ export function jobHandlers(
   return out;
 }
 
+/**
+ * The running jobs every registration vouches for (`Registration.liveJobs`), for the reaper. A
+ * registration whose read fails vouches for none.
+ */
+export async function liveJobIds(
+  registrations: Registration[] = collectRegistrations(),
+): Promise<string[]> {
+  const reads = registrations.flatMap((r) => (r.liveJobs ? [r.liveJobs().catch(() => [])] : []));
+  return [...new Set((await Promise.all(reads)).flat())];
+}
+
 /** Drain steps in registration order, `before` steps first. */
 export function drainSteps(registrations: Registration[] = collectRegistrations()): DrainStep[] {
   const all = registrations.flatMap((r) => r.drainSteps ?? []);

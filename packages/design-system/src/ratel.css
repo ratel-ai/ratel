@@ -16,7 +16,8 @@
   --font-display: var(--font-sans);
   /* Geist Mono in place of the pixel face, which renders jagged in Chrome. */
   --font-pixel: var(--font-mono);
-  /* The etched dot texture behind a page-title band. */
+  /* The etched dot texture: full strength behind panels and cards, soft behind a page title. */
+  --pixel-grid-image: radial-gradient(circle at center, var(--color-forest-300) 1px, transparent 1.5px);
   --pixel-grid-image-soft: radial-gradient(
     circle at center,
     color-mix(in srgb, var(--color-forest-300) 55%, transparent) 1px,
@@ -56,6 +57,51 @@
 @media (prefers-reduced-motion: no-preference) {
   .card-enter {
     animation: card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+/* The dot texture on a decorative, `aria-hidden` layer behind a panel or card. */
+.pixel-grid {
+  background-image: var(--pixel-grid-image);
+  background-size: var(--pixel-grid-size);
+}
+
+/* Same grid, faded out toward the bottom so it never ends on a hard tile edge. */
+.pixel-grid-fade {
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
+
+/* A dialog powers on: the panel rises from slightly small and blurred while the scrim fades in. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@keyframes dialog-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dialog-enter {
+    animation: dialog-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .dialog-scrim-enter {
+    animation: dialog-scrim-in 0.18s ease-out both;
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { drainCron } from "@/lib/jobs/drain";
+import { startBackgroundDrain } from "@/lib/jobs/background-drain";
 import { appRole, runsJobsAfterResponse } from "@/lib/jobs/role";
 import { type ScheduleProjectDrainDeps, scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { IDLE_POLL_MS, SWEEP_EVERY_MS, startWorker, type WorkerDeps } from "@/lib/jobs/worker";
@@ -112,30 +112,32 @@ test("an API-only process queues but does not run jobs after its response", () =
 });
 
 test("on an API-only task the cron tick leaves the work to the worker", async () => {
-  const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "s3cret";
+  const scheduled: Array<() => Promise<void>> = [];
+  const logged: string[] = [];
   let drains = 0;
-  try {
-    const response = await drainCron(
-      new Request("http://localhost/api/cron/drain", {
-        headers: { authorization: "Bearer s3cret" },
-      }),
-      {
-        steps: [],
-        drainProjectJobs: async () => {
-          drains += 1;
-          return { done: 0, failed: 0 };
-        },
+  const response = await startBackgroundDrain(
+    new Request("http://localhost/api/cron/drain", {
+      headers: { authorization: "Bearer s3cret" },
+    }),
+    {
+      after: (callback) => scheduled.push(callback),
+      drain: async () => {
+        drains += 1;
+        return { ok: true, done: 0, failed: 0, retention: false, steps: {}, duration_ms: 0 };
       },
-      "api",
-    );
-    assert.equal(response.status, 202);
-    assert.deepEqual(await response.json(), { ok: true, skipped: "worker" });
-    assert.equal(drains, 0);
-  } finally {
-    if (previous === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previous;
-  }
+      secret: () => "s3cret",
+      role: () => "api",
+      timeoutMs: () => 0,
+      oldestQueuedJobAgeMs: async () => null,
+      log: (_level, _fields, code) => logged.push(code),
+      reportException: () => {},
+    },
+  );
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), { ok: true, skipped: "worker" });
+  assert.equal(scheduled.length, 0);
+  assert.equal(drains, 0);
+  assert.deepEqual(logged, []);
 });
 
 test("a long import in its own lane does not hold up analysis or the sweeps", async () => {

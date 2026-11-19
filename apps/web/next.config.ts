@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
   // instead of calling server actions the new server does not know (lib/console/stale-build.ts
   // covers calls made before that). Unset in local dev and plain local builds.
   deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
+  // Browser source maps, for an edition's error tracking only: the image's cloud build sets
+  // BROWSER_SOURCEMAPS=1, and its last builder step hands the maps to the edition and then deletes
+  // them (apps/web/Dockerfile), so they are never served. Plain builds emit none.
+  productionBrowserSourceMaps: process.env.BROWSER_SOURCEMAPS === "1",
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
   // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.

@@ -17,7 +17,12 @@ export type ConsoleProject = {
   isDemo: boolean;
 };
 
-export type ConsoleAccount = { name: string; email: string | null };
+export type ConsoleAccount = {
+  name: string;
+  email: string | null;
+  /** A line under the name and email in the account menu (`EditionUi.accountNote`). */
+  note?: string | null;
+};
 
 /** An organization the reader belongs to, with their role there. */
 export type ConsoleOrganization = { id: string; name: string; slug: string; role: OrgRole };

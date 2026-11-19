@@ -78,10 +78,15 @@ export default async function OnboardingPage({
     }
   }
 
-  const ConsoleAccessGate = (await composition.ui?.())?.ConsoleAccessGate;
+  const ui = await composition.ui?.();
+  const ConsoleAccessGate = ui?.ConsoleAccessGate;
+  // The edition's backdrop and badge (upstream's Lightfall streaks and dot-matrix orb), else the
+  // static dot field and the mark.
+  const art = ui?.OnboardingArt;
+  const Backdrop = art?.Backdrop ?? OnboardingBackground;
   const page = (
     <main className="relative flex min-h-dvh items-center justify-center px-4 py-10 sm:py-16">
-      <OnboardingBackground />
+      <Backdrop />
       {/* The naming step keeps itself to `max-w-lg` (see Card); the key reveal
           spends the full width so its key + quickstart clear the fold. */}
       <div className="relative z-10 w-full max-w-4xl">
@@ -91,6 +96,8 @@ export default async function OnboardingPage({
             <CelebrationBadger className="relative h-full w-full object-contain text-cream-dim drop-shadow-[0_14px_28px_rgba(0,0,0,0.7)]" />
           }
           organization={formOrganization}
+          emblem={art ? <art.Emblem /> : undefined}
+          keyIssuedEmblem={art ? <art.Emblem tone="mint" /> : undefined}
         />
       </div>
     </main>

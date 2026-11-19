@@ -81,6 +81,13 @@ export type SessionPort = {
    */
   rememberProject?(projectId: string): Promise<void>;
   /**
+   * The project the signed-in person last opened, as the edition remembers it (Cloud: the user
+   * row's pointer), or null when it has none. Read when the last-project cookie names no project
+   * the reader may see (a new browser): `/project/_/…` links and the console entry land there.
+   * Absent, they land on the active organization's first project.
+   */
+  lastProject?(): Promise<string | null>;
+  /**
    * How the signed-in person left the guided tour, kept with their account. The edition decides
    * where and when it is not written (Cloud keeps it on the user row and writes nothing in a
    * support session). Absent, the core keeps it in a per-browser cookie.
