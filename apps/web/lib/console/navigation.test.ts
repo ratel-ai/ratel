@@ -316,6 +316,13 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
   const entries = commandEntries({ items, projectId: P1, projects: [], pathname: "/" });
   assert.equal(searchCommands(entries, "hosted apis")[0]?.label, "APIs");
   assert.equal(searchCommands(entries, "routing")[0]?.label, "Tool Picker");
+  assert.deepEqual(
+    entries
+      .filter(({ href }) => href === `/project/${P1}/models/embeddings`)
+      .map(({ label }) => label),
+    ["APIs"],
+    "the row and its first page share a path, so ⌘K lists it once, under the row, as upstream",
+  );
 });
 
 test("the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords", () => {

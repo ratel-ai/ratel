@@ -7,8 +7,9 @@ import type { LinkPreview } from "@/lib/contracts/composition";
  * origin as `metadataBase`.
  */
 export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
+  const base = metadataBase(preview.origin);
   return {
-    metadataBase: new URL(preview.origin),
+    ...(base ? { metadataBase: base.url } : {}),
     title: { default: appName, template: `%s · ${appName}` },
     description: preview.description,
     // The mark on its tile: `ratel-mark.png` of @ratel/brand, served from `public/`.
@@ -16,7 +17,7 @@ export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
     openGraph: {
       title: preview.title,
       description: preview.description,
-      url: preview.origin,
+      ...(base ? { url: base.text } : {}),
       siteName: preview.siteName,
       type: "website",
     },
@@ -26,6 +27,20 @@ export function siteMetadata(appName: string, preview: LinkPreview): Metadata {
       description: preview.description,
     },
   };
+}
+
+/**
+ * The origin as a URL. One written without a scheme (`ratel.example.com`) is read as https; one
+ * that still does not parse leaves the preview without an origin rather than failing every page.
+ */
+function metadataBase(origin: string): { url: URL; text: string } | null {
+  const text = origin.includes("://") ? origin : `https://${origin}`;
+  try {
+    const url = new URL(text);
+    return url.protocol === "http:" || url.protocol === "https:" ? { url, text } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The preview without an edition: this deployment's name and origin. */
