@@ -1,3 +1,4 @@
+import { composition } from "@/lib/composition/ports";
 import { claimSampleProjectSeeding, recordSampleProject } from "@/lib/console/onboarding/queries";
 import { seedSiteCopilot } from "@/lib/console/seed/site-copilot-seed";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
@@ -35,6 +36,11 @@ import { reportServerException, trackProductEvent } from "@/lib/platform/telemet
  * follow (the turn ledger, Agent health) do run as jobs: a drain is scheduled
  * after the response.
  *
+ * Never inside an admin support session: the organization is a customer's, and an operator's
+ * visit must not spend its one-time seed. Upstream's support context returns before seeding
+ * (`auth-user.ts`), for a session it resolved or one it refuses; a stale marker it ignores, so
+ * this asks `actingAs`, not the stricter write guard.
+ *
  * Failure is contained on purpose. Seeding is a nicety layered on top of
  * sign-in, so a broken seed must never stop somebody getting into their
  * account: the error is logged, reported, and swallowed. The mark is
@@ -59,6 +65,8 @@ export interface EnsureSampleProjectContext {
 }
 
 export interface EnsureSampleProjectDeps {
+  /** Whether this request is an admin support session (`SessionPort.actingAs`). */
+  inSupportSession: () => Promise<boolean>;
   listProjects: (organizationId: string) => Promise<readonly { id: string }[]>;
   claim: (organizationId: string, at: Date) => Promise<boolean>;
   seed: (organizationId: string) => Promise<{
@@ -75,6 +83,7 @@ export interface EnsureSampleProjectDeps {
 }
 
 const defaultDeps: EnsureSampleProjectDeps = {
+  inSupportSession: async () => (await composition.session.actingAs()) !== null,
   listProjects: listProjectsForOrganization,
   claim: claimSampleProjectSeeding,
   seed: (organizationId) => seedSiteCopilot({ organizationId, turns: SAMPLE_PROJECT_TURNS }),
@@ -92,6 +101,7 @@ export async function ensureSampleProject(
 ): Promise<string | null> {
   let claimed = false;
   try {
+    if (await deps.inSupportSession()) return null;
     const existing = await deps.listProjects(organization.id);
     if (existing.length > 0) return null;
 
