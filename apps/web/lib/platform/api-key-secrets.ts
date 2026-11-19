@@ -23,7 +23,24 @@ export async function keepApiKeySecret(keyId: string, plaintext: string): Promis
   try {
     return await port.store(keyId, plaintext);
   } catch (err) {
-    logger.warn({ apiKeyId: keyId, err }, "api key was not kept for a later reveal");
+    logger.warn(
+      { apiKeyId: keyId, ...keepFailureFields(err) },
+      "api key was not kept for a later reveal",
+    );
     return false;
   }
+}
+
+/**
+ * What a failed keep may log: the error's name and its database code. Never its message, which
+ * for a failed insert repeats the query's parameters (the sealed key and its nonce).
+ */
+export function keepFailureFields(err: unknown): { error: string; code?: string } {
+  const name = err instanceof Error ? err.name : "unknown";
+  const withCode = (value: unknown) =>
+    typeof value === "object" && value !== null && "code" in value && typeof value.code === "string"
+      ? value.code
+      : undefined;
+  const code = withCode(err) ?? (err instanceof Error ? withCode(err.cause) : undefined);
+  return code ? { error: name, code } : { error: name };
 }

@@ -27,6 +27,25 @@ test("the root metadata carries upstream's link preview: metadataBase, OpenGraph
   });
 });
 
+test("an origin written without a scheme is read as https, and one that does not parse drops the origin, not the page", () => {
+  const bare = siteMetadata("Acme", {
+    origin: "app.example.com",
+    siteName: "Acme",
+    title: "Acme",
+    description: "d",
+  });
+  assert.equal(String(bare.metadataBase), "https://app.example.com/");
+  assert.equal((bare.openGraph as { url?: string }).url, "https://app.example.com");
+  const broken = siteMetadata("Acme", {
+    origin: "http://exa mple",
+    siteName: "Acme",
+    title: "Acme",
+    description: "d",
+  });
+  assert.equal(broken.metadataBase, undefined);
+  assert.equal((broken.openGraph as { url?: string }).url, undefined);
+});
+
 test("without an edition, the preview names this deployment", () => {
   assert.deepEqual(defaultLinkPreview("Ratel", "http://localhost:3000"), {
     origin: "http://localhost:3000",
