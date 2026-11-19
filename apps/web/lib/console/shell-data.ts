@@ -22,6 +22,8 @@ export type ConsoleAccount = {
   email: string | null;
   /** The profile photo the session carries (`SessionUser.avatarUrl`); initials without one. */
   imageUrl: string | null;
+  /** A line under the name and email in the account menu (`EditionUi.accountNote`). */
+  note?: string | null;
 };
 
 /** An organization the reader belongs to, with their role there. */

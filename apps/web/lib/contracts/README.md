@@ -40,6 +40,9 @@ session and refuses a support session before it calls either.
 The session port's optional `rememberProject` keeps the project a reader just opened, called by
 the project layout once the reader may see it. Cloud keeps it on the user row and writes nothing in
 a support session; the open-source edition leaves it out and keeps only the last-project cookie.
+Its optional `lastProject` reads that pointer back: when the cookie names no project the reader may
+see, `/project/_/…` links and the console entry land there, as Cloud's landing does. Without it they
+land on the active organization's first project.
 Its optional `tourStatus` (`TourStatusStore`) keeps how the signed-in person left the guided tour
 with their account: Cloud reads and writes the user row and writes nothing in a support session.
 Without it the core keeps the status in a per-browser cookie.
@@ -58,6 +61,8 @@ or organization), loop stage and the core tool it is listed `after`, and its par
 `projectId`; the core adds that, resolves the project and publishes the tool read-only
 (`lib/mcp/operations/edition.ts`). Its `execute` gets the project, its organization and the
 core's `notFound`. The open-source edition registers none, so its tool list is unchanged.
+A registration's optional `liveJobs` names running jobs it knows are alive however long they run
+(Cloud's import with a fresh heartbeat); the stale-job reaper spares them.
 `session.ts` also has the optional `supportSessionPresent`: whether the request carries a support-session marker at all, valid or not, since upstream refuses writes on the marker alone. And it carries `SUPPORT_BLOCKED_MESSAGE` and `isSupportBlockedError`, the message an edition's refused support-session write throws with, so the core's error page shows it as such instead of reporting a fault.
 
 `telemetry.ts` also carries the core's model calls to an edition that accounts for spend: the
@@ -106,8 +111,15 @@ calibration page no longer links members to it. Without it the operator pages an
 report stays the members'.
 
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
-project id and showing its own loading state; any other key is a 404. Its rail entries come from
-`composition.projectNav`. The open-source edition has neither.
+project id and showing its own loading state; any other key is a 404. `ProjectPageSkeleton` is
+what the route shows while such a page loads, so the project Overview's skeleton never flashes
+first. Its rail entries come from `composition.projectNav`. The open-source edition has none of them.
+
+`linkPreview` gives the root layout the canonical origin and the words a shared link unfurls into
+(`metadataBase`, OpenGraph, Twitter card); without it they name this deployment (`APP_NAME`,
+`BASE_URL`). `OnboardingArt` replaces the first-run screen's backdrop and card emblem; without it
+the static dot field and the badger mark stay. `accountNote` is a line under the name and email at
+the top of the account menu (Cloud's "Local session (auth bypassed)").
 
 `TelemetryPort` has two optional members for the edition's analytics. `reportRequestError` takes an
 uncaught server-side request error with its request (path, method, headers) and route; the headers

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build context: repository root.
 #   docker build -f apps/web/Dockerfile --target oss -t ratel-oss:spike .
 #   docker build -f apps/web/Dockerfile --target cloud -t ratel-cloud:spike .
@@ -79,9 +80,22 @@ ENV RATEL_COMPOSITION=${RATEL_COMPOSITION}
 # node_modules is dockerignored, so this merges the source in beside the links
 # the deps stage already created for @ratel/ee.
 COPY ee ee
-RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
+# BROWSER_SOURCEMAPS=1 emits browser source maps (next.config.ts); the last step below hands them
+# to the edition and deletes them before anything reaches the runtime image.
+RUN BROWSER_SOURCEMAPS=1 NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
 RUN node ee/src/db/bundle-migrator.mjs /app/migrator
+# The edition's source-map step (ee/src/scripts/browser-sourcemaps.sh): it uploads the maps for its
+# error tracking when its key is present, then deletes every .map either way, so none is served or
+# shipped. Last on purpose: SOURCEMAP_UPLOAD_RUN is unique per CI run attempt, so only this cheap
+# step reruns on a cached build (the secret is not part of the cache key). The key arrives as a
+# BuildKit secret, never an ARG, ENV or layer; without it the upload is skipped.
+ARG SOURCE_COMMIT=local
+ARG SOURCEMAP_UPLOAD_RUN=local
+ARG SOURCEMAP_PROJECT_IDS=
+RUN --mount=type=secret,id=sourcemap_upload_key,env=SOURCEMAP_UPLOAD_KEY \
+  echo "browser sourcemaps for commit ${SOURCE_COMMIT} run ${SOURCEMAP_UPLOAD_RUN}" \
+  && bash ee/src/scripts/browser-sourcemaps.sh apps/web/.next/static apps/web/.next/standalone
 
 # --- runtime base: minimal Node, no toolchain -----------------------------
 FROM node:24-trixie-slim AS runtime

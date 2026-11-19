@@ -97,3 +97,20 @@ test("the drain reads the queue clock and the registered handlers", async () => 
   assert.equal(seenClock, true, "the drain claims only jobs queued before it started");
   assert.equal(seenHandlers, registered, "handlers come from the registry, read at drain time");
 });
+
+test("the reaper spares the running jobs a registration vouches for", async () => {
+  const { deps } = observability();
+  const reaped: Array<readonly string[] | undefined> = [];
+  await drainProjectJobs(undefined, {
+    reapStaleRunningJobs: async (_olderThan, _db, spare) => {
+      reaped.push(spare);
+      return 0;
+    },
+    drainJobs: async () => ({ done: 0, failed: 0 }),
+    jobStore: {} as never,
+    jobHandlers: () => ({}),
+    observability: deps,
+    liveJobIds: async () => ["live-import-job"],
+  });
+  assert.deepEqual(reaped, [["live-import-job"]]);
+});

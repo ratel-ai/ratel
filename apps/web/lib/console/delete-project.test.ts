@@ -44,11 +44,11 @@ function deps(projects = organizations[0].projects, actingAs: ActingAs = null, s
   };
 }
 
-test("the typed name must match; the next page is another project", async () => {
+test("the typed name must match; the next page is another project's Dashboards, as upstream", async () => {
   const { deleted, deps: d } = deps();
   assert.deepEqual(await deleteConsoleProject(P1, " One ", d), {
     ok: true,
-    next: `/project/${P2}`,
+    next: `/project/${P2}/dashboards`,
   });
   assert.deepEqual(deleted, [P1]);
 });

@@ -46,3 +46,25 @@ test("the edition's end items follow the shortcuts", () => {
     ["separator", "start", "Documentation", "Keyboard shortcuts", "end"],
   );
 });
+
+/** The lines at the top of the menu, above the first separator. */
+function headerLines(props: Partial<Parameters<typeof AccountMenu>[0]>): string[] {
+  const menu = AccountMenu({ account, collapsed: false, onShortcuts: () => {}, ...props });
+  const content = Children.toArray((menu as ReactElement<Props>).props.children).find(
+    (child) => (child as ReactElement).type === MenuContent,
+  ) as ReactElement<Props>;
+  const header = Children.toArray(content.props.children).find(
+    (child) => (child as ReactElement).type === "div",
+  ) as ReactElement<Props>;
+  return Children.toArray(header.props.children).map((line) =>
+    String((line as ReactElement<Props>).props.children),
+  );
+}
+
+test("the edition's note sits under the name and email (upstream's local-session line)", () => {
+  assert.deepEqual(headerLines({}), ["Ada Lovelace", "ada@example.com"]);
+  assert.deepEqual(
+    headerLines({ account: { ...account, note: "Local session (auth bypassed)" } }),
+    ["Ada Lovelace", "ada@example.com", "Local session (auth bypassed)"],
+  );
+});

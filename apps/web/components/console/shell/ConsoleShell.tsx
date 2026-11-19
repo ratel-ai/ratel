@@ -12,7 +12,11 @@ import { productName } from "@/lib/platform/product-name";
 
 /** The console's rail and page, with its data resolved on the server. */
 export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
-  const [scope, cookieStore] = await Promise.all([getConsoleScope(), cookies()]);
+  const [scope, cookieStore, accountNote] = await Promise.all([
+    getConsoleScope(),
+    cookies(),
+    ui?.accountNote?.(),
+  ]);
   const AccountMenuItems = ui?.AccountMenuItems;
   const AccountMenuEndItems = ui?.AccountMenuEndItems;
   const ConsoleBoundary = ui?.ConsoleBoundary;
@@ -43,7 +47,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           organizationSlug: scope?.organizationSlug ?? null,
           organizations,
           projects,
-          account: scope?.account ?? null,
+          account: scope?.account ? { ...scope.account, note: accountNote ?? null } : null,
           editionNav: composition.nav,
           organizationNav: composition.organizationNav,
           hiddenOrganizationNav: hidden,

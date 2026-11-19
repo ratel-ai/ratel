@@ -85,6 +85,12 @@ export type Registration = {
   drainSteps?: DrainStep[];
   /** MCP tools the edition adds (`lib/mcp/operations/edition.ts`). The open-source edition has none. */
   mcpOperations?: EditionMcpOperation[];
+  /**
+   * Ids of `running` jobs this module knows are still alive however long they have run (a job
+   * with its own heartbeat, such as a long import): the stale-job reaper spares them. Read before
+   * each reap; a failed read spares nothing.
+   */
+  liveJobs?: () => Promise<readonly string[]>;
 };
 
 export type RegistryPort = {

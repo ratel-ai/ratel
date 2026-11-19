@@ -44,6 +44,7 @@ export function AccountMenu({
           {account.email ? (
             <p className="truncate text-xs text-fg-subtle">{account.email}</p>
           ) : null}
+          {account.note ? <p className="mt-1 text-xs text-warning">{account.note}</p> : null}
         </div>
         <MenuSeparator />
         {editionItems}

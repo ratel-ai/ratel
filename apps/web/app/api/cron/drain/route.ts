@@ -1,8 +1,9 @@
-import { drainCron } from "@/lib/jobs/drain";
+import { startBackgroundDrain } from "@/lib/jobs/background-drain";
 import { withRequestLog } from "@/lib/platform/request-log";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// No `maxDuration`: the handler answers in milliseconds and the tick runs in `after()`. Its limit
+// is the watchdog in `lib/jobs/background-drain.ts` (`CRON_DRAIN_TIMEOUT_MS`), as upstream.
 
 /**
  * GET /api/cron/drain: one tick of background work (`lib/jobs/drain.ts`): the registered
@@ -13,11 +14,14 @@ export const maxDuration = 300;
  * project's jobs right after the enqueue response, but a cut-short function can leave jobs
  * `queued`, and the safety-net enqueues and self-throttled sweeps live in the tick.
  *
- * An API-only process (`APP_ROLE=api`) answers 202 `{ ok: true, skipped: "worker" }` and runs
- * nothing: the worker sweeps on its own timer.
+ * Answers 202 at once, so a scheduler never times out and retries into overlapping drains
+ * (`lib/jobs/background-drain.ts`): the tick runs after the response, one at a time per process,
+ * and logs `drain_completed`, `drain_failed` or `drain_timed_out`; a tick that finds the process
+ * busy logs `drain_skipped_busy`. An API-only process (`APP_ROLE=api`) answers
+ * `{ ok: true, skipped: "worker" }` and runs nothing: the worker sweeps on its own timer.
  */
 export const GET = withRequestLog(handleGet);
 
 async function handleGet(req: Request) {
-  return drainCron(req);
+  return startBackgroundDrain(req);
 }

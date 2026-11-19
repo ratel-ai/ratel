@@ -4,7 +4,7 @@ import type { CompositionPorts } from "@/lib/contracts/composition";
 
 process.env.RATEL_COMPOSITION = "oss";
 const { createComposition } = await import("@/lib/composition");
-const { drainSteps, jobHandlers } = await import("@/lib/composition/registry");
+const { drainSteps, jobHandlers, liveJobIds } = await import("@/lib/composition/registry");
 const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
@@ -321,4 +321,18 @@ describe("registry root", () => {
     ];
     assert.throws(() => drainSteps(steps), /drain step registered twice: s/);
   });
+});
+
+it("live job ids are the union of what registrations vouch for; a failed read vouches for none", async () => {
+  const ids = await liveJobIds([
+    { liveJobs: async () => ["a", "b"] },
+    {},
+    {
+      liveJobs: async () => {
+        throw new Error("read failed");
+      },
+    },
+    { liveJobs: async () => ["b", "c"] },
+  ]);
+  assert.deepEqual(ids.sort(), ["a", "b", "c"]);
 });
