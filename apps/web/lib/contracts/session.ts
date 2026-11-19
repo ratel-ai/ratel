@@ -48,6 +48,17 @@ export type ActingAs = {
   readOnly: boolean;
 } | null;
 
+/** Where an edition keeps how the signed-in person left the guided tour (`SessionPort.tourStatus`). */
+export type TourStatusStore = {
+  /**
+   * The stored status, as stored: the core reads it with `shouldOfferTour`, so an unknown value
+   * offers the tour again. Null when the person has never finished it or nobody is signed in.
+   */
+  read(): Promise<string | null>;
+  /** Records a finished ("completed") or dismissed ("skipped") tour. */
+  write(status: "completed" | "skipped"): Promise<void>;
+};
+
 export type SessionPort = {
   /** Null when nobody is signed in. */
   resolveSession(): Promise<Session | null>;
@@ -69,6 +80,12 @@ export type SessionPort = {
    * remembered beyond the last-project cookie.
    */
   rememberProject?(projectId: string): Promise<void>;
+  /**
+   * How the signed-in person left the guided tour, kept with their account. The edition decides
+   * where and when it is not written (Cloud keeps it on the user row and writes nothing in a
+   * support session). Absent, the core keeps it in a per-browser cookie.
+   */
+  tourStatus?: TourStatusStore;
   /** Throws when the deployment cannot authenticate anyone. Called once, at boot. */
   assertConfigured?(): void;
 };
