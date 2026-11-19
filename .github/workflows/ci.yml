@@ -647,7 +647,9 @@ jobs:
             -e "s/^TRACE_SIGNALS_HASH_SALT=.*/TRACE_SIGNALS_HASH_SALT=$(openssl rand -hex 32)/" \
             .env
           docker compose up --detach --wait --wait-timeout 120
-          curl --fail --silent --show-error --location http://127.0.0.1:3000/ | grep --quiet 'CI &amp; Co'
+          # Read the whole page before matching: the console streams, and grep --quiet stops
+          # reading at the first match, which fails curl's next write under pipefail.
+          grep --quiet 'CI &amp; Co' <<<"$(curl --fail --silent --show-error --location http://127.0.0.1:3000/)"
           # The operator and the organization are constants: a visit writes no identity row, and
           # the open-source schema has no identity table. The first visit seeds the sample
           # project (one project, one seed mark), and only once: a restart and a second visit
