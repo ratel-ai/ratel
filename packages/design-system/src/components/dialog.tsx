@@ -33,8 +33,14 @@ export function DialogContent({
   children,
   footer,
   className,
+  label,
 }: {
   title: string;
+  /**
+   * The dialog's accessible name when it should differ from its visible title; the title
+   * names it otherwise.
+   */
+  label?: string;
   description?: ReactNode;
   children?: ReactNode;
   /** Buttons, right-aligned: secondary first, the primary action last. */
@@ -44,7 +50,10 @@ export function DialogContent({
   return (
     <BaseDialog.Portal>
       <BaseDialog.Backdrop className={BACKDROP} />
-      <BaseDialog.Popup className={cn(POPUP, className)}>
+      <BaseDialog.Popup
+        className={cn(POPUP, className)}
+        {...(label ? { "aria-label": label, "aria-labelledby": undefined } : {})}
+      >
         <div className="pr-8">
           <BaseDialog.Title className="text-sm font-semibold text-fg">{title}</BaseDialog.Title>
           {description ? (

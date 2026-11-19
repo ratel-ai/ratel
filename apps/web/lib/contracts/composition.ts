@@ -96,6 +96,11 @@ export type EditionUi = {
   /** Menu items above the docs in the account menu. */
   AccountMenuItems: ComponentType;
   /**
+   * Menu items after the keyboard shortcuts, at the foot of the account menu: the edition's tools
+   * and its sign-out. Nothing follows the shortcuts without it.
+   */
+  AccountMenuEndItems?: ComponentType;
+  /**
    * The top of the rail, in place of the project switcher: organizations and projects. Given the
    * projects of every organization the reader belongs to.
    */

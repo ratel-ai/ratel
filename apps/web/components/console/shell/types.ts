@@ -30,6 +30,8 @@ export type ShellData = {
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
   accountMenuItems: ReactNode;
+  /** Menu items the edition adds after the shortcuts, rendered on the server; none otherwise. */
+  accountMenuEndItems?: ReactNode;
   /** The edition's overlays, rendered on the server and mounted once after the shell's dialogs; null otherwise. */
   overlays?: ReactNode;
   /** Command palette entries the edition adds; none otherwise. */

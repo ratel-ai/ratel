@@ -23,6 +23,7 @@ export type SidebarProps = {
   project: ConsoleProject | undefined;
   account: ConsoleAccount | null;
   accountMenuItems?: ReactNode;
+  accountMenuEndItems?: ReactNode;
   /** The edition's switcher, one rendering per rail width; the project switcher otherwise. */
   scopeSwitcher?: { expanded: ReactNode; collapsed: ReactNode } | null;
   collapsed: boolean;
@@ -47,6 +48,7 @@ export function SidebarContent({
   project,
   account,
   accountMenuItems,
+  accountMenuEndItems,
   scopeSwitcher,
   collapsed,
   onToggleCollapsed,
@@ -160,6 +162,7 @@ export function SidebarContent({
               account={account}
               collapsed={collapsed}
               editionItems={accountMenuItems}
+              editionEndItems={accountMenuEndItems}
               onShortcuts={onShortcuts}
             />
           ) : null}
