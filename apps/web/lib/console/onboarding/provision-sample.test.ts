@@ -16,6 +16,7 @@ function deps(over: Partial<EnsureSampleProjectDeps> = {}) {
     reported: 0,
   };
   const value: EnsureSampleProjectDeps = {
+    inSupportSession: async () => false,
     listProjects: async () => [],
     claim: async () => {
       calls.claimed += 1;
@@ -68,6 +69,17 @@ test("an organization with projects is left alone before the mark is even read",
   });
   assert.equal(await ensureSampleProject(context, value), null);
   assert.equal(calls.seeded, 0);
+});
+
+test("nothing is seeded in a support session, where the organization is a customer's", async () => {
+  const { value, calls } = deps({
+    inSupportSession: async () => true,
+    listProjects: async () => assert.fail("the projects must not be read"),
+    claim: async () => assert.fail("the one-time mark must not be spent"),
+  });
+  assert.equal(await ensureSampleProject(context, value), null);
+  assert.equal(calls.seeded, 0);
+  assert.deepEqual(calls.tracked, []);
 });
 
 test("a lost claim seeds nothing: a deleted sample does not come back", async () => {

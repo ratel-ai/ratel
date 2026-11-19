@@ -38,6 +38,9 @@ session and refuses a support session before it calls either.
 The session port's optional `rememberProject` keeps the project a reader just opened, called by
 the project layout once the reader may see it. Cloud keeps it on the user row and writes nothing in
 a support session; the open-source edition leaves it out and keeps only the last-project cookie.
+Its optional `tourStatus` (`TourStatusStore`) keeps how the signed-in person left the guided tour
+with their account: Cloud reads and writes the user row and writes nothing in a support session.
+Without it the core keeps the status in a per-browser cookie.
 A project or organization page is authorized by the session's `memberships`, so any organization
 the reader belongs to opens, whichever is active.
 

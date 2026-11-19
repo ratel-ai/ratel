@@ -1,8 +1,10 @@
 import { cookies } from "next/headers";
 import { OverviewPage } from "@/components/console/home/OverviewPage";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { composition } from "@/lib/composition/ports";
 import { TOUR_STATUS_COOKIE } from "@/lib/console/onboarding/tour-cookie";
 import { shouldOfferTour } from "@/lib/console/onboarding/tour-state";
+import { readTourStatus } from "@/lib/console/onboarding/tour-status";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
@@ -13,8 +15,9 @@ export const metadata = { title: "Project home" };
  * A project's home: the Overview.
  *
  * Owned (ADR-0030): the project comes from the console scope (the session's
- * organization, a 404 otherwise). How a person left the guided tour is read
- * from a cookie (upstream reads the users table, the private edition's).
+ * organization, a 404 otherwise). How a person left the guided tour is the
+ * edition's to keep (`SessionPort.tourStatus`; upstream reads the user row), or
+ * a cookie without one.
  */
 export default async function ProjectHomePage({
   params,
@@ -37,7 +40,11 @@ export default async function ProjectHomePage({
   // the button and decides for themselves.
   // Inside an admin support session the operator came to look at the data,
   // not to be onboarded: no auto-start, and finishing records nothing.
-  const tourStatus = (await cookies()).get(TOUR_STATUS_COOKIE)?.value;
+  const cookieStore = await cookies();
+  const tourStatus = await readTourStatus({
+    edition: composition.session.tourStatus,
+    cookie: () => cookieStore.get(TOUR_STATUS_COOKIE)?.value,
+  });
   const inSupportSession = await isRestrictedBySupportSession();
   return (
     <OverviewPage
