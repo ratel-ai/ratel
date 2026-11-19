@@ -1590,7 +1590,7 @@
     { "from": "apps/web/app/api/v1/events/route.test.ts", "to": "apps/web/app/api/v1/events/route.test.ts", "mode": "copy" },
     { "from": "apps/web/app/globals.css", "to": "apps/web/app/globals.css", "mode": "owned", "$why": "no support-bar rules (ratel-platform's); the tokens come from @ratel/brand" },
     { "from": "apps/web/app/layout.tsx", "to": "apps/web/app/layout.tsx", "mode": "owned", "$why": "no Clerk, PostHog or support bar; fonts and theme from @ratel/brand" },
-    { "from": "apps/web/app/page.tsx", "to": "apps/web/app/(console)/page.tsx", "mode": "owned", "$why": "the console entry: the last project (upstream's landing resolution), else onboarding; no landing page or sign-in" },
+    { "from": "apps/web/app/page.tsx", "to": "apps/web/app/page.tsx", "mode": "owned", "$why": "the console entry: the last project (upstream's landing resolution), else onboarding; no landing page or sign-in (the edition's RootPage); outside the console layout as upstream's, its no-database and no-session states drawn in the console frame" },
     { "from": "apps/web/components.json", "mode": "excluded", "$why": "shadcn's manifest; the design system replaces it" },
     { "from": "apps/web/components/catalog/CatalogAdoptionWarning.tsx", "mode": "excluded", "$why": "the v1 console, replaced by components/console and the design system; reached only from the v1 pages the proxy redirects and the private share pages" },
     { "from": "apps/web/components/catalog/CatalogLayersHelp.tsx", "mode": "excluded", "$why": "the v1 console, replaced by components/console and the design system; reached only from the v1 pages the proxy redirects and the private share pages" },
