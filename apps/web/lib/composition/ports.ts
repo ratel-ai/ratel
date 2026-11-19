@@ -36,6 +36,7 @@ export type NavIconName =
   | "embeddings"
   | "tool-picker"
   | "ship"
+  | "apis"
   | "edition";
 
 /** An organization page an edition adds: `/org/<slug>/<path>`. */
@@ -62,15 +63,34 @@ export type ProjectNavItem = {
   keywords?: readonly string[];
 };
 
-/** A named group of edition pages in the project rail, between the core pages and Settings. */
+/**
+ * Where an edition's project group can sit as one row instead of a labelled section. `setup` is
+ * the core's unlabelled group of Catalog and Settings; the row goes between the two.
+ */
+export type ProjectNavRow = {
+  in: "setup";
+  /** The row's glyph; the edition one when absent. */
+  icon?: NavIconName;
+  /** Other words ⌘K finds the row by. */
+  keywords?: readonly string[];
+};
+
+/**
+ * A named group of edition pages in the project rail: a labelled section between the core pages
+ * and Settings, or, with `row`, one collapsible row in a core group whose sub-pages are its items.
+ */
 export type ProjectNavGroup = {
   id: string;
   label: string;
   items: ProjectNavItem[];
+  /** Show the group as one collapsible row inside a core group, labelled `label`. */
+  row?: ProjectNavRow;
 };
 
 export type Composition = CompositionPorts & {
   edition: string;
+  /** The product's name where the shell has no project or organization to show. */
+  productName: string;
   nav: NavItem[];
   organizationNav: OrganizationNavItem[];
   projectNav: ProjectNavGroup[];
@@ -100,6 +120,7 @@ export function createComposition(
 
   let base: CompositionPorts;
   let edition: string;
+  let productName: string;
   let nav: NavItem[];
   let organizationNav: OrganizationNavItem[] = [];
   let projectNav: ProjectNavGroup[] = [];
@@ -107,6 +128,7 @@ export function createComposition(
   if (editionKey === "oss") {
     base = OSS_PORTS;
     edition = "Ratel OSS";
+    productName = "Ratel";
     nav = [];
   } else if (editionKey === "cloud") {
     if (ee == null) {
@@ -116,19 +138,46 @@ export function createComposition(
     }
     base = ee;
     edition = "Ratel Cloud";
+    productName = "Ratel Cloud";
     // The admin console is reached from the account menu, for allowlisted admins only.
     nav = [];
     organizationNav = [
-      { path: "team", label: "Members", icon: "members" },
-      { path: "billing", label: "Billing", icon: "billing" },
+      {
+        path: "team",
+        label: "Members",
+        icon: "members",
+        shortcut: "m",
+        keywords: ["team", "invite", "people"],
+      },
+      {
+        path: "billing",
+        label: "Billing",
+        icon: "billing",
+        shortcut: "b",
+        keywords: ["plan", "credits", "invoices"],
+      },
     ];
+    // Upstream's one collapsible APIs row between Catalog and Settings (lib/navigation/v2.ts).
     projectNav = [
       {
         id: "apis",
         label: "APIs",
+        row: { in: "setup", icon: "apis", keywords: ["hosted apis", "embeddings", "tool picker"] },
         items: [
-          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
-          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
+          {
+            path: "models/embeddings",
+            label: "Embeddings",
+            icon: "embeddings",
+            shortcut: "e",
+            keywords: ["vectors", "usage", "api"],
+          },
+          {
+            path: "models/tool-picker",
+            label: "Tool Picker",
+            icon: "tool-picker",
+            shortcut: "p",
+            keywords: ["pick", "routing", "decision", "api"],
+          },
         ],
       },
     ];
@@ -144,7 +193,8 @@ export function createComposition(
     if (ports[port] == null) throw new Error(`Composition is missing required port: ${port}`);
   }
 
-  return { edition, nav, organizationNav, projectNav, ...(ports as CompositionPorts) };
+  // The edition's own fields last: a ports object never overrides the edition's nav.
+  return { ...(ports as CompositionPorts), edition, productName, nav, organizationNav, projectNav };
 }
 
 export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");

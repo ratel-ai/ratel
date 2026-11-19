@@ -942,6 +942,7 @@
         "apps/web/lib/views/adaptive-ranking/ranking.test.ts",
         "apps/web/lib/console/sidebar-cookie.ts",
         "apps/web/lib/console/sidebar-cookie.test.ts",
+        "apps/web/components/console/shell/ShellSkeleton.tsx",
         "apps/web/components/console/shell/DatabaseUnavailable.tsx",
         "apps/web/components/console/shell/AnalysisFreshness.tsx",
         "apps/web/lib/console/scope/command-search.ts",
@@ -1336,6 +1337,7 @@
         "apps/web/components/console/settings/skeleton-parts.tsx",
         "apps/web/components/console/catalog/CatalogSkeleton.tsx",
         "apps/web/components/console/org/OrgSkeleton.tsx",
+        "apps/web/components/console/shell/ShellSkeleton.tsx",
         "apps/web/components/console/onboarding/GuidedTour.tsx",
         "apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/**"
       ],

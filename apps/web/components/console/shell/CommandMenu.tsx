@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { type KeyboardEvent, useId, useMemo, useState } from "react";
 import type { CommandEntry } from "@/lib/console/navigation";
 import { searchCommands } from "@/lib/console/scope/command-search";
+import { track } from "@/lib/platform/track-client";
 
 export type CommandAction = {
   id: string;
@@ -19,18 +20,45 @@ export type CommandAction = {
 
 type Item = (CommandEntry & { run?: undefined }) | (CommandAction & { href: string });
 
+/** Upstream's `command_palette_used` properties for a chosen result. */
+export function commandPaletteUsed(
+  item: { href: string; id?: string; run?: () => void },
+  query: string,
+  position: number,
+  trigger: "keyboard" | "pointer",
+) {
+  return {
+    destination: item.run ? `action:${item.id}` : item.href,
+    query_length: query.length,
+    result_position: position,
+    trigger,
+  };
+}
+
+/**
+ * What ⌘K says it searches. With the edition's scope switcher the projects are switched there and
+ * the wording is upstream's; open source lists the projects in ⌘K and says so.
+ */
+export function commandSearchLabel(projectsInSwitcher: boolean): string {
+  return projectsInSwitcher ? "Search pages and actions" : "Search pages and projects";
+}
+
 /** ⌘K: every page and project and the few actions worth a shortcut, searched by name or intent. */
 export function CommandMenu({
   open,
   onOpenChange,
   entries,
   actions,
+  projectsInSwitcher = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   entries: readonly CommandEntry[];
   actions: readonly CommandAction[];
+  /** The edition's scope switcher holds the projects (see `commandSearchLabel`). */
+  projectsInSwitcher?: boolean;
 }) {
+  const label = commandSearchLabel(projectsInSwitcher);
   const router = useRouter();
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -47,9 +75,10 @@ export function CommandMenu({
     setActiveIndex(0);
   }
 
-  function choose(item: Item) {
+  function choose(item: Item, position: number, trigger: "keyboard" | "pointer") {
     onOpenChange(false);
     reset();
+    track("command_palette_used", commandPaletteUsed(item, query, position, trigger));
     if (item.run) item.run();
     else router.push(item.href);
   }
@@ -65,7 +94,7 @@ export function CommandMenu({
       const entry = results[active];
       if (entry) {
         event.preventDefault();
-        choose(entry);
+        choose(entry, active, "keyboard");
       }
     }
   }
@@ -84,7 +113,7 @@ export function CommandMenu({
           data-tour-surface="command-menu"
           className="fixed top-[14vh] left-1/2 z-dialog flex w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-overlay text-fg shadow-dialog outline-none focus-visible:outline-none transition-[scale,opacity] duration-160 ease-enter data-starting-style:scale-[0.98] data-starting-style:opacity-0 data-ending-style:opacity-0 motion-reduce:transition-none"
         >
-          <Dialog.Title className="sr-only">Search pages and projects</Dialog.Title>
+          <Dialog.Title className="sr-only">{label}</Dialog.Title>
           <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
             <Search className="size-4 shrink-0 text-fg-subtle" aria-hidden />
             <input
@@ -94,8 +123,8 @@ export function CommandMenu({
               aria-expanded="true"
               aria-controls={listId}
               aria-activedescendant={results[active] ? `${listId}-${active}` : undefined}
-              aria-label="Search pages and projects"
-              placeholder="Search pages and projects…"
+              aria-label={label}
+              placeholder={`${label}…`}
               value={query}
               onChange={(event) => {
                 setQuery(event.currentTarget.value);
@@ -114,7 +143,7 @@ export function CommandMenu({
           >
             {results.length === 0 ? (
               <p className="px-3 py-8 text-center text-sm text-fg-muted">
-                No page or project matches “{query}”.
+                No page or {projectsInSwitcher ? "action" : "project"} matches “{query}”.
               </p>
             ) : null}
             {results.map((entry, index) => {
@@ -137,7 +166,7 @@ export function CommandMenu({
                     tabIndex={-1}
                     aria-selected={index === active}
                     onMouseMove={() => setActiveIndex(index)}
-                    onClick={() => choose(entry)}
+                    onClick={() => choose(entry, index, "pointer")}
                     className={cn(
                       "flex h-9 cursor-pointer items-center gap-2 rounded-md px-2.5 text-ui text-fg-muted",
                       index === active && "bg-hover text-fg",

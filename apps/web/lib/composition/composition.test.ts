@@ -76,6 +76,7 @@ describe("createComposition", () => {
   it("assembles the OSS edition with the five ports", async () => {
     const composition = createComposition("oss");
     assert.equal(composition.edition, "Ratel OSS");
+    assert.equal(composition.productName, "Ratel", "the shell's fallback title");
     assert.deepEqual(composition.organizationNav, []);
     assert.deepEqual(composition.projectNav, []);
     const session = await composition.session.resolveSession();
@@ -90,17 +91,43 @@ describe("createComposition", () => {
   it("assembles the Cloud edition from the seam", async () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
+    assert.equal(composition.productName, "Ratel Cloud", "upstream AppFrame's fallback title");
     assert.deepEqual(composition.organizationNav, [
-      { path: "team", label: "Members", icon: "members" },
-      { path: "billing", label: "Billing", icon: "billing" },
+      {
+        path: "team",
+        label: "Members",
+        icon: "members",
+        shortcut: "m",
+        keywords: ["team", "invite", "people"],
+      },
+      {
+        path: "billing",
+        label: "Billing",
+        icon: "billing",
+        shortcut: "b",
+        keywords: ["plan", "credits", "invoices"],
+      },
     ]);
     assert.deepEqual(composition.projectNav, [
       {
         id: "apis",
         label: "APIs",
+        row: { in: "setup", icon: "apis", keywords: ["hosted apis", "embeddings", "tool picker"] },
         items: [
-          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
-          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
+          {
+            path: "models/embeddings",
+            label: "Embeddings",
+            icon: "embeddings",
+            shortcut: "e",
+            keywords: ["vectors", "usage", "api"],
+          },
+          {
+            path: "models/tool-picker",
+            label: "Tool Picker",
+            icon: "tool-picker",
+            shortcut: "p",
+            keywords: ["pick", "routing", "decision", "api"],
+          },
         ],
       },
     ]);

@@ -17,7 +17,12 @@ export type ConsoleProject = {
   isDemo: boolean;
 };
 
-export type ConsoleAccount = { name: string; email: string | null };
+export type ConsoleAccount = {
+  name: string;
+  email: string | null;
+  /** The profile photo the session carries (`SessionUser.avatarUrl`); initials without one. */
+  imageUrl: string | null;
+};
 
 /** An organization the reader belongs to, with their role there. */
 export type ConsoleOrganization = { id: string; name: string; slug: string; role: OrgRole };
@@ -101,8 +106,10 @@ export async function loadConsoleScope(
     organizationSlug: context.organization.slug,
     role: context.role,
     account: {
-      name: context.user.name ?? context.user.username ?? context.user.email ?? "Operator",
+      // Upstream's ShellV2: an empty name is no name.
+      name: context.user.name || context.user.username || context.user.email || "Account",
       email: context.user.email,
+      imageUrl: context.user.avatarUrl || null,
     },
     projects: projects.map(toConsoleProject),
     organizations: context.memberships.map(({ organization, role }) => ({

@@ -17,7 +17,8 @@ port implementations is mounted; a missing port stops the process at startup
   module.
   Absent in the open-source edition.
 - `organizationNav`: the organization pages an edition adds to the rail (Cloud: Members, Billing). The edition's optional `hiddenOrganizationNav(slug)` names paths to hide for one organization; the shell filters with it, and nothing is hidden without it. An item of any of the three nav slots may carry `keywords` (other words ⌘K finds it by); an organization or project item may carry a `shortcut` (the key after `g`).
-- `projectNav`: named groups of edition project pages, between the core pages and Settings in the project rail (Cloud: APIs, with Embeddings). Empty in the open-source edition, whose rail is unchanged.
+- `projectNav`: named groups of edition project pages, a labelled section between the core pages and Catalog; a group with `row: { in: "setup" }` is instead one collapsible row between Catalog and Settings, its items the sub-pages (Cloud: the APIs row, with Embeddings and Tool Picker, as upstream). Empty in the open-source edition, whose rail is unchanged.
+- `productName`: the shell's fallback title where no project or organization is shown ("Ratel" in open source, "Ratel Cloud" with Cloud).
 - `ee-absent.ts` — what the `#ee-composition` alias resolves to when `ee/src` is absent: `null`.
 
 With ADR-0030 the root splits in two: `ports.ts` (the ports; imports no module) and
