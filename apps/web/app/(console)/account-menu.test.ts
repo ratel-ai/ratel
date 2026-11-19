@@ -4,7 +4,7 @@ import { MenuContent, MenuItem, MenuSeparator } from "@ratel/design-system/menu"
 import { Children, createElement, type ReactElement, type ReactNode } from "react";
 import { AccountMenu } from "@/components/console/shell/AccountMenu";
 
-const account = { name: "Ada Lovelace", email: "ada@example.com" };
+const account = { name: "Ada Lovelace", email: "ada@example.com", imageUrl: null };
 const Start = () => null;
 const End = () => null;
 

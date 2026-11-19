@@ -8,6 +8,7 @@ import {
   SIDEBAR_COLLAPSED_COOKIE,
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
+import { productName } from "@/lib/platform/product-name";
 
 /** The console's rail and page, with its data resolved on the server. */
 export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
@@ -51,6 +52,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           organizationNav: composition.organizationNav,
           hiddenOrganizationNav: hidden,
           projectNav: composition.projectNav,
+          productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {
                 expanded: <ScopeSwitcher projects={projects} collapsed={false} />,

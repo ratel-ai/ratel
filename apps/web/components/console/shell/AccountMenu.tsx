@@ -33,7 +33,7 @@ export function AccountMenu({
           collapsed && "justify-center px-0",
         )}
       >
-        <Avatar name={account.name} />
+        <Avatar name={account.name} imageUrl={account.imageUrl} />
         {collapsed ? null : (
           <span className="min-w-0 flex-1 truncate text-ui text-fg-muted">{account.name}</span>
         )}
@@ -63,13 +63,19 @@ export function AccountMenu({
   );
 }
 
-function Avatar({ name }: { name: string }) {
+/** The profile photo when the session has one, else the initials (upstream's AccountMenu). */
+export function Avatar({ name, imageUrl }: { name: string; imageUrl: string | null }) {
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+  if (imageUrl) {
+    // A 24px avatar from the identity provider's CDN; next/image buys nothing here.
+    // biome-ignore lint/performance/noImgElement: as upstream, a plain img
+    return <img src={imageUrl} alt="" className="size-6 shrink-0 rounded-full" />;
+  }
   return (
     <span
       aria-hidden

@@ -91,16 +91,41 @@ describe("createComposition", () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
     assert.equal(composition.edition, "Ratel Cloud");
     assert.deepEqual(composition.organizationNav, [
-      { path: "team", label: "Members", icon: "members" },
-      { path: "billing", label: "Billing", icon: "billing" },
+      {
+        path: "team",
+        label: "Members",
+        icon: "members",
+        shortcut: "m",
+        keywords: ["team", "invite", "people"],
+      },
+      {
+        path: "billing",
+        label: "Billing",
+        icon: "billing",
+        shortcut: "b",
+        keywords: ["plan", "credits", "invoices"],
+      },
     ]);
     assert.deepEqual(composition.projectNav, [
       {
         id: "apis",
         label: "APIs",
+        row: { in: "setup", icon: "apis", keywords: ["hosted apis", "embeddings", "tool picker"] },
         items: [
-          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
-          { path: "models/tool-picker", label: "Tool Picker", icon: "tool-picker", shortcut: "p" },
+          {
+            path: "models/embeddings",
+            label: "Embeddings",
+            icon: "embeddings",
+            shortcut: "e",
+            keywords: ["vectors", "usage", "api"],
+          },
+          {
+            path: "models/tool-picker",
+            label: "Tool Picker",
+            icon: "tool-picker",
+            shortcut: "p",
+            keywords: ["pick", "routing", "decision", "api"],
+          },
         ],
       },
     ]);
