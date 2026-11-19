@@ -18,3 +18,11 @@ paths = [
   '''^apps/web/lib/console/settings/support-session-ui\.test\.ts$''',
   '''^apps/web/lib/platform/otel/config\.test\.ts$''',
 ]
+
+[[allowlists]]
+description = "MCP Apps view bindings and their tests: a column's or stat's `key` is a field path (p95DurationMs, kpis.p95LatencyMs), not a credential"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^apps/web/mcp-apps/views/[^/]+/bindings\.ts$''',
+  '''^apps/web/mcp-apps/shell/config\.test\.ts$''',
+]

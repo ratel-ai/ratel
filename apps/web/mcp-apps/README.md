@@ -31,7 +31,7 @@ mcp-apps/
 - `pnpm mcp-apps:build` builds every view into `dist/<view>.html` (script and
   styles inlined, nothing fetched) and `dist/views.json` (what the server serves).
   `build`, `dev`, `typecheck` and `test` run it first.
-- `pnpm mcp-apps:dev` opens the harness on http://localhost:4180: any view, any
+- `pnpm mcp-apps:dev` opens the harness on `http://localhost:4180`: any view, any
   fixture, light and dark side by side, rebuilt on every reload.
 
 ## Try them in Claude Desktop (local)
