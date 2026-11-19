@@ -257,6 +257,123 @@ test("an edition's project group sits between the core pages and Settings, under
   );
 });
 
+test("an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row)", () => {
+  const items = consoleNav({
+    projectId: P1,
+    additions: [],
+    projectGroups: [
+      {
+        id: "apis",
+        label: "APIs",
+        row: { in: "setup", icon: "apis", keywords: ["hosted apis"] },
+        items: [
+          { path: "models/embeddings", label: "Embeddings", icon: "embeddings", shortcut: "e" },
+          { path: "models/tool-picker", label: "Tool Picker", keywords: ["routing"] },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    items.map(
+      ({ id, section, sectionLabel }) => `${section ?? "main"}:${id}:${sectionLabel ?? ""}`,
+    ),
+    [
+      "group:monitor:overview:Monitor",
+      "group:monitor:health:",
+      "group:monitor:traces:",
+      "group:insights:tasks:Insights",
+      "group:insights:intents:",
+      "group:improve:improvements:Improve",
+      "group:ship:ship:Ship",
+      "settings:catalog:",
+      "settings:group-apis:",
+      "settings:settings:",
+    ],
+  );
+  const row = items.find(({ id }) => id === "group-apis");
+  assert.equal(row?.label, "APIs");
+  assert.equal(row?.icon, "apis");
+  assert.equal(row?.href, `/project/${P1}/models/embeddings`, "the row opens its first page");
+  assert.equal(row?.exact, true);
+  assert.deepEqual(row?.keywords, ["hosted apis"]);
+  assert.deepEqual(
+    row?.children?.map(({ id, href }) => `${id} ${href}`),
+    [
+      `project-models/embeddings /project/${P1}/models/embeddings`,
+      `project-models/tool-picker /project/${P1}/models/tool-picker`,
+    ],
+  );
+  assert.equal(shortcutHref(items, "e"), `/project/${P1}/models/embeddings`);
+  assert.equal(
+    activeNavItemId(`/project/${P1}/models/tool-picker`, items),
+    "project-models/tool-picker",
+  );
+  assert.equal(
+    activeNavItemId(`/project/${P1}/models/embeddings`, items),
+    "project-models/embeddings",
+    "the child, not the row, is lit on the shared path",
+  );
+  const entries = commandEntries({ items, projectId: P1, projects: [], pathname: "/" });
+  assert.equal(searchCommands(entries, "hosted apis")[0]?.label, "APIs");
+  assert.equal(searchCommands(entries, "routing")[0]?.label, "Tool Picker");
+  assert.deepEqual(
+    entries
+      .filter(({ href }) => href === `/project/${P1}/models/embeddings`)
+      .map(({ label }) => label),
+    ["APIs"],
+    "the row and its first page share a path, so ⌘K lists it once, under the row, as upstream",
+  );
+});
+
+test("the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords", () => {
+  // Any ports do: only the edition's nav registrations are read.
+  const cloud = createComposition("cloud", { eeComposition: createComposition("oss") });
+  const project = consoleNav({ projectId: P1, additions: [], projectGroups: cloud.projectNav });
+  assert.deepEqual(
+    project.filter(({ section }) => section === "settings").map(({ id }) => id),
+    ["catalog", "group-apis", "settings"],
+  );
+  const row = project.find(({ id }) => id === "group-apis");
+  assert.equal(row?.icon, "apis");
+  assert.deepEqual(row?.keywords, ["hosted apis", "embeddings", "tool picker"]);
+  assert.deepEqual(
+    row?.children?.map(({ label, icon, shortcut, keywords }) => ({
+      label,
+      icon,
+      shortcut,
+      keywords,
+    })),
+    [
+      {
+        label: "Embeddings",
+        icon: "embeddings",
+        shortcut: "e",
+        keywords: ["vectors", "usage", "api"],
+      },
+      {
+        label: "Tool Picker",
+        icon: "tool-picker",
+        shortcut: "p",
+        keywords: ["pick", "routing", "decision", "api"],
+      },
+    ],
+  );
+  const organization = consoleNav({
+    projectId: undefined,
+    organizationSlug: "acme",
+    additions: [],
+    organizationAdditions: cloud.organizationNav,
+  });
+  assert.equal(shortcutHref(organization, "m"), "/org/acme/team");
+  assert.equal(shortcutHref(organization, "b"), "/org/acme/billing");
+  const entries = commandEntries({ items: organization, projects: [], pathname: "/org/acme" });
+  const first = (query: string) => searchCommands(entries, query)[0]?.label;
+  assert.equal(first("invite"), "Members");
+  assert.equal(first("people"), "Members");
+  assert.equal(first("invoices"), "Billing");
+  assert.equal(first("credits"), "Billing");
+});
+
 test("Settings sits in a section of its own in both rails, the edition's items in another", () => {
   const sectionsOf = (items: ReturnType<typeof consoleNav>) =>
     items.map(({ id, section }) => `${section ?? "main"}:${id}`);

@@ -3,7 +3,8 @@
 What the platform reads out of the turn ledger and the raw runtime events: recurring asks,
 the adaptive-ranking intent graph and the intent engine's clusters. Every reading is a
 registered job plus a drain step; the lexical ones run with no model key, the naming and
-judging ones report themselves skipped without one (ADR-0030). Six readings are in: the
+judging ones report themselves skipped without one (ADR-0030); the intent names and the
+workflow labels also write upstream's `skipped_no_key` model-call line (`model-call-skips.test.ts`). Six readings are in: the
 three lexical ones, Agent health (signals, workflows, self-corrections), topics and the tool
 explorer; match quality follows.
 

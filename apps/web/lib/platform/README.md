@@ -9,7 +9,9 @@ npm packages.
 | `db/client.ts`, `db/pool.ts` | the lazy drizzle client over node-postgres; `isDbConfigured`, `sslConfig`; the pool's connect, query and keepalive timeouts, and dropping a client whose query timed out |
 | `db/migrate.ts`, `scripts/migrate.mts` | the migrator; `DATABASE_MIGRATE_ON_BOOT=1` runs it at startup |
 | `db/migrations/` | the migrations: one baseline file per schema fragment, then one file per change (`pnpm db:generate`, checked by `pnpm db:check`) |
-| `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from the environment; `apiUrl()` builds `/api/v1` URLs |
+| `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from the environment; `apiUrl()` builds `/api/v1` URLs; `serviceName()` is the edition's short name ("Cloud", set at startup from `productName` and handed to the browser), else `APP_NAME` |
+| `product-name.ts` | `productName()` and `productSlug()`: the edition's full name for the MCP server ("Ratel Cloud", `ratel-cloud`), else "Ratel" (server-only) |
+| `site-metadata.ts` | the root layout's metadata: title template, icon, and the link preview (`metadataBase`, OpenGraph, Twitter card) from the edition's `linkPreview` or this deployment's name and origin; an origin without a scheme is read as https, and one that does not parse leaves the preview without an origin |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/top-queries.ts` | the statements that cost the database most since the last reset (`pg_stat_statements`; null where it is not installed or not preloaded), which the worker logs once a day |
 | `process-stats.ts` | `process_stats` once a minute from every process (memory, event loop delay), started where this process exports its own telemetry (`instrumentation.node.ts`) |
@@ -21,7 +23,7 @@ npm packages.
 | `projects/names.ts` | project name limits and normalization, safe for client components |
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
 | `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request; `membershipIn` and `membershipBySlug` (the reader's membership in one organization, which is what authorizes a project or an organization page, as upstream) and upstream's `sessionForOrganization` for actions that name an organization |
-| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port; `planSummary`, `planWithWindow`, `planName`, `planLabel` and `billingSelfServe` over its optional `plans` (no summary, no plan named and no self-serve billing without them) |
+| `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port; `planSummary`, `planWithWindow`, `fullAgentHealthPlanName`, `planName`, `planLabel` and `billingSelfServe` over its optional `plans` (no summary, no plan named and no self-serve billing without them) |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
 | `edition-telemetry.ts` | what the instrumentation hands the telemetry port: an uncaught request error (`onRequestError`) and the analytics flush at shutdown, the port loaded only when called; the open-source port has neither, so nothing happens |
 | `track-client.ts` | the browser's `track` and `captureClientException` over the browser seam (`contracts/client-analytics.ts`): silent until an edition installs its client, never throwing |
@@ -36,6 +38,7 @@ npm packages.
 | `support-session.ts` | upstream's `isRestrictedBySupportSession` over the session port's `actingAs` and `supportSessionPresent` (a marker the edition can't resolve still restricts, as upstream's cookie check), and `supportSessionActingAs` for write paths that take an `actingAs` dependency, for copied actions that refuse writes in a support session and pages that disable them; `afterOutsideSupportSession`, `after()` for analytics that is skipped in one. `support-session-policy.ts`: the refusal text, a leaf a client component may import |
 | `api-key-actions.ts` | create and revoke a project's keys, behind the settings server actions; refused in a support session |
 | `organization.ts`, `api-keys.ts`, `api-keys-observability.ts` | pure helpers: slugs and roles, key generation and hashing, expired-key reporting |
+| `api-key-secrets.ts` | the core's side of the optional `apiKeySecrets` port: `keepApiKeySecret` hands a key just issued to the edition (never throws; logs the id, the error's name and database code, never the error's message, which repeats the sealed key) and `apiKeysRevealable` says whether keys reveal later |
 | `api-key-bearer.ts` | `resolveProjectFromBearer`: the project a `/api/v1/*` bearer key belongs to |
 | `api-keys/` | scoped keys (ratel-cloud #428): `scopes.ts` (every scope and the Full, read-only, ingest and custom presets), `policy.ts` (`apiKeyPolicy`, the one place that decides what a key may do), `authenticate.ts` (`authenticateApiKey`, the bearer decision every key route shares: 401, 403 with the missing scope, or the key and its policy) and `routes.ts` (`BEARER_ROUTE_SCOPES`, the scope each bearer route needs; `routes.test.ts` fails a route that authenticates a key without its entry) |
 | `format.ts` | `fmtCount`, `fmtCost`: the shared numeric display formatters |

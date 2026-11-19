@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apiUrl } from "@/lib/platform/app-config";
+import { apiUrl, setEditionServiceName } from "@/lib/platform/app-config";
 import {
   buildBoostWarning,
   buildGraphSteps,
@@ -314,4 +314,18 @@ test("the snippet points at this deployment, not the hosted default", () => {
   assert.ok(code.includes(`baseUrl: "${apiUrl()}"`));
   assert.ok(code.includes(`endpoint: "${apiUrl("/intent-graph")}"`));
   assert.equal(code.includes("cloud.ratel.sh"), false);
+});
+
+test("with an edition, the steps and warnings name its service, as Cloud's do", (t) => {
+  setEditionServiceName("Cloud");
+  t.after(() => setEditionServiceName(undefined));
+  const code = connectSnippet("billing-agent");
+  assert.match(code, /tool calls to Cloud\. Attach first\./);
+  assert.match(code, /Rank from the graph Cloud builds/);
+  const warnings = buildGraphWarnings({
+    lastEventAt: ago(1),
+    graphUpdatedAt: ago(60),
+    missingTools: new Map(),
+  });
+  assert.match(warnings[0]!, /^The Cloud graph has not caught up with recent searches/);
 });

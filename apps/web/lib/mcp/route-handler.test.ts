@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { test } from "node:test";
+import { composition } from "@/lib/composition/ports";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { McpOperationError } from "@/lib/mcp/errors";
 import { assembleOperations } from "@/lib/mcp/operations";
@@ -68,7 +69,43 @@ test("initialize negotiates and advertises the tools capability", async () => {
   assert.equal(body.jsonrpc, "2.0");
   assert.ok(body.result.capabilities.tools, "must advertise tools");
   assert.equal(body.result.serverInfo.name, "ratel");
-  assert.ok(body.result.instructions.length > 0);
+  assert.match(body.result.instructions, /^Ratel: agent context-usage analytics\./);
+});
+
+test("an edition's product name introduces the server, names it and its 401 realm", async (t) => {
+  composition.productName = { full: "Ratel Cloud", short: "Cloud" };
+  t.after(() => {
+    composition.productName = undefined;
+  });
+  const { body } = await call("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "test-client", version: "1.0.0" },
+  });
+  assert.equal(body.result.serverInfo.name, "ratel-cloud");
+  assert.match(body.result.instructions, /^Ratel Cloud: agent context-usage analytics\./);
+
+  const handler = createMcpRouteHandler(
+    deps({
+      authenticate: async () => {
+        throw new Error("boom");
+      },
+    }),
+  );
+  const response = await handler(rpc("tools/list"));
+  assert.match(response.headers.get("www-authenticate") ?? "", /^Bearer realm="ratel-cloud", /);
+});
+
+test("without an edition's name the 401 realm stays ratel", async () => {
+  const handler = createMcpRouteHandler(
+    deps({
+      authenticate: async () => {
+        throw new Error("boom");
+      },
+    }),
+  );
+  const response = await handler(rpc("tools/list"));
+  assert.match(response.headers.get("www-authenticate") ?? "", /^Bearer realm="ratel", /);
 });
 
 test("an older protocol version still negotiates", async () => {

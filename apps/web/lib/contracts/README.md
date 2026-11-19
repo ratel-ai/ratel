@@ -6,12 +6,14 @@ declared here and implemented twice, in `lib/adapters/oss` and in the private ch
 nothing from the application.
 
 `composition.ts` declares `CompositionPorts`, the full set a composition must supply; the private
-side annotates against it, so the two shapes cannot drift.
+side annotates against it, so the two shapes cannot drift. Its optional `productName` is how the
+edition names the product in copy (`full` for the MCP server, `short` for the service in a
+sentence); without it the copy keeps its neutral words.
 
 `entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
 table of an edition that sells plans: the organization's plan and subscription state
-(`summary`), the cheapest plan whose Agent health window reaches a number of days, and a plan's
-name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
+(`summary`), the cheapest plan whose Agent health window reaches a number of days, the cheapest
+that shows Agent health in full (optional, named by the locks), and a plan's name. The open-source edition leaves it out, so no plan is named and billing is never self-serve.
 
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
@@ -38,6 +40,9 @@ session and refuses a support session before it calls either.
 The session port's optional `rememberProject` keeps the project a reader just opened, called by
 the project layout once the reader may see it. Cloud keeps it on the user row and writes nothing in
 a support session; the open-source edition leaves it out and keeps only the last-project cookie.
+Its optional `lastProject` reads that pointer back: when the cookie names no project the reader may
+see, `/project/_/…` links and the console entry land there, as Cloud's landing does. Without it they
+land on the active organization's first project.
 Its optional `tourStatus` (`TourStatusStore`) keeps how the signed-in person left the guided tour
 with their account: Cloud reads and writes the user row and writes nothing in a support session.
 Without it the core keeps the status in a per-browser cookie.
@@ -56,6 +61,8 @@ or organization), loop stage and the core tool it is listed `after`, and its par
 `projectId`; the core adds that, resolves the project and publishes the tool read-only
 (`lib/mcp/operations/edition.ts`). Its `execute` gets the project, its organization and the
 core's `notFound`. The open-source edition registers none, so its tool list is unchanged.
+A registration's optional `liveJobs` names running jobs it knows are alive however long they run
+(Cloud's import with a fresh heartbeat); the stale-job reaper spares them.
 `session.ts` also has the optional `supportSessionPresent`: whether the request carries a support-session marker at all, valid or not, since upstream refuses writes on the marker alone. And it carries `SUPPORT_BLOCKED_MESSAGE` and `isSupportBlockedError`, the message an edition's refused support-session write throws with, so the core's error page shows it as such instead of reporting a fault.
 
 `telemetry.ts` also carries the core's model calls to an edition that accounts for spend: the
@@ -67,6 +74,11 @@ line. The open-source edition leaves it out, and a recorded call only runs.
 clients. The MCP endpoint hands a bearer that is not a project key to `verifyAccessToken`, which
 answers with the person and their organizations, or says the token is invalid or belongs to
 nobody with an account. Its optional `launchAccess` is the console's allowlist for a person by their provider id; the MCP server asks it for every signed-in caller and refuses without it. The open-source edition has no such port and accepts project keys only.
+
+`apiKeySecrets` (`api-key-secrets.ts`) is an optional port: an edition that keeps project API keys
+for a later reveal. The core hands it every key it issues (`store`, after the key's row exists) and
+its copy says "reveal it later" when `revealable()`; the reveal itself is on the edition's pages. The
+open-source edition has none: keys are stored as hash and prefix only and shown once.
 
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
@@ -104,8 +116,15 @@ calibration page no longer links members to it. Without it the operator pages an
 report stays the members'.
 
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
-project id and showing its own loading state; any other key is a 404. Its rail entries come from
-`composition.projectNav`. The open-source edition has neither.
+project id and showing its own loading state; any other key is a 404. `ProjectPageSkeleton` is
+what the route shows while such a page loads, so the project Overview's skeleton never flashes
+first. Its rail entries come from `composition.projectNav`. The open-source edition has none of them.
+
+`linkPreview` gives the root layout the canonical origin and the words a shared link unfurls into
+(`metadataBase`, OpenGraph, Twitter card); without it they name this deployment (`APP_NAME`,
+`BASE_URL`). `OnboardingArt` replaces the first-run screen's backdrop and card emblem; without it
+the static dot field and the badger mark stay. `accountNote` is a line under the name and email at
+the top of the account menu (Cloud's "Local session (auth bypassed)").
 
 `TelemetryPort` has two optional members for the edition's analytics. `reportRequestError` takes an
 uncaught server-side request error with its request (path, method, headers) and route; the headers
@@ -118,3 +137,7 @@ are only for tying the error to the edition's own analytics identity and must ne
 forwards to it. Nothing is installed in the open-source edition, so the browser sends nothing.
 It installs with the edition's provider, not before hydration: a root layout crash on a hard load
 can happen first and then goes unreported.
+
+`embedding-provider.ts` is the Playground's vectors. A provider that answered but was refused or
+unreadable sets `reason` on the error it throws; its optional `noteUnavailable` is told when a
+run wanted vectors with no key, so the edition can record the call it skipped.

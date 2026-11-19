@@ -58,7 +58,8 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   otherwise, and a ready draft supplies `get_fix`'s change. `run-eval-gate.integration.test.ts`: the gate is the env
   switch. `stages.ts`: no map entry for the tools an edition adds (embedding and Tool Picker
   usage); each carries its own stage, which `toolStage` reads. `route-handler.ts` and `server.ts`:
-  the server name and the bearer realm say `ratel`, signed-in callers pass `launch-access.ts`,
+  the server name, its instructions and the bearer realm take the edition's `productName`
+  (`ratel` and "Ratel" without one), signed-in callers pass `launch-access.ts`,
   and the stage comes from `toolStage`. `__fixtures__/tools-list.json` is this build's tool
   list, regenerated with `UPDATE_MCP_TOOLS_FIXTURE=1`; `route-handler.test.ts` pins it.
 - `launch-access.ts` (with its test): upstream asks its identity provider and flag service whether

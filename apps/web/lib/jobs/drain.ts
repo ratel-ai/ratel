@@ -1,6 +1,5 @@
 import { drainSteps } from "@/lib/composition/registry";
 import type { DrainStep } from "@/lib/contracts/registry";
-import { type DrainObserverDeps, defaultDrainObserverDeps, observeDrain } from "./drain-observer";
 import { RUN_IMPORT_JOB } from "./kinds";
 import {
   type BackgroundObservability,
@@ -8,15 +7,16 @@ import {
   createBackgroundObservability,
   defaultBackgroundObservabilityDeps,
 } from "./observability";
-import { type AppRole, appRole } from "./role";
 import { drainProjectJobs } from "./store";
 
 /**
- * One cron tick (owned port of the upstream drain): the registered `before` steps (the safety-net
+ * One cron tick (owned port of upstream's `lib/cron/drain.ts`): the registered `before` steps (the safety-net
  * enqueues), the job drain, then the registered `after` steps (sweeps, refreshes, and the pruning
  * passes that run only with retention on). Every step is isolated: a failure is recorded under
  * its name and never costs the drain its job durability. The tick always emits
- * `cron_drain_completed`, stamped `ok: false` with the reason when it threw.
+ * `cron_drain_completed`, stamped `ok: false` with the reason when it threw, and with upstream's
+ * per-area error lists (`DRAIN_ERROR_AREAS`). The cron route runs it after its answer
+ * (`background-drain.ts`).
  *
  * Upstream enumerated its steps in this file; here `jobs/` knows only the registry, so a module
  * (core or private) adds a step by exporting it from its `register.ts`. Two deliberate changes
@@ -115,37 +115,10 @@ export async function runDrainTick(
     retention,
     duration_ms: result.duration_ms,
     ...heartbeatProperties(summary),
-    ...(Object.keys(errors).length > 0 ? { errors: Object.keys(errors).join(",") } : {}),
+    ...heartbeatErrors(errors),
     ...(error !== undefined ? { error } : {}),
   });
   return result;
-}
-
-/**
- * GET /api/cron/drain: one tick for an external scheduler. Closed unless `CRON_SECRET` is set
- * and presented as a bearer: an open route would let any caller drive background work,
- * including jobs that spend the operator's model keys. The open-source edition never needs
- * the route, its scheduler runs the tick in process. A tick it runs logs its outcome for the
- * deployment's drain monitors (`drain-observer.ts`); an API-only process logs nothing, its
- * worker's sweep does.
- */
-export async function drainCron(
-  req: Request,
-  deps?: DrainCronDeps,
-  role: AppRole = appRole(),
-  observer: DrainObserverDeps = defaultDrainObserverDeps,
-): Promise<Response> {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return new Response("CRON_SECRET is not configured", { status: 401 });
-  if (req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return new Response("Unauthorized", { status: 401 });
-  }
-  // An API-only task leaves the sweeps and the drain to the worker, which runs
-  // them on its own timer.
-  if (role === "api") return Response.json({ ok: true, skipped: "worker" }, { status: 202 });
-  const summary = await observeDrain(() => runDrainTick(deps), observer);
-  if (!summary) return Response.json({ ok: false, error: "drain threw" }, { status: 500 });
-  return Response.json(summary, { status: summary.ok ? 200 : 500 });
 }
 
 /** Run a step whose failure should degrade the drain rather than end it. */
@@ -161,6 +134,37 @@ async function isolated(
     observability.reportException("drain step failed", thrown, "system:cron", { step: step.name });
     return null;
   }
+}
+
+/**
+ * Upstream's per-area error lists on the heartbeat (`traceSummaryErrors`, `qualityErrors`, ...),
+ * each entry `<step>: <message>`, by the area upstream filed each step under. A step upstream did
+ * not isolate (its failure failed the whole tick) lands in `otherErrors`.
+ */
+export const DRAIN_ERROR_AREAS: Readonly<Record<string, string>> = {
+  trace_turns_build_enqueue: "traceSignalErrors",
+  sealed_import_expiry: "traceSignalErrors",
+  trace_signal_sweep: "traceSignalErrors",
+  intent_graph_fold_enqueue: "intentGraphErrors",
+  intent_graph_revisions_prune: "intentGraphErrors",
+  intent_engine_enqueue: "intentEngineErrors",
+  intent_engine_expire: "intentEngineErrors",
+  task_scores_enqueue: "taskScoreErrors",
+  otlp_raw_prune: "otlpRawErrors",
+  trace_summary_refresh: "traceSummaryErrors",
+  trace_summary_prune: "traceSummaryErrors",
+  quality_snapshot_refresh: "qualityErrors",
+  match_quality_sweep: "matchQualityErrors",
+  what_if_prune: "whatIfErrors",
+};
+
+function heartbeatErrors(errors: Record<string, string>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [step, message] of Object.entries(errors)) {
+    const area = DRAIN_ERROR_AREAS[step] ?? "otherErrors";
+    out[area] = [...(out[area] ?? []), `${step}: ${message}`];
+  }
+  return out;
 }
 
 /**

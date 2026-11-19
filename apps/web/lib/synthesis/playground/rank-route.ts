@@ -69,7 +69,7 @@ export async function rankResponse(body: unknown, deps: RankRouteDeps): Promise<
     if (!built.ok) {
       deps.logError(
         { reason: built.reason, project_id: project.projectId },
-        "test a search embedding failed",
+        "playground embedding failed",
       );
       return Response.json({ error: built.message }, { status: built.status });
     }

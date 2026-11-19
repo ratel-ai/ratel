@@ -148,7 +148,7 @@ test("a provider failure is a logged 502 and no tracked run", async () => {
   assert.deepEqual(await response.json(), {
     error: "The embedding provider is unavailable. Try again shortly.",
   });
-  assert.equal(logged.length, 1);
+  assert.deepEqual(logged, ["playground embedding failed"]);
   assert.equal(tracked.length, 0);
 });
 

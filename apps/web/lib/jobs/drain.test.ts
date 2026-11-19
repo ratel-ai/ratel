@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { DrainStep } from "@/lib/contracts/registry";
-import { type DrainCronDeps, dataRetentionEnabled, drainCron, runDrainTick } from "./drain";
+import { type DrainCronDeps, dataRetentionEnabled, runDrainTick } from "./drain";
 import type { BackgroundObservabilityDeps } from "./observability";
 
 function observability() {
@@ -149,123 +149,35 @@ test("the heartbeat event always fires, flat numbers included, and a drain failu
   assert.equal(second.events[0]?.properties.error, "database gone");
 });
 
-test("the route is closed without a configured secret, and to a caller without the bearer", async () => {
-  const previous = process.env.CRON_SECRET;
-  let ticks = 0;
-  const deps = tick([], {
-    observability: observability().deps,
-    drainProjectJobs: async () => {
-      ticks++;
-      return { done: 0, failed: 0 };
-    },
-  });
-  try {
-    delete process.env.CRON_SECRET;
-    const closed = await drainCron(new Request("http://localhost/api/cron/drain"), deps);
-    assert.equal(closed.status, 401);
-    assert.equal(ticks, 0, "no secret, no tick");
-
-    process.env.CRON_SECRET = "s3cret";
-    const denied = await drainCron(new Request("http://localhost/api/cron/drain"), deps);
-    assert.equal(denied.status, 401);
-    assert.equal(ticks, 0);
-
-    const allowed = await drainCron(
-      new Request("http://localhost/api/cron/drain", {
-        headers: { authorization: "Bearer s3cret" },
-      }),
-      deps,
-    );
-    assert.equal(allowed.status, 200);
-    assert.equal(((await allowed.json()) as { ok: boolean }).ok, true);
-    assert.equal(ticks, 1);
-  } finally {
-    if (previous === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previous;
-  }
-});
-
-test("an API-only process answers the tick without running it, behind the same bearer", async () => {
-  const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "s3cret";
-  let ticks = 0;
-  const deps = tick([], {
-    observability: observability().deps,
-    drainProjectJobs: async () => {
-      ticks++;
-      return { done: 0, failed: 0 };
-    },
-  });
-  const authorized = () =>
-    new Request("http://localhost/api/cron/drain", {
-      headers: { authorization: "Bearer s3cret" },
+test("the heartbeat carries upstream's per-area error lists; a step upstream did not isolate is under otherErrors", async () => {
+  const observed = observability();
+  const failing = (name: string, message: string) =>
+    step(name, "after", async () => {
+      throw new Error(message);
     });
-  try {
-    const denied = await drainCron(new Request("http://localhost/api/cron/drain"), deps, "api");
-    assert.equal(denied.status, 401, "the role is not told to a caller without the bearer");
-
-    const skipped = await drainCron(authorized(), deps, "api");
-    assert.equal(skipped.status, 202);
-    assert.deepEqual(await skipped.json(), { ok: true, skipped: "worker" });
-    assert.equal(ticks, 0, "the worker runs the tick, on its own timer");
-
-    // The worker's own server still answers a tick: its port is not published, and the
-    // atomic claim keeps a tick here from overlapping the loop's work.
-    assert.equal((await drainCron(authorized(), deps, "worker")).status, 200);
-    assert.equal((await drainCron(authorized(), deps, "all")).status, 200);
-    assert.equal(ticks, 2);
-  } finally {
-    if (previous === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previous;
-  }
-});
-
-test("a failed tick answers 500 so an external scheduler can alert on it", async () => {
-  const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "s3cret";
-  try {
-    const res = await drainCron(
-      new Request("http://localhost/api/cron/drain", {
-        headers: { authorization: "Bearer s3cret" },
-      }),
-      tick([], {
-        observability: observability().deps,
-        drainProjectJobs: async () => {
-          throw new Error("nope");
-        },
-      }),
-    );
-    assert.equal(res.status, 500);
-  } finally {
-    if (previous === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previous;
-  }
-});
-
-test("a tick the route runs logs its outcome for the drain monitors; an API-only answer logs nothing", async () => {
-  const previous = process.env.CRON_SECRET;
-  process.env.CRON_SECRET = "s3cret";
-  const codes: string[] = [];
-  const observer = {
-    oldestQueuedJobAgeMs: async () => 0,
-    log: (_level: string, _fields: unknown, code: string) => codes.push(code),
-    reportException: () => {},
-  };
-  const authorized = () =>
-    new Request("http://localhost/api/cron/drain", {
-      headers: { authorization: "Bearer s3cret" },
-    });
-  const deps = tick([], { observability: observability().deps });
-  try {
-    assert.equal((await drainCron(authorized(), deps, "all", observer)).status, 200);
-    assert.deepEqual(codes, ["drain_started", "drain_completed"]);
-    codes.length = 0;
-    assert.equal((await drainCron(authorized(), deps, "api", observer)).status, 202);
-    assert.deepEqual(codes, []);
-  } finally {
-    if (previous === undefined) delete process.env.CRON_SECRET;
-    else process.env.CRON_SECRET = previous;
-  }
+  const summary = await runDrainTick(
+    tick([], {
+      observability: observed.deps,
+      steps: [
+        failing("trace_summary_refresh", "refresh failed"),
+        failing("trace_summary_prune", "prune failed"),
+        failing("match_quality_sweep", "sweep failed"),
+        failing("sealed_import_expiry", "expiry failed"),
+        failing("otel_spans_prune", "spans failed"),
+      ],
+    }),
+  );
+  assert.equal(summary.ok, true);
+  const heartbeat = observed.events[0]?.properties ?? {};
+  assert.deepEqual(heartbeat.traceSummaryErrors, [
+    "trace_summary_refresh: refresh failed",
+    "trace_summary_prune: prune failed",
+  ]);
+  assert.deepEqual(heartbeat.matchQualityErrors, ["match_quality_sweep: sweep failed"]);
+  assert.deepEqual(heartbeat.traceSignalErrors, ["sealed_import_expiry: expiry failed"]);
+  assert.deepEqual(heartbeat.otherErrors, ["otel_spans_prune: spans failed"]);
+  assert.equal("errors" in heartbeat, false, "no comma list: upstream's arrays only");
+  assert.equal("qualityErrors" in heartbeat, false, "an area with no failure is left out");
 });
 
 test("data retention is opt-in", () => {

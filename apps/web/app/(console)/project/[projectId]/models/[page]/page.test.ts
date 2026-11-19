@@ -4,6 +4,7 @@ import { isValidElement } from "react";
 import { composition } from "@/lib/composition";
 import type { EditionUi } from "@/lib/contracts/composition";
 import CompactionPage from "../compaction/page";
+import EditionProjectPageLoading from "./loading";
 import EditionProjectRoute, { generateMetadata } from "./page";
 
 const params = (page: string) => Promise.resolve({ projectId: "p1", page });
@@ -49,4 +50,16 @@ test("compaction keeps its own route: a redirect to the context split", async ()
     CompactionPage({ params: Promise.resolve({ projectId: "p1" }) }),
     (err: { digest?: string }) => String(err.digest).includes("/project/p1?peek=context"),
   );
+});
+
+test("while an edition page loads, the route shows the edition's skeleton, not the project Overview's", async () => {
+  function ApiSkeleton() {
+    return null;
+  }
+  assert.equal(await EditionProjectPageLoading(), null, "nothing without an edition skeleton");
+  await withUi({ ProjectPageSkeleton: ApiSkeleton }, async () => {
+    const element = await EditionProjectPageLoading();
+    assert.ok(isValidElement(element));
+    assert.equal(element.type, ApiSkeleton);
+  });
 });

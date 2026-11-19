@@ -4,7 +4,7 @@
  * what the scheduler calls on its tick, and what the cron drain calls; all are safe to run at
  * once thanks to the atomic claim.
  */
-import { jobHandlers } from "@/lib/composition/registry";
+import { jobHandlers, liveJobIds } from "@/lib/composition/registry";
 import type { JobHandler } from "@/lib/contracts/registry";
 import {
   claimNextQueuedJob,
@@ -28,6 +28,8 @@ export interface DrainProjectJobsDeps {
   /** Read lazily: the registry imports every module, and some of them import this file. */
   jobHandlers: () => Partial<Record<string, JobHandler>>;
   observability: BackgroundObservabilityDeps;
+  /** Running jobs the registrations vouch for (`Registration.liveJobs`): never reaped. */
+  liveJobIds?: () => Promise<readonly string[]>;
 }
 
 /** The runner's DB surface, backed by the platform database. */
@@ -55,12 +57,13 @@ const defaultDeps = (): DrainProjectJobsDeps => ({
   jobStore: dbJobStore,
   jobHandlers: () => jobHandlers(),
   observability: defaultBackgroundObservabilityDeps,
+  liveJobIds: () => liveJobIds(),
 });
 
 /**
  * Drain queued jobs (a project's, or all) through the registered handlers. First reaps any zombie
- * `running` jobs so they stop wedging the in-flight checks; best-effort, so a reaper hiccup never
- * blocks the drain itself.
+ * `running` jobs so they stop wedging the in-flight checks, sparing the ones a registration vouches
+ * for; best-effort, so a reaper hiccup never blocks the drain itself.
  */
 export async function drainProjectJobs(
   projectId?: string,
@@ -72,7 +75,12 @@ export async function drainProjectJobs(
 ): Promise<{ done: number; failed: number }> {
   const observability = createBackgroundObservability(deps.observability);
   try {
-    const count = await deps.reapStaleRunningJobs(new Date(observability.now() - STALE_JOB_MS));
+    const spare = (await deps.liveJobIds?.()) ?? [];
+    const count = await deps.reapStaleRunningJobs(
+      new Date(observability.now() - STALE_JOB_MS),
+      undefined,
+      spare,
+    );
     if (count > 0) await observability.trackSystemEvent("jobs_reaped", "system:jobs", { count });
   } catch (error) {
     observability.reportException("stale job reaper failed", error, "system:jobs", {

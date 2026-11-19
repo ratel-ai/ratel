@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { OrgSkeleton } from "@/components/console/org/OrgSkeleton";
 import { composition } from "@/lib/composition";
 
 export const metadata = { title: "Members" };
@@ -12,5 +14,9 @@ export default async function OrganizationMembersPage({
   const [{ orgSlug }, ui] = await Promise.all([params, composition.ui?.()]);
   const Members = ui?.MembersPage;
   if (!Members) notFound();
-  return <Members slug={orgSlug} />;
+  return (
+    <Suspense fallback={<OrgSkeleton variant="members" />}>
+      <Members slug={orgSlug} />
+    </Suspense>
+  );
 }

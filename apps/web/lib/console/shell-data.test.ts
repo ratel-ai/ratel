@@ -91,3 +91,30 @@ test("open source: one membership reads its projects once, and the shell's lists
     { name: "Acme", slug: "acme", role: "admin" },
   );
 });
+
+test("the account carries the profile photo the session has, and upstream's name fallback", async () => {
+  const membership = { organization: acme, role: "admin" as const };
+  const scopeFor = (over: Partial<Session["user"]>) =>
+    loadConsoleScope(
+      {
+        user: { ...user, ...over },
+        organization: acme,
+        role: "admin",
+        memberships: [membership],
+      },
+      deps().d,
+    );
+  const photo = await scopeFor({ avatarUrl: "https://img.example/ada.png" });
+  assert.deepEqual(photo.account, {
+    name: "Ada",
+    email: "ada@example.com",
+    imageUrl: "https://img.example/ada.png",
+  });
+  assert.equal((await scopeFor({})).account.imageUrl, null, "initials without a photo");
+  // Upstream's ShellV2: name, else username, else email, else "Account"; an empty name is no name.
+  assert.equal((await scopeFor({ name: "", username: "ada" })).account.name, "ada");
+  assert.equal(
+    (await scopeFor({ name: null, username: null, email: null })).account.name,
+    "Account",
+  );
+});

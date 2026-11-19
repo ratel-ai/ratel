@@ -10,6 +10,7 @@ import { CaptureConsentPanel } from "@/components/console/onboarding/CaptureCons
 import { OnboardingEmblem } from "@/components/console/onboarding/OnboardingEmblem";
 import { SdkQuickstart } from "@/components/console/onboarding/SdkQuickstart";
 import { navigateUnderVeil } from "@/lib/console/onboarding/arrival-veil";
+import { onboardingKeyNote } from "@/lib/console/onboarding/key-note";
 import {
   LEAVE_VEIL_DELAY_MS,
   LEAVE_VEIL_MS,
@@ -46,11 +47,17 @@ function Card({ children, size = "default" }: { children: ReactNode; size?: "def
 export function CreateProjectForm({
   ingestUrl,
   keyIssuedCameo,
+  emblem,
+  keyIssuedEmblem,
   organization,
 }: {
   ingestUrl: string;
   /** Rendered by the server because optional badger assets are resolved from disk. */
   keyIssuedCameo?: ReactNode;
+  /** The badge heading the naming step: the edition's (`EditionUi.OnboardingArt`), else the mark. */
+  emblem?: ReactNode;
+  /** The success step's badge when there is no cameo, likewise. */
+  keyIssuedEmblem?: ReactNode;
   organization?: {
     id: string;
     name: string;
@@ -70,8 +77,9 @@ export function CreateProjectForm({
         name={state.name}
         slug={state.slug}
         apiKey={state.apiKey}
+        keyRevealable={state.keyRevealable}
         ingestUrl={ingestUrl}
-        cameo={keyIssuedCameo}
+        cameo={keyIssuedCameo ?? keyIssuedEmblem}
         showCaptureConsent={state.showCaptureConsent}
       />
     );
@@ -89,7 +97,7 @@ export function CreateProjectForm({
         </Link>
       )}
       <header className="flex flex-col items-center gap-4 text-center">
-        <OnboardingEmblem />
+        {emblem ?? <OnboardingEmblem />}
         <div className="eyebrow flex items-center gap-1.5">
           <span className="inline-block size-1.5 rounded-full bg-coral" aria-hidden />
           {organization ? organization.name : `${APP_NAME}`}
@@ -147,6 +155,7 @@ function KeyReveal({
   name,
   slug,
   apiKey,
+  keyRevealable,
   ingestUrl,
   cameo,
   showCaptureConsent,
@@ -155,6 +164,7 @@ function KeyReveal({
   name: string;
   slug: string;
   apiKey: string;
+  keyRevealable: boolean;
   ingestUrl: string;
   cameo?: ReactNode;
   showCaptureConsent: boolean;
@@ -213,7 +223,7 @@ function KeyReveal({
                 <span className="text-coral">{name}</span> is ready
               </h2>
               <p className="text-pretty text-sm text-warm-muted">
-                Treat this API key like a password. Copy it now; it is not shown again.
+                {onboardingKeyNote(keyRevealable)}
               </p>
             </div>
           </header>
@@ -227,7 +237,13 @@ function KeyReveal({
             </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-5">
+          {/* Key beside quickstart from `md` up rather than stacked: the two together
+          were what pushed the dashboard button past the fold. The key keeps a full
+          column so all 36 characters are visible without scrubbing sideways. */}
+          <div className="mt-6 grid gap-5 md:grid-cols-2">
+            {/* The key is short and the quickstart is tall, so the environment note
+            drops to the bottom of its column — the two columns then close on the
+            same line instead of leaving a ragged hole under the key. */}
             <div className="flex flex-col gap-2">
               <div className="font-mono text-xs uppercase tracking-wide text-warm-muted">
                 Secret API key
@@ -250,7 +266,7 @@ function KeyReveal({
                   </span>
                 </button>
               </div>
-              <p className="font-mono text-[11px] leading-relaxed text-warm-muted">
+              <p className="font-mono text-[11px] leading-relaxed text-warm-muted md:mt-auto md:pt-2">
                 Export this key as <code>RATEL_API_KEY</code> — the SDK reads it from the
                 environment so it never lands in your source.
               </p>
