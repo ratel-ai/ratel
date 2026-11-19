@@ -271,6 +271,7 @@ const CLAIMS = [
   ".dockerignore",
   "apps/web/Dockerfile",
   "install.sh",
+  "docker-compose.caddy.yml",
   ...Object.keys(SCRIPT_OWNERS),
 ];
 
@@ -441,6 +442,7 @@ function applyFile(result, file) {
     file === ".dockerignore" ||
     file === "apps/web/Dockerfile" ||
     file === "install.sh" ||
+    file === "docker-compose.caddy.yml" ||
     file === "scripts/link-ee.mjs"
   ) {
     merge(result, ["compose", "platform"]);

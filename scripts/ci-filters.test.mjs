@@ -145,6 +145,11 @@ test("install.sh and its test set compose and platform", () => {
   assertFalse(r, ["sdk", "rust", "python"]);
 });
 
+test("the Caddy overlay sets compose and platform", () => {
+  assertTrue(on(["docker-compose.caddy.yml"]), ["compose", "platform"]);
+  assertFalse(on(["docker-compose.caddy.yml"]), ["sdk"]);
+});
+
 test("lockfile and exceptions-file changes set lockfiles", () => {
   for (const f of ["pnpm-lock.yaml", "Cargo.lock", ".trivyignore.yaml"]) {
     assertTrue(on([f]), ["lockfiles"]);

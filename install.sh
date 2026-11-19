@@ -9,9 +9,15 @@
 #   --dir <path>            RATEL_DIR   where to put it (default: ~/ratel, or /opt/ratel as root)
 #   --yes, -y               RATEL_YES=1 answer yes to every question (for scripts)
 #   --demo                  RATEL_DEMO=1 load the demo data after the start
+#   --access private|public RATEL_ACCESS  private (default): ports stay on 127.0.0.1.
+#                                         public: Caddy on 80 and 443, with TLS and a login.
+#   --domain <name>         RATEL_DOMAIN  public: the site name (default: <public-ip>.sslip.io)
+#   --tls acme|internal     RATEL_TLS     public: Let's Encrypt (default) or Caddy's own CA
+#   --auth-hash <bcrypt>    RATEL_AUTH_HASH public: the login's hash (default: a new password,
+#                                         printed once)
 #
-# Run it again to upgrade: it fetches the ref, rebuilds and restarts. It never touches an
-# existing .env and stops if the checkout has local changes. Ports stay on 127.0.0.1.
+# Run it again to upgrade: it fetches the ref, rebuilds and restarts. It keeps the values in an
+# existing .env and stops if the checkout has local changes. A rerun keeps the access settings.
 set -eu
 
 RATEL_REPO="${RATEL_REPO:-https://github.com/ratel-ai/ratel.git}"
@@ -24,6 +30,15 @@ MIN_DISK_MB=5120
 # The two secrets README.md "On a server" asks for, and the external scheduler's bearer.
 ENV_SECRETS="POSTGRES_PASSWORD TRACE_SIGNALS_HASH_SALT CRON_SECRET"
 SUDO=""
+# The public access mode: docker-compose.caddy.yml runs this image in front of web.
+CADDY_IMAGE=caddy:2.11-alpine
+CADDY_COMPOSE_FILE=docker-compose.yml:docker-compose.caddy.yml
+AUTH_USER=ratel
+# README.md "On a server": the SDKs and MCP clients use project API keys on these routes, and a
+# monitor reads /api/health. Each prefix also opens its subpaths, but never /v1foo.
+OPEN_ROUTES="/v1 /v2 /api/v1 /api/v2 /api/mcp"
+HEALTH_ROUTE=/api/health
+NEW_PASSWORD=""
 
 main() {
   parse_args "$@"
@@ -50,10 +65,15 @@ main() {
   step "Configuration"
   write_env "$INSTALL_DIR"
 
+  step "Access"
+  configure_access "$INSTALL_DIR" "$cloud"
+
   step "Start"
   cd "$INSTALL_DIR"
   info "Building and starting. The first build takes about 5 minutes."
-  dc compose up -d --build --wait
+  # .env names the compose files (COMPOSE_FILE). --remove-orphans stops Caddy after a switch to
+  # private.
+  dc compose up -d --build --wait --remove-orphans
   port=$(env_value RATEL_PORT 3000)
   wait_healthy "http://127.0.0.1:$port/api/health"
 
@@ -72,6 +92,10 @@ parse_args() {
   INSTALL_DIR="${RATEL_DIR:-}"
   ASSUME_YES="${RATEL_YES:-0}"
   WITH_DEMO="${RATEL_DEMO:-0}"
+  ACCESS="${RATEL_ACCESS:-}"
+  DOMAIN="${RATEL_DOMAIN:-}"
+  TLS="${RATEL_TLS:-}"
+  AUTH_HASH="${RATEL_AUTH_HASH:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --ref) [ $# -ge 2 ] || usage_error "--ref needs a value"; REF="$2"; shift ;;
@@ -80,12 +104,28 @@ parse_args() {
       --dir=*) INSTALL_DIR="${1#*=}" ;;
       -y | --yes) ASSUME_YES=1 ;;
       --demo) WITH_DEMO=1 ;;
+      --access) [ $# -ge 2 ] || usage_error "--access needs a value"; ACCESS="$2"; shift ;;
+      --access=*) ACCESS="${1#*=}" ;;
+      --domain) [ $# -ge 2 ] || usage_error "--domain needs a value"; DOMAIN="$2"; shift ;;
+      --domain=*) DOMAIN="${1#*=}" ;;
+      --tls) [ $# -ge 2 ] || usage_error "--tls needs a value"; TLS="$2"; shift ;;
+      --tls=*) TLS="${1#*=}" ;;
+      --auth-hash) [ $# -ge 2 ] || usage_error "--auth-hash needs a value"; AUTH_HASH="$2"; shift ;;
+      --auth-hash=*) AUTH_HASH="${1#*=}" ;;
       -h | --help) usage; exit 0 ;;
       *) usage_error "unknown option: $1" ;;
     esac
     shift
   done
   [ -n "$REF" ] || usage_error "--ref is empty"
+  case "$ACCESS" in "" | private | public) ;; *) usage_error "--access is private or public" ;; esac
+  case "$TLS" in "" | acme | internal) ;; *) usage_error "--tls is acme or internal" ;; esac
+  # The values go into the Caddyfile, so only the characters a name or a bcrypt hash has.
+  case "$DOMAIN" in *[!A-Za-z0-9.-]*) usage_error "--domain is not a host name: $DOMAIN" ;; esac
+  case "$AUTH_HASH" in
+    "") ;;
+    *[!A-Za-z0-9./\$]* | [!$]*) usage_error "--auth-hash is not a bcrypt hash" ;;
+  esac
   [ -n "$INSTALL_DIR" ] || INSTALL_DIR=$(default_dir)
 }
 
@@ -96,11 +136,19 @@ default_dir() {
 usage() {
   cat <<'EOF'
 Usage: install.sh [--ref <branch|tag|sha>] [--dir <path>] [--yes] [--demo]
+                  [--access private|public] [--domain <name>] [--tls acme|internal]
+                  [--auth-hash <bcrypt>]
 
-  --ref   what to check out (default: main)
-  --dir   where to put it (default: ~/ratel, or /opt/ratel as root)
-  --yes   answer yes to every question
-  --demo  load the demo data after the start
+  --ref        what to check out (default: main)
+  --dir        where to put it (default: ~/ratel, or /opt/ratel as root)
+  --yes        answer yes to every question
+  --demo       load the demo data after the start
+  --access     private: ports on 127.0.0.1 only (default on the first run)
+               public: Caddy on 80 and 443 with TLS and a login (basic auth)
+  --domain     public: the site name (default: <public-ip>.sslip.io)
+  --tls        public: acme for Let's Encrypt (default), internal for Caddy's own CA
+  --auth-hash  public: the bcrypt hash of the login password (default: a new password)
+A rerun keeps the access settings unless you pass new ones.
 EOF
 }
 
@@ -384,6 +432,83 @@ env_value() {
   echo "${found:-$2}"
 }
 
+# --- Access ------------------------------------------------------------------------------------
+
+# Private keeps the ports on 127.0.0.1. Public writes ./Caddyfile and adds the Caddy overlay to
+# COMPOSE_FILE in .env, so every `docker compose` command in the directory includes it. With no
+# flags, a rerun keeps the mode: public while a Caddyfile exists.
+configure_access() {
+  caddyfile="$1/Caddyfile"
+  if [ -z "$ACCESS" ]; then
+    if [ -f "$caddyfile" ]; then ACCESS=public; else ACCESS=private; fi
+  fi
+  if [ "$ACCESS" = private ]; then
+    rm -f "$caddyfile"
+    set_env_line "$1/.env" COMPOSE_FILE ""
+    ok "Private: the console listens on 127.0.0.1 only."
+    return 0
+  fi
+
+  [ -n "$DOMAIN" ] || DOMAIN=$(caddy_setting domain "$caddyfile")
+  if [ -z "$DOMAIN" ]; then
+    ip=$(public_ip "$2")
+    [ -n "$ip" ] || fail "--access public needs --domain: this machine has no public IP to use."
+    DOMAIN="$ip.sslip.io"
+  fi
+  [ -n "$TLS" ] || TLS=$(caddy_setting tls "$caddyfile")
+  [ -n "$TLS" ] || TLS=acme
+  [ -n "$AUTH_HASH" ] || AUTH_HASH=$(caddy_setting hash "$caddyfile")
+  if [ -z "$AUTH_HASH" ]; then
+    NEW_PASSWORD=$(random_hex | cut -c1-24)
+    AUTH_HASH=$(dc run --rm "$CADDY_IMAGE" caddy hash-password --plaintext "$NEW_PASSWORD" | tail -n 1)
+  fi
+
+  (umask 077 && write_caddyfile "$DOMAIN" "$AUTH_HASH" "$TLS" >"$caddyfile.tmp") && mv "$caddyfile.tmp" "$caddyfile"
+  set_env_line "$1/.env" COMPOSE_FILE "$CADDY_COMPOSE_FILE"
+  # The console builds its snippets from BASE_URL. Only the example's default is replaced.
+  if [ "$(sed -n 's/^BASE_URL=//p' "$1/.env" | tail -n 1)" = "http://localhost:3000" ]; then
+    set_env_line "$1/.env" BASE_URL "https://$DOMAIN"
+  fi
+  ok "Public: Caddy serves https://$DOMAIN ($TLS TLS), with a login for user $AUTH_USER."
+}
+
+# Prints the Caddyfile for the public mode. The API-key routes and /api/health pass without the
+# login. Caddy matches on the cleaned path, so /api/v1/../x does not pass.
+write_caddyfile() {
+  open=$HEALTH_ROUTE
+  for route in $OPEN_ROUTES; do open="$open $route $route/*"; done
+  printf '# Written by install.sh --access public. Rerun the installer to change it.\n'
+  printf '%s {\n' "$1"
+  [ "$3" = internal ] && printf '\ttls internal\n'
+  printf '\t@open path %s\n' "$open"
+  printf '\thandle @open {\n\t\treverse_proxy web:3000\n\t}\n'
+  printf '\thandle {\n\t\tbasic_auth {\n\t\t\t%s %s\n\t\t}\n' "$AUTH_USER" "$2"
+  printf '\t\treverse_proxy web:3000\n\t}\n}\n'
+}
+
+# Reads one setting (domain, hash or tls) back from a Caddyfile that write_caddyfile wrote.
+caddy_setting() {
+  [ -f "$2" ] || return 0
+  case "$1" in
+    domain) sed -n 's/^\([^#[:space:]][^[:space:]]*\) {$/\1/p' "$2" | head -n 1 ;;
+    hash) awk '/basic_auth \{/ { getline; print $2; exit }' "$2" ;;
+    tls) if grep -q '^[[:space:]]*tls internal$' "$2"; then echo internal; else echo acme; fi ;;
+  esac
+}
+
+# Sets NAME=value in an env file, or removes it when the value is empty. Other lines stay.
+set_env_line() {
+  [ -f "$1" ] || return 0
+  # .env holds secrets: the copy is owner-only too, and `cat >` keeps the file's own mode.
+  (
+    umask 077
+    grep -v "^$2=" "$1" >"$1.next" || true
+    [ -z "$3" ] || printf '%s=%s\n' "$2" "$3" >>"$1.next"
+  )
+  cat "$1.next" >"$1"
+  rm -f "$1.next"
+}
+
 # --- Start -------------------------------------------------------------------------------------
 
 wait_healthy() {
@@ -401,7 +526,37 @@ print_summary() {
   port=$2
   url=$(env_value BASE_URL "http://localhost:$port")
   step "Ratel is running"
-  info "Open:     $url"
+  if [ "$ACCESS" = public ]; then
+    print_public_access
+  else
+    print_private_access "$cloud" "$port" "$url"
+  fi
+  info ""
+  info "Upgrade:  rerun the installer with the same --dir (and --ref)"
+  info "Backup:   cd $INSTALL_DIR && ${SUDO}docker compose exec -T db pg_dump -U ratel ratel > ratel.sql"
+  info "Logs:     cd $INSTALL_DIR && ${SUDO}docker compose logs -f web worker"
+  info "Stop:     cd $INSTALL_DIR && ${SUDO}docker compose down"
+}
+
+print_public_access() {
+  info "Open:     https://$DOMAIN"
+  info "User:     $AUTH_USER"
+  if [ -n "$NEW_PASSWORD" ]; then
+    info "Password: $NEW_PASSWORD"
+    info "          Shown once. Save it now: only its hash is kept, in $INSTALL_DIR/Caddyfile."
+  else
+    info "Password: the one you set (its hash is in $INSTALL_DIR/Caddyfile)"
+  fi
+  [ "$TLS" = internal ] && info "TLS:      Caddy's own CA, so the browser warns until you trust it."
+  info ""
+  info "The SDK and MCP routes ($OPEN_ROUTES) and $HEALTH_ROUTE pass without the login:"
+  info "they use project API keys."
+}
+
+print_private_access() {
+  cloud=$1
+  port=$2
+  info "Open:     $3"
   if [ "$cloud" != local ]; then
     ip=$(public_ip "$cloud")
     info ""
@@ -410,13 +565,8 @@ print_summary() {
     info "then open http://localhost:$port"
   fi
   info ""
-  info "To expose it publicly, put it behind your own proxy with login and TLS:"
-  info "  $README_SERVER_URL"
-  info ""
-  info "Upgrade:  rerun the installer with the same --dir (and --ref)"
-  info "Backup:   cd $INSTALL_DIR && ${SUDO}docker compose exec -T db pg_dump -U ratel ratel > ratel.sql"
-  info "Logs:     cd $INSTALL_DIR && ${SUDO}docker compose logs -f web worker"
-  info "Stop:     cd $INSTALL_DIR && ${SUDO}docker compose down"
+  info "To expose it publicly with TLS and a login, rerun with --access public, or use your own"
+  info "proxy: $README_SERVER_URL"
 }
 
 # --- Helpers -----------------------------------------------------------------------------------

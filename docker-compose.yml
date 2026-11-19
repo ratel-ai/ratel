@@ -14,6 +14,8 @@ x-platform: &platform
     context: .
     dockerfile: apps/web/Dockerfile
     target: oss
+  # Back after a reboot or a daemon restart; `docker compose stop` keeps it down.
+  restart: unless-stopped
   env_file:
     - path: .env
       required: false
@@ -25,6 +27,7 @@ x-platform-env: &platform-env
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ratel
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratel}

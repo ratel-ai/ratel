@@ -42,13 +42,15 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
 ```
 
-The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps your `.env` and stops if the checkout has local changes.
+The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps the values in your `.env` and stops if the checkout has local changes.
 
 Options, after `sh -s --`: `--ref <branch|tag|sha>` (default `main`), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
 ```
+
+On a server with a public IP, `--access public` puts [Caddy](https://caddyserver.com) in front of the console, on ports 80 and 443, with a Let's Encrypt certificate and a login (basic auth, user `ratel`). The password is new and printed once. `--domain <name>` sets the site name (default `<public-ip>.sslip.io`), `--tls internal` uses Caddy's own CA in place of Let's Encrypt, and `--auth-hash <bcrypt>` sets the password's hash. The routes that SDKs and MCP clients call with project API keys (`/v1`, `/v2`, `/api/v1`, `/api/v2`, `/api/mcp`) and `/api/health` pass without the login. A rerun keeps the mode, and `--access private` turns Caddy off. The installer writes `Caddyfile` and adds `docker-compose.caddy.yml` to `COMPOSE_FILE` in `.env`, so every `docker compose` command in the directory includes Caddy. The containers restart after a reboot.
 
 ### On your machine
 
@@ -88,7 +90,7 @@ A fresh install seeds this sample project, Site Copilot, by itself the first tim
 
 > **The console has no login.** Anyone who reaches it is an admin. Ratel binds to `127.0.0.1` only: keep it behind your own proxy with authentication and TLS.
 
-The [one-command installer](#one-command) does the steps below for you, with random secrets. Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
+The [one-command installer](#one-command) does the steps below for you, with random secrets. With `--access public` it also sets up the proxy (Caddy). Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
