@@ -10,6 +10,7 @@ import {
   type RevokeApiKeyState,
   revokeApiKeyHandler,
 } from "@/lib/platform/api-key-actions";
+import { keepApiKeySecret } from "@/lib/platform/api-key-secrets";
 import { generateApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
@@ -42,6 +43,7 @@ const apiKeyActionDeps: ApiKeyActionDeps = {
   generateApiKey,
   createApiKey,
   revokeApiKey,
+  keepApiKeySecret,
   trackApiKeyCreated: async (ctx, projectId, details) => {
     await trackProductEvent(
       "api_key_created",

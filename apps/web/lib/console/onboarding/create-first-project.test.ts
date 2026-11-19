@@ -47,6 +47,7 @@ function harness({
     },
     createApiKey: async (input) => {
       keys.push(input);
+      return { id: "55555555-5555-4555-8555-555555555555" };
     },
     generateApiKey: () => ({ plaintext: "rtl_secret-value", prefix: "rtl_secret-v", hash: "h" }),
     checkQuota: (_org, _key, count) => {
@@ -69,6 +70,7 @@ test("the first project lands with a Default key, revealed once", async () => {
     name: "Support Copilot",
     slug: "support-copilot",
     apiKey: "rtl_secret-value",
+    keyRevealable: false,
     showCaptureConsent: true,
   });
   assert.deepEqual(h.created, [
@@ -205,4 +207,31 @@ test("a non-active organization the reader belongs to gets the project, as upstr
     ),
     { ok: false, error: "Organization not found." },
   );
+});
+
+test("with an edition that keeps keys, the new key is handed over and reads as revealable later", async () => {
+  const h = harness();
+  const kept: [string, string][] = [];
+  const state = await createFirstProject(
+    { name: "Support Copilot" },
+    {
+      ...h.deps,
+      keepApiKeySecret: async (keyId, plaintext) => {
+        kept.push([keyId, plaintext]);
+        return true;
+      },
+    },
+  );
+  assert.deepEqual(kept, [["55555555-5555-4555-8555-555555555555", "rtl_secret-value"]]);
+  assert.equal(state?.ok && state.keyRevealable, true);
+});
+
+test("a key the edition could not keep still lands, shown once", async () => {
+  const h = harness();
+  const state = await createFirstProject(
+    { name: "Support Copilot" },
+    { ...h.deps, keepApiKeySecret: async () => false },
+  );
+  assert.equal(state?.ok && state.apiKey, "rtl_secret-value");
+  assert.equal(state?.ok && state.keyRevealable, false);
 });

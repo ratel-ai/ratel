@@ -25,6 +25,8 @@ export type CreateProjectState =
       name: string;
       slug: string;
       apiKey: string;
+      /** Whether the edition kept the key, so the reveal says it can be shown again later. */
+      keyRevealable: boolean;
       /** Whether the key reveal shows "What Ratel will read" and the content-capture opt-in. */
       showCaptureConsent: boolean;
     };
@@ -58,8 +60,13 @@ export type CreateFirstProjectDeps = {
     name: string;
     keyHash: string;
     keyPrefix: string;
-  }) => Promise<unknown>;
+  }) => Promise<{ id: string }>;
   generateApiKey: () => GeneratedApiKey;
+  /**
+   * Hands the new key to an edition that keeps keys for a later reveal; resolves to whether it
+   * was kept. Absent: the key is stored as hash and prefix only and shown once.
+   */
+  keepApiKeySecret?: (keyId: string, plaintext: string) => Promise<boolean>;
   checkQuota: (organization: OrgLimitView, key: "maxProjects", currentCount: number) => QuotaResult;
   track: typeof trackProductEvent;
 };
@@ -128,14 +135,15 @@ export async function createFirstProject(
     { project_slug: project.slug },
   );
 
-  // Keys are stored as hash and prefix only; the plaintext exists in this response and nowhere else.
+  // The core stores hash and prefix only; an edition that keeps keys gets the plaintext sealed.
   const key = deps.generateApiKey();
-  await deps.createApiKey({
+  const stored = await deps.createApiKey({
     projectId: project.id,
     name: "Default",
     keyHash: key.hash,
     keyPrefix: key.prefix,
   });
+  const keyRevealable = (await deps.keepApiKeySecret?.(stored.id, key.plaintext)) ?? false;
   await deps.track(
     "api_key_created",
     { ...actor, projectId: project.id },
@@ -149,6 +157,7 @@ export async function createFirstProject(
     name: project.name,
     slug: project.slug,
     apiKey: key.plaintext,
+    keyRevealable,
     showCaptureConsent: true,
   };
 }

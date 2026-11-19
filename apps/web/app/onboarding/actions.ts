@@ -4,6 +4,7 @@ import {
   createFirstProject,
   type CreateProjectState as FirstProjectState,
 } from "@/lib/console/onboarding/create-first-project";
+import { keepApiKeySecret } from "@/lib/platform/api-key-secrets";
 import { generateApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { checkQuota } from "@/lib/platform/entitlements";
@@ -35,7 +36,8 @@ export async function createProjectAction(
   // Do NOT add revalidatePath("/onboarding") / revalidate the root layout here:
   // re-rendering this route would re-run the onboarding page's project-cap guard
   // (now at the cap we just reached) and redirect away before the key is shown.
-  // Keys are stored as hash and prefix only, so this response is the key's one reveal.
+  // The core stores hash and prefix only; with an edition that keeps keys, the key can be
+  // revealed again later on the edition's pages, and `keyRevealable` says so.
   return createFirstProject(
     { name: String(formData.get("name") ?? ""), organizationId },
     {
@@ -46,6 +48,7 @@ export async function createProjectAction(
       createProject: (input) => createProject(input),
       createApiKey: (input) => createApiKey(input),
       generateApiKey,
+      keepApiKeySecret,
       checkQuota,
       track: trackProductEvent,
     },

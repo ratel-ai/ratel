@@ -90,6 +90,11 @@ export type ApiKeyActionDeps = {
     scopes: string[];
   }): Promise<ApiKeyRecord>;
   revokeApiKey(keyId: string): Promise<void>;
+  /**
+   * Hands a key just issued to the edition that keeps keys for a later reveal (the
+   * `apiKeySecrets` port); resolves to whether it was kept. Absent: hash and prefix only.
+   */
+  keepApiKeySecret?(keyId: string, plaintext: string): Promise<boolean>;
   trackApiKeyCreated(
     context: ApiKeyActionContext,
     projectId: string,
@@ -138,7 +143,8 @@ export type CreateApiKeyInput = {
 
 /**
  * Issue an additional key for the project. Every key already out there keeps working. The
- * plaintext comes back once, for the caller to copy; it's never returned again.
+ * plaintext comes back for the caller to copy; the core never returns it again, though an edition
+ * that keeps keys (`keepApiKeySecret`) may reveal it later on its own pages.
  */
 export async function createApiKeyHandler(
   input: CreateApiKeyInput,
@@ -183,6 +189,7 @@ export async function createApiKeyHandler(
     expiresAt: expiration.expiresAt,
     scopes: choice.scopes,
   });
+  await deps.keepApiKeySecret?.(created.id, generated.plaintext);
 
   deps.logInfo(
     {

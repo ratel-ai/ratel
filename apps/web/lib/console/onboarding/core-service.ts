@@ -13,6 +13,7 @@ import {
   QUICKSTART_LANGS,
 } from "@/lib/console/onboarding/quickstart";
 import type { OnboardingPort } from "@/lib/contracts/onboarding";
+import { keepApiKeySecret } from "@/lib/platform/api-key-secrets";
 import { generateApiKey } from "@/lib/platform/api-keys";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { checkQuota } from "@/lib/platform/entitlements";
@@ -39,6 +40,7 @@ const defaultDeps: OnboardingServiceDeps = {
   createProject: (input) => createProject(input),
   createApiKey: (input) => createApiKey(input),
   generateApiKey,
+  keepApiKeySecret,
   checkQuota,
   track: trackProductEvent,
   ensureSampleProject: (context) => ensureSampleProject(context),
@@ -66,6 +68,7 @@ export function createOnboardingService(deps: OnboardingServiceDeps = defaultDep
         name: created.name,
         slug: created.slug,
         apiKey: created.apiKey,
+        revealable: created.keyRevealable,
         quickstart: {
           keyEnv: QUICKSTART_KEY_ENV,
           install: snippets.typescript.install,

@@ -75,6 +75,11 @@ clients. The MCP endpoint hands a bearer that is not a project key to `verifyAcc
 answers with the person and their organizations, or says the token is invalid or belongs to
 nobody with an account. Its optional `launchAccess` is the console's allowlist for a person by their provider id; the MCP server asks it for every signed-in caller and refuses without it. The open-source edition has no such port and accepts project keys only.
 
+`apiKeySecrets` (`api-key-secrets.ts`) is an optional port: an edition that keeps project API keys
+for a later reveal. The core hands it every key it issues (`store`, after the key's row exists) and
+its copy says "reveal it later" when `revealable()`; the reveal itself is on the edition's pages. The
+open-source edition has none: keys are stored as hash and prefix only and shown once.
+
 `EditionUi` (same file) holds the optional UI slots. Two relate to the organization: `OrganizationBillingPage`
 fills `/org/<slug>/billing` (a 404 without it), and `hiddenOrganizationNav(slug)` returns the
 edition organization-nav paths to hide for that organization. Both are absent in the open-source
