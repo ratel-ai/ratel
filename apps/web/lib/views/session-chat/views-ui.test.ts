@@ -8,7 +8,10 @@ import {
 } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
 import { createElement, type ReactElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SessionChatView } from "@/components/console/session-chat/SessionChatView";
+import {
+  SessionChatView,
+  type SessionChatViewProps,
+} from "@/components/console/session-chat/SessionChatView";
 import { CallSections, RawRequest } from "@/components/console/session-chat/StepInspector";
 import { SessionTimeline } from "@/components/console/session-replay/SessionTimeline";
 import {
@@ -125,7 +128,11 @@ const TEXTS = new Map<string, ChatCallText>([
   ["c3", { ask: "Thanks!", reply: "Have a good flight." }],
 ]);
 
-function render(search: string, texts: Map<string, ChatCallText> | null = TEXTS): string {
+function render(
+  search: string,
+  texts: Map<string, ChatCallText> | null = TEXTS,
+  extra: Partial<SessionChatViewProps> = {},
+): string {
   const timeline = buildSessionTimeline({
     sessionId: "s1",
     turns: TURNS,
@@ -140,6 +147,7 @@ function render(search: string, texts: Map<string, ChatCallText> | null = TEXTS)
         projectId: "p1",
         chat,
         settingsHref: "/project/p1/settings",
+        ...extra,
       }),
     ),
   );
@@ -433,6 +441,32 @@ test("a search step: its ranked results", () => {
   const html = renderChat("?peek=step:3", null);
   assert.ok(html.includes("data-search-step"));
   assert.ok(html.includes("Ranked results"));
+});
+
+test("the panel pushes the chat aside by default, as the page has it; overlay is opt-in", () => {
+  const push = render("?peek=work:1");
+  assert.equal(push, render("?peek=work:1", TEXTS, { panelMode: "push" }), "the default is push");
+  assert.match(
+    push,
+    /<aside data-chat-panel="work"[^>]*class="flex w-\[26rem\] shrink-0 flex-col border-l border-line bg-raised"/,
+    "the page's panel, beside the chat",
+  );
+  assert.equal(push.includes("data-chat-scrim"), false);
+  assert.equal(push.includes("data-chat-overlay"), false);
+
+  const overlay = render("?peek=work:1", TEXTS, { panelMode: "overlay" });
+  assert.ok(overlay.includes("data-chat-scrim"), "a scrim over the chat");
+  assert.match(
+    overlay,
+    /data-chat-overlay[^>]*class="[^"]*absolute inset-y-0 right-0[^"]*max-w-\[28rem\]/,
+    "the panel over the chat, from the right",
+  );
+  assert.match(overlay, /<aside data-chat-panel="work"[^>]*class="[^"]*w-full/);
+  assert.equal(
+    render("", TEXTS, { panelMode: "overlay" }).includes("data-chat-scrim"),
+    false,
+    "no scrim with no panel open",
+  );
 });
 
 /* --- RC-524: one replay, the inspector open by default ------------------------ */

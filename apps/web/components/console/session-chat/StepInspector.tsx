@@ -8,7 +8,6 @@ import { Check, ChevronLeft, ChevronRight, Copy, ListTree, TriangleAlert } from 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 import { DecisionChip } from "@/components/console/session-replay/DecisionChip";
 import { WhatIfPanel } from "@/components/console/session-replay/WhatIfPanel";
-import { loadStepContentAction } from "@/lib/views/session-chat/actions";
 import {
   type CallView,
   callDiff,
@@ -29,6 +28,7 @@ import type { ChatPeek } from "@/lib/views/session-chat/peek";
 import { LENS_PARTS, type LensPart } from "@/lib/views/session-replay/composition";
 import { segmentTime } from "./format";
 import type { ChatWhatIf, InspectorActions } from "./SessionChatView";
+import { useStepContentLoader } from "./step-content";
 
 /**
  * One step in the side panel (RC-284, A6, A7). A model call shows its tokens,
@@ -36,7 +36,8 @@ import type { ChatWhatIf, InspectorActions } from "./SessionChatView";
  * since the call before it, its sections and the raw request with Copy. A
  * tool step shows why it was flagged, its arguments and result, and the call
  * that chose it; a search shows its query and ranked results. Text is read
- * on demand through `loadStepContentAction`, never with the opt-in off.
+ * on demand through `loadStepContentAction` (or a view's own loader,
+ * ./step-content.ts), never with the opt-in off.
  * Each step shows its tool-choice verdicts, and a model call What if… when
  * the page gave it (RC-524: what the step-by-step view had). The text comes
  * from `source` when the page gives one (an eval run's transcript, RC-646),
@@ -632,9 +633,11 @@ function useStepContent(
   source: StepContentSource | undefined,
   request: StepContentRequest | null,
 ): { data: StepContent | null; error: string | null } {
+  // The trace tables through the page's server action, or a view's own loader (./step-content.ts).
+  const loadFromTraces = useStepContentLoader();
   const traceSource = useCallback<StepContentSource>(
-    (req) => loadStepContentAction(projectId, req),
-    [projectId],
+    (req) => loadFromTraces(projectId, req),
+    [loadFromTraces, projectId],
   );
   const load = source ?? traceSource;
   const key = request ? JSON.stringify(request) : null;

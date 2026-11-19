@@ -48,6 +48,12 @@ export interface OperationContext {
   projectId: string;
   organizationId: string | null;
   logger: Logger;
+  /**
+   * The result renders in an MCP Apps view: `FF_MCP_APPS` is on for the
+   * caller and this tool is bound to one. Only then may an operation spend a
+   * read on `OperationResult.view`.
+   */
+  forView?: boolean;
 }
 
 export interface OperationResult {
@@ -59,6 +65,13 @@ export interface OperationResult {
   window?: { since: string; until: string };
   /** Drill-down guidance for the agent, e.g. which operation to call next. */
   hint?: string;
+  /**
+   * Data only the tool's view reads (with `forView`): the console's own model
+   * of the thing, such as a session's SessionChat. It goes into the result's
+   * `_meta["sh.ratel/view"]` and never into its text or structuredContent, so
+   * the agent reads exactly what it read without views.
+   */
+  view?: Record<string, unknown>;
 }
 
 // A zod object schema whose parsed output is an object. Deliberately loose in
@@ -82,6 +95,13 @@ export interface McpOperation<Schema extends AnyParamsSchema = AnyParamsSchema> 
    * mechanically rather than by reading each implementation.
    */
   mutates: boolean;
+  /**
+   * Called by an MCP Apps view through tools/call, not offered to an agent
+   * (such as the replay's step content). Registered only with
+   * `FF_MCP_APPS` on, and marked `_meta.ui.visibility: ["app"]`, so the
+   * server without views lists exactly what it did.
+   */
+  appOnly?: boolean;
   params: Schema;
   execute(ctx: OperationContext, params: z.infer<Schema>): Promise<OperationResult>;
 }

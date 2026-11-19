@@ -49,6 +49,10 @@ const DEPLOYMENT_SWITCHES = [
     key: "FF_RANKING_CATALOG_DRIFT",
     note: "adaptive ranking warns only about tools a published catalog dropped, and prunes them on rebuild",
   },
+  {
+    key: "FF_MCP_APPS",
+    note: "this MCP server publishes interactive ui:// views (MCP Apps) and points its tools at them",
+  },
 ] as const;
 
 export interface AccountOperationDeps {
@@ -144,7 +148,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       domain: "account",
       title: "Feature flag status",
       description:
-        "The deployment's feature switches and whether each is on: the eval gate and adaptive ranking's catalog drift. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+        "The deployment's feature switches and whether each is on: the eval gate, adaptive ranking's catalog drift and MCP Apps views. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
       keywords: ["flags", "enabled", "disabled", "feature access"],
       scope: "project",
       mutates: false,

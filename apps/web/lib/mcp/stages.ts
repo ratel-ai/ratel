@@ -54,6 +54,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   compare_traces: "monitor",
   get_turn: "monitor",
   get_session: "monitor",
+  get_session_step_content: null,
   list_sdk_events: "monitor",
   get_sdk_event: "monitor",
 

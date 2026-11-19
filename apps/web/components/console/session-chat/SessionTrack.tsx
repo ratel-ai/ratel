@@ -175,18 +175,31 @@ export function SessionTrack({
         <span data-track-position className="text-ui tabular-nums text-fg">
           {formatStepTime(t)} <span className="text-fg-subtle">of {formatStepTime(total)}</span>
         </span>
-        {here && here.kind !== "wait" ? (
-          <span className="min-w-0 truncate text-ui text-fg-muted">
-            · {stepWords(here)}{" "}
-            {here.measured && here.realMs !== null ? formatStepTime(here.realMs) : ""}
-          </span>
-        ) : null}
-        {problem ? (
-          <span className="inline-flex items-center gap-1 text-ui text-warning">
-            <TriangleAlert aria-hidden className="size-3.5" />
-            To check
-          </span>
-        ) : null}
+        {/*
+          What the playhead is on. It comes and goes as the playhead moves, so it must not
+          decide where the controls sit: this box is a size container (it asks for no width
+          of its own, it only takes what the row has left), and each label shows only when
+          the box has room for it. The controls stay on one row whatever the playhead is on.
+          A label with no room is hidden from the eye only (sr-only), so it is still read aloud.
+        */}
+        <div data-track-here className="@container flex min-w-0 flex-1 basis-0 items-center gap-2">
+          {here && here.kind !== "wait" ? (
+            <span className="sr-only @[14rem]:not-sr-only @[14rem]:flex @[14rem]:min-w-0">
+              <span className="min-w-0 truncate text-ui text-fg-muted">
+                · {stepWords(here)}{" "}
+                {here.measured && here.realMs !== null ? formatStepTime(here.realMs) : ""}
+              </span>
+            </span>
+          ) : null}
+          {problem ? (
+            <span className="sr-only @[5.5rem]:not-sr-only @[5.5rem]:flex @[5.5rem]:shrink-0">
+              <span className="inline-flex items-center gap-1 text-ui whitespace-nowrap text-warning">
+                <TriangleAlert aria-hidden className="size-3.5" />
+                To check
+              </span>
+            </span>
+          ) : null}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           <div role="group" aria-label="Zoom" className="flex rounded-md border border-line">
             {ZOOMS.map((z) => (

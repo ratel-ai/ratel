@@ -2,7 +2,6 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Callout } from "@ratel/design-system/states";
 import type { ComponentType } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
-import { pageGap, signalsForGap, tilesForGap } from "@/components/console/health/data-gaps-model";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
 import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
 import { CallOrderSection } from "@/components/console/health/v2/CallOrderSection";
@@ -11,7 +10,6 @@ import { HealthScore, type ScoreFix } from "@/components/console/health/v2/Healt
 import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
 import { InferredToolsCallout } from "@/components/console/health/v2/InferredToolsCallout";
 import { IssuesSection } from "@/components/console/health/v2/IssuesSection";
-import { type IssueRow, issueRows, issuesLine } from "@/components/console/health/v2/issue-rows";
 import { PartialReading } from "@/components/console/health/v2/PartialReading";
 import { Readings } from "@/components/console/health/v2/Readings";
 import { readingViews } from "@/components/console/health/v2/reading-views";
@@ -45,6 +43,8 @@ import {
   type WindowOption,
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
+import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
 import { earlyReadingCopy } from "@/lib/views/health/page-state-copy";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";

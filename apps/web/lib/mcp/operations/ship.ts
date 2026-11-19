@@ -1,8 +1,13 @@
 import { z } from "zod";
 import { invalidParams, notFound } from "@/lib/mcp/errors";
-import { credentialMayReadContent, withheldMarker } from "@/lib/mcp/operations/content-access";
+import {
+  CONTENT_WITHHELD_HINT,
+  credentialMayReadContent,
+  withheldMarker,
+} from "@/lib/mcp/operations/content-access";
 import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
+import { sessionChatView } from "@/lib/mcp/operations/session-chat-view";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import {
@@ -30,6 +35,14 @@ import { chainOf, sourceOf } from "@/lib/views/lineage/resolve";
 import { loadShipments, type ShipmentRow } from "@/lib/views/lineage/shipments";
 import { shipmentTrail } from "@/lib/views/lineage/trail";
 import { LINEAGE_KINDS, type LineageRef, stageOfKind } from "@/lib/views/lineage/types";
+import {
+  loadStepContent,
+  MAX_STEP_CALLS,
+  type StepContent,
+  type StepContentRequest,
+} from "@/lib/views/session-chat/inspect-load";
+import { loadSessionChat } from "@/lib/views/session-chat/load";
+import type { SessionChat } from "@/lib/views/session-chat/model";
 import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
 import { loadSessionTimeline } from "@/lib/views/session-replay/load";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
@@ -107,6 +120,20 @@ export interface ShipOperationDeps {
     textWindow: StepWindow | null,
   ) => Promise<LoadedSession | null>;
   loadWhatIfOptions: (projectId: string, organization: Organization) => Promise<WhatIfOptions>;
+  /**
+   * The session as the console's replay page reads it (lib/session-chat/load.ts), for get_session's view.
+   * `mayReadContent` is the caller's half of the content rule (RC-585); the project's opt-in is the other.
+   */
+  loadSessionChat: (
+    projectId: string,
+    sessionId: string,
+    mayReadContent: boolean,
+  ) => Promise<SessionChat | null>;
+  /** The stored text behind a replay inspector view, as the console's loadStepContentAction reads it. */
+  loadStepContent: (
+    projectId: string,
+    request: StepContentRequest,
+  ) => Promise<{ readContent: boolean; content: StepContent | null }>;
   now: () => Date;
 }
 
@@ -204,6 +231,31 @@ export const defaultShipDeps: ShipOperationDeps = {
     loadWhatIfOptions(
       projectId,
       async (id) => (await loadFixes({ projectId: id, organization, topics: false })).open,
+    ),
+  // The page's rule: message text only with the project's content opt-in, for everyone.
+  loadSessionChat: (projectId, sessionId, mayReadContent) =>
+    withStatementTimeout(
+      async (db) =>
+        loadSessionChat(
+          projectId,
+          sessionId,
+          { readContent: mayReadContent && (await contentOptIn(projectId, db)) },
+          db,
+        ),
+      {
+        operation: "session_chat_page",
+      },
+    ),
+  loadStepContent: (projectId, request) =>
+    withStatementTimeout(
+      async (db) => {
+        const readContent = await contentOptIn(projectId, db);
+        return {
+          readContent,
+          content: await loadStepContent(projectId, request, { readContent }, db),
+        };
+      },
+      { operation: "session_step_content" },
     ),
   now: () => new Date(),
 };
@@ -476,6 +528,19 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
             : null,
         );
         if (!loaded) throw notFound("session");
+        // The view plays the session with the console's own components, from the console's own model.
+        // The view's own read: when it fails, the agent still gets its answer, without the view's data.
+        const chat = ctx.forView
+          ? await deps
+              .loadSessionChat(ctx.projectId, params.sessionId, credentialText)
+              .catch((err: unknown) => {
+                logger.error(
+                  { err, project_id: ctx.projectId },
+                  "session chat for the view failed; the call answers without it",
+                );
+                return null;
+              })
+          : null;
         const options = withSessionToolsFirst(
           await deps.loadWhatIfOptions(ctx.projectId, organization),
           loaded.tools,
@@ -508,6 +573,7 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
             },
             href: sessionReplayHref(ctx.projectId, view.sessionId),
           },
+          ...(chat ? { view: sessionChatView(ctx.projectId, chat) } : {}),
           truncated: tracker.value,
           hint:
             params.offset + window.length < view.rows.length
@@ -515,6 +581,51 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
               : loaded.readContent
                 ? "get_trace opens a model call's trace."
                 : "Message text is off: a project admin can turn on content reading in Settings.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "get_session_step_content",
+      domain: "observability",
+      title: "Get session step content",
+      description:
+        "The stored text behind one step of a session replay, as the replay's inspector shows it: up to three model calls' full requests and replies (the call, the one before it, the one after a tool step) and a search's query. Only with the project's content opt-in on; off, content is null.",
+      keywords: ["session replay", "model call messages", "inspector", "step content"],
+      scope: "project",
+      mutates: false,
+      // The replay view's inspector reads through it (components/session-chat/StepInspector).
+      appOnly: true,
+      params: z.object({
+        ...projectScoped,
+        eventIds: z
+          .array(z.string().uuid())
+          .min(1)
+          .max(MAX_STEP_CALLS)
+          .describe("Model call event ids of one session, from the replay's calls."),
+        searchEventId: z
+          .string()
+          .uuid()
+          .nullable()
+          .optional()
+          .describe("A search step's trace event id, for its query."),
+      }),
+      async execute(ctx, params) {
+        // The key's own content scope first (RC-585): without it no stored text is read.
+        if (!credentialMayReadContent(ctx.auth)) {
+          return {
+            data: { contentOptIn: false, content: null, ...withheldMarker(false) },
+            hint: CONTENT_WITHHELD_HINT,
+          };
+        }
+        const { readContent, content } = await deps.loadStepContent(ctx.projectId, {
+          eventIds: params.eventIds,
+          searchEventId: params.searchEventId ?? null,
+        });
+        return {
+          data: { contentOptIn: readContent, content },
+          hint: readContent
+            ? undefined
+            : "Message text is off: a project admin can turn on content reading in Settings.",
         };
       },
     }),

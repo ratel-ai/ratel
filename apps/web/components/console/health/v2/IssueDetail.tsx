@@ -10,11 +10,9 @@ import { ArrowUpRight, EyeOff, PenLine } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { dismissSlowSignalAction } from "@/app/(console)/project/[projectId]/health/signal-actions";
-import { signalCaveat, splitFix } from "@/components/console/health/card-model";
 import { groupFixLead, memberLabel, primaryOf } from "@/components/console/health/problem-groups";
 import { storyDay } from "@/components/console/health/TurnStory";
 import { type ExamplesCache, IssueExamples } from "@/components/console/health/v2/IssueExamples";
-import { type IssueRow, memberNoun } from "@/components/console/health/v2/issue-rows";
 import { InsightSource } from "@/components/console/lineage/InsightSource";
 import {
   clampFigures,
@@ -25,6 +23,8 @@ import {
 import { isDismissable } from "@/lib/readings/trace-signals/dismiss";
 import type { SignalView, SubjectChip } from "@/lib/readings/trace-signals/view";
 import { productWords } from "@/lib/views/fixes/copy";
+import { signalCaveat, splitFix } from "@/lib/views/health/card-model";
+import { type IssueRow, memberNoun } from "@/lib/views/health/issue-rows";
 import { DESCRIPTION_FIX_LABEL } from "@/lib/views/health/summary/fix-links";
 import { capabilityCatalogHref } from "@/lib/views/intents/hrefs";
 

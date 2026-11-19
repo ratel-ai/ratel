@@ -1,6 +1,6 @@
-import type { FixLookup } from "@/components/console/health/v2/issue-rows";
 import { fixHref } from "@/lib/views/fixes/href";
 import { findFix } from "@/lib/views/fixes/select";
+import type { FixLookup } from "@/lib/views/health/issue-rows";
 import type { FixView } from "@/lib/views/health/self-corrections/page-model";
 import { descriptionFixHref, isDescriptionFix } from "@/lib/views/health/summary/fix-links";
 

@@ -1,0 +1,691 @@
+{
+ "view": {
+  "kind": "session_chat",
+  "projectId": "5d2a7c1e-4b8f-4e2a-9c3d-6f1e0a9b8c7d",
+  "chat": {
+   "sessionId": "replay-demo-session",
+   "textOff": true,
+   "turns": [
+    {
+     "turnId": "ec59a261-9d5a-42aa-9f46-cf2dd3eaf8eb",
+     "turnIndex": 1,
+     "startedAt": "2026-11-10T09:12:59.506Z",
+     "endedAt": "2026-11-10T09:13:07.506Z",
+     "ask": null,
+     "reply": null,
+     "work": {
+      "actions": 2,
+      "tookMs": 8000,
+      "problems": 0,
+      "label": "2 actions \u00b7 8 s"
+     },
+     "split": {
+      "thinkingMs": 1670,
+      "toolMs": 180,
+      "searchMs": 0
+     },
+     "inputTokens": 1619,
+     "outputTokens": 120,
+     "costUsd": 0.006657,
+     "stepIndexes": [
+      1,
+      2,
+      3,
+      4,
+      5
+     ],
+     "trackStartMs": 0,
+     "trackEndMs": 8720
+    },
+    {
+     "turnId": "f6a8e7a6-3bd3-4fce-97a8-64144e6f519d",
+     "turnIndex": 2,
+     "startedAt": "2026-11-10T09:13:59.506Z",
+     "endedAt": "2026-11-10T09:14:14.506Z",
+     "ask": null,
+     "reply": null,
+     "work": {
+      "actions": 3,
+      "tookMs": 15000,
+      "problems": 2,
+      "label": "3 actions \u00b7 15 s \u00b7 2 to check"
+     },
+     "split": {
+      "thinkingMs": 2030,
+      "toolMs": 1380,
+      "searchMs": 0
+     },
+     "inputTokens": 7800,
+     "outputTokens": 120,
+     "costUsd": 0.0252,
+     "stepIndexes": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+     ],
+     "trackStartMs": 11720,
+     "trackEndMs": 27440
+    },
+    {
+     "turnId": "11cecae5-9f6a-4de4-98e0-ee0ec734b72b",
+     "turnIndex": 3,
+     "startedAt": "2026-11-10T09:14:59.506Z",
+     "endedAt": "2026-11-10T09:15:19.506Z",
+     "ask": null,
+     "reply": null,
+     "work": {
+      "actions": 4,
+      "tookMs": 20000,
+      "problems": 2,
+      "label": "4 actions \u00b7 20 s \u00b7 2 to check"
+     },
+     "split": {
+      "thinkingMs": 2390,
+      "toolMs": 540,
+      "searchMs": 0
+     },
+     "inputTokens": 6271,
+     "outputTokens": 120,
+     "costUsd": 0.020613,
+     "stepIndexes": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18
+     ],
+     "trackStartMs": 30440,
+     "trackEndMs": 51400
+    },
+    {
+     "turnId": "be8552ab-82fb-4321-95c6-6c40c61dd774",
+     "turnIndex": 4,
+     "startedAt": "2026-11-10T09:15:59.506Z",
+     "endedAt": "2026-11-10T09:16:09.506Z",
+     "ask": null,
+     "reply": null,
+     "work": {
+      "actions": 2,
+      "tookMs": 10000,
+      "problems": 2,
+      "label": "2 actions \u00b7 10 s \u00b7 2 to check"
+     },
+     "split": {
+      "thinkingMs": 0,
+      "toolMs": 1200,
+      "searchMs": 0
+     },
+     "inputTokens": 0,
+     "outputTokens": 0,
+     "costUsd": 0,
+     "stepIndexes": [
+      19,
+      20,
+      21
+     ],
+     "trackStartMs": 54400,
+     "trackEndMs": 65000
+    }
+   ],
+   "calls": [
+    {
+     "stepIndex": 2,
+     "eventId": "103982c8-cbe5-4949-8fd9-2c305f45431d",
+     "callNumber": 1,
+     "turnIndex": 1,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 683,
+     "outputTokens": 60,
+     "latencyMs": 790,
+     "costUsd": 0.002949
+    },
+    {
+     "stepIndex": 5,
+     "eventId": "98a0764b-d634-43ce-8c55-93fcb97e9ea1",
+     "callNumber": 2,
+     "turnIndex": 1,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 936,
+     "outputTokens": 60,
+     "latencyMs": 880,
+     "costUsd": 0.003708
+    },
+    {
+     "stepIndex": 7,
+     "eventId": "b856b061-07db-44b6-a067-9e16fa833107",
+     "callNumber": 3,
+     "turnIndex": 2,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 3300,
+     "outputTokens": 60,
+     "latencyMs": 970,
+     "costUsd": 0.0108
+    },
+    {
+     "stepIndex": 10,
+     "eventId": "bbbb4884-b90d-4f84-888b-89167bbce833",
+     "callNumber": 4,
+     "turnIndex": 2,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 4500,
+     "outputTokens": 60,
+     "latencyMs": 1060,
+     "costUsd": 0.0144
+    },
+    {
+     "stepIndex": 13,
+     "eventId": "e42aea39-eb2b-41cb-ab6b-867b2be2cb2e",
+     "callNumber": 5,
+     "turnIndex": 3,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 2460,
+     "outputTokens": 60,
+     "latencyMs": 1150,
+     "costUsd": 0.00828
+    },
+    {
+     "stepIndex": 17,
+     "eventId": "82760f95-c1a5-424a-9046-0aaf9838cb18",
+     "callNumber": 6,
+     "turnIndex": 3,
+     "model": "claude-sonnet-5-5",
+     "inputTokens": 3811,
+     "outputTokens": 60,
+     "latencyMs": 1240,
+     "costUsd": 0.012333
+    }
+   ],
+   "segments": [
+    {
+     "kind": "ask",
+     "stepIndex": 1,
+     "turnIndex": 1,
+     "label": "Ask",
+     "realStartMs": 0,
+     "realMs": 0,
+     "measured": true,
+     "trackStartMs": 0,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 2,
+     "turnIndex": 1,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 1000,
+     "realMs": 790,
+     "measured": true,
+     "trackStartMs": 1300,
+     "trackMs": 790,
+     "problem": false,
+     "eventId": "103982c8-cbe5-4949-8fd9-2c305f45431d",
+     "hits": []
+    },
+    {
+     "kind": "search",
+     "stepIndex": 3,
+     "turnIndex": 1,
+     "label": "Search",
+     "realStartMs": 2000,
+     "realMs": null,
+     "measured": false,
+     "trackStartMs": 2300,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "451ab42c-14e1-40b5-ae4b-a73d220dfedc",
+     "hits": [
+      "get_trace",
+      "list_traces",
+      "search_docs"
+     ]
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 4,
+     "turnIndex": 1,
+     "label": "get_trace",
+     "realStartMs": 4000,
+     "realMs": 180,
+     "measured": true,
+     "trackStartMs": 4600,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "6b536e87-8e99-44da-bd8c-3939daa5907c",
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 5,
+     "turnIndex": 1,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 6000,
+     "realMs": 880,
+     "measured": true,
+     "trackStartMs": 6720,
+     "trackMs": 880,
+     "problem": false,
+     "eventId": "98a0764b-d634-43ce-8c55-93fcb97e9ea1",
+     "hits": []
+    },
+    {
+     "kind": "wait",
+     "stepIndex": null,
+     "turnIndex": 2,
+     "label": "52 s later",
+     "realStartMs": 8000,
+     "realMs": 52000,
+     "measured": true,
+     "trackStartMs": 8720,
+     "trackMs": 3000,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "ask",
+     "stepIndex": 6,
+     "turnIndex": 2,
+     "label": "Ask",
+     "realStartMs": 60000,
+     "realMs": 0,
+     "measured": true,
+     "trackStartMs": 11720,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 7,
+     "turnIndex": 2,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 61000,
+     "realMs": 970,
+     "measured": true,
+     "trackStartMs": 13020,
+     "trackMs": 970,
+     "problem": false,
+     "eventId": "b856b061-07db-44b6-a067-9e16fa833107",
+     "hits": []
+    },
+    {
+     "kind": "search",
+     "stepIndex": 8,
+     "turnIndex": 2,
+     "label": "Search",
+     "realStartMs": 62000,
+     "realMs": null,
+     "measured": false,
+     "trackStartMs": 14020,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "109d7afb-3e40-410b-907a-fc0bffe6f7a0",
+     "hits": [
+      "get_trace",
+      "search_docs",
+      "list_traces"
+     ]
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 9,
+     "turnIndex": 2,
+     "label": "search_docs",
+     "realStartMs": 64000,
+     "realMs": 1200,
+     "measured": true,
+     "trackStartMs": 16320,
+     "trackMs": 1200,
+     "problem": true,
+     "eventId": "d1151c99-5e2a-42a1-ba9d-2af998a5fba5",
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 10,
+     "turnIndex": 2,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 66000,
+     "realMs": 1060,
+     "measured": true,
+     "trackStartMs": 18320,
+     "trackMs": 1060,
+     "problem": false,
+     "eventId": "bbbb4884-b90d-4f84-888b-89167bbce833",
+     "hits": []
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 11,
+     "turnIndex": 2,
+     "label": "search_docs",
+     "realStartMs": 68000,
+     "realMs": 180,
+     "measured": true,
+     "trackStartMs": 20320,
+     "trackMs": 300,
+     "problem": true,
+     "eventId": "a6d8f0cf-7896-4869-bea6-7323b22231e4",
+     "hits": []
+    },
+    {
+     "kind": "wait",
+     "stepIndex": null,
+     "turnIndex": 3,
+     "label": "45 s later",
+     "realStartMs": 75000,
+     "realMs": 45000,
+     "measured": true,
+     "trackStartMs": 27440,
+     "trackMs": 3000,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "ask",
+     "stepIndex": 12,
+     "turnIndex": 3,
+     "label": "Ask",
+     "realStartMs": 120000,
+     "realMs": 0,
+     "measured": true,
+     "trackStartMs": 30440,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 13,
+     "turnIndex": 3,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 121000,
+     "realMs": 1150,
+     "measured": true,
+     "trackStartMs": 31740,
+     "trackMs": 1150,
+     "problem": false,
+     "eventId": "e42aea39-eb2b-41cb-ab6b-867b2be2cb2e",
+     "hits": []
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 14,
+     "turnIndex": 3,
+     "label": "search_docs",
+     "realStartMs": 122150,
+     "realMs": 180,
+     "measured": true,
+     "trackStartMs": 32890,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "7c1deada-6c18-4d0c-a0e8-938e72936c57",
+     "hits": []
+    },
+    {
+     "kind": "search",
+     "stepIndex": 15,
+     "turnIndex": 3,
+     "label": "Search",
+     "realStartMs": 124000,
+     "realMs": null,
+     "measured": false,
+     "trackStartMs": 34860,
+     "trackMs": 300,
+     "problem": true,
+     "eventId": "10dd470b-ef5e-4733-99bc-627d65f16b50",
+     "hits": [
+      "search_docs",
+      "get_trace"
+     ]
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 16,
+     "turnIndex": 3,
+     "label": "search_docs",
+     "realStartMs": 126000,
+     "realMs": 180,
+     "measured": true,
+     "trackStartMs": 37160,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "40c8d315-f39e-4246-a6d8-c12d53ed8ca1",
+     "hits": []
+    },
+    {
+     "kind": "model_call",
+     "stepIndex": 17,
+     "turnIndex": 3,
+     "label": "claude-sonnet-5-5",
+     "realStartMs": 128000,
+     "realMs": 1240,
+     "measured": true,
+     "trackStartMs": 39280,
+     "trackMs": 1240,
+     "problem": false,
+     "eventId": "82760f95-c1a5-424a-9046-0aaf9838cb18",
+     "hits": []
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 18,
+     "turnIndex": 3,
+     "label": "search_docs",
+     "realStartMs": 130000,
+     "realMs": 180,
+     "measured": true,
+     "trackStartMs": 41280,
+     "trackMs": 300,
+     "problem": true,
+     "eventId": "a1d6552c-8dc0-4746-b855-b337e4bffec6",
+     "hits": []
+    },
+    {
+     "kind": "wait",
+     "stepIndex": null,
+     "turnIndex": 4,
+     "label": "40 s later",
+     "realStartMs": 140000,
+     "realMs": 40000,
+     "measured": true,
+     "trackStartMs": 51400,
+     "trackMs": 3000,
+     "problem": false,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "ask",
+     "stepIndex": 19,
+     "turnIndex": 4,
+     "label": "Ask",
+     "realStartMs": 180000,
+     "realMs": 0,
+     "measured": true,
+     "trackStartMs": 54400,
+     "trackMs": 300,
+     "problem": true,
+     "eventId": null,
+     "hits": []
+    },
+    {
+     "kind": "search",
+     "stepIndex": 20,
+     "turnIndex": 4,
+     "label": "Search",
+     "realStartMs": 181000,
+     "realMs": null,
+     "measured": false,
+     "trackStartMs": 55700,
+     "trackMs": 300,
+     "problem": false,
+     "eventId": "0f70b7ed-bb52-41dc-894a-0e0452c253fe",
+     "hits": [
+      "list_traces"
+     ]
+    },
+    {
+     "kind": "tool_call",
+     "stepIndex": 21,
+     "turnIndex": 4,
+     "label": "list_traces",
+     "realStartMs": 183000,
+     "realMs": 1200,
+     "measured": true,
+     "trackStartMs": 58000,
+     "trackMs": 1200,
+     "problem": true,
+     "eventId": "8db1272d-3f6d-42c4-a38e-6c3f2a77e872",
+     "hits": []
+    }
+   ],
+   "problems": [
+    {
+     "stepIndex": 9,
+     "turnIndex": 2,
+     "kinds": [
+      "failed"
+     ],
+     "trackStartMs": 16320
+    },
+    {
+     "stepIndex": 11,
+     "turnIndex": 2,
+     "kinds": [
+      "retry"
+     ],
+     "trackStartMs": 20320
+    },
+    {
+     "stepIndex": 15,
+     "turnIndex": 3,
+     "kinds": [
+      "loop"
+     ],
+     "trackStartMs": 34860
+    },
+    {
+     "stepIndex": 18,
+     "turnIndex": 3,
+     "kinds": [
+      "loop"
+     ],
+     "trackStartMs": 41280
+    },
+    {
+     "stepIndex": 19,
+     "turnIndex": 4,
+     "kinds": [
+      "abandoned"
+     ],
+     "trackStartMs": 54400
+    },
+    {
+     "stepIndex": 21,
+     "turnIndex": 4,
+     "kinds": [
+      "failed"
+     ],
+     "trackStartMs": 58000
+    }
+   ],
+   "trackTotalMs": 65000,
+   "realTotalMs": 190000,
+   "splits": {
+    "2": {
+     "inputTokens": 683,
+     "parts": {
+      "system": 199,
+      "skills": 222,
+      "memory": 0,
+      "tools_used": 0,
+      "tools_unused": 202,
+      "history": 0,
+      "tool_results": 0,
+      "user_input": 60
+     }
+    },
+    "5": {
+     "inputTokens": 936,
+     "parts": {
+      "system": 199,
+      "skills": 222,
+      "memory": 0,
+      "tools_used": 43,
+      "tools_unused": 159,
+      "history": 152,
+      "tool_results": 101,
+      "user_input": 60
+     }
+    },
+    "7": {
+     "inputTokens": 3300,
+     "parts": {
+      "system": 0,
+      "skills": 0,
+      "memory": 0,
+      "tools_used": 751,
+      "tools_unused": 2391,
+      "history": 158,
+      "tool_results": 0,
+      "user_input": 0
+     }
+    },
+    "10": {
+     "inputTokens": 4500,
+     "parts": {
+      "system": 0,
+      "skills": 0,
+      "memory": 0,
+      "tools_used": 1000,
+      "tools_unused": 3184,
+      "history": 316,
+      "tool_results": 0,
+      "user_input": 0
+     }
+    },
+    "13": {
+     "inputTokens": 2460,
+     "parts": {
+      "system": 220,
+      "skills": 222,
+      "memory": 0,
+      "tools_used": 38,
+      "tools_unused": 121,
+      "history": 747,
+      "tool_results": 1082,
+      "user_input": 30
+     }
+    },
+    "17": {
+     "inputTokens": 3811,
+     "parts": {
+      "system": 199,
+      "skills": 222,
+      "memory": 0,
+      "tools_used": 38,
+      "tools_unused": 121,
+      "history": 1055,
+      "tool_results": 2116,
+      "user_input": 60
+     }
+    }
+   }
+  },
+  "turnIndex": null,
+  "sessionHref": "/project/5d2a7c1e-4b8f-4e2a-9c3d-6f1e0a9b8c7d/sessions/replay-demo-session",
+  "settingsHref": "/project/5d2a7c1e-4b8f-4e2a-9c3d-6f1e0a9b8c7d/settings"
+ }
+}

@@ -4,14 +4,22 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
 import type { Organization } from "@/lib/platform/organizations";
+import { gainOf, healthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
 import type { HealthPageModel, SignalView } from "@/lib/readings/trace-signals/view";
 import type { IssueExamples } from "@/lib/views/health/issue-examples";
+import { issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import type { PageStateInput } from "@/lib/views/health/page-state-load";
 import { unavailableSelfCorrectionsCard } from "@/lib/views/health/self-corrections/card";
 import type { SelfCorrectionsPageModel } from "@/lib/views/health/self-corrections/page-model";
-import { type HealthOperationDeps, healthOperations } from "./health";
+import { chainFolding } from "@/lib/views/health/workflows-view";
+import {
+  type HealthOperationDeps,
+  healthOperations,
+  loadHealthIssueRows,
+  rowAbout,
+} from "./health";
 import { shownOpenSignals } from "./loop/read";
 
 /**
@@ -199,11 +207,15 @@ function harness(
     contentOptIn: async () => true,
     ...over,
   };
-  const run = (id: string, params: Record<string, unknown> = {}) =>
+  const run = (id: string, params: Record<string, unknown> = {}, forView = false) =>
     dispatchOperation(
       id,
       { projectId: PROJECT, ...params },
-      { registry: buildRegistry(healthOperations(deps)), auth: caller },
+      {
+        registry: buildRegistry(healthOperations(deps)),
+        auth: caller,
+        ...(forView ? { forView } : {}),
+      },
     );
   return { run, calls };
 }
@@ -253,6 +265,129 @@ test("get_agent_health cuts issues and the window to the plan, as the page does"
   assert.equal(out.issues.length, 3);
   assert.equal(out.lockedIssueCount, 2);
   assert.equal(out.openIssueCount, 5);
+});
+
+test("get_agent_health's Health score and per-issue points go to the view only", async () => {
+  const signals = [signal(1, { kind: "error_loop", severity: 0.5 }), signal(2, { severity: 0.2 })];
+  const score = healthScoreView(
+    signals.map((item) => ({ id: item.id, kind: item.kind, severity: item.severity, turns: 120 })),
+    400,
+    [{ version: 2, value: 70 }],
+  );
+  const loaded = { ...model(signals), score };
+  type View = {
+    kind: string;
+    score: { value: number; band: string; change: number | null; topGain: number } | null;
+    points: Record<string, number>;
+    rows: { key: string; kind: string; memberIds: string[]; points: number | null }[];
+    line: string;
+  };
+
+  const on = harness({ loadHealthModel: async () => loaded });
+  const forView = (await on.run("get_agent_health", {}, true)) as DispatchSuccess;
+  const view = forView.view as unknown as View;
+  assert.equal(view.kind, "health_score");
+  assert.equal(view.score!.value, score.value);
+  assert.equal(view.score!.band, score.band);
+  assert.equal(view.score!.change, score.value - 70);
+  assert.equal("parts" in view.score!, false);
+  assert.ok(
+    view.points[signals[0]!.id]! > view.points[signals[1]!.id]!,
+    "the failing issue is worth more",
+  );
+
+  // The agent's result is main's: no score, no points.
+  const agent = (await on.run("get_agent_health", {})) as DispatchSuccess;
+  assert.equal(agent.view, undefined);
+  assert.deepEqual(forView.data, agent.data);
+  const out = agent.data as { score?: unknown; issues: Record<string, unknown>[] };
+  assert.equal("score" in out, false);
+  assert.ok(out.issues.every((issue) => !("points" in issue)));
+
+  const unscored = harness({ loadHealthModel: async () => ({ ...loaded, score: null }) });
+  const bare = ((await unscored.run("get_agent_health", {}, true)) as DispatchSuccess)
+    .view as unknown as View;
+  assert.equal(bare.score, null, "no score yet");
+  assert.deepEqual(bare.points, {});
+  assert.ok(
+    bare.rows.length > 0 && bare.rows.every((item) => item.points === null),
+    "the rows still go, worth no points",
+  );
+});
+
+test("get_agent_health's view carries the page's rows: one per kind, worth what fixing all of it wins back", async () => {
+  // Three slow tools and one failing tool: two rows on the page, not four.
+  const signals = [
+    signal(1, { kind: "latency_outlier", severity: 0.3 }),
+    signal(2, { kind: "latency_outlier", severity: 0.25 }),
+    signal(3, { kind: "latency_outlier", severity: 0.2 }),
+    signal(4, { kind: "error_loop", severity: 0.5 }),
+  ];
+  const score = healthScoreView(
+    signals.map((item) => ({ id: item.id, kind: item.kind, severity: item.severity, turns: 150 })),
+    400,
+    [],
+  );
+  const loaded = { ...model(signals), score };
+  const { run } = harness({ loadHealthModel: async () => loaded });
+  const result = (await run("get_agent_health", {}, true)) as DispatchSuccess;
+  const view = result.view as unknown as {
+    rows: { kind: string; memberIds: string[]; points: number | null; title: string }[];
+    points: Record<string, number>;
+    line: string;
+  };
+
+  // The same rows the page builds from the same model.
+  const page = issueRows({
+    projectId: PROJECT,
+    signals,
+    tooEarly: [],
+    folding: chainFolding(loaded.workflows),
+    tasks: [],
+    fixes: null,
+    score,
+  });
+  assert.deepEqual(
+    view.rows.map((item) => [item.kind, item.title, item.memberIds, item.points]),
+    page.map((item) => [item.kind, item.title, item.memberIds, item.points ?? null]),
+  );
+  assert.equal(view.rows.length, 2);
+  const slow = view.rows.find((item) => item.kind === "latency_outlier")!;
+  assert.deepEqual(
+    slow.memberIds,
+    signals.slice(0, 3).map((item) => item.id),
+    "worst first",
+  );
+  assert.equal(
+    slow.points,
+    gainOf(score, slow.memberIds),
+    "a row is worth all of its issues together",
+  );
+  assert.ok(
+    slow.points! >= Math.max(...slow.memberIds.map((id) => view.points[id]!)),
+    "never less than one of them alone",
+  );
+  assert.equal(view.line, issuesLine(page, signals));
+
+  // An early reading is marked for the view, as the page marks it.
+  assert.equal((result.view as unknown as { early: boolean; progress: unknown }).early, false);
+  const progress = { read: 40, total: 400, percent: 10 };
+  const early = harness({
+    loadHealthModel: async () => ({
+      ...loaded,
+      earlyReading: true as const,
+      earlyProgress: progress,
+    }),
+  });
+  const earlyView = ((await early.run("get_agent_health", {}, true)) as DispatchSuccess)
+    .view as unknown as { early: boolean; progress: unknown };
+  assert.equal(earlyView.early, true);
+  assert.deepEqual(earlyView.progress, progress);
+
+  // A limit cuts the agent's issues, never the page's rows.
+  const cut = (await run("get_agent_health", { limit: 1 }, true)) as DispatchSuccess;
+  assert.equal((cut.data as { issues: unknown[] }).issues.length, 1);
+  assert.equal((cut.view as unknown as { rows: unknown[] }).rows.length, 2);
 });
 
 test("a reading that failed to load reads as unavailable, not as an empty project", async () => {
@@ -668,4 +803,75 @@ test("without an edition's labels, an import's source is its id, capitalized", a
   });
   const out = data<{ state: { body: string } }>(await run("get_agent_health", { windowDays: 30 }));
   assert.match(out.state.body, /imported from Langsmith called one/);
+});
+
+test("a row says what it is about: a count, its tools and how many more, or its scope", () => {
+  const tools = (shown: string[][], more = 0, count: string | null = null) => ({
+    shown,
+    more,
+    count,
+  });
+  assert.equal(rowAbout({ tools: tools([["x"], ["y"]], 1), scope: null }), "x, y +1");
+  assert.equal(
+    rowAbout({ tools: tools([["get_order", "get_order_status"]]), scope: null }),
+    "get_order → get_order_status",
+  );
+  assert.equal(rowAbout({ tools: tools([], 0, "18 tools"), scope: null }), "18 tools");
+  assert.equal(rowAbout({ tools: tools([]), scope: "Whole project" }), "Whole project");
+  assert.equal(rowAbout({ tools: tools([]), scope: null }), null);
+});
+
+test("the page's Issues rows load on their own for another tool's view: default window, the plan's cut, Agent health on", async () => {
+  const signals = [
+    signal(1, { kind: "latency_outlier", severity: 0.3 }),
+    signal(2, { kind: "latency_outlier", severity: 0.2 }),
+    signal(3, { kind: "error_loop", severity: 0.5 }),
+  ];
+  const score = healthScoreView(
+    signals.map((item) => ({ id: item.id, kind: item.kind, severity: item.severity, turns: 150 })),
+    400,
+    [],
+  );
+  const loaded = { ...model(signals), score };
+  const windows: number[] = [];
+  const on = {
+    getOrganization: async () => proOrg,
+    agentHealthEnabled: async () => true,
+    loadHealthModel: async (_projectId: string, windowDays: number) => {
+      windows.push(windowDays);
+      return loaded;
+    },
+  } as unknown as Pick<
+    HealthOperationDeps,
+    "getOrganization" | "agentHealthEnabled" | "loadHealthModel"
+  >;
+
+  const read = await loadHealthIssueRows(PROJECT, on);
+  assert.equal(read!.kind, "health_issue_rows");
+  assert.deepEqual(windows, [7], "the page's default window");
+  // The same rows get_agent_health sends its own view.
+  const { run } = harness({ loadHealthModel: async () => loaded });
+  const card = ((await run("get_agent_health", {}, true)) as DispatchSuccess).view as unknown as {
+    rows: unknown[];
+    line: string;
+  };
+  assert.deepEqual(read!.rows, card.rows);
+  assert.equal(read!.line, card.line);
+  assert.equal(read!.rows.length, 2, "one row per kind");
+
+  assert.equal(
+    await loadHealthIssueRows(PROJECT, { ...on, agentHealthEnabled: async () => false }),
+    null,
+    "Agent health off",
+  );
+  assert.equal(
+    await loadHealthIssueRows(PROJECT, { ...on, getOrganization: async () => null }),
+    null,
+    "no organization",
+  );
+  assert.equal(
+    await loadHealthIssueRows(PROJECT, { ...on, loadHealthModel: async () => null }),
+    null,
+    "the model could not be read",
+  );
 });

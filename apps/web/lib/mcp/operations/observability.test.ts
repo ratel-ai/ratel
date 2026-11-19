@@ -38,6 +38,7 @@ const stubDeps = {
   getToolMetrics: async () => ({}),
   listRunTools: async () => new Map(),
   listRunAsks: async () => new Map(),
+  loadTraceViewProps: async () => null,
   contentOptIn: async () => true,
 } as unknown as ObservabilityOperationDeps;
 
@@ -346,3 +347,101 @@ for (const { name, caller, optIn, sees } of CONTENT_CASES) {
     }
   });
 }
+
+test("get_trace's view gets the console trace page's TraceView props; without content access, no captured text", async () => {
+  const root = {
+    spanId: "root",
+    parentSpanId: null,
+    name: "invoke_agent support",
+    kind: 1,
+    spanClass: "agent",
+    statusCode: 1,
+    startedAt: new Date("2026-11-04T10:00:00.000Z"),
+    durationMs: 900,
+    serviceName: "support-agent",
+    inputTokens: null,
+    outputTokens: null,
+    model: null,
+    costUsd: null,
+    searchQuery: null,
+    searchHitCount: null,
+    operationName: "invoke_agent",
+    attributes: {},
+  };
+  const span = (attributes: Record<string, unknown>) => ({
+    ...root,
+    startedAt: "2026-11-04T10:00:00.000Z",
+    endedAt: "2026-11-04T10:00:00.900Z",
+    searchQuery: "refund for order 1234",
+    experimentAttrs: { q: "refund" },
+    attributes,
+  });
+  const props = {
+    projectId: "p",
+    traceId: TRACE,
+    title: "Where is my refund for order 1234?",
+    payloadContent: { messages: [{ role: "user", text: "Where is my refund?" }] },
+    waterfall: {
+      startedAt: null,
+      endedAt: null,
+      durationMs: 900,
+      rows: [
+        {
+          depth: 0,
+          span: span({
+            "gen_ai.tool.name": "lookup_order",
+            "error.type": "timeout",
+            "gen_ai.input.messages": "Where is my refund?",
+            "gen_ai.tool.call.arguments": '{"order":1234}',
+          }),
+        },
+      ],
+    },
+    lifecycle: [{ id: "l1", experimentAttrs: { query: "refund" } }],
+  };
+  let reads = 0;
+  const deps = {
+    ...stubDeps,
+    getTraceSpansWithTruncation: (async () => ({ spans: [root], truncated: false })) as never,
+    loadTraceViewProps: (async () => {
+      reads += 1;
+      return props;
+    }) as never,
+  };
+  const call = (forView: boolean, optIn: boolean) =>
+    dispatchOperation(
+      "get_trace",
+      { traceId: TRACE },
+      {
+        registry: buildRegistry(
+          observabilityOperations({ ...deps, contentOptIn: async () => optIn }),
+        ),
+        auth,
+        forView,
+      },
+    ) as Promise<DispatchSuccess>;
+
+  const plain = await call(false, true);
+  assert.equal(plain.view, undefined);
+  assert.equal(reads, 0, "no extra read without a view");
+
+  const open = await call(true, true);
+  assert.deepEqual(open.data, plain.data, "the agent's data is unchanged");
+  assert.deepEqual(open.view, { kind: "trace", props });
+
+  const withheld = (await call(true, false)).view as { props: typeof props };
+  const text = JSON.stringify(withheld);
+  for (const captured of [
+    "Where is my refund",
+    "refund for order",
+    'order\\":1234',
+    '"query":"refund',
+  ])
+    assert.ok(!text.includes(captured), `withheld view leaks ${captured}`);
+  assert.equal(withheld.props.payloadContent, null);
+  assert.equal(withheld.props.title, "support", "the root step in plain words, not the ask");
+  assert.deepEqual(withheld.props.waterfall.rows[0]!.span.attributes, {
+    "gen_ai.tool.name": "lookup_order",
+    "error.type": "timeout",
+  });
+});

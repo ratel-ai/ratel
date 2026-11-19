@@ -6,6 +6,7 @@ import { buildRegistry } from "@/lib/mcp/registry";
 import type { Organization } from "@/lib/platform/organizations";
 import type { ShipmentRow } from "@/lib/views/lineage/shipments";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import type { SessionChat } from "@/lib/views/session-chat/model";
 import type { TimelineStep } from "@/lib/views/session-replay/timeline";
 import type { SessionView } from "@/lib/views/session-replay/view";
 import {
@@ -100,6 +101,7 @@ function sessionView(rows: number): SessionView {
     rows: Array.from({ length: rows }, (_, index) => ({
       index,
       kind: index === 0 ? "turn" : "model_call",
+      turnId: "5c1e0a77-2f4b-4a1e-9d3c-7b2a1f0e9c44",
       turnIndex: 1,
       title: index === 0 ? "Turn 1" : "Model call · gpt",
       detail: null,
@@ -162,6 +164,23 @@ interface Calls {
   trails: number;
   resolve: { ref: LineageRef; traces: boolean; chain: boolean }[];
   sessionText: (StepWindow | null)[];
+  chats: number;
+  /** Whether each view chat read was allowed message text (RC-585). */
+  chatText: boolean[];
+}
+
+/** A SessionChat as lib/session-chat/load.ts returns one; only its identity matters here. */
+function chatOf(sessionId: string): SessionChat {
+  return {
+    sessionId,
+    textOff: false,
+    turns: [],
+    calls: [],
+    segments: [],
+    problems: [],
+    trackTotalMs: 0,
+    realTotalMs: 0,
+  };
 }
 
 function harness(
@@ -169,7 +188,14 @@ function harness(
   auth: McpAuthContext = keyAuth,
   org: Organization = proOrg,
 ) {
-  const calls: Calls = { actors: [], trails: 0, resolve: [], sessionText: [] };
+  const calls: Calls = {
+    actors: [],
+    trails: 0,
+    resolve: [],
+    sessionText: [],
+    chats: 0,
+    chatText: [],
+  };
   const deps: ShipOperationDeps = {
     getOrganization: async () => org,
     evalGateEnabled: async (_projectId, actor) => {
@@ -202,11 +228,20 @@ function harness(
         { name: "find_fare", description: "", searchable: "f".repeat(300) },
       ],
     }),
+    loadSessionChat: async (_projectId, sessionId, mayReadContent) => {
+      calls.chats += 1;
+      calls.chatText.push(mayReadContent);
+      return chatOf(sessionId);
+    },
+    loadStepContent: async () => ({
+      readContent: true,
+      content: { calls: {}, query: "fare to Rome" },
+    }),
     now: () => new Date("2026-11-05T00:00:00.000Z"),
     ...over,
   };
-  const run = (id: string, params: Record<string, unknown> = {}) =>
-    dispatchOperation(id, params, { registry: buildRegistry(shipOperations(deps)), auth });
+  const run = (id: string, params: Record<string, unknown> = {}, forView = false) =>
+    dispatchOperation(id, params, { registry: buildRegistry(shipOperations(deps)), auth, forView });
   return { run, calls };
 }
 
@@ -303,6 +338,11 @@ test("get_session returns the timeline without text unless asked", async () => {
   }>(await run("get_session", { sessionId: "sess-1" }));
   assert.deepEqual(calls.sessionText, [null], "no text asked for, none read");
   assert.equal(out.steps.length, 3);
+  assert.equal(
+    "turnId" in out.steps[0]!,
+    false,
+    "rows are main's: the replay view reads turn ids from its SessionChat",
+  );
   assert.equal(out.steps[1]!.text, undefined);
   assert.equal(out.totals.costUsd, 0.012346);
   assert.deepEqual(
@@ -398,6 +438,81 @@ test("textCallsInWindow reads only the window's model calls that kept their text
     textCallsInWindow(view, steps, { offset: 20, steps: 5 }),
     [],
     "past the end reads nothing",
+  );
+});
+
+test("get_session answers the agent when the view's own read fails, without the view", async () => {
+  const { run } = harness({
+    loadSessionChat: async () => Promise.reject(new Error("statement timeout")),
+  });
+  const plain = (await run("get_session", { sessionId: "sess-1" })) as DispatchSuccess;
+  const forView = (await run("get_session", { sessionId: "sess-1" }, true)) as DispatchSuccess;
+  assert.equal(forView.ok, true);
+  assert.equal(forView.view, undefined);
+  assert.deepEqual(forView.data, plain.data);
+});
+
+test("get_session adds the console's SessionChat for its view only, and never to the agent's data", async () => {
+  const { run, calls } = harness();
+  const plain = (await run("get_session", { sessionId: "sess-1" })) as DispatchSuccess;
+  assert.equal(plain.view, undefined);
+  assert.equal(calls.chats, 0, "no extra read without a view");
+
+  const forView = (await run("get_session", { sessionId: "sess-1" }, true)) as DispatchSuccess;
+  assert.deepEqual(forView.data, plain.data, "the data the agent reads is unchanged");
+  const view = forView.view as {
+    kind: string;
+    projectId: string;
+    chat: SessionChat;
+    turnIndex: number | null;
+    sessionHref: string;
+    settingsHref: string;
+  };
+  assert.equal(view.kind, "session_chat");
+  assert.equal(view.chat.sessionId, "sess-1");
+  assert.equal(view.turnIndex, null);
+  assert.match(view.sessionHref, /\/sessions\/sess-1$/);
+  assert.match(view.settingsHref, /\/settings$/);
+  assert.deepEqual(calls.chatText, [true], "a key with content:read may see the view's text");
+
+  const readOnly = harness({}, { ...keyAuth, scopes: ["mcp:read"] });
+  await readOnly.run("get_session", { sessionId: "sess-1" }, true);
+  assert.deepEqual(
+    readOnly.calls.chatText,
+    [false],
+    "a key without content:read reads the view's chat without text (RC-585)",
+  );
+});
+
+test("get_session_step_content reads the inspector's text, and says when the opt-in is off or the key may not read it", async () => {
+  const eventIds = ["0b6c3a52-3f0e-4f4e-9d0a-1c2b3c4d5e6f"];
+  const on = harness();
+  assert.deepEqual(data(await on.run("get_session_step_content", { eventIds })), {
+    contentOptIn: true,
+    content: { calls: {}, query: "fare to Rome" },
+  });
+
+  const off = harness({ loadStepContent: async () => ({ readContent: false, content: null }) });
+  const result = (await off.run("get_session_step_content", { eventIds })) as DispatchSuccess;
+  assert.deepEqual(result.data, { contentOptIn: false, content: null });
+  assert.match(result.hint ?? "", /content reading/);
+
+  const readOnly = harness(
+    { loadStepContent: async () => assert.fail("no stored text is read without content:read") },
+    { ...keyAuth, scopes: ["mcp:read"] },
+  );
+  const withheld = (await readOnly.run("get_session_step_content", {
+    eventIds,
+  })) as DispatchSuccess;
+  assert.deepEqual(
+    withheld.data,
+    { contentOptIn: false, content: null, contentWithheld: true },
+    "an API key without content:read reads no text (RC-585)",
+  );
+  assert.equal(
+    ((await on.run("get_session_step_content", { eventIds: ["not-a-uuid"] })) as { error?: string })
+      .error,
+    "invalid_params",
   );
 });
 

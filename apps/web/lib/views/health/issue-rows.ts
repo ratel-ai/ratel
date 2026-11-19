@@ -1,5 +1,4 @@
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
-import { TOP_PROBLEMS } from "@/components/console/health/card-model";
 import {
   groupAnchors,
   groupByKind,
@@ -19,6 +18,7 @@ import { fixHref } from "@/lib/views/fixes/href";
 import type { FixKind } from "@/lib/views/fixes/kinds";
 import { findFix } from "@/lib/views/fixes/select";
 import type { FixSource } from "@/lib/views/fixes/types";
+import { TOP_PROBLEMS } from "@/lib/views/health/card-model";
 import { descriptionFixHref, isDescriptionFix } from "@/lib/views/health/summary/fix-links";
 import type { ChainFolding } from "@/lib/views/health/workflows-view";
 import { taskHref } from "@/lib/views/tasks/paths";

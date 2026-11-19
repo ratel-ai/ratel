@@ -37,19 +37,11 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import {
-  type SignalTone,
-  type StepGlyphKind,
-  TONE_LABELS,
-} from "@/components/console/health/card-model";
 import { signalTitle } from "@/lib/readings/trace-signals/claims";
 import type { SignalKind } from "@/lib/readings/trace-signals/view";
+import { type SignalTone, type StepGlyphKind, TONE_LABELS } from "@/lib/views/health/card-model";
 
-export {
-  CORAL_SEVERITY,
-  type SignalTone,
-  signalTone,
-} from "@/components/console/health/card-model";
+export { CORAL_SEVERITY, type SignalTone, signalTone } from "@/lib/views/health/card-model";
 
 /**
  * One plain glyph per kind of problem, so a reader can tell a slow tool from a

@@ -5,6 +5,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
 import type { ReplayDb } from "@/lib/views/session-replay/load";
 import { loadSessionChat } from "./load";
+import type { SessionChat } from "./model";
 import { loadTurnTraceIds } from "./turn-traces";
 
 /**
@@ -62,6 +63,24 @@ export async function loadTraceSession(
       traceId: traces.get(item.turnId)?.[0] ?? null,
     })),
   };
+}
+
+/**
+ * The whole session a turn's trace belongs to, as the replay page reads it,
+ * and the trace's own turn in it (null when the chat does not hold it). Null
+ * when no turn of the project holds the trace.
+ */
+export async function loadTraceSessionChat(
+  projectId: string,
+  traceId: string,
+  { readContent }: { readContent: boolean },
+  db: ReplayDb = getDb(),
+): Promise<{ chat: SessionChat; turnIndex: number | null } | null> {
+  const turn = await findTraceTurn(projectId, traceId, db);
+  if (!turn) return null;
+  const chat = await loadSessionChat(projectId, turn.sessionId, { readContent }, db);
+  if (!chat) return null;
+  return { chat, turnIndex: chat.turns.find((item) => item.turnId === turn.id)?.turnIndex ?? null };
 }
 
 async function findTraceTurn(

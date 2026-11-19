@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
+import { type HealthIssueRowsViewData, loadHealthIssueRows } from "@/lib/mcp/operations/health";
 import { fixesSummary } from "@/lib/mcp/operations/loop/eval-sets";
 import {
   type InsightView,
@@ -28,6 +29,7 @@ import { defineOperation, type McpOperation, type OperationContext } from "@/lib
 import { capRows, limitParam, TruncationTracker } from "@/lib/mcp/serialize";
 import { getLogger } from "@/lib/platform/logger";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
+import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 import { hasEffect, changeOf as simulationChangeOf } from "@/lib/views/eval-gate/change";
 import { EVAL_GATE_OFF_ERROR, evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
@@ -104,6 +106,8 @@ export interface LoopOperationDeps {
   dailyScoresFor: (projectId: string, taskId: string) => ReturnType<typeof dailyScoresFor>;
   taskEvalViewFor: (projectId: string, taskId: string) => ReturnType<typeof taskEvalViewFor>;
   loadOpenInsights: (projectId: string) => Promise<InsightView[]>;
+  /** Agent health's Issues rows (one per kind of issue), for list_insights' view; null when they cannot be read. */
+  loadIssueRows: (projectId: string) => Promise<HealthIssueRowsViewData | null>;
   loadInsight: (projectId: string, insightId: string) => Promise<InsightView | null>;
   loadProjectFixes: (projectId: string) => Promise<FixesModel | null>;
   /** The fixes with the intents each serves, as Fixes reads them, for list_fixes' intent filter. */
@@ -148,6 +152,14 @@ export const defaultLoopDeps: LoopOperationDeps = {
   dailyScoresFor: (projectId, taskId) => dailyScoresFor(projectId, taskId),
   taskEvalViewFor: (projectId, taskId) => taskEvalViewFor(projectId, taskId),
   loadOpenInsights,
+  // Only for a view, so a failed read costs the view its grouping, never the agent its result.
+  loadIssueRows: (projectId) =>
+    loadOrFallback<HealthIssueRowsViewData | null>({
+      operation: "mcp_insights_issue_rows",
+      distinctId: `project:${projectId}`,
+      fallback: null,
+      load: () => loadHealthIssueRows(projectId),
+    }),
   loadInsight,
   loadProjectFixes,
   loadProjectFixesWithIntents: async (projectId) => {
@@ -590,10 +602,23 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       }),
       async execute(ctx, params) {
         const tracker = new TruncationTracker();
-        const all = await deps.loadOpenInsights(ctx.projectId);
+        // The view lists the issues as Agent health does: one row per kind, worth what fixing all of it wins back.
+        const [all, issueRows] = await Promise.all([
+          deps.loadOpenInsights(ctx.projectId),
+          ctx.forView ? deps.loadIssueRows(ctx.projectId) : null,
+        ]);
         const matching = params.kind ? all.filter((insight) => insight.kind === params.kind) : all;
         const page = tracker.take(capRows(matching, params.limit));
+        const view: HealthIssueRowsViewData | null =
+          issueRows && params.kind
+            ? {
+                ...issueRows,
+                rows: issueRows.rows.filter((row) => row.kind === params.kind),
+                line: null,
+              }
+            : issueRows;
         return {
+          ...(view ? { view: { ...view } } : {}),
           data: { count: matching.length, insights: page },
           truncated: tracker.value,
           hint:

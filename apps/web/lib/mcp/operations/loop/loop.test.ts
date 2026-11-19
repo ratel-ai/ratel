@@ -384,6 +384,7 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
       refreshJob: null,
     }),
     loadOpenInsights: async () => [insight],
+    loadIssueRows: async () => null,
     loadInsight: async (_projectId, id) => (id === INSIGHT ? insight : null),
     loadProjectFixes: async () => model,
     runSimulation: async (fixId) => simulated(fixId),
@@ -436,6 +437,66 @@ test("list_insights returns insights with their trace as source", async () => {
   const out = data<{ count: number; insights: InsightView[] }>(await run("list_insights", {}));
   assert.equal(out.count, 1);
   assert.deepEqual(out.insights[0]!.source, traceSource);
+});
+
+test("list_insights' view gets Agent health's rows; the agent's result does not change", async () => {
+  const row = (key: string, kind: string) => ({
+    key,
+    kind,
+    title: key,
+    tone: "watch" as const,
+    tools: { shown: [], more: 0, count: null },
+    scope: null,
+    about: null,
+    figure: { display: "8%", caption: "" },
+    memberIds: [INSIGHT],
+    points: 3,
+  });
+  const issueRows = {
+    kind: "health_issue_rows" as const,
+    rows: [row("a", "tool_errors"), row("b", "slow_tool")],
+    line: "2 issues across 3 tools, most points first.",
+  };
+  const over = { loadIssueRows: async () => issueRows } as unknown as Partial<LoopOperationDeps>;
+  const forView = async (params: Record<string, unknown>) =>
+    (await dispatchOperation("list_insights", params, {
+      registry: buildRegistry([
+        ...loopReadOperations(deps([], over)),
+        ...loopWriteOperations(deps([], over)),
+      ]),
+      auth,
+      forView: true,
+    })) as DispatchSuccess;
+
+  const shown = await forView({});
+  assert.deepEqual(shown.view, issueRows);
+  // The agent reads the same insights with or without a view.
+  const agent = (await run("list_insights", {}, [], over)) as DispatchSuccess;
+  assert.equal(agent.view, undefined);
+  assert.deepEqual(shown.data, agent.data);
+
+  // A kind filter cuts the rows to that kind; the page's line is about all of them, so it goes.
+  const slow = (await forView({ kind: "slow_tool" })).view as unknown as {
+    rows: { key: string }[];
+    line: string | null;
+  };
+  assert.deepEqual(
+    slow.rows.map((item) => item.key),
+    ["b"],
+  );
+  assert.equal(slow.line, null);
+
+  // The rows could not be read: no view model, and the list shows the tool's own rows.
+  const none = (await dispatchOperation(
+    "list_insights",
+    {},
+    {
+      registry: buildRegistry([...loopReadOperations(deps([])), ...loopWriteOperations(deps([]))]),
+      auth,
+      forView: true,
+    },
+  )) as DispatchSuccess;
+  assert.equal(none.view, undefined);
 });
 
 test("list_insights filters by kind", async () => {
