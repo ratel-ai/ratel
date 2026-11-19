@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
+import type {
+  EmbeddingProviderFailure,
+  EmbeddingProviderPort,
+} from "@/lib/contracts/embedding-provider";
 import { sliceWellFormed } from "@/lib/readings/text/well-formed";
 
 /**
@@ -20,6 +23,7 @@ const PROVIDER_TIMEOUT_MS = 30_000;
 
 export type EmbeddingFailureReason =
   | "not_configured"
+  | "upstream_rejected"
   | "upstream_unreachable"
   | "upstream_unreadable"
   | "too_many_inputs";
@@ -69,6 +73,17 @@ function remember(cache: Map<string, number[]>, key: string, vector: number[]) {
   cache.set(key, vector);
 }
 
+const PROVIDER_FAILURES: readonly EmbeddingProviderFailure[] = [
+  "upstream_rejected",
+  "upstream_unreadable",
+];
+
+/** The reason a provider set on the error it threw, when it is one the port names. */
+function providerFailure(error: unknown): EmbeddingProviderFailure | null {
+  const reason = (error as { reason?: unknown } | null)?.reason;
+  return PROVIDER_FAILURES.find((failure) => failure === reason) ?? null;
+}
+
 /** One provider request. The port has no signal, so a timed-out request finishes unobserved. */
 async function embedBatch(
   inputs: readonly string[],
@@ -86,8 +101,9 @@ async function embedBatch(
     return vectors.length === inputs.length
       ? { ok: true, vectors }
       : { ok: false, reason: "upstream_unreadable", status: 502 };
-  } catch {
-    return { ok: false, reason: "upstream_unreachable", status: 502 };
+  } catch (error) {
+    // The provider answered but was refused or unreadable (upstream's distinct reasons), or never answered.
+    return { ok: false, reason: providerFailure(error) ?? "upstream_unreachable", status: 502 };
   } finally {
     clearTimeout(timer);
   }
@@ -102,6 +118,7 @@ export async function embedTexts(texts: readonly string[], deps: EmbedDeps): Pro
     return { ok: false, reason: "too_many_inputs", status: 400 };
   }
   if (!deps.provider.isAvailable()) {
+    deps.provider.noteUnavailable?.();
     return { ok: false, reason: "not_configured", status: 503 };
   }
 

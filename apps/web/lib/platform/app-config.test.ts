@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { apiUrl, appConfigScript, resolveAppConfig } from "./app-config";
+import {
+  APP_NAME,
+  apiUrl,
+  appConfigScript,
+  editionServiceName,
+  resolveAppConfig,
+  serviceName,
+  setEditionServiceName,
+} from "./app-config";
 
 test("the defaults are local development on the open-source edition", () => {
   assert.deepEqual(resolveAppConfig({}), {
@@ -41,4 +49,18 @@ test("the browser script cannot break out of its tag", () => {
   const script = appConfigScript({ name: "</script><b>", baseUrl: "http://x" });
   assert.equal(script.includes("</script>"), false);
   assert.match(script, /^window\.__RATEL_APP_CONFIG__=/);
+});
+
+test("without an edition's short name, a sentence names the service APP_NAME", () => {
+  assert.equal(editionServiceName(), null);
+  assert.equal(serviceName(), APP_NAME);
+  assert.doesNotMatch(appConfigScript(), /serviceName/);
+});
+
+test("an edition's short name names the service, and the browser is handed it", (t) => {
+  setEditionServiceName("Cloud");
+  t.after(() => setEditionServiceName(undefined));
+  assert.equal(editionServiceName(), "Cloud");
+  assert.equal(serviceName(), "Cloud");
+  assert.match(appConfigScript(), /"serviceName":"Cloud"/);
 });

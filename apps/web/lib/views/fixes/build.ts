@@ -1,4 +1,5 @@
 import { type TaskColorSlot, taskColors } from "@ratel/design-system/task-colors";
+import { editionServiceName } from "@/lib/platform/app-config";
 import { TOPIC_WINDOW_DAYS } from "@/lib/readings/topics/types";
 import {
   catalogIdentities,
@@ -202,9 +203,15 @@ const SAME_STEPS_KINDS: ReadonlySet<FixKind> = new Set([
 /** A topic is about a tool (or task) when at least this share of its turns ran it. */
 export const TOPIC_SHARE = 0.5;
 
-/** Shown beside Apply when nothing has fetched the overrides recently (Quality's caveat). */
-const NOT_REACHING_RUNTIME =
-  "Nothing has fetched this project's overrides recently, so an applied rewrite may not reach your agent yet.";
+/**
+ * Shown beside Apply when nothing has fetched the overrides recently (Quality's caveat). With an
+ * edition the overrides are its ("Cloud overrides"); the open-source words name no product.
+ */
+export function notReachingRuntime(): string {
+  const service = editionServiceName();
+  const overrides = service ? `${service} overrides` : "overrides";
+  return `Nothing has fetched this project's ${overrides} recently, so an applied rewrite may not reach your agent yet.`;
+}
 
 /** "Missed 12 searches", or the absence of any. */
 function missedLabel(missed: number): string {
@@ -455,7 +462,7 @@ function rewriteSeed({ row, howWeKnow }: RewriteInput, overridesAdopted: boolean
     detail: {
       source: "rewrite",
       row,
-      caveat: pending && overridesAdopted !== true ? NOT_REACHING_RUNTIME : null,
+      caveat: pending && overridesAdopted !== true ? notReachingRuntime() : null,
     },
     measured: tone === "good",
     worse: tone === "bad",

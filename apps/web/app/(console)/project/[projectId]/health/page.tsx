@@ -8,7 +8,11 @@ import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { billingSelfServe, getAgentHealthLimits } from "@/lib/platform/entitlements";
+import {
+  billingSelfServe,
+  fullAgentHealthPlanName,
+  getAgentHealthLimits,
+} from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   afterOutsideSupportSession,
@@ -179,6 +183,7 @@ export default async function AgentHealthPage({
       state={state}
       windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
       billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
+      lockedPlan={fullAgentHealthPlanName()}
       tasks={tasks}
       fixes={fixes}
       corrections={corrections}
