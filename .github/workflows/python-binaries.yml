@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: ls -la src/sdk/python/dist/
       - name: Upload wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.triple }}
           path: src/sdk/python/dist/*.whl
@@ -81,7 +81,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: src/sdk/python/dist/*.tar.gz
