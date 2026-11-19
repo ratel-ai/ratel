@@ -27,6 +27,7 @@ function harness({
     },
     createApiKey: async (input) => {
       keys.push(input);
+      return { id: "66666666-6666-4666-8666-666666666666" };
     },
     generateApiKey: () => ({ plaintext: "rtl_plain", hash: "hash", prefix: "rtl_plai" }),
     checkQuota: (organization) => {
@@ -41,7 +42,7 @@ function harness({
       return "55555555-5555-4555-8555-555555555555";
     },
   };
-  return { service: createOnboardingService(deps), created, keys, events, quotaFor, sampled };
+  return { deps, service: createOnboardingService(deps), created, keys, events, quotaFor, sampled };
 }
 
 test("a name becomes a project of the organization it is handed, with its key and its snippets", async () => {
@@ -62,6 +63,8 @@ test("a name becomes a project of the organization it is handed, with its key an
   assert.equal(result.id, "44444444-4444-4444-8444-444444444444");
   assert.equal(result.slug, "support-copilot");
   assert.equal(result.apiKey, "rtl_plain");
+  // No edition keeps keys here: the copy says the key is shown once.
+  assert.equal(result.revealable, false);
 
   // The snippets are data, so the edition renders them without importing the builders.
   assert.equal(result.quickstart.keyEnv, QUICKSTART_KEY_ENV);
@@ -127,4 +130,24 @@ test("the sample project is asked for with the organization and the person, and 
   const answer = await service.ensureSampleProject({ organization: ORG, externalId: "user_1" });
   assert.equal(answer, undefined);
   assert.deepEqual(sampled, [{ organization: ORG, externalId: "user_1" }]);
+});
+
+test("a key the edition keeps comes back marked revealable, for the welcome page's copy", async () => {
+  const h = harness();
+  const kept: string[] = [];
+  const service = createOnboardingService({
+    ...h.deps,
+    keepApiKeySecret: async (keyId) => {
+      kept.push(keyId);
+      return true;
+    },
+  });
+  const result = await service.createFirstProject({
+    name: "Support Copilot",
+    organization: ORG,
+    externalId: "user_1",
+    ingestUrl: INGEST,
+  });
+  assert.deepEqual(kept, ["66666666-6666-4666-8666-666666666666"]);
+  assert.equal(result.ok && result.revealable, true);
 });

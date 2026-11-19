@@ -409,3 +409,40 @@ test("the created event says which access was picked", async () => {
   );
   assert.deepEqual(tracked, ["ingest"]);
 });
+
+test("a new key is handed to the edition to keep, by its id, after its row exists", async () => {
+  const order: string[] = [];
+  const kept: [string, string][] = [];
+  const result = await createApiKeyHandler(
+    { projectSlug: "support" },
+    undefined,
+    deps({
+      createApiKey: async (input) => {
+        order.push("row");
+        return record({ id: "key-9", keyPrefix: input.keyPrefix });
+      },
+      keepApiKeySecret: async (keyId, plaintext) => {
+        order.push("kept");
+        kept.push([keyId, plaintext]);
+        return true;
+      },
+    }),
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(order, ["row", "kept"]);
+  assert.deepEqual(kept, [["key-9", "rtl_abcd1234secret"]]);
+});
+
+test("the plaintext is never in the structured log, kept or not", async () => {
+  const logged: string[] = [];
+  await createApiKeyHandler(
+    { projectSlug: "support" },
+    undefined,
+    deps({
+      keepApiKeySecret: async () => true,
+      logInfo: (fields, message) => logged.push(JSON.stringify(fields) + message),
+    }),
+  );
+  assert.ok(logged.length > 0);
+  for (const line of logged) assert.ok(!line.includes("rtl_abcd1234secret"), line);
+});

@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type {
@@ -239,6 +240,12 @@ export type CompositionPorts = {
    * it, an MCP client may sign in through a browser and send the identity provider's token.
    */
   mcpOAuth?: McpOAuthPort;
+  /**
+   * Absent in the open-source edition, where a key is stored as hash and prefix only and shown
+   * once. With it, the core hands every key it issues to the edition, which keeps it (sealed) for
+   * a later reveal on its own pages, and the core's copy says the key can be revealed later.
+   */
+  apiKeySecrets?: ApiKeySecretsPort;
 };
 
 export const PORT_NAMES = [

@@ -37,8 +37,13 @@ export type FirstProjectResult =
       id: string;
       name: string;
       slug: string;
-      /** The key's plaintext, once: only its hash is stored. */
+      /** The key's plaintext, once: the core stores only its hash. */
       apiKey: string;
+      /**
+       * Whether the edition's `apiKeySecrets` kept the key, so it can be revealed again later.
+       * Optional so an edition built against an older core still type-checks; absent means no.
+       */
+      revealable?: boolean;
       quickstart: QuickstartSamples;
     };
 
