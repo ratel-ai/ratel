@@ -121,7 +121,7 @@ export function SidebarContent({
       </div>
 
       <nav
-        aria-label={project ? "Project" : "Console"}
+        aria-label={railLandmark(Boolean(project))}
         className={cn(
           "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-2 py-1",
           collapsed && "items-center",
@@ -170,6 +170,11 @@ export function SidebarContent({
       ) : null}
     </div>
   );
+}
+
+/** The rail's landmark name: the project's rail, else the organization's (upstream's Sidebar). */
+export function railLandmark(inProject: boolean): string {
+  return inProject ? "Project" : "Organization";
 }
 
 /**

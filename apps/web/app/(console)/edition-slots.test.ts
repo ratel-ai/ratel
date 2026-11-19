@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { createElement, type ReactElement, type ReactNode } from "react";
+import { createElement, type ReactElement, type ReactNode, Suspense } from "react";
 import ConsoleLayout from "@/app/(console)/layout";
-import HomePage from "@/app/(console)/page";
 import OnboardingPage from "@/app/onboarding/page";
+import HomePage from "@/app/page";
+import { ConsoleFrame } from "@/components/console/shell/ConsoleFrame";
 import { ConsoleShell } from "@/components/console/shell/ConsoleShell";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { ShellSkeleton } from "@/components/console/shell/ShellSkeleton";
 import { composition } from "@/lib/composition";
 import type { EditionUi } from "@/lib/contracts/composition";
 
@@ -38,11 +40,23 @@ function layoutParts(tree: ReactElement<Props>) {
   return { banner, body };
 }
 
+test("the console layout draws the shell skeleton while the frame resolves (upstream's)", () => {
+  const page = createElement("p");
+  const tree = ConsoleLayout({ children: page }) as ReactElement<
+    Props & { fallback: ReactElement }
+  >;
+  assert.equal(tree.type, Suspense);
+  assert.equal(tree.props.fallback.type, ShellSkeleton);
+  const frame = tree.props.children as ReactElement<Props>;
+  assert.equal(frame.type, ConsoleFrame);
+  assert.equal(frame.props.children, page);
+});
+
 test("OSS: the console renders the shell around the page, with no gate", async () => {
   composition.ui = undefined;
   const page = createElement("p");
   const { banner, body } = layoutParts(
-    (await ConsoleLayout({ children: page })) as ReactElement<Props>,
+    (await ConsoleFrame({ children: page })) as ReactElement<Props>,
   );
   assert.equal(banner, null);
   assert.equal(body.type, ConsoleShell);
@@ -53,7 +67,7 @@ test("an access gate wraps the shell before it renders, under the banner", async
   const ui = useEdition({ ConsoleAccessGate: Gate, ConsoleBanner: Banner });
   const page = createElement("p");
   const { banner, body } = layoutParts(
-    (await ConsoleLayout({ children: page })) as ReactElement<Props>,
+    (await ConsoleFrame({ children: page })) as ReactElement<Props>,
   );
   assert.equal(banner?.type, Banner);
   assert.equal(body.type, Gate);
@@ -65,14 +79,16 @@ test("an access gate wraps the shell before it renders, under the banner", async
 
 test("OSS: / keeps the console entry", async () => {
   composition.ui = undefined;
-  const tree = (await HomePage()) as ReactElement;
-  assert.equal(tree.type, DatabaseUnavailable);
+  const tree = (await HomePage()) as ReactElement<Props>;
+  assert.equal(tree.type, ConsoleFrame, "the state sits in the console frame");
+  assert.equal((tree.props.children as ReactElement).type, DatabaseUnavailable);
 });
 
 test("an edition without RootPage keeps the console entry", async () => {
   useEdition({ ConsoleAccessGate: Gate });
-  const tree = (await HomePage()) as ReactElement;
-  assert.equal(tree.type, DatabaseUnavailable);
+  const tree = (await HomePage()) as ReactElement<Props>;
+  assert.equal(tree.type, ConsoleFrame, "the state sits in the console frame");
+  assert.equal((tree.props.children as ReactElement).type, DatabaseUnavailable);
 });
 
 test("an edition's RootPage replaces /", async () => {

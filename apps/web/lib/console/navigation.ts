@@ -89,10 +89,21 @@ export function consoleNav({
   additions: readonly EditionNavItem[];
   /** Organization pages the edition adds (`composition.organizationNav`), after Projects. */
   organizationAdditions?: readonly OrganizationNavItem[];
-  /** Project page groups the edition adds (`composition.projectNav`), before Settings. */
+  /**
+   * Project page groups the edition adds (`composition.projectNav`): a labelled section before
+   * Catalog and Settings, or a group with `row` as one collapsible row between them.
+   */
   projectGroups?: readonly ProjectNavGroup[];
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
+  const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
+    id: `project-${item.path}`,
+    label: item.label,
+    href: `${root}/${item.path}`,
+    icon: item.icon ?? "edition",
+    ...(item.shortcut ? { shortcut: item.shortcut } : {}),
+    ...(item.keywords ? { keywords: item.keywords } : {}),
+  });
   const organization: NavItem[] = organizationSlug
     ? [
         {
@@ -318,20 +329,17 @@ export function consoleNav({
             },
           ],
         },
-        ...projectGroups.flatMap((group) =>
-          group.items.map(
-            (item, index): NavItem => ({
-              id: `project-${item.path}`,
-              label: item.label,
-              href: `${root}/${item.path}`,
-              icon: item.icon ?? "edition",
-              ...(item.shortcut ? { shortcut: item.shortcut } : {}),
-              ...(item.keywords ? { keywords: item.keywords } : {}),
-              section: `group:${group.id}`,
-              ...(index === 0 ? { sectionLabel: group.label } : {}),
-            }),
+        ...projectGroups
+          .filter((group) => !group.row)
+          .flatMap((group) =>
+            group.items.map(
+              (item, index): NavItem => ({
+                ...projectPage(item),
+                section: `group:${group.id}`,
+                ...(index === 0 ? { sectionLabel: group.label } : {}),
+              }),
+            ),
           ),
-        ),
         {
           id: "settings",
           label: "Settings",
@@ -344,8 +352,26 @@ export function consoleNav({
         },
       ]
     : organization;
+  // Upstream's APIs row: one collapsible row whose landing page is its first sub-page.
+  const setupRows: NavItem[] = root
+    ? projectGroups.flatMap((group) => {
+        const children = group.items.map(projectPage);
+        if (!group.row || !children[0]) return [];
+        return [
+          {
+            id: `group-${group.id}`,
+            label: group.label,
+            href: children[0].href,
+            icon: group.row.icon ?? "edition",
+            exact: true,
+            ...(group.row.keywords ? { keywords: group.row.keywords } : {}),
+            children,
+          },
+        ];
+      })
+    : [];
   return [
-    ...(root ? stageRailNav(root, core) : core),
+    ...(root ? stageRailNav(root, core, setupRows) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -361,9 +387,13 @@ export function consoleNav({
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
  * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new.
+ * Ship is new. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
-function stageRailNav(root: string, classic: readonly NavItem[]): NavItem[] {
+function stageRailNav(
+  root: string,
+  classic: readonly NavItem[],
+  setupRows: readonly NavItem[],
+): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
     if (!item) throw new Error(`the classic rail has no ${id}`);
@@ -406,6 +436,7 @@ function stageRailNav(root: string, classic: readonly NavItem[]): NavItem[] {
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
     { ...pick("catalog"), section: "settings" },
+    ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("settings"),
   ];
 }
