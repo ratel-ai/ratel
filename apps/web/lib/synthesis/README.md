@@ -15,7 +15,7 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `traces/waterfall.ts`, `tree.ts`, `content-view.ts`, `format.ts` | one trace as a span tree, a waterfall and its message content |
 | `match-quality/` | a run over a project's searches: evidence, the judge, the analyst, replay, rewrites and their apply path; `judges.ts` resolves the OpenAI judge. Without a key a run stops before judging. |
 | `quality/` | the ground truth and metrics, the snapshots and fingerprints; `register.ts` holds the `match_quality_run` job, the snapshot and sweep steps, and fills `foldSeams.loadShadow` |
-| `playground/` | Test a search (upstream's Playground): rank a prompt with the SDK's engine against the live catalog, with what-if edits. `embed.ts` goes through the embedding-provider port, `rank-route.ts` is the route's logic |
+| `playground/` | Test a search (upstream's Playground): rank a prompt with the SDK's engine against the live catalog, with what-if edits. `embed.ts` goes through the embedding-provider port (a refused or unreadable answer keeps its reason; a keyless run is told to the provider), `rank-route.ts` is the route's logic |
 | `experiments/` | experiment detection and comparison over recorded rankings |
 | `catalog/` | the tools table model, data provenance and the runtime-catalog reads, shared by Test a search and the Catalog pages |
 | `tool-crafter/` | the `craft_tools` job: rule-drafted changes to a project's tools (merges, folds, retirements, tightened schemas…) with their backtest and round-trip price, read off the tool explorer, match quality and the topic patterns; `register.ts` fills `exploreSeams.enqueueCraft`. Owned: `schema.ts`, `job.ts`, `job.integration.test.ts`, `register.ts` |

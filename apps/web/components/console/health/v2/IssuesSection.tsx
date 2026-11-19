@@ -64,6 +64,8 @@ export interface IssuesSectionProps {
   lockedCount: number;
   /** Where a plan can be picked; null when billing is off. */
   upgradeHref: string | null;
+  /** The plan that shows every issue and its turns ("Plus"); null names the limits instead. */
+  lockedPlan?: string | null;
   /** Slow tools hidden as slow by design, each with "Show again". */
   dismissed: readonly DismissedSignal[];
   /** The reading is early (RC-225): the list is as of now, more may come. */
@@ -78,6 +80,7 @@ export function IssuesSection({
   examplesAllowed,
   lockedCount,
   upgradeHref,
+  lockedPlan = null,
   dismissed,
   calculating = null,
 }: IssuesSectionProps) {
@@ -244,7 +247,9 @@ export function IssuesSection({
             {calculating ? <StillReading progress={calculating.progress} /> : null}
           </>
         )}
-        {lockedCount > 0 ? <Locked count={lockedCount} upgradeHref={upgradeHref} /> : null}
+        {lockedCount > 0 ? (
+          <Locked count={lockedCount} upgradeHref={upgradeHref} plan={lockedPlan} />
+        ) : null}
         {dismissed.length > 0 ? <Dismissed projectId={projectId} dismissed={dismissed} /> : null}
       </div>
       <Panel
@@ -269,6 +274,7 @@ export function IssuesSection({
             initialMemberId={shownId}
             examplesAllowed={examplesAllowed}
             upgradeHref={upgradeHref}
+            lockedPlan={lockedPlan}
             focusExamples={fromTurns === shownRow.key}
             cache={cache}
           />
@@ -360,18 +366,26 @@ function ActionCell({ row, onTurns }: { row: IssueRow; onTurns: () => void }) {
 }
 
 /**
- * What the limits hide, as one quiet line; the map scrolls here when it names a hidden issue.
- * Owned (ADR-0030): no plan to name; `upgradeHref` is kept for the call sites and is null here.
+ * What the plan hides, as one quiet line; the map scrolls here when it names a hidden issue.
+ * Owned (ADR-0030): the plan is named only with an edition's plans; otherwise the limits are.
  */
-function Locked({ count, upgradeHref }: { count: number; upgradeHref: string | null }) {
+function Locked({
+  count,
+  upgradeHref,
+  plan,
+}: {
+  count: number;
+  upgradeHref: string | null;
+  plan: string | null;
+}) {
   return (
     <p
       data-signals-locked={count}
       className="mt-3 flex flex-wrap items-center gap-x-2 text-ui text-fg-muted"
     >
       <span>
-        {count.toLocaleString("en-US")} more {count === 1 ? "issue" : "issues"} outside this
-        project&apos;s limits.
+        {count.toLocaleString("en-US")} more {count === 1 ? "issue" : "issues"}{" "}
+        {plan ? `on ${plan}.` : "outside this project's limits."}
       </span>
       {upgradeHref ? (
         <Link href={upgradeHref} className={cn(LINK, "text-fg")}>

@@ -128,8 +128,12 @@ export function planSync({
   const report = { copied: [], updated: [], deleted: [], ownedBootstrapped: [], ownedKept: [], unmapped: [], privateHits: [], privatePathsSkipped: 0 };
   const confidential = patterns.filter(isHashEntry);
 
+  // The most specific entry wins here too: an excluded folder keeps out every file but one with a
+  // longer entry of its own (a file landed apart from a folder that is otherwise left behind).
+  const kept = map.entries.filter((e) => e.mode !== "excluded").map((e) => e.from);
   const land = (pair, owned) => {
-    if (excluded.some((x) => under(pair.from, x))) return;
+    const exclusion = excluded.filter((x) => under(pair.from, x)).sort((a, b) => b.length - a.length)[0];
+    if (exclusion && !kept.some((k) => k.length > exclusion.length && under(pair.from, k))) return;
     // An upstream path naming confidential data is excluded implicitly, so the map never has to spell it.
     if (findPrivateStrings(pair.from, confidential).length > 0) {
       report.privatePathsSkipped++;

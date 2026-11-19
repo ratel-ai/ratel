@@ -102,6 +102,11 @@ export interface HealthOperationDeps extends ContentAccessDeps {
   ) => Promise<HealthPageModel | null>;
   /** The project's recent imports; null when they could not be read (unknown, not none). */
   listImports: (projectId: string) => Promise<ImportSummary[] | null>;
+  /**
+   * How the edition names import sources ("LangSmith"), as the page's copy does; optional, and
+   * without it a source is its id, capitalized.
+   */
+  importSourceLabels?: () => Promise<Readonly<Record<string, string>>>;
   loadPageState: (input: PageStateInput) => Promise<HealthPageState | null>;
   readIssueExamples: (
     projectId: string,
@@ -155,6 +160,7 @@ export const defaultHealthDeps: HealthOperationDeps = {
         return slot ? [...(await slot.load(projectId)).list] : [];
       },
     }),
+  importSourceLabels: async () => (await composition.ui?.())?.HealthImports?.sourceLabel ?? {},
   loadPageState: (input) => loadHealthPageState(input),
   readIssueExamples: (projectId, ids, limits) =>
     withStatementTimeout((db) => readIssueExamples(db, projectId, ids, limits), {
@@ -353,9 +359,10 @@ function stateView(
   windowDays: WindowDays,
   now: Date,
   plans: boolean,
+  sourceLabel: Readonly<Record<string, string>>,
 ) {
   if (!state) return { kind: "collecting", title: "", body: "" };
-  const copy = healthStateCopy(state, { windowDays, now, canImport: false, plans });
+  const copy = healthStateCopy(state, { windowDays, now, canImport: false, plans, sourceLabel });
   return { ...state, title: copy.title, body: copy.body };
 }
 
@@ -568,9 +575,10 @@ export function healthOperations(deps: HealthOperationDeps = defaultHealthDeps):
         const limits = getAgentHealthLimits(organization);
         const windowDays = parseWindowDays(String(params.windowDays), limits.agentHealthWindowDays);
         const tracker = new TruncationTracker();
-        const [loaded, imports] = await Promise.all([
+        const [loaded, imports, sourceLabel] = await Promise.all([
           deps.loadHealthModel(ctx.projectId, windowDays, limits),
           deps.listImports(ctx.projectId),
+          deps.importSourceLabels?.() ?? {},
         ]);
         const model = applyPlanLimits(loaded ?? pendingHealthModel(windowDays), limits);
         // Read only: the page asks for a reading on view; an MCP read never does (request_analysis does).
@@ -593,7 +601,13 @@ export function healthOperations(deps: HealthOperationDeps = defaultHealthDeps):
               .filter((option) => !option.locked)
               .map((option) => option.days),
             readiness: healthReadiness(model),
-            state: stateView(state, windowDays, deps.now(), billingSelfServe(organization)),
+            state: stateView(
+              state,
+              windowDays,
+              deps.now(),
+              billingSelfServe(organization),
+              sourceLabel,
+            ),
             turns: model.turns,
             floor: model.floor,
             computedAt: model.computedAt,

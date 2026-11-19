@@ -98,6 +98,7 @@ export function IssueExamples({
   labelTools,
   examplesAllowed,
   upgradeHref,
+  lockedPlan = null,
   cache,
 }: {
   projectId: string;
@@ -108,6 +109,8 @@ export function IssueExamples({
   /** False on a plan without example turns: no read, the upsell instead. */
   examplesAllowed: boolean;
   upgradeHref: string | null;
+  /** The plan that shows example turns ("Plus"); null names the limits instead. */
+  lockedPlan?: string | null;
   cache: ExamplesCache;
 }) {
   const ids = members.map((member) => member.id);
@@ -116,7 +119,7 @@ export function IssueExamples({
   const total = members.reduce((sum, member) => sum + member.evidence.totalTurns, 0);
 
   if (!examplesAllowed || (state.status === "ready" && state.locked))
-    return <Locked total={total} upgradeHref={upgradeHref} />;
+    return <Locked total={total} upgradeHref={upgradeHref} plan={lockedPlan} />;
   if (state.status === "loading") {
     return (
       <div aria-busy="true" className="flex flex-col gap-3 py-1" data-issue-examples="loading">
@@ -199,7 +202,15 @@ export function IssueExamples({
 }
 
 /** A plan without example turns: how many there are, and where to get them. */
-function Locked({ total, upgradeHref }: { total: number; upgradeHref: string | null }) {
+function Locked({
+  total,
+  upgradeHref,
+  plan,
+}: {
+  total: number;
+  upgradeHref: string | null;
+  plan: string | null;
+}) {
   return (
     <div
       className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-raised px-3 py-2.5"
@@ -210,7 +221,9 @@ function Locked({ total, upgradeHref }: { total: number; upgradeHref: string | n
         {total > 0
           ? `${formatCount(total)} ${total === 1 ? "turn stands" : "turns stand"} behind this issue. `
           : ""}
-        Example turns are outside this project&apos;s limits.
+        {plan
+          ? `Example turns are on ${plan}.`
+          : "Example turns are outside this project's limits."}
       </p>
       {upgradeHref ? (
         <Link href={upgradeHref} className={buttonVariants({ variant: "secondary", size: "sm" })}>
