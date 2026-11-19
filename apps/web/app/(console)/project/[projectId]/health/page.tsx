@@ -8,7 +8,11 @@ import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
-import { billingSelfServe, getAgentHealthLimits } from "@/lib/platform/entitlements";
+import {
+  billingSelfServe,
+  fullAgentHealthPlanName,
+  getAgentHealthLimits,
+} from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
   afterOutsideSupportSession,
@@ -38,6 +42,7 @@ import {
   loadSelfCorrectionsCard,
   unavailableSelfCorrectionsCard,
 } from "@/lib/views/health/self-corrections/card";
+import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
 
@@ -85,7 +90,7 @@ export default async function AgentHealthPage({
         }),
     }),
     loadImportState(project.id, importsSlot),
-    loadShareState(project.id, editionUi?.HealthShare),
+    loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),
     isRestrictedBySupportSession(),
     loadOrFallback<TaskListModel | null>({
       operation: "agent_health_tasks",
@@ -179,6 +184,7 @@ export default async function AgentHealthPage({
       state={state}
       windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
       billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
+      lockedPlan={fullAgentHealthPlanName()}
       tasks={tasks}
       fixes={fixes}
       corrections={corrections}
@@ -191,10 +197,14 @@ export default async function AgentHealthPage({
   );
 }
 
-/** The project's public link. A failed read hides sharing, not the page. */
+/**
+ * The project's public link, its window cut to the plan as the public page opens it. A failed
+ * read hides sharing, not the page.
+ */
 async function loadShareState(
   projectId: string,
   slot: EditionUi["HealthShare"],
+  planWindowDays: number,
 ): Promise<SummaryShare | null> {
   if (!slot) return null;
   return loadOrFallback<SummaryShare | null>({
@@ -203,7 +213,13 @@ async function loadShareState(
     fallback: null,
     load: async () => {
       const state = await slot.load(projectId);
-      return state && { ...state, Dialog: slot.Dialog };
+      return (
+        state && {
+          ...state,
+          link: shareLinkOnPlan(state.link, planWindowDays),
+          Dialog: slot.Dialog,
+        }
+      );
     },
   });
 }

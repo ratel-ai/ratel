@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { OrgSkeleton } from "@/components/console/org/OrgSkeleton";
 import { composition } from "@/lib/composition";
 
-export const metadata = { title: "Organization settings" };
+export const metadata = { title: "Danger zone" };
 
 /** Deleting the organization: the edition's page, where it has one; a 404 otherwise. */
 export default async function OrganizationDangerPage({

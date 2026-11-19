@@ -18,6 +18,7 @@ import {
 } from "./decide";
 import {
   type DecideDeps,
+  decideMaxInputTokens,
   decideMaxUsd,
   decideProjectWorkflows,
   workflowJudgeFromEnv,
@@ -358,5 +359,19 @@ test("a decision whose workflow is unchanged is carried to a new option list and
         row.workflowId === "wf-release" &&
         row.optionPrint === optionPrint("workflow", release),
     ),
+  );
+});
+
+test("the job's token cap reads upstream's variable, and ours as an alias", () => {
+  assert.equal(decideMaxInputTokens({}), 3_000_000);
+  assert.equal(decideMaxInputTokens({ TRACE_WORKFLOW_MAX_JEV_TOKENS: "500" }), 500);
+  assert.equal(decideMaxInputTokens({ TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700" }), 700);
+  assert.equal(
+    decideMaxInputTokens({
+      TRACE_WORKFLOW_MAX_JEV_TOKENS: "500",
+      TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700",
+    }),
+    500,
+    "upstream's name wins",
   );
 });

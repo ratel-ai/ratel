@@ -116,3 +116,14 @@ test("capacity is positive and shrinks with the budget", () => {
   const small = openaiJudgeEngine({ apiKey: "k", maxInputTokens: 100_000 }).capacity!(CORPUS);
   assert.ok(big > small && small > 0);
 });
+
+test("a run OpenAI never answers fails, counted in searches", async () => {
+  const { fetchImpl } = scriptedFetch([]);
+  await assert.rejects(
+    openaiJudgeEngine({ apiKey: "k", fetchImpl, sleep: noSleep, concurrency: 1 }).judge(
+      [CASE("1"), CASE("2")],
+      CORPUS,
+    ),
+    /OpenAI answered none of 2 searches/,
+  );
+});

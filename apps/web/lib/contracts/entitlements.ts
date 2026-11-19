@@ -78,6 +78,12 @@ export type PlanCatalog = {
   summary(org: OrgLimitView): PlanSummary;
   /** The cheapest plan whose Agent health window reaches `days`: its id. */
   withAgentHealthWindow(days: number): string;
+  /**
+   * The cheapest plan that shows every Agent health issue with its example turns: its id. The
+   * locks on hidden issues and examples name it ("Example turns are on Plus."). Optional so an
+   * edition built against an older core still type-checks; without it the locks name no plan.
+   */
+  withFullAgentHealth?(): string;
   /** A plan's display name, by id. */
   name(planId: string): string;
 };

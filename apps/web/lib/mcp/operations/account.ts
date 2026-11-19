@@ -4,7 +4,7 @@ import { composition } from "@/lib/composition/ports";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
 import { editionToolListed } from "@/lib/mcp/operations/edition";
-import { projectScoped } from "@/lib/mcp/operations/params";
+import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import {
   checkMeteredFeature,
@@ -242,9 +242,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       mutates: false,
       params: z.object({
         ...projectScoped,
-        jobId: z
-          .string()
-          .uuid()
+        jobId: uuidParam()
           .optional()
           .describe("A specific job id, as returned by an operation that enqueues work."),
       }),

@@ -617,7 +617,11 @@ test("asks no task handles: compact rows, the example on a click", () => {
 /** The detail a row's Panel holds (a Panel renders in a portal, so the detail is rendered on its own here). */
 function detail(
   signalId: string,
-  over: { examplesAllowed?: boolean; fixes?: SummaryViewProps["fixes"] } = {},
+  over: {
+    examplesAllowed?: boolean;
+    fixes?: SummaryViewProps["fixes"];
+    lockedPlan?: string | null;
+  } = {},
 ): string {
   const rows = issueRows({
     projectId: PROJECT,
@@ -637,6 +641,7 @@ function detail(
       initialMemberId: signalId,
       examplesAllowed: over.examplesAllowed ?? true,
       upgradeHref: null,
+      lockedPlan: over.lockedPlan ?? null,
       focusExamples: false,
       cache: new Map(),
     }),
@@ -769,6 +774,25 @@ test("a plan without example turns says how many there are and where to get them
   assert.match(page, /data-signals-locked="3"/);
   assert.match(visibleText(page), /3 more issues outside this project(?:'|&#x27;)s limits\./);
   assert.doesNotMatch(page, /See plans/);
+});
+
+test("with an edition's plans, the locks name the plan that shows them, as upstream's do", () => {
+  const html = detail("sig-magnet-create-task", { examplesAllowed: false, lockedPlan: "Plus" });
+  assert.match(
+    visibleText(html),
+    /509 turns stand behind this issue\. Example turns are on Plus\./,
+  );
+  const page = render(
+    createElement(
+      SummaryView,
+      props({
+        model: { ...READY_MODEL, evidenceTurnsPerSignal: 0, lockedCount: 3 },
+        lockedPlan: "Plus",
+      }),
+    ),
+    { pathname: `${ROOT}/health` },
+  );
+  assert.match(visibleText(page), /3 more issues on Plus\./);
 });
 
 /** An edition's plan table, as upstream's (Hobby 7 days, Plus 30, Pro 90), for one test. */

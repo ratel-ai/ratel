@@ -4,15 +4,17 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchDeps, dispatchOperation } from "@/lib/mcp/dispatch";
 import type { McpOperation, Registry } from "@/lib/mcp/registry";
 import { stageMeta, toolStage } from "@/lib/mcp/stages";
+import { productName, productSlug } from "@/lib/platform/product-name";
 
-export const MCP_SERVER_NAME = "ratel";
+/** The server is named by `productSlug()`: "ratel", or the edition's ("ratel-cloud"). */
 export const MCP_SERVER_VERSION = "0.1.0";
 
 /**
  * How the model is told to use this server. Deliberately short: it is prepended
- * to the agent's context on every session, so it should orient and stop.
+ * to the agent's context on every session, so it should orient and stop. It
+ * opens with the edition's product name ("Ratel Cloud"), "Ratel" without one.
  */
-const INSTRUCTIONS = `Ratel: agent context-usage analytics.
+const INSTRUCTIONS_BODY = `agent context-usage analytics.
 
 Each tool reads or changes one thing about a project. whoami names the project
 this credential reaches; most tools default to it.
@@ -82,8 +84,8 @@ function annotationsFor(operation: McpOperation) {
  */
 export function createRatelMcpServer(deps: McpServerDeps): McpServer {
   const server = new McpServer(
-    { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
-    { capabilities: { tools: {} }, instructions: INSTRUCTIONS },
+    { name: productSlug(), version: MCP_SERVER_VERSION },
+    { capabilities: { tools: {} }, instructions: `${productName()}: ${INSTRUCTIONS_BODY}` },
   );
 
   server.registerTool(

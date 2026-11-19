@@ -191,6 +191,8 @@ export async function assertComposition(): Promise<void> {
   try {
     const { composition } = await import("@/lib/composition");
     composition.session.assertConfigured?.();
+    const { setEditionServiceName } = await import("@/lib/platform/app-config");
+    setEditionServiceName(composition.productName?.short);
     if (composition.connect) {
       const { createToolCorpus } = await import("@/lib/synthesis/tool-corpus");
       const { createImportedRuns } = await import("@/lib/ledger/imported-runs");

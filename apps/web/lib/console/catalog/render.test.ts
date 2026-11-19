@@ -8,6 +8,7 @@ import {
   type CatalogItemDetailProps,
 } from "@/components/console/catalog/CatalogItemDetail";
 import { CatalogTree } from "@/components/console/catalog/CatalogTree";
+import { SkillEditor } from "@/components/console/catalog/SkillEditor";
 import {
   NOW,
   observedTool,
@@ -189,4 +190,24 @@ test("a Ratel skill shows its status, runs and instructions; in a Panel the Pane
   const panel = detail({ item: skill, layout: "panel" });
   assert.doesNotMatch(panel, /<h2/, "the Panel's title is the heading");
   assert.match(panel, /Created here in Ratel\./);
+});
+
+test("the skill form is headed as upstream's: New skill, or Edit and the skill's name", () => {
+  const props = {
+    projectSlug: "acme",
+    pending: false,
+    onCancel: () => {},
+    onSubmitCreate: () => {},
+    onSubmitEdit: () => {},
+  };
+  const created = renderToStaticMarkup(createElement(SkillEditor, { ...props, mode: "create" }));
+  assert.match(created, /<h3[^>]*>New skill<\/h3>/);
+  const edited = renderToStaticMarkup(
+    createElement(SkillEditor, {
+      ...props,
+      mode: "edit",
+      skill: skillRecord("review-pull-request"),
+    }),
+  );
+  assert.match(edited, /<h3[^>]*>Edit review-pull-request<\/h3>/);
 });

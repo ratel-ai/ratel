@@ -2,16 +2,18 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
-import { HealthReportDocument } from "@/components/console/health/report/HealthReportDocument";
-import { ReportToolbar } from "@/components/console/health/report/ReportToolbar";
-import { buildHealthReport } from "@/components/console/health/report/report-model";
-import "@/components/console/health/report/health-report.css";
+import { HealthPageView } from "@/components/console/health/HealthPageView";
+import { SharedPageActions } from "@/components/console/health/share/SharedPageActions";
 import { trackProductEvent } from "@/lib/platform/telemetry";
 import { hasSignals } from "@/lib/readings/trace-signals/view";
+import { shareReportPath } from "@/lib/views/health/share-paths";
 import { isLinkPreviewAgent } from "@/lib/views/health/share-preview";
 import { recordSharedHealthView, sharedHealthFor } from "@/lib/views/health/shared-page-load";
 
 export const dynamic = "force-dynamic";
+
+/** Placeholder project id: links are off on a shared page, so the real id never reaches the browser. */
+const SHARED_PROJECT_ID = "shared";
 
 export async function generateMetadata({
   params,
@@ -31,9 +33,8 @@ export async function generateMetadata({
  * credential, and the model is redacted before it gets here (`publicHealthModel`). Unknown and
  * revoked links, and an edition without share links, are one 404.
  *
- * Owned (ADR-0030): upstream renders its interactive health page under a share bar; here the
- * link opens the report, the same document a member downloads. The link and its view count are
- * the edition's (`EditionUi.HealthShare`).
+ * Owned (ADR-0030): the link is the edition's (`EditionUi.HealthShare`), which resolves the token
+ * and counts the view; the rest is upstream's page.
  */
 export default async function SharedHealthPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -56,15 +57,14 @@ export default async function SharedHealthPage({ params }: { params: Promise<{ t
     );
   });
 
-  const report = buildHealthReport(shared.model, {
-    projectName: shared.projectName,
-    organizationName: shared.organizationName,
-    generatedAt: new Date(),
-  });
   return (
-    <>
-      <ReportToolbar autoPrint={false} />
-      <HealthReportDocument report={report} />
-    </>
+    <HealthPageView
+      projectId={SHARED_PROJECT_ID}
+      projectName={shared.projectName}
+      model={shared.model}
+      windowOptions={[]}
+      shared={{ organizationName: shared.organizationName }}
+      actions={<SharedPageActions reportHref={shareReportPath(token)} />}
+    />
   );
 }

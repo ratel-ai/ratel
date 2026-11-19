@@ -46,6 +46,7 @@ export function IssueDetail({
   initialMemberId,
   examplesAllowed,
   upgradeHref,
+  lockedPlan = null,
   focusExamples,
   cache,
 }: {
@@ -55,6 +56,8 @@ export function IssueDetail({
   initialMemberId: string | null;
   examplesAllowed: boolean;
   upgradeHref: string | null;
+  /** The plan that shows example turns ("Plus"); null without an edition's plans. */
+  lockedPlan?: string | null;
   /** Opened from "See turns": bring the examples into view. */
   focusExamples: boolean;
   cache: ExamplesCache;
@@ -139,6 +142,7 @@ export function IssueDetail({
           labelTools={shownMembers.length > 1}
           examplesAllowed={examplesAllowed}
           upgradeHref={upgradeHref}
+          lockedPlan={lockedPlan}
           cache={cache}
         />
       </section>

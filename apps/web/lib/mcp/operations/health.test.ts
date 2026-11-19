@@ -650,3 +650,22 @@ test("request_analysis for intents after the cooldown queues as before", async (
   assert.equal(out.jobId, "job-topics");
   assert.deepEqual(calls.drained, [PROJECT]);
 });
+
+test("get_agent_health names an import's source as the edition labels it", async () => {
+  const { run } = harness({
+    loadPageState: async () => ({ kind: "imported_no_tools", runs: 2, source: "langsmith" }),
+    importSourceLabels: async () => ({ langsmith: "LangSmith" }),
+  });
+  const out = data<{ state: { title: string; body: string } }>(
+    await run("get_agent_health", { windowDays: 30 }),
+  );
+  assert.match(out.state.body, /imported from LangSmith called one/);
+});
+
+test("without an edition's labels, an import's source is its id, capitalized", async () => {
+  const { run } = harness({
+    loadPageState: async () => ({ kind: "imported_no_tools", runs: 2, source: "langsmith" }),
+  });
+  const out = data<{ state: { body: string } }>(await run("get_agent_health", { windowDays: 30 }));
+  assert.match(out.state.body, /imported from Langsmith called one/);
+});

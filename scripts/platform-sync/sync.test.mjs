@@ -328,6 +328,16 @@ describe("sync", () => {
     assert.deepEqual(report.copied.sort(), ["apps/web/lib/console/b.ts", "apps/web/lib/ingest/otlp/a.ts"]);
   });
 
+  it("lands a file with its own entry inside an excluded folder, and nothing else from there", () => {
+    put(source, "apps/web/lib/stripe/plans.ts", "export const plans = 1;\n");
+    const map = { entries: [...MAP.entries, { from: "apps/web/lib/stripe/plans.ts", to: "apps/web/lib/console/plans.ts", mode: "copy" }] };
+    const { actions, report } = plan({ map });
+    applySync(actions, { repoRoot: repo });
+    assert.equal(read("apps/web/lib/console/plans.ts"), "export const plans = 1;\n");
+    assert.ok(!existsSync(join(repo, "apps/web/lib/stripe")));
+    assert.ok(!report.copied.some((p) => p.endsWith("client.ts")));
+  });
+
   it("bootstraps an owned file once and never overwrites it afterwards", () => {
     const first = plan();
     applySync(first.actions, { repoRoot: repo });
