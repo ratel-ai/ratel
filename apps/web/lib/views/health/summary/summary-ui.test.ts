@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { type TestContext, test } from "node:test";
 import { createElement } from "react";
 import { IssueDetail } from "@/components/console/health/v2/IssueDetail";
-import { issueRows, rowOfIssue } from "@/components/console/health/v2/issue-rows";
 import { SelfCorrectionsRow } from "@/components/console/health/v2/SelfCorrectionsRow";
 import { SummarySkeleton } from "@/components/console/health/v2/SummarySkeleton";
 import {
@@ -31,6 +30,7 @@ import {
   windowOptionsForPlan,
 } from "@/lib/readings/trace-signals/view";
 import type { Fix } from "@/lib/views/fixes/types";
+import { issueRows, rowOfIssue } from "@/lib/views/health/issue-rows";
 import { MOCK_HEALTH_MODEL, MOCK_NO_TELEMETRY } from "@/lib/views/health/mock-fixture";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import type { HealthPageState } from "@/lib/views/health/page-state";

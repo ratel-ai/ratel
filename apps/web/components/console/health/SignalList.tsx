@@ -1,7 +1,6 @@
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { signalAnchorId } from "@/components/console/health/anchors";
-import { sortSignals, TONE_LABELS, UPGRADE_HREF } from "@/components/console/health/card-model";
 import { SeverityKey } from "@/components/console/health/kinds";
 import { groupByKind, toolCount } from "@/components/console/health/problem-groups";
 import { OpenSignalProvider } from "@/components/console/health/SignalCard";
@@ -9,6 +8,7 @@ import { SignalGroups, TooEarlyRows } from "@/components/console/health/SignalGr
 import { DismissedLine } from "@/components/console/health/SlowByDesign";
 import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
 import type { SignalView } from "@/lib/readings/trace-signals/view";
+import { sortSignals, TONE_LABELS, UPGRADE_HREF } from "@/lib/views/health/card-model";
 import type { ChainFolding } from "@/lib/views/health/workflows-view";
 
 export { signalAnchorId };

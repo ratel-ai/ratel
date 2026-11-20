@@ -32,6 +32,7 @@ import {
 } from "@/lib/readings/topics/queries";
 import { signalsTitle } from "@/lib/readings/trace-signals/claims";
 import { DISMISSABLE_KINDS, isDismissable } from "@/lib/readings/trace-signals/dismiss";
+import { gainOf, type HealthScoreView } from "@/lib/readings/trace-signals/health-score";
 import { type RunTrigger, setSignalDismissed } from "@/lib/readings/trace-signals/signals/queries";
 import {
   agentHealthHref,
@@ -49,6 +50,7 @@ import {
 } from "@/lib/readings/trace-signals/view";
 import { issueHref } from "@/lib/views/fixes/href";
 import { agentHealthEnabled, toIngestFlagOrganization } from "@/lib/views/health/agent-health-flag";
+import { pageGap, signalsForGap } from "@/lib/views/health/data-gaps-model";
 import type { ImportSummary } from "@/lib/views/health/imports-types";
 import {
   type ExampleLimits,
@@ -57,6 +59,7 @@ import {
   readIssueExamples,
   turnsPerIssue,
 } from "@/lib/views/health/issue-examples";
+import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { loadHealthPageModel, pendingHealthModel } from "@/lib/views/health/page-model";
 import { type HealthPageState, READING_REQUEST_COOLDOWN_MS } from "@/lib/views/health/page-state";
 import { healthStateCopy } from "@/lib/views/health/page-state-copy";
@@ -73,6 +76,7 @@ import {
 } from "@/lib/views/health/self-corrections/page-load";
 import type { SelfCorrectionsPageModel } from "@/lib/views/health/self-corrections/page-model";
 import { selfCorrectionsHref } from "@/lib/views/health/self-corrections/paths";
+import { chainFolding } from "@/lib/views/health/workflows-view";
 
 /**
  * Agent health over MCP: the Summary page (`get_agent_health`), an issue's
@@ -255,6 +259,150 @@ function tileView(tile: HealthTile) {
     tier: tile.tier,
     n: tile.n,
   };
+}
+
+/**
+ * The Health score as the page shows it (`components/health/v2/HealthScore.tsx`),
+ * without its per-issue parts: each issue carries its own `points` instead.
+ */
+function scoreView(score: HealthScoreView) {
+  return {
+    value: score.value,
+    band: score.band,
+    change: score.change,
+    trend: score.trend,
+    outcome: round(score.outcome),
+    pillars: score.pillars.map((reading) => ({
+      pillar: reading.pillar,
+      good: round(reading.good),
+      n: reading.n,
+    })),
+    issueScore: score.issueScore,
+    topGain: score.topGain,
+    lost: score.lost,
+    issues: score.issues,
+  };
+}
+
+/** What a row is about, in a few words: "18 tools", "refund_payment, get_order +3", "Whole project". */
+export function rowAbout(row: Pick<IssueRow, "tools" | "scope">): string | null {
+  if (row.tools.count) return row.tools.count;
+  const named = row.tools.shown.map((names) => names.join(" → ")).join(", ");
+  if (named) return row.tools.more > 0 ? `${named} +${row.tools.more}` : named;
+  return row.scope;
+}
+
+/**
+ * One row of the page's Issues list (`components/health/v2/issue-rows.ts`): a
+ * kind of issue with the issues it stands for, without the links only the
+ * console can follow.
+ */
+function rowView(row: IssueRow) {
+  return {
+    key: row.key,
+    kind: row.kind,
+    title: row.title,
+    tone: row.tone,
+    tools: row.tools,
+    scope: row.scope,
+    about: rowAbout(row),
+    figure: row.figure,
+    memberIds: row.memberIds,
+    /** Points fixing every issue of the row wins back; null without a score, or when it is too early to call. */
+    points: row.points ?? null,
+  };
+}
+
+/**
+ * What the health view reads from a result's `view` (OperationResult.view, in
+ * `_meta`): the Health score and the Issues list as the page shows them. Only
+ * for a view, so the agent's result is exactly main's, flag or not.
+ */
+export interface HealthScoreViewData {
+  kind: "health_score";
+  /** Null when no reading is scored yet, or when a gap in the data hides it on the page. */
+  score: ReturnType<typeof scoreView> | null;
+  /** Whole points fixing each issue alone wins back now, by issue id. */
+  points: Record<string, number>;
+  /** The page's rows, in its order: one per kind of issue, then the ones too early to call. */
+  rows: ReturnType<typeof rowView>[];
+  /** The page's line over them: "9 issues across 17 tools, most points first." */
+  line: string;
+  /** The reading is early: the page marks the score "Calculating" and shows no change or trend against a full reading. */
+  early: boolean;
+  /** How far the early reading has got; null when it is not early, or the count failed. */
+  progress: HealthPageModel["earlyProgress"] | null;
+}
+
+/**
+ * The page's own score and rows (`Ready` in `components/health/v2/SummaryView.tsx`),
+ * through the same functions with the same inputs, so the card and the page
+ * cannot disagree: a gap in the data hides the run-based issues and the score
+ * over them, issues group by kind, and a row is worth what fixing all of it
+ * wins back. Tasks and fixes only add links to a row, which the card leaves out.
+ */
+function healthScoreViewData(
+  projectId: string,
+  model: HealthPageModel,
+): HealthScoreViewData & Record<string, unknown> {
+  const gap = pageGap(model);
+  const score = gap ? null : (model.score ?? null);
+  const signals = signalsForGap(model.signals, gap);
+  const rows = issueRows({
+    projectId,
+    signals,
+    tooEarly: model.tooEarly,
+    folding: chainFolding(model.workflows),
+    tasks: [],
+    fixes: null,
+    score,
+  });
+  return {
+    kind: "health_score",
+    score: score ? scoreView(score) : null,
+    points: score
+      ? Object.fromEntries(signals.map((signal) => [signal.id, gainOf(score, [signal.id])]))
+      : {},
+    rows: rows.map(rowView),
+    line: issuesLine(rows, signals),
+    early: model.earlyReading === true,
+    progress: model.earlyProgress ?? null,
+  };
+}
+
+/** The page's Issues rows on their own, for a list of the same issues (list_insights' view). */
+export interface HealthIssueRowsViewData {
+  kind: "health_issue_rows";
+  rows: HealthScoreViewData["rows"];
+  /** The page's line over them; null when the rows are a part of the page's (one kind). */
+  line: string | null;
+}
+
+/**
+ * The Issues rows of a project's Agent health page, at the page's default
+ * window and on the project's plan: what `get_agent_health` sends its view,
+ * for another tool about the same issues. Null when Agent health is off for
+ * the project or its model cannot be read: that tool's view then lists what
+ * the tool returned.
+ */
+export async function loadHealthIssueRows(
+  projectId: string,
+  deps: Pick<
+    HealthOperationDeps,
+    "getOrganization" | "agentHealthEnabled" | "loadHealthModel"
+  > = defaultHealthDeps,
+): Promise<HealthIssueRowsViewData | null> {
+  const organization = await deps.getOrganization(projectId);
+  if (!organization || !(await deps.agentHealthEnabled(projectId, organization))) return null;
+  const limits = getAgentHealthLimits(organization);
+  const loaded = await deps.loadHealthModel(
+    projectId,
+    parseWindowDays(undefined, limits.agentHealthWindowDays),
+    limits,
+  );
+  if (!loaded) return null;
+  const { rows, line } = healthScoreViewData(projectId, applyPlanLimits(loaded, limits));
+  return { kind: "health_issue_rows", rows, line };
 }
 
 function signalRow(projectId: string, signal: SignalView, tracker: TruncationTracker) {
@@ -592,8 +740,11 @@ export function healthOperations(deps: HealthOperationDeps = defaultHealthDeps):
           readOnly: true,
         });
         const openIssues = model.signals.length + model.lockedCount;
+        // The Health score and the page's rows go to the view alone.
+        const view = ctx.forView ? healthScoreViewData(ctx.projectId, model) : null;
         const issues = tracker.take(capRows(model.signals, params.limit));
         return {
+          ...(view ? { view } : {}),
           data: {
             windowDays,
             ...(windowDays !== params.windowDays ? { requestedWindowDays: params.windowDays } : {}),

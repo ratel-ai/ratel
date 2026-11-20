@@ -15,13 +15,6 @@ import {
 import Link from "next/link";
 import { type ReactNode, useId, useMemo, useState } from "react";
 import {
-  type ExamplePageSize,
-  effectivePageSize,
-  examplePageSizeOptions,
-  exampleSlice,
-  UPGRADE_HREF,
-} from "@/components/console/health/card-model";
-import {
   type ExampleSubject,
   type ExampleVerdict,
   exampleSubject,
@@ -40,6 +33,13 @@ import { useSharedSurface } from "@/components/console/health/surface";
 import { TurnStory } from "@/components/console/health/TurnStory";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import type { EvidenceTurn, SignalKind, SignalView } from "@/lib/readings/trace-signals/view";
+import {
+  type ExamplePageSize,
+  effectivePageSize,
+  examplePageSizeOptions,
+  exampleSlice,
+  UPGRADE_HREF,
+} from "@/lib/views/health/card-model";
 
 /**
  * One small glyph per verdict, before each example's sentence, that says whose

@@ -25,6 +25,8 @@ export interface DispatchSuccess {
   truncated?: boolean;
   window?: { since: string; until: string };
   hint?: string;
+  /** OperationResult.view; the server moves it to the result's _meta (lib/mcp/server.ts asToolResult). */
+  view?: Record<string, unknown>;
 }
 
 export type DispatchResult = DispatchSuccess | McpErrorBody;
@@ -44,6 +46,8 @@ export interface DispatchDeps {
     truncated: boolean;
   }) => void;
   now?: () => number;
+  /** The result renders in an MCP Apps view (OperationContext.forView). */
+  forView?: boolean;
 }
 
 /**
@@ -183,6 +187,7 @@ export async function dispatchOperation(
           projectId: scope.projectId,
           organizationId: scope.organizationId,
           logger,
+          ...(deps.forView ? { forView: true } : {}),
         },
         parsed.data,
       ),
@@ -195,6 +200,7 @@ export async function dispatchOperation(
       ...(result.truncated ? { truncated: true } : {}),
       ...(result.window ? { window: result.window } : {}),
       ...(result.hint ? { hint: result.hint } : {}),
+      ...(deps.forView && result.view ? { view: result.view } : {}),
     });
   } catch (error) {
     if (error instanceof McpOperationError) return finish(error.toBody());

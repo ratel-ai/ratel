@@ -18,13 +18,14 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT` and `FF_MCP_APPS`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `telemetry/` | each tool call as an `execute_tool` span with its arguments and result (`trace-tool-call.ts`, owned for one comment; `session.ts`: the client, credential and session ids), sent only to a Ratel project of its own (`export.ts`, owned: off unless `RATEL_SELF_TELEMETRY_MCP_API_KEY` and `RATEL_SELF_TELEMETRY_ENDPOINT` are both set, no default destination; ratel-cloud #482) |
 | `launch-access.ts` | the app's allowlist at the MCP door: a project key passes, a signed-in caller is decided by the edition (owned) |
 | `operations/playground.ts` | `test_retrieval`: rank a query against the catalog with draft edits, metered per credential |
 | `operations/loop/` | the improvement loop as tools, listed for everyone with app access as upstream (RC-234), with its tasks (`tasks.ts`: task pages, scorers, eval sets, simulations, drafted tests) and fix eval sets (`eval-sets.ts`): `list_tasks`, `get_task` (a task's scorers, score series and eval set, empty with `FF_EVAL_GATE` off), `list_insights`, `list_fixes`, `get_fix`, `get_eval`, `run_eval` (also behind `FF_EVAL_GATE`; a fix with tasks is simulated once per task, `operations/loop/task-simulation.ts` reads the runs), `create_experiment`, `mark_fix_shipped`; each result names its source one step back, and the writes record lineage |
+| `apps/` | MCP Apps (SEP-1865): the `ui://ratel/<view>` resources built from `../../mcp-apps` and the tools bound to them, behind `FF_MCP_APPS` (`apps/flag.ts`, owned); with the switch off the server is what it was, pinned by `route-handler.apps.test.ts` and `__fixtures__/flag-off-protocol.json` (owned). See `apps/README.md` |
 | `stages.ts` | which loop stage (Monitor, Insights, Improve, Ship) each tool belongs to, published as `_meta["sh.ratel/stage"]`; `toolStage` also reads an edition tool's own stage |
 | `operations/params.ts`, `mutation-errors.ts` | the shared `projectId` and end-user params; mutation failures as operation errors |
 | `connect/snippets.ts` | the Integrations page's copy-paste client configuration (Claude Code, Claude Desktop, Cursor / VS Code, CI), the worked example and the capability groups; `page-contract.test.ts` keeps the page's tool names real, `connect-ui.test.ts` the connect panel with and without browser sign-in (owned snippets, see below) |
@@ -49,6 +50,11 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   and `get_quota_status` gives upstream's hint pointing at it only then.
   `operations/contract.test.ts` and `compatibility.test.ts` pin the core's surface, without it.
 - `operations/index.ts`: also places the edition's tools (`operations/edition.ts`).
+- `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
+  `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
+  `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a
+  cache, so its cases for a hung or slow lookup have no counterpart. The fixture is captured from
+  this server with the switch off.
 - `operations/playground.ts`: `test_retrieval` embeds through the embedding-provider port
   (`composition.embeddingProvider`), as the Playground route does, instead of a vendor key.
 - `route-handler.test.ts`: the verifier-crash fixture names no vendor.

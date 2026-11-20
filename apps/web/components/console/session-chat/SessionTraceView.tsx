@@ -3,8 +3,9 @@ import { cn } from "@ratel/design-system/cn";
 import { EmptyState } from "@ratel/design-system/states";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { TraceView, type TraceViewProps } from "@/components/console/traces/TraceView";
+import { TraceView } from "@/components/console/traces/TraceView";
 import { sessionTraceHref } from "@/lib/views/session-chat/peek";
+import type { TraceViewProps } from "@/lib/views/traces/trace-view-types";
 
 export interface TraceViewTurn {
   turnIndex: number;

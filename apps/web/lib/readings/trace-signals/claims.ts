@@ -12,6 +12,7 @@ import {
   WORKFLOW_KIND_LABELS,
   WORKFLOW_KIND_TITLES,
 } from "@/lib/readings/trace-signals/claim-templates-workflow";
+import { formatCount, formatSharePercent } from "@/lib/readings/trace-signals/figures";
 import type {
   ClaimSegment,
   SignalFigure,
@@ -36,25 +37,13 @@ import type {
 
 /* - Figures ----------------------------------------------------------------- */
 
-/** A share in [0, 1] as a whole percent. A real but tiny share reads "<1%", never "0%". */
-export function formatSharePercent(share: number): string {
-  if (!Number.isFinite(share) || share <= 0) return "0%";
-  if (share >= 1) return "100%";
-  const whole = Math.round(share * 100);
-  if (whole === 0) return "<1%";
-  // 99.6% is not everything; say so rather than print a 100 that is not true.
-  if (whole === 100) return ">99%";
-  return `${whole}%`;
-}
+// formatSharePercent and formatCount live in ./figures (no imports), so a caller that only
+// formats a number does not load this module's templates; they are re-exported here.
+export { formatCount, formatSharePercent };
 
 /** A list position: `#7`. */
 export function formatRank(rank: number): string {
   return `#${Math.max(1, Math.round(rank))}`;
-}
-
-/** A count with thousands grouping: `7,190`. */
-export function formatCount(count: number): string {
-  return Math.round(count).toLocaleString("en-US");
 }
 
 /**

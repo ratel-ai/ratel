@@ -87,6 +87,16 @@ export function assembleOperations(
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);
 }
 
+/**
+ * How many tools an agent is offered with `FF_MCP_APPS` off: every
+ * operation but the app-only ones (registered for MCP Apps views alone), plus
+ * `whoami`. The Integrations page states it; flag-off.test.ts pins it to the
+ * server's own tools/list.
+ */
+export function agentToolCount(): number {
+  return assembleOperations().filter((operation) => !operation.appOnly).length + 1;
+}
+
 /** Build a registry for one request. */
 export function buildRequestRegistry(options: AssembleOptions = {}): Registry {
   return buildRegistry(assembleOperations(options));

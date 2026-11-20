@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { invokeGlyph, SLOW_STEP_MS, storyWindow } from "@/components/console/health/card-model";
 import {
   EXAMPLE_KIND_MEANING,
   type ExampleSubject,
@@ -41,6 +40,7 @@ import {
   turnTracesHref,
 } from "@/lib/readings/trace-signals/view";
 import { productWords } from "@/lib/views/fixes/copy";
+import { invokeGlyph, SLOW_STEP_MS, storyWindow } from "@/lib/views/health/card-model";
 
 /**
  * One example turn of an issue, as a row that opens into its steps: whose

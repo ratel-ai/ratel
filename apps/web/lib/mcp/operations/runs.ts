@@ -4,12 +4,14 @@ import { invalidParams, notFound } from "@/lib/mcp/errors";
 import {
   type ContentAccessDeps,
   contentHint,
+  credentialMayReadContent,
   experimentAttributesFor,
   mayReadContent,
   readContentOptIn,
   withheldMarker,
 } from "@/lib/mcp/operations/content-access";
 import { projectScoped } from "@/lib/mcp/operations/params";
+import { sessionChatView } from "@/lib/mcp/operations/session-chat-view";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import {
@@ -20,6 +22,7 @@ import {
   windowParams,
 } from "@/lib/mcp/windows";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { getLogger } from "@/lib/platform/logger";
 import { summarizeTraceForComparison } from "@/lib/synthesis/traces/comparison";
 import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
 import {
@@ -76,6 +79,9 @@ import {
 } from "@/lib/synthesis/traces/view";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
 import { agentHealthEnabled } from "@/lib/views/health/agent-health-flag";
+import type { SessionChat } from "@/lib/views/session-chat/model";
+import { loadTraceSessionChat } from "@/lib/views/session-chat/trace-session";
+import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { loadTurnDetail, type TurnDetail } from "@/lib/views/traces/turn-detail";
 
 /**
@@ -137,6 +143,40 @@ export interface RunsOperationDeps extends ContentAccessDeps {
   agentHealthEnabled: (projectId: string, organizationId: string | null) => Promise<boolean>;
   /** The trace's `events.payload` content, as the pages read it; null when nothing is stored or the read fails. */
   loadPayloadContent: (projectId: string, traceId: string) => Promise<PayloadContent | null>;
+  /**
+   * The session a run belongs to, as the console's replay page reads it, for
+   * the replay view: null when no session holds the run or the read fails (the
+   * call answers without it). `mayReadContent` is the caller's half of the
+   * content rule (RC-585); the project's opt-in is the other.
+   */
+  loadTraceSessionChat: (
+    projectId: string,
+    traceId: string,
+    mayReadContent: boolean,
+  ) => Promise<{ chat: SessionChat; turnIndex: number | null } | null>;
+}
+
+const logger = getLogger("mcp/runs");
+
+async function readTraceSessionChat(projectId: string, traceId: string, mayReadText: boolean) {
+  try {
+    return await withStatementTimeout(
+      async (db) =>
+        loadTraceSessionChat(
+          projectId,
+          traceId,
+          { readContent: mayReadText && (await contentOptIn(projectId, db)) },
+          db,
+        ),
+      { operation: "session_chat_for_run" },
+    );
+  } catch (err) {
+    logger.error(
+      { err, project_id: projectId },
+      "session chat for a run failed; the view gets the run without it",
+    );
+    return null;
+  }
 }
 
 export const defaultRunsDeps: RunsOperationDeps = {
@@ -167,6 +207,7 @@ export const defaultRunsDeps: RunsOperationDeps = {
   agentHealthEnabled: (projectId, organizationId) => agentHealthEnabled(projectId, organizationId),
   loadPayloadContent: (projectId, traceId) =>
     loadPayloadContentSafely(projectId, traceId, "mcp_trace_payload"),
+  loadTraceSessionChat: readTraceSessionChat,
   contentOptIn: readContentOptIn,
 };
 
@@ -512,8 +553,18 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
           return span ? contentFreeTitle(span) : title;
         };
         const rootSpan = load.spans.find((span) => span.parentSpanId === null) ?? load.spans[0];
+        const session = ctx.forView
+          ? await deps.loadTraceSessionChat(
+              ctx.projectId,
+              traceId,
+              credentialMayReadContent(ctx.auth),
+            )
+          : null;
 
         return {
+          ...(session
+            ? { view: sessionChatView(ctx.projectId, session.chat, session.turnIndex) }
+            : {}),
           data: {
             traceId,
             status: summary.status,
@@ -720,8 +771,18 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
         const toolCalls = params.includeToolCalls
           ? tracker.take(capRows(content.toolCalls, TOOL_CALL_CAP))
           : [];
+        const session = ctx.forView
+          ? await deps.loadTraceSessionChat(
+              ctx.projectId,
+              traceId,
+              credentialMayReadContent(ctx.auth),
+            )
+          : null;
 
         return {
+          ...(session
+            ? { view: sessionChatView(ctx.projectId, session.chat, session.turnIndex) }
+            : {}),
           data: {
             traceId,
             contentCaptured: content.contentCaptured,

@@ -161,6 +161,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["get_lineage", false],
   ["get_analysis_freshness", false],
   ["get_session", false],
+  ["get_session_step_content", false],
   // Writes the console offers: hide a slow signal, ask for a reading, review a
   // description rewrite, start a metered quality analysis.
   ["set_health_signal_hidden", true],

@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
   // `@ratel-ai/sdk` addon are copied into .next/standalone.
   output: "standalone",
   outputFileTracingRoot: path.join(process.cwd(), "..", ".."),
+  // The MCP Apps views (scripts/build-mcp-apps.mts) are read from disk by
+  // lib/mcp/apps/load.ts, which tracing cannot see: ship them with the route.
+  outputFileTracingIncludes: {
+    "/api/mcp": ["./mcp-apps/dist/views.json"],
+  },
   turbopack: {
     resolveAlias: {
       "#ee-composition": eeCompositionTarget,

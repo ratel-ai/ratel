@@ -1,4 +1,8 @@
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
+import type { McpAppCatalog } from "@/lib/mcp/apps/catalog";
+import { clientViews, viewSessionId } from "@/lib/mcp/apps/client-views";
+import { type McpAppsFlagOptions, mcpAppsEnabled } from "@/lib/mcp/apps/flag";
+import { mcpAppCatalog } from "@/lib/mcp/apps/load";
 import {
   authDistinctId,
   authenticateMcpRequest,
@@ -15,7 +19,7 @@ import {
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
 import { describeCaller } from "@/lib/mcp/operations/scope";
-import { mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
+import { mcpOrigin, mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
 import { toolStage } from "@/lib/mcp/stages";
 import { SingleMessageTransport } from "@/lib/mcp/transport";
@@ -27,7 +31,7 @@ import { productSlug } from "@/lib/platform/product-name";
 import { getProjectById } from "@/lib/platform/projects/queries";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 import { setRequestLogContext } from "@/lib/platform/request-log";
-import { trackServerEvent } from "@/lib/platform/telemetry";
+import { reportServerException, trackServerEvent } from "@/lib/platform/telemetry";
 
 const logger = getLogger("mcp");
 
@@ -100,6 +104,13 @@ export interface McpRouteDeps {
    * is refused with 403.
    */
   launchAccess?: (auth: McpAuthContext) => Promise<boolean>;
+  /**
+   * `FF_MCP_APPS`, for this caller as for every other: whether to publish the ui:// views.
+   * `options.initialize` on the initialize of a client that shows views (upstream waits longer there; the switch has no wait).
+   */
+  mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
+  /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
+  appCatalog?: () => McpAppCatalog;
   now?: () => number;
 }
 
@@ -110,6 +121,9 @@ export const defaultRouteDeps: McpRouteDeps = {
   globalLimiter: createTokenBucketRateLimiter(GLOBAL_LIMIT),
   trackServerEvent,
   launchAccess: mcpLaunchAccess,
+  // One switch for the deployment (FF_MCP_APPS): nothing in the options changes it.
+  mcpApps: (auth) => mcpAppsEnabled(auth),
+  appCatalog: mcpAppCatalog,
 };
 
 /**
@@ -320,27 +334,108 @@ export function createMcpRouteHandler(deps: McpRouteDeps = defaultRouteDeps) {
       );
     }
 
-    const responses = await runMessages(messages as JSONRPCMessage[], auth.auth, deps);
+    // Views only with `FF_MCP_APPS` on; whether this client shows them, only then.
+    // What the client says of itself is read first: the initialize of one that shows
+    // views is where its session id is issued.
+    const client = clientViews(messages, request.headers.get("mcp-session-id"));
+    const apps = await appsFor(auth.auth, deps, client.issueSession);
+    const views = apps ? client : null;
+    const responses = await runMessages(
+      messages as JSONRPCMessage[],
+      auth.auth,
+      deps,
+      viewConsoleOrigin(request),
+      apps,
+      views?.renders === true,
+    );
 
     // Notifications produce nothing to return; the spec wants 202 with no body.
     if (responses.length === 0) return new Response(null, { status: 202 });
 
     return new Response(JSON.stringify(Array.isArray(parsed) ? responses : responses[0]), {
       status: 200,
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // A client that shows views gets an id saying so, and sends it back on every request (lib/mcp/apps/client-views.ts).
+        ...(views?.issueSession ? { "mcp-session-id": viewSessionId() } : {}),
+      },
     });
   };
+}
+
+/**
+ * The views to publish for this caller, or undefined with `FF_MCP_APPS`
+ * off. A view build that fails its checks is logged and reported, and the
+ * caller gets the server without views rather than no server.
+ */
+async function appsFor(
+  auth: McpAuthContext,
+  deps: McpRouteDeps,
+  initialize: boolean,
+): Promise<McpAppCatalog | undefined> {
+  if (!deps.mcpApps || !(await deps.mcpApps(auth, initialize ? { initialize: true } : undefined)))
+    return undefined;
+  try {
+    const catalog = (deps.appCatalog ?? mcpAppCatalog)();
+    // No views built is no views: the server main serves, app-only tools absent too.
+    return catalog.views.length > 0 ? catalog : undefined;
+  } catch (error) {
+    logger.error({ err: error }, "mcp app views failed to load");
+    reportServerException(error, authDistinctId(auth), { component: "mcp_apps" });
+    return undefined;
+  }
+}
+
+/** resources/read is not a tool call, so dispatch does not see it: log it here. */
+function logResourceReads(
+  message: JSONRPCMessage,
+  responses: readonly JSONRPCMessage[],
+  durationMs: number,
+): void {
+  if (!("method" in message) || message.method !== "resources/read" || !("id" in message)) return;
+  const uri = (message.params as { uri?: unknown } | undefined)?.uri;
+  const reply = responses.find((response) => "id" in response && response.id === message.id);
+  const error = reply && "error" in reply ? reply.error : undefined;
+  const fields = {
+    uri: typeof uri === "string" ? uri : null,
+    outcome: error ? "error" : "ok",
+    ...(error ? { error_code: error.code } : {}),
+    duration_ms: durationMs,
+  };
+  if (error) logger.warn(fields, "mcp resource read refused");
+  else logger.info(fields, "mcp resource read");
+}
+
+/**
+ * The origin views link to: the one this request reached (mcpOrigin). A
+ * deployment without APP_PUBLIC_URL has none to give, and the views fall back
+ * to cloud.ratel.sh rather than the request failing.
+ */
+function viewConsoleOrigin(request: Request): string | undefined {
+  try {
+    return mcpOrigin(request);
+  } catch (cause) {
+    logger.warn({ err: cause }, "mcp views fall back to the default console origin");
+    return undefined;
+  }
 }
 
 async function runMessages(
   messages: readonly JSONRPCMessage[],
   auth: McpAuthContext,
   deps: McpRouteDeps,
+  /** This app's own origin: a view's "Open in Ratel" links go there. */
+  consoleOrigin: string | undefined,
+  /** The views to publish (`FF_MCP_APPS`), or undefined. */
+  apps: McpAppCatalog | undefined,
+  /** The client shows views: the model is told the person already sees the data. */
+  clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
   const registry = buildRequestRegistry();
   const server = createRatelMcpServer({
     auth,
     registry,
+    ...(apps ? { apps, clientRendersViews, ...(consoleOrigin ? { consoleOrigin } : {}) } : {}),
     describeCaller,
     projectOwner: async (projectId) => {
       const project = await getProjectById(projectId);
@@ -385,7 +480,10 @@ async function runMessages(
   try {
     const collected: JSONRPCMessage[] = [];
     for (const message of messages) {
-      collected.push(...(await transport.handle(message)));
+      const started = Date.now();
+      const responses = await transport.handle(message);
+      logResourceReads(message, responses, Date.now() - started);
+      collected.push(...responses);
     }
     return collected;
   } finally {

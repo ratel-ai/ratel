@@ -11,6 +11,7 @@ import {
 } from "@/lib/mcp/operations/content-access";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import {
+  contentFreeTitle,
   cursorParam,
   encodePageCursor,
   recordSortParams,
@@ -26,6 +27,7 @@ import {
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, WINDOW_PRESETS, windowParams } from "@/lib/mcp/windows";
+import { getLogger } from "@/lib/platform/logger";
 import {
   getSpanAggregates,
   getTraceDailyAggregates,
@@ -40,6 +42,9 @@ import {
 import { listRunAsks, listRunTools } from "@/lib/synthesis/traces/run-details";
 import { runStatus } from "@/lib/synthesis/traces/v2/runs";
 import { parseTraceCursor, serializeTraceCursor } from "@/lib/synthesis/traces/view";
+import { loadTraceViewProps } from "@/lib/views/traces/trace-view-props";
+import type { TraceViewProps } from "@/lib/views/traces/trace-view-types";
+import { withoutCapturedText } from "@/lib/views/traces/without-captured-text";
 
 /**
  * Observability reads.
@@ -102,6 +107,34 @@ export interface ObservabilityOperationDeps extends ContentAccessDeps {
   getToolMetrics: typeof getToolMetrics;
   listRunTools: typeof listRunTools;
   listRunAsks: typeof listRunAsks;
+  /**
+   * The console trace page's TraceView props (lib/traces/v2/trace-view-props.ts),
+   * for get_trace's view; null when the read fails (the call answers without them).
+   */
+  loadTraceViewProps: (projectId: string, traceId: string) => Promise<TraceViewProps | null>;
+}
+
+const logger = getLogger("mcp/observability");
+
+async function readTraceViewProps(
+  projectId: string,
+  traceId: string,
+): Promise<TraceViewProps | null> {
+  const tracesPath = `/project/${encodeURIComponent(projectId)}/traces`;
+  try {
+    return await loadTraceViewProps(projectId, traceId, {
+      listHref: tracesPath,
+      compareHref: `${tracesPath}?compare=${encodeURIComponent(traceId)}`,
+      tab: undefined,
+      spanId: null,
+    });
+  } catch (err) {
+    logger.error(
+      { err, project_id: projectId },
+      "trace view props failed; the view gets the trace without them",
+    );
+    return null;
+  }
 }
 
 export const defaultObservabilityDeps: ObservabilityOperationDeps = {
@@ -117,6 +150,7 @@ export const defaultObservabilityDeps: ObservabilityOperationDeps = {
   getToolMetrics,
   listRunTools,
   listRunAsks,
+  loadTraceViewProps: readTraceViewProps,
   contentOptIn: readContentOptIn,
 };
 
@@ -307,8 +341,19 @@ export function observabilityOperations(
         const tracker = new TruncationTracker();
         tracker.mark(load.truncated);
         const spans = tracker.take(capRows(load.spans, params.limit));
+        // The view renders the console's TraceView from the trace page's own props, text withheld as here.
+        const props = ctx.forView ? await deps.loadTraceViewProps(ctx.projectId, traceId) : null;
+        const root = load.spans.find((span) => span.parentSpanId === null) ?? load.spans[0]!;
 
         return {
+          ...(props
+            ? {
+                view: {
+                  kind: "trace",
+                  props: content ? props : withoutCapturedText(props, contentFreeTitle(root)),
+                },
+              }
+            : {}),
           data: {
             traceId,
             spanCount: load.spans.length,

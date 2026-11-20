@@ -52,10 +52,13 @@ test('a turn page offers "run to test" behind the eval gate', () => {
 });
 
 test("the trace span inspector is given the SDK events page to link to", () => {
-  const view = source("app/(console)/project/[projectId]/traces/[traceId]/trace-v2.tsx");
-  const root = view.match(/runtimeEventsRoot:\s*([^,\n]*)/)?.[1]?.trim();
+  // The trace page reads its props through the loader get_trace's MCP view shares (MCP Apps).
+  const loader = source("lib/views/traces/trace-view-props.ts");
+  const root = loader.match(/runtimeEventsRoot:\s*([^,]*)/)?.[1]?.trim();
   assert.ok(root !== undefined && root !== "null", "runtimeEventsRoot is a path, not null");
   assert.match(root, /runtime-events/);
+  // Upstream's switch for it is a constant that is always on.
+  assert.match(loader, /const runtimeEventsEnabled = true;/);
 });
 
 test("Settings › Developer builds each SDK event's trace link", () => {

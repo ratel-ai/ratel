@@ -72,6 +72,11 @@ RUN rm -rf "apps/web/app/(ee)"
 # NODE_OPTIONS raises the heap to 4 GB, as upstream's image does: the Next type-check worker
 # needs more than the default.
 RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
+# The MCP Apps views are read from disk at runtime (lib/mcp/apps/load.ts) and reach
+# the standalone output only through outputFileTracingIncludes in next.config.ts.
+# Without the file the server runs and serves no views, with only a warning in the
+# log: fail the build instead.
+RUN test -s apps/web/.next/standalone/apps/web/mcp-apps/dist/views.json
 
 # --- build-cloud: bring in commercial modules -----------------------------
 FROM source AS build-cloud
@@ -83,6 +88,8 @@ COPY ee ee
 # BROWSER_SOURCEMAPS=1 emits browser source maps (next.config.ts); the last step below hands them
 # to the edition and deletes them before anything reaches the runtime image.
 RUN BROWSER_SOURCEMAPS=1 NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
+# As in build-oss: the MCP Apps views must be in the standalone output.
+RUN test -s apps/web/.next/standalone/apps/web/mcp-apps/dist/views.json
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
 RUN node ee/src/db/bundle-migrator.mjs /app/migrator
 # The edition's source-map step (ee/src/scripts/browser-sourcemaps.sh): it uploads the maps for its

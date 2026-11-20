@@ -1,4 +1,3 @@
-import { type SignalTone, signalTone } from "@/components/console/health/card-model";
 import {
   groupByKind,
   groupFigure,
@@ -24,6 +23,7 @@ import {
   type TilePoint,
 } from "@/lib/readings/trace-signals/view";
 import { productWords } from "@/lib/views/fixes/copy";
+import { type SignalTone, signalTone } from "@/lib/views/health/card-model";
 import { sourceBadgeText } from "@/lib/views/health/source-mode";
 import { type DeltaTone, sparkDomain, tileDelta, tileFigure } from "@/lib/views/health/tiles";
 import { chainFolding } from "@/lib/views/health/workflows-view";

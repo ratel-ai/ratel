@@ -3,10 +3,10 @@ import { PeekLink } from "@ratel/design-system/panel";
 import { Section } from "@ratel/design-system/section";
 import { EmptyState } from "@ratel/design-system/states";
 import { Shuffle, Wrench } from "lucide-react";
-import type { PageGap } from "@/components/console/health/data-gaps-model";
 import { previewCopy } from "@/components/console/health/section-preview-model";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { setupPeek } from "@/components/console/health/v2/setup-peek";
+import type { PageGap } from "@/lib/views/health/data-gaps-model";
 
 /**
  * When runs cannot carry the run-based sections (no tool call recorded, or

@@ -56,9 +56,10 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `.env.local`, or on the container, when the app runs anywhere else.
 
 `RATEL_EXPERIMENTAL_FEATURES=1` turns on the experimental features left in the open-source
-edition: the eval gate and adaptive ranking's catalog drift (the gone-tool warning only for tools a
-published catalog dropped, closable warnings, gone tools pruned on rebuild). Cloud ignores it and
-reads `FF_EVAL_GATE` and `FF_RANKING_CATALOG_DRIFT`. The eval gate's pages live in the
+edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
+published catalog dropped, closable warnings, gone tools pruned on rebuild) and MCP Apps, the MCP
+server's interactive `ui://` views ([`lib/mcp/apps`](lib/mcp/apps/README.md)). Cloud ignores it and
+reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT` and `FF_MCP_APPS`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,
@@ -69,7 +70,9 @@ for everyone.
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise. It also copies the edition's static
 files (`ee/src/public/`) into `public/`, git-ignored and listed in `.ee-public.json`, never
-replacing a file the app ships.
+replacing a file the app ships. They, and `test`, then build the MCP Apps views (`pnpm
+mcp-apps:build`, from [`mcp-apps/`](mcp-apps/README.md) into the git-ignored `mcp-apps/dist/`);
+`pnpm mcp-apps:dev` serves them with their fixtures at `http://localhost:4180`.
 
 ## API keys and scopes
 

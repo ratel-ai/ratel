@@ -2,12 +2,6 @@ import { cn } from "@ratel/design-system/cn";
 import { Check } from "lucide-react";
 import type { AnimationEvent, CSSProperties, ReactNode } from "react";
 import {
-  invokeGlyph,
-  replayBeatAt,
-  SLOW_STEP_MS,
-  storyWindow,
-} from "@/components/console/health/card-model";
-import {
   EXAMPLE_KIND_MEANING,
   type FlagTone,
   flagText,
@@ -22,6 +16,12 @@ import type {
   StoryQuery,
   TurnStoryStep,
 } from "@/lib/readings/trace-signals/view";
+import {
+  invokeGlyph,
+  replayBeatAt,
+  SLOW_STEP_MS,
+  storyWindow,
+} from "@/lib/views/health/card-model";
 
 /**
  * How the flagged step is marked, by what it means (see `example-copy.ts`).

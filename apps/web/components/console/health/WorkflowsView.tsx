@@ -4,7 +4,6 @@ import { cn } from "@ratel/design-system/cn";
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
-import { LIST_TOP_OFFSET_PX } from "@/components/console/health/card-model";
 import {
   SectionPreview,
   UnservedPreviewRows,
@@ -24,6 +23,7 @@ import type {
   WorkflowRowView,
   WorkflowsView as WorkflowsModel,
 } from "@/lib/readings/trace-signals/view";
+import { LIST_TOP_OFFSET_PX } from "@/lib/views/health/card-model";
 import { tasksHref } from "@/lib/views/tasks/paths";
 
 export interface WorkflowsViewProps {

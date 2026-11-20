@@ -1,4 +1,4 @@
-import { PILLAR_LABEL } from "@/lib/readings/trace-signals/health-outcomes";
+import { PILLAR_LABEL } from "@/lib/readings/trace-signals/health-pillars";
 import {
   HARM_LABEL,
   HARM_LEVELS,

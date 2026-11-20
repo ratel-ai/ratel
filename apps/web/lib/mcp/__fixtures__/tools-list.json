@@ -2771,7 +2771,7 @@
   {
     "name": "get_flag_status",
     "title": "Feature flag status",
-    "description": "The deployment's feature switches and whether each is on: the eval gate and adaptive ranking's catalog drift. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+    "description": "The deployment's feature switches and whether each is on: the eval gate, adaptive ranking's catalog drift and MCP Apps views. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

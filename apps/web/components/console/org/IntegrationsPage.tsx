@@ -3,7 +3,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { composition } from "@/lib/composition/ports";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
-import { assembleOperations } from "@/lib/mcp/operations";
+import { agentToolCount } from "@/lib/mcp/operations";
 import { mcpOriginFromHeaders } from "@/lib/mcp/public-origin";
 import {
   listApiKeysForProject,
@@ -38,7 +38,7 @@ export async function IntegrationsPage({ slug }: { slug: string }) {
       ]),
     ),
   ) as Record<string, string[]>;
-  const toolCount = assembleOperations().length + 1;
+  const toolCount = agentToolCount();
 
   return (
     <Page>

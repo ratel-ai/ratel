@@ -4,6 +4,9 @@
   "rules": [
     { "from": "@/components/ds/", "to": "@ratel/design-system/" },
     { "from": "@/components/ds/dot-loader", "to": "@ratel/design-system/dot-matrix", "exact": true },
+    { "from": "@/components/health/card-model", "to": "@/lib/views/health/card-model", "exact": true },
+    { "from": "@/components/health/data-gaps-model", "to": "@/lib/views/health/data-gaps-model", "exact": true },
+    { "from": "@/components/health/v2/issue-rows", "to": "@/lib/views/health/issue-rows", "exact": true },
     { "from": "@/components/intents/v2/", "to": "@/components/console/intents/" },
     { "from": "@/components/intent-map/", "to": "@/components/console/intent-map/" },
     { "from": "@/components/shell/nav-icons", "to": "@/components/console/shell/nav-icons", "exact": true },
@@ -537,6 +540,14 @@
       "symbols": {
         "usePrefersReducedMotion": "@ratel/design-system/use-prefers-reduced-motion"
       }
+    },
+    "@/components/traces/v2/TraceView": {
+      "default": "@/components/console/traces/TraceView",
+      "symbols": {
+        "TraceView": "@/components/console/traces/TraceView",
+        "TraceViewProps": "@/lib/views/traces/trace-view-types",
+        "TraceTab": "@/lib/views/traces/trace-view-types"
+      }
     }
   },
   "identifiers": {
@@ -548,6 +559,7 @@
     "getUserByClerkId": "getUserByExternalId",
     "clerkUserId": "externalUserId",
     "JevFraming": "JudgeFraming",
-    "__dirname": "import.meta.dirname"
+    "__dirname": "import.meta.dirname",
+    "cloud-mcp-apps": "FF_MCP_APPS"
   }
 }

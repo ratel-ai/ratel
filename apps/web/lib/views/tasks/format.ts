@@ -1,4 +1,4 @@
-import { formatCount, formatSharePercent } from "@/lib/readings/trace-signals/claims";
+import { formatCount, formatSharePercent } from "@/lib/readings/trace-signals/figures";
 import {
   formatDuration,
   formatMoney as formatTraceMoney,

@@ -147,6 +147,7 @@ function fakeDeps(overrides: Partial<RunsOperationDeps> = {}): RunsOperationDeps
     loadTurnDetail: async () => null,
     agentHealthEnabled: async () => true,
     loadPayloadContent: async () => null,
+    loadTraceSessionChat: async () => null,
     contentOptIn: async () => true,
     ...overrides,
   };
@@ -156,10 +157,13 @@ function run(
   id: string,
   params: Record<string, unknown>,
   overrides: Partial<RunsOperationDeps> = {},
+  forView = false,
+  caller: McpAuthContext = auth,
 ) {
   return dispatchOperation(id, params, {
     registry: buildRegistry(runsOperations(fakeDeps(overrides))),
-    auth,
+    auth: caller,
+    forView,
   });
 }
 
@@ -890,3 +894,52 @@ for (const { name, caller, optIn, sees } of CONTENT_CASES) {
     );
   });
 }
+
+test("a run's view gets the session it belongs to, as the console's SessionChat; the agent's data does not change", async () => {
+  const asked: string[] = [];
+  const chat = {
+    sessionId: "sess-9",
+    textOff: false,
+    turns: [],
+    calls: [],
+    segments: [],
+    problems: [],
+    trackTotalMs: 0,
+    realTotalMs: 0,
+  };
+  const overrides: Partial<RunsOperationDeps> = {
+    loadTraceSessionChat: async (_projectId, traceId, mayReadContent) => {
+      asked.push(`${traceId} ${mayReadContent}`);
+      return { chat, turnIndex: 3 };
+    },
+  };
+  for (const tool of ["get_run_summary", "get_trace_conversation"]) {
+    asked.length = 0;
+    const plain = ok(await run(tool, { traceId: TRACE }, overrides));
+    assert.equal(plain.view, undefined, `${tool}: no view data without a view`);
+    assert.equal(asked.length, 0, `${tool}: no session read without a view`);
+    const viewed = ok(await run(tool, { traceId: TRACE }, overrides, true));
+    assert.deepEqual(viewed.data, plain.data, `${tool}: the agent's data is unchanged`);
+    assert.deepEqual(
+      { ...viewed.view, sessionHref: undefined, settingsHref: undefined },
+      {
+        kind: "session_chat",
+        projectId: PROJECT,
+        chat,
+        turnIndex: 3,
+        sessionHref: undefined,
+        settingsHref: undefined,
+      },
+    );
+    assert.deepEqual(asked, [`${TRACE} true`]);
+    // An API key without content:read gets the session without its text (RC-585).
+    asked.length = 0;
+    await run(tool, { traceId: TRACE }, overrides, true, { ...auth, scopes: ["mcp:read"] });
+    assert.deepEqual(asked, [`${TRACE} false`], `${tool}: no text for a key without content:read`);
+    // A run outside any session renders without it.
+    const alone = ok(
+      await run(tool, { traceId: TRACE }, { loadTraceSessionChat: async () => null }, true),
+    );
+    assert.equal(alone.view, undefined);
+  }
+});

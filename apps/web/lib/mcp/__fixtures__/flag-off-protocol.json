@@ -1,0 +1,27 @@
+{
+  "initialize": {
+    "result": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {
+        "tools": {
+          "listChanged": true
+        }
+      },
+      "serverInfo": {
+        "name": "ratel",
+        "version": "0.1.0"
+      },
+      "instructions": "Ratel: agent context-usage analytics.\n\nEach tool reads or changes one thing about a project. whoami names the project\nthis credential reaches; most tools default to it.\n\nResults are summarized with row caps. When one sets \"truncated\": true, narrow the\ntime window or filters, or follow the cursor a list returns. An empty result\nmeans empty; a surface that is switched off for this caller refuses with\n\"forbidden\" and says which, and get_flag_status lists what is on.\n\nMetrics come from two pipelines and each result names its own \"source\". Ask the\nspan tools about latency, errors and individual requests; ask get_cost_by_day and\nget_cost_by_tool about tokens and cost, since those are the figures the customer\nsees on their own dashboard. Do not add totals from the two together.\n\nTools that change something say so in their description."
+    },
+    "jsonrpc": "2.0",
+    "id": 1
+  },
+  "resourcesList": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "error": {
+      "code": -32601,
+      "message": "Method not found"
+    }
+  }
+}

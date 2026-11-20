@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { SignalView } from "@/lib/readings/trace-signals/view";
 import {
   type FixLookup,
   ISSUES_SHOWN,
@@ -12,8 +13,7 @@ import {
   type TaskLookup,
   taskOfGroup,
   withoutExampleTurns,
-} from "@/components/console/health/v2/issue-rows";
-import type { SignalView } from "@/lib/readings/trace-signals/view";
+} from "@/lib/views/health/issue-rows";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import { signal } from "@/lib/views/health/workflows-view-fixtures";
 

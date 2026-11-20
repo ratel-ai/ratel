@@ -65,6 +65,12 @@ export interface TraceViewProps {
   embedded?: boolean;
   /** The session this turn is part of, and its turns (RC-472). */
   session?: TraceSession | null;
+  /**
+   * Read the run's raw spans from the app's raw route (views redesign). Off in
+   * an MCP view, which cannot reach the app's routes: the span pane keeps the
+   * stored spans, as when the read fails.
+   */
+  fetchRaw?: boolean;
 }
 
 /**
@@ -122,7 +128,7 @@ export function TraceView(props: TraceViewProps) {
     [rows, writer],
   );
 
-  const raw = useTraceRaw(props.projectId, props.traceId);
+  const raw = useTraceRaw(props.projectId, props.traceId, props.fetchRaw !== false);
   // RC-501: a wrapper step shows its nearest model call's content, and links to it.
   const descendants = useMemo(() => {
     const out = [];
@@ -344,20 +350,22 @@ export function TraceView(props: TraceViewProps) {
 
 /**
  * The run's raw spans from `otlp_raw_exports`, fetched once. A failed read
- * leaves the pane on the stored spans.
+ * leaves the pane on the stored spans; so does `enabled` false (an MCP view).
  */
 function useTraceRaw(
   projectId: string,
   traceId: string,
+  enabled: boolean,
 ): { state: RawState; spans: ReadonlyMap<string, RawSpanView> } {
   const [result, setResult] = useState<{
     state: RawState;
     spans: ReadonlyMap<string, RawSpanView>;
   }>(() => ({
-    state: "loading",
+    state: enabled ? "loading" : "ready",
     spans: new Map(),
   }));
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     fetch(rawUrl(projectId, traceId), { signal: controller.signal })
       .then(async (response) => {
@@ -372,7 +380,7 @@ function useTraceRaw(
         if (!controller.signal.aborted) setResult({ state: "error", spans: new Map() });
       });
     return () => controller.abort();
-  }, [projectId, traceId]);
+  }, [projectId, traceId, enabled]);
   return result;
 }
 

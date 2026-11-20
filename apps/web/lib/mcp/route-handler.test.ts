@@ -122,9 +122,10 @@ test("tools/list exposes every operation as its own tool, plus whoami", async ()
   const { body } = await call("tools/list");
   const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
 
+  // App-only operations (a view's own reads) are listed only with FF_MCP_APPS on.
   assert.equal(
     names.length,
-    assembleOperations().length + 1,
+    assembleOperations().filter((operation) => !operation.appOnly).length + 1,
     "one tool per operation, plus whoami",
   );
   assert.ok(names.includes("whoami"));
@@ -334,7 +335,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     .map((flag: { key: string }) => flag.key)
     .sort();
   // Owned: the deployment's FF_* switches, not upstream's flag service.
-  assert.deepEqual(keys, ["FF_EVAL_GATE", "FF_RANKING_CATALOG_DRIFT"]);
+  assert.deepEqual(keys, ["FF_EVAL_GATE", "FF_MCP_APPS", "FF_RANKING_CATALOG_DRIFT"]);
 });
 
 test("an exhausted rate limit returns 429 with Retry-After", async () => {

@@ -1,4 +1,3 @@
-import type { FixLookup, TaskLookup } from "@/components/console/health/v2/issue-rows";
 import {
   type HealthPageModel,
   type SourceMode,
@@ -6,6 +5,7 @@ import {
   windowPhrase,
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
+import type { FixLookup, TaskLookup } from "@/lib/views/health/issue-rows";
 import type { HealthPageState } from "@/lib/views/health/page-state";
 import type { TaskListModel, TaskRow } from "@/lib/views/tasks/model";
 import { TASK_STATUS_RANK } from "@/lib/views/tasks/status";

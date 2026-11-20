@@ -19,6 +19,9 @@ import { SIGNAL_KIND_ICONS } from "@/components/console/health/kinds";
 import { Calculating, ReadProgress } from "@/components/console/health/v2/Calculating";
 import { IssueDetail } from "@/components/console/health/v2/IssueDetail";
 import type { ExamplesCache } from "@/components/console/health/v2/IssueExamples";
+import { NounTitle } from "@/components/console/health/v2/NounTitle";
+import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
+import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
 import {
   ISSUE_TONE_LABEL,
   ISSUES_SHOWN,
@@ -27,10 +30,7 @@ import {
   issuePeek,
   peekedIssue,
   rowOfIssue,
-} from "@/components/console/health/v2/issue-rows";
-import { NounTitle } from "@/components/console/health/v2/NounTitle";
-import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
-import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
+} from "@/lib/views/health/issue-rows";
 import { DESCRIPTION_FIX_LABEL } from "@/lib/views/health/summary/fix-links";
 
 /**

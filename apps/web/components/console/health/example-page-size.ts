@@ -6,7 +6,7 @@ import {
   EXAMPLE_PAGE_SIZE_STORAGE_KEY,
   type ExamplePageSize,
   parseExamplePageSize,
-} from "@/components/console/health/card-model";
+} from "@/lib/views/health/card-model";
 
 /**
  * How many example turns a viewer likes to see at once, remembered in their

@@ -13,7 +13,7 @@ the next run rewrites it, and nothing stores query text, error text or an end-us
 | `signals/` | the detectors (`detect-*`), accumulators, pairs, prerequisites, journey and flow models, the OpenTelemetry facts, the compute pass (`compute.ts`, `compute-job.ts`), the run and signal queries, the analysis context a run reads besides turns | `trace_signal_runs`, `trace_signals`, `trace_turns.workflow_id` |
 | `workflows/` | mining (`itemsets`, `mine`, `assign`, `order`, `health`, `detect`), placement (`place`), model names (`label*`), judge decisions (`decide*`) | `trace_workflow_labels`, `trace_workflow_verdicts`, `trace_workflow_insights` |
 | `self-corrections/` | the one definition of a retry, switch, give-up, repeated search or repeated ask (`detect`), reply phrases, the per-run reading (`run`, `run-job`, `run-queries`) | `trace_self_corrections` |
-| root | the view-model vocabulary the signals are stored in (`view.ts`), claims and their templates, setup facts, the sweep policy and service, `schema.ts`, `register.ts` | — |
+| root | the view-model vocabulary the signals are stored in (`view.ts`), claims and their templates (with the shared figures, `figures.ts`), the Health score and its pillar math (`health-score.ts`, `health-outcomes.ts`, `health-pillars.ts`), setup facts, the sweep policy and service, `schema.ts`, `register.ts` | — |
 
 **How a run happens.** `compute_trace_signals` is enqueued three ways: the daily sweep
 (`trace_signal_sweep`, an after-step of the drain, least-recently-run first), the first reading

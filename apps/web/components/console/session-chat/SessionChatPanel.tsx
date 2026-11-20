@@ -43,6 +43,8 @@ export interface SessionChatPanelProps {
   traceLinks?: boolean;
   onOpen: (peek: ChatPeek) => void;
   onClose: () => void;
+  /** Its width where it overlays the chat (SessionChatView panelMode "overlay"); 26rem beside it. */
+  className?: string;
 }
 
 export function SessionChatPanel(props: SessionChatPanelProps) {
@@ -51,7 +53,10 @@ export function SessionChatPanel(props: SessionChatPanelProps) {
     <aside
       data-chat-panel={props.peek.kind}
       aria-label={body.title}
-      className="flex w-[26rem] shrink-0 flex-col border-l border-line bg-raised"
+      className={cn(
+        "flex w-[26rem] shrink-0 flex-col border-l border-line bg-raised",
+        props.className,
+      )}
     >
       <header className="flex min-h-12 shrink-0 items-center gap-1 border-b border-line py-2 pr-2 pl-4">
         <div className="min-w-0 flex-1">

@@ -14,11 +14,11 @@ import {
   type SessionTraceViewProps,
   type TraceViewTurn,
 } from "@/components/console/session-chat/SessionTraceView";
-import type { TraceViewProps } from "@/components/console/traces/TraceView";
 import type { OtelSpan } from "@/lib/ingest/otlp/schema";
 import { buildRunSummary } from "@/lib/synthesis/traces/v2/run-summary";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
 import { buildSessionTimeline, type TimelineTurn } from "@/lib/views/session-replay/timeline";
+import type { TraceViewProps } from "@/lib/views/traces/trace-view-types";
 import { buildSessionChat } from "./model";
 
 /** RC-314: the session replay's Trace view and its way in from a work line. */

@@ -1,5 +1,7 @@
 import { signalAnchorId } from "@/components/console/health/anchors";
-import type { OpenSource } from "@/components/console/health/card-model";
+import { clampFigures, figureCaption, signalsTitle } from "@/lib/readings/trace-signals/claims";
+import type { EvidenceTurn, SignalKind, SignalView } from "@/lib/readings/trace-signals/view";
+import type { OpenSource } from "@/lib/views/health/card-model";
 import {
   countNoun,
   SIGNAL_GROUP_LABELS,
@@ -10,9 +12,7 @@ import {
   signalTone,
   sortSignals,
   splitFix,
-} from "@/components/console/health/card-model";
-import { clampFigures, figureCaption, signalsTitle } from "@/lib/readings/trace-signals/claims";
-import type { EvidenceTurn, SignalKind, SignalView } from "@/lib/readings/trace-signals/view";
+} from "@/lib/views/health/card-model";
 import type { ChainFolding } from "@/lib/views/health/workflows-view";
 
 /**

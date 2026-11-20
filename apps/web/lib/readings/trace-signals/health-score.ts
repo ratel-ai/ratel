@@ -3,7 +3,7 @@ import {
   outcomeScore,
   PILLAR_LEVEL,
   type PillarReading,
-} from "@/lib/readings/trace-signals/health-outcomes";
+} from "@/lib/readings/trace-signals/health-pillars";
 import { existingToolStanding } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
 import type { SignalKind } from "@/lib/readings/trace-signals/view";
 

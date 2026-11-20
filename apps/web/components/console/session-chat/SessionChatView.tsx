@@ -63,6 +63,21 @@ export interface SessionChatViewProps {
   chat: SessionChat;
   /** Project settings, where an admin turns message text on. */
   settingsHref: string;
+  /**
+   * Keep the playhead and zoom in the URL (`?t=`, `?zoom=`), as the console
+   * page does. Off in an MCP view, which has no URL to share and keeps only
+   * the open panel in its in-memory location.
+   */
+  syncUrl?: boolean;
+  /** Overrides the frame's own height, for a container that sets it (an MCP view in fullscreen). */
+  className?: string;
+  /**
+   * How the side panel opens. "push" (the page) sits beside the chat and pushes
+   * it aside. "overlay" (a narrow frame, such as an MCP view) slides over the
+   * chat from the right, over a scrim, so the chat keeps its width; a click on
+   * the scrim, Esc or Close closes it.
+   */
+  panelMode?: "push" | "overlay";
   /** Views v3: play from the start, the inspector open, and the two in sync. */
   synced?: boolean;
   /** What if… in the model call inspector; absent, the inspector has none. */
@@ -87,6 +102,9 @@ export function SessionChatView({
   inspectorActions,
   marker,
   traceLinks = true,
+  syncUrl = true,
+  className,
+  panelMode = "push",
 }: SessionChatViewProps) {
   const { id, open: openPeek, close: closePeek } = usePeek();
   // Closed once, the default inspector stays closed until a click opens a panel.
@@ -144,7 +162,7 @@ export function SessionChatView({
   );
   const firstWrite = useRef(true);
   useEffect(() => {
-    if (firstWrite.current) {
+    if (firstWrite.current || !syncUrl) {
       firstWrite.current = false;
       return;
     }
@@ -152,7 +170,7 @@ export function SessionChatView({
       t: playheadParam(t, total, { fromStart: synced }),
       zoom: zoom === 1 ? null : String(zoom),
     });
-  }, [t, zoom, total, writer, synced]);
+  }, [t, zoom, total, writer, synced, syncUrl]);
   useEffect(() => () => writer.cancel(), [writer]);
 
   const playhead = useRef(t);
@@ -234,7 +252,13 @@ export function SessionChatView({
   }, [shownTurns, liveSteps, t, total]);
 
   return (
-    <div className="flex h-[min(52rem,calc(100dvh-10rem))] min-h-[32rem] overflow-hidden rounded-xl border border-line bg-app">
+    <div
+      className={cn(
+        "flex h-[min(52rem,calc(100dvh-10rem))] min-h-[32rem] overflow-hidden rounded-xl border border-line bg-app",
+        panelMode === "overlay" && "relative",
+        className,
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-col">
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -293,7 +317,7 @@ export function SessionChatView({
           marker={marker}
         />
       </div>
-      {peek ? (
+      {peek && panelMode === "push" ? (
         <SessionChatPanel
           projectId={projectId}
           chat={chat}
@@ -307,6 +331,35 @@ export function SessionChatView({
           onOpen={open}
           onClose={close}
         />
+      ) : null}
+      {peek && panelMode === "overlay" ? (
+        <>
+          <div
+            aria-hidden
+            data-chat-scrim
+            className="absolute inset-0 z-10 bg-scrim"
+            onClick={close}
+          />
+          <div
+            data-chat-overlay
+            className="absolute inset-y-0 right-0 z-10 flex w-full max-w-[28rem] shadow-dialog"
+          >
+            <SessionChatPanel
+              projectId={projectId}
+              chat={chat}
+              peek={peek}
+              follow={follow}
+              onFollowChange={onFollowChange}
+              whatIf={whatIf}
+              source={source}
+              inspectorActions={inspectorActions}
+              traceLinks={traceLinks}
+              onOpen={open}
+              onClose={close}
+              className="w-full"
+            />
+          </div>
+        </>
       ) : null}
     </div>
   );
