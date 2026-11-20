@@ -38,6 +38,12 @@ payload fields an oversized event keeps when it is trimmed (beside the envelope 
 fields), so the two SDKs' trimming cannot drift apart. Both SDKs' `RuntimeEvent`-conformance tests
 assert this block against their own frozen constants.
 
+## MCP server spans
+
+[`mcp-server/`](mcp-server/README.md) holds real OTLP/JSON exports of MCP SDK native
+instrumentation, copied from ratel-cloud. The TS SDK's `instrumentMcpServer` contract test
+(`../../sdk/ts/src/mcp-server.test.ts`) checks its spans against them.
+
 ## Consumers
 
 - **TS** — `../ts/src/conformance.test.ts`

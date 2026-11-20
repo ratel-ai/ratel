@@ -350,6 +350,54 @@ export const GEN_AI_TOOL_CALL_ARGUMENTS = "gen_ai.tool.call.arguments";
 /** `gen_ai.tool.call.result` — tool result (Opt-In content, gated). */
 export const GEN_AI_TOOL_CALL_RESULT = "gen_ai.tool.call.result";
 
+// ---------------------------------------------------------------------------
+// MCP server-span keys (OTel semconv `mcp.*`, `jsonrpc.*`, `network.*`; borrowed verbatim)
+//
+// The keys the SDK's MCP server wrapper (`instrumentMcpServer`) sets on its
+// SERVER span per MCP message. Ratel Cloud ingest reads them with the same
+// rules as third-party MCP instrumentation (an MCP server span = kind SERVER
+// with `mcp.method.name`).
+// ---------------------------------------------------------------------------
+
+/** `mcp.method.name` — the JSON-RPC method (`initialize`, `tools/call`, ...). */
+export const MCP_METHOD_NAME = "mcp.method.name";
+
+/** `mcp.session.id` — the MCP session (HTTP: the transport session id; stdio: one id per connection). */
+export const MCP_SESSION_ID = "mcp.session.id";
+
+/** `mcp.protocol.version` — the negotiated MCP protocol version. */
+export const MCP_PROTOCOL_VERSION = "mcp.protocol.version";
+
+/** `mcp.client.name` — `clientInfo.name` from the client's `initialize` request. */
+export const MCP_CLIENT_NAME = "mcp.client.name";
+
+/** `mcp.client.version` — `clientInfo.version` from the client's `initialize` request. */
+export const MCP_CLIENT_VERSION = "mcp.client.version";
+
+/** `mcp.server.name` — `serverInfo.name` from the server's `initialize` result. */
+export const MCP_SERVER_NAME = "mcp.server.name";
+
+/** `mcp.server.version` — `serverInfo.version` from the server's `initialize` result. */
+export const MCP_SERVER_VERSION = "mcp.server.version";
+
+/** `jsonrpc.request.id` — the JSON-RPC request id as a string; absent on notifications. */
+export const JSONRPC_REQUEST_ID = "jsonrpc.request.id";
+
+/** `network.transport` — `pipe` (stdio) or `tcp` (HTTP); see {@link NetworkTransport}. */
+export const NETWORK_TRANSPORT = "network.transport";
+
+/** `network.protocol.name` — `http` on Streamable HTTP. */
+export const NETWORK_PROTOCOL_NAME = "network.protocol.name";
+
+/** `user_agent.original` — the HTTP `User-Agent` header of the request. */
+export const USER_AGENT_ORIGINAL = "user_agent.original";
+
+/** `client.address` — the caller's IP address (opt-in: personal data). */
+export const CLIENT_ADDRESS = "client.address";
+
+/** `error.type` — the JSON-RPC error code as a string, or `tool_error` for a tool result with `isError`. */
+export const ERROR_TYPE = "error.type";
+
 // Tier 1 content, carried on the `gen_ai.client.inference.operation.details`
 // EventRecord (never span attributes; CONVENTIONS.md § Tier 1 content). Each
 // holds a structured v1.42.0 message list (`{ role, parts[], name? }`).
@@ -407,6 +455,13 @@ export const AuthOutcome = {
   Failed: "failed",
 } as const;
 export type AuthOutcome = (typeof AuthOutcome)[keyof typeof AuthOutcome];
+
+/** `network.transport` values on an MCP server span: stdio is `pipe`, HTTP is `tcp`. */
+export const NetworkTransport = {
+  Pipe: "pipe",
+  Tcp: "tcp",
+} as const;
+export type NetworkTransport = (typeof NetworkTransport)[keyof typeof NetworkTransport];
 
 /** Immutable role assigned when an experiment arm is dispatched. */
 export const ExperimentArmRole = {

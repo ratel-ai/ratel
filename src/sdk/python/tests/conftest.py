@@ -7,8 +7,20 @@ import textwrap
 import threading
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import ModuleType
 
 import pytest
+
+
+@pytest.fixture
+def otel_exporters() -> ModuleType:
+    """The shared OpenTelemetry exporters (`otel_support`): installed once and cleared per test."""
+    pytest.importorskip("opentelemetry.sdk.trace", reason="OpenTelemetry SDK not installed")
+    import otel_support
+
+    otel_support.install()
+    otel_support.clear()
+    return otel_support
 
 
 @pytest.fixture

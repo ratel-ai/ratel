@@ -9,6 +9,7 @@ Mirrors the public surface of the TypeScript SDK (`@ratel-ai/sdk`):
 - `search_capabilities_tool` / `invoke_tool_tool` / `get_skill_content_tool` —
   framework-neutral capability tools.
 - `register_mcp_server` — ingest an upstream MCP server's tools (extra: mcp).
+- `instrument_mcp_server` — OpenTelemetry SERVER spans for your own MCP server.
 - `ToolCatalog.turn` / `current_turn_id`: mark one user request as one turn
   so everything inside carries its `turn_id` (ADR-0026).
 - `RuntimeEvents` / `RuntimeCatalog` — subscribe to runtime facts and snapshot
@@ -88,6 +89,7 @@ from .intent_graph_storage import (
     StaleIntentGraphError,
 )
 from .mcp import McpServerHandle, McpToolsListError, register_mcp_server
+from .mcp_server import instrument_mcp_server
 from .runtime_events import (
     OPTIONAL_ENVELOPE_FIELDS,
     RUNTIME_EVENT_MAX_HITS,
@@ -184,6 +186,7 @@ __all__ = [
     "define_plugin",
     "format_upstream_line",
     "get_skill_content_tool",
+    "instrument_mcp_server",
     "invoke_tool_tool",
     "register_mcp_server",
     "search_capabilities_tool",

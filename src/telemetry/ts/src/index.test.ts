@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   AuthOutcome,
   CAPTURE_CONTENT_ENV,
+  CLIENT_ADDRESS,
+  ERROR_TYPE,
   EXECUTE_TOOL,
   EXPERIMENTAL_CATALOG_DEFINITIONS_ENV,
   ExperimentArmOutcome,
@@ -14,6 +16,17 @@ import {
   GEN_AI_TOOL_CALL_ID,
   GEN_AI_TOOL_CALL_RESULT,
   GEN_AI_TOOL_NAME,
+  JSONRPC_REQUEST_ID,
+  MCP_CLIENT_NAME,
+  MCP_CLIENT_VERSION,
+  MCP_METHOD_NAME,
+  MCP_PROTOCOL_VERSION,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
+  MCP_SESSION_ID,
+  NETWORK_PROTOCOL_NAME,
+  NETWORK_TRANSPORT,
+  NetworkTransport,
   Origin,
   RATEL_AUTH_FLOW,
   RATEL_AUTH_OUTCOME,
@@ -101,6 +114,7 @@ import {
   RATEL_UPSTREAM_TRANSPORT,
   SEMCONV_VERSION,
   SearchTarget,
+  USER_AGENT_ORIGINAL,
 } from "./index.js";
 
 describe("ratel telemetry vocabulary", () => {
@@ -456,5 +470,21 @@ describe("ratel telemetry vocabulary", () => {
     expect(ExperimentDropReason.SelectionFailed).toBe("selection-failed");
     expect(ExperimentDropReason.ServedRankingFailed).toBe("served-ranking-failed");
     expect(ExperimentDropReason.ComparisonFailed).toBe("comparison-failed");
+  });
+  it("borrows the MCP server-span semconv keys verbatim (RC-792)", () => {
+    expect(MCP_METHOD_NAME).toBe("mcp.method.name");
+    expect(MCP_SESSION_ID).toBe("mcp.session.id");
+    expect(MCP_PROTOCOL_VERSION).toBe("mcp.protocol.version");
+    expect(MCP_CLIENT_NAME).toBe("mcp.client.name");
+    expect(MCP_CLIENT_VERSION).toBe("mcp.client.version");
+    expect(MCP_SERVER_NAME).toBe("mcp.server.name");
+    expect(MCP_SERVER_VERSION).toBe("mcp.server.version");
+    expect(JSONRPC_REQUEST_ID).toBe("jsonrpc.request.id");
+    expect(NETWORK_TRANSPORT).toBe("network.transport");
+    expect(NETWORK_PROTOCOL_NAME).toBe("network.protocol.name");
+    expect(USER_AGENT_ORIGINAL).toBe("user_agent.original");
+    expect(CLIENT_ADDRESS).toBe("client.address");
+    expect(ERROR_TYPE).toBe("error.type");
+    expect(NetworkTransport).toEqual({ Pipe: "pipe", Tcp: "tcp" });
   });
 });

@@ -378,7 +378,8 @@ export function ambientProjection(
   }) as RuntimeEventProjection;
 }
 
-function getTracer() {
+/** The SDK's tracer, on scope `@ratel-ai/sdk`, from whatever provider the host registered. */
+export function getTracer() {
   return trace.getTracer(TRACER_NAME);
 }
 
@@ -692,7 +693,7 @@ function errorType(error: unknown): string {
 }
 
 /** Content rides span attributes only when the capture gate selects a span mode. */
-function captureContentOnSpan(): boolean {
+export function captureContentOnSpan(): boolean {
   const mode = contentCaptureMode();
   return mode === ContentCapture.SpanOnly || mode === ContentCapture.SpanAndEvent;
 }

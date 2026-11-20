@@ -18,6 +18,8 @@ s3-support-adaptive-ranking-python/ Live S3 intent graph storage smoke test — 
 ai-sdk/           Ratel + Vercel AI SDK — top-K filtering + capability tools in ToolLoopAgent.generate
 mastra/           Ratel + Mastra — capability tools + per-turn recall processor via @ratel-ai/mastra
 mcp-chat/         Interactive REPL against an MCP-backed agent (Vercel AI SDK + OpenAI)
+mcp-server-wrapper-ts/ A stdio MCP server traced with instrumentMcpServer (OTLP or a JSON-lines spans file)
+mcp-server-wrapper-python/ A stdio MCP server traced with instrument_mcp_server — the Python mirror
 pydantic-ai/      Ratel + Pydantic AI (Python) — top-K filtering + capability tools in the agent loop
 telemetry-ts/     Ratel telemetry — emit ratel.* spans via the OpenTelemetry JS SDK
 telemetry-python/ Ratel telemetry — emit ratel.* spans via the OpenTelemetry Python SDK

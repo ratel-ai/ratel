@@ -2,7 +2,8 @@
  * `@ratel-ai/sdk` — TypeScript SDK for Ratel, the context engineering platform
  * for AI agents. In-process, no infra: a native (Rust) BM25/semantic/hybrid
  * index behind {@link ToolCatalog} and {@link SkillCatalog}, MCP ingestion via
- * {@link registerMcpServer}, and the framework-neutral capability tools
+ * {@link registerMcpServer}, MCP server spans via {@link instrumentMcpServer},
+ * and the framework-neutral capability tools
  * ({@link searchCapabilitiesTool}, {@link invokeToolTool},
  * {@link getSkillContentTool}) that let a model discover and run what the
  * catalogs hold. Everything emits OTel `ratel.*`/`gen_ai.*` spans plus a local
@@ -127,6 +128,9 @@ export {
 } from "./intent-graph-storage.js";
 export type { McpServerHandle, McpToolsListErrorCode, RegisterMcpServerOptions } from "./mcp.js";
 export { McpToolsListError, registerMcpServer } from "./mcp.js";
+/** MCP server side: SERVER spans per MCP message for an `McpServer` / `Server` (RC-792). */
+export type { InstrumentMcpServerOptions } from "./mcp-server.js";
+export { instrumentMcpServer } from "./mcp-server.js";
 // The framework-adapter SPI and factory (ADR-0013): `ratel(config).adaptTo(adapter)`.
 export type {
   AdaptedBase,

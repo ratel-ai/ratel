@@ -310,6 +310,54 @@ GEN_AI_TOOL_CALL_ARGUMENTS: Final = "gen_ai.tool.call.arguments"
 #: gen_ai.tool.call.result — tool result (Opt-In content, gated).
 GEN_AI_TOOL_CALL_RESULT: Final = "gen_ai.tool.call.result"
 
+# ---------------------------------------------------------------------------
+# MCP server-span keys (OTel semconv mcp.*, jsonrpc.*, network.*; borrowed verbatim)
+#
+# The keys the SDK's MCP server wrapper (instrument_mcp_server) sets on its
+# SERVER span per MCP message. Ratel Cloud ingest reads them with the same
+# rules as third-party MCP instrumentation (an MCP server span = kind SERVER
+# with mcp.method.name).
+# ---------------------------------------------------------------------------
+
+#: mcp.method.name — the JSON-RPC method (initialize, tools/call, ...).
+MCP_METHOD_NAME: Final = "mcp.method.name"
+
+#: mcp.session.id — the MCP session (HTTP: the transport session id; stdio: one id per connection).
+MCP_SESSION_ID: Final = "mcp.session.id"
+
+#: mcp.protocol.version — the negotiated MCP protocol version.
+MCP_PROTOCOL_VERSION: Final = "mcp.protocol.version"
+
+#: mcp.client.name — clientInfo.name from the client's initialize request.
+MCP_CLIENT_NAME: Final = "mcp.client.name"
+
+#: mcp.client.version — clientInfo.version from the client's initialize request.
+MCP_CLIENT_VERSION: Final = "mcp.client.version"
+
+#: mcp.server.name — serverInfo.name from the server's initialize result.
+MCP_SERVER_NAME: Final = "mcp.server.name"
+
+#: mcp.server.version — serverInfo.version from the server's initialize result.
+MCP_SERVER_VERSION: Final = "mcp.server.version"
+
+#: jsonrpc.request.id — the JSON-RPC request id as a string; absent on notifications.
+JSONRPC_REQUEST_ID: Final = "jsonrpc.request.id"
+
+#: network.transport — pipe (stdio) or tcp (HTTP); see NetworkTransport.
+NETWORK_TRANSPORT: Final = "network.transport"
+
+#: network.protocol.name — http on Streamable HTTP.
+NETWORK_PROTOCOL_NAME: Final = "network.protocol.name"
+
+#: user_agent.original — the HTTP User-Agent header of the request.
+USER_AGENT_ORIGINAL: Final = "user_agent.original"
+
+#: client.address — the caller's IP address (opt-in: personal data).
+CLIENT_ADDRESS: Final = "client.address"
+
+#: error.type — the JSON-RPC error code as a string, or tool_error for a tool result with isError.
+ERROR_TYPE: Final = "error.type"
+
 # Tier 1 content, carried on the gen_ai.client.inference.operation.details
 # EventRecord (never span attributes; CONVENTIONS.md § Tier 1 content). Each
 # holds a structured v1.42.0 message list ({role, parts[], name?}).
@@ -354,6 +402,13 @@ class AuthOutcome(str, Enum):
     REFRESHED = "refreshed"
     NEEDS_AUTH = "needs_auth"
     FAILED = "failed"
+
+
+class NetworkTransport(str, Enum):
+    """network.transport values on an MCP server span: stdio is pipe, HTTP is tcp."""
+
+    PIPE = "pipe"
+    TCP = "tcp"
 
 
 class ExperimentArmRole(str, Enum):
@@ -436,6 +491,8 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "CAPTURE_CONTENT_ENV",
+    "CLIENT_ADDRESS",
+    "ERROR_TYPE",
     "EXPERIMENTAL_CATALOG_DEFINITIONS_ENV",
     "EXECUTE_TOOL",
     "GEN_AI_INFERENCE_DETAILS",
@@ -447,6 +504,16 @@ __all__ = [
     "GEN_AI_TOOL_CALL_ID",
     "GEN_AI_TOOL_CALL_RESULT",
     "GEN_AI_TOOL_NAME",
+    "JSONRPC_REQUEST_ID",
+    "MCP_CLIENT_NAME",
+    "MCP_CLIENT_VERSION",
+    "MCP_METHOD_NAME",
+    "MCP_PROTOCOL_VERSION",
+    "MCP_SERVER_NAME",
+    "MCP_SERVER_VERSION",
+    "MCP_SESSION_ID",
+    "NETWORK_PROTOCOL_NAME",
+    "NETWORK_TRANSPORT",
     "RATEL_AUTH_FLOW",
     "RATEL_AUTH_OUTCOME",
     "RATEL_CATALOG_CONTENT_HASH",
@@ -532,11 +599,13 @@ __all__ = [
     "RATEL_UPSTREAM_TOOL_COUNT",
     "RATEL_UPSTREAM_TRANSPORT",
     "SEMCONV_VERSION",
+    "USER_AGENT_ORIGINAL",
     "AuthOutcome",
     "ExperimentArmOutcome",
     "ExperimentArmRole",
     "ExperimentDropReason",
     "ExperimentSkipReason",
+    "NetworkTransport",
     "Origin",
     "SearchTarget",
     # The OTLP exporter surface, lazily resolved from `.otlp` via __getattr__ above
