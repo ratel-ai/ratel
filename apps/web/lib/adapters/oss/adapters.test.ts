@@ -206,4 +206,95 @@ describe("oss embedding provider", () => {
     assert.equal(provider.local, false);
     assert.equal(provider.model, "m");
   });
+  /** The provider the environment selects, and the one request it makes for one text. */
+  async function embedOnce(env: Record<string, string | undefined>) {
+    const calls: Array<{ url: string; model: unknown; auth: string | null }> = [];
+    const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({
+        url: String(url),
+        model: JSON.parse(String(init?.body)).model,
+        auth: new Headers(init?.headers).get("authorization"),
+      });
+      return new Response(JSON.stringify({ data: [{ index: 0, embedding: [1] }] }), {
+        status: 200,
+      });
+    }) as typeof fetch;
+    const provider = embeddingProviderFromEnv(env, fakeFetch);
+    await provider.embed(["a"]);
+    return { provider, call: calls[0] };
+  }
+
+  it("the OpenAI variables still select the provider, with their base URL and model", async () => {
+    const { provider, call } = await embedOnce({
+      OPENAI_API_KEY: "sk-openai",
+      OPENAI_BASE_URL: "https://gw.example/v1",
+      OPENAI_EMBEDDING_MODEL: "m",
+    });
+    assert.equal(provider.local, false);
+    assert.deepEqual(call, {
+      url: "https://gw.example/v1/embeddings",
+      model: "m",
+      auth: "Bearer sk-openai",
+    });
+  });
+
+  it("EMBEDDING_BASE_URL alone is a server that asks for no key (ADR-0033)", async () => {
+    const { provider, call } = await embedOnce({
+      EMBEDDING_BASE_URL: "http://localhost:11434/v1/",
+      EMBEDDING_MODEL: "nomic-embed-text",
+    });
+    assert.equal(provider.local, false);
+    assert.equal(provider.model, "nomic-embed-text");
+    assert.deepEqual(call, {
+      url: "http://localhost:11434/v1/embeddings",
+      model: "nomic-embed-text",
+      auth: null,
+    });
+  });
+
+  it("the OpenAI key is never sent to another embeddings server", async () => {
+    const { call } = await embedOnce({
+      EMBEDDING_BASE_URL: "http://embed.internal/v1",
+      OPENAI_API_KEY: "sk-openai",
+      OPENAI_BASE_URL: "https://gw.example/v1",
+      OPENAI_EMBEDDING_MODEL: "m",
+    });
+    assert.deepEqual(call, {
+      url: "http://embed.internal/v1/embeddings",
+      // The model falls back; the key and the base URL do not.
+      model: "m",
+      auth: null,
+    });
+  });
+
+  it("EMBEDDING_API_KEY alone is OpenAI's endpoint with that key, ahead of the OpenAI one", async () => {
+    const { call } = await embedOnce({
+      EMBEDDING_API_KEY: "sk-embed",
+      OPENAI_API_KEY: "sk-openai",
+      OPENAI_BASE_URL: "https://decisions.example/v1",
+    });
+    assert.deepEqual(call, {
+      url: "https://api.openai.com/v1/embeddings",
+      model: "text-embedding-3-small",
+      auth: "Bearer sk-embed",
+    });
+  });
+
+  it("EMBEDDING_MODEL names the model ahead of OPENAI_EMBEDDING_MODEL", () => {
+    const provider = embeddingProviderFromEnv({
+      OPENAI_API_KEY: "sk",
+      OPENAI_EMBEDDING_MODEL: "old",
+      EMBEDDING_MODEL: "new",
+    });
+    assert.equal(provider.model, "new");
+  });
+
+  it("a placeholder is no setting: the local hash, and nothing called", () => {
+    const provider = embeddingProviderFromEnv({
+      EMBEDDING_BASE_URL: "REPLACE_ME",
+      EMBEDDING_API_KEY: "REPLACE_ME",
+      EMBEDDING_MODEL: "x",
+    });
+    assert.equal(provider.local, true);
+  });
 });

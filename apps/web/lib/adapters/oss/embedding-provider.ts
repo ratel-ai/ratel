@@ -2,9 +2,17 @@ import { createHash } from "node:crypto";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 
 /**
- * Two providers behind one port. With `OPENAI_API_KEY` set, an OpenAI-compatible embeddings
- * endpoint (`OPENAI_BASE_URL` for a private gateway, `OPENAI_EMBEDDING_MODEL` to pick the model).
- * Without it, a hashing vectorizer: a bag of words projected onto a fixed number of dimensions
+ * Two providers behind one port. An OpenAI-compatible embeddings endpoint when one is
+ * configured, else a hashing vectorizer.
+ *
+ * The endpoint has its own variables (ADR-0033), so embeddings and decisions can use different
+ * providers: `EMBEDDING_BASE_URL` (any server that speaks `/embeddings`; alone it is a server
+ * that asks for no key), `EMBEDDING_API_KEY` (alone it is OpenAI's endpoint) and
+ * `EMBEDDING_MODEL`. With neither of the first two, `OPENAI_API_KEY` selects the endpoint as
+ * before, with `OPENAI_BASE_URL` and `OPENAI_EMBEDDING_MODEL`. The OpenAI key and base URL are
+ * never used with `EMBEDDING_BASE_URL`: a key goes only to the server it was set for.
+ *
+ * The hashing vectorizer: a bag of words projected onto a fixed number of dimensions
  * and L2-normalized, so cosine similarity over it means something real and stable (shared
  * vocabulary), just something much cruder than a trained embedding. It is labelled `local` so
  * every run made with it says so in the UI. Nothing here ever calls out without a key.
@@ -46,7 +54,8 @@ export const localEmbeddingProvider: EmbeddingProviderPort = {
 };
 
 export type OpenAiEmbeddingOptions = {
-  apiKey: string;
+  /** Absent for a server that asks for none. */
+  apiKey?: string;
   baseUrl?: string;
   model?: string;
   fetch?: typeof fetch;
@@ -67,7 +76,7 @@ export function createOpenAiEmbeddingProvider(
       const response = await doFetch(`${baseUrl}/embeddings`, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${options.apiKey}`,
+          ...(options.apiKey ? { authorization: `Bearer ${options.apiKey}` } : {}),
           "content-type": "application/json",
         },
         body: JSON.stringify({ model, input: texts }),
@@ -89,16 +98,30 @@ export function createOpenAiEmbeddingProvider(
   };
 }
 
-/** The provider the environment selects: OpenAI-compatible when keyed, else the local hash. */
+/** A setting's trimmed value; empty or the deployment placeholder is no setting. */
+function set(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && trimmed !== "REPLACE_ME" ? trimmed : undefined;
+}
+
+/** The provider the environment selects: an OpenAI-compatible endpoint when one is configured, else the local hash. */
 export function embeddingProviderFromEnv(
   env: Record<string, string | undefined> = process.env,
+  fetchImpl?: typeof fetch,
 ): EmbeddingProviderPort {
+  const baseUrl = set(env.EMBEDDING_BASE_URL);
+  const ownKey = set(env.EMBEDDING_API_KEY);
+  const model = set(env.EMBEDDING_MODEL) ?? env.OPENAI_EMBEDDING_MODEL;
+  if (baseUrl || ownKey) {
+    return createOpenAiEmbeddingProvider({ apiKey: ownKey, baseUrl, model, fetch: fetchImpl });
+  }
   const apiKey = env.OPENAI_API_KEY?.trim();
   if (!apiKey) return localEmbeddingProvider;
   return createOpenAiEmbeddingProvider({
     apiKey,
     baseUrl: env.OPENAI_BASE_URL,
-    model: env.OPENAI_EMBEDDING_MODEL,
+    model,
+    fetch: fetchImpl,
   });
 }
 
