@@ -421,6 +421,14 @@ test("every module runs on Terraform 1.5.7, the last version GCP Infrastructure 
   }
 });
 
+test("the shared cloud-init checks every value that reaches the install command", () => {
+  const main = readFileSync(join(MODULES, "cloud-init", "main.tf"), "utf8");
+  for (const name of ["domain", "ref", "install_url"]) {
+    const block = main.slice(main.indexOf(`variable "${name}"`), main.indexOf("\n}\n", main.indexOf(`variable "${name}"`)));
+    assert.match(block, /validation \{\n\s+condition\s+= can\(regex\(/, name);
+  }
+});
+
 test("deploy.sh downloads exactly the module files that exist", () => {
   const script = readFileSync(SCRIPT, "utf8");
   const shared = script.match(/^SHARED_FILES="([^"]+)"/m)?.[1].split(" ");
