@@ -58,6 +58,10 @@ test("parse_args rejects an unknown flag and a flag with no value", async () => 
   assert.equal((await parsed(["--ref"])).code, 2);
 });
 
+test("parse_args rejects a ref with .. (it goes into a git ref path)", async () => {
+  for (const ref of ["main/../../evil", "..", "a..b"]) assert.equal((await parsed(["--ref", ref])).code, 2, ref);
+});
+
 test("parse_args leaves the access settings empty by default, so a rerun keeps the last ones", async () => {
   assert.equal((await access([])).stdout.trim(), "|||");
 });
