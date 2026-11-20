@@ -32,6 +32,12 @@ variable "access" {
 variable "domain" {
   description = "The site name in the public mode. Empty: <public_ip>.sslip.io."
   type        = string
+
+  # The value goes into a shell command in the user data: the same rule as deploy.sh.
+  validation {
+    condition     = can(regex("^$|^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$", var.domain))
+    error_message = "domain is not a host name."
+  }
 }
 
 variable "tls" {
@@ -42,11 +48,23 @@ variable "tls" {
 variable "ref" {
   description = "The branch, tag or commit that install.sh checks out."
   type        = string
+
+  # The value goes into a shell command in the user data: the same rule as deploy.sh.
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.ref))
+    error_message = "ref has characters it cannot have."
+  }
 }
 
 variable "install_url" {
   description = "Where the VM downloads install.sh."
   type        = string
+
+  # The value goes into a shell command in the user data: the same rule as deploy.sh.
+  validation {
+    condition     = can(regex("^https://[A-Za-z0-9._/:-]+$", var.install_url))
+    error_message = "install_url is not an https URL."
+  }
 }
 
 resource "random_password" "console" {
