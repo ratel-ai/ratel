@@ -51,7 +51,8 @@ Parameters:
   Ref:
     Type: String
     Default: main
-    AllowedPattern: "^[A-Za-z0-9._][A-Za-z0-9._/-]*$"
+    AllowedPattern: "^(?!.*\\.\\.)[A-Za-z0-9._][A-Za-z0-9._/-]*$"
+    ConstraintDescription: letters, digits and . _ / - with no ..
     Description: The branch, tag or commit that install.sh checks out.
   ImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>

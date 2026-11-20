@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { BUTTONS, TEMPLATE_BUCKET, awsLaunchStackUrl, azureDeployUrl, cloudShellUrl } from "./deploy-buttons.mjs";
 
@@ -63,4 +64,33 @@ test("the ARM template runs install.sh with both access modes and takes the pass
   const vm = arm.resources.find((r) => r.type === "Microsoft.Compute/virtualMachines");
   assert.equal(vm.properties.osProfile.customData, "[base64(variables('bootstrap'))]");
   assert.equal(vm.properties.osProfile.linuxConfiguration.disablePasswordAuthentication, true);
+});
+
+test("the CloudFormation Ref pattern rejects a ref with ..", () => {
+  const cfn = read("deploy/cloudformation/ratel.yaml");
+  const block = cfn.slice(cfn.indexOf("\n  Ref:\n"));
+  const pattern = new RegExp(JSON.parse(block.match(/AllowedPattern: (".*")/)[1]));
+  assert.ok(pattern.test("v1.2.3") && pattern.test("feat/x"));
+  for (const ref of ["main/../../evil", "..", "a..b"]) assert.ok(!pattern.test(ref), ref);
+});
+
+test("the ARM bootstrap stops on a ref with .. before it installs anything", () => {
+  const arm = JSON.parse(read("deploy/azure/azuredeploy.json"));
+  const b64 = (v) => Buffer.from(v).toString("base64");
+  const values = { accessMode: "private", ref: "main/../../evil", domain: "", loginPassword: "" };
+  // Render the concat(): each string literal as is, each base64(...parameters('x')...) with the value.
+  const tokens = arm.variables.bootstrap
+    .slice("[concat(".length, -")]".length)
+    .match(/'(?:[^']|'')*'|base64\((?:concat\()?parameters\('\w+'\)(?:, '')?\)\)?|variables\('tls'\)/g);
+  const script = tokens
+    .map((t) => {
+      if (t.startsWith("'")) return t.slice(1, -1).replaceAll("''", "'");
+      if (t.startsWith("variables")) return "acme";
+      return b64(values[t.match(/parameters\('(\w+)'\)/)[1]]);
+    })
+    .join("");
+  assert.match(script, /^#!\/bin\/sh\n/);
+  const run = spawnSync("sh", ["-c", script], { encoding: "utf8", env: { PATH: "/usr/bin:/bin" } });
+  assert.equal(run.status, 1, run.stderr);
+  assert.match(run.stderr, /bad ref/);
 });
