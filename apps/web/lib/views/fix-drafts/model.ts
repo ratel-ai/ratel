@@ -1,9 +1,6 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { deploymentEnvironment } from "@/lib/platform/environment";
-import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
-import { anthropicContent } from "@/lib/platform/model-call-content";
-import { anthropicClient, anthropicConfigured } from "@/lib/readings/anthropic/client";
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import { recordModelCall } from "@/lib/platform/model-call";
+import { models } from "@/lib/readings/models";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
 import type { ModelUsage } from "@/lib/views/eval-gate/models";
 import { mockModelsEnabled } from "@/lib/views/eval-gate/models";
@@ -59,7 +56,9 @@ export function draftModelAvailable(
   env: Env = process.env,
   environment: string = deploymentEnvironment(),
 ): boolean {
-  return mockModelsEnabled(env, environment) || anthropicConfigured(env);
+  return (
+    mockModelsEnabled(env, environment) || models.text(DRAFT_FEATURE, { env, environment }) !== null
+  );
 }
 
 /**
@@ -73,43 +72,24 @@ export function draftModelFromEnv(
   tools: ReadonlyArray<{ entryId: string; searchable: string }> = [],
 ): DraftModel | null {
   if (mockModelsEnabled(env, environment)) return standInDraftModel(tools);
-  const client = anthropicClient({ maxRetries: 0 }, env);
-  if (!client) return null;
-  const model = env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL;
+  const text = models.text(DRAFT_FEATURE, { env, environment });
+  if (!text) return null;
   return {
-    model,
+    model: text.model,
     async complete({ system, user, maxTokens }) {
-      const request: Anthropic.MessageCreateParamsNonStreaming = {
-        model,
-        max_tokens: maxTokens,
+      const reply = await text.complete({
         system,
-        messages: [{ role: "user", content: user }],
-        output_config: { format: { type: "json_schema", schema: ANALYST_SCHEMA }, effort: "low" },
-      };
-      const message = await trackModelCall(
-        {
-          provider: "anthropic",
-          model,
-          feature: DRAFT_FEATURE,
-          payer: "ratel",
-          content: anthropicContent(request),
-        },
-        () => client.messages.create(wellFormedJson(request)),
-        anthropicUsage,
-      );
-      if (message.stop_reason === "refusal")
-        throw new Error("The model refused the draft request.");
-      if (message.stop_reason === "max_tokens")
-        throw new Error("The draft exceeded the output token limit.");
+        user,
+        schema: ANALYST_SCHEMA,
+        effort: "low",
+        maxTokens,
+        maxRetries: 0,
+      });
+      if (reply.stop === "refused") throw new Error("The model refused the draft request.");
+      if (reply.stop === "cut_off") throw new Error("The draft exceeded the output token limit.");
       return {
-        text: message.content
-          .filter((block): block is Anthropic.TextBlock => block.type === "text")
-          .map((block) => block.text)
-          .join(""),
-        usage: {
-          inputTokens: message.usage.input_tokens,
-          outputTokens: message.usage.output_tokens,
-        },
+        text: reply.text,
+        usage: { inputTokens: reply.usage.inputTokens, outputTokens: reply.usage.outputTokens },
       };
     },
   };

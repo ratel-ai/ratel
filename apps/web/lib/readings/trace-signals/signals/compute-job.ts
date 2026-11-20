@@ -14,8 +14,8 @@ import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { getLogger } from "@/lib/platform/logger";
 import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import { decisionEngineConfigured } from "@/lib/readings/decisions/engine";
+import { models } from "@/lib/readings/models";
 import { outcomePillars, type PillarReading } from "@/lib/readings/trace-signals/health-outcomes";
 import {
   HEALTH_SCORE_VERSION,
@@ -205,7 +205,8 @@ function defaultDeps(env: Env): ComputeJobDeps {
     observability: createBackgroundObservability(),
     loadSetupCounts: (projectId, window) => loadSetupCountsFn(projectId, window),
     enqueueLabels: (projectId) => enqueueLabelWorkflowsJobFn(projectId),
-    canLabel: () => anthropicConfigured(env) || decisionEngineConfigured(env),
+    canLabel: () =>
+      models.text("workflow_label", { env }) !== null || decisionEngineConfigured(env),
     countUnbuilt: (projectId, since) =>
       countUnbuiltTurnEventsFn(projectId, since, UNBUILT_COUNT_CAP),
     writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),

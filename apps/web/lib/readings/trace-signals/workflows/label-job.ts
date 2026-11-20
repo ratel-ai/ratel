@@ -1,11 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { TextModel } from "@/lib/contracts/models";
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
-import { anthropicContent } from "@/lib/platform/model-call-content";
+import { recordModelCall } from "@/lib/platform/model-call";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { anthropicClient } from "@/lib/readings/anthropic/client";
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import { models } from "@/lib/readings/models";
+import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 import {
   type DecideDeps,
   type DecideResult,
@@ -67,43 +66,34 @@ export interface LabelJobResult {
   decisions: DecideResult | null;
 }
 
-/** A structured-output Anthropic completion, or null without a Claude backend. */
-export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] {
-  const client = anthropicClient();
-  if (!client) return null;
+/** The label completion over any text model (ADR-0033). A refusal throws; the call is already recorded. */
+export function labelCompleteOver(text: TextModel): NonNullable<LabelJobDeps["complete"]> {
   return async (system, user) => {
-    const request: Anthropic.MessageCreateParamsNonStreaming = {
-      model,
-      max_tokens: LABEL_MAX_TOKENS,
+    const reply = await text.complete({
       system,
-      messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema: LABEL_SCHEMA } },
-    };
-    const msg = await trackModelCall(
-      {
-        provider: "anthropic",
-        model,
-        feature: "workflow_label",
-        payer: "ratel",
-        content: anthropicContent(request),
-      },
-      () => client.messages.create(wellFormedJson(request)),
-      anthropicUsage,
-    );
-    if (msg.stop_reason === "refusal")
+      user,
+      schema: LABEL_SCHEMA,
+      maxTokens: LABEL_MAX_TOKENS,
+    });
+    if (reply.stop === "refused")
       throw new Error("workflow label declined by the model's safety filter");
-    return msg.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    return reply.text;
   };
 }
 
+/** A structured-output Claude completion on the model given, or null without a Claude backend. */
+export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] {
+  const text = anthropicTextModel({ model, feature: "workflow_label", payer: "ratel" });
+  return text ? labelCompleteOver(text) : null;
+}
+
 function defaultDeps(): LabelJobDeps {
-  const model = process.env.TRACE_WORKFLOW_LABEL_MODEL || DEFAULT_LABEL_MODEL;
+  // The deployment's model for labels, whoever serves it; none means the job reports `no_model`.
+  const text = models.text("workflow_label");
+  const model = text?.model ?? (process.env.TRACE_WORKFLOW_LABEL_MODEL || DEFAULT_LABEL_MODEL);
   return {
     model,
-    complete: anthropicLabelComplete(model),
+    complete: text ? labelCompleteOver(text) : null,
     loadLatestWorkflows: loadLatestWorkflowsFn,
     loadToolDocs: loadToolDocsFn,
     loadTurnAsks: loadTurnAsksFn,

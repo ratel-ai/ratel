@@ -160,3 +160,7 @@ browser, rows, census tiles, ranking diff, arm mix, and the generic experiment d
 conversion and lifecycle panels); the components live in `components/console/calibration` and
 the read models are `synthesis/experiments` and `synthesis/traces`. Owned: `ranking-ui.test.ts`
 (the trace calibration card case is left out; the Traces pages here do not carry that card).
+
+`fix-drafts/model.ts` gets its model from the model kit (`lib/readings/models`, ADR-0033), so a
+draft runs on whichever provider the deployment selects; the eval gate's own models are still
+Claude only.

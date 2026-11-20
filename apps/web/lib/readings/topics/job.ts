@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { TextModel } from "@/lib/contracts/models";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -9,10 +9,7 @@ import { hashEndUser, traceSignalsHashSalt } from "@/lib/ledger/hash";
 import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
-import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import type {
   CorpusEntry,
@@ -23,7 +20,8 @@ import type {
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
 import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import { models } from "@/lib/readings/models";
+import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import {
   chooseAsks,
@@ -221,43 +219,30 @@ export function topicJudgeFromEnv(
   });
 }
 
-/** One structured-output Anthropic call that names topics; null without a Claude backend. */
+/** The topic namer over any text model (ADR-0033). A refusal and a cut-off throw; the call is already recorded. */
+export function topicNamerOver(text: TextModel): Namer {
+  return async (groups) => {
+    const { system, user } = buildNamePrompt(groups);
+    const reply = await text.complete({
+      system,
+      user,
+      schema: NAME_SCHEMA,
+      maxTokens: NAME_MAX_TOKENS,
+    });
+    if (reply.stop === "refused")
+      throw new Error("topic names declined by the model's safety filter");
+    if (reply.stop === "cut_off") throw new Error("topic names cut off at the token limit");
+    return parseNamedTopics(reply.text, groups);
+  };
+}
+
+/** One structured-output Claude call that names topics, on the model given; null without a Claude backend. */
 export function anthropicTopicNamer(
   model: string,
   env: Record<string, string | undefined> = process.env,
 ): Namer | null {
-  const client = anthropicClient({}, env);
-  if (!client) return null;
-  return async (groups) => {
-    const { system, user } = buildNamePrompt(groups);
-    const request: Anthropic.MessageCreateParamsNonStreaming = {
-      model,
-      max_tokens: NAME_MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: { format: { type: "json_schema", schema: NAME_SCHEMA } },
-    };
-    const message = await trackModelCall(
-      {
-        provider: "anthropic",
-        model,
-        feature: "topics_names",
-        payer: "ratel",
-        content: anthropicContent(request),
-      },
-      () => client.messages.create(wellFormedJson(request)),
-      anthropicUsage,
-    );
-    if (message.stop_reason === "refusal")
-      throw new Error("topic names declined by the model's safety filter");
-    if (message.stop_reason === "max_tokens")
-      throw new Error("topic names cut off at the token limit");
-    const raw = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-    return parseNamedTopics(raw, groups);
-  };
+  const text = anthropicTextModel({ model, feature: "topics_names", payer: "ratel", env });
+  return text ? topicNamerOver(text) : null;
 }
 
 async function loadAsksInChunks(
@@ -274,8 +259,13 @@ async function loadAsksInChunks(
 
 /** The real collaborators; model clients only for what the caller did not supply. */
 function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
+  // The deployment's model for topic names, whoever serves it; none leaves the topics unnamed.
+  const text = "name" in overrides ? null : models.text("topics_names");
   const nameModel =
-    process.env.TOPICS_LABEL_MODEL || process.env.TRACE_WORKFLOW_LABEL_MODEL || DEFAULT_LABEL_MODEL;
+    text?.model ??
+    (process.env.TOPICS_LABEL_MODEL ||
+      process.env.TRACE_WORKFLOW_LABEL_MODEL ||
+      DEFAULT_LABEL_MODEL);
   return {
     now: () => new Date(),
     maxTurns: TOPICS_MAX_TURNS,
@@ -306,7 +296,7 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
       "sentimentJudge" in overrides
         ? null
         : topicJudgeFromEnv(SENTIMENT_FRAMING, process.env, "topics_sentiment"),
-    name: "name" in overrides ? null : anthropicTopicNamer(nameModel),
+    name: text ? topicNamerOver(text) : null,
     nameModel,
     observability: createBackgroundObservability(),
   };

@@ -35,7 +35,10 @@ test("every Anthropic SDK call in lib sends its params through wellFormedJson", 
     }
   }
   // The eval gate makes all its calls through one `tracked` (lib/eval-gate/models.ts), so it counts once.
-  assert.ok(calls.length >= 8, `found only ${calls.length} calls: the scan no longer sees them`);
+  // Owned: the JSON features call Claude through the model kit's adapter (ADR-0033), which
+  // holds their two calls (`create`, and `stream` for a long answer), so the floor is lower than
+  // upstream's 8. It drops again as the analyst and the eval gate move.
+  assert.ok(calls.length >= 6, `found only ${calls.length} calls: the scan no longer sees them`);
   assert.deepEqual(unguarded, []);
 });
 
@@ -58,4 +61,53 @@ test("the Anthropic judge sends no lone surrogate", async () => {
     run: "ran \uDE00",
   });
   assert.doesNotMatch(JSON.stringify(sent), /\\ud[89ab-f]/i);
+});
+
+// Owned (ADR-0033): a feature asks the model kit for a model and never talks to a vendor. A
+// vendor SDK may be imported by the Claude client, its error mapping, and the kit's adapters.
+const VENDOR_SDK =
+  /from "(@anthropic-ai\/[^"]*|openai|@ai-sdk\/[^"]*|@google\/(?:genai|generative-ai)|@aws-sdk\/client-bedrock[^"]*|@mistralai\/[^"]*|cohere-ai|ollama)"/;
+
+const VENDOR_SDK_ALLOWED = new Set([
+  "platform/anthropic-errors.ts",
+  "readings/anthropic/client.ts",
+  "readings/models/providers/anthropic.ts",
+  // Not on the kit yet. Remove each as it moves.
+  "synthesis/match-quality/analyst.ts",
+  "views/eval-gate/models.ts",
+]);
+
+test("only the Claude client and the model kit's adapters import a vendor SDK", () => {
+  const importers = libSources(LIB)
+    .filter((file) => VENDOR_SDK.test(readFileSync(file, "utf8")))
+    .map((file) => path.relative(LIB, file))
+    .sort();
+  assert.deepEqual(
+    importers.filter((file) => !VENDOR_SDK_ALLOWED.has(file)),
+    [],
+    "call a model through lib/readings/models (see its README), not a vendor SDK",
+  );
+  // An entry nothing matches is stale: the file moved onto the kit, so take it off the list.
+  assert.deepEqual(
+    [...VENDOR_SDK_ALLOWED].filter((file) => !importers.includes(file)),
+    [],
+  );
+});
+
+test("every request a model kit adapter sends over fetch is well-formed", () => {
+  const providers = path.join(LIB, "readings", "models", "providers");
+  const bodies: string[] = [];
+  const unguarded: string[] = [];
+  for (const file of libSources(providers)) {
+    for (const match of readFileSync(file, "utf8").matchAll(/body:\s*JSON\.stringify\(\s*(\w+)/g)) {
+      const where = `${path.relative(LIB, file)}: ${match[0]}`;
+      bodies.push(where);
+      if (match[1] !== "wellFormedJson") unguarded.push(where);
+    }
+  }
+  assert.ok(
+    bodies.length >= 1,
+    "found no fetch body in the adapters: the scan no longer sees them",
+  );
+  assert.deepEqual(unguarded, []);
 });

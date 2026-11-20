@@ -42,15 +42,19 @@ behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
 `models/` is the model kit (ADR-0033): `models.text(feature)` and `models.chat(feature)` give a
 feature the deployment's model for it, whoever serves it, or null. `features.ts` lists every
-feature that calls a model. See `models/README.md` before adding a model call.
+feature that calls a model. See `models/README.md` before adding a model call. The workflow
+labels, the intent names and the topic names get their model there, so they run on whichever
+provider the deployment selects; each keeps its `anthropic…` factory, which names a Claude model
+outright, for the tests that pin it.
 
 `anthropic/client.ts` (a copy) is the one place the platform gets a Claude client:
 `anthropicClient` and `anthropicConfigured`. With `ANTHROPIC_BACKEND` unset, `ANTHROPIC_API_KEY`
 selects the Anthropic API. `ANTHROPIC_BACKEND=bedrock` serves every call from Amazon Bedrock
 through an EU inference profile with the AWS credential chain and never reads the key; a model
-with no EU profile fails as not found, and any other value gives no client. Every call site in
-`readings/`, `synthesis/` and `views/` builds its client there. `pnpm bedrock:smoke` checks the
-request shapes against Bedrock with made-up text.
+with no EU profile fails as not found, and any other value gives no client. The model kit's
+Claude adapter (`models/providers/anthropic.ts`) builds its client there, and so do the two call
+sites not on the kit yet (the match-quality analyst and the eval gate). `pnpm bedrock:smoke`
+checks the request shapes against Bedrock with made-up text.
 Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
 its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs
 went and 40% the open issues: `trace-signals/health-outcomes.ts` reads five measured rates from

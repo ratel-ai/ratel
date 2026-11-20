@@ -61,6 +61,7 @@ inferred from `OPENAI_API_KEY`, and nothing defaults to localhost.
 
 | Provider | File | Notes |
 |---|---|---|
+| Claude (unset, or `anthropic`) | `providers/anthropic.ts` | Over `readings/anthropic/client.ts`: the Anthropic API, or Bedrock through EU profiles. Text only; the eval gate's Claude agent is still its own |
 | `openai-compatible` | `providers/openai-compatible.ts` | Chat completions over `fetch`: OpenAI, Gemini's compatible endpoint, vLLM, llama.cpp, Ollama. Text and tool calls |
 | `fake` | `fake.ts` | Local environments only |
 
@@ -77,6 +78,12 @@ its tool calls need).
 
 ## Status
 
-The Claude adapter is not in the registry yet, so `models.text` gives no model on a Claude
-deployment and no call site uses the kit. It lands next, and the call sites move after it
-(ADR-0033).
+| Feature | On the kit |
+|---|---|
+| Workflow labels, intent names, topic names, fix drafts | yes |
+| Match-quality analyst | not yet: it still builds its own Claude request |
+| Eval gate (replay, judge, tool stand-in, person, test draft) | not yet |
+| Decisions (`models.decision`) | not yet: the engine is OpenAI's Decisions API, in `readings/decisions` |
+
+`call-sites.test.ts` runs the moved features on a model that is not Claude. The golden tests
+beside each site (`*.golden.test.ts`) hold the Claude path to the requests it sent before the kit.
