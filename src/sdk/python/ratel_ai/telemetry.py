@@ -689,6 +689,7 @@ def configure_telemetry(
             span_filter=span_filter,
             log_filter=log_filter,
         )
+        _add_variant_processor(handle)
         return _TelemetryHandle(handle, handle.shutdown)
 
     # Apply (and validate — an unrecognized mode raises ValueError) the override *before*
@@ -708,6 +709,7 @@ def configure_telemetry(
     except BaseException:
         clear_content_capture(generation)
         raise
+    _add_variant_processor(provider)
 
     def shutdown_and_clear() -> Any:
         clear_content_capture(generation)
@@ -717,3 +719,19 @@ def configure_telemetry(
     # to multiple callers; mutating provider.shutdown would make every reference observe the
     # newest generation's wrapper and let a stale handle clear a newer privacy override.
     return _TelemetryHandle(provider, shutdown_and_clear)
+
+
+def _add_variant_processor(provider: Any) -> None:
+    """Add the variant-tag processor once to the provider ``init()`` returned.
+
+    ``init()`` is idempotent and can return the same provider to more than one call, so a
+    marker attribute keeps it to one processor. A handle without ``add_span_processor`` (the
+    no-op handle when export is off) is left as it is.
+    """
+    add = getattr(provider, "add_span_processor", None)
+    if add is None or getattr(provider, "_ratel_variant_processor", False):
+        return
+    from .variant import ExperimentalVariantSpanProcessor
+
+    add(ExperimentalVariantSpanProcessor())
+    provider._ratel_variant_processor = True

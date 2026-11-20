@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Agent variant vocabulary (CONVENTIONS.md § `ratel.variant.*`): `RATEL_VARIANT_EXPERIMENT`, `RATEL_VARIANT_NAME`, `RATEL_VARIANT_PREFIX` for free-form `ratel.variant.<key>` descriptors, the matching baggage keys (`RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY`, `RATEL_VARIANT_NAME_BAGGAGE_KEY`, `RATEL_VARIANT_BAGGAGE_PREFIX`) and the bounds (`RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN`, `RATEL_VARIANT_MAX_DESCRIPTORS`, `RATEL_VARIANT_MAX_VALUE_LENGTH`). The retrieval `ratel.experiment.*` keys do not change.
+
 ## [0.4.0] - 2026-08-21
 
 ### Added

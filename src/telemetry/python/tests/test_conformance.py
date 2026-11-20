@@ -107,6 +107,13 @@ from ratel_ai_telemetry import (
     RATEL_UPSTREAM_SERVER,
     RATEL_UPSTREAM_TOOL_COUNT,
     RATEL_UPSTREAM_TRANSPORT,
+    RATEL_VARIANT_BAGGAGE_PREFIX,
+    RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+    RATEL_VARIANT_EXPERIMENT,
+    RATEL_VARIANT_MAX_DESCRIPTORS,
+    RATEL_VARIANT_MAX_VALUE_LENGTH,
+    RATEL_VARIANT_NAME,
+    RATEL_VARIANT_PREFIX,
     SEMCONV_VERSION,
 )
 
@@ -219,6 +226,20 @@ def test_fixtures_share_the_pinned_semconv_version() -> None:
     assert _FIXTURES["semconv_version"] == SEMCONV_VERSION
 
 
+def test_fixtures_pin_the_variant_keys_and_bounds() -> None:
+    assert _FIXTURES["variant"] == {
+        "attribute_prefix": RATEL_VARIANT_PREFIX,
+        "baggage_prefix": RATEL_VARIANT_BAGGAGE_PREFIX,
+        "experiment_key": RATEL_VARIANT_EXPERIMENT,
+        "name_key": RATEL_VARIANT_NAME,
+        "reserved_descriptor_keys": ["experiment", "name"],
+        "descriptor_key_pattern": RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+        "descriptor_value_types": ["string", "number", "boolean"],
+        "max_descriptors": RATEL_VARIANT_MAX_DESCRIPTORS,
+        "max_value_length": RATEL_VARIANT_MAX_VALUE_LENGTH,
+    }
+
+
 @pytest.mark.parametrize("fixture", _FIXTURES["fixtures"], ids=lambda f: f["name"])
 def test_fixture_emits_pinned_keys(fixture: dict[str, Any]) -> None:
     exporter = InMemorySpanExporter()
@@ -247,9 +268,7 @@ def test_fixture_emits_pinned_keys(fixture: dict[str, Any]) -> None:
             if key in seen_definitions:
                 continue
             seen_definitions.add(key)
-        attributes = {
-            ATTR_KEY[field]: value for field, value in event["attributes"].items()
-        }
+        attributes = {ATTR_KEY[field]: value for field, value in event["attributes"].items()}
         logger.emit(event_name=EVENT_NAME[event["event"]], attributes=attributes)
     span.end()
 
@@ -260,9 +279,7 @@ def test_fixture_emits_pinned_keys(fixture: dict[str, Any]) -> None:
     events = [
         {
             "name": readable.log_record.event_name,
-            "attributes": json.loads(
-                json.dumps(dict(readable.log_record.attributes or {}))
-            ),
+            "attributes": json.loads(json.dumps(dict(readable.log_record.attributes or {}))),
         }
         for readable in log_exporter.get_finished_logs()
     ]

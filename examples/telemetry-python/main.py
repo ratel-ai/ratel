@@ -18,7 +18,9 @@ import os
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import Tracer, set_span_in_context
+from ratel_ai import ExperimentalVariantSpanProcessor, experimental_with_variant
 from ratel_ai_telemetry import (
     CAPTURE_CONTENT_ENV,
     EXECUTE_TOOL,
@@ -108,6 +110,32 @@ def main() -> None:
     emit_ratel_trace(tracer)
     provider.force_flush()
     provider.shutdown()
+
+    # --- Agent variant tags: compare variants of the agent (model, prompt version, ...) ---
+    # experimental_with_variant scopes one run to a variant; ExperimentalVariantSpanProcessor
+    # copies ratel.variant.* onto every span that starts inside (configure_telemetry adds it).
+    recorded = InMemorySpanExporter()
+    variant_provider = TracerProvider(
+        resource=Resource.create({SERVICE_NAME: "ratel-telemetry-example"})
+    )
+    variant_provider.add_span_processor(ExperimentalVariantSpanProcessor())
+    variant_provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    variant_provider.add_span_processor(SimpleSpanProcessor(recorded))
+    print("\n--- emitting the same trace as one run of a tagged agent variant ---")
+    with experimental_with_variant(
+        experiment="support-agent-model",
+        name="haiku",
+        model="claude-haiku-5-5",
+        prompt_version=3,
+    ):
+        emit_ratel_trace(variant_provider.get_tracer("ratel-example-telemetry"))
+    variant_provider.force_flush()
+    print("\n--- ratel.variant.* on each span of the run ---")
+    for span in recorded.get_finished_spans():
+        tags = {k: v for k, v in (span.attributes or {}).items() if k.startswith("ratel.variant.")}
+        role = "root " if span.parent is None else "child"
+        print(f"  {role} {span.name:<13} {tags}")
+    variant_provider.shutdown()
 
     # --- Production wiring: traces + EventRecords exported to Ratel via init() ---
     # resolve_otlp_config is pure (no network), so we can show how endpoint + auth

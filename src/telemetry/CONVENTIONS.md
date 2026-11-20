@@ -355,6 +355,60 @@ Experiment baggage propagates only when the host registers a `ContextManager`, w
 independently of exporter setup. The SDK registers neither providers nor exporters; hosts need
 both span and log-record processors to deliver the complete experiment signal.
 
+### `ratel.variant.*`: agent variant tags
+
+A customer tags a run with the variant of the agent that the run used: a model, a prompt
+version or any other setting. Ratel compares cost, latency, errors, health signals and eval
+scores per variant. These tags are separate from the retrieval experiment stamp
+(`ratel.experiment.*`). They do not change it, and an emitter can set both on the same span.
+
+There are three key forms. Each one is a span attribute and an OTel baggage key with the same
+literal:
+
+| Attribute / baggage key | Type | Notes |
+|---|---|---|
+| `ratel.variant.experiment` | string | required; the experiment that the run belongs to, for example `support-agent-model` |
+| `ratel.variant.name` | string | required; the variant of that experiment, for example `haiku` or `control` |
+| `ratel.variant.<key>` | string \| number \| boolean | optional descriptor; for example `ratel.variant.model = "claude-haiku-5-5"` or `ratel.variant.prompt_version = 3` |
+
+Bounds:
+
+- `<key>` matches `^[a-z][a-z0-9_]{0,63}$`. The keys `experiment` and `name` are reserved for the
+  two required tags. Thus `<key>` never contains a dot, and descriptors do not nest.
+- `ratel.variant.experiment`, `ratel.variant.name` and each string descriptor value have 1 to
+  128 characters.
+- A number value is finite. A boolean value is `true` or `false`. Other types (null, arrays,
+  objects, dates) are not valid.
+- One run has at most 16 descriptors, in addition to `experiment` and `name`.
+- Values are content-free. They name a configuration, never the content of a run: no prompt
+  text, no user input, no model output and no personal data. The content-capture gate does not
+  apply to them, so they are always exported.
+
+Emitter rules (the TypeScript `experimentalWithVariant` and the Python
+`experimental_with_variant` helpers follow them):
+
+- An invalid `ratel.variant.experiment` or `ratel.variant.name` is a configuration error. The
+  helper refuses the call with an error, and it starts no run.
+- An invalid descriptor (a bad key, a bad value type, a value out of bounds) is dropped with a
+  warning. The run continues with the valid tags. A value is never truncated, because a truncated
+  value names a different variant.
+- When a run has more than 16 valid descriptors, the helper keeps the first 16 in key order and
+  drops the remainder with a warning.
+- The helper sets the tags as baggage for the scope of the run. A span processor copies them onto
+  each span that starts in that scope. Baggage values are strings: in-process, the helper keeps
+  the original type on the span; across a process boundary, a number or a boolean arrives as its
+  string form.
+
+**A tag on the root span is sufficient.** Ratel Cloud reads the tags of each span of a trace and
+rolls them up per trace. When only the root span carries the tags, the whole trace still counts
+for that variant. The SDK helpers tag every span of the run, so that a backend that does not roll
+up (for example, a span search in another vendor) can also filter each span by variant. When two
+spans of one trace carry different values for the same key, Ratel Cloud uses the value of the
+span nearest the root.
+
+Like experiment baggage, variant baggage propagates only when the host registers an OTel
+`ContextManager`.
+
 ### Out of the remote tier
 
 `index_churn` / `skill_churn` are internal catalog-maintenance events with no consumer in this

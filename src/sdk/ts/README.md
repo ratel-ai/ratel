@@ -367,6 +367,27 @@ Use `ground()` for a long-lived agent whose messages you persist (pays once, sta
 
 Facts are **host-driven, on their own path**: `ground()`/`groundSnapshot()` are the only ways facts reach the context. `modelTools()`, the model-facing `search_capabilities` tool, and `recall()` are all unchanged and never return facts — the model doesn't discover facts by calling a tool, and there is no second place to look. You decide what is true and inject it. Every decision is traced (`fact_inject` with its reason, `fact_inject_skip`, `fact_snapshot`), so the skip rate — the tokens you saved — is measurable. See [ADR-0017](../../../docs/adr/0017-facts-and-injection-freshness.md).
 
+## Agent variant tags (experimental)
+
+To compare variants of your agent (a model, a prompt version, any setting), wrap each run in `experimentalWithVariant`. Each span that starts inside carries `ratel.variant.experiment`, `ratel.variant.name` and one `ratel.variant.<key>` per descriptor, also across `await`. Ratel compares cost, latency, errors and eval scores per variant.
+
+```ts
+import { context } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import { ExperimentalVariantSpanProcessor, experimentalWithVariant } from "@ratel-ai/sdk";
+
+// Once, where you build the tracer provider:
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+// spanProcessors: [new ExperimentalVariantSpanProcessor(), ...your exporting processors]
+
+await experimentalWithVariant(
+  { experiment: "support-agent-model", name: "haiku", model: "claude-haiku-5-5", prompt_version: 3 },
+  () => runAgent(request),
+);
+```
+
+Descriptor values are content-free strings, finite numbers or booleans: never prompt text, user input or personal data. An invalid `experiment` or `name` throws a `TypeError`. An invalid descriptor is dropped with a warning. The tags also go into OTel baggage, so a propagator carries them to downstream services, where the same processor copies them as strings. A tag on the root span alone is sufficient for Ratel. The contract, with its bounds, is the `ratel.variant.*` section of [CONVENTIONS.md](../../telemetry/CONVENTIONS.md). This is separate from [retrieval experiments](#retrieval-experiments-experimental), which compare retrieval selectors.
+
 ## Retrieval experiments (experimental)
 
 `experimentalDefineExperiment` wraps host-supplied async selectors with deterministic A/B

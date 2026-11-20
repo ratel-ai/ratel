@@ -12,6 +12,7 @@
 
 import { context, type Tracer, trace } from "@opentelemetry/api";
 import type { Logger } from "@opentelemetry/api-logs";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-proto";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
@@ -19,10 +20,12 @@ import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs
 import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
+  InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions";
+import { ExperimentalVariantSpanProcessor, experimentalWithVariant } from "@ratel-ai/sdk";
 
 import {
   contentCaptureMode,
@@ -141,6 +144,34 @@ async function main(): Promise<void> {
   emitRatelTrace(tracer);
   await provider.forceFlush();
   await provider.shutdown();
+
+  // --- Agent variant tags: compare variants of the agent (model, prompt version, ...) ---
+  // `experimentalWithVariant` scopes one run to a variant; the
+  // `ExperimentalVariantSpanProcessor` copies `ratel.variant.*` onto every span that
+  // starts inside. Scoping needs a ContextManager, registered here.
+  context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+  const recorded = new InMemorySpanExporter();
+  const variantProvider = new NodeTracerProvider({
+    resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: SERVICE_NAME }),
+    spanProcessors: [
+      new ExperimentalVariantSpanProcessor(),
+      new SimpleSpanProcessor(new ConsoleSpanExporter()),
+      new SimpleSpanProcessor(recorded),
+    ],
+  });
+  console.log("\n--- emitting the same trace as one run of a tagged agent variant ---");
+  experimentalWithVariant(
+    { experiment: "support-agent-model", name: "haiku", model: "claude-haiku-5-5", prompt_version: 3 },
+    () => emitRatelTrace(variantProvider.getTracer("@ratel-ai/example-telemetry")),
+  );
+  await variantProvider.forceFlush();
+  console.log("\n--- ratel.variant.* on each span of the run ---");
+  for (const span of recorded.getFinishedSpans()) {
+    const tags = Object.entries(span.attributes).filter(([key]) => key.startsWith("ratel.variant."));
+    const role = span.parentSpanContext === undefined ? "root " : "child";
+    console.log(`  ${role} ${span.name.padEnd(13)} ${JSON.stringify(Object.fromEntries(tags))}`);
+  }
+  await variantProvider.shutdown();
 
   // --- Production wiring: traces + EventRecords exported to Ratel over OTLP ---
   // Endpoint and auth are plain host configuration; shown here with demo values so the

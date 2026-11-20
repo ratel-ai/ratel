@@ -220,6 +220,32 @@ pub const RATEL_EXPERIMENT_ROLE_BAGGAGE_KEY: &str = RATEL_EXPERIMENT_ROLE;
 pub const RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY: &str = RATEL_EXPERIMENT_UNIT;
 
 // ---------------------------------------------------------------------------
+// Agent variant tags (CONVENTIONS.md § `ratel.variant.*`)
+//
+// Customer-set tags that name the variant of the agent a run used. They are
+// independent of the retrieval `ratel.experiment.*` stamp above.
+// ---------------------------------------------------------------------------
+
+/// `ratel.variant.` — prefix of every agent-variant attribute and baggage key.
+pub const RATEL_VARIANT_PREFIX: &str = "ratel.variant.";
+/// `ratel.variant.experiment` — the experiment the run belongs to.
+pub const RATEL_VARIANT_EXPERIMENT: &str = "ratel.variant.experiment";
+/// `ratel.variant.name` — the variant of that experiment the run used.
+pub const RATEL_VARIANT_NAME: &str = "ratel.variant.name";
+/// Baggage key matching [`RATEL_VARIANT_EXPERIMENT`].
+pub const RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY: &str = RATEL_VARIANT_EXPERIMENT;
+/// Baggage key matching [`RATEL_VARIANT_NAME`].
+pub const RATEL_VARIANT_NAME_BAGGAGE_KEY: &str = RATEL_VARIANT_NAME;
+/// Baggage key prefix matching [`RATEL_VARIANT_PREFIX`] (descriptor `ratel.variant.<key>`).
+pub const RATEL_VARIANT_BAGGAGE_PREFIX: &str = RATEL_VARIANT_PREFIX;
+/// Pattern every descriptor `<key>` matches. `experiment` and `name` are reserved.
+pub const RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN: &str = "^[a-z][a-z0-9_]{0,63}$";
+/// Most descriptors one run carries (besides `experiment` and `name`).
+pub const RATEL_VARIANT_MAX_DESCRIPTORS: usize = 16;
+/// Most characters in the experiment, the name and each string descriptor value.
+pub const RATEL_VARIANT_MAX_VALUE_LENGTH: usize = 128;
+
+// ---------------------------------------------------------------------------
 // `gen_ai.*` interop keys (CONVENTIONS.md, Tier 1 — borrowed verbatim)
 //
 // Only the subset the `ratel.*` overlay directly emits on the `execute_tool`
@@ -630,6 +656,28 @@ mod tests {
         assert_eq!(RATEL_EXPERIMENT_ARM_BAGGAGE_KEY, RATEL_EXPERIMENT_ARM);
         assert_eq!(RATEL_EXPERIMENT_ROLE_BAGGAGE_KEY, RATEL_EXPERIMENT_ROLE);
         assert_eq!(RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY, RATEL_EXPERIMENT_UNIT);
+    }
+
+    #[test]
+    fn variant_keys_and_bounds_are_pinned() {
+        assert_eq!(RATEL_VARIANT_PREFIX, "ratel.variant.");
+        assert_eq!(RATEL_VARIANT_EXPERIMENT, "ratel.variant.experiment");
+        assert_eq!(RATEL_VARIANT_NAME, "ratel.variant.name");
+        assert_eq!(
+            RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY,
+            RATEL_VARIANT_EXPERIMENT
+        );
+        assert_eq!(RATEL_VARIANT_NAME_BAGGAGE_KEY, RATEL_VARIANT_NAME);
+        assert_eq!(RATEL_VARIANT_BAGGAGE_PREFIX, RATEL_VARIANT_PREFIX);
+        assert!(RATEL_VARIANT_EXPERIMENT.starts_with(RATEL_VARIANT_PREFIX));
+        assert!(RATEL_VARIANT_NAME.starts_with(RATEL_VARIANT_PREFIX));
+        assert!(!RATEL_VARIANT_PREFIX.starts_with("ratel.experiment."));
+        assert_eq!(
+            RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+            "^[a-z][a-z0-9_]{0,63}$"
+        );
+        assert_eq!(RATEL_VARIANT_MAX_DESCRIPTORS, 16);
+        assert_eq!(RATEL_VARIANT_MAX_VALUE_LENGTH, 128);
     }
 
     #[test]

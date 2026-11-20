@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- `experimental_with_variant(experiment=..., name=..., **descriptors)` (a sync and async context manager) and `ExperimentalVariantSpanProcessor`: tag every span of one agent run with `ratel.variant.*` (CONVENTIONS.md), to compare variants of the agent. The tags also go into OTel baggage. `configure_telemetry()` adds the processor. Invalid `experiment`/`name` raises `ValueError`; invalid descriptors are dropped with a `UserWarning`.
+
 ## [0.13.0-rc.12] - 2026-10-16
 
 ### Added

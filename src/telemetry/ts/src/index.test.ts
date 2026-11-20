@@ -99,6 +99,15 @@ import {
   RATEL_UPSTREAM_SERVER,
   RATEL_UPSTREAM_TOOL_COUNT,
   RATEL_UPSTREAM_TRANSPORT,
+  RATEL_VARIANT_BAGGAGE_PREFIX,
+  RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+  RATEL_VARIANT_EXPERIMENT,
+  RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY,
+  RATEL_VARIANT_MAX_DESCRIPTORS,
+  RATEL_VARIANT_MAX_VALUE_LENGTH,
+  RATEL_VARIANT_NAME,
+  RATEL_VARIANT_NAME_BAGGAGE_KEY,
+  RATEL_VARIANT_PREFIX,
   SEMCONV_VERSION,
   SearchTarget,
 } from "./index.js";
@@ -253,6 +262,24 @@ describe("ratel telemetry vocabulary", () => {
     expect(RATEL_EXPERIMENT_ARM_BAGGAGE_KEY).toBe(RATEL_EXPERIMENT_ARM);
     expect(RATEL_EXPERIMENT_ROLE_BAGGAGE_KEY).toBe(RATEL_EXPERIMENT_ROLE);
     expect(RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY).toBe(RATEL_EXPERIMENT_UNIT);
+  });
+
+  it("pins the agent variant keys, their baggage aliases and their bounds", () => {
+    expect(RATEL_VARIANT_PREFIX).toBe("ratel.variant.");
+    expect(RATEL_VARIANT_EXPERIMENT).toBe("ratel.variant.experiment");
+    expect(RATEL_VARIANT_NAME).toBe("ratel.variant.name");
+    expect(RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY).toBe(RATEL_VARIANT_EXPERIMENT);
+    expect(RATEL_VARIANT_NAME_BAGGAGE_KEY).toBe(RATEL_VARIANT_NAME);
+    expect(RATEL_VARIANT_BAGGAGE_PREFIX).toBe(RATEL_VARIANT_PREFIX);
+    expect(RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN).toBe("^[a-z][a-z0-9_]{0,63}$");
+    expect(RATEL_VARIANT_MAX_DESCRIPTORS).toBe(16);
+    expect(RATEL_VARIANT_MAX_VALUE_LENGTH).toBe(128);
+    const descriptorKey = new RegExp(RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN);
+    expect(descriptorKey.test("model")).toBe(true);
+    expect(descriptorKey.test("prompt_version")).toBe(true);
+    expect(descriptorKey.test("Model")).toBe(false);
+    expect(descriptorKey.test("prompt.version")).toBe(false);
+    expect(descriptorKey.test("x".repeat(65))).toBe(false);
   });
 
   it("keeps the borrowed gen_ai.* interop keys under gen_ai.*, never renamed into ratel.*", () => {

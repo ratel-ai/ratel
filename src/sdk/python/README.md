@@ -251,6 +251,21 @@ the authoritative full replacement for removals and recovery. They contain sorte
 definitions only—never tool executors or skill bodies. Python exposes no Cloud transport;
 applications may publish these events and snapshots through their own adapter.
 
+## Agent variant tags (experimental)
+
+To compare variants of your agent (a model, a prompt version, any setting), run each request inside `experimental_with_variant`. Each span that starts inside carries `ratel.variant.experiment`, `ratel.variant.name` and one `ratel.variant.<key>` per descriptor. It works with `with` and `async with`, also across `await` and in tasks created inside.
+
+```python
+from ratel_ai import experimental_with_variant
+
+with experimental_with_variant(
+    experiment="support-agent-model", name="haiku", model="claude-haiku-5-5", prompt_version=3
+):
+    run_agent(request)
+```
+
+`configure_telemetry()` adds the `ExperimentalVariantSpanProcessor` that copies the tags onto spans. A host that owns its provider adds it: `provider.add_span_processor(ExperimentalVariantSpanProcessor())`. Descriptor values are content-free strings, finite numbers or booleans: never prompt text, user input or personal data. An invalid `experiment` or `name` raises `ValueError`. An invalid descriptor is dropped with a `UserWarning`. A tag on the root span alone is sufficient for Ratel. The contract, with its bounds, is the `ratel.variant.*` section of [CONVENTIONS.md](../../telemetry/CONVENTIONS.md).
+
 ## Facts (experimental)
 
 Tools and skills are **pulled** — a query ranks them and only the winners reach the model. Facts are the opposite: constant content the agent should always work from (a shop's address, hours, a brand's voice), **pushed** into the context and deduplicated so it is injected once rather than every turn.

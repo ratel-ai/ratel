@@ -93,6 +93,13 @@ import {
   RATEL_UPSTREAM_SERVER,
   RATEL_UPSTREAM_TOOL_COUNT,
   RATEL_UPSTREAM_TRANSPORT,
+  RATEL_VARIANT_BAGGAGE_PREFIX,
+  RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+  RATEL_VARIANT_EXPERIMENT,
+  RATEL_VARIANT_MAX_DESCRIPTORS,
+  RATEL_VARIANT_MAX_VALUE_LENGTH,
+  RATEL_VARIANT_NAME,
+  RATEL_VARIANT_PREFIX,
   SEMCONV_VERSION,
 } from "./index.js";
 
@@ -217,6 +224,7 @@ interface Fixture {
 
 interface FixtureFile {
   semconv_version: string;
+  variant: Record<string, unknown>;
   fixtures: Fixture[];
 }
 
@@ -274,6 +282,20 @@ async function emit(fixture: Fixture): Promise<{
 describe("telemetry conformance (contract against the pin)", () => {
   it("shares the pinned semconv version with the vocabulary", () => {
     expect(fixtures.semconv_version).toBe(SEMCONV_VERSION);
+  });
+
+  it("pins the agent variant keys and bounds the SDK helpers enforce", () => {
+    expect(fixtures.variant).toEqual({
+      attribute_prefix: RATEL_VARIANT_PREFIX,
+      baggage_prefix: RATEL_VARIANT_BAGGAGE_PREFIX,
+      experiment_key: RATEL_VARIANT_EXPERIMENT,
+      name_key: RATEL_VARIANT_NAME,
+      reserved_descriptor_keys: ["experiment", "name"],
+      descriptor_key_pattern: RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN,
+      descriptor_value_types: ["string", "number", "boolean"],
+      max_descriptors: RATEL_VARIANT_MAX_DESCRIPTORS,
+      max_value_length: RATEL_VARIANT_MAX_VALUE_LENGTH,
+    });
   });
 
   for (const fixture of fixtures.fixtures) {

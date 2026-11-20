@@ -288,6 +288,37 @@ RATEL_EXPERIMENT_ROLE_BAGGAGE_KEY: Final = RATEL_EXPERIMENT_ROLE
 RATEL_EXPERIMENT_UNIT_BAGGAGE_KEY: Final = RATEL_EXPERIMENT_UNIT
 
 # ---------------------------------------------------------------------------
+# Agent variant tags (CONVENTIONS.md § ratel.variant.*)
+#
+# Customer-set tags that name the variant of the agent a run used. They are
+# independent of the retrieval ratel.experiment.* stamp above.
+# ---------------------------------------------------------------------------
+
+#: ratel.variant. — prefix of every agent-variant attribute and baggage key.
+RATEL_VARIANT_PREFIX: Final = "ratel.variant."
+
+#: ratel.variant.experiment — the experiment the run belongs to.
+RATEL_VARIANT_EXPERIMENT: Final = "ratel.variant.experiment"
+
+#: ratel.variant.name — the variant of that experiment the run used.
+RATEL_VARIANT_NAME: Final = "ratel.variant.name"
+
+# Variant baggage keys equal their matching span-attribute keys, as the
+# experiment baggage keys do.
+RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY: Final = RATEL_VARIANT_EXPERIMENT
+RATEL_VARIANT_NAME_BAGGAGE_KEY: Final = RATEL_VARIANT_NAME
+RATEL_VARIANT_BAGGAGE_PREFIX: Final = RATEL_VARIANT_PREFIX
+
+#: Pattern every descriptor <key> matches. "experiment" and "name" are reserved.
+RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN: Final = "^[a-z][a-z0-9_]{0,63}$"
+
+#: Most descriptors one run carries (besides experiment and name).
+RATEL_VARIANT_MAX_DESCRIPTORS: Final = 16
+
+#: Most characters in the experiment, the name and each string descriptor value.
+RATEL_VARIANT_MAX_VALUE_LENGTH: Final = 128
+
+# ---------------------------------------------------------------------------
 # gen_ai.* interop keys (CONVENTIONS.md, Tier 1 — borrowed verbatim)
 #
 # Only the subset the ratel.* overlay directly emits on the execute_tool span.
@@ -531,6 +562,15 @@ __all__ = [
     "RATEL_UPSTREAM_SERVER",
     "RATEL_UPSTREAM_TOOL_COUNT",
     "RATEL_UPSTREAM_TRANSPORT",
+    "RATEL_VARIANT_BAGGAGE_PREFIX",
+    "RATEL_VARIANT_DESCRIPTOR_KEY_PATTERN",
+    "RATEL_VARIANT_EXPERIMENT",
+    "RATEL_VARIANT_EXPERIMENT_BAGGAGE_KEY",
+    "RATEL_VARIANT_MAX_DESCRIPTORS",
+    "RATEL_VARIANT_MAX_VALUE_LENGTH",
+    "RATEL_VARIANT_NAME",
+    "RATEL_VARIANT_NAME_BAGGAGE_KEY",
+    "RATEL_VARIANT_PREFIX",
     "SEMCONV_VERSION",
     "AuthOutcome",
     "ExperimentArmOutcome",
