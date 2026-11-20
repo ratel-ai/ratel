@@ -11,6 +11,7 @@ import {
 } from "./config";
 import { fakeChatModel, fakeTextModel } from "./fake";
 import { type ChatFeatureId, type FeatureId, featureRow, type TextFeatureId } from "./features";
+import { openAiCompatibleProvider } from "./providers/openai-compatible";
 
 /**
  * The model kit (ADR-0033): where a feature gets a model. It names what it is
@@ -54,6 +55,7 @@ const fakeProvider: ModelProviderAdapter = {
 };
 
 let providers: Partial<Record<ModelProviderName, ModelProviderAdapter>> = {
+  "openai-compatible": openAiCompatibleProvider(),
   fake: fakeProvider,
 };
 

@@ -51,7 +51,7 @@ and embeddings follow `OPENAI_API_KEY`.
 
 | Kind | Variables | Values |
 |---|---|---|
-| Text and chat | `MODEL_PROVIDER`, `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_DEEP`, `MODEL_STANDARD`, `MODEL_FAST`, `MODEL_MAX_OUTPUT_TOKENS`, `MODEL_PRICES` | unset (Claude, as today), `anthropic-vertex`, `anthropic-bedrock`, `openai-compatible`, `fake` |
+| Text and chat | `MODEL_PROVIDER`, `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_DEEP`, `MODEL_STANDARD`, `MODEL_FAST`, `MODEL_MAX_OUTPUT_TOKENS`, `MODEL_REASONING_MODELS`, `MODEL_PRICES` | unset (Claude, as today), `anthropic-vertex`, `anthropic-bedrock`, `openai-compatible`, `fake` |
 | Decision | `DECISION_ENGINE`, `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL`, `DECISION_MIN_CONFIDENCE` | `openai` (default), `system-one`, `rerank`, `llm` |
 | Embedding | `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL` | fall back to `OPENAI_*`, then the local hash |
 

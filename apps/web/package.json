@@ -20,6 +20,7 @@
     "seed:quality": "tsx scripts/seed-site-copilot-quality.mts",
     "seed:task-loop": "tsx scripts/seed-task-loop.mts",
     "bedrock:smoke": "tsx scripts/bedrock-smoke.mts",
+    "models:smoke": "tsx scripts/model-smoke.mts",
     "otlp-raw:keys": "tsx scripts/otlp-raw-keys.ts",
     "otlp-raw:reprocess": "tsx scripts/reprocess-otlp-raw.ts",
     "backfill:costs": "tsx scripts/backfill-costs.ts",

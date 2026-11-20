@@ -57,7 +57,26 @@ The selection fails closed: a named provider never falls back to another, the pr
 inferred from `OPENAI_API_KEY`, and nothing defaults to localhost.
 `no-outbound-without-key.test.ts` holds the table.
 
+## Providers
+
+| Provider | File | Notes |
+|---|---|---|
+| `openai-compatible` | `providers/openai-compatible.ts` | Chat completions over `fetch`: OpenAI, Gemini's compatible endpoint, vLLM, llama.cpp, Ollama. Text and tool calls |
+| `fake` | `fake.ts` | Local environments only |
+
+`openai-compatible` asks for the most a server can do and steps down. JSON output is asked for by
+schema, then as a JSON object, then by the prompt alone; what a server took is remembered. A model
+named in `MODEL_REASONING_MODELS` (comma-separated id prefixes, such as `o4,gpt-5`) is sent
+`max_completion_tokens` and its effort and no temperature; every other model gets `max_tokens`.
+Usage a server does not report is estimated. One call, with its retries, is one spend line.
+
+`pnpm --filter @ratel/platform models:smoke` runs a plain answer, a schema-bound answer, a
+streamed answer and a tool call against whatever the environment selects. Checked live on Ollama
+(`llama3.2:1b`, `qwen2.5:0.5b`) and on llama.cpp's `llama-server` (started with `--jinja`, which
+its tool calls need).
+
 ## Status
 
-The registry holds the fake provider. The Claude and `openai-compatible` adapters land in
-`providers/`, and the call sites move onto the kit after them (ADR-0033).
+The Claude adapter is not in the registry yet, so `models.text` gives no model on a Claude
+deployment and no call site uses the kit. It lands next, and the call sites move after it
+(ADR-0033).
