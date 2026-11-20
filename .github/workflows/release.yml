@@ -96,9 +96,16 @@ jobs:
             target: x86_64-apple-darwin
             runs-on: macos-15
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-apple-darwin --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
+          # The Linux gnu bindings build in the manylinux_2_28 image (AlmaLinux 8,
+          # glibc 2.28), the image the Python wheels use too. A build on the runner's
+          # own glibc (2.39 on Ubuntu 24.04) does not load on Amazon Linux 2023
+          # (glibc 2.34), the OS of Vercel and AWS Lambda. check-sdk-linux-glibc
+          # below fails the release when a binding needs a newer glibc. Keep the
+          # image the same as ci.yml's sdk-linux-glibc-build.
           - triple: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
             runs-on: ubuntu-latest
+            container: quay.io/pypa/manylinux_2_28_x86_64:2026.11.14-1
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-unknown-linux-gnu --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: linux-arm64-gnu
             target: aarch64-unknown-linux-gnu
@@ -106,12 +113,15 @@ jobs:
             # zig-cross-compile, so build arm64-linux natively instead of
             # `--use-napi-cross`.
             runs-on: ubuntu-24.04-arm
+            container: quay.io/pypa/manylinux_2_28_aarch64:2026.11.14-1
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target aarch64-unknown-linux-gnu --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
           - triple: win32-x64-msvc
             target: x86_64-pc-windows-msvc
             runs-on: windows-latest
             build: pnpm --filter @ratel-ai/sdk exec napi build --release --platform --target x86_64-pc-windows-msvc --manifest-path native/Cargo.toml --output-dir native --js index.cjs --dts index.d.cts
     runs-on: ${{ matrix.runs-on }}
+    # Empty (no container) for the rows that set none.
+    container: ${{ matrix.container }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,7 +132,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src/sdk/ts/native
-          key: ${{ matrix.triple }}
+          # A container build must not reuse a host build's cache (other glibc).
+          key: ${{ matrix.container && format('{0}-{1}', matrix.triple, matrix.container) || matrix.triple }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -142,9 +153,36 @@ jobs:
             src/sdk/ts/native/index.d.cts
           if-no-files-found: error
 
+  # Each Linux gnu binding must load on Amazon Linux 2023 and need no glibc above 2.28
+  # (scripts/check-native-glibc.sh). Runs on the binding's own architecture.
+  check-sdk-linux-glibc:
+    name: glibc check (${{ matrix.triple }})
+    needs: [tag-version-check, build]
+    if: needs.tag-version-check.outputs.unit == 'sdk-ts'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: linux-x64-gnu
+            runs-on: ubuntu-latest
+          - triple: linux-arm64-gnu
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.triple }}
+          path: bindings
+      - name: Check glibc and load on Amazon Linux 2023
+        run: scripts/check-native-glibc.sh bindings/ratel-sdk.${{ matrix.triple }}.node
+
   publish-sdk-ts:
     name: Publish @ratel-ai/sdk (loader + platform packages)
-    needs: [tag-version-check, build]
+    needs: [tag-version-check, build, check-sdk-linux-glibc]
     if: needs.tag-version-check.outputs.unit == 'sdk-ts'
     runs-on: ubuntu-latest
     environment: release

@@ -83,6 +83,14 @@ the floor is GA and both packages hold `latest`, drop the `@rc` from those insta
   via Trusted Publishers (OIDC) — no `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` / PyPI token
   secrets. `*-rc.*` versions publish under the npm `rc` dist-tag (and are pre-release on PyPI
   by PEP 440); un-suffixed versions become `latest`.
+- **Linux glibc floor (`sdk-ts`)** — the `linux-x64-gnu` and `linux-arm64-gnu` bindings build
+  in the `manylinux_2_28` image (glibc 2.28), so they load on Amazon Linux 2023 (Vercel, AWS
+  Lambda). The `check-sdk-linux-glibc` job runs
+  [`scripts/check-native-glibc.sh`](scripts/check-native-glibc.sh) on each binding before
+  `publish-sdk-ts`: it fails above `GLIBC_2.28` or when Node on `amazonlinux:2023` cannot
+  `require` it. `ci.yml` runs the same build and check (`sdk-linux-glibc-build`,
+  `sdk-linux-glibc`) on the `release` filter. Run the check locally with
+  `scripts/check-native-glibc.sh <file>.node` (needs Docker).
 - **`scripts/releasable.mjs`** — DX helper: run `node scripts/releasable.mjs` to see which
   units have commits since their last release tag (and how many), so you know what to cut.
 - **`verify-install.yml`** — `workflow_dispatch` + daily cron. Installs a unit's published
@@ -100,7 +108,7 @@ the floor is GA and both packages hold `latest`, drop the `@rc` from those insta
 All pre-merge checks live in **one** workflow, `.github/workflows/ci.yml`, so a single
 terminal **`ci-gate`** job can `needs:` every leg (GitHub `needs:` can't cross workflow
 files). `ci-gate` is the **only required status check** on `main` — it aggregates the
-everyday legs (`rust`, `sdk`, `ai-sdk-compat`, `python`, `telemetry`, `protocol`, `design-system`, `platform-build`, `platform-test`, `platform-compose`) **and** the
+everyday legs (`rust`, `sdk`, `sdk-linux-glibc-build`, `sdk-linux-glibc`, `ai-sdk-compat`, `python`, `telemetry`, `protocol`, `design-system`, `platform-build`, `platform-test`, `platform-compose`) **and** the
 heavy release-verify matrix, so one green check means the whole pipeline is green. See
 [ADR-0016](docs/adr/0016-single-ci-gate.md).
 

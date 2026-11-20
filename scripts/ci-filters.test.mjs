@@ -131,6 +131,11 @@ test("inject-sdk-optional-deps sets sdk and release", () => {
   assertFalse(r, ["platform"]);
 });
 
+test("check-native-glibc.sh sets sdk and release", () => {
+  const r = on(["scripts/check-native-glibc.sh"]);
+  assertTrue(r, ["sdk", "release"]);
+});
+
 test("docker-compose.yml sets compose and platform", () => {
   const r = on(["docker-compose.yml"]);
   assertTrue(r, ["compose", "platform"]);
