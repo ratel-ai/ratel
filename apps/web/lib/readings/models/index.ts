@@ -11,6 +11,7 @@ import {
 } from "./config";
 import { fakeChatModel, fakeTextModel } from "./fake";
 import { type ChatFeatureId, type FeatureId, featureRow, type TextFeatureId } from "./features";
+import { anthropicProvider } from "./providers/anthropic";
 import { openAiCompatibleProvider } from "./providers/openai-compatible";
 
 /**
@@ -55,6 +56,7 @@ const fakeProvider: ModelProviderAdapter = {
 };
 
 let providers: Partial<Record<ModelProviderName, ModelProviderAdapter>> = {
+  anthropic: anthropicProvider,
   "openai-compatible": openAiCompatibleProvider(),
   fake: fakeProvider,
 };
