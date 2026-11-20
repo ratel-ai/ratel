@@ -118,6 +118,7 @@ test("parse_args rejects bad values with exit 2", async () => {
     ["--domain", "a b"],
     ["--region", "us east"],
     ["--ref", "a;b"],
+    ["--ref", "main/../../evil"],
     ["--nope"],
     ["--cloud"],
     ["up", "status"],
@@ -427,6 +428,8 @@ test("the shared cloud-init checks every value that reaches the install command"
     const block = main.slice(main.indexOf(`variable "${name}"`), main.indexOf("\n}\n", main.indexOf(`variable "${name}"`)));
     assert.match(block, /validation \{\n\s+condition\s+= can\(regex\(/, name);
   }
+  const ref = main.slice(main.indexOf('variable "ref"'), main.indexOf("\n}\n", main.indexOf('variable "ref"')));
+  assert.match(ref, /!strcontains\(var\.ref, "\.\."\)/, "a ref with .. could leave the repo in the raw URL");
 });
 
 test("deploy.sh downloads exactly the module files that exist", () => {

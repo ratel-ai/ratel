@@ -51,8 +51,8 @@ variable "ref" {
 
   # The value goes into a shell command in the user data: the same rule as deploy.sh.
   validation {
-    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.ref))
-    error_message = "ref has characters it cannot have."
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.ref)) && !strcontains(var.ref, "..")
+    error_message = "ref has characters it cannot have, or contains \"..\"."
   }
 }
 

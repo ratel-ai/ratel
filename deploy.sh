@@ -97,7 +97,11 @@ set_flag() {
       ;;
     region) check_word "$1" "$2"; REGION=$2 ;;
     size) check_word "$1" "$2"; SIZE=$2 ;;
-    ref) check_word "$1" "$2"; REF=$2 ;;
+    ref)
+      check_word "$1" "$2"
+      case "$2" in *..*) usage_error "--ref cannot contain .." ;; esac
+      REF=$2
+      ;;
     name)
       printf '%s' "$2" | grep -Eq '^[a-z]([a-z0-9-]{0,18}[a-z0-9])?$' ||
         usage_error "--name is 1 to 20 lowercase letters, digits and dashes, and starts with a letter"
