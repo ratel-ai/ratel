@@ -90,3 +90,7 @@ adaptive_demo_graph.json
 
 # install.sh --access public writes it (it holds the login hash)
 /Caddyfile
+
+# deploy/terraform/check.sh
+deploy/terraform/**/.terraform/
+deploy/terraform/**/.terraform.lock.hcl

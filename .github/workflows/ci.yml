@@ -58,6 +58,7 @@ jobs:
       design_system: ${{ steps.c.outputs.design_system }}
       platform: ${{ steps.c.outputs.platform }}
       compose: ${{ steps.c.outputs.compose }}
+      deploy: ${{ steps.c.outputs.deploy }}
       release: ${{ steps.c.outputs.release }}
       lockfiles: ${{ steps.c.outputs.lockfiles }}
     steps:
@@ -251,6 +252,7 @@ jobs:
           scripts/platform-sync/sync.test.mjs
           scripts/quick-start.test.mjs
           scripts/install.test.mjs
+          scripts/deploy.test.mjs
       - name: Shellcheck install.sh
         run: shellcheck -s sh install.sh
 
@@ -610,6 +612,34 @@ jobs:
       - name: Verify v2 conformance vectors
         run: node protocol/v2/conformance/verify.mjs
 
+  # The cloud deployer: deploy.sh and the modules under deploy/terraform, checked with both
+  # engines (format, init, validate). It logs in to no cloud: nothing is planned or created.
+  deploy:
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck deploy.sh
+        run: shellcheck -s sh deploy.sh deploy/terraform/check.sh
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - name: Terraform fmt and validate
+        run: deploy/terraform/check.sh terraform
+      - name: OpenTofu fmt and validate
+        run: deploy/terraform/check.sh tofu
+      # GCP Infrastructure Manager runs Terraform 1.5.7 at no cost: the modules must stay valid there.
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+          terraform_wrapper: false
+      - name: Terraform 1.5.7 validate
+        run: deploy/terraform/check.sh terraform
+
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
   platform-compose:
@@ -871,7 +901,7 @@ jobs:
   # block the merge.
   ci-gate:
     name: ci-gate
-    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, dependency-scan, secret-scan, setup, verify]
+    needs: [changes, rust, sdk, ai-sdk-compat, python, rankers-python, rankers-ts-publish-build, telemetry, protocol, design-system, platform-build, platform-test, platform-compose, deploy, dependency-scan, secret-scan, setup, verify]
     if: >-
       always() &&
       (github.event_name != 'pull_request' || !github.event.pull_request.draft)
@@ -879,7 +909,7 @@ jobs:
     steps:
       - name: Summarize upstream results
         run: |
-          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
+          echo "changes=${{ needs.changes.result }} rust=${{ needs.rust.result }} sdk=${{ needs.sdk.result }} ai-sdk-compat=${{ needs.ai-sdk-compat.result }} python=${{ needs.python.result }} rankers-python=${{ needs.rankers-python.result }} rankers-ts-publish-build=${{ needs.rankers-ts-publish-build.result }} telemetry=${{ needs.telemetry.result }} protocol=${{ needs.protocol.result }} design-system=${{ needs.design-system.result }} platform-build=${{ needs.platform-build.result }} platform-test=${{ needs.platform-test.result }} platform-compose=${{ needs.platform-compose.result }} deploy=${{ needs.deploy.result }} dependency-scan=${{ needs.dependency-scan.result }} secret-scan=${{ needs.secret-scan.result }} setup=${{ needs.setup.result }} verify=${{ needs.verify.result }}"
       - name: Fail if any required job failed or was cancelled
         if: >-
           contains(needs.*.result, 'failure') ||
