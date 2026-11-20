@@ -1,0 +1,42 @@
+# Upload the CloudFormation template to S3 for the README's "Launch Stack" button.
+# CloudFormation's quick-create page takes a template URL only from S3.
+#
+# One-time setup (the owner, in the AWS account that hosts the template):
+#   1. Create the bucket named in scripts/deploy-buttons.mjs (TEMPLATE_BUCKET), with public read
+#      on cloudformation/* only.
+#   2. Create an IAM role that GitHub OIDC for ratel-ai/ratel on main can assume, with
+#      s3:PutObject on arn:aws:s3:::<bucket>/cloudformation/*.
+#   3. Add its ARN as the repo variable AWS_TEMPLATES_ROLE_ARN.
+# Until the variable exists this job no-ops (it does not fail).
+name: Deploy templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/cloudformation/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  upload:
+    if: vars.AWS_TEMPLATES_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TEMPLATES_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Upload the template
+        run: |
+          bucket=$(node -e 'import("./scripts/deploy-buttons.mjs").then((m) => console.log(m.TEMPLATE_BUCKET))')
+          aws s3 cp deploy/cloudformation/ratel.yaml "s3://$bucket/cloudformation/ratel.yaml" \
+            --content-type text/yaml --cache-control max-age=300
