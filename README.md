@@ -77,6 +77,18 @@ curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh 
 
 `up` on an existing deploy upgrades it: it reruns `install.sh` on the VM over SSH with the new `--ref`. If your IP changed, it first opens SSH to the new one. `destroy` deletes the VM, its disk with all Ratel data and its IP, then the local state. Back up first (see [On a server](#on-a-server)).
 
+### One-click deploy
+
+Each button opens your cloud's console with Ratel's template, in your account. Nothing is created until you confirm there. The VM runs `install.sh`, as `deploy.sh` does, in the public mode (Caddy with TLS and a login for user `ratel`, with the password that you type) or in the private mode (no web port, an SSH tunnel). The install takes 5 to 10 minutes after the VM starts.
+
+| Cloud | Button | What it opens |
+|---|---|---|
+| AWS | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?templateURL=https%3A%2F%2Fratel-public-templates.s3.amazonaws.com%2Fcloudformation%2Fratel.yaml&stackName=ratel) | CloudFormation quick-create, with [deploy/cloudformation/ratel.yaml](deploy/cloudformation/ratel.yaml) (default VPC, `t3.large`, Elastic IP) |
+| Azure | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fratel-ai%2Fratel%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json) | A custom deployment, with [deploy/azure/azuredeploy.json](deploy/azure/azuredeploy.json) (its own network, `Standard_B2ms`, static IP) |
+| Google Cloud | [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fratel-ai%2Fratel&cloudshell_git_branch=main&cloudshell_tutorial=deploy%2Fcloudshell%2Ftutorial.md&show=terminal) | Cloud Shell, with a [tutorial](deploy/cloudshell/tutorial.md) that runs `./deploy.sh up --cloud gcp` |
+
+The password is in the user data of the VM (AWS) or in its custom data (Azure), base64-encoded. Anyone who can read the VM's configuration in your account can read it. Use `deploy.sh` when that matters: it gives the VM only the hash.
+
 ### On your machine
 
 The manual steps:
