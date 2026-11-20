@@ -35,7 +35,7 @@ dependencies = []
 # (this package targets >=3.9). semantic-conventions is not a direct dep: SERVICE_NAME
 # resolves to the literal "service.name" from opentelemetry-sdk.
 otlp = [
-    "opentelemetry-api>=1.41.0,<1.42",
+    "opentelemetry-api>=1.41.0,<1.46",
     "opentelemetry-sdk>=1.41.0,<1.42",
     "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
 ]
