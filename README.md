@@ -3,7 +3,7 @@
   <p>See what your AI agent gets wrong, and what to change. On your own infrastructure.</p>
 
   <p>
-    <a href="https://docs.ratel.sh">Docs</a> •
+    <a href="https://www.ratel.sh/docs">Docs</a> •
     <a href="https://github.com/ratel-ai/skills">Skills</a> •
     <a href="https://discord.gg/75vAPdjYqT">Discord</a>
   </p>
