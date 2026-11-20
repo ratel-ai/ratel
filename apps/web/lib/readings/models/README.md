@@ -80,8 +80,7 @@ its tool calls need).
 
 | Feature | On the kit |
 |---|---|
-| Workflow labels, intent names, topic names, fix drafts | yes |
-| Match-quality analyst | not yet: it still builds its own Claude request |
+| Workflow labels, intent names, topic names, fix drafts, the match-quality analyst | yes |
 | Eval gate (replay, judge, tool stand-in, person, test draft) | not yet |
 | Decisions (`models.decision`) | not yet: the engine is OpenAI's Decisions API, in `readings/decisions` |
 

@@ -11,7 +11,7 @@ import {
 import { topicNamerOver } from "@/lib/readings/topics/job";
 import { LABEL_SCHEMA } from "@/lib/readings/trace-signals/workflows/label";
 import { labelCompleteOver } from "@/lib/readings/trace-signals/workflows/label-job";
-import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
+import { ANALYST_SCHEMA, analystDepsOver } from "@/lib/synthesis/match-quality/analyst";
 import { draftModelAvailable, draftModelFromEnv } from "@/lib/views/fix-drafts/model";
 import { resetJsonModes } from "./providers/openai-compatible";
 
@@ -94,6 +94,31 @@ test("the names job takes the deployment's model, whoever serves it", () => {
     ANTHROPIC_API_KEY: "sk-test",
   });
   assert.equal(unnamed.complete, null);
+});
+
+test("the match-quality analyst asks for a long answer at high effort, and names its stops", async () => {
+  const { model, asked } = recording('{"diagnosis":{},"proposals":[]}');
+  const deps = analystDepsOver(model);
+  assert.equal(deps.model, "llama-3.3-70b");
+  assert.equal(await deps.complete("system", "user"), '{"diagnosis":{},"proposals":[]}');
+  assert.deepEqual(asked, [
+    {
+      system: "system",
+      user: "user",
+      schema: ANALYST_SCHEMA,
+      effort: "xhigh",
+      maxTokens: 64_000,
+      longOutput: true,
+    },
+  ]);
+  await assert.rejects(
+    analystDepsOver(recording("half", "cut_off").model).complete("s", "u"),
+    /64000-token output cap/,
+  );
+  await assert.rejects(
+    analystDepsOver(recording("", "refused").model).complete("s", "u"),
+    /declined by the model's safety filter/,
+  );
 });
 
 test("a fix draft runs on another provider, end to end", async () => {

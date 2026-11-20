@@ -898,6 +898,7 @@
         "!apps/web/lib/synthesis/match-quality/schema.ts",
         "!apps/web/lib/synthesis/match-quality/start-run.test.ts",
         "!apps/web/lib/synthesis/match-quality/analyst.golden.test.ts",
+        "!apps/web/lib/synthesis/match-quality/job.ts",
         "apps/web/lib/console/seed/site-copilot-quality.ts",
         "apps/web/lib/console/seed/site-copilot-quality.test.ts",
         "apps/web/lib/console/seed/site-copilot-quality-fixture.ts",

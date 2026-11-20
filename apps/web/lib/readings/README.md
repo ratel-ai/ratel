@@ -52,8 +52,8 @@ outright, for the tests that pin it.
 selects the Anthropic API. `ANTHROPIC_BACKEND=bedrock` serves every call from Amazon Bedrock
 through an EU inference profile with the AWS credential chain and never reads the key; a model
 with no EU profile fails as not found, and any other value gives no client. The model kit's
-Claude adapter (`models/providers/anthropic.ts`) builds its client there, and so do the two call
-sites not on the kit yet (the match-quality analyst and the eval gate). `pnpm bedrock:smoke`
+Claude adapter (`models/providers/anthropic.ts`) builds its client there, and so does the one call
+site not on the kit yet (the eval gate). `pnpm bedrock:smoke`
 checks the request shapes against Bedrock with made-up text.
 Each completed full reading stores its Health score (`trace-signals/health-score.ts`, RC-225) in
 its summary, so the page can show the change. The score (version 2, RC-226) is 60% how the runs

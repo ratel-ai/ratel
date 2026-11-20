@@ -25,3 +25,8 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 
 The experiment reads are in `traces/` (`experiment-*`, `calibration-view`); the Calibration pages and
 their services stay upstream until they land. Copies and owned files are listed in `scripts/platform-sync/map.json`.
+
+The match-quality analyst gets its model from the model kit (`lib/readings/models`, ADR-0033):
+`analystDepsOver` runs on whichever provider the deployment selects, and `job.ts`
+(`resolveAnalystFactory`, owned for this) asks the kit instead of asking whether Claude is
+configured. `anthropicAnalystDeps` still names a Claude model outright, for the tests that pin it.

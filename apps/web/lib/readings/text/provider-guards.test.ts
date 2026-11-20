@@ -37,8 +37,8 @@ test("every Anthropic SDK call in lib sends its params through wellFormedJson", 
   // The eval gate makes all its calls through one `tracked` (lib/eval-gate/models.ts), so it counts once.
   // Owned: the JSON features call Claude through the model kit's adapter (ADR-0033), which
   // holds their two calls (`create`, and `stream` for a long answer), so the floor is lower than
-  // upstream's 8. It drops again as the analyst and the eval gate move.
-  assert.ok(calls.length >= 6, `found only ${calls.length} calls: the scan no longer sees them`);
+  // upstream's 8. The analyst is on the kit too; the floor drops again as the eval gate moves.
+  assert.ok(calls.length >= 5, `found only ${calls.length} calls: the scan no longer sees them`);
   assert.deepEqual(unguarded, []);
 });
 
@@ -73,7 +73,6 @@ const VENDOR_SDK_ALLOWED = new Set([
   "readings/anthropic/client.ts",
   "readings/models/providers/anthropic.ts",
   // Not on the kit yet. Remove each as it moves.
-  "synthesis/match-quality/analyst.ts",
   "views/eval-gate/models.ts",
 ]);
 
