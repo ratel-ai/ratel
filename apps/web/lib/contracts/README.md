@@ -141,3 +141,8 @@ can happen first and then goes unreported.
 `embedding-provider.ts` is the Playground's vectors. A provider that answered but was refused or
 unreadable sets `reason` on the error it throws; its optional `noteUnavailable` is told when a
 run wanted vectors with no key, so the edition can record the call it skipped.
+
+`models.ts` is not a port: it is what a model is to the platform, whoever serves it (ADR-0033).
+`TextModel`, `ChatModel` and `DecisionClient` are implemented once per provider under
+`lib/readings/models`, and both editions choose a provider by environment, not by composition.
+It lives here so that nothing above it, and nothing in an edition, has to name a vendor's types.

@@ -40,6 +40,10 @@ exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
 `views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
+`models/` is the model kit (ADR-0033): `models.text(feature)` and `models.chat(feature)` give a
+feature the deployment's model for it, whoever serves it, or null. `features.ts` lists every
+feature that calls a model. See `models/README.md` before adding a model call.
+
 `anthropic/client.ts` (a copy) is the one place the platform gets a Claude client:
 `anthropicClient` and `anthropicConfigured`. With `ANTHROPIC_BACKEND` unset, `ANTHROPIC_API_KEY`
 selects the Anthropic API. `ANTHROPIC_BACKEND=bedrock` serves every call from Amazon Bedrock

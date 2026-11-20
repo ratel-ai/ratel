@@ -79,8 +79,8 @@ own error for it.
 path keeps the accounting it has.
 
 **8. A model without a price is charged at the fallback price.** A budget can then never be
-bypassed by an unknown hosted model. `MODEL_PRICES` (JSON, model id to input and output price per
-token) is read first, and `0` is allowed for a local model.
+bypassed by an unknown hosted model. `MODEL_PRICES` (JSON, model id to input and output price in
+dollars per million tokens) is read first, and `0` is allowed for a local model.
 
 **9. System One ships as a format, not a vendor.** The `system-one` engine speaks the System One
 wire format (`POST /v1/systemone`) and is configured by base URL, model and key alone, so a
