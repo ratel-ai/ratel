@@ -16,7 +16,6 @@ import {
   signalAnchorFromHash,
   signalAnchorId,
 } from "@/components/console/health/anchors";
-import { listScrollDelta, TOP_PROBLEMS } from "@/components/console/health/card-model";
 import { ProblemCard } from "@/components/console/health/ProblemCard";
 import {
   groupAnchors,
@@ -29,6 +28,7 @@ import {
 import { SignalCard, useHash, useOpenSignal } from "@/components/console/health/SignalCard";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import type { SignalView } from "@/lib/readings/trace-signals/view";
+import { listScrollDelta, TOP_PROBLEMS } from "@/lib/views/health/card-model";
 import type { ChainFolding } from "@/lib/views/health/workflows-view";
 
 /**

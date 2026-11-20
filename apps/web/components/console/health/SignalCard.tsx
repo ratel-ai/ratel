@@ -23,22 +23,6 @@ import {
   signalAnchorFromHash,
   signalAnchorId,
 } from "@/components/console/health/anchors";
-import {
-  cardEnterDelayMs,
-  nameSeparator,
-  type OpenSource,
-  openReducer,
-  resolveOpen,
-  signalCaveat,
-  signalTone,
-  splitFix,
-  storyRowLimit,
-  subjectNeedsList,
-  subjectPlainText,
-  subjectText,
-  subjectTotal,
-  TONE_LABELS,
-} from "@/components/console/health/card-model";
 import { EvidenceChart } from "@/components/console/health/EvidenceChart";
 import { ExamplesPanel } from "@/components/console/health/ExampleList";
 import { FixLead } from "@/components/console/health/FixLead";
@@ -55,6 +39,22 @@ import {
   signalsTitle,
 } from "@/lib/readings/trace-signals/claims";
 import type { SignalView, SubjectChip } from "@/lib/readings/trace-signals/view";
+import {
+  cardEnterDelayMs,
+  nameSeparator,
+  type OpenSource,
+  openReducer,
+  resolveOpen,
+  signalCaveat,
+  signalTone,
+  splitFix,
+  storyRowLimit,
+  subjectNeedsList,
+  subjectPlainText,
+  subjectText,
+  subjectTotal,
+  TONE_LABELS,
+} from "@/lib/views/health/card-model";
 import { capabilityCatalogHref } from "@/lib/views/intents/hrefs";
 
 /**

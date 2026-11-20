@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { CaptureNudge } from "@/components/console/health/CaptureNudge";
 import { CollectingState } from "@/components/console/health/CollectingState";
-import { pageGap, signalsForGap, tilesForGap } from "@/components/console/health/data-gaps-model";
 import { EntranceMotion } from "@/components/console/health/EntranceMotion";
 import { HealthHeader } from "@/components/console/health/HealthHeader";
 import { HealthReadings } from "@/components/console/health/HealthReadings";
@@ -24,6 +23,7 @@ import {
   runWindowLabel,
   type WindowOption,
 } from "@/lib/readings/trace-signals/view";
+import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
 import { MOCK_HEALTH_MODEL } from "@/lib/views/health/mock-fixture";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
 import { sourceBadgeText } from "@/lib/views/health/source-mode";

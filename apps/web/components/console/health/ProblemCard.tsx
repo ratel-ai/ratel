@@ -2,12 +2,6 @@
 
 import { cn } from "@ratel/design-system/cn";
 import { useLayoutEffect, useRef, useState } from "react";
-import {
-  cardEnterDelayMs,
-  signalTone,
-  storyRowLimit,
-  TONE_LABELS,
-} from "@/components/console/health/card-model";
 import { ExamplesPanel } from "@/components/console/health/ExampleList";
 import { FixLead } from "@/components/console/health/FixLead";
 import { ProblemIcon } from "@/components/console/health/kinds";
@@ -36,6 +30,12 @@ import {
 import { SlowByDesignButton } from "@/components/console/health/SlowByDesign";
 import { ToolFilter } from "@/components/console/health/ToolFilter";
 import { clampFigures } from "@/lib/readings/trace-signals/claims";
+import {
+  cardEnterDelayMs,
+  signalTone,
+  storyRowLimit,
+  TONE_LABELS,
+} from "@/lib/views/health/card-model";
 
 /**
  * One kind of problem that several tools share, as one row: "Wrong tool keeps

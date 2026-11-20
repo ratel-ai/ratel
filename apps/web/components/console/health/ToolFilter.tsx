@@ -4,7 +4,6 @@ import { Popover } from "@base-ui/react/popover";
 import { cn } from "@ratel/design-system/cn";
 import { ChevronDown } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
-import { signalTone } from "@/components/console/health/card-model";
 import {
   chipFiguresUseful,
   FILTER_SEARCH_THRESHOLD,
@@ -14,6 +13,7 @@ import {
 } from "@/components/console/health/problem-groups";
 import { clampFigures } from "@/lib/readings/trace-signals/claims";
 import type { SignalView } from "@/lib/readings/trace-signals/view";
+import { signalTone } from "@/lib/views/health/card-model";
 
 /**
  * The tool filter inside an open problem row, built to stay one calm line
