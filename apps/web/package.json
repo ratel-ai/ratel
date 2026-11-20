@@ -47,7 +47,7 @@
     "@opentelemetry/sdk-trace-base": "~2.9.0",
     "@opentelemetry/sdk-trace-node": "~2.9.0",
     "@opentelemetry/semantic-conventions": "^1.42.0",
-    "@ratel-ai/sdk": "0.13.0-rc.9",
+    "@ratel-ai/sdk": "0.13.0-rc.12",
     "@ratel-ai/telemetry": "^0.5.0",
     "@ratel/brand": "workspace:*",
     "@ratel/design-system": "workspace:*",
