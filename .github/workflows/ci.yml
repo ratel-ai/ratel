@@ -640,12 +640,16 @@ jobs:
           terraform_wrapper: false
       - name: Terraform 1.5.7 validate
         run: deploy/terraform/check.sh terraform
-      # The one-click templates: CloudFormation with cfn-lint, ARM with the Bicep decompiler,
-      # which fails on an invalid template.
+      # The one-click templates: CloudFormation with cfn-lint, ARM decompiled to Bicep and built,
+      # which fails on an invalid template or a wrong property type.
       - name: cfn-lint
         run: pipx run cfn-lint deploy/cloudformation/ratel.yaml
       - name: ARM template
-        run: az bicep decompile --file deploy/azure/azuredeploy.json --stdout > /dev/null
+        run: |
+          az bicep install
+          mkdir -p "$RUNNER_TEMP/arm"
+          ~/.azure/bin/bicep decompile deploy/azure/azuredeploy.json --outfile "$RUNNER_TEMP/arm/main.bicep"
+          ~/.azure/bin/bicep build "$RUNNER_TEMP/arm/main.bicep" --stdout > /dev/null
 
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
