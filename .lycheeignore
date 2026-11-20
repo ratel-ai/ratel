@@ -6,3 +6,5 @@
 ^https://opentelemetry\.io/docs/languages/(python|js)/$
 # ADR-0012 ships in this branch; its blob/main URL 404s until merge. Remove once on main.
 ^https://github\.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models\.md$
+# install.sh ships in this branch; its raw main URL 404s until merge. Remove once on main.
+^https://raw\.githubusercontent\.com/ratel-ai/ratel/main/install\.sh$

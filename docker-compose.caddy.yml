@@ -1,0 +1,21 @@
+# The public access mode of install.sh (--access public): Caddy in front of web, with TLS and
+# a login. install.sh writes ./Caddyfile and adds this file to COMPOSE_FILE in .env, so every
+# `docker compose` command in the directory includes it. See README.md "Deploy to your cloud".
+# web and db keep their 127.0.0.1 ports. Only Caddy listens on the public interfaces.
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and Caddy's own CA. A new volume means new certificates.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

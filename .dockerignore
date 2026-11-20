@@ -14,3 +14,5 @@ benchmark/
 **/*.tfstate
 **/*.tfstate.*
 **/*.tfplan
+# install.sh --access public: the login hash stays out of the image
+Caddyfile
