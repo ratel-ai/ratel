@@ -36,7 +36,7 @@ dependencies = []
 # resolves to the literal "service.name" from opentelemetry-sdk.
 otlp = [
     "opentelemetry-api>=1.41.0,<1.42",
-    "opentelemetry-sdk>=1.41.0,<1.42",
+    "opentelemetry-sdk>=1.41.0,<1.46",
     "opentelemetry-exporter-otlp-proto-http>=1.41.0,<1.42",
 ]
 # dev pulls the [otlp] extra so the init() + conformance tests exercise the real SDK.
