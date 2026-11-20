@@ -120,6 +120,7 @@ export const FEATURES = [
   { id: "match_quality_judge", kind: "decision", does: "Judges which tool a query wanted" },
   { id: "workflow_decide", kind: "decision", does: "Decides what a workflow was for" },
   { id: "topics_place", kind: "decision", does: "Places an ask under a topic" },
+  { id: "topics_sentiment", kind: "decision", does: "Reads how an ask was meant" },
 ] as const satisfies readonly FeatureRow[];
 
 type Row = (typeof FEATURES)[number];

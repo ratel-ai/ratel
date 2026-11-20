@@ -2,18 +2,14 @@ import { loadToolCorpus as loadToolCorpusFn } from "@/lib/ingest/runtime-catalog
 import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import {
-  configured,
-  resolveDecisionEngine,
-  usdPerInputToken,
-} from "@/lib/readings/decisions/engine";
+import { resolveDecisionEngine, usdPerInputToken } from "@/lib/readings/decisions/engine";
 import {
   type CorpusEntry,
   identityFingerprint,
   type JudgeEngine,
   type JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
-import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { judgeFromEnv } from "@/lib/readings/decisions/resolve";
 import { type CarryOutcome, decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import {
   type AskGroup,
@@ -97,12 +93,7 @@ const WORKFLOW_DECIDE_FEATURE = "workflow_decide";
  * `tools` its tuned tool framing; null without a usable key.
  */
 export function workflowJudgeFromEnv(env: Env = process.env, tools = false): JudgeEngine | null {
-  const resolved = resolveDecisionEngine(env);
-  if (!resolved) return null;
-  return openaiJudgeEngine({
-    apiKey: resolved.apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
+  return judgeFromEnv(env, {
     ...(tools ? {} : { framing: WORKFLOW_FRAMING }),
     feature: WORKFLOW_DECIDE_FEATURE,
     maxInputTokens: DECIDE_MAX_INPUT_TOKENS,
@@ -113,7 +104,7 @@ export function workflowJudgeFromEnv(env: Env = process.env, tools = false): Jud
 export function decideMaxUsd(env: Env = process.env): number | undefined {
   const resolved = resolveDecisionEngine(env);
   if (!resolved) return undefined;
-  return Number((DECIDE_MAX_INPUT_TOKENS * usdPerInputToken(resolved.name)).toFixed(2));
+  return Number((DECIDE_MAX_INPUT_TOKENS * usdPerInputToken(resolved.name, env)).toFixed(2));
 }
 
 export function defaultDecideDeps(env: Env = process.env): DecideDeps {

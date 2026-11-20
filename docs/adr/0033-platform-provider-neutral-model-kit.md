@@ -52,13 +52,17 @@ and embeddings follow `OPENAI_API_KEY`.
 | Kind | Variables | Values |
 |---|---|---|
 | Text and chat | `MODEL_PROVIDER`, `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_DEEP`, `MODEL_STANDARD`, `MODEL_FAST`, `MODEL_MAX_OUTPUT_TOKENS`, `MODEL_REASONING_MODELS`, `MODEL_PRICES` | unset (Claude, as today), `anthropic-vertex`, `anthropic-bedrock`, `openai-compatible`, `fake` |
-| Decision | `DECISION_ENGINE`, `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL`, `DECISION_MIN_CONFIDENCE` | `openai` (default), `system-one`, `rerank`, `llm` |
+| Decision | `DECISION_ENGINE`, `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL`, `DECISION_MIN_CONFIDENCE` | `openai` (default), `system-one`; `rerank` and `llm` are planned |
 | Embedding | `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL` | fall back to `OPENAI_*`, then the local hash |
 
 `openai-compatible` is any server that speaks chat completions: OpenAI, Gemini's compatible
 endpoint, vLLM, llama.cpp, Ollama. The adapters are written over `fetch`; no vendor SDK is added.
 
-**4. The selection is explicit and fails closed.** An unknown value gives no client. The text
+**4. The selection is explicit and fails closed.** An unknown `MODEL_PROVIDER` gives no client.
+An unknown `DECISION_ENGINE` is the one exception: it is read as `openai` with a warning, as
+before, because Ratel's own deployments set the names of the Cloud edition's private engines
+there and the core must keep judging. A key goes only to the server it was set for: the OpenAI
+key is never sent to `DECISION_BASE_URL` or `EMBEDDING_BASE_URL`. The text
 provider is never inferred from `OPENAI_API_KEY`, which Ratel sets for decisions. A server
 without a key counts as configured only when its base URL is set; nothing defaults to localhost.
 `fake` works only in local environments.
@@ -91,8 +95,9 @@ calibration stay private, the format is open.
 
 **10. Confidence thresholds belong to the engine.** Each engine declares whether it refuses,
 whether its confidence is calibrated, a score, or absent, and how many options it takes. The judge
-reads the thresholds of the engine it runs on. An engine is trusted for a surface only after the
-judge benchmark has run on it.
+reads the thresholds of the engine it runs on: OpenAI's keeps its measured 0.8, and an engine
+whose confidence is only a score is held to 0.9 until `DECISION_MIN_CONFIDENCE` says it was
+measured. An engine is trusted for a surface only after the judge benchmark has run on it.
 
 **11. The eval gate gains a branch; the Claude branch is not rewritten.** `resolveEvalModels`
 and its siblings choose by provider. Everything exported from `views/eval-gate/models.ts` stays.

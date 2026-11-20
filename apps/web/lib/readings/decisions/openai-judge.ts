@@ -1,3 +1,4 @@
+import type { DecisionClient } from "@/lib/contracts/models";
 import { getLogger } from "@/lib/platform/logger";
 import {
   bm25Order,
@@ -96,7 +97,34 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
     retryRateLimit: true,
     ...(config.feature ? { feature: config.feature } : {}),
   });
-  const model = config.model || OPENAI_DECISIONS_MODEL;
+  return judgeEngineOver(client, config.model || OPENAI_DECISIONS_MODEL, config);
+}
+
+/** What the judge runs with, whichever engine answers. Absent values are the OpenAI engine's. */
+export interface JudgeEngineSettings {
+  framing?: JudgeFraming;
+  minConfidence?: number;
+  maxInputTokens?: number;
+  maxDurationMs?: number;
+  concurrency?: number;
+  now?: () => number;
+  /** The engine's price, for the dollars the finishing log line reports. */
+  usdPerInputToken?: number;
+  /** Who is named when nothing answers. */
+  label?: string;
+}
+
+/**
+ * The judge over any decision client (ADR-0033 §10): the same budget, deadline, concurrency
+ * and abstention rules, with the thresholds of the engine it runs on.
+ */
+export function judgeEngineOver(
+  client: Pick<DecisionClient, "decideChoice">,
+  model: string,
+  config: JudgeEngineSettings = {},
+): JudgeEngine {
+  const label = config.label ?? "OpenAI";
+  const usdPerInputToken = config.usdPerInputToken ?? OPENAI_USD_PER_INPUT_TOKEN;
   const framing = judgeFraming(config.framing);
   const minConfidence = config.minConfidence ?? OPENAI_MIN_CONFIDENCE;
   const maxInputTokens = config.maxInputTokens ?? OPENAI_MAX_INPUT_TOKENS_PER_RUN;
@@ -155,7 +183,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
           consecutiveFailures += 1;
           if (consecutiveFailures >= OPENAI_MAX_CONSECUTIVE_FAILURES) {
             throw new OpenAIJudgeUnavailableError(
-              `OpenAI answered none of the last ${consecutiveFailures} searches`,
+              `${label} answered none of the last ${consecutiveFailures} searches`,
             );
           }
         }
@@ -180,7 +208,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
       await Promise.all(Array.from({ length: concurrency }, worker));
       if (fatal !== null) throw fatal;
       if (verdicts.length === 0 && unanswered > 0) {
-        throw new OpenAIJudgeUnavailableError(`OpenAI answered none of ${unanswered} searches`);
+        throw new OpenAIJudgeUnavailableError(`${label} answered none of ${unanswered} searches`);
       }
 
       const answered = verdicts.filter((verdict) => verdict.entryId !== "").length;
@@ -194,7 +222,7 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
           unanswered,
           not_asked: cases.length - verdicts.length - unanswered,
           input_tokens: inputTokens,
-          usd: Number((inputTokens * OPENAI_USD_PER_INPUT_TOKEN).toFixed(4)),
+          usd: Number((inputTokens * usdPerInputToken).toFixed(4)),
         },
         "openai judging finished",
       );

@@ -26,6 +26,8 @@ function sources(dir: string): string[] {
 
 /** The ways a call site names its feature: a `feature` field, or a `*_FEATURE` / `*Feature` constant or default. */
 const FEATURE_LITERAL = /(?:\bfeature|FEATURE|Feature)\w*\s*[:=]\s*"([a-z][a-z0-9_]*)"/g;
+/** A feature handed over as an argument, which the patterns above cannot see. Add one here when you add such a call. */
+const PASSED_AS_ARGUMENT = ["topics_sentiment"];
 /** The eval gate names its features in a union type, in this one file. */
 const EVAL_GATE_UNION = "views/eval-gate/models.ts";
 const EVAL_GATE_LITERAL = /"(eval_gate_[a-z_]+)"/g;
@@ -44,6 +46,7 @@ test("every feature a model call names is in the feature table", () => {
       for (const match of text.matchAll(pattern)) named.set(match[1], name);
     }
   }
+  for (const id of PASSED_AS_ARGUMENT) named.set(id, "(passed as an argument)");
   assert.ok(named.size >= 14, `found only ${named.size} feature names; the scan is broken`);
   const missing = [...named].filter(([id]) => !isFeature(id));
   assert.deepEqual(

@@ -82,7 +82,7 @@ its tool calls need).
 |---|---|
 | Workflow labels, intent names, topic names, fix drafts, the match-quality analyst | yes |
 | Eval gate (replay, judge, tool stand-in, person, test draft) | not yet |
-| Decisions (`models.decision`) | not yet: the engine is OpenAI's Decisions API, in `readings/decisions` |
+| Decisions | in `readings/decisions`, not behind `models`: `DECISION_ENGINE` picks OpenAI's Decisions API or `system-one`, and `judgeFromEnv` builds every surface's judge. A reranker and an LLM as the judge are not built yet |
 
 `call-sites.test.ts` runs the moved features on a model that is not Claude. The golden tests
 beside each site (`*.golden.test.ts`) hold the Claude path to the requests it sent before the kit.

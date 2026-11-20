@@ -10,14 +10,13 @@ import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import type {
   CorpusEntry,
   JudgeEngine,
   JudgeFraming,
   JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
-import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { judgeFromEnv } from "@/lib/readings/decisions/resolve";
 import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
 import { models } from "@/lib/readings/models";
@@ -201,22 +200,13 @@ export interface AssignTopicsResult {
 /** Bound on the helper read: one row's JSON path, so a slow one is cut rather than holding the reading. */
 const HELPER_READ_TIMEOUT_MS = 5_000;
 
-/** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. `feature` names its questions on `model_call` lines. */
+/** The deployment's decision engine (`readings/decisions/resolve.ts`), asking `framing`; null without a usable one. `feature` names its questions on `model_call` lines. */
 export function topicJudgeFromEnv(
   framing: JudgeFraming,
   env: Record<string, string | undefined> = process.env,
   feature = "topics_place",
 ): JudgeEngine | null {
-  const resolved = resolveDecisionEngine(env);
-  if (!resolved) return null;
-  return openaiJudgeEngine({
-    apiKey: resolved.apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
-    framing,
-    feature,
-    maxInputTokens: TOPICS_MAX_JUDGE_TOKENS,
-  });
+  return judgeFromEnv(env, { framing, feature, maxInputTokens: TOPICS_MAX_JUDGE_TOKENS });
 }
 
 /** The topic namer over any text model (ADR-0033). A refusal and a cut-off throw; the call is already recorded. */

@@ -1,7 +1,6 @@
-import { configured } from "@/lib/readings/decisions/engine";
+import { resolveDecisionEngine, usdPerInputToken } from "@/lib/readings/decisions/engine";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
-import { OPENAI_USD_PER_INPUT_TOKEN } from "@/lib/readings/decisions/openai";
-import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { judgeFromEnv } from "@/lib/readings/decisions/resolve";
 
 type Env = Record<string, string | undefined>;
 
@@ -15,22 +14,22 @@ export interface JudgeRunOptions {
 const MATCH_QUALITY_JUDGE_FEATURE = "match_quality_judge";
 
 /**
- * The judge this deployment can plug in, or undefined with no key: a run then stops before
- * judging. Owned (ADR-0030): OpenAI is the one decision engine here.
+ * The judge this deployment can plug in, or undefined with no usable engine: a run then stops
+ * before judging. Owned (ADR-0030, ADR-0033): the engine is the one `DECISION_ENGINE` selects
+ * (`readings/decisions/engine.ts`), OpenAI's Decisions API unless told otherwise.
  */
 export function resolveJudgeEngine(
   env: Env = process.env,
   run: JudgeRunOptions = {},
 ): JudgeEngine | undefined {
-  const apiKey = configured(env.OPENAI_API_KEY);
-  if (!apiKey) return undefined;
-  return openaiJudgeEngine({
-    apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
-    feature: MATCH_QUALITY_JUDGE_FEATURE,
-    ...(run.budgetUsd === undefined
-      ? {}
-      : { maxInputTokens: Math.floor(run.budgetUsd / OPENAI_USD_PER_INPUT_TOKEN) }),
-  });
+  const resolved = resolveDecisionEngine(env);
+  if (!resolved) return undefined;
+  return (
+    judgeFromEnv(env, {
+      feature: MATCH_QUALITY_JUDGE_FEATURE,
+      ...(run.budgetUsd === undefined
+        ? {}
+        : { maxInputTokens: Math.floor(run.budgetUsd / usdPerInputToken(resolved.name, env)) }),
+    }) ?? undefined
+  );
 }
