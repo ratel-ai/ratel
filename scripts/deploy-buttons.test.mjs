@@ -42,7 +42,7 @@ test("the README shows each button with its generated link", () => {
 
 test("the CloudFormation template runs install.sh with both access modes and hides the password", () => {
   const cfn = read("deploy/cloudformation/ratel.yaml");
-  assert.match(cfn, /raw\.githubusercontent\.com\/ratel-ai\/ratel\/main\/install\.sh \| sh -s -- --yes/);
+  assert.match(cfn, /raw\.githubusercontent\.com\/ratel-ai\/ratel\/\$\{Ref\}\/install\.sh" \| sh -s -- --yes/);
   assert.match(cfn, /AllowedValues: \[public, private\]/);
   assert.match(cfn, /LoginPassword:\n\s+Type: String\n\s+NoEcho: true/);
   assert.match(cfn, /--auth-hash \$hash/);
@@ -55,7 +55,11 @@ test("the ARM template runs install.sh with both access modes and takes the pass
   assert.equal(arm.parameters.loginPassword.type, "secureString");
   assert.deepEqual(arm.parameters.accessMode.allowedValues, ["public", "private"]);
   assert.equal(arm.parameters.accessMode.defaultValue, "public");
-  assert.match(arm.variables.bootstrap, /install\.sh \| sh -s -- --yes/);
+  assert.match(arm.variables.bootstrap, /ratel\/\$ref\/install\.sh" \| sh -s -- --yes/);
+  assert.match(arm.variables.bootstrap, /needs a password of 12 characters or more/, "no public console with an empty password");
+  for (const p of ["ref", "domain", "loginPassword", "accessMode"]) {
+    assert.ok(arm.variables.bootstrap.includes(`base64(`) && arm.variables.bootstrap.match(new RegExp(`base64\\((concat\\()?parameters\\('${p}'\\)`)), `${p} reaches the script base64-encoded`);
+  }
   const vm = arm.resources.find((r) => r.type === "Microsoft.Compute/virtualMachines");
   assert.equal(vm.properties.osProfile.customData, "[base64(variables('bootstrap'))]");
   assert.equal(vm.properties.osProfile.linuxConfiguration.disablePasswordAuthentication, true);

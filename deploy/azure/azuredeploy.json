@@ -8,43 +8,67 @@
     "accessMode": {
       "type": "string",
       "defaultValue": "public",
-      "allowedValues": ["public", "private"],
-      "metadata": { "description": "public: Caddy with TLS and a login (user ratel) on 80 and 443. private: no web port, reach the console through an SSH tunnel." }
+      "allowedValues": [
+        "public",
+        "private"
+      ],
+      "metadata": {
+        "description": "public: Caddy with TLS and a login (user ratel) on 80 and 443. private: no web port, reach the console through an SSH tunnel."
+      }
     },
     "loginPassword": {
       "type": "secureString",
       "defaultValue": "",
-      "metadata": { "description": "public: the console password for user ratel, 12 characters or more. Empty in private mode." }
+      "metadata": {
+        "description": "public: the console password for user ratel, 12 characters or more (the install stops on a shorter one). Empty in private mode."
+      }
     },
     "domain": {
       "type": "string",
       "defaultValue": "",
-      "metadata": { "description": "public: a DNS name that points at the VM. Empty: <ip>.sslip.io." }
+      "metadata": {
+        "description": "public: a DNS name that points at the VM. Empty: <ip>.sslip.io. Letters, digits, dots and hyphens only."
+      }
     },
     "webCidr": {
       "type": "string",
       "defaultValue": "0.0.0.0/0",
-      "metadata": { "description": "public: who reaches 80 and 443. Not 0.0.0.0/0: Caddy uses its own CA, because Let's Encrypt cannot reach the VM." }
+      "metadata": {
+        "description": "public: who reaches 80 and 443. Not 0.0.0.0/0: Caddy uses its own CA, because Let's Encrypt cannot reach the VM."
+      }
     },
     "sshPublicKey": {
       "type": "string",
-      "metadata": { "description": "The public key for SSH as user ratel." }
+      "metadata": {
+        "description": "The public key for SSH as user ratel."
+      }
     },
     "sshCidr": {
       "type": "string",
       "defaultValue": "",
-      "metadata": { "description": "Who reaches SSH (22), for example your IP with /32. Empty: SSH stays closed." }
+      "metadata": {
+        "description": "Who reaches SSH (22), for example your IP with /32. Empty: SSH stays closed."
+      }
     },
     "vmSize": {
       "type": "string",
       "defaultValue": "Standard_B2ms",
-      "allowedValues": ["Standard_B2ms", "Standard_B4ms", "Standard_D2s_v5", "Standard_D4s_v5"],
-      "metadata": { "description": "2 vCPU and 8 GB of RAM or more." }
+      "allowedValues": [
+        "Standard_B2ms",
+        "Standard_B4ms",
+        "Standard_D2s_v5",
+        "Standard_D4s_v5"
+      ],
+      "metadata": {
+        "description": "2 vCPU and 8 GB of RAM or more."
+      }
     },
     "ref": {
       "type": "string",
       "defaultValue": "main",
-      "metadata": { "description": "The branch, tag or commit that install.sh checks out." }
+      "metadata": {
+        "description": "The branch, tag or commit that install.sh checks out. Letters, digits and . _ / - only."
+      }
     },
     "location": {
       "type": "string",
@@ -56,13 +80,49 @@
     "isPublic": "[equals(parameters('accessMode'), 'public')]",
     "tls": "[if(equals(parameters('webCidr'), '0.0.0.0/0'), 'acme', 'internal')]",
     "webRules": [
-      { "name": "http", "properties": { "priority": 100, "direction": "Inbound", "access": "Allow", "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "80", "sourceAddressPrefix": "[parameters('webCidr')]", "destinationAddressPrefix": "*" } },
-      { "name": "https", "properties": { "priority": 110, "direction": "Inbound", "access": "Allow", "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "443", "sourceAddressPrefix": "[parameters('webCidr')]", "destinationAddressPrefix": "*" } }
+      {
+        "name": "http",
+        "properties": {
+          "priority": 100,
+          "direction": "Inbound",
+          "access": "Allow",
+          "protocol": "Tcp",
+          "sourcePortRange": "*",
+          "destinationPortRange": "80",
+          "sourceAddressPrefix": "[parameters('webCidr')]",
+          "destinationAddressPrefix": "*"
+        }
+      },
+      {
+        "name": "https",
+        "properties": {
+          "priority": 110,
+          "direction": "Inbound",
+          "access": "Allow",
+          "protocol": "Tcp",
+          "sourcePortRange": "*",
+          "destinationPortRange": "443",
+          "sourceAddressPrefix": "[parameters('webCidr')]",
+          "destinationAddressPrefix": "*"
+        }
+      }
     ],
     "sshRules": [
-      { "name": "ssh", "properties": { "priority": 120, "direction": "Inbound", "access": "Allow", "protocol": "Tcp", "sourcePortRange": "*", "destinationPortRange": "22", "sourceAddressPrefix": "[if(empty(parameters('sshCidr')), '127.0.0.1/32', parameters('sshCidr'))]", "destinationAddressPrefix": "*" } }
+      {
+        "name": "ssh",
+        "properties": {
+          "priority": 120,
+          "direction": "Inbound",
+          "access": "Allow",
+          "protocol": "Tcp",
+          "sourcePortRange": "*",
+          "destinationPortRange": "22",
+          "sourceAddressPrefix": "[if(empty(parameters('sshCidr')), '127.0.0.1/32', parameters('sshCidr'))]",
+          "destinationAddressPrefix": "*"
+        }
+      }
     ],
-    "bootstrap": "[concat('#!/bin/sh\n# Ratel bootstrap (deploy/azure): hashes the password, then runs install.sh.\nset -eu\nexport HOME=/root\nargs=\"--access private\"\nif [ ''', parameters('accessMode'), ''' = public ]; then\n  apt-get update -q && apt-get install -yq apache2-utils\n  password=$(echo ''', base64(if(empty(parameters('loginPassword')), '-', parameters('loginPassword'))), ''' | base64 -d)\n  hash=$(htpasswd -nbBC 12 ratel \"$password\" | cut -d: -f2 | sed ''s/^[$]2y[$]/$2a$/'')\n  args=\"--access public --tls ', variables('tls'), ' --auth-hash $hash\"\n  [ -z ''', parameters('domain'), ''' ] || args=\"$args --domain ', parameters('domain'), '\"\nfi\ncurl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --ref ''', parameters('ref'), ''' --dir /opt/ratel $args\n')]"
+    "bootstrap": "[concat('#!/bin/sh\n# Ratel bootstrap (deploy/azure): checks the inputs, hashes the password, then runs install.sh.\n# The inputs arrive base64-encoded, so no value can break out of the script.\nset -eu\nexport HOME=/root\nd() { echo \"$1\" | base64 -d; }\naccess=$(d ''', base64(parameters('accessMode')), '''); ref=$(d ''', base64(parameters('ref')), '''); domain=$(d ''', base64(concat(parameters('domain'), '')), '''); password=$(d ''', base64(concat(parameters('loginPassword'), '')), ''')\ncase \"$ref\" in \"\" | *[!A-Za-z0-9._/-]* | -*) echo \"ratel: bad ref\" >&2; exit 1 ;; esac\ncase \"$domain\" in *[!A-Za-z0-9.-]* | -* | .*) echo \"ratel: bad domain\" >&2; exit 1 ;; esac\nset -- --access private\nif [ \"$access\" = public ]; then\n  [ \"${#password}\" -ge 12 ] || { echo \"ratel: the public mode needs a password of 12 characters or more\" >&2; exit 1; }\n  apt-get update -q && apt-get install -yq apache2-utils\n  hash=$(htpasswd -nbBC 12 ratel \"$password\" | cut -d: -f2 | sed ''s/^[$]2y[$]/$2a$/'')\n  set -- --access public --tls ', variables('tls'), ' --auth-hash \"$hash\"\n  [ -z \"$domain\" ] || set -- \"$@\" --domain \"$domain\"\nfi\ncurl -fsSL \"https://raw.githubusercontent.com/ratel-ai/ratel/$ref/install.sh\" | sh -s -- --yes --ref \"$ref\" --dir /opt/ratel \"$@\"\n')]"
   },
   "resources": [
     {
@@ -79,15 +139,23 @@
       "apiVersion": "2023-09-01",
       "name": "[concat(variables('name'), '-vnet')]",
       "location": "[parameters('location')]",
-      "dependsOn": ["[resourceId('Microsoft.Network/networkSecurityGroups', concat(variables('name'), '-nsg'))]"],
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', concat(variables('name'), '-nsg'))]"
+      ],
       "properties": {
-        "addressSpace": { "addressPrefixes": ["10.42.0.0/16"] },
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.42.0.0/16"
+          ]
+        },
         "subnets": [
           {
             "name": "default",
             "properties": {
               "addressPrefix": "10.42.1.0/24",
-              "networkSecurityGroup": { "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(variables('name'), '-nsg'))]" }
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', concat(variables('name'), '-nsg'))]"
+              }
             }
           }
         ]
@@ -98,8 +166,12 @@
       "apiVersion": "2023-09-01",
       "name": "[concat(variables('name'), '-ip')]",
       "location": "[parameters('location')]",
-      "sku": { "name": "Standard" },
-      "properties": { "publicIPAllocationMethod": "Static" }
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Static"
+      }
     },
     {
       "type": "Microsoft.Network/networkInterfaces",
@@ -116,8 +188,12 @@
             "name": "ipconfig",
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
-              "subnet": { "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('name'), '-vnet'), 'default')]" },
-              "publicIPAddress": { "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('name'), '-ip'))]" }
+              "subnet": {
+                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', concat(variables('name'), '-vnet'), 'default')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat(variables('name'), '-ip'))]"
+              }
             }
           }
         ]
@@ -128,12 +204,27 @@
       "apiVersion": "2024-03-01",
       "name": "[variables('name')]",
       "location": "[parameters('location')]",
-      "dependsOn": ["[resourceId('Microsoft.Network/networkInterfaces', concat(variables('name'), '-nic'))]"],
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('name'), '-nic'))]"
+      ],
       "properties": {
-        "hardwareProfile": { "vmSize": "[parameters('vmSize')]" },
+        "hardwareProfile": {
+          "vmSize": "[parameters('vmSize')]"
+        },
         "storageProfile": {
-          "imageReference": { "publisher": "Canonical", "offer": "ubuntu-24_04-lts", "sku": "server", "version": "latest" },
-          "osDisk": { "createOption": "FromImage", "diskSizeGB": 30, "managedDisk": { "storageAccountType": "StandardSSD_LRS" } }
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "ubuntu-24_04-lts",
+            "sku": "server",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage",
+            "diskSizeGB": 30,
+            "managedDisk": {
+              "storageAccountType": "StandardSSD_LRS"
+            }
+          }
         },
         "osProfile": {
           "computerName": "[variables('name')]",
@@ -141,10 +232,23 @@
           "customData": "[base64(variables('bootstrap'))]",
           "linuxConfiguration": {
             "disablePasswordAuthentication": true,
-            "ssh": { "publicKeys": [{ "path": "/home/ratel/.ssh/authorized_keys", "keyData": "[parameters('sshPublicKey')]" }] }
+            "ssh": {
+              "publicKeys": [
+                {
+                  "path": "/home/ratel/.ssh/authorized_keys",
+                  "keyData": "[parameters('sshPublicKey')]"
+                }
+              ]
+            }
           }
         },
-        "networkProfile": { "networkInterfaces": [{ "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('name'), '-nic'))]" }] }
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('name'), '-nic'))]"
+            }
+          ]
+        }
       }
     }
   ],
