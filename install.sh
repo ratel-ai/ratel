@@ -118,6 +118,7 @@ parse_args() {
     shift
   done
   [ -n "$REF" ] || usage_error "--ref is empty"
+  case "$REF" in *..*) usage_error "--ref cannot contain .." ;; esac
   case "$ACCESS" in "" | private | public) ;; *) usage_error "--access is private or public" ;; esac
   case "$TLS" in "" | acme | internal) ;; *) usage_error "--tls is acme or internal" ;; esac
   # The values go into the Caddyfile, so only the characters a name or a bcrypt hash has.
