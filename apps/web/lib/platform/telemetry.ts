@@ -106,6 +106,9 @@ export const SERVER_EVENT_NAMES = [
   "fix_eval_run",
   "fix_experiment_created",
   "fix_shipped",
+  "agent_override_updated",
+  "mcp_servers_viewed",
+  "agents_viewed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
@@ -213,6 +216,13 @@ export type ProductEventProperties = {
   };
   demo_project_seed_failed: { reason: string };
   onboarding_tour_finished: { outcome: string; last_step_id: string; steps_viewed: number };
+  mcp_servers_viewed: { view: "list" | "detail"; servers: number; environment_filtered: boolean };
+  agents_viewed: {
+    view: "list" | "detail";
+    agents: number;
+    handoffs: number;
+    environment_filtered: boolean;
+  };
 };
 export type ProductEventName = keyof ProductEventProperties;
 

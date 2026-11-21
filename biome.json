@@ -1127,6 +1127,9 @@
         "!apps/web/lib/mcp/connect/snippets.ts",
         "!apps/web/lib/mcp/connect/snippets.test.ts",
         "!apps/web/lib/mcp/operations/index.ts",
+        "!apps/web/lib/mcp/operations/agents.ts",
+        "!apps/web/lib/mcp/operations/mcp-servers.ts",
+        "!apps/web/lib/mcp/operations/entities-gate.test.ts",
         "apps/web/mcp-apps/**",
         "!apps/web/mcp-apps/README.md",
         "!apps/web/mcp-apps/build.test.ts",
@@ -1367,7 +1370,13 @@
         "!apps/web/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/\\[taskId\\]/TaskScoring.tsx",
         "apps/web/components/console/tasks/RunToTest.tsx",
         "apps/web/components/console/tasks/TopLevelTasksTable.tsx",
-        "apps/web/lib/views/tasks/top-level-ui.test.ts"
+        "apps/web/lib/views/tasks/top-level-ui.test.ts",
+        "apps/web/lib/views/agents/**",
+        "!apps/web/lib/views/agents/tests/drizzle-store.integration.test.ts",
+        "!apps/web/lib/views/agents/schema.ts",
+        "apps/web/lib/views/mcp-servers/**",
+        "!apps/web/lib/views/mcp-servers/queries.integration.test.ts",
+        "apps/web/app/api/projects/\\[projectId\\]/agents/overrides/route.ts"
       ],
       "linter": {
         "rules": {

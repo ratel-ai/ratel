@@ -8,7 +8,12 @@
  */
 
 /** Every switch the core reads, by its environment name. */
-export const CORE_FLAGS = ["FF_EVAL_GATE", "FF_RANKING_CATALOG_DRIFT", "FF_MCP_APPS"] as const;
+export const CORE_FLAGS = [
+  "FF_EVAL_GATE",
+  "FF_RANKING_CATALOG_DRIFT",
+  "FF_MCP_APPS",
+  "FF_AGENTS_PAGES",
+] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];
 

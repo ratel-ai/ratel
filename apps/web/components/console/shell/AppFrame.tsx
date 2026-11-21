@@ -90,6 +90,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       ),
     [data.organizationNav, data.hiddenOrganizationNav, organizationSlug],
   );
+  const entityPages = Boolean(
+    organization && data.entityPagesOrganizations?.includes(organization.id),
+  );
   const items = useMemo(
     () =>
       consoleNav({
@@ -98,8 +101,9 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         additions: data.editionNav,
         organizationAdditions: organizationNav,
         projectGroups: data.projectNav,
+        entityPages,
       }),
-    [project, organizationSlug, data.editionNav, organizationNav, data.projectNav],
+    [project, organizationSlug, data.editionNav, organizationNav, data.projectNav, entityPages],
   );
   const activeId = activeNavItemId(pathname, items);
   // Inside a project ⌘K reaches the organization's pages too.

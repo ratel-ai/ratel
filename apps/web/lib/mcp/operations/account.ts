@@ -60,6 +60,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_TOOL_RUN_INSIGHTS",
     note: "tool-run insights: tasks from small projects, derived asks for tool-only runs, agent runs as turns and tasks, a low-confidence reading from 10 turns",
   },
+  {
+    key: "FF_AGENTS_PAGES",
+    note: "the Agents and MCP servers pages, their tools (list_agents, get_agent, list_mcp_servers, get_mcp_server) and agent overrides",
+  },
 ];
 
 export interface AccountOperationDeps {
