@@ -20,6 +20,7 @@ export const OUTPUTS = [
   "design_system",
   "platform",
   "compose",
+  "deploy",
   "release",
   "lockfiles",
 ];
@@ -73,6 +74,7 @@ export const SCRIPT_OWNERS = {
   "scripts/platform-sync/undecided.mjs": "platform",
   "scripts/quick-start.test.mjs": "platform",
   "scripts/install.test.mjs": "platform",
+  "scripts/deploy.test.mjs": "platform",
 
   "scripts/workflow-contracts.test.mjs": "changes",
   "scripts/ci-filters.mjs": "changes",
@@ -272,6 +274,8 @@ const CLAIMS = [
   "apps/web/Dockerfile",
   "install.sh",
   "docker-compose.caddy.yml",
+  "deploy.sh",
+  "deploy/**",
   ...Object.keys(SCRIPT_OWNERS),
 ];
 
@@ -292,6 +296,7 @@ function applyFile(result, file) {
     }
     if (owner === "platform") {
       merge(result, ["platform"]);
+      if (file === "scripts/deploy.test.mjs") merge(result, ["deploy"]);
       if (file === "scripts/link-ee.mjs") merge(result, ["compose"]);
       return result;
     }
@@ -446,6 +451,11 @@ function applyFile(result, file) {
     file === "scripts/link-ee.mjs"
   ) {
     merge(result, ["compose", "platform"]);
+  }
+
+  // The cloud deployer: its script and modules (deploy job), and its tests (platform job).
+  if (file === "deploy.sh" || matches("deploy/**", file)) {
+    merge(result, ["deploy", "platform"]);
   }
 
   return result;
