@@ -21,6 +21,10 @@ import { lockOrganizationSpend, organizationModelSpendSince } from "@/lib/views/
 import type { OrganizationFlagDeps } from "@/lib/views/task-evals/store";
 // Owned (ADR-0030): the task loop's spend joins the daily budget through the eval gate's seam.
 import "@/lib/views/task-evals/spend";
+import {
+  FOREIGN_PROJECT_ERROR,
+  foreignProjectsOfRun,
+} from "@/lib/views/task-evals/foreign-project";
 import { taskEvalCases, taskTestDrafts } from "@/lib/views/task-evals/schema";
 import { type TestProposal, testProposalSchema } from "@/lib/views/task-evals/test-proposal";
 import { scorersFor } from "@/lib/views/task-scorers/store";
@@ -70,6 +74,20 @@ export async function draftTestFromRun(
   if (!turn) throw new TestDraftError("No completed run in this task and project has that ID.");
   if (await runIsInEvalSet(projectId, taskId, turnId, db))
     throw new TestDraftError("This run is already in the eval set.");
+  const foreign = await foreignProjectsOfRun(projectId, turnId, db);
+  if (foreign.length > 0) {
+    logger.warn(
+      {
+        project_id: projectId,
+        task_id: taskId,
+        turn_id: turnId,
+        reason: "foreign_project",
+        foreign_projects: foreign.length,
+      },
+      "refused to draft a test from a run of another organization",
+    );
+    throw new TestDraftError(FOREIGN_PROJECT_ERROR);
+  }
   const model = deps.model === undefined ? resolveTestDraftModel() : deps.model;
   if (!model) throw new TestDraftError("No model is configured to draft a test.");
   const run = (await loadRuns(projectId, [turnId], db)).get(turnId);

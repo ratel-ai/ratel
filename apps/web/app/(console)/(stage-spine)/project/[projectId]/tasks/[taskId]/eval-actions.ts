@@ -51,6 +51,15 @@ export async function changeTaskEvalAction(input: unknown): Promise<TaskEvalActi
         }
         revalidatePath(topLevelTasksHref(fields.project_id, fields.task_id));
       },
+      observeRefusal: (fields) =>
+        trackServerEvent(
+          "task_eval_run_refused",
+          { externalId: fields.actor, projectId: fields.project_id, orgId: fields.organization_id },
+          {
+            ...fields,
+            object_action: "task_eval_run_refused",
+          },
+        ),
     });
   } catch (err) {
     logger.error({ err }, "task eval change failed");

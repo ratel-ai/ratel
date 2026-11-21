@@ -2,9 +2,11 @@ import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { getLogger } from "@/lib/platform/logger";
 import { type EvalDb, findRun } from "@/lib/views/eval-gate/runs";
 import { taskEvalCases, taskEvalSets } from "@/lib/views/task-evals/schema";
 import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
+import { FOREIGN_PROJECT_ERROR, foreignProjectsOfRun } from "./foreign-project";
 import { type TestProposal, testProposalSchema } from "./test-proposal";
 
 export type TaskEvalActionInput = { projectId: string; taskId: string } & (
@@ -25,6 +27,17 @@ export type TaskEvalChangeEvent = {
   turn_id?: string;
   test_saved?: boolean;
 };
+/** RC-853: a run refused as an eval, and why. */
+export type TaskEvalRunRefusedEvent = Omit<
+  TaskEvalChangeEvent,
+  "action" | "case_id" | "test_saved"
+> & {
+  action: "add";
+  turn_id: string;
+  reason: "foreign_project";
+  foreign_projects: number;
+  with_proposal: boolean;
+};
 export interface TaskEvalActionDeps {
   db?: EvalDb;
   getSession(): Promise<{ user: { id: string; externalId: string } } | null>;
@@ -35,8 +48,12 @@ export interface TaskEvalActionDeps {
   enabled(projectId: string, actor: string): Promise<boolean>;
   enqueue(projectId: string, taskId: string): Promise<{ id: string } | null>;
   observe(fields: TaskEvalChangeEvent): Promise<void>;
+  /** RC-853: tracks a refused run. */
+  observeRefusal?(fields: TaskEvalRunRefusedEvent): Promise<void>;
   now?: () => Date;
 }
+
+const logger = getLogger("task-evals/actions");
 
 /** Require membership and the project flag before an eval change. */
 export async function changeTaskEval(
@@ -82,6 +99,20 @@ export async function changeTaskEval(
       )
       .limit(1);
     if (!closed) return { ok: false, error: "Only completed runs can enter the eval set." };
+    const foreign = await foreignProjectsOfRun(scope.project.id, run.turnId, db);
+    if (foreign.length > 0) {
+      const refused: TaskEvalRunRefusedEvent = {
+        ...fields,
+        action: "add",
+        turn_id: run.turnId,
+        reason: "foreign_project",
+        foreign_projects: foreign.length,
+        with_proposal: !!input.proposal,
+      };
+      logger.warn(refused, "refused a run of another organization as an eval");
+      await deps.observeRefusal?.(refused);
+      return { ok: false, error: FOREIGN_PROJECT_ERROR };
+    }
     const proposal = input.proposal;
     const edited = proposal
       ? {

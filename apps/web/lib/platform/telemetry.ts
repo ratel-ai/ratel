@@ -97,6 +97,7 @@ export const SERVER_EVENT_NAMES = [
   "task_eval_simulation_requested",
   "task_eval_simulation_finished",
   "task_eval_case_changed",
+  "task_eval_run_refused",
   "task_test_saved",
   "task_test_drafted",
   "task_simulation_edited",
