@@ -1,4 +1,6 @@
 import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
+import type { AgentSubtree } from "@/lib/synthesis/traces/v2/agent-rollup";
+import type { RunMetrics } from "@/lib/synthesis/traces/v2/run-metrics";
 import type { RunTotals } from "@/lib/synthesis/traces/v2/run-summary";
 import type { RunStatus } from "@/lib/synthesis/traces/v2/runs";
 import type { TraceWaterfallView } from "@/lib/synthesis/traces/waterfall";
@@ -38,6 +40,10 @@ export interface TraceViewProps {
   status: RunStatus;
   totals: RunTotals;
   waterfall: TraceWaterfallView;
+  /** The run's agents with each subtree's totals (AOBS-5); empty without a sub-agent. */
+  agents?: readonly AgentSubtree[];
+  /** How the run ran (AOBS-7): time split, context, cache and run events; null with nothing to show. */
+  runMetrics?: RunMetrics | null;
   truncated: boolean;
   /** The run's `events.payload` content, read on the server; the spans' own content wins when they carry any. */
   payloadContent?: TraceContentView | null;

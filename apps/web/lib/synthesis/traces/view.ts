@@ -1,5 +1,6 @@
 import type { OtelSpan } from "@/lib/ingest/otlp/schema";
 import type { RangePreset, ResolvedRange } from "@/lib/synthesis/dashboard";
+import { AGENT_DIMENSIONS } from "./agent-dimensions";
 import type {
   ListOperationsOptions,
   ListSpansOptions,
@@ -27,6 +28,8 @@ export interface TraceListSearchParams {
   name?: TraceSearchParamValue;
   model?: TraceSearchParamValue;
   tool?: TraceSearchParamValue;
+  /** The exact `gen_ai.conversation.id` whose runs the run list keeps (AOBS-3). */
+  conversation?: TraceSearchParamValue;
   scope?: TraceSearchParamValue;
   groupBy?: TraceSearchParamValue;
   sort?: TraceSearchParamValue;
@@ -70,6 +73,12 @@ export interface TraceListFilters {
   name: string;
   model: string;
   tool: string;
+  /**
+   * The conversation whose runs are listed; absent when not filtered. Not part
+   * of the cursor's context: a cursor is a position in the window, and the
+   * list links carry the filter beside it.
+   */
+  conversation?: string;
   errorOnly: boolean;
   experiment: string;
   arm: string;
@@ -172,7 +181,7 @@ export type SpanSummaryView = Omit<SpanSummary, "startedAt"> & {
  */
 export type TraceSpanView = Omit<
   OtelSpan,
-  "startedAt" | "endedAt" | "id" | "projectId" | "traceId"
+  "startedAt" | "endedAt" | "id" | "projectId" | "traceId" | "events" | "links"
 > & {
   startedAt: string;
   endedAt: string;
@@ -193,7 +202,12 @@ const TRACE_RANGE_LABELS: Record<RangePreset, string> = {
 };
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const SPAN_CURSOR_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const OPERATION_GROUPS: ReadonlySet<string> = new Set(["name", "model", "tool"]);
+const OPERATION_GROUPS: ReadonlySet<string> = new Set([
+  "name",
+  "model",
+  "tool",
+  ...AGENT_DIMENSIONS,
+]);
 const OPERATION_SORTS: ReadonlySet<string> = new Set([
   "key",
   "count",
@@ -215,6 +229,7 @@ export function resolveTraceListView(
   const name = textParam(params.name);
   const model = textParam(params.model);
   const tool = textParam(params.tool);
+  const conversation = textParam(params.conversation);
   const exactTags = textParam(params.exactTags) === "1";
   const facets = resolveTraceFacetFilters(params);
   const experiment = exactTags ? exactTextParam(params.experiment) : textParam(params.experiment);
@@ -230,6 +245,7 @@ export function resolveTraceListView(
     name,
     model,
     tool,
+    ...(conversation ? { conversation } : {}),
     errorOnly,
     experiment,
     arm,
@@ -250,6 +266,7 @@ export function resolveTraceListView(
       ...(name ? { spanName: name } : {}),
       ...(model ? { model } : {}),
       ...(tool ? { tool } : {}),
+      ...(conversation ? { conversation } : {}),
       errorOnly,
       experiment: experiment || undefined,
       arm: arm || undefined,
@@ -574,7 +591,8 @@ export function toSpanSummaryView(summary: SpanSummary): SpanSummaryView {
 }
 
 export function toTraceSpanView(span: OtelSpan): TraceSpanView {
-  const view: TraceSpanView & Partial<Pick<OtelSpan, "id" | "projectId" | "traceId">> = {
+  const view: TraceSpanView &
+    Partial<Pick<OtelSpan, "id" | "projectId" | "traceId" | "events" | "links">> = {
     ...span,
     startedAt: span.startedAt.toISOString(),
     endedAt: span.endedAt.toISOString(),
@@ -582,6 +600,9 @@ export function toTraceSpanView(span: OtelSpan): TraceSpanView {
   delete view.id;
   delete view.projectId;
   delete view.traceId;
+  // AOBS-7: the turn view reads events from its run metrics; each span need not carry them to the client.
+  delete view.events;
+  delete view.links;
   return view;
 }
 

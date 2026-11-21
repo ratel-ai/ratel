@@ -6,6 +6,8 @@ import {
   LANGGRAPH_TRACE,
   langGraphTrace,
 } from "./agent-span-fixtures";
+import { indexSpans } from "./attr-resolve";
+import { deriveSpanDimensions } from "./dimensions";
 import { modelCallTraceIds } from "./group";
 import { type OtelSpanRow, toOtelSpanRows } from "./span-rows";
 import type { DecodedSpan } from "./types";
@@ -254,6 +256,8 @@ test("retains only namespaced and explicitly safe attributes", () => {
         "traceloop.entity.input": "private Traceloop input",
         "error.type": "rate_limit",
         "server.address": "api.example.test",
+        "mcp.server.name": "beluga_board",
+        "mcp.session.id": "private session",
       },
     }),
   ]);
@@ -263,6 +267,7 @@ test("retains only namespaced and explicitly safe attributes", () => {
     "ratel.origin": "sdk",
     "error.type": "rate_limit",
     "server.address": "api.example.test",
+    "mcp.server.name": "beluga_board",
   });
   assert.equal(row.attrsTruncated, false);
 });
@@ -505,4 +510,146 @@ test("a span pays the project's own price (RC-482)", () => {
   );
   // The project's gpt-5.5 at $1 in (cached at input), $1 out: (1,000 + 200) / 1M.
   assert.equal(row.costUsd, "0.0012");
+});
+
+test("a span row carries its entity dimensions; with no agent and a service, the service is the agent (RC-772)", () => {
+  const base = {
+    traceId: "0123456789abcdef0123456789abcdef",
+    kind: 1,
+    startUnixMs: 1_750_000_000_000,
+    endUnixMs: 1_750_000_000_100,
+    events: [],
+    statusCode: 0,
+    scopeName: null,
+  };
+  const spans: DecodedSpan[] = [
+    {
+      ...base,
+      spanId: "1111111111111111",
+      parentSpanId: "0000000000000000",
+      name: "invoke_agent supervisor",
+      attributes: { "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "supervisor" },
+      resourceAttributes: { "service.name": "app" },
+    },
+    {
+      ...base,
+      spanId: "2222222222222222",
+      parentSpanId: "1111111111111111",
+      name: "invoke_agent researcher",
+      attributes: { "gen_ai.operation.name": "invoke_agent", "gen_ai.agent.name": "researcher" },
+      resourceAttributes: { "service.name": "app" },
+    },
+    {
+      ...base,
+      spanId: "3333333333333333",
+      parentSpanId: null,
+      name: "work",
+      attributes: {},
+      resourceAttributes: { "service.name": "worker" },
+    },
+    {
+      ...base,
+      spanId: "4444444444444444",
+      parentSpanId: null,
+      name: "work",
+      attributes: { "mcp.session.id": "sess-9" },
+      resourceAttributes: { "service.name": "unknown_service:node" },
+    },
+  ];
+  const rows = toOtelSpanRows("project-1", spans, undefined, {
+    dimensions: deriveSpanDimensions(spans, indexSpans(spans)),
+  });
+  const columns = (r: OtelSpanRow) => [
+    r.agentKey,
+    r.agentSource,
+    r.callerAgentKey,
+    r.mcpServer,
+    r.mcpServerSource,
+    r.mcpRole,
+  ];
+  const dims = rows.map(columns);
+  assert.deepEqual(
+    rows.map((r) => r.mcpSessionId),
+    [null, null, null, "sess-9"],
+    "the span's own mcp.session.id",
+  );
+  // The dimensions are never derived here: without them every column is null.
+  for (const row of toOtelSpanRows("project-1", spans)) {
+    assert.deepEqual(
+      [...columns(row), row.mcpSessionId],
+      [null, null, null, null, null, null, null],
+    );
+  }
+  assert.deepEqual(dims, [
+    ["supervisor", "semconv", null, null, null, null],
+    ["researcher", "semconv", "supervisor", null, null, null],
+    ["worker", "heuristic", null, null, null, null],
+    [null, null, null, null, null, null],
+  ]);
+});
+
+const UNPRICED_CALL = {
+  "gen_ai.operation.name": "chat",
+  "gen_ai.request.model": "my-own-model",
+  "gen_ai.usage.input_tokens": 1_000,
+  "gen_ai.usage.output_tokens": 200,
+};
+const costOf = (attributes: DecodedSpan["attributes"]) =>
+  toOtelSpanRows("project-1", [span({ attributes })], undefined, { prices: { overrides: {} } })[0]
+    .costUsd;
+
+test("a call with no book price stores the cost the emitter sent (AOBS-3)", () => {
+  assert.equal(costOf({ ...UNPRICED_CALL, "ratel.usage.cost_usd": 0.0421 }), "0.0421");
+  assert.equal(costOf({ ...UNPRICED_CALL, "gen_ai.usage.cost": "0.5" }), "0.5");
+  assert.equal(
+    costOf({ ...UNPRICED_CALL, "ratel.usage.cost_usd": 0.1, "gen_ai.usage.cost": 0.9 }),
+    "0.1",
+  );
+});
+
+test("a Claude alias call stores its alias price", () => {
+  // opus prices as claude-opus-5-5: $4 per 1M input.
+  assert.equal(
+    costOf({
+      "gen_ai.request.model": "opus",
+      "gen_ai.usage.input_tokens": 1_000_000,
+      "gen_ai.usage.output_tokens": 0,
+    }),
+    "4",
+  );
+});
+
+test("the book price wins over the emitter's cost", () => {
+  assert.equal(
+    costOf({
+      "gen_ai.request.model": "gpt-5.5",
+      "gen_ai.usage.input_tokens": 1_000,
+      "gen_ai.usage.output_tokens": 0,
+      "ratel.usage.cost_usd": 99,
+    }),
+    "0.005",
+  );
+});
+
+test("an emitter cost that is not a plausible amount is ignored", () => {
+  for (const cost of [-1, Number.NaN, "abc", 1e9]) {
+    assert.equal(costOf({ ...UNPRICED_CALL, "ratel.usage.cost_usd": cost }), null, String(cost));
+  }
+});
+
+test("an emitter cost on a span with no token usage is not stored, so a run total on the root never counts twice", () => {
+  assert.equal(
+    costOf({ "gen_ai.operation.name": "invoke_agent", "ratel.usage.cost_usd": 1.5 }),
+    null,
+  );
+});
+
+test("a batch whose prices are unknown stores no cost, emitter cost included", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { ...UNPRICED_CALL, "ratel.usage.cost_usd": 0.0421 } })],
+    undefined,
+    { prices: "unknown" },
+  );
+  assert.equal(row.costUsd, null);
 });

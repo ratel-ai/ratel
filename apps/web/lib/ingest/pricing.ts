@@ -338,6 +338,27 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
 };
 
 /**
+ * The model aliases of Claude Code and the Claude Agent SDK (AOBS-3): a harness
+ * that reports the picker alias as the model id sends `opus`, not
+ * `claude-opus-5-5`. An alias names the newest model of its family, so it
+ * prices as that model's {@link MODEL_PRICES} key (and as the project's own
+ * price of that key).
+ * The match is exact: `opus-custom` is not an alias.
+ * A call made while the alias named an older model is priced at the newest
+ * one; an emitter that sends the resolved id avoids that. Move a target here
+ * when a family gets a newer model.
+ */
+export const CLAUDE_MODEL_ALIASES: Readonly<Record<string, string>> = Object.freeze({
+  opus: "claude-opus-5-5",
+  "opus[1m]": "claude-opus-5-5",
+  sonnet: "claude-sonnet-5-5",
+  "sonnet[1m]": "claude-sonnet-5-5",
+  haiku: "claude-haiku-5-5",
+  fable: "claude-fable-5-2",
+  mythos: "claude-mythos-5-2",
+});
+
+/**
  * A date after a known id, and nothing else: `-2024-08-06`, `-20250929`,
  * `@20250929`, `-2508` (YYMM), with an optional Bedrock `-v1:0`. A word
  * (`-mini`, `-pro`) or a minor version (`.2`, `-6`) is a different model, so
@@ -365,6 +386,9 @@ export function resolvePrice(
 ): ResolvedPrice | null {
   if (!model) return null;
   const { overrides } = book ?? CURRENT_PRICES;
+  if (overrides[model]) return { key: model, price: overrides[model], source: "custom" };
+  // A project's own price of the alias itself won above; else the alias prices as the model it names.
+  model = CLAUDE_MODEL_ALIASES[model] ?? model;
   if (overrides[model]) return { key: model, price: overrides[model], source: "custom" };
   if (MODEL_PRICES[model]) return { key: model, price: MODEL_PRICES[model], source: "built-in" };
   let best: ResolvedPrice | null = null;

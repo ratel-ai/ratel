@@ -66,3 +66,36 @@ test("the tool menu reads gen_ai definitions, OpenInference and AI SDK shapes, n
   );
   assert.equal(toolMenuOf(span("chat", { "gen_ai.operation.name": "chat" })), null);
 });
+
+// AOBS-5
+test("mcpServerOf reads mcp.server.name, else the mcp__server__tool name", async () => {
+  const { mcpServerOf, skillNameOf } = await import("./span-facts");
+  const base = {
+    traceId: "a".repeat(32),
+    spanId: "1".repeat(16),
+    parentSpanId: null,
+    name: "execute_tool x",
+    kind: 1,
+    startUnixMs: 0,
+    endUnixMs: 1,
+    events: [],
+    statusCode: 0,
+    resourceAttributes: {},
+    scopeName: null,
+  };
+  assert.equal(
+    mcpServerOf({ ...base, attributes: { "mcp.server.name": " beluga_board " } }, "mcp__other__t"),
+    "beluga_board",
+  );
+  assert.equal(
+    mcpServerOf({ ...base, attributes: {} }, "mcp__beluga_board__task_update"),
+    "beluga_board",
+  );
+  assert.equal(mcpServerOf({ ...base, attributes: {} }, "Bash:git"), null);
+  assert.equal(mcpServerOf({ ...base, attributes: {} }, "mcp____x"), null);
+  assert.equal(
+    skillNameOf({ ...base, attributes: { "ratel.skill.name": "pr-review" } }),
+    "pr-review",
+  );
+  assert.equal(skillNameOf({ ...base, attributes: {} }), null);
+});

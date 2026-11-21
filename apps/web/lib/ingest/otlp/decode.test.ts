@@ -219,3 +219,60 @@ test("real emitter protobuf (otlp-transformer) decodes with correct gen_ai attrs
 
   await provider.shutdown();
 });
+
+test("decodes span links with hex ids and attribute maps, in both wire formats", () => {
+  const request = {
+    resourceSpans: [
+      {
+        scopeSpans: [
+          {
+            spans: [
+              {
+                traceId: Buffer.from(TRACE_ID, "hex"),
+                spanId: Buffer.from(ANCHOR_SPAN_ID, "hex"),
+                name: "invoke_agent claude",
+                startTimeUnixNano: START_NS,
+                endTimeUnixNano: END_NS,
+                links: [
+                  {
+                    traceId: Buffer.from("abcdefabcdef0123456789abcdef0123", "hex"),
+                    spanId: Buffer.from(TOOL_SPAN_ID, "hex"),
+                    attributes: kvs({ "ratel.link.kind": "chat_message" }),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const expected = [
+    {
+      traceId: "abcdefabcdef0123456789abcdef0123",
+      spanId: TOOL_SPAN_ID,
+      attributes: { "ratel.link.kind": "chat_message" },
+    },
+  ];
+  const fromProto = decodeProtobuf(RequestType.encode(RequestType.fromObject(request)).finish());
+  assert.deepEqual(fromProto[0].links, expected);
+  const json = JSON.parse(
+    JSON.stringify(request, (_key, value) =>
+      value?.type === "Buffer" ? Buffer.from(value.data).toString("hex") : value,
+    ),
+  );
+  assert.deepEqual(decodeJson(Buffer.from(JSON.stringify(json)))[0].links, expected);
+});
+
+test("a span without links decodes with no links", () => {
+  const spans = decodeJson(
+    Buffer.from(
+      JSON.stringify({
+        resourceSpans: [
+          { scopeSpans: [{ spans: [{ traceId: TRACE_ID, spanId: ANCHOR_SPAN_ID, name: "x" }] }] },
+        ],
+      }),
+    ),
+  );
+  assert.deepEqual(spans[0].links, []);
+});

@@ -15,6 +15,7 @@ import { loadPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { projectModelPrices } from "@/lib/ingest/model-pricing/schema";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { GEN_AI } from "@/lib/ingest/otlp/constants";
+import { EMITTER_COST_KEYS, plausibleCostUsd } from "@/lib/ingest/otlp/emitter-cost";
 import { eventMetrics, events, otelSpans } from "@/lib/ingest/otlp/schema";
 import { costFor, extendsByDate, type PriceBook, resolvePrice } from "@/lib/ingest/pricing";
 import type { getDb } from "@/lib/platform/db/client";
@@ -35,7 +36,8 @@ import { recomputeTraceSummaries } from "@/lib/synthesis/traces/summary-refresh"
  *   of now, after a price correction (`scripts/backfill-costs.ts --reprice`).
  *
  * Costs are computed exactly as ingest does: `costFor` with the project's
- * price book. A row is written only when its cost changes at the stored
+ * price book, then the emitter's own cost for a call the book has no price
+ * for (AOBS-3). A row is written only when its cost changes at the stored
  * `numeric(12,6)` precision, or when an event's `event_metrics` cost differs
  * from it, so a re-run writes nothing. Rows are read in id order, a page at a
  * time, and each page's `events` and `event_metrics` writes are one
@@ -75,6 +77,11 @@ export interface CostChange {
 
 const PAGE = 1_000;
 const CACHE_WRITE_KEY = GEN_AI.usageCacheCreation;
+/** The emitter's own cost keys, off the stored span's attributes, in priority order. */
+const EMITTER_COSTS = sql<(string | null)[]>`array[${sql.join(
+  EMITTER_COST_KEYS.map((key) => sql`${otelSpans.attributes} ->> ${key}`),
+  sql`, `,
+)}]`;
 
 /**
  * Restate the rows of one project that the price key `model` prices: `model`
@@ -272,6 +279,8 @@ interface PricedRow {
   outputTokens: number | null;
   cachedTokens: number | null;
   written: string | null;
+  /** What the call's span holds under each emitter cost key (AOBS-3), in priority order; nulls when it sent none or the span is gone. */
+  emitterCosts: (string | null)[] | null;
   costUsd: string | null;
   /** An event's `event_metrics` cost (the event's own cost when it has no metric row). Absent for spans. */
   metricCostUsd?: string | null;
@@ -295,6 +304,7 @@ async function repriceSpans(
         outputTokens: otelSpans.outputTokens,
         cachedTokens: otelSpans.cachedTokens,
         written: sql<string | null>`${otelSpans.attributes} ->> ${CACHE_WRITE_KEY}`,
+        emitterCosts: EMITTER_COSTS,
         costUsd: otelSpans.costUsd,
       })
       .from(otelSpans)
@@ -343,6 +353,7 @@ async function repriceEvents(
         outputTokens: events.outputTokens,
         cachedTokens: events.cachedTokens,
         written: sql<string | null>`${otelSpans.attributes} ->> ${CACHE_WRITE_KEY}`,
+        emitterCosts: EMITTER_COSTS,
         costUsd: events.costUsd,
         metricCostUsd: sql<
           string | null
@@ -388,16 +399,19 @@ async function changedCosts(rows: readonly PricedRow[], prices: PricesFor): Prom
   const out: CostUpdate[] = [];
   for (const row of rows) {
     const written = row.written === null ? null : Number(row.written);
-    const cost = costFor(
-      row.model,
-      {
-        input_tokens: row.inputTokens,
-        output_tokens: row.outputTokens,
-        cached_tokens: row.cachedTokens,
-        cache_write_tokens: Number.isFinite(written) ? written : null,
-      },
-      await prices(row.projectId),
-    );
+    const book = await prices(row.projectId);
+    const cost =
+      costFor(
+        row.model,
+        {
+          input_tokens: row.inputTokens,
+          output_tokens: row.outputTokens,
+          cached_tokens: row.cachedTokens,
+          cache_write_tokens: Number.isFinite(written) ? written : null,
+        },
+        book,
+        // As ingest: a call the book has no price for keeps the emitter's own cost.
+      ) ?? storedEmitterCost(row.emitterCosts);
     const next = cost === null ? null : cost.toFixed(6);
     const stored = atPrecision(row.costUsd);
     const metric = row.metricCostUsd === undefined ? stored : atPrecision(row.metricCostUsd);
@@ -405,6 +419,15 @@ async function changedCosts(rows: readonly PricedRow[], prices: PricesFor): Prom
     out.push({ id: row.id, cost: next });
   }
   return out;
+}
+
+/** As ingest's `emitterCostUsd`: the first key that holds a plausible amount. */
+function storedEmitterCost(values: PricedRow["emitterCosts"]): number | null {
+  for (const value of values ?? []) {
+    const cost = value === null || value.trim() === "" ? null : plausibleCostUsd(Number(value));
+    if (cost !== null) return cost;
+  }
+  return null;
 }
 
 function atPrecision(cost: string | null): string | null {

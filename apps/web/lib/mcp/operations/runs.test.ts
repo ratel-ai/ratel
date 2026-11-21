@@ -286,6 +286,54 @@ test("get_span surfaces the inspector's facts and previews the tool payloads", a
   assert.equal(result.truncated, true);
 });
 
+test("get_span returns the span's stored events and links, and neither key for a span without them", async () => {
+  const withEvents = span({
+    spanId: "evented",
+    events: [
+      {
+        name: "ratel.compaction",
+        timeUnixMs: T0 + 500,
+        attributes: { "ratel.compaction.trigger": "auto" },
+      },
+    ],
+    links: [
+      {
+        traceId: "f".repeat(32),
+        spanId: "e".repeat(16),
+        attributes: { "ratel.link.kind": "background_task" },
+      },
+    ],
+  });
+  const deps: Partial<RunsOperationDeps> = {
+    getTraceSpansWithTruncation: async () => ({ spans: [root, withEvents], truncated: false }),
+  };
+  type Evented = {
+    eventCount?: number;
+    events?: { name: string; at: string; attributes: Record<string, unknown> | null }[];
+    links?: { traceId: string; spanId: string }[];
+  };
+  const result = ok<Evented>(await run("get_span", { traceId: TRACE, spanId: "evented" }, deps));
+  assert.equal(result.data.eventCount, 1);
+  assert.deepEqual(result.data.events, [
+    {
+      name: "ratel.compaction",
+      at: new Date(T0 + 500).toISOString(),
+      attributes: { "ratel.compaction.trigger": "auto" },
+    },
+  ]);
+  assert.deepEqual(result.data.links, [
+    {
+      traceId: "f".repeat(32),
+      spanId: "e".repeat(16),
+      attributes: { "ratel.link.kind": "background_task" },
+    },
+  ]);
+
+  const plain = ok<Evented>(await run("get_span", { traceId: TRACE, spanId: "root" }, deps));
+  assert.equal("events" in plain.data, false);
+  assert.equal("links" in plain.data, false);
+});
+
 test("get_span caps the attribute list and attributePrefix reads a subset", async () => {
   const attributes = Object.fromEntries(
     Array.from({ length: 80 }, (_, index) => [
@@ -703,6 +751,7 @@ test("get_run_stats applies the run filters and falls back to daily volume on a 
       "get_run_stats",
       {
         rootName: "support",
+        conversationId: "conv-a",
         errorOnly: true,
         minCostUsd: 0.5,
         bucket: "hour",
@@ -729,6 +778,7 @@ test("get_run_stats applies the run filters and falls back to daily volume on a 
   );
 
   assert.equal(options?.rootName, "support");
+  assert.equal(options?.conversation, "conv-a");
   assert.equal(options?.errorOnly, true);
   assert.equal(options?.minCostUsd, 0.5);
   assert.equal(options?.volumeBucket, "day");

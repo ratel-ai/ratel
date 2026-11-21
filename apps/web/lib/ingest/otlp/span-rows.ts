@@ -2,8 +2,22 @@ import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { deterministicEventId, MAX_QUERY } from "@/lib/ingest/trace-events/parse";
 import { attrNumber, attrString } from "./anyvalue";
-import { GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
+import { AGENT_DIMENSION, GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
+import {
+  type DetectSource,
+  type McpRole,
+  NO_DIMENSIONS,
+  NO_SPAN_DIMENSIONS,
+  type SpanDimensionsById,
+} from "./dimensions";
+import { emitterCostUsd } from "./emitter-cost";
 import { type AgentSpanDedupe, isAnchor, isDedupedAgentSpan, isExecuteTool } from "./group";
+import {
+  type StoredSpanEvent,
+  type StoredSpanLink,
+  storedSpanEvents,
+  storedSpanLinks,
+} from "./span-events";
 import type { AttrMap, DecodedSpan } from "./types";
 
 export type SpanClass = "llm_call" | "tool" | "ratel_search" | "other";
@@ -44,6 +58,17 @@ export interface OtelSpanRow {
   experimentAttrs: Record<string, unknown>;
   attributes: Record<string, unknown>;
   attrsTruncated: boolean;
+  /** Entity dimensions (RC-772), from `lib/otlp/dimensions`. */
+  agentKey: string | null;
+  agentSource: DetectSource | null;
+  callerAgentKey: string | null;
+  mcpServer: string | null;
+  mcpServerSource: DetectSource | null;
+  mcpRole: McpRole | null;
+  mcpSessionId: string | null;
+  /** The span's events and links (AOBS-7); null when it has none or they are not stored. */
+  events: StoredSpanEvent[] | null;
+  links: StoredSpanLink[] | null;
 }
 
 const MAX_ATTRIBUTE_BYTES = 16 * 1024;
@@ -52,6 +77,13 @@ const MAX_DATE_MS = 8_640_000_000_000_000;
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const ZERO_SPAN_ID = "0000000000000000";
+const MCP_SESSION_ID_KEY = "mcp.session.id";
+/** The keys a tool span keeps, in the order the size bound keeps them. */
+const TOOL_CONTENT_KEYS = [
+  MCP_SESSION_ID_KEY,
+  GEN_AI.toolCallArguments,
+  GEN_AI.toolCallResult,
+] as const;
 const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   GEN_AI.systemInstructions,
   GEN_AI.inputMessages,
@@ -64,8 +96,15 @@ const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   GEN_AI.legacyPrompt,
   GEN_AI.legacyCompletion,
   RATEL.searchQuery,
+  // AOBS-7: the question a coding agent asked a person (a `ratel.human.wait` event).
+  "ratel.wait.question",
 ]);
-const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set(["error.type", "server.address"]);
+const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
+  "error.type",
+  "server.address",
+  // AOBS-5: the MCP server of a tool call, a name and no content.
+  AGENT_DIMENSION.mcpServer,
+]);
 /**
  * Resource keys a span row keeps: the environment facet in `lib/traces/queries.ts` reads them from `attributes`.
  * The legacy `deployment.environment` is kept only without the `.name` key.
@@ -78,6 +117,12 @@ const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)
 export interface OtelSpanRowOptions {
   /** The project's price book (RC-482); absent, the current built-in prices; unknown, no cost. */
   prices?: BatchPrices;
+  /**
+   * The export's span dimensions, which ingest derives one time
+   * (`lib/otlp/dimensions`). They are never derived here: without them, or for
+   * a span they do not hold, the row's dimension columns are null.
+   */
+  dimensions?: SpanDimensionsById;
 }
 
 export function toOtelSpanRows(
@@ -87,6 +132,7 @@ export function toOtelSpanRows(
   options: OtelSpanRowOptions = {},
 ): OtelSpanRow[] {
   const normalizedSpans = spans.map(normalizeParentSpanId);
+  const dimensions = options.dimensions ?? NO_SPAN_DIMENSIONS;
   return normalizedSpans.filter(isPersistableSpan).map((span) => {
     let scalarTruncated = false;
     // A deduped agent span stores no usage or cost, so every SUM over
@@ -124,29 +170,32 @@ export function toOtelSpanRows(
     const outputTokens = usage(GEN_AI.usageOutputTokens);
     const cachedTokens = usage(GEN_AI.usageCacheRead);
     const hasCostUsage = inputTokens !== null || outputTokens !== null;
+    // The book first; a call it has no price for takes the emitter's own
+    // cost (AOBS-3). Only a span with token usage:
+    // a run total on an agent root would count its calls twice.
     const cost =
-      options.prices === PRICES_UNKNOWN
+      options.prices === PRICES_UNKNOWN || !hasCostUsage
         ? null
-        : costFor(
+        : (costFor(
             model,
-            hasCostUsage
-              ? {
-                  input_tokens: inputTokens,
-                  output_tokens: outputTokens,
-                  cached_tokens: cachedTokens,
-                  cache_write_tokens: intColumn(
-                    attrNumber(span.attributes, GEN_AI.usageCacheCreation),
-                  ),
-                }
-              : null,
+            {
+              input_tokens: inputTokens,
+              output_tokens: outputTokens,
+              cached_tokens: cachedTokens,
+              cache_write_tokens: intColumn(attrNumber(span.attributes, GEN_AI.usageCacheCreation)),
+            },
             options.prices,
-          );
+          ) ?? emitterCostUsd(span.attributes));
     const retained = retainedAttributes(
       span.attributes,
       environmentAttributes(span),
-      keptAsk(span),
+      keptContent(span),
     );
     const experiment = experimentAttributes(span);
+    const entity = dimensions.get(span.spanId) ?? NO_DIMENSIONS;
+    // Each span's events and links (AOBS-7).
+    const events = storedSpanEvents(span);
+    const links = storedSpanLinks(span);
 
     return {
       id: deterministicEventId(projectId, `span:${span.traceId}:${span.spanId}`),
@@ -183,23 +232,48 @@ export function toOtelSpanRows(
       experimentRole,
       experimentAttrs: experiment.attributes,
       attributes: retained.attributes,
-      attrsTruncated: scalarTruncated || retained.truncated || experiment.truncated,
+      attrsTruncated:
+        scalarTruncated ||
+        retained.truncated ||
+        experiment.truncated ||
+        events.truncated ||
+        links.truncated,
+      agentKey: entity.agentKey,
+      agentSource: entity.agentSource,
+      callerAgentKey: entity.callerAgentKey,
+      mcpServer: entity.mcpServer,
+      mcpServerSource: entity.mcpServerSource,
+      mcpRole: entity.mcpRole,
+      mcpSessionId: entity.mcpSessionId,
+      events: events.value,
+      links: links.value,
     } satisfies NewOtelSpan;
   });
 }
 
-/** The content a row keeps: an agent root's ask (RC-740); nothing for any other span. */
-function keptAsk(span: DecodedSpan): AttrMap {
-  return isAgentAskRoot(span)
-    ? { [GEN_AI.inputMessages]: span.attributes[GEN_AI.inputMessages]! }
-    : {};
+/**
+ * The content keys a row keeps: an agent root's ask (RC-740), or an
+ * `execute_tool` span's MCP session id, tool arguments and result (RC-725).
+ * Tool-only traces make no `events` row, so the `otel_spans` row is the one
+ * place they can stay.
+ */
+function keptContent(span: DecodedSpan): AttrMap {
+  if (isAgentAskRoot(span))
+    return { [GEN_AI.inputMessages]: span.attributes[GEN_AI.inputMessages]! };
+  if (!isExecuteTool(span)) return {};
+  const out: AttrMap = {};
+  for (const key of TOOL_CONTENT_KEYS) {
+    const value = span.attributes[key];
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
 }
 
 /**
  * A top-level `invoke_agent` span that carries its run's ask as
- * `gen_ai.input.messages` (Ratel's own backend jobs, RC-722). Model calls keep
- * their content in `events.payload`; this root has no event, so its row is the
- * one place the ask can stay.
+ * `gen_ai.input.messages` (Ratel's own backend jobs, RC-722). Its row keeps the
+ * ask (RC-740). Model calls keep their content in `events.payload`; this root
+ * has no event, so its row is the one place the ask can stay.
  */
 function isAgentAskRoot(span: DecodedSpan): boolean {
   const parent = span.parentSpanId;
@@ -292,8 +366,9 @@ function environmentAttributes(span: DecodedSpan): AttrMap {
 
 /**
  * `extra` goes first, so the size bound drops span attributes before it.
- * `content` (an agent root's kept ask) goes last: an ask too big for the bound
- * is dropped before any content-free key.
+ * `content` (an agent root's kept ask, a tool span's kept session and
+ * payloads) goes last: content too big for the bound is dropped before any
+ * content-free key, and a tool result before its arguments.
  */
 function retainedAttributes(
   attributes: AttrMap,

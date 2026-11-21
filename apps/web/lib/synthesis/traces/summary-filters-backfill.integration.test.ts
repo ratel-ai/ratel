@@ -167,3 +167,28 @@ async function columns(client: PGlite) {
   );
   return rows;
 }
+
+test("the backfill fills the agents and MCP servers of old rows from their spans' entity dimensions (RC-790)", async () => {
+  const { client, db } = await seeded();
+  try {
+    // As `backfill:entity-dimensions` leaves the spans: it does not touch received_at, so the sweep does not see them.
+    await client.exec(`
+      update otel_spans set agent_key = 'support' where trace_id in ('a1', 'a2', 'b2');
+      update otel_spans set agent_key = 'researcher' where span_id = 's2';
+      update otel_spans set mcp_server = 'orders-mcp', mcp_role = 'consumed' where span_id = 's3';
+    `);
+    await backfillTraceSummaryFilters(db, { before: CUTOFF, batchSize: 2 });
+    const { rows } = await client.query(
+      `select trace_id as trace, agents, mcp_servers from otel_trace_summaries order by trace_id`,
+    );
+    assert.deepEqual(rows, [
+      { trace: "a1", agents: ["researcher", "support"], mcp_servers: ["orders-mcp"] },
+      { trace: "a2", agents: ["support"], mcp_servers: [] },
+      { trace: "b1", agents: [], mcp_servers: [] },
+      // Written after the cutoff: left for the sweep.
+      { trace: "b2", agents: [], mcp_servers: [] },
+    ]);
+  } finally {
+    await client.close();
+  }
+});

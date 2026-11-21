@@ -366,3 +366,39 @@ test("the Codex models double their cache rates over 272k prompt tokens", () => 
   // gpt-5.6-luna long: 50k * $0.40 + 200k * $0.04 + 50k * $0.50 + 10k * $1.80.
   assert.equal(costFor("gpt-5.6-luna", usage, C), 0.071);
 });
+
+test("a Claude alias prices as the model it names (AOBS-3)", () => {
+  for (const [alias, model] of [
+    ["opus", "claude-opus-5-5"],
+    ["sonnet", "claude-sonnet-5-5"],
+    ["haiku", "claude-haiku-5-5"],
+    ["fable", "claude-fable-5-2"],
+    ["opus[1m]", "claude-opus-5-5"],
+  ] as const) {
+    for (const book of [undefined, null, CURRENT_PRICES, { overrides: {} }]) {
+      assert.deepEqual(resolvePrice(alias, book), resolvePrice(model), alias);
+      assert.equal(resolvePrice(alias, book)?.key, model);
+    }
+  }
+  const usage = { input_tokens: 1_000_000, output_tokens: 0 };
+  assert.equal(costFor("opus", usage), costFor("claude-opus-5-5", usage));
+});
+
+test("a project's price of the alias, or of the model it names, wins over the built-in alias price", () => {
+  const own = { input: 1, output: 2 };
+  assert.deepEqual(resolvePrice("opus", { overrides: { opus: own } }), {
+    key: "opus",
+    price: own,
+    source: "custom",
+  });
+  assert.deepEqual(resolvePrice("opus", { overrides: { "claude-opus-5-5": own } }), {
+    key: "claude-opus-5-5",
+    price: own,
+    source: "custom",
+  });
+});
+
+test("an alias is not a prefix: a longer id never prices as it", () => {
+  assert.equal(resolvePrice("opus-custom"), null);
+  assert.equal(resolvePrice("sonnetto"), null);
+});

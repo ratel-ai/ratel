@@ -398,3 +398,73 @@ test("list_skills sorts by name and by runs, reading run counts only for runs", 
     ],
   );
 });
+
+/* AOBS-7: list_declared_tools also lists what the agent declared in its telemetry. */
+
+interface DeclaredTools {
+  count: number;
+  totalSynced: number;
+  tools: { name: string }[];
+  telemetryDeclaredCount?: number;
+  telemetryDeclaredTools?: { name: string; lastDeclaredAt: string; modelCalls: number }[];
+}
+
+async function declared(overrides: Partial<CatalogOperationDeps>) {
+  const result = await dispatchOperation(
+    "list_declared_tools",
+    {},
+    {
+      registry: buildRegistry(
+        catalogOperations(
+          deps({
+            listSyncedTools: async () => [syncedTool("Bash", "source-a")],
+            listToolDefinitions: async () => [],
+            ...overrides,
+          }),
+        ),
+      ),
+      auth,
+    },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+  return result as { ok: true; data: DeclaredTools; hint?: string };
+}
+
+const TELEMETRY = [
+  { name: "Bash", lastDeclaredAt: new Date("2026-11-17T10:00:00.000Z"), modelCalls: 4 },
+  {
+    name: "mcp__beluga_board__task_get",
+    lastDeclaredAt: new Date("2026-11-16T10:00:00.000Z"),
+    modelCalls: 2,
+  },
+];
+
+test("list_declared_tools adds the tools declared in telemetry that were not synced", async () => {
+  const { data, hint } = await declared({ listTelemetryDeclaredTools: async () => TELEMETRY });
+  assert.deepEqual(
+    data.tools.map((tool) => tool.name),
+    ["Bash"],
+  );
+  assert.equal(data.telemetryDeclaredCount, 1);
+  assert.deepEqual(data.telemetryDeclaredTools, [
+    {
+      name: "mcp__beluga_board__task_get",
+      lastDeclaredAt: "2026-11-16T10:00:00.000Z",
+      modelCalls: 2,
+    },
+  ]);
+  assert.match(hint ?? "", /telemetryDeclaredTools/);
+});
+
+test("list_declared_tools keeps its synced tools when the telemetry read fails", async () => {
+  const { data } = await declared({
+    listTelemetryDeclaredTools: async () => {
+      throw new Error("read failed");
+    },
+  });
+  assert.deepEqual(
+    data.tools.map((tool) => tool.name),
+    ["Bash"],
+  );
+  assert.equal("telemetryDeclaredTools" in data, false);
+});

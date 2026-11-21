@@ -25,6 +25,7 @@
     "otlp-raw:keys": "tsx scripts/otlp-raw-keys.ts",
     "otlp-raw:reprocess": "tsx scripts/reprocess-otlp-raw.ts",
     "backfill:costs": "tsx scripts/backfill-costs.ts",
+    "backfill:entity-dimensions": "tsx scripts/backfill-entity-dimensions.ts",
     "traces:backfill-filters": "tsx scripts/backfill-trace-summary-filters.ts"
   },
   "dependencies": {

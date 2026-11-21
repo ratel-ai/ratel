@@ -93,12 +93,16 @@ export async function loadIntentTexts(
   return out;
 }
 
-/** One session's closed turns with their steps, oldest first, for the drill-down. */
+/**
+ * One session's turns with their steps, oldest first, for the drill-down:
+ * the closed ones, and with `includeOpen` the open one too (a live session,
+ * AOBS-3: its last turn stays open until the idle sweep closes it).
+ */
 export async function listSessionTurns(
   projectId: string,
   sessionId: string,
   db: Pick<ExplorerLedgerDb, "select"> = getDb(),
-  limit = 200,
+  { limit = 200, includeOpen = false }: { limit?: number; includeOpen?: boolean } = {},
 ): Promise<{ turn: TraceTurnRow; steps: TraceTurnStepRow[] }[]> {
   const turns = await db
     .select()
@@ -107,7 +111,7 @@ export async function listSessionTurns(
       and(
         eq(traceTurns.projectId, projectId),
         eq(traceTurns.sessionId, sessionId),
-        eq(traceTurns.status, "closed"),
+        includeOpen ? undefined : eq(traceTurns.status, "closed"),
       ),
     )
     .orderBy(asc(traceTurns.startedAt), asc(traceTurns.id))

@@ -430,6 +430,23 @@ test("toRow drops cost for an unknown model", () => {
   assert.equal(row.event.costUsd, null);
 });
 
+test("toRow stores the emitter's cost for a model with no book price (AOBS-3)", () => {
+  const call = {
+    anchor: span({
+      attributes: {
+        ...baseUsage,
+        "gen_ai.request.model": "some-unlisted-model",
+        "ratel.usage.cost_usd": 0.0421,
+      },
+    }),
+    detailsEvent: null,
+    toolSpans: [],
+  };
+  const row = toRow("proj-1", call, { overrides: {} });
+  assert.equal(row.event.costUsd, "0.0421");
+  assert.equal(row.metric.costUsd, "0.0421");
+});
+
 /* --- dedup ------------------------------------------------------------------- */
 
 test("dedup prefers response.id, then span id, then trace+start", () => {

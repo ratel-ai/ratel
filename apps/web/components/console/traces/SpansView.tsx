@@ -1,13 +1,22 @@
 "use client";
 
 import { StatusDot } from "@ratel/design-system/badge";
+import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { type Column, DataTable, type SortDirection } from "@ratel/design-system/data-table";
 import { Page, PageBody } from "@ratel/design-system/page-header";
-import { SegmentedControl } from "@ratel/design-system/tabs";
+import { Select } from "@ratel/design-system/select";
+import { EmptyState } from "@ratel/design-system/states";
+import { Layers } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { TabSummary } from "@/components/console/traces-sessions/TabSummary";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
+import {
+  AGENT_DIMENSION_LABEL,
+  AGENT_DIMENSIONS,
+  type AgentDimension,
+  isAgentDimension,
+} from "@/lib/synthesis/traces/agent-dimensions";
 import type {
   OperationAggregate,
   OperationGroupBy,
@@ -52,6 +61,8 @@ export interface SpansViewProps {
   >;
   /** Null lists every span; otherwise spans are grouped by this key (what v1 called Operations). */
   groupBy: OperationGroupBy | null;
+  /** Grouped by a dimension that no span of the window carries: the window is not empty, the dimension is. */
+  noDimensionValue?: boolean;
   spans: readonly SpanSummaryView[];
   operations: readonly OperationAggregate[];
   sort: { id: string; direction: SortDirection };
@@ -66,12 +77,35 @@ const GROUP_LABEL: Readonly<Record<OperationGroupBy, string>> = {
   name: "Step name",
   model: "Model",
   tool: "Tool",
+  ...AGENT_DIMENSION_LABEL,
 };
+/** Why a dimension has no group: what a span must carry for it. */
+const NO_DIMENSION_HINT: Readonly<Record<AgentDimension, string>> = {
+  server: "A tool call names its MCP server when your agent sends it.",
+  command: "A tool call names its command when your agent runs shell commands and sends them.",
+  skill: "A step names its skill when your agent loads one and sends its name.",
+  agent: "A step names its agent when your agent sends it with each span.",
+  chat: "A step names its chat when your agent sends a conversation ID with each span.",
+  task: "A turn names its task when your agent sends it on the turn's first span.",
+  repo: "A turn names its repository when your agent sends it on the turn's first span.",
+};
+/** With the coding-agent dimensions (AOBS-5): too many for a segmented control, so a select. */
+const GROUP_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "name", label: "Name" },
+  { value: "model", label: "Model" },
+  { value: "tool", label: "Tool" },
+  ...AGENT_DIMENSIONS.map((dimension) => ({
+    value: dimension,
+    label: AGENT_DIMENSION_LABEL[dimension],
+  })),
+];
 
 /**
  * Traces, Spans tab (v2): every step across runs, or the same steps grouped by
  * name, model or tool with their latency, failures and spend ("Group by"
- * replaces v1's Operations tab).
+ * replaces v1's Operations tab). The steps also group by MCP server, command,
+ * skill, agent, chat, task and repository (AOBS-5, AOBS-7).
  */
 export function SpansView(props: SpansViewProps) {
   const { projectId, now, timeWindow, facets, groupBy, empty } = props;
@@ -99,23 +133,35 @@ export function SpansView(props: SpansViewProps) {
           end={
             <span className="flex items-center gap-2">
               <span className="text-xs text-fg-subtle">Group by</span>
-              <SegmentedControl
-                label="Group by"
+              <Select
+                aria-label="Group by"
+                className="w-40"
                 value={groupBy ?? "none"}
                 onValueChange={(value) =>
                   go((current) => withGroupBy(current, value === "none" ? null : value))
                 }
-                options={[
-                  { value: "none", label: "None" },
-                  { value: "name", label: "Name" },
-                  { value: "model", label: "Model" },
-                  { value: "tool", label: "Tool" },
-                ]}
+                options={GROUP_OPTIONS}
               />
             </span>
           }
         />
-        {empty ? (
+        {empty && props.noDimensionValue && isAgentDimension(groupBy) ? (
+          <div className="rounded-lg border border-line">
+            <EmptyState
+              icon={Layers}
+              title={`No ${AGENT_DIMENSION_LABEL[groupBy].toLowerCase()} on these spans`}
+              description={NO_DIMENSION_HINT[groupBy]}
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => go((current) => withGroupBy(current, null))}
+                >
+                  Show all spans
+                </Button>
+              }
+            />
+          </div>
+        ) : empty ? (
           <div className="rounded-lg border border-line">
             <TracesEmpty
               kind={empty}
@@ -390,7 +436,8 @@ function withDrillDown(search: string, groupBy: OperationGroupBy, key: string): 
   const params = new URLSearchParams(search.replace(/^\?/, ""));
   for (const name of ["groupBy", "sort", "direction", "cursor", "peek", "scope"])
     params.delete(name);
-  params.set(groupBy === "name" ? "name" : groupBy, key);
+  // A dimension's key is its exact filter; name, model and tool keep their text filters.
+  params.set(isAgentDimension(groupBy) ? groupBy : groupBy === "name" ? "name" : groupBy, key);
   return `?${params.toString()}`;
 }
 

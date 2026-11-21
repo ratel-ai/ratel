@@ -38,6 +38,10 @@ import {
   listSyncedTools,
   listToolDefinitions,
 } from "@/lib/ingest/catalogs/queries";
+import {
+  listTelemetryDeclaredTools,
+  type TelemetryDeclaredTool,
+} from "@/lib/ingest/catalogs/telemetry-declared-tools";
 import { listRuntimeCatalogOverrides } from "@/lib/ingest/runtime-catalog/override-queries";
 import { notFound } from "@/lib/mcp/errors";
 import { endUserIdParam, projectScoped, uuidParam } from "@/lib/mcp/operations/params";
@@ -51,7 +55,10 @@ import {
   TruncationTracker,
 } from "@/lib/mcp/serialize";
 import { APP_NAME } from "@/lib/platform/app-config";
+import { getLogger } from "@/lib/platform/logger";
 import { getSkillCatalogAdoption } from "@/lib/synthesis/catalog/runtime-reads";
+
+const logger = getLogger("mcp/operations/catalog");
 
 /**
  * The catalog: what the retrieval engine can actually see.
@@ -71,6 +78,8 @@ export interface CatalogOperationDeps {
   listSyncedTools: typeof listSyncedTools;
   listObservedTools: typeof listObservedTools;
   listToolDefinitions: typeof listToolDefinitions;
+  /** The tools the agent declared in its telemetry (AOBS-7). Absent, none is listed. */
+  listTelemetryDeclaredTools?: (projectId: string) => Promise<TelemetryDeclaredTool[]>;
   listRuntimeCatalogOverrides: typeof listRuntimeCatalogOverrides;
   listSkillRunCounts: (projectId: string) => ReturnType<typeof listSkillRunCounts>;
   /** The Catalog page's tools read (`lib/catalog/v2/load.ts`). */
@@ -88,6 +97,7 @@ export const defaultCatalogDeps: CatalogOperationDeps = {
   listSyncedTools,
   listObservedTools,
   listToolDefinitions,
+  listTelemetryDeclaredTools: (projectId) => listTelemetryDeclaredTools(projectId),
   listRuntimeCatalogOverrides,
   listSkillRunCounts: (projectId) => listSkillRunCounts(projectId),
   loadToolsCatalog,
@@ -450,11 +460,12 @@ export function catalogOperations(deps: CatalogOperationDeps = defaultCatalogDep
       }),
       async execute(ctx, params) {
         const tracker = new TruncationTracker();
-        const [synced, definitions] = await Promise.all([
+        const [synced, definitions, telemetry] = await Promise.all([
           deps.listSyncedTools(ctx.projectId, {
             includeInactive: params.includeInactive,
           }),
           deps.listToolDefinitions(ctx.projectId),
+          telemetryDeclaredTools(ctx.projectId, deps),
         ]);
 
         const describedNames = new Set(
@@ -467,6 +478,12 @@ export function catalogOperations(deps: CatalogOperationDeps = defaultCatalogDep
           .filter((tool) => !describedNames.has(tool.name))
           .map((tool) => tool.name);
 
+        // AOBS-7: an agent that declares its tools only in its telemetry
+        // (`gen_ai.tool.definitions`) syncs nothing: list those names too.
+        const syncedNames = new Set(synced.map((tool) => tool.name));
+        const telemetryOnly = telemetry?.filter((tool) => !syncedNames.has(tool.name)) ?? [];
+        const telemetryPage = tracker.take(capRows(telemetryOnly, params.limit));
+
         return {
           data: {
             count: page.length,
@@ -477,11 +494,29 @@ export function catalogOperations(deps: CatalogOperationDeps = defaultCatalogDep
               ...tool,
               hasDescription: describedNames.has(tool.name),
             })),
+            ...(telemetry
+              ? {
+                  telemetryDeclaredCount: telemetryOnly.length,
+                  telemetryDeclaredTools: telemetryPage.map((tool) => ({
+                    name: tool.name,
+                    lastDeclaredAt: tool.lastDeclaredAt.toISOString(),
+                    modelCalls: tool.modelCalls,
+                  })),
+                }
+              : {}),
           },
           truncated: tracker.value,
-          hint: undescribed.length
-            ? "Tools listed in undescribedTools have no definition text. A tool known only by name has nothing for a prompt to match, so it can never be retrieved."
-            : undefined,
+          hint:
+            [
+              undescribed.length
+                ? "Tools listed in undescribedTools have no definition text. A tool known only by name has nothing for a prompt to match, so it can never be retrieved."
+                : null,
+              telemetryOnly.length
+                ? "telemetryDeclaredTools are the tools the agent declared to the model in its traces in the last 30 days and did not sync: names only, with no definition text."
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined,
         };
       },
     }),
@@ -615,3 +650,21 @@ export function catalogOperations(deps: CatalogOperationDeps = defaultCatalogDep
 
 /** Exported for tests that assert cost rounding stays stable. */
 export const __testing = { round };
+
+/**
+ * The tools the agent declared in its telemetry (AOBS-7); null without a read.
+ * A failed read lists none: the synced tools are the operation's established
+ * answer.
+ */
+async function telemetryDeclaredTools(
+  projectId: string,
+  deps: CatalogOperationDeps,
+): Promise<TelemetryDeclaredTool[] | null> {
+  if (!deps.listTelemetryDeclaredTools) return null;
+  try {
+    return await deps.listTelemetryDeclaredTools(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "telemetry declared tools read failed");
+    return null;
+  }
+}

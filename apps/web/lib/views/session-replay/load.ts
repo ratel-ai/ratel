@@ -37,7 +37,7 @@ const HAS_CONTENT = sql<boolean>`(
   or jsonb_path_exists(${events.payload}, '$.messages[*].content[*] ? (@.type == "text" && @.text != "")')
 )`;
 
-/** The session's timeline, or null when the project has no closed turn in it. */
+/** The session's timeline, or null when the project has no turn in it, open or closed. */
 export async function loadSessionTimeline(
   projectId: string,
   sessionId: string,
@@ -52,7 +52,8 @@ export async function loadSessionReplay(
   sessionId: string,
   db: ReplayDb = getDb(),
 ): Promise<{ timeline: SessionTimeline; turns: TimelineTurn[] } | null> {
-  const ledger = await listSessionTurns(projectId, sessionId, db);
+  // Open turns too (AOBS-3): the Sessions tab lists a live session, so it opens.
+  const ledger = await listSessionTurns(projectId, sessionId, db, { includeOpen: true });
   if (ledger.length === 0) return null;
   const eventIds = [
     ...new Set(ledger.flatMap(({ steps }) => steps.map((step) => step.traceEventId))),

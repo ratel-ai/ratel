@@ -296,6 +296,15 @@ function otelSpan(overrides: Partial<OtelSpan> & { spanId: string; at?: number }
     experimentAttrs: {},
     attributes: {},
     attrsTruncated: false,
+    agentKey: null,
+    agentSource: null,
+    callerAgentKey: null,
+    mcpServer: null,
+    mcpServerSource: null,
+    mcpRole: null,
+    mcpSessionId: null,
+    events: null,
+    links: null,
     ...rest,
   };
 }

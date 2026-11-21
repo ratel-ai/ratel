@@ -3,7 +3,8 @@ import type { getDb } from "@/lib/platform/db/client";
 import { type ChangedTrace, recomputeTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
 
 /**
- * One-off backfill of the trace filter columns (RC-505, migration 0097).
+ * One-off backfill of the trace filter columns (RC-505, migration 0097; RC-790,
+ * migration 0107).
  *
  * Migration 0097 adds `models`, `tools`, `service_name` and `environment` to
  * `otel_trace_summaries` at their defaults. The sweep fills them for every
@@ -11,6 +12,14 @@ import { type ChangedTrace, recomputeTraceSummaries } from "@/lib/synthesis/trac
  * summaries in `(project_id, trace_id)` keyset batches on the primary key and
  * recomputes each batch in full with the sweep's own recompute, so it never
  * moves the sweep cursor and never competes with new summaries for it.
+ *
+ * Migration 0107 adds `agents` and `mcp_servers` the same way. The recompute
+ * reads them from `otel_spans.agent_key` and `mcp_server`, so for spans stored
+ * before migration 0106 run `backfill:entity-dimensions` first: that backfill
+ * keeps `received_at`, so the sweep does not recompute those traces itself.
+ *
+ * Migration 0108 (AOBS-3) adds `root_error` the same way: a run of this
+ * backfill with `before` at the 0108 deploy time fills it for the older rows.
  *
  * Only rows last written before `before` are read. A recomputed row gets a
  * fresh `updated_at`, so a re-run with the same `before` skips the rows a

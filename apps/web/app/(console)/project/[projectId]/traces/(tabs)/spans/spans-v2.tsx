@@ -9,6 +9,11 @@ import {
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { RANGE_PRESETS } from "@/lib/synthesis/dashboard";
 import {
+  AGENT_DIMENSIONS,
+  agentDimensionFiltersOf,
+  isAgentDimension,
+} from "@/lib/synthesis/traces/agent-dimensions";
+import {
   EMPTY_TRACE_FACETS,
   getTraceFacets,
   getTracesIngestDiagnostics,
@@ -34,7 +39,8 @@ import {
   toSpanSummaryView,
 } from "@/lib/synthesis/traces/view";
 
-const GROUPS: ReadonlySet<string> = new Set(["name", "model", "tool"]);
+/** Name, model and tool, and the coding-agent dimensions (AOBS-5). */
+const GROUPS: ReadonlySet<string> = new Set(["name", "model", "tool", ...AGENT_DIMENSIONS]);
 
 /**
  * The v2 Spans page's data: the v1 span list, or with `?groupBy=` the v1
@@ -54,6 +60,9 @@ export async function SpansPageV2({
 
   const now = new Date();
   const params: TraceListSearchParams = { ...searchParams, peek: undefined };
+  // The exact dimension filters of a group's drill-down. Not part of the
+  // cursor's context: the list links carry them beside it.
+  const dimensions = agentDimensionFiltersOf(params);
   const requestedGroup = firstParam(params.groupBy);
   const groupBy =
     requestedGroup && GROUPS.has(requestedGroup) ? (requestedGroup as OperationGroupBy) : null;
@@ -65,15 +74,21 @@ export async function SpansPageV2({
   const [page, operations, facets] = await Promise.all([
     operationsView
       ? Promise.resolve<SpanPage>({ items: [], hasMore: false, nextCursor: null })
-      : withStatementTimeout((db) => listSpans(project.id, view.queryOptions, db), {
-          operation: "trace_spans",
-        }),
+      : withStatementTimeout(
+          (db) => listSpans(project.id, { ...view.queryOptions, ...dimensions }, db),
+          {
+            operation: "trace_spans",
+          },
+        ),
     operationsView
       ? withStatementTimeout(
           (db) =>
             listOperations(
               project.id,
-              groupedSpanOptions(operationsView.queryOptions, view.queryOptions),
+              {
+                ...groupedSpanOptions(operationsView.queryOptions, view.queryOptions),
+                ...dimensions,
+              },
               db,
             ),
           { operation: "trace_operations" },
@@ -84,10 +99,13 @@ export async function SpansPageV2({
       distinctId,
       fallback: EMPTY_TRACE_FACETS,
       load: () =>
-        withStatementTimeout((db) => getTraceFacets(project.id, view.queryOptions, db), {
-          operation: "trace_facets",
-          timeoutMs,
-        }),
+        withStatementTimeout(
+          (db) => getTraceFacets(project.id, { ...view.queryOptions, ...dimensions }, db),
+          {
+            operation: "trace_facets",
+            timeoutMs,
+          },
+        ),
     }),
   ]);
 
@@ -96,6 +114,7 @@ export async function SpansPageV2({
     : page.items.length === 0 && !view.queryOptions.cursor;
   let empty: TracesEmptyKind | null = null;
   let latestAt: string | null = null;
+  let noDimensionValue = false;
   if (nothing) {
     if (hasFilters("spans", searchFromParams(params))) {
       empty = "filtered";
@@ -107,6 +126,11 @@ export async function SpansPageV2({
           ? "events-only"
           : "no-telemetry"
         : "outside-window";
+      // AOBS-5: the window has spans, and none carries the dimension grouped by.
+      noDimensionValue =
+        isAgentDimension(groupBy) &&
+        diagnostics.latestSpanAt !== null &&
+        new Date(diagnostics.latestSpanAt) >= view.range.since;
     }
   }
   const wider = presetCovering(
@@ -127,6 +151,7 @@ export async function SpansPageV2({
       }}
       facets={facets}
       groupBy={groupBy}
+      noDimensionValue={noDimensionValue}
       spans={page.items.map(toSpanSummaryView)}
       operations={operations}
       sort={

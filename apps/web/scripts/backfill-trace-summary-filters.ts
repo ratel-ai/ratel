@@ -2,7 +2,11 @@
 /**
  * Fill the trace filter columns of trace summaries written before migration
  * 0038 (`0038_trace_summary_filters`, upstream 0097, RC-505): `models`, `tools`,
- * `service_name` and `environment`.
+ * `service_name` and `environment`; and before migration 0040
+ * (`0040_trace_summary_entities`, upstream 0107, RC-790): `agents` and `mcp_servers`.
+ *
+ * For `agents` and `mcp_servers` of spans stored before migration 0039, run
+ * `backfill:entity-dimensions` first: this script reads them from `otel_spans`.
  *
  * The summary sweep fills them for every trace it touches after the deploy.
  * This recomputes the older rows in (project_id, trace_id) batches, without
@@ -13,8 +17,8 @@
  * Usage:
  *   DATABASE_URL=… pnpm --filter @ratel/platform traces:backfill-filters [--before <ISO time>] [--batch-size <n>] [--dry-run]
  *
- * `--before` defaults to now. Use the 0038 deploy time to skip the rows the
- * sweep already recomputed.
+ * `--before` defaults to now. Use the deploy time of the migration (0038 or
+ * 0040) to skip the rows the sweep already recomputed.
  */
 import { config } from "dotenv";
 

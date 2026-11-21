@@ -389,3 +389,94 @@ function span(index: number, overrides: Partial<NewOtelSpan> & { at: number }): 
     ...rest,
   };
 }
+
+// — RC-790: agents and MCP servers ————————————————————————————————————————
+
+/** The seeded traces, with entity dimensions on their spans, swept again. */
+async function seededWithEntities() {
+  const { client, db } = await seeded();
+  await client.exec(`
+    update otel_spans set agent_key = 'supervisor', received_at = now() where trace_id in ('${traceId(1)}', '${traceId(2)}');
+    update otel_spans set agent_key = 'researcher' where span_id = '${spanId(11)}';
+    update otel_spans set mcp_server = 'orders-mcp', mcp_role = 'consumed' where span_id = '${spanId(12)}';
+    update otel_spans set agent_key = 'billing-agent', received_at = now() where trace_id = '${traceId(3)}';
+    update otel_spans set mcp_server = 'payments-mcp', mcp_role = 'consumed' where span_id = '${spanId(32)}';
+  `);
+  await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+  return { client, db };
+}
+
+test("the summary sweep fills each trace's agents and MCP servers from its spans", async () => {
+  const { client, db } = await seededWithEntities();
+  try {
+    const rows = await db
+      .select({
+        traceId: otelTraceSummaries.traceId,
+        agents: otelTraceSummaries.agents,
+        mcpServers: otelTraceSummaries.mcpServers,
+      })
+      .from(otelTraceSummaries)
+      .orderBy(asc(otelTraceSummaries.traceId));
+    assert.deepEqual(rows, [
+      { traceId: traceId(1), agents: ["researcher", "supervisor"], mcpServers: ["orders-mcp"] },
+      { traceId: traceId(2), agents: ["supervisor"], mcpServers: [] },
+      { traceId: traceId(3), agents: ["billing-agent"], mcpServers: ["payments-mcp"] },
+    ]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("filter by agent and by MCP server narrows the Turns list and Sessions", async () => {
+  const { client, db } = await seededWithEntities();
+  try {
+    const turns = async (traces: ListTracesOptions["traces"]) =>
+      (await listTraces(PROJECT_ID, { ...WINDOW, traces }, db)).items
+        .map((item) => item.traceId)
+        .sort();
+    assert.deepEqual(await turns({ agents: ["supervisor"] }), [traceId(1), traceId(2)]);
+    assert.deepEqual(await turns({ agents: ["researcher", "billing-agent"] }), [
+      traceId(1),
+      traceId(3),
+    ]);
+    assert.deepEqual(await turns({ mcpServers: ["payments-mcp"] }), [traceId(3)]);
+    assert.deepEqual(await turns({ agents: ["supervisor"], mcpServers: ["orders-mcp"] }), [
+      traceId(1),
+    ]);
+    assert.deepEqual(await turns({ agents: ["nobody"] }), []);
+
+    const sessions = async (traces: ListSessionListOptions["traces"]) =>
+      (await listSessionList(PROJECT_ID, { filter: "all", now: NOW, traces }, db)).items
+        .map((row) => row.id)
+        .sort();
+    assert.deepEqual(await sessions({ agents: ["researcher"] }), ["session-a"]);
+    assert.deepEqual(await sessions({ mcpServers: ["payments-mcp"] }), ["session-b"]);
+    assert.deepEqual(await sessions({ agents: ["supervisor"], mcpServers: ["payments-mcp"] }), []);
+  } finally {
+    await client.close();
+  }
+});
+
+test("the agent and MCP server facet values are read only when the entity filters are on", async () => {
+  const { client, db } = await seededWithEntities();
+  try {
+    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50, { entities: true });
+    assert.deepEqual(on.agent, [
+      { value: "supervisor", count: 2 },
+      { value: "billing-agent", count: 1 },
+      { value: "researcher", count: 1 },
+    ]);
+    assert.deepEqual(on.server, [
+      { value: "orders-mcp", count: 1 },
+      { value: "payments-mcp", count: 1 },
+    ]);
+    const off = await getTraceFilterFacets(PROJECT_ID, WINDOW, db);
+    assert.deepEqual(Object.keys(off).sort(), ["environment", "model", "service", "tool"]);
+    assert.doesNotMatch(
+      JSON.stringify(traceFacetsQuery(PROJECT_ID, WINDOW, 10)),
+      /agents|mcp_servers/,
+    );
+  } finally {
+    await client.close();
+  }
+});

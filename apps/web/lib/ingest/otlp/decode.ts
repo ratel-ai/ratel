@@ -3,10 +3,12 @@ import { keyValuesToMap } from "./anyvalue";
 import descriptor from "./proto/otlp-trace.descriptor.json";
 import type {
   DecodedEvent,
+  DecodedLink,
   DecodedSpan,
   IExportTraceServiceRequest,
   RawSpan,
   RawSpanEvent,
+  RawSpanLink,
 } from "./types";
 
 /**
@@ -134,6 +136,7 @@ function normalizeSpan(
     endUnixMs: toMs(span.endTimeUnixNano),
     attributes: keyValuesToMap(span.attributes),
     events: (span.events ?? []).map(normalizeEvent),
+    links: (span.links ?? []).map(normalizeLink),
     statusCode: span.status?.code ?? 0,
     resourceAttributes,
     scopeName,
@@ -145,6 +148,14 @@ function normalizeEvent(ev: RawSpanEvent): DecodedEvent {
     name: ev.name ?? "",
     timeUnixMs: toMs(ev.timeUnixNano),
     attributes: keyValuesToMap(ev.attributes),
+  };
+}
+
+function normalizeLink(link: RawSpanLink): DecodedLink {
+  return {
+    traceId: toHexId(link.traceId),
+    spanId: toHexId(link.spanId),
+    attributes: keyValuesToMap(link.attributes),
   };
 }
 

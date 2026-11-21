@@ -4,6 +4,12 @@ import {
   getTraceSpansWithTruncation,
   listTraceLifecycleEvents,
 } from "@/lib/synthesis/traces/queries";
+import {
+  type AgentSubtree,
+  agentSubtrees,
+  hasSubAgents,
+} from "@/lib/synthesis/traces/v2/agent-rollup";
+import { buildRunMetrics, type RunMetrics } from "@/lib/synthesis/traces/v2/run-metrics";
 import { buildRunSummary } from "@/lib/synthesis/traces/v2/run-summary";
 import { buildTraceWaterfall } from "@/lib/synthesis/traces/waterfall";
 import type { TraceTab, TraceViewProps } from "@/lib/views/traces/trace-view-types";
@@ -50,6 +56,10 @@ export async function loadTraceViewProps(
     status: summary.status,
     totals: summary.totals,
     waterfall: buildTraceWaterfall(load.spans),
+    // AOBS-5: the run's agents with each subtree's totals, when it handed work to a sub-agent.
+    agents: subAgentRows(agentSubtrees(load.spans)),
+    // AOBS-7: how the run ran.
+    runMetrics: shownRunMetrics(buildRunMetrics(load.spans)),
     truncated: load.truncated,
     payloadContent: payload?.view ?? null,
     lifecycle: lifecycle.map((event) => ({
@@ -69,4 +79,14 @@ export async function loadTraceViewProps(
       ? `/project/${encodeURIComponent(projectId)}/runtime-events`
       : null,
   };
+}
+
+/** A run with no model call, no run attribute and no event has nothing to show. */
+function shownRunMetrics(metrics: RunMetrics): RunMetrics | null {
+  return metrics.empty ? null : metrics;
+}
+
+/** A run with only its main agent has nothing to break down: the header already has its totals. */
+function subAgentRows(agents: AgentSubtree[]): AgentSubtree[] {
+  return hasSubAgents(agents) ? agents : [];
 }

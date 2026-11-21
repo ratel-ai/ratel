@@ -3,6 +3,7 @@ import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-sched
 import type { LogError } from "@/lib/platform/logger";
 import { deriveModelCalls } from "./derive-model-calls";
 import { deriveToolInvocations } from "./derive-tools";
+import type { SpanDimensionsById } from "./dimensions";
 import {
   type FindRuntimeInvokes,
   runtimeInvokeProbe,
@@ -21,6 +22,8 @@ import type { DecodedSpan } from "./types";
  * only when the SDK already recorded the same tool in the same session within
  * a few seconds (`runtime-duplicates.ts`), so one agent sending both is never
  * double counted while a second, OTel-only agent in the project keeps its runs.
+ *
+ * A tool row carries its MCP server and its skill (AOBS-5).
  */
 
 export interface AgentHealthBridgeDeps {
@@ -34,10 +37,12 @@ export async function agentHealthToolRows(
   spans: readonly DecodedSpan[],
   projectId: string,
   deps: AgentHealthBridgeDeps,
+  /** The export's span dimensions, derived one time by ingest. Absent, a tool row names no MCP server. */
+  dimensions?: SpanDimensionsById,
 ): Promise<ParsedTraceEvent[]> {
   if (!deps.traceTurns) return [];
   try {
-    const rows = [...deriveToolInvocations(spans), ...deriveModelCalls(spans)];
+    const rows = [...deriveToolInvocations(spans, dimensions), ...deriveModelCalls(spans)];
     if (rows.length === 0) return [];
     return await withoutSdkDuplicates(rows, projectId, deps);
   } catch (err) {

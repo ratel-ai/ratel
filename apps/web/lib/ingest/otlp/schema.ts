@@ -15,6 +15,7 @@ import {
 import type { CategorySplits, ToolsByName } from "@/lib/ingest/categorize";
 import type { CloudEvent } from "@/lib/ingest/cloud-schema";
 import type { ContextSource } from "@/lib/ingest/context";
+import type { StoredSpanEvent, StoredSpanLink } from "@/lib/ingest/otlp/span-events";
 import { projects } from "@/lib/platform/projects/schema";
 
 /** Raw telemetry the OTLP and legacy event routes write. Owned fragment of the upstream schema (ADR-0030). */
@@ -173,8 +174,36 @@ export const otelSpans = pgTable(
       .default(sql`'{}'::jsonb`),
     attributes: jsonb("attributes").$type<Record<string, unknown>>().notNull(),
     attrsTruncated: boolean("attrs_truncated").notNull().default(false),
+    // Entity dimensions (RC-772), derived at ingest by `lib/ingest/otlp/dimensions`:
+    // the agent the span ran under, the agent that called it, and the MCP
+    // server it provides or consumes. `*_source` is how the value was found:
+    // sdk | semconv | heuristic. Null on spans stored before migration 0039
+    // until `backfill:entity-dimensions` fills them. `trace_events` has no such
+    // column: an OTLP MCP tool row names its server in its `server` column.
+    agentKey: text("agent_key"),
+    agentSource: text("agent_source"),
+    callerAgentKey: text("caller_agent_key"),
+    mcpServer: text("mcp_server"),
+    mcpServerSource: text("mcp_server_source"),
+    // provided (the span is the server's side of an MCP call) | consumed (the client's side).
+    mcpRole: text("mcp_role"),
+    // The MCP transport session (`mcp.session.id`). `attributes` keeps that key
+    // only on tool spans, so ingest stores it here. The backfill does not fill it.
+    mcpSessionId: text("mcp_session_id"),
+    // AOBS-7: the span's events and links, content-free and bounded
+    // (`lib/ingest/otlp/span-events.ts`). Null when the span has none, and on rows
+    // written before AOBS-7.
+    events: jsonb("events").$type<StoredSpanEvent[]>(),
+    links: jsonb("links").$type<StoredSpanLink[]>(),
   },
   (t) => [
+    // The entity pages: an agent's or an MCP server's spans, newest first.
+    index("otel_spans_project_agent_key_started_idx")
+      .on(t.projectId, t.agentKey, t.startedAt)
+      .where(sql`${t.agentKey} is not null`),
+    index("otel_spans_project_mcp_server_started_idx")
+      .on(t.projectId, t.mcpServer, t.startedAt)
+      .where(sql`${t.mcpServer} is not null`),
     index("otel_spans_received_at_idx").on(t.receivedAt, t.id),
     index("otel_spans_project_trace_idx").on(t.projectId, t.traceId),
     index("otel_spans_project_event_idx")

@@ -6,13 +6,13 @@ import { FilterBar, FilterChip, SearchInput } from "@ratel/design-system/filter-
 import { Popover, PopoverContent, PopoverTrigger } from "@ratel/design-system/popover";
 import { Check, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useMemo, useReducer, useState } from "react";
-import type { TraceFacets } from "@/lib/synthesis/traces/queries";
 import {
   type FilterField,
   filterChips,
   filterFields,
   hasFilters,
   searchText,
+  type TraceFilterBarFacets,
   type TraceTab,
   withFilterToggled,
   withoutChip,
@@ -54,23 +54,29 @@ export function TraceFilterBar({
   onSearchChange,
   end,
   searchable = true,
+  entities = false,
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
   search: string;
   /** A navigation is loading, so a value the search box sent may not be in `search` yet. */
   pending: boolean;
-  facets: Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
-    Partial<Pick<TraceFacets, "experiment" | "arm" | "name">>;
+  facets: TraceFilterBarFacets;
   /** Applies a change. Every change here is a function of the newest query asked for, never a stale copy. */
   onSearchChange: (next: SearchUpdate, options?: { replace?: boolean }) => void;
   end?: ReactNode;
   /** False on a list without a name search (Sessions). */
   searchable?: boolean;
+  /** `cloud-project-entities`: the rollup bar has the Agent and MCP server filters (RC-790). Off, their parameters are not filters. */
+  entities?: boolean;
 }) {
-  const chips = useMemo(() => filterChips(tab, search), [tab, search]);
-  const fields = useMemo(() => filterFields(tab, search, facets), [tab, search, facets]);
-  const filtered = hasFilters(tab, search);
+  const options = useMemo(() => ({ entities }), [entities]);
+  const chips = useMemo(() => filterChips(tab, search, options), [tab, search, options]);
+  const fields = useMemo(
+    () => filterFields(tab, search, facets, options),
+    [tab, search, facets, options],
+  );
+  const filtered = hasFilters(tab, search, options);
 
   // What the box shows is kept apart from what the URL says (lib/traces/v2/
   // search-box.ts): typing never waits for a navigation to land, and the URL
@@ -139,7 +145,7 @@ export function TraceFilterBar({
               size="sm"
               onClick={() => {
                 dispatch({ type: "cleared" });
-                onSearchChange((current) => withoutFilters(tab, current));
+                onSearchChange((current) => withoutFilters(tab, current, options));
               }}
             >
               Clear filters

@@ -107,6 +107,8 @@ import { loadTurnDetail, type TurnDetail } from "@/lib/views/traces/turn-detail"
 
 /** Attributes `get_span` lists before pointing at `attributePrefix`. */
 const SPAN_ATTRIBUTE_CAP = 60;
+/** Events listed for one span: a root can carry 200 hooks. */
+const SPAN_EVENT_CAP = 50;
 const ATTRIBUTE_VALUE_CHARS = 500;
 const TOOL_PAYLOAD_CHARS = 1_000;
 const STEP_TITLE_CHARS = 200;
@@ -236,6 +238,14 @@ export const runFilterParams = {
     .optional()
     .describe("Keep runs with a span whose name contains this text."),
   arm: z.string().max(200).optional().describe("Experiment variant (arm) contains this text."),
+  conversationId: z
+    .string()
+    .min(1)
+    .max(256)
+    .optional()
+    .describe(
+      "Keep the runs of one conversation: the exact gen_ai.conversation.id, which is also the session id get_session takes.",
+    ),
 };
 
 /**
@@ -301,6 +311,7 @@ export type RunListInput = SpanFacetInput & {
   spanName?: string;
   model?: string;
   tool?: string;
+  conversationId?: string;
   errorOnly?: boolean;
   experiment?: string;
   arm?: string;
@@ -353,6 +364,7 @@ export function resolveRunListQuery(
     name: input.spanName,
     model: input.model,
     tool: input.tool,
+    conversation: input.conversationId,
     errorOnly: input.errorOnly ? "1" : undefined,
     experiment: input.experiment,
     arm: input.arm,
@@ -700,6 +712,7 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
             attributeCount: attributeTotal,
             attributes: content ? attributes.attributes : null,
             attributesCutAtIngest: span.attrsTruncated,
+            ...spanEventsAndLinks(span, tracker, content),
             experimentAttributes: experimentAttributes.attributes,
             ...withheldMarker(content),
           },
@@ -1218,7 +1231,7 @@ export function runsOperations(deps: RunsOperationDeps = defaultRunsDeps): McpOp
       domain: "observability",
       title: "Run totals for a filtered set",
       description:
-        "Totals for the runs matching the same filters as list_traces, as the Runs page header shows them: run count, failed runs, error rate, p50, p95 and p99 duration, tokens, cost, and runs per day or hour. For the unfiltered project get_trace_health is cheaper; for spend to quote prefer get_cost_by_day.",
+        "Totals for the runs matching the same filters as list_traces, as the Runs page header shows them: run count, failed runs (a run failed when its root span reports an error), error rate, p50, p95 and p99 duration, tokens, cost, and runs per day or hour. For the unfiltered project get_trace_health is cheaper; for spend to quote prefer get_cost_by_day.",
       keywords: [
         "run stats",
         "filtered totals",
@@ -1323,5 +1336,40 @@ function lifecycleCounts(
       a: a.get(eventName) ?? 0,
       b: b.get(eventName) ?? 0,
     })),
+  };
+}
+
+/**
+ * The span's stored events and links (AOBS-7), absent when it has none. An
+ * event's attributes follow the content rule of the span's own attributes: a
+ * wait can carry the question that was asked.
+ */
+function spanEventsAndLinks(
+  span: OtelSpan,
+  tracker: TruncationTracker,
+  content: boolean,
+): Record<string, unknown> {
+  const events = span.events ?? [];
+  const links = span.links ?? [];
+  return {
+    ...(events.length > 0
+      ? {
+          eventCount: events.length,
+          events: tracker.take(capRows(events, SPAN_EVENT_CAP)).map((event) => ({
+            name: event.name,
+            at: new Date(event.timeUnixMs).toISOString(),
+            attributes: content ? event.attributes : null,
+          })),
+        }
+      : {}),
+    ...(links.length > 0
+      ? {
+          links: links.map((link) => ({
+            traceId: link.traceId,
+            spanId: link.spanId,
+            attributes: content ? link.attributes : null,
+          })),
+        }
+      : {}),
   };
 }

@@ -4,6 +4,7 @@ import { cn } from "@ratel/design-system/cn";
 import { ChevronRight } from "lucide-react";
 import { type KeyboardEvent, memo, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { formatDuration } from "@/lib/synthesis/traces/v2/format";
+import { isRoutineHook, type RunEvent, spanWait } from "@/lib/synthesis/traces/v2/run-metrics";
 import { STEP_KIND_LABEL, stepKind, stepTitle } from "@/lib/synthesis/traces/v2/span-kind";
 import {
   hasChildren,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/synthesis/traces/v2/timeline";
 import type { TraceWaterfallRow } from "@/lib/synthesis/traces/waterfall";
 import { KIND_DOT } from "./kind";
+import { RUN_EVENT_DOT } from "./TraceRunMetrics";
 
 /** Tree | time axis | duration. Header and rows share it, so the axis lines up. */
 const GRID = "grid grid-cols-[minmax(13rem,38%)_minmax(0,1fr)_4.5rem] items-center";
@@ -36,6 +38,7 @@ export function TraceTimeline({
   selected,
   onSelect,
   onToggle,
+  eventsBySpan,
 }: {
   rows: readonly TraceWaterfallRow[];
   durationMs: number;
@@ -44,6 +47,8 @@ export function TraceTimeline({
   selected: number;
   onSelect: (index: number) => void;
   onToggle: (index: number) => void;
+  /** Each step's run events (AOBS-7): markers on its row, and its wait in words. Absent, rows read as before. */
+  eventsBySpan?: ReadonlyMap<string, readonly RunEvent[]>;
 }) {
   const rowRefs = useRef(new Map<number, HTMLDivElement>());
   const ticks = useMemo(() => timeTicks(durationMs), [durationMs]);
@@ -152,6 +157,9 @@ export function TraceTimeline({
                 selected={index === selected}
                 expandable={hasChildren(shape, index)}
                 expanded={!collapsed.has(index)}
+                events={eventsBySpan?.get(rows[index].span.spanId)}
+                durationMs={durationMs}
+                showWait={eventsBySpan !== undefined}
                 setRef={setRef}
                 onSelect={onSelect}
                 onToggle={onToggle}
@@ -171,6 +179,9 @@ const TimelineRow = memo(function TimelineRow({
   selected,
   expandable,
   expanded,
+  events,
+  durationMs,
+  showWait,
   setRef,
   onSelect,
   onToggle,
@@ -181,6 +192,9 @@ const TimelineRow = memo(function TimelineRow({
   selected: boolean;
   expandable: boolean;
   expanded: boolean;
+  events: readonly RunEvent[] | undefined;
+  durationMs: number;
+  showWait: boolean;
   setRef: (index: number, element: HTMLDivElement | null) => void;
   onSelect: (index: number) => void;
   onToggle: (index: number) => void;
@@ -192,6 +206,15 @@ const TimelineRow = memo(function TimelineRow({
   const title = stepTitle(span);
   const left = Math.min(100, Math.max(0, row.offsetRatio * 100));
   const width = Math.min(100 - left, Math.max(0, row.durationRatio * 100));
+  // A wait for a person is not a failure: it reads in words, beside the step.
+  const wait = showWait ? spanWait(span.attributes) : null;
+  const markers = useMemo(
+    () =>
+      events
+        ? [...events.filter(isRoutineHook), ...events.filter((event) => !isRoutineHook(event))]
+        : undefined,
+    [events],
+  );
   return (
     <div
       ref={(element) => setRef(index, element)}
@@ -199,7 +222,7 @@ const TimelineRow = memo(function TimelineRow({
       aria-level={row.depth + 1}
       aria-selected={selected}
       aria-expanded={expandable ? expanded : undefined}
-      aria-label={`${STEP_KIND_LABEL[kind]} ${title}, ${formatDuration(span.durationMs)}${failed ? ", failed" : ""}`}
+      aria-label={`${STEP_KIND_LABEL[kind]} ${title}, ${formatDuration(span.durationMs)}${failed ? ", failed" : ""}${wait ? `, waited for a person, ${wait.label.toLowerCase()}` : ""}${events?.length ? `, ${events.length} ${events.length === 1 ? "event" : "events"}` : ""}`}
       tabIndex={selected ? 0 : -1}
       data-span-id={span.spanId}
       data-step-kind={kind}
@@ -253,6 +276,14 @@ const TimelineRow = memo(function TimelineRow({
         {row.orphaned ? (
           <span className="shrink-0 text-xs text-fg-subtle">(parent missing)</span>
         ) : null}
+        {wait ? (
+          <span
+            className={cn("shrink-0 text-xs", wait.refused ? "text-warning" : "text-fg-subtle")}
+            data-wait={wait.outcome}
+          >
+            {wait.label}
+          </span>
+        ) : null}
       </span>
       <span className="relative h-full">
         <span
@@ -264,6 +295,24 @@ const TimelineRow = memo(function TimelineRow({
           )}
           style={{ left: `${left}%`, width: `max(2px, ${width}%)` }}
         />
+        {markers?.map((event, position) => (
+          <span
+            key={`${event.kind}:${event.offsetMs}:${position}`}
+            title={`${event.label}${event.detail ? `: ${event.detail}` : ""}`}
+            data-event={event.kind}
+            className={cn(
+              "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45",
+              // A routine hook is a small quiet mark; the others sit on top of it at full size.
+              isRoutineHook(event)
+                ? "size-1 opacity-70"
+                : "size-2 shadow-[0_0_0_1.5px_var(--ds-app)]",
+              RUN_EVENT_DOT[event.kind],
+            )}
+            style={{
+              left: `${durationMs > 0 ? Math.min(100, (event.offsetMs / durationMs) * 100) : 0}%`,
+            }}
+          />
+        ))}
       </span>
       <span className={cn("text-right text-xs tabular-nums", failed ? "text-fg" : "text-fg-muted")}>
         {formatDuration(span.durationMs)}

@@ -130,3 +130,24 @@ test("another project's session of the same id stays out, and so do its model ca
     await client.close();
   }
 });
+
+test("a live session opens: its open turn is listed with the closed ones (AOBS-3)", async () => {
+  const { client, db } = await setup();
+  try {
+    // A conversation whose only turn is still open (the idle sweep has not closed it), as OTLP ingest keys it.
+    await client.exec(`
+      insert into trace_turns (id, project_id, session_id, turn_key, turn_source, lane, status, ended_by, started_at, ended_at, last_received_at, re_search_count) values
+        ('33333333-3333-4333-8333-333333333341', '${PROJECT}', 'conv-live', 'otlp:trlive', 'otlp', 'otlp', 'open', null, '2026-10-20T11:00:00Z', '2026-10-20T11:00:05Z', '2026-10-20T11:00:05Z', 0),
+        ('33333333-3333-4333-8333-333333333342', '${PROJECT}', 's1', 'declared:3', 'declared', 'runtime', 'open', null, '2026-10-20T10:10:00Z', '2026-10-20T10:10:05Z', '2026-10-20T10:10:05Z', 0);
+    `);
+
+    const live = await loadSessionTimeline(PROJECT, "conv-live", db);
+    assert.ok(live, "a session with only an open turn is found");
+    assert.equal(live.turnCount, 1);
+
+    const mixed = await loadSessionTimeline(PROJECT, "s1", db);
+    assert.equal(mixed?.turnCount, 3);
+  } finally {
+    await client.close();
+  }
+});

@@ -64,3 +64,46 @@ test("with the flag on, Sessions shows the bar with the URL's chips and no name 
   assert.doesNotMatch(html, /role="search"/);
   assert.match(html, /No sessions match/);
 });
+
+// — RC-790: the Agent and MCP server filters, behind cloud-project-entities —
+
+const ENTITY_SEARCH = "?facetModel=gpt-4o&facetAgent=researcher&facetServer=docs-mcp";
+
+function renderEntities(entities: boolean | undefined): string {
+  const view = createElement(SessionListView, {
+    projectId: PROJECT,
+    filter: "all",
+    rows: [],
+    nextCursor: null,
+    now: "2026-11-10T09:00:00.000Z",
+    empty: "filtered",
+    filterFacets: {
+      ...EMPTY_TRACE_FILTER_FACETS,
+      ...(entities
+        ? { agent: [{ value: "researcher", count: 2 }], server: [{ value: "docs-mcp", count: 1 }] }
+        : {}),
+    },
+    ...(entities === undefined ? {} : { entities }),
+  });
+  return renderToStaticMarkup(inRouter(ENTITY_SEARCH, view));
+}
+
+test("with cloud-project-entities on, the bar shows the agent and MCP server chips from the URL", () => {
+  const html = renderEntities(true);
+  assert.match(html, /Model is/);
+  assert.match(html, /Agent is/);
+  assert.match(html, /researcher/);
+  assert.match(html, /MCP server is/);
+  assert.match(html, /docs-mcp/);
+});
+
+test("with cloud-project-entities off, facetAgent and facetServer in the URL show no chip", () => {
+  for (const entities of [false, undefined]) {
+    const html = renderEntities(entities);
+    assert.match(html, /Model is/, "the other filters are as before");
+    assert.doesNotMatch(html, /Agent is/);
+    assert.doesNotMatch(html, /MCP server is/);
+    // The values stay only in the tab links, which keep the query string as before.
+    assert.doesNotMatch(html, />researcher<|>docs-mcp</);
+  }
+});
