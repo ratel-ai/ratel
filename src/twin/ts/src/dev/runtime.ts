@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { buildInfo } from "../cli/build-info.js";
 import { discoverTwinFiles } from "../cli/discover.js";
-import { canonicalJson } from "../hash.js";
 import { type Manifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
 import { ChildHost } from "./child-host.js";
 import { ConnectError, exchangeToken, runnerSocketUrl } from "./connect-http.js";
@@ -48,13 +47,14 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   const child = new ChildHost(options.root);
   const runner = runnerInfo(options.root);
   const loadManifest = (): Promise<Manifest> => {
-    const build = buildInfo(options.root);
+    const files = discoverTwinFiles(options.root);
+    const build = buildInfo(options.root, files);
     const resource = playgroundResource({
       build,
       runner,
       sdk: { name: SDK_NAME, version: SDK_VERSION },
     });
-    return child.restart(discoverTwinFiles(options.root), build, {
+    return child.restart(files, build, {
       baseUrl: options.baseUrl,
       apiKey: options.apiKey,
       resource,
@@ -234,11 +234,11 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
     }
     try {
       const next = await loadManifest();
-      const changed = canonicalJson(next) !== canonicalJson(connection.manifest);
-      options.out(`reloaded ${next.twins.length} twin(s)${changed ? "; manifest updated" : ""}`);
-      if (changed) step({ type: "manifest.changed", manifest: next });
+      // Always: the controller must learn of every reload, also one that only changed code.
+      options.out(`reloaded ${next.twins.length} twin(s); manifest updated`);
+      step({ type: "manifest.changed", manifest: next });
     } catch (err) {
-      options.out(`reload failed: ${messageOf(err)}`);
+      options.out(`reload failed, still serving the last good code: ${messageOf(err)}`);
     }
   };
 

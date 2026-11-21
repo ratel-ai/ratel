@@ -20,7 +20,12 @@
       "type": "object",
       "properties": {
         "id": { "description": "The git commit SHA, if known.", "type": "string", "minLength": 1 },
-        "dirty": { "description": "True when the working tree has uncommitted changes.", "type": "boolean" }
+        "dirty": { "description": "True when the working tree has uncommitted changes.", "type": "boolean" },
+        "revision": {
+          "description": "Optional. A revision of the loaded twin code: lowercase hex SHA-256 of the twin files' content. It changes with every edit of a twin file, also without git or in a dirty checkout.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "providers": {

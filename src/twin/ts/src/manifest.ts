@@ -13,7 +13,12 @@ export interface Manifest {
     readonly name: string;
     readonly version: string;
   };
-  readonly build?: { readonly id?: string; readonly dirty?: boolean };
+  readonly build?: {
+    readonly id?: string;
+    readonly dirty?: boolean;
+    /** SHA-256 of the twin files' content. Changes with every edit of a twin file. */
+    readonly revision?: string;
+  };
   readonly providers: readonly CallableProvider[];
   readonly twins: readonly ManifestTwin[];
 }

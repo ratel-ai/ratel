@@ -18,3 +18,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `ratel dev` runs: idempotent `run.start` with `run.ack` / `run.reject`, `run.lease`, `run.event` by `seq` with resend of unacked events after a reconnect, `run.end` with the trace ID, `run.cancel` (aborts `ctx.signal`), make-before-break `drain` and frames of at most 64 KB.
 - `ctx.log(message, level?)` and an optional `redact(payload)` on the twin definition.
 - Playground traces: the `ratel dev` child exports each run to `/api/v1/traces` on the project's tracer provider (or the only one it registers), with the root span `invoke_workflow <twin id>`, the `ratel.twin.*` attributes and the playground resource. New constants `RATEL_TWIN_RUN_ID`, `RATEL_TWIN_OVERRIDES` and `RATEL_REPLAY_*`.
+- `ratel dev` sends `manifest.update` after every successful reload, with `build.revision` (SHA-256 of the twin files). A failed reload keeps the last good child worker.

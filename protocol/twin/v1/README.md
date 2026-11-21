@@ -57,7 +57,7 @@ The worker reconnects with a jittered backoff from 1 s to 60 s.
 ## Manifest
 
 [`schema/manifest.schema.json`](schema/manifest.schema.json): the SDK (language, name, version),
-the build (git SHA, dirty flag), the callable providers (**environment variable names only**,
+the build (git SHA, dirty flag, optional `revision`: SHA-256 of the twin files), the callable providers (**environment variable names only**,
 never values) and the twins. A twin has an `id`, its input (`structured` with a JSON Schema, or
 `chat`), its params in declaration order and its context fields. A param has a `kind`:
 

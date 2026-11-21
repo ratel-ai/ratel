@@ -33,7 +33,7 @@ async function main(argv: readonly string[]): Promise<number> {
   if (command.command === "dev") return devCommand(command, root);
   const files = discoverTwinFiles(root);
   if (command.command === "list") {
-    const reply = await askWorker({ kind: "list", root, files, build: buildInfo(root) });
+    const reply = await askWorker({ kind: "list", root, files, build: buildInfo(root, files) });
     if (reply.kind !== "list") throw new Error("the twin worker answered the wrong request");
     process.stdout.write(
       command.json

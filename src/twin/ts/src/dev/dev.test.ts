@@ -15,7 +15,7 @@ import { type Dev, INDEX, PROJECT_KEY, startRatelDev } from "../test-support/rat
 
 const PROVIDER_SECRET = "sk-ant-not-a-real-key-SECRET-4242";
 
-function twinSource(maxTokens: number): string {
+function twinSource(maxTokens: number, tag = "v1"): string {
   return `import { twin } from ${JSON.stringify(INDEX)};
 export default twin("workflow-label", {
   params: {
@@ -24,9 +24,21 @@ export default twin("workflow-label", {
     maxTokens: twin.int(${maxTokens}, { min: 50, max: 2000 }),
   },
   input: twin.structured({ type: "object", properties: { workflowId: { type: "string" } } }),
-  run: async ({ input, params }) => ({ input, maxTokens: params.maxTokens }),
+  run: async ({ input, params }) => ({ input, maxTokens: params.maxTokens, tag: ${JSON.stringify(tag)} }),
 });
 `;
+}
+
+/** The newest register or manifest.update frame: the manifest the controller holds. */
+function lastManifestFrame(c: TestController): ReceivedFrame | undefined {
+  return c.frames
+    .filter((f) => f.frame.type === "register" || f.frame.type === "manifest.update")
+    .at(-1);
+}
+
+function revisionOf(f: ReceivedFrame | undefined): unknown {
+  return (f?.frame.payload as { manifest?: { build?: { revision?: unknown } } }).manifest?.build
+    ?.revision;
 }
 
 const registers = (c: TestController): ReceivedFrame[] =>
@@ -102,6 +114,46 @@ describe("ratel dev against the test controller", () => {
     expect(controller.sockets).toEqual(["tok_1"]);
     expect(controller.invalid).toEqual([]);
     expect(dev.stdout()).toContain("manifest updated");
+  });
+
+  it("sends manifest.update with a new revision when only the code of run() changes", async () => {
+    const before = controller.frames.length;
+    const updates = () =>
+      controller.frames.slice(before).filter((f) => f.frame.type === "manifest.update");
+    const previous = revisionOf(lastManifestFrame(controller));
+    expect(previous).toMatch(/^[0-9a-f]{64}$/);
+    // Same declared params and defaults, no git: only the body of run() changes.
+    writeFileSync(join(project, "agents", "label.twin.ts"), twinSource(500, "v2"));
+    await expect.poll(() => updates().length, { timeout: 15_000 }).toBe(1);
+    const [update] = updates();
+    expect(update?.connection).toBe(1);
+    expect(revisionOf(update)).toMatch(/^[0-9a-f]{64}$/);
+    expect(revisionOf(update)).not.toBe(previous);
+    expect(controller.sockets).toEqual(["tok_1"]);
+    expect(controller.invalid).toEqual([]);
+  });
+
+  it("keeps the last good manifest and child when a reload fails to load", async () => {
+    const before = controller.frames.length;
+    const good = revisionOf(lastManifestFrame(controller));
+    writeFileSync(join(project, "agents", "label.twin.ts"), "export default twin(;\n");
+    await dev.waitForOutput("reload failed");
+    // The last good child still serves runs.
+    controller.startRun("run_after_bad_reload");
+    const end = await controller.waitForFrame(
+      (f) => f.frame.type === "run.end" && f.frame.runId === "run_after_bad_reload",
+    );
+    expect(end.frame.payload).toMatchObject({ status: "ok", output: { tag: "v2" } });
+    expect(controller.frames.slice(before).some((f) => f.frame.type === "manifest.update")).toBe(
+      false,
+    );
+    expect(revisionOf(lastManifestFrame(controller))).toBe(good);
+    // Fixing the file sends the update.
+    writeFileSync(join(project, "agents", "label.twin.ts"), twinSource(500, "v3"));
+    await controller.waitForFrame(
+      (f) => f.frame.type === "manifest.update" && controller.frames.indexOf(f) >= before,
+    );
+    expect(controller.sockets).toEqual(["tok_1"]);
   });
 
   it("reconnects after a dropped socket with backoff and a fresh token", async () => {

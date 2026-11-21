@@ -57,7 +57,9 @@ RATEL_API_KEY=rtl_... ratel dev [--url https://cloud.ratel.sh]
 `register` and prints one playground URL per twin. The project key goes to the token exchange
 only, never onto the socket. The manifest names provider keys, never their values. A dropped
 socket reconnects with a jittered backoff from 1 s to 60 s and a fresh token. A file change
-restarts the child worker and sends `manifest.update` on the same socket. `RATEL_API_KEY` and
+loads the twins in a new child worker and sends `manifest.update` on the same socket, every
+time. The manifest's `build.revision` (SHA-256 of the twin files) changes with every edit of a
+twin file. A reload that fails to load keeps the last good child and sends nothing. `RATEL_API_KEY` and
 `RATEL_URL` come from the environment or the project's `.env`. The CLI parent reads only those
 two names from `.env`.
 
