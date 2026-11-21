@@ -1010,6 +1010,7 @@
         "apps/web/lib/synthesis/dashboard.test.ts",
         "apps/web/lib/synthesis/dashboard-prompt-cache.test.ts",
         "apps/web/lib/synthesis/traces/**",
+        "!apps/web/lib/synthesis/traces/trace-filters.integration.test.ts",
         "!apps/web/lib/synthesis/traces/summary-refresh.ts",
         "!apps/web/lib/synthesis/traces/summary-refresh.integration.test.ts",
         "!apps/web/lib/synthesis/traces/queries.integration.test.ts",

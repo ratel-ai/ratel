@@ -396,10 +396,10 @@ function span(index: number, overrides: Partial<NewOtelSpan> & { at: number }): 
 async function seededWithEntities() {
   const { client, db } = await seeded();
   await client.exec(`
-    update otel_spans set agent_key = 'supervisor', received_at = now() where trace_id in ('${traceId(1)}', '${traceId(2)}');
+    update otel_spans set agent_key = 'supervisor', received_at = now() - interval '1 second' where trace_id in ('${traceId(1)}', '${traceId(2)}');
     update otel_spans set agent_key = 'researcher' where span_id = '${spanId(11)}';
     update otel_spans set mcp_server = 'orders-mcp', mcp_role = 'consumed' where span_id = '${spanId(12)}';
-    update otel_spans set agent_key = 'billing-agent', received_at = now() where trace_id = '${traceId(3)}';
+    update otel_spans set agent_key = 'billing-agent', received_at = now() - interval '1 second' where trace_id = '${traceId(3)}';
     update otel_spans set mcp_server = 'payments-mcp', mcp_role = 'consumed' where span_id = '${spanId(32)}';
   `);
   await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
