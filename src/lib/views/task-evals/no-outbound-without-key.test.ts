@@ -67,20 +67,26 @@ test("with no key and no mock there is no test drafter; the stand-in only with t
 });
 
 test("run-to-test with no key refuses before it reserves or calls anything", async () => {
-  // The gate is on, the run exists and is not in the set; the missing model is the refusal.
-  // Two reads answer (the run, then the eval set); a third read or any write fails the test.
-  const answers = [[{ id: "turn" }], []];
-  const db = {
-    select: () => ({
-      from: () => ({
-        where: () => {
-          const rows = answers.shift();
-          if (!rows) throw new Error("no read may follow the refusal");
-          return { limit: async () => rows };
-        },
-      }),
-    }),
-  } as never;
+  // The gate is on, the run exists and is not in the set, and it names no foreign project; the
+  // missing model is the refusal. Five reads answer (the run, the eval set, then the
+  // foreign-project check's three); a sixth read or any write fails the test.
+  const answers = [[{ id: "turn" }], [], [], [], []];
+  const read = {
+    innerJoin: () => read,
+    leftJoin: () => read,
+    where: () => {
+      const rows = answers.shift();
+      if (!rows) throw new Error("no read may follow the refusal");
+      const result = {
+        limit: async () => rows,
+        orderBy: () => result,
+        // biome-ignore lint/suspicious/noThenProperty: a drizzle query is awaited as is.
+        then: (resolve: (value: unknown) => unknown) => resolve(rows),
+      };
+      return result;
+    },
+  };
+  const db = { select: () => ({ from: () => read }) } as never;
   await assert.rejects(
     draftTestFromRun("11111111-1111-4111-8111-111111111111", "task-a", "turn", {
       db,
