@@ -121,3 +121,26 @@ describe("twin", () => {
     ).toThrow(/t: n default: must be at least 5/);
   });
 });
+
+describe("an async resolve", () => {
+  it("leaves no unhandled rejection when only the hash is read", async () => {
+    const { twin } = await import("./index.js");
+    const t = twin("async-probe", {
+      params: { model: twin.model("anthropic/claude-sonnet-5-5") },
+      input: twin.structured({ type: "object" }),
+      resolve: async () => {
+        throw new Error("no key");
+      },
+      run: () => null,
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    const { configHash, values } = resolveParams(t, {});
+    expect(configHash).toMatch(/^[0-9a-f]{64}$/);
+    await new Promise((r) => setTimeout(r, 10));
+    process.off("unhandledRejection", onUnhandled);
+    expect(unhandled).toEqual([]);
+    await expect(values.model).rejects.toThrow("no key");
+  });
+});

@@ -1,4 +1,5 @@
 import type { Manifest, ManifestParam } from "../manifest.js";
+import { defaultMode } from "../tools.js";
 import type { ToolMode } from "./args.js";
 
 /** The manifest as a readable table: one block per twin, one row per param. */
@@ -7,7 +8,7 @@ export function formatManifest(manifest: Manifest): string {
   const lines: string[] = [];
   for (const twin of manifest.twins) {
     lines.push(`${twin.id}  ${twin.file ?? ""}  (${twin.input.kind} input)`);
-    const rows = twin.params.map((p) => [p.name, typeOf(p), show(p.default), constraintsOf(p)]);
+    const rows = twin.params.map((p) => [p.name, typeOf(p), defaultOf(p), constraintsOf(p)]);
     lines.push(...table(rows).map((row) => `  ${row}`));
     lines.push("");
   }
@@ -52,6 +53,12 @@ function constraintsOf(p: ManifestParam): string {
   if (p.type === "enum") return p.values.join(" | ");
   if (p.type === "string" && p.maxLength !== undefined) return `max ${p.maxLength} chars`;
   return "";
+}
+
+/** A tools param lists each tool with its default mode: "searchDocs real, createTicket fake". */
+function defaultOf(p: ManifestParam): string {
+  if (p.kind !== "tools") return show(p.default);
+  return p.default.map((tool) => `${tool.name} ${defaultMode(tool)}`).join(", ");
 }
 
 function show(value: unknown): string {

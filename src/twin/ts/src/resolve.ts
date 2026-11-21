@@ -57,7 +57,7 @@ export function resolveParams<P extends ParamMap, M>(
   if (issues.length > 0) throw new TwinParamError(twin.id, sortByDeclaration(issues, twin.params));
 
   const resolve = twin.resolve;
-  const resolveModel = resolve ? (id: string) => resolve(id) : bareModelId;
+  const resolveModel = resolve ? (id: string) => handled(resolve(id)) : bareModelId;
   const values: Record<string, unknown> = {};
   for (const [name, param] of Object.entries(twin.params)) {
     values[name] =
@@ -83,6 +83,18 @@ export async function settleParams<P extends ParamMap, M>(
     Object.entries(values).map(async ([name, value]) => [name, await value] as const),
   );
   return Object.fromEntries(entries) as ParamValues<P, M>;
+}
+
+/**
+ * An async model value is awaited only when the run starts. Marks its promise
+ * as handled, so a run refused before that (or a caller that reads only the
+ * hash) leaves no unhandled rejection. Awaiting it still rejects.
+ */
+function handled<M>(value: M | PromiseLike<M>): M | PromiseLike<M> {
+  if (typeof (value as PromiseLike<M> | null)?.then !== "function") return value;
+  const promise = Promise.resolve(value);
+  promise.catch(() => {});
+  return promise;
 }
 
 function sortByDeclaration(issues: ParamIssue[], params: ParamMap): ParamIssue[] {

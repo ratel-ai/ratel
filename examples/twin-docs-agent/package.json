@@ -1,0 +1,34 @@
+{
+  "name": "@ratel-ai/example-twin-docs-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "build:twin": "pnpm -F \"@ratel-ai/twin...\" -F \"@ratel-ai/telemetry\" build",
+    "start": "pnpm build:twin && tsx src/chat.ts",
+    "seed": "pnpm build:twin && tsx src/seed.ts",
+    "ratel": "ratel",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "@ratel-ai/telemetry": "workspace:*",
+    "@ratel-ai/twin": "workspace:*",
+    "ai": "^6.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
+  }
+}

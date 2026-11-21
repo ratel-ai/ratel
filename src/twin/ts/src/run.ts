@@ -49,12 +49,12 @@ export async function runTwin<P extends ParamMap, I, O, M>(
 ): Promise<RunTwinResult<O>> {
   const problem = checkInput(twin.input, options.input);
   if (problem) throw new TwinInputError(twin.id, problem);
-  const resolved = resolveParams(twin, options.overrides ?? {});
   const toolsParams = Object.entries(twin.params).filter(
     (entry): entry is [string, ToolsParam] => entry[1].kind === "tools",
   );
   const descriptors: ToolDescriptor[] = toolsParams.flatMap(([, param]) => param.default);
   const toolModes = resolveToolModes(twin.id, descriptors, options.toolModes);
+  const resolved = resolveParams(twin, options.overrides ?? {});
   const params: Record<string, unknown> = await settleParams(resolved.values);
   const signal = options.signal ?? new AbortController().signal;
   for (const [name, param] of toolsParams) {
