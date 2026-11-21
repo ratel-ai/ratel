@@ -1970,6 +1970,7 @@
     { "from": "apps/web/lib/task-evals/post-ship.integration.test.ts", "to": "apps/web/lib/views/task-evals/post-ship.integration.test.ts", "mode": "owned", "$why": "the gate is the FF_EVAL_GATE env value; a shipment goes through fixSeams.recordShipment, filled by ./ship" },
     { "from": "apps/web/lib/task-evals/run-to-test.ts", "to": "apps/web/lib/views/task-evals/run-to-test.ts", "mode": "owned", "$why": "the gate is FF_EVAL_GATE (upstream's flagDeps are the environment the gate reads); no organizations table in the core: the budget lock is lockOrganizationSpend" },
     { "from": "apps/web/lib/task-evals/run-to-test.integration.test.ts", "to": "apps/web/lib/views/task-evals/run-to-test.integration.test.ts", "mode": "owned", "$why": "the gate is the FF_EVAL_GATE env value, not an organization flag" },
+    { "from": "apps/web/lib/task-evals/foreign-run.integration.test.ts", "to": "apps/web/lib/views/task-evals/foreign-run.integration.test.ts", "mode": "owned", "$why": "the gate is the FF_EVAL_GATE env value, not an organization flag; the seeded ask is a model call, since the core does not read agent_run asks (RC-742 is not ported)" },
     { "from": "apps/web/lib/tasks/live-scores.ts", "to": "apps/web/lib/views/tasks/live-scores.ts", "mode": "copy" },
     { "from": "apps/web/lib/tasks/live-scores.integration.test.ts", "to": "apps/web/lib/views/tasks/live-scores.integration.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/tasks/top-level-paths.test.ts", "to": "apps/web/lib/views/tasks/top-level-paths.test.ts", "mode": "copy" },

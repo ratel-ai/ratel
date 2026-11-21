@@ -569,6 +569,7 @@ export function loopTaskWriteOperations(deps: TaskOperationDeps = defaultTaskDep
             await track(deps, ctx, "task_eval_case_changed", fields);
             if (fields.test_saved) await track(deps, ctx, "task_test_saved", fields);
           },
+          observeRefusal: (fields) => track(deps, ctx, "task_eval_run_refused", fields),
         });
         if (!result.ok) throw libRefusal(result.error);
         return {
