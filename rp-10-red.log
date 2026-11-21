@@ -1,0 +1,106 @@
+# RP-61 / RC-853 RED: the new test on the pre-fix code (baseline f6f918d9 + only lib/views/task-evals/foreign-run.integration.test.ts from head 0ca0bdd6)
+# date: 2026-11-21T17:23:01Z
+# code: ratel f6f918d9 (baseline, origin/main before the port); test file = git show 0ca0bdd6:apps/web/lib/views/task-evals/foreign-run.integration.test.ts
+# cwd: ratel/rp-10-port-rc-853-eval/.beluga/scratch/ratel-red/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/views/task-evals/foreign-run.integration.test.ts
+# expected: FAIL: 4 of 6 tests (add by ask, add by root span, draft_task_test, eval-set refresh)
+
+(node:27237) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✖ a run whose ask names a project of another organization is refused and nothing is stored (1386.042667ms)
+✔ a run whose ask names a project of the same organization becomes an eval (202.650625ms)
+✔ a run whose ask names no project, or an id that is no project, becomes an eval (582.998083ms)
+✖ a run whose root span names a project of another organization is refused (354.032917ms)
+{"level":30,"time":1795281786737,"pid":27237,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.000001,"outcome":"drafted","msg":"task_test_drafted"}
+✖ drafting a test from a run of another organization's project is refused before the model call (272.597208ms)
+{"level":30,"time":1795281786879,"pid":27237,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","added":1,"kept":0,"pinned":0,"dropped":0,"short_of_target":19,"issue_capped":0,"duration_ms":11,"msg":"task_eval_set_refreshed"}
+✖ the eval-set refresh does not pick a run of another organization's project (141.413ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 2
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4674.137708
+
+✖ failing tests:
+
+test at lib/views/task-evals/foreign-run.integration.test.ts:10:437
+✖ a run whose ask names a project of another organization is refused and nothing is stored (1386.042667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   message: 'Run added.',
+  +   ok: true
+  -   error: 'This run works on a project of another organization, so it cannot become an eval here.',
+  -   ok: false
+    }
+  
+      at TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-10-port-rc-853-eval/.beluga/scratch/ratel-red/apps/web/lib/views/task-evals/foreign-run.integration.test.ts:90:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { ok: true, message: 'Run added.' },
+    expected: { ok: false, error: 'This run works on a project of another organization, so it cannot become an eval here.' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/views/task-evals/foreign-run.integration.test.ts:11:1327
+✖ a run whose root span names a project of another organization is refused (354.032917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   message: 'Run added.',
+  +   ok: true
+  -   error: 'This run works on a project of another organization, so it cannot become an eval here.',
+  -   ok: false
+    }
+  
+      at TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-10-port-rc-853-eval/.beluga/scratch/ratel-red/apps/web/lib/views/task-evals/foreign-run.integration.test.ts:154:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { ok: true, message: 'Run added.' },
+    expected: { ok: false, error: 'This run works on a project of another organization, so it cannot become an eval here.' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/views/task-evals/foreign-run.integration.test.ts:12:493
+✖ drafting a test from a run of another organization's project is refused before the model call (272.597208ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-10-port-rc-853-eval/.beluga/scratch/ratel-red/apps/web/lib/views/task-evals/foreign-run.integration.test.ts:169:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /works on a project of another organization/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at lib/views/task-evals/foreign-run.integration.test.ts:12:1149
+✖ the eval-set refresh does not pick a run of another organization's project (141.413ms)
+  AssertionError [ERR_ASSERTION]: ask: cluster_intents for project 55555555-5555-4555-8555-555555555555
+  
+  true !== false
+  
+      at TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-10-port-rc-853-eval/.beluga/scratch/ratel-red/apps/web/lib/views/task-evals/foreign-run.integration.test.ts:208:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+# exit code: 1

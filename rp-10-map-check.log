@@ -1,0 +1,51 @@
+# RP-61 / RC-853 map.json coverage and sync check at head
+# date: 2026-11-21T17:23:43Z
+# code: ratel 0ca0bdd6 (clean tree); upstream = frozen ratel-cloud origin/main 1ce9942f
+# cwd: ratel/ratel-wt-rp-10
+# commands: node map-coverage.mjs f6f918d9 0ca0bdd6 (script on this branch); pnpm platform:sync -- --source <frozen ratel-cloud> --only <copy folder> --check (once per copy folder)
+# expected: every changed file covered; sync --check applies 0 copy changes (exit 0)
+
+## 1) every file changed f6f918d9..0ca0bdd6 and its map.json entry
+apps/web/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/eval-actions.ts
+    -> copy (folder entry): apps/web/app/(app)/project/[projectId]/tasks -> apps/web/app/(console)/(stage-spine)/project/[projectId]/tasks
+apps/web/lib/mcp/operations/loop/tasks.ts
+    -> owned: apps/web/lib/mcp/operations/loop/tasks.ts -> apps/web/lib/mcp/operations/loop/tasks.ts
+       $why: the stage spine is FF_STAGE_SPINE (views/stage-spine-flag.ts), not the Cloud flag read with the users table; simulation links point at the task Simulations pages, which upstream re-pointed to its Evals area
+apps/web/lib/platform/telemetry.ts
+    -> owned: apps/web/lib/analytics/track-server.ts -> apps/web/lib/platform/telemetry.ts
+       $why: shim over the telemetry port; also carries trackProductEvent and reportServerException; no eval_* events (the Evals area is not ported)
+apps/web/lib/views/task-evals/actions.ts
+    -> copy (folder entry): apps/web/lib/task-evals -> apps/web/lib/views/task-evals
+apps/web/lib/views/task-evals/foreign-project.ts
+    -> copy (folder entry): apps/web/lib/task-evals -> apps/web/lib/views/task-evals
+apps/web/lib/views/task-evals/foreign-run.integration.test.ts
+    -> owned: apps/web/lib/task-evals/foreign-run.integration.test.ts -> apps/web/lib/views/task-evals/foreign-run.integration.test.ts
+       $why: the gate is the FF_EVAL_GATE env value, not an organization flag; the seeded ask is a model call, since the core does not read agent_run asks (RC-742 is not ported); adds the eval-set refresh case, the core's stand-in for upstream's score suggestions
+apps/web/lib/views/task-evals/run-to-test.ts
+    -> owned: apps/web/lib/task-evals/run-to-test.ts -> apps/web/lib/views/task-evals/run-to-test.ts
+       $why: the gate is FF_EVAL_GATE (upstream's flagDeps are the environment the gate reads); no organizations table in the core: the budget lock is lockOrganizationSpend
+apps/web/lib/views/task-evals/store.ts
+    -> owned: apps/web/lib/task-evals/store.ts -> apps/web/lib/views/task-evals/store.ts
+       $why: the gate is FF_EVAL_GATE through views/eval-gate/gate (no organization flag deps); the refresh drops runs of another organization's project (RC-853), the guard upstream puts on its score suggestions (lib/evals, excluded)
+scripts/platform-sync/map.json
+    -> the map itself
+
+9 changed files, 0 not covered
+
+## 2) pnpm platform:sync -- --source <frozen ratel-cloud @ 1ce9942f> --only "apps/web/lib/task-evals" --check  (copy files match upstream; owned drift is only reported)
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/Dockerfile                                |   5 +
+ 75 files changed, 3775 insertions(+), 329 deletions(-)
+
+in sync
+
+## 2) pnpm platform:sync -- --source <frozen ratel-cloud @ 1ce9942f> --only "apps/web/app/(app)/project/[projectId]/tasks" --check  (copy files match upstream; owned drift is only reported)
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/Dockerfile                                |   5 +
+ 75 files changed, 3775 insertions(+), 329 deletions(-)
+
+in sync
+
+# exit code: 0

@@ -1,0 +1,98 @@
+# RP-61 / RC-853 GREEN: the new test and the targeted task-evals / MCP loop tests at head
+# date: 2026-11-21T17:23:07Z
+# code: ratel 0ca0bdd6 (fix/refuse-foreign-project-evals head, clean tree)
+# cwd: ratel/ratel-wt-rp-10/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/views/task-evals/foreign-run.integration.test.ts lib/views/task-evals/refresh.integration.test.ts lib/views/task-evals/job.integration.test.ts lib/views/task-evals/selection.integration.test.ts lib/views/task-evals/run-to-test.integration.test.ts lib/views/task-evals/save-test.integration.test.ts lib/views/task-evals/actions.integration.test.ts lib/mcp/operations/loop/tasks.test.ts
+# expected: PASS
+
+(node:27302) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ every task tool refuses with eval_gate_off and calls nothing (442.908625ms)
+✔ the eval gate is asked for the caller in the project (13.45875ms)
+✔ list_task_simulations lists each fix's latest simulation with stale and a link, cutting long text (2.566791ms)
+✔ list_task_simulations with fixId returns one simulation's detail, capped, and refuses a fix of another task (5.33725ms)
+✔ change_task_scorer saves through the console's action as the caller, and emits task_scorer_updated (54.709125ms)
+✔ change_task_scorer resets, and refuses a scorer without its setting or a save without enabled (16.247208ms)
+✔ change_task_eval_set routes each action to the console's changeTaskEval input (52.997292ms)
+✔ change_task_eval_set refresh queues the refresh job and returns its id for get_job_status (3.43375ms)
+✔ change_task_eval_set saving a drafted test emits task_test_saved as the console does (131.259084ms)
+✔ change_task_eval_set turns the action's refusals into tool errors (14.271541ms)
+✔ draft_task_test drafts through the console's action as the caller, saves nothing, and emits task_test_drafted (5.464958ms)
+✔ change_task_simulation maps each action to the console's input, passing only the expected fields given (13.654417ms)
+✔ change_task_simulation input passes the console's own checks, which then refuse a fix of another task (6.790541ms)
+✔ change_task_scorer runs the real action end to end with the console's parse (1.177625ms)
+(node:27303) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a member adds a run by trace or turn, pins, unpins, excludes and queues a refresh (8332.688708ms)
+(node:27304) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":40,"time":1795281799746,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/actions","project_id":"11111111-1111-4111-8111-111111111111","organization_id":"22222222-2222-4222-8222-222222222222","task_id":"cluster_intents","actor":"user_test","action":"add","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","reason":"foreign_project","foreign_projects":1,"with_proposal":false,"msg":"refused a run of another organization as an eval"}
+✔ a run whose ask names a project of another organization is refused and nothing is stored (6870.184833ms)
+{"level":40,"time":1795281799777,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/actions","project_id":"11111111-1111-4111-8111-111111111111","organization_id":"22222222-2222-4222-8222-222222222222","task_id":"cluster_intents","actor":"user_test","action":"add","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","reason":"foreign_project","foreign_projects":1,"with_proposal":true,"msg":"refused a run of another organization as an eval"}
+✔ a run whose ask names a project of the same organization becomes an eval (297.853417ms)
+✔ a run whose ask names no project, or an id that is no project, becomes an eval (709.425791ms)
+{"level":40,"time":1795281801073,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/actions","project_id":"11111111-1111-4111-8111-111111111111","organization_id":"22222222-2222-4222-8222-222222222222","task_id":"cluster_intents","actor":"user_test","action":"add","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","reason":"foreign_project","foreign_projects":1,"with_proposal":false,"msg":"refused a run of another organization as an eval"}
+✔ a run whose root span names a project of another organization is refused (279.061667ms)
+{"level":40,"time":1795281801296,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","reason":"foreign_project","foreign_projects":1,"msg":"refused to draft a test from a run of another organization"}
+✔ drafting a test from a run of another organization's project is refused before the model call (222.050041ms)
+{"level":40,"time":1795281801527,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","skipped":1,"reason":"foreign_project","msg":"skipped runs of another organization in the eval-set refresh"}
+{"level":30,"time":1795281801531,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","added":0,"kept":0,"pinned":0,"dropped":0,"short_of_target":20,"issue_capped":0,"duration_ms":40,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281801810,"pid":27304,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cluster_intents","added":1,"kept":0,"pinned":0,"dropped":0,"short_of_target":19,"issue_capped":0,"duration_ms":20,"msg":"task_eval_set_refreshed"}
+✔ the eval-set refresh does not pick a run of another organization's project (512.278792ms)
+(node:27305) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ refresh jobs and enqueue requests write nothing when the eval gate is off (6897.66775ms)
+{"level":30,"time":1795281800144,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":40,"msg":"task_scores_written"}
+✔ scoring queues a weekly refresh and explicit requests bypass the weekly limit (460.19275ms)
+{"level":30,"time":1795281800188,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":29,"msg":"task_scores_written"}
+{"level":30,"time":1795281800234,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":1,"kept":0,"pinned":0,"dropped":0,"short_of_target":19,"issue_capped":0,"duration_ms":41,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281800251,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":12,"msg":"task_scores_written"}
+{"level":30,"time":1795281800273,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":0,"kept":1,"pinned":0,"dropped":0,"short_of_target":19,"issue_capped":0,"duration_ms":19,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281800299,"pid":27305,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":0,"kept":1,"pinned":0,"dropped":0,"short_of_target":19,"issue_capped":0,"duration_ms":25,"msg":"task_eval_set_refreshed"}
+(node:27306) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795281798259,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":20,"kept":0,"pinned":0,"dropped":0,"short_of_target":0,"issue_capped":0,"duration_ms":182,"msg":"task_eval_set_refreshed"}
+✔ refresh preserves pins, user edits and fix cases while removing stale cases and respecting exclusions (8753.382084ms)
+{"level":30,"time":1795281798334,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":1,"kept":22,"pinned":1,"dropped":2,"short_of_target":0,"issue_capped":0,"duration_ms":63,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281798638,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":0,"kept":23,"pinned":1,"dropped":0,"short_of_target":0,"issue_capped":0,"duration_ms":299,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281799093,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":20,"kept":0,"pinned":0,"dropped":0,"short_of_target":0,"issue_capped":0,"duration_ms":167,"msg":"task_eval_set_refreshed"}
+✔ refresh updates automatic selection reasons when an issue resolves (605.28175ms)
+{"level":30,"time":1795281799243,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":0,"kept":20,"pinned":0,"dropped":0,"short_of_target":0,"issue_capped":0,"duration_ms":138,"msg":"task_eval_set_refreshed"}
+{"level":30,"time":1795281799865,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":20,"kept":0,"pinned":0,"dropped":0,"short_of_target":0,"issue_capped":0,"duration_ms":74,"msg":"task_eval_set_refreshed"}
+✔ the case key treats null fix ids as equal and keeps fix-specific cases separate (621.4145ms)
+{"level":30,"time":1795281800253,"pid":27306,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/store","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","added":0,"kept":23,"pinned":1,"dropped":58,"short_of_target":0,"issue_capped":76,"duration_ms":66,"msg":"task_eval_set_refreshed"}
+✔ refresh shrinks an over-target set while pins, user and fix cases stay outside the budget (388.034292ms)
+(node:27307) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795281799388,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"drafted","msg":"task_test_drafted"}
+✔ a valid model answer gives a proposal and charges the shared organization budget (7944.579708ms)
+{"level":50,"time":1795281799915,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","err":{"type":"TestDraftError","message":"The model returned an invalid test proposal. Try again.","stack":"Error: The model returned an invalid test proposal. Try again.\n    at draftTestFromRun (~/Dev/ratel-ai/ratel-wt-rp-10/apps/web/lib/views/task-evals/run-to-test.ts:184:13)\n    at async waitForActual (node:assert:615:5)\n    at async strict.rejects (node:assert:738:25)\n    at async TestContext.<anonymous> (~/Dev/ratel-ai/ratel-wt-rp-10/apps/web/lib/views/task-evals/run-to-test.integration.test.ts:87:5)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","msg":"task test draft failed"}
+✔ invalid output gives a clear error and still counts the model charge (483.78925ms)
+{"level":30,"time":1795281799920,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"failed","msg":"task_test_drafted"}
+{"level":30,"time":1795281800248,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0,"outcome":"refused_budget","msg":"task_test_drafted"}
+✔ a spent organization budget refuses before the model call (321.246542ms)
+✔ the flag and project and task boundaries refuse before a model call (244.169833ms)
+{"level":30,"time":1795281800722,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0,"outcome":"refused_budget","msg":"task_test_drafted"}
+✔ a pending draft reserves the shared budget before another draft can call the model (234.850875ms)
+{"level":30,"time":1795281800724,"pid":27307,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"drafted","msg":"task_test_drafted"}
+(node:27308) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ Save stores the edited proposal as a user case and refuses duplicate saves (8084.517583ms)
+(node:27309) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ selection mixes scorer results, open issue evidence and intents with at least twenty runs (8201.228ms)
+✔ a task with fewer than twenty runs keeps every eligible run (665.680208ms)
+✔ selection scores only the recent two hundred runs and also keeps older issue evidence (520.352583ms)
+✔ three open issues with eighty evidence runs stay within the target and per-issue cap (611.776708ms)
+✔ four scorers retain passing and failing examples with explicit reasons and intent coverage (288.613333ms)
+✔ issue evidence uses at most seven slots and prioritizes eligible open issues by severity (294.921125ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14393.910917
+
+# exit code: 0
