@@ -26,6 +26,18 @@ export function projectEntitiesEnabled(
 }
 
 /**
+ * The flag for a project, before anything is read from the database (RP-83): the four pages
+ * decide it first, so with the flag off they are absent even where no database is configured.
+ * The context then decides it again for the project's organization.
+ */
+export function projectEntitiesEnabledForProject(
+  projectId: string,
+  env: Env = process.env,
+): Promise<boolean> {
+  return featureEnabled(PROJECT_ENTITIES_FLAG, { projectId }, { env });
+}
+
+/**
  * The flag for an MCP caller with no session: `project:<id>` for a key, the person's
  * identity-provider id otherwise. Upstream's `sessionFlagForActor(PROJECT_ENTITIES_FLAG, …)`.
  */

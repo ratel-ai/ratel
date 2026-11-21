@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { AgentsView } from "@/components/console/agents/AgentsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -9,6 +10,7 @@ import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-sto
 import { overrideView } from "@/lib/views/agents/domain/overrides";
 import type { AgentHandoff, AgentList } from "@/lib/views/agents/domain/types";
 import { agentHref } from "@/lib/views/agents/paths";
+import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import {
   type AgentListExtras,
   listAgentExtras,
@@ -33,6 +35,8 @@ export default async function AgentsPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<AgentsSearchParams>;
 }) {
+  const { projectId } = await params;
+  if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Agents">
@@ -40,7 +44,6 @@ export default async function AgentsPage({
       </DatabaseUnavailable>
     );
   }
-  const { projectId } = await params;
   const context = await resolveAgentsPageContext(projectId, await searchParams);
   const { project, organization, range, environment, window, query, showHidden, canEdit } = context;
   const readHidden = canEdit;
