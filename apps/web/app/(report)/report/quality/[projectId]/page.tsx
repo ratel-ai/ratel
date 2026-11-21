@@ -12,7 +12,6 @@ import {
   loadQualityTrend,
 } from "@/lib/synthesis/quality/snapshot";
 import { parseWindowDays, resolveQualityWindow } from "@/lib/synthesis/quality/window";
-import { operatorConsole, qualityReportProjectId } from "@/lib/views/quality/operator-console";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +22,9 @@ export const dynamic = "force-dynamic";
  * `(console)`, so it does not inherit the console's layout check, and the report
  * contains a customer's real query volumes and catalog shape.
  *
- * Owned (ADR-0030): with the edition's operator console (`EditionUi.OperatorConsole`),
- * its `authorize` is upstream's platform-admin gate, and the operator reads any
- * tenant's project. Without one it is a member's report, so the project comes from
- * the console scope (a 404 outside the organization). The quality stylesheet, which
- * upstream loads globally, is loaded here.
+ * Owned (ADR-0030): it is a member's report, so the project comes from the console
+ * scope (a 404 outside the organization). No edition reads other tenants' reports.
+ * The quality stylesheet, which upstream loads globally, is loaded here.
  */
 export default async function QualityReportPage({
   params,
@@ -41,10 +38,9 @@ export default async function QualityReportPage({
     params,
     searchParams,
   ]);
-  const projectId = await qualityReportProjectId(requestedProjectId, {
-    operatorConsole,
-    requireProjectScope,
-  });
+  const {
+    project: { id: projectId },
+  } = await requireProjectScope(requestedProjectId);
   const window = resolveQualityWindow(days);
   const windowDays = parseWindowDays(days);
   const db = getDb();
