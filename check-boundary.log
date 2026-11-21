@@ -1,0 +1,10 @@
+# pnpm check:boundary
+# date: 2026-11-21T19:02:36Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel
+# command: node scripts/check-ee-boundary.mjs
+# expected: exit 0
+
+ee boundary clean: 0 violations
+
+# exit code: 0

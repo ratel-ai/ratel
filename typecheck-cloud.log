@@ -1,0 +1,9 @@
+# Cloud typecheck (ee/src present): apps/web tsc --noEmit
+# date: 2026-11-21T19:02:00Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web
+# command: npx tsc --noEmit -p .
+# expected: exit 0
+
+
+# exit code: 0

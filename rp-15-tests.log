@@ -1,0 +1,133 @@
+# RP-15 targeted tests: dimensions ingest, trace filters by agent and MCP server
+# date: 2026-11-21T19:01:10Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/ingest/otlp/dimensions/ingest.integration.test.ts lib/ingest/otlp/dimensions/index.test.ts lib/synthesis/traces/trace-filters.integration.test.ts lib/synthesis/traces/v2/filters.test.ts lib/synthesis/traces/span-dimensions.test.ts lib/ingest/otlp/span-events.test.ts
+# expected: all pass, exit 0
+
+(node:29122) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ every span with an id has an entry, and a span with no agent has none (1.458958ms)
+✔ the span's own agent attribute names the agent, in AGENT_KEYS order (0.79275ms)
+✔ the nearest ancestor's agent attribute wins over a farther one and over the resource (0.248125ms)
+✔ the resource's agent attribute is read when no span up the tree has one (0.207708ms)
+✔ with no agent attribute, the nearest invoke_agent ancestor's span name is the agent (0.365417ms)
+✔ an agent attribute anywhere up the tree wins over a nearer invoke_agent ancestor (0.307375ms)
+✔ an agent name is capped at 256 characters (0.152708ms)
+✔ an ancestor outside the export is not read, and a parent cycle ends (0.138583ms)
+✔ a span with no id has no entry, and the input is not changed (0.141875ms)
+✔ agent key rule 1: the Ratel SDK field wins over every other rule, with source sdk (0.182833ms)
+✔ agent key rule 2: gen_ai.agent.name, gen_ai.agent.id and agent.name, with source semconv (0.175584ms)
+✔ agent key rule 3: a framework's agent span, before an invoke_agent ancestor (0.908292ms)
+✔ agent key rule 4: the nearest invoke_agent span names the agent without the operation, source heuristic (0.215625ms)
+✔ agent key rule 5: with no agent attribute, service.name is the key, source heuristic (0.270583ms)
+✔ unknown_service is never an agent key or an MCP server key (0.601583ms)
+✔ a span with no agent and no service has no key (0.25425ms)
+✔ the caller is the agent of the nearest ancestor under another agent (0.293625ms)
+✔ an MCP server span is provided by its service, and the service is not an agent (0.116834ms)
+✔ an MCP server span is found by its span name when the method attribute is missing (0.096292ms)
+✔ an MCP server span with no usable service.name takes the server's own name (0.076ms)
+✔ a client span consumes the Ratel SDK's upstream server, source sdk (0.055792ms)
+✔ a tool call consumes the server its tool name carries, source heuristic (0.111458ms)
+✔ an MCP client span with no server name is consumed, with no server (0.151584ms)
+✔ a span that is no tool call takes no server from its name (0.030041ms)
+✔ an MCP server span under the caller's spans in one export does not take the caller's agent (0.075708ms)
+✔ an agent that runs inside an MCP server keeps its own key, and its caller is the agent above the server (0.04425ms)
+✔ a span's MCP session is its own mcp.session.id, whatever its role (RC-811) (0.199375ms)
+(node:29123) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287675068,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ two nested agents and an MCP server span get their dimensions in otel_spans (1995.181917ms)
+{"level":30,"time":1795287675069,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675075,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795287675075,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675303,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the dimensions are the same when the server's export comes first (236.716917ms)
+{"level":30,"time":1795287675303,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675314,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795287675314,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675576,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the MCP tool row names its server in trace_events.server; the other derived rows keep it null (267.266166ms)
+{"level":30,"time":1795287675576,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675581,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795287675581,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795287675846,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ an MCP server that exports alone stores its call with its own name as the server (266.151334ms)
+{"level":30,"time":1795287675846,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+✔ trace_events has no entity dimension column: the dimensions live on otel_spans (265.634833ms)
+{"level":50,"time":1795287676318,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"derivation failed","stack":"Error: derivation failed\n    at deriveSpanDimensions (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:209:13)\n    at persistDecodedSpans (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/ingest-spans.ts:173:48)\n    at handleTracesRequest (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/route-handler.ts:331:27)\n    at async ingest (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:81:17)\n    at async TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:206:22)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","msg":"exception"}
+{"level":30,"time":1795287676329,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ a derivation that throws is logged, and the batch is still stored: null dimensions, the payload agent of main (RC-811) (221.6765ms)
+{"level":30,"time":1795287676329,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795287676334,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795287676334,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":50,"time":1795287676329,"pid":29123,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"derivation failed","stack":"Error: derivation failed\n    at deriveSpanDimensions (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:209:13)\n    at persistDecodedSpans (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/ingest-spans.ts:173:48)\n    at handleTracesRequest (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/route-handler.ts:331:27)\n    at async ingest (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:81:17)\n    at async TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/ingest/otlp/dimensions/ingest.integration.test.ts:206:22)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","msg":"exception"}
+(node:29124) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ keeps a span event with its name, time and content-free attributes (1.712625ms)
+✔ drops an event that carries only content, and strips content keys from the others (0.292334ms)
+✔ the question asked in a wait for a person is content (0.183416ms)
+✔ a span with no event stores null (0.106875ms)
+✔ bounds the number of events and reports the cut (0.602708ms)
+✔ bounds the bytes of the stored events (0.471125ms)
+✔ keeps a span link with valid ids and its content-free attributes (0.545917ms)
+✔ a span with no link stores null (0.147292ms)
+✔ a span row stores its events and links (2.520625ms)
+(node:29125) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a page reads server, command, skill and agent as exact filters, trimmed (1.171458ms)
+✔ the shared resolvers do not read them: only the flagged Spans page adds them (2.081792ms)
+✔ the grouped view takes the new groupings (0.2125ms)
+✔ each dimension filter shows as a chip on Spans, and clears with the filters (0.776625ms)
+(node:29126) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the summary sweep fills each trace's models, tools, service and environment (1561.625667ms)
+✔ filter by model and by tool narrows the Turns list (358.450375ms)
+✔ a trace that starts before the window but has an in-window root is in the filtered list as in the unfiltered one (279.342792ms)
+✔ the Turns totals follow the same filter (242.35125ms)
+{"level":30,"time":1795287674772,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by model and by tool narrows Sessions: a session matches when any of its turns matches (282.678833ms)
+{"level":30,"time":1795287674790,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287674803,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287674817,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287674820,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287674832,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"failed","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ facet values for a project and window come from one rollup query (225.217125ms)
+✔ the Sessions facet window is the Turns default range: it ignores rows outside it (213.96275ms)
+✔ the Sessions filter finds the matching sessions once per page, not once per walked head (0.313292ms)
+✔ without a filter the list queries are unchanged (0.170334ms)
+✔ the summary sweep fills each trace's agents and MCP servers from its spans (238.737292ms)
+{"level":30,"time":1795287675765,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by agent and by MCP server narrows the Turns list and Sessions (275.517959ms)
+{"level":30,"time":1795287675776,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287675786,"pid":29126,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ the agent and MCP server facet values are read only when the entity filters are on (299.8145ms)
+(node:29127) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ every narrowing parameter becomes a chip, so no filter hides (1.273666ms)
+✔ exact experiment links read as exact, and removing the last tag drops exactTags (0.180875ms)
+✔ removing a chip drops the page cursor and the open row, and keeps the rest (0.078541ms)
+✔ measures read as ranges in plain units (15.113292ms)
+✔ logs only show the filters that narrow logs (0.129125ms)
+✔ clear filters keeps the window, sort, view options and the compare selection (0.32075ms)
+✔ the search box writes the name filter and Logs retire the old event-name param (0.133084ms)
+✔ the add-filter popover offers the values seen in the window, with counts only in the span unit (0.316333ms)
+✔ toggling a value adds or removes it; single-value fields replace (0.281125ms)
+✔ a preset window replaces custom days; switching tabs leaves the page and open row behind (0.184208ms)
+✔ grouped Spans apply the variant and top-level filters their chips show (1.662375ms)
+✔ traceFilterFromSearch reads the rollup filters from the URL (RC-505) (0.2845ms)
+✔ rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip (0.467792ms)
+✔ rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds (0.224625ms)
+✔ with the entity filters on, facetAgent and facetServer are read, shown as chips and offered as fields (0.545375ms)
+✔ with the entity filters off, facetAgent and facetServer are ignored and no facet shows (1.170458ms)
+✔ the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3) (0.099916ms)
+ℹ tests 75
+ℹ suites 0
+ℹ pass 75
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5254.416125
+
+# exit code: 0

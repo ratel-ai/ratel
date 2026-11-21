@@ -1,0 +1,37 @@
+# RP-17 targeted tests: job ask allowlist, exported invoke_agent root (captures rp-17-captured-ask.json)
+# date: 2026-11-21T19:01:25Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/jobs/job-ask.test.ts lib/jobs/project-context.test.ts
+# expected: all pass, exit 0; the captured span has no project id, user id or customer text
+
+(node:29250) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a simulate_task_eval job asks in words, with only its allowed ids and settings (0.953958ms)
+✔ a label_workflows job asks in words, with only its allowed ids and settings (0.118792ms)
+✔ a assign_topics job asks in words, with only its allowed ids and settings (0.045958ms)
+✔ a match_quality_run job asks in words, with only its allowed ids and settings (0.095916ms)
+✔ a cluster_intents job asks in words, with only its allowed ids and settings (0.050333ms)
+✔ a draft_fix job asks in words, with only its allowed ids and settings (0.051625ms)
+✔ a what_if_step job asks in words, with only its allowed ids and settings (0.055667ms)
+✔ a payload key not on the kind's allowlist never reaches the ask (0.137ms)
+✔ an allowed key whose value is free text, an object or too long is left out (0.096708ms)
+✔ a list of more than ten ids shows the first ten and how many more (0.103833ms)
+✔ a job whose payload is not an object asks by its words alone (0.061541ms)
+✔ a table entry is checked against its kind's payload: every key needs a decision (0.048625ms)
+✔ every kind's ask, with or without ids, reads back as its job kind (0.245125ms)
+✔ a stored run's old machine ask still reads as its job kind (0.058083ms)
+✔ an ask that is not a job's reads as no job kind (0.055625ms)
+(node:29251) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a run ask with a project id, a user id and customer text sends none of them (3.412417ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1037.629417
+
+# exit code: 0

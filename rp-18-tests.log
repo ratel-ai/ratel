@@ -1,0 +1,97 @@
+# RP-18 targeted tests: Sessions empty state (#493), draft_task_test fence (#505), codex prices (#558)
+# date: 2026-11-21T19:01:27Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/synthesis/traces-sessions/view.test.ts lib/synthesis/traces-sessions/sessions-agreement.integration.test.ts lib/synthesis/traces/v2/sessions-tab-ui.test.ts lib/views/task-evals/run-to-test.integration.test.ts lib/ingest/pricing.test.ts
+# expected: all pass, exit 0
+
+(node:29279) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ costFor charges input + output at model rates (1.254125ms)
+✔ costFor discounts cached input tokens (0.116625ms)
+✔ costFor bills claude-opus-4-8 cache writes at $6.25/Mtok (0.06575ms)
+✔ cached_tokens never exceeds input_tokens (0.064791ms)
+✔ priceFor resolves by longest prefix (0.238792ms)
+✔ unknown model is unpriced (0.08975ms)
+✔ claude-haiku-5-5 is priced, including dated ids (0.106292ms)
+✔ claude-haiku-5-5 bills prompts up to 100k at base rates (0.195875ms)
+✔ claude-haiku-5-5 bills the whole call at long-context rates over 100k (0.114833ms)
+✔ long-context threshold counts cache reads and writes (0.261625ms)
+✔ cache writes bill at the write rate and never exceed uncached input (0.223209ms)
+✔ models without a cache-write rate bill writes at input (0.149917ms)
+✔ claude-sonnet-5 is priced at $2/$10, cache reads $0.20 and writes $2.50 (0.11725ms)
+✔ claude-opus-5 is priced at $5/$25, cache reads $0.50 and writes $6.25 (0.098583ms)
+✔ the 5.5 models keep their own prices next to their 5 prefixes (0.20275ms)
+✔ with no book a cost uses the current table and the date-only lookup (0.16175ms)
+✔ Ratel's own budget costs keep the frozen rates and the any-suffix lookup (0.285125ms)
+✔ gpt-4o-mini keeps its own price next to its gpt-4o prefix, dated ids included (0.181459ms)
+✔ a prefix prices only a dated id, never a named variant or a newer version (0.474458ms)
+✔ each minor version has its own official price (0.085333ms)
+✔ a project override wins over the built-in price, for dated ids too (0.075458ms)
+✔ a project override prices a model the built-in list does not know (0.054625ms)
+✔ resolvePrice names the key that priced a model and where it came from (0.465458ms)
+✔ claude-sonnet-5-5 reads cache hits at 5% of input (0.034208ms)
+✔ gpt-5.5 bills prompts over 272k at 2x input, 2x cache and 1.5x output (0.031541ms)
+✔ the main providers' current models are priced (0.061084ms)
+✔ gpt-6-sol is priced at its official standard rates (0.040459ms)
+✔ gpt-6-luna is priced at its official standard rates (0.02275ms)
+✔ gpt-5.6-terra is priced at its official standard rates (0.022959ms)
+✔ gpt-5.6-luna is priced at its official standard rates (0.021833ms)
+✔ the Codex models double their cache rates over 272k prompt tokens (0.044541ms)
+✔ a Claude alias prices as the model it names (AOBS-3) (0.142125ms)
+✔ a project's price of the alias, or of the model it names, wins over the built-in alias price (0.055125ms)
+✔ an alias is not a prefix: a longer id never prices as it (0.056958ms)
+(node:29280) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287690840,"pid":29280,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ one MCP session of 5 tool calls is 1 session in the summary and 1 row in the list (2047.409166ms)
+{"level":30,"time":1795287691314,"pid":29280,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ an open (live) MCP session shows in the list as Active and counts in the summary (494.599292ms)
+{"level":30,"time":1795287691329,"pid":29280,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":true,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287691341,"pid":29280,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287691686,"pid":29280,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ turns with no session id are not sessions in the summary, as in the list (344.571666ms)
+(node:29281) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the filter reads from ?show=: All or Failed, no To check (0.45525ms)
+✔ changing the filter drops the open row and keeps the rest, the timeframe too (0.162084ms)
+✔ turns but no sessions is its own empty kind, not 'No turns yet' (0.066042ms)
+✔ no telemetry at all keeps the send-your-first-trace kind; events without spans keep events-only (0.043875ms)
+✔ property filters and the Failed filter win over the telemetry check (0.097584ms)
+✔ the session guidance names gen_ai.conversation.id, and the agent prompt tells an agent to set it on every span of one conversation (0.085958ms)
+(node:29282) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the tabs are Sessions (first), Turns, Spans and Logs (RC-503) (21.010167ms)
+✔ a turn's trace says which session it is part of and links each turn to its own trace (2.653208ms)
+✔ a session of one turn shows only the link, no picker (1.237875ms)
+✔ the Sessions table puts the ID first, then status, first message, last turn, turns, duration, started, last update, tokens and cost (30.617083ms)
+✔ the Turns table starts with the same ID column as Sessions (5.7625ms)
+✔ the session Panel shows every turn of the session as chat, each linking to its trace (9.175417ms)
+✔ turns but no sessions: 'No sessions yet', a link to Turns, the attribute to add and a copy-prompt button (10.111041ms)
+✔ no telemetry at all keeps the send-your-first-trace empty state (3.883375ms)
+(node:29283) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287692697,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"drafted","msg":"task_test_drafted"}
+✔ a valid model answer gives a proposal and charges the shared organization budget (2974.099208ms)
+{"level":30,"time":1795287693202,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"drafted","msg":"task_test_drafted"}
+✔ a proposal in a json code fence is read (488.881625ms)
+{"level":40,"time":1795287693678,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","reason":"schema","issues":["ask: invalid_type","expected: invalid_type","criteria: invalid_type"],"msg":"task test proposal rejected"}
+✔ invalid output gives a clear error and still counts the model charge (495.096958ms)
+{"level":50,"time":1795287693678,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","err":{"type":"TestDraftError","message":"The model returned an invalid test proposal. Try again.","stack":"Error: The model returned an invalid test proposal. Try again.\n    at draftTestFromRun (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/views/task-evals/run-to-test.ts:180:13)\n    at async waitForActual (node:assert:615:5)\n    at async strict.rejects (node:assert:738:25)\n    at async TestContext.<anonymous> (~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web/lib/views/task-evals/run-to-test.integration.test.ts:104:5)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","msg":"task test draft failed"}
+{"level":30,"time":1795287693683,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"failed","msg":"task_test_drafted"}
+{"level":30,"time":1795287694056,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0,"outcome":"refused_budget","msg":"task_test_drafted"}
+✔ a spent organization budget refuses before the model call (359.831208ms)
+✔ the flag and project and task boundaries refuse before a model call (300.962042ms)
+{"level":30,"time":1795287694659,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0,"outcome":"refused_budget","msg":"task_test_drafted"}
+✔ a pending draft reserves the shared budget before another draft can call the model (311.163167ms)
+{"level":30,"time":1795287694663,"pid":29283,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/run-to-test","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001","model":"claude-haiku-5-5","cost_usd":0.00006,"outcome":"drafted","msg":"task_test_drafted"}
+ℹ tests 57
+ℹ suites 0
+ℹ pass 57
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6925.576
+
+# exit code: 0

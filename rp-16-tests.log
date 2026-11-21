@@ -1,0 +1,117 @@
+# RP-16 targeted tests, FF_TOOL_RUN_INSIGHTS on and off: agent runs as turns, topics, agent tasks, flag
+# date: 2026-11-21T19:01:16Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/apps/web
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit lib/ledger/turns/agent-run.integration.test.ts lib/ledger/turns/segment-agent-run.test.ts lib/readings/topics/agent-asks.test.ts lib/readings/topics/derived-asks.test.ts lib/readings/topics/job.agent-answered.integration.test.ts lib/readings/topics/job.agent-asks.integration.test.ts lib/readings/topics/job.tool-runs.integration.test.ts lib/readings/trace-signals/signals/agent-tasks.integration.test.ts lib/readings/trace-signals/tool-run-insights.test.ts lib/platform/tool-run-insights-flag.test.ts lib/ingest/otlp/derive-agent-runs.test.ts
+# expected: all pass, exit 0
+
+(node:29190) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ an invoke_agent root is one agent_run row with the root's ask, agent and session (2.617709ms)
+✔ the root arrives alone (its chat children came in an earlier export): still one row (0.265584ms)
+✔ a failed run carries its error type (0.294791ms)
+✔ a run without an ask or a conversation id: no prompt, session is the trace (0.631208ms)
+✔ bare chat spans, a nested invoke_agent and non-agent roots make no row (1.502167ms)
+(node:29191) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287682621,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":37,"msg":"trace turns build completed"}
+✔ flag on: an invoke_agent run with chat children is exactly one closed turn, its ask the root's (3621.16925ms)
+{"level":30,"time":1795287683036,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":31,"msg":"trace turns build completed"}
+✔ flag on: a finished run reads Completed with its real duration in the Sessions list and its summary, minutes after it ended (RC-812) (423.504084ms)
+{"level":30,"time":1795287683096,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287683583,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":23,"msg":"trace turns build completed"}
+✔ flag on: a run whose root span ended in an error reads Failed, minutes after it ended (RC-812) (489.68025ms)
+{"level":30,"time":1795287683596,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287683875,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":8,"msg":"trace turns build completed"}
+✔ flag off: the run makes no turn and no session, as before (RC-812) (283.962ms)
+{"level":30,"time":1795287683880,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795287684386,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":6,"msg":"trace turns build completed"}
+✔ flag off: no agent_run row, no turn, and the trace stays a model-only ask (520.083583ms)
+{"level":30,"time":1795287684838,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":12,"msg":"trace turns build completed"}
+✔ rows stored with the flag on are not read by a build with the flag off (439.153416ms)
+{"level":30,"time":1795287685202,"pid":29191,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":8,"msg":"trace turns build completed"}
+✔ a bare chat span with no invoke_agent root makes no turn, flag on (364.164417ms)
+(node:29192) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ an agent_run row alone makes exactly one closed otlp turn with one agent step (2.400208ms)
+✔ a failed run's agent step reads error, counts no tool error, and keeps it on rebuild (1.114542ms)
+✔ tool calls of the same trace join the agent run's turn: still one turn (0.67625ms)
+✔ rebuilt from its stored steps, the turn is the same (idempotent) (0.557542ms)
+✔ an agent_run row on the runtime lane is not read (0.207833ms)
+✔ the agent's name rides the agent step as its target id, no target type, and survives a rebuild (RC-747) (0.459875ms)
+✔ a run is finished when its row exists: its turn closes at once and ends when the root span ended (RC-812) (0.587542ms)
+✔ a tool call that arrives after the run's row joins the closed turn, which stays closed (RC-812) (0.450334ms)
+✔ a run with no duration ends at its last event; a turn with no agent run still waits for the idle window (RC-812) (0.269208ms)
+(node:29193) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ tool-run insights are off with nothing set (0.992375ms)
+✔ FF_TOOL_RUN_INSIGHTS turns them on, and only a true value does (0.321791ms)
+✔ another experimental switch does not turn them on (0.132459ms)
+(node:29194) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a job's machine ask reads as the job in words, without the project id and the payload (1.343166ms)
+✔ a job's ask in words (RC-834) reads as the same job in words, with or without its ids (0.241959ms)
+✔ the old and the new ask of one job kind are one ask (0.932459ms)
+✔ an ask in a person's words is left alone (0.188084ms)
+✔ only the machine asks are derived, by turn (0.31175ms)
+(node:29195) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ toolPathAsk: distinct tools in first-call order, MCP server prefix dropped, humanized (1.2275ms)
+✔ derivedAsks: only turns with calls and no raw ask; the task's name wins over the tool path (1.715834ms)
+(node:29196) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287684748,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":8,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":50,"msg":"trace turns build completed"}
+✔ flag on: a finished agent run is an answered ask, a failed one is not (4426.47975ms)
+{"level":30,"time":1795287684807,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795287684819,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":8,"model_only":0,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":70,"msg":"topic reading completed"}
+{"level":30,"time":1795287685262,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":8,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":33,"msg":"trace turns build completed"}
+✔ flag off: the same runs read as before, none answered (470.756167ms)
+{"level":30,"time":1795287685284,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795287685292,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":8,"model_only":0,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":30,"msg":"topic reading completed"}
+{"level":30,"time":1795287685563,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":2,"turns_written":2,"steps_written":2,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":11,"msg":"trace turns build completed"}
+✔ flag on: an unplaced finished run is answered too (285.0405ms)
+{"level":30,"time":1795287685575,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795287685578,"pid":29196,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":2,"model_only":0,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":15,"msg":"topic reading completed"}
+(node:29197) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287684853,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: the runs of one job kind are one ask and make one intent, with no project id (4364.160166ms)
+{"level":30,"time":1795287684866,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":14,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795287685272,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: a job's old machine asks and its asks in words (RC-834) are one ask and make one intent (406.727917ms)
+{"level":30,"time":1795287685277,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":6,"model_only":6,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795287685561,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag off: the job asks are read as they are, all unplaced, as before (286.103083ms)
+{"level":30,"time":1795287685564,"pid":29197,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":14,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+(node:29198) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287685014,"pid":29198,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: tool-only runs read a derived ask (task name, else tool path) and make intents (4495.771708ms)
+{"level":30,"time":1795287685039,"pid":29198,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":13,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795287685483,"pid":29198,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag off: tool-only runs stay without an ask, as before (442.617ms)
+{"level":30,"time":1795287685489,"pid":29198,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":13,"model_only":0,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"none","duration_ms":0,"msg":"topic reading completed"}
+(node:29202) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+{"level":30,"time":1795287684829,"pid":29202,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":7,"turns_written":7,"steps_written":7,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":0,"msg":"trace turns build completed"}
+✔ flag on: a project of agent runs alone reads one task per agent with three runs (4441.280459ms)
+{"level":30,"time":1795287684947,"pid":29202,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"564d0aa7-f1ff-4784-8c81-3461164d22ed","trigger":"manual","window_days":7,"turns_scanned":7,"runs_placed":6,"placement_written":6,"unbuilt_at_start":0,"early_reading":true,"signals_open":0,"signals_new":0,"signals_resolved":0,"pair_tools":0,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+{"level":30,"time":1795287685373,"pid":29202,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":7,"turns_written":7,"steps_written":7,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":0,"msg":"trace turns build completed"}
+✔ flag off: the same project stores no task reading, as before (473.361459ms)
+{"level":30,"time":1795287685425,"pid":29202,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"801f8f04-1d67-4d0f-86b5-82b8b2769158","trigger":"manual","window_days":7,"turns_scanned":7,"runs_placed":0,"placement_written":0,"unbuilt_at_start":0,"early_reading":true,"signals_open":0,"signals_new":0,"signals_resolved":0,"pair_tools":0,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+(node:29203) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ default mining: Beluga's 18 multi-tool runs make no task (support floor 10) (6.21ms)
+✔ tool-run mining: the same runs make the task_define + task_update task (7.065792ms)
+✔ workflowMiningFor: FF_TOOL_RUN_INSIGHTS on gives the tool-run config; off or unset gives none (0.581583ms)
+✔ without the switch, the flag is off (tests and local runs read as before) (0.268917ms)
+ℹ tests 45
+ℹ suites 0
+ℹ pass 45
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8499.469167
+
+# exit code: 0

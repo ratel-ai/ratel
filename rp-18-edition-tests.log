@@ -1,0 +1,21 @@
+# RP-18 edition test: gpt-6-luna general vs Decisions rate
+# date: 2026-11-21T19:03:12Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/ee
+# command: npx tsx --no-wasm-code-gc --test --test-force-exit src/observability/pricing.test.ts
+# expected: all pass, exit 0
+
+(node:32817) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ gpt-6-luna prices customer chat calls at the general rate and Decisions calls at the Decisions rate (1.971667ms)
+✔ vendor-only models stay unpriced for customer ingest (0.471917ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 471.3865
+
+# exit code: 0

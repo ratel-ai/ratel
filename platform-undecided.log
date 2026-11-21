@@ -1,0 +1,76 @@
+# pnpm platform:undecided
+# date: 2026-11-21T19:02:37Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel
+# command: env RATEL_CLOUD_DIR=../ratel-cloud node scripts/platform-sync/undecided.mjs
+# expected: only Agents/MCP pages files (RP-27); exit 1 while they are undecided
+
+3418 upstream files at 1ce9942f
+  copy 1766, owned 539, excluded 1074
+  skipped as confidential 3 (paths not printed)
+
+undecided (36); add an entry to map.json
+
+apps/web/app/(app)/project/[projectId]/agents/[agent] (1)
+  apps/web/app/(app)/project/[projectId]/agents/[agent]/page.tsx
+
+apps/web/app/(app)/project/[projectId]/agents (3)
+  apps/web/app/(app)/project/[projectId]/agents/context.test.ts
+  apps/web/app/(app)/project/[projectId]/agents/context.ts
+  apps/web/app/(app)/project/[projectId]/agents/page.tsx
+
+apps/web/app/(app)/project/[projectId]/mcp/[server] (1)
+  apps/web/app/(app)/project/[projectId]/mcp/[server]/page.tsx
+
+apps/web/app/(app)/project/[projectId]/mcp (2)
+  apps/web/app/(app)/project/[projectId]/mcp/context.ts
+  apps/web/app/(app)/project/[projectId]/mcp/page.tsx
+
+apps/web/app/api/projects/[projectId]/agents/overrides (1)
+  apps/web/app/api/projects/[projectId]/agents/overrides/route.ts
+
+apps/web/components/agents (4)
+  apps/web/components/agents/AgentDetailView.tsx
+  apps/web/components/agents/AgentHandoffGraph.tsx
+  apps/web/components/agents/AgentOverrideControls.tsx
+  apps/web/components/agents/AgentsView.tsx
+
+apps/web/components/mcp-servers (3)
+  apps/web/components/mcp-servers/McpServerDetailView.tsx
+  apps/web/components/mcp-servers/McpServersFilters.tsx
+  apps/web/components/mcp-servers/McpServersView.tsx
+
+apps/web/lib/agents/adapters (1)
+  apps/web/lib/agents/adapters/drizzle-store.ts
+
+apps/web/lib/agents/domain (3)
+  apps/web/lib/agents/domain/handoff-network.ts
+  apps/web/lib/agents/domain/overrides.ts
+  apps/web/lib/agents/domain/types.ts
+
+apps/web/lib/agents (3)
+  apps/web/lib/agents/navigation.ts
+  apps/web/lib/agents/overrides-api.ts
+  apps/web/lib/agents/paths.ts
+
+apps/web/lib/agents/ports (1)
+  apps/web/lib/agents/ports/store.ts
+
+apps/web/lib/agents/tests (7)
+  apps/web/lib/agents/tests/drizzle-store.integration.test.ts
+  apps/web/lib/agents/tests/handoff-network.test.ts
+  apps/web/lib/agents/tests/navigation.test.ts
+  apps/web/lib/agents/tests/override-controls-ui.test.ts
+  apps/web/lib/agents/tests/overrides-api.test.ts
+  apps/web/lib/agents/tests/overrides.test.ts
+  apps/web/lib/agents/tests/paths.test.ts
+
+apps/web/lib/mcp-servers (6)
+  apps/web/lib/mcp-servers/navigation.test.ts
+  apps/web/lib/mcp-servers/navigation.ts
+  apps/web/lib/mcp-servers/paths.test.ts
+  apps/web/lib/mcp-servers/paths.ts
+  apps/web/lib/mcp-servers/queries.integration.test.ts
+  apps/web/lib/mcp-servers/queries.ts
+
+# exit code: 1

@@ -1,0 +1,61 @@
+# cutover.integration.test.ts, synthetic production and ratel-cloud's real migrations to 0110
+# date: 2026-11-21T19:02:38Z
+# code: ratel 570c00e3 + ratel-platform 8655ce11 (clean trees; ee/src = git archive of 8655ce11); upstream = frozen ratel-cloud 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel/ee
+# command: env RATEL_CLOUD_DIR=~/.beluga/workspaces/ratel-platform-3fa8/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel-cloud npx tsx --no-wasm-code-gc --test --test-force-exit src/db/cutover.integration.test.ts
+# expected: all pass, no drift, exit 0
+
+(node:31897) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+▶ cutover on synthetic production
+  ✔ records both journals, drops the projects key, keeps the data, and the migrators then find nothing to apply (3656.077791ms)
+  ✔ runs the unlisted migration older than a recorded one, which the migrator would skip (814.864625ms)
+  ✔ rollback refuses once a newer migration ran (922.365667ms)
+  ✔ fails on drift and changes nothing (1123.05725ms)
+  ✔ fails when production ran a migration newer than the one it was compared with (887.597041ms)
+  ✔ rollback restores the key and ratel-cloud's journal, once (878.446792ms)
+  ✔ rollback refuses when a table the cutover created has rows (784.515875ms)
+  ✔ carries ratel-cloud's sample-project marker into sample_project_seeds, once (827.830208ms)
+  ✔ rollback drops the carried markers, which ratel-cloud's column still holds (745.406542ms)
+  ✔ keys: seals every plaintext ratel-cloud holds, leaves key_plaintext, and a second run seals nothing (817.263292ms)
+  ✔ keys: refuses before the private migrators made api_key_secrets (803.230042ms)
+  ✔ rollback after the keys step drops api_key_secrets; ratel-cloud still holds every plaintext (763.341459ms)
+  ✔ rollback refuses while a key made after the switch exists only sealed (748.328375ms)
+  ✔ clear: a dry run changes nothing; applied, it empties only what opens to the same plaintext (769.827041ms)
+  ✔ rollback refuses projects whose organization is gone (806.922375ms)
+✔ cutover on synthetic production (15351.752458ms)
+▶ cutover on ratel-cloud's migrations
+  ✔ records both journals, drops the projects key, keeps the data, and the migrators then find nothing to apply (913.103916ms)
+  ✔ runs the unlisted migration older than a recorded one, which the migrator would skip (843.834083ms)
+  ✔ rollback refuses once a newer migration ran (816.660583ms)
+  ✔ fails on drift and changes nothing (773.372875ms)
+  ✔ fails when production ran a migration newer than the one it was compared with (791.881708ms)
+  ✔ rollback restores the key and ratel-cloud's journal, once (916.413542ms)
+  ✔ rollback refuses when a table the cutover created has rows (799.247958ms)
+  ✔ carries ratel-cloud's sample-project marker into sample_project_seeds, once (2231.276625ms)
+  ✔ rollback drops the carried markers, which ratel-cloud's column still holds (1957.58375ms)
+  ✔ keys: seals every plaintext ratel-cloud holds, leaves key_plaintext, and a second run seals nothing (1396.470833ms)
+  ✔ keys: refuses before the private migrators made api_key_secrets (941.680416ms)
+  ✔ rollback after the keys step drops api_key_secrets; ratel-cloud still holds every plaintext (924.836625ms)
+  ✔ rollback refuses while a key made after the switch exists only sealed (869.454083ms)
+  ✔ clear: a dry run changes nothing; applied, it empties only what opens to the same plaintext (977.376708ms)
+  ✔ rollback refuses projects whose organization is gone (932.371666ms)
+✔ cutover on ratel-cloud's migrations (16087.580292ms)
+✔ the production lists name real migrations, in order, and leave only 0022 out (0.304875ms)
+✔ ratel-cloud's Evals tables are not drift; a truly unknown table still is (792.810375ms)
+✔ ratel-cloud's 0106–0110 on top of 0105 are not drift (708.266375ms)
+✔ the Evals tables and agent_overrides ratel-cloud's 0088–0110 create stay in place, listed as unported (0.164375ms)
+✔ createdTables reads CREATE TABLE in drizzle's styles (0.049709ms)
+✔ an unlisted migration that creates a table production has is named (483.508292ms)
+✔ a newer ALTER of a table production has is named (0.231542ms)
+✔ newerAlters has nothing to say today (4.228417ms)
+ℹ tests 38
+ℹ suites 2
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33999.612625
+
+# exit code: 0
