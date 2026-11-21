@@ -47,7 +47,8 @@
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
     "lint": "biome check src",
-    "test": "vitest run"
+    "test": "vitest run",
+    "controller": "node --import tsx src/test-support/start-controller.ts"
   },
   "publishConfig": {
     "access": "public",

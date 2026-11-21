@@ -15,10 +15,15 @@ export default twin("workflow-label", {
       toolOrder: { type: "array", items: { type: "string" } },
     },
   }),
-  run: async ({ input, params }) => ({
-    ...(await label(input, params)),
-    greeting: process.env.TWIN_FIXTURE_GREETING ?? null,
-    pid: process.pid,
-    ppid: process.ppid,
-  }),
+  run: async ({ input, params, ctx }) => {
+    ctx.log(`labeling ${input.workflowId} with ${params.model}`);
+    const labeled = await label(input, params);
+    ctx.log(`label: ${labeled.name}`);
+    return {
+      ...labeled,
+      greeting: process.env.TWIN_FIXTURE_GREETING ?? null,
+      pid: process.pid,
+      ppid: process.ppid,
+    };
+  },
 });

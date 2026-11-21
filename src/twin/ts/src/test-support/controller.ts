@@ -80,6 +80,8 @@ export interface OtlpKeyValue {
 export interface TestControllerOptions {
   /** Project keys the controller accepts. Default: any key. */
   readonly keys?: readonly string[];
+  /** The port to listen on. Default: any free port. */
+  readonly port?: number;
   /** Changes to the limits of the registered fixture (for short lease intervals in tests). */
   readonly limits?: Readonly<Record<string, number>>;
 }
@@ -246,7 +248,7 @@ export async function startTestController(
     });
   }
 
-  await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => http.listen(options.port ?? 0, "127.0.0.1", resolve));
   const { port } = http.address() as AddressInfo;
   return Object.assign(controller, { url: `http://127.0.0.1:${port}` });
 }

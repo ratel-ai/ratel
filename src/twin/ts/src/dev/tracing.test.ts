@@ -71,7 +71,13 @@ describe("executeRun", () => {
     const spans = userProvider();
     const result = await run(
       { maxTokens: 100, system: SECRET_PROMPT },
-      { replay: { sourceTraceId: "4bf92f3577b34da6a3ce929d0e0e4736", arm: "candidate" } },
+      {
+        replay: {
+          sourceTraceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+          sourceSessionId: "sess_recorded_7",
+          arm: "candidate",
+        },
+      },
     );
     const span = root(spans.getFinishedSpans());
     expect(result).toMatchObject({ status: "ok", traceId: span.spanContext().traceId });
@@ -84,6 +90,7 @@ describe("executeRun", () => {
       "ratel.twin.overrides": ["system", "maxTokens"],
       "ratel.twin.input": JSON.stringify({ workflowId: "wf_12", toolOrder: ["search", "read"] }),
       "ratel.replay.source_trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "ratel.replay.source_session_id": "sess_recorded_7",
       "ratel.replay.arm": "candidate",
     });
   });
