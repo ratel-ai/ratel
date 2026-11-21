@@ -1309,6 +1309,7 @@
         "!src/lib/views/task-evals/post-ship.integration.test.ts",
         "!src/lib/views/task-evals/run-to-test.ts",
         "!src/lib/views/task-evals/run-to-test.integration.test.ts",
+        "!src/lib/views/task-evals/foreign-run.integration.test.ts",
         "!src/lib/views/task-evals/register.ts",
         "!src/lib/views/task-evals/spend.ts",
         "!src/lib/views/task-evals/no-outbound-without-key.test.ts",
