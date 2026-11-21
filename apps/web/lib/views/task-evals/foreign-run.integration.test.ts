@@ -7,6 +7,7 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { taskEvalCases, taskEvalSets, taskTestDrafts } from "@/lib/views/task-evals/schema";
 import { changeTaskEval, type TaskEvalActionDeps, type TaskEvalRunRefusedEvent } from "./actions";
 import { draftTestFromRun } from "./run-to-test";
+import { refreshTaskEvalSet } from "./store";
 
 /**
  * RC-853: a run that works on a project of another organization (our own
@@ -185,5 +186,32 @@ test("drafting a test from a run of another organization's project is refused be
     assert.equal((await f.db.select().from(taskTestDrafts)).length, 0, "No model budget is held.");
   } finally {
     await f.client.close();
+  }
+});
+
+// Owned (ADR-0030): upstream's score suggestions (lib/evals/suggest.ts) are not ported; the core's
+// automatic pick from scored runs is the eval-set refresh, so the same rule guards it.
+test("the eval-set refresh does not pick a run of another organization's project", async () => {
+  for (const [ask, picked] of [
+    [`cluster_intents for project ${CUSTOMER}`, false],
+    [`cluster_intents for project ${SIBLING}`, true],
+  ] as const) {
+    const f = await setup(ask);
+    try {
+      const result = await refreshTaskEvalSet(PROJECT, "cluster_intents", {
+        db: f.db,
+        flagDeps: { FF_EVAL_GATE: "1" },
+        observability: { trackSystemEvent: async () => undefined },
+      });
+      assert.equal(result.refreshed, true);
+      const cases = await f.db.select().from(taskEvalCases);
+      assert.equal(
+        cases.some((row) => row.turnId === TURN),
+        picked,
+        `ask: ${ask}`,
+      );
+    } finally {
+      await f.client.close();
+    }
   }
 });
