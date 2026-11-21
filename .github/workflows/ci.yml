@@ -224,12 +224,14 @@ jobs:
       # which fails on an invalid template or a wrong property type.
       - name: cfn-lint
         run: pipx run cfn-lint deploy/cloudformation/ratel.yaml
+      # Through `az bicep`: the CLI installs bicep where it wants, not always ~/.azure/bin.
       - name: ARM template
         run: |
           az bicep install
           mkdir -p "$RUNNER_TEMP/arm"
-          ~/.azure/bin/bicep decompile deploy/azure/azuredeploy.json --outfile "$RUNNER_TEMP/arm/main.bicep"
-          ~/.azure/bin/bicep build "$RUNNER_TEMP/arm/main.bicep" --stdout > /dev/null
+          cp deploy/azure/azuredeploy.json "$RUNNER_TEMP/arm/main.json"
+          az bicep decompile --file "$RUNNER_TEMP/arm/main.json" --force
+          az bicep build --file "$RUNNER_TEMP/arm/main.bicep" --stdout > /dev/null
 
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
