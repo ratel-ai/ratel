@@ -16,18 +16,8 @@ Thumbs.db
 # Node
 node_modules/
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.egg
+# Build output (src/mcp-apps/dist, package builds)
 dist/
-build/
-.venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.whl
 
 # TypeScript
 *.tsbuildinfo
@@ -53,13 +43,6 @@ next-env.d.ts
 plan.md
 progress.md
 CLAUDE.local.md
-embedding_demo.py
-embedding_demo.ts
-embedding_usage_demo.py
-embedding_usage_demo.ts
-adaptive_demo.py
-adaptive_demo.ts
-adaptive_demo_graph.json
 
 # Claude Code — personal/runtime; commit .claude/skills and .claude/settings.json
 .claude/settings.local.json

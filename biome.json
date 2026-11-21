@@ -2,8 +2,6 @@
   "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
   "files": {
     "includes": [
-      "benchmark/agent/src/**/*.ts",
-      "benchmark/agent/src/**/*.tsx",
       "ee/**/*.ts",
       "ee/**/*.tsx",
       "src/**/*.ts",

@@ -3,7 +3,6 @@
 .git
 .DS_Store
 docs/
-benchmark/
 **/.env*
 !**/.env.example
 # Terraform caches, state and plans (ee/src/infra, when ee/src is checked out):
