@@ -61,6 +61,17 @@ restarts the child worker and sends `manifest.update` on the same socket. `RATEL
 `RATEL_URL` come from the environment or the project's `.env`. The CLI parent reads only those
 two names from `.env`.
 
+Runs: `ratel dev` answers `run.start` with `run.ack` at once, or `run.reject` (`unknown_twin`,
+`invalid_params` against the manifest, `busy`: one run at a time). A repeated run ID re-acks and
+does not run again. A live run sends `run.lease` at the controller's interval (15 s). Its events
+(`ctx.log(message)` gives a `log` event) carry a `seq` and stay buffered until `events.ack`. After
+a reconnect the runner resends every unacked event, in order. `run.end` carries the status, the
+output, the changed param names and the trace ID. `run.cancel` aborts `ctx.signal`, and the run
+ends `canceled`. `drain` opens the new socket first and closes the old one after `registered`, so
+a live run keeps going. No frame is over 64 KB: long `text.delta` text is split, other long values
+are cut with a marker. An optional `redact(payload)` in the twin runs on every event and on the
+`run.end` payload before they leave the child worker. A file change during a run reloads after it.
+
 ## Rules
 
 - An override applies to one run. Values are resolved per run, with no module-level state.
@@ -79,7 +90,8 @@ two names from `.env`.
 - `src/otel.ts` — `resolveLocal` and `stampTwinInput` (`@opentelemetry/api` peer).
 - `src/cli/` — the `ratel` bin (`main.ts`, a separate entrypoint) and its child worker
   (`worker.ts`, `load.ts`), argument parsing, discovery, build info and output.
-- `src/dev/` — `ratel dev`. `connection.ts` is the pure twin/v1 connection state machine
+- `src/dev/` — `ratel dev`. `connection.ts` (socket, register, reconnect, drain) and `runs.ts`
+  (ack, reject, seq, buffer, lease, cancel; `frame-size.ts`) are the pure twin/v1 state machines
   (`protocol.ts`, `backoff.ts`). The adapters are `connect-http.ts` (token exchange),
   `ws-socket.ts` (the socket) and `child-host.ts` / `child.ts` (the long-lived child worker).
   `runtime.ts` performs the machine's effects. `watch.ts` reloads on a file change.

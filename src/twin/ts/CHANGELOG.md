@@ -15,3 +15,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - The `ratel` CLI: `ratel twin list` and `ratel twin run <id> --input <file> [--set k=v] [--tool t=mode]`, with user code in a child worker under `tsx`.
 - `coerceOverride` turns `--set` text into the param's value type.
 - `ratel dev`: token exchange, one outbound twin/v1 websocket, `register` with provider key names only, playground URLs, reconnect with a 1–60 s jittered backoff and a fresh token, and hot reload with `manifest.update`.
+- `ratel dev` runs: idempotent `run.start` with `run.ack` / `run.reject`, `run.lease`, `run.event` by `seq` with resend of unacked events after a reconnect, `run.end` with the trace ID, `run.cancel` (aborts `ctx.signal`), make-before-break `drain` and frames of at most 64 KB.
+- `ctx.log(message, level?)` and an optional `redact(payload)` on the twin definition.

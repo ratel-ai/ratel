@@ -20,6 +20,8 @@ export const TEST_PROJECT_ID = "prj_test";
 
 export interface ReceivedFrame {
   readonly connection: number;
+  /** Sockets open when the frame arrived: 2 during a make-before-break drain. */
+  readonly openSockets: number;
   readonly token: string;
   readonly raw: string;
   readonly frame: Envelope;
@@ -43,12 +45,23 @@ export interface TestController {
   dropAll(): void;
   /** Sends a frame on the newest open socket. */
   send(frame: Envelope): void;
+  /** Sends run.start (the fixture, with this runId and payload changes). Returns the runId. */
+  startRun(runId: string, payload?: Record<string, unknown>): string;
+  /**
+   * The run.event and run.end frames stored for a run, one per seq, in seq
+   * order: what the gateway's twin_run_events table would hold.
+   */
+  stored(runId: string): Envelope[];
+  /** Answers each run.event and run.end with events.ack while true. Default true. */
+  autoAck: boolean;
   close(): Promise<void>;
 }
 
 export interface TestControllerOptions {
   /** Project keys the controller accepts. Default: any key. */
   readonly keys?: readonly string[];
+  /** Changes to the limits of the registered fixture (for short lease intervals in tests). */
+  readonly limits?: Readonly<Record<string, number>>;
 }
 
 export async function startTestController(
@@ -56,6 +69,17 @@ export async function startTestController(
 ): Promise<TestController> {
   const validate = loadValidator();
   const registered = fixture("registered.json");
+  const runStart = fixture("run.start.json");
+  const storedEvents = new Map<string, Map<number, Envelope>>();
+  let serverFrames = 0;
+  const serverFrame = (type: string, payload: object, runId?: string): Envelope => ({
+    v: 1,
+    type,
+    id: `c_${++serverFrames}`,
+    ts: new Date().toISOString(),
+    ...(runId ? { runId } : {}),
+    payload,
+  });
   const http: Server = createServer((req, res) => handleHttp(req, res));
   const wss = new WebSocketServer({ noServer: true });
   const open = new Set<WebSocket>();
@@ -92,6 +116,15 @@ export async function startTestController(
       for (const ws of open) ws.terminate();
     },
     send: (frame) => newest?.send(JSON.stringify(frame)),
+    startRun: (runId, payload = {}) => {
+      controller.send({
+        ...serverFrame("run.start", { ...(runStart.payload as object), ...payload }, runId),
+      });
+      return runId;
+    },
+    stored: (runId) =>
+      [...(storedEvents.get(runId)?.entries() ?? [])].sort(([a], [b]) => a - b).map(([, f]) => f),
+    autoAck: true,
     close: async () => {
       for (const ws of open) ws.terminate();
       wss.close();
@@ -149,24 +182,34 @@ export async function startTestController(
       if (!validate(frame)) {
         controller.invalid.push({ raw, errors: JSON.stringify(validate.errors) });
       }
-      const received = { connection, token, raw, frame };
+      const received = { connection, openSockets: open.size, token, raw, frame };
       controller.frames.push(received);
       for (const waiter of [...waiters]) {
         if (!waiter.match(received)) continue;
         waiters.splice(waiters.indexOf(waiter), 1);
         waiter.resolve(received);
       }
+      if ((frame.type === "run.event" || frame.type === "run.end") && frame.runId && frame.seq) {
+        const events = storedEvents.get(frame.runId) ?? new Map<number, Envelope>();
+        storedEvents.set(frame.runId, events);
+        if (!events.has(frame.seq)) events.set(frame.seq, frame);
+        if (controller.autoAck) {
+          // The highest seq stored without a gap, as the gateway acks it.
+          let seq = 0;
+          while (events.has(seq + 1)) seq++;
+          if (seq > 0) ws.send(JSON.stringify(serverFrame("events.ack", { seq }, frame.runId)));
+        }
+      }
       if (frame.type === "register") {
+        const base = registered.payload as { limits: object };
         ws.send(
-          JSON.stringify({
-            ...registered,
-            id: `c_${connection}`,
-            ts: new Date().toISOString(),
-            payload: {
-              ...(registered.payload as object),
+          JSON.stringify(
+            serverFrame("registered", {
+              ...base,
               connectionId: `conn_${connection}`,
-            },
-          }),
+              limits: { ...base.limits, ...options.limits },
+            }),
+          ),
         );
       }
     });

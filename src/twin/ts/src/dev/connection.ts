@@ -24,9 +24,15 @@ export type ConnectionPhase =
       readonly socket: number;
       readonly connectionId: string;
       readonly limits: Limits;
+      /** The replacement connection while a drain is in progress (make-before-break). */
+      readonly next?: DrainStep;
     }
   | { readonly kind: "waiting"; readonly attempt: number }
   | { readonly kind: "stopped"; readonly reason: string };
+
+export type DrainStep =
+  | { readonly kind: "exchanging" }
+  | { readonly kind: "opening" | "registering"; readonly socket: number };
 
 export type ConnectionEvent =
   | { readonly type: "start" }
@@ -56,6 +62,8 @@ export type ConnectionEffect =
       readonly connectionId: string;
       readonly limits: Limits;
       readonly reconnected: boolean;
+      /** True when a drain moved the connection to a new socket without a gap. */
+      readonly drained: boolean;
     }
   | { readonly type: "disconnected"; readonly reason: string; readonly retryInMs: number }
   | { readonly type: "fatal"; readonly message: string }
@@ -103,13 +111,29 @@ export class Connection {
         if (phase.kind !== "waiting") return [];
         return this.#exchange(phase.attempt);
       case "token.ok":
+        if (phase.kind === "ready" && phase.next?.kind === "exchanging") {
+          const socket = this.#nextSocket++;
+          this.#phase = { ...phase, next: { kind: "opening", socket } };
+          return [{ type: "open-socket", socket, ...tokenOf(event) }];
+        }
         if (phase.kind !== "exchanging") return [];
         return this.#open(phase.attempt, event.gatewayUrl, event.token);
       case "token.failed":
+        if (phase.kind === "ready" && phase.next?.kind === "exchanging") {
+          if (event.fatal) return this.#stop(event.message, phase.socket);
+          // Stay on the old socket. When the gateway closes it, the normal reconnect runs.
+          this.#phase = withoutNext(phase);
+          return [];
+        }
         if (phase.kind !== "exchanging") return [];
         if (event.fatal) return this.#stop(event.message);
         return this.#retry(phase.attempt, event.message);
       case "socket.open":
+        if (phase.kind === "ready" && phase.next?.kind === "opening") {
+          if (phase.next.socket !== event.socket) return [];
+          this.#phase = { ...phase, next: { kind: "registering", socket: event.socket } };
+          return [{ type: "send", socket: event.socket, frame: this.#register() }];
+        }
         if (phase.kind !== "opening" || phase.socket !== event.socket) return [];
         this.#phase = { kind: "registering", attempt: phase.attempt, socket: event.socket };
         return [{ type: "send", socket: event.socket, frame: this.#register() }];
@@ -120,7 +144,7 @@ export class Connection {
       case "manifest.changed":
         return this.#onManifest(event.manifest);
       case "stop":
-        return this.#stop("stopped", currentSocket(phase));
+        return this.#stop("stopped", currentSocket(phase), nextSocket(phase));
     }
   }
 
@@ -137,6 +161,16 @@ export class Connection {
 
   #onFrame(socket: number, incoming: Envelope): ConnectionEffect[] {
     const phase = this.#phase;
+    if (phase.kind === "ready" && nextSocket(phase) === socket) {
+      // The replacement socket of a drain: switch over once it is registered.
+      if (phase.next?.kind !== "registering" || !isRegistered(incoming)) return [];
+      const { connectionId, limits } = incoming.payload;
+      this.#phase = { kind: "ready", socket, connectionId, limits };
+      return [
+        { type: "close-socket", socket: phase.socket },
+        { type: "registered", connectionId, limits, reconnected: true, drained: true },
+      ];
+    }
     if (currentSocket(phase) !== socket) return [];
     if (phase.kind === "registering") {
       if (!isRegistered(incoming)) return [];
@@ -144,14 +178,35 @@ export class Connection {
       this.#phase = { kind: "ready", socket, connectionId, limits };
       const reconnected = this.#everRegistered;
       this.#everRegistered = true;
-      return [{ type: "registered", connectionId, limits, reconnected }];
+      return [{ type: "registered", connectionId, limits, reconnected, drained: false }];
     }
-    if (phase.kind === "ready") return [{ type: "frame", frame: incoming }];
-    return [];
+    if (phase.kind !== "ready") return [];
+    if (incoming.type === "drain") {
+      if (phase.next) return [];
+      this.#phase = { ...phase, next: { kind: "exchanging" } };
+      return [{ type: "exchange-token" }];
+    }
+    return [{ type: "frame", frame: incoming }];
   }
 
   #onClosed(socket: number, reason: string): ConnectionEffect[] {
     const phase = this.#phase;
+    if (phase.kind === "ready" && phase.next) {
+      if (nextSocket(phase) === socket) {
+        // The replacement failed. Keep the old socket; its close starts a normal reconnect.
+        this.#phase = withoutNext(phase);
+        return [];
+      }
+      if (phase.socket === socket) {
+        // The old socket went first: the replacement simply carries on.
+        const next = phase.next;
+        this.#phase =
+          next.kind === "exchanging"
+            ? { kind: "exchanging", attempt: 0 }
+            : { kind: next.kind, attempt: 0, socket: next.socket };
+        return [];
+      }
+    }
     if (currentSocket(phase) !== socket) return [];
     // A socket that reached ready earned a fresh start of the backoff.
     const attempt = phase.kind === "ready" ? 0 : (phase as { attempt: number }).attempt;
@@ -176,10 +231,11 @@ export class Connection {
     return [{ type: "send", socket: phase.socket, frame: update }];
   }
 
-  #stop(reason: string, socket?: number): ConnectionEffect[] {
+  #stop(reason: string, ...sockets: (number | undefined)[]): ConnectionEffect[] {
     this.#phase = { kind: "stopped", reason };
-    const effects: ConnectionEffect[] =
-      socket !== undefined ? [{ type: "close-socket", socket }] : [];
+    const effects: ConnectionEffect[] = sockets
+      .filter((socket): socket is number => socket !== undefined)
+      .map((socket) => ({ type: "close-socket", socket }));
     if (reason !== "stopped") effects.push({ type: "fatal", message: reason });
     return effects;
   }
@@ -196,4 +252,19 @@ export class Connection {
 
 function currentSocket(phase: ConnectionPhase): number | undefined {
   return "socket" in phase ? phase.socket : undefined;
+}
+
+function nextSocket(phase: ConnectionPhase): number | undefined {
+  return phase.kind === "ready" && phase.next && "socket" in phase.next
+    ? phase.next.socket
+    : undefined;
+}
+
+function withoutNext(phase: Extract<ConnectionPhase, { kind: "ready" }>): ConnectionPhase {
+  const { next: _next, ...rest } = phase;
+  return rest;
+}
+
+function tokenOf(event: { gatewayUrl: string; token: string }) {
+  return { gatewayUrl: event.gatewayUrl, token: event.token };
 }

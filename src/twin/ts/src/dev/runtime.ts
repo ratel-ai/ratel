@@ -8,6 +8,7 @@ import { ChildHost } from "./child-host.js";
 import { ConnectError, exchangeToken, runnerSocketUrl } from "./connect-http.js";
 import { Connection, type ConnectionEffect, type ConnectionEvent } from "./connection.js";
 import { type Envelope, type FrameStamp, MAX_FRAME_BYTES, parseFrame } from "./protocol.js";
+import { type RunStartPayload, Runs, type RunsEffect } from "./runs.js";
 import { watchProject } from "./watch.js";
 import { openSocket, type Socket } from "./ws-socket.js";
 
@@ -16,6 +17,10 @@ import { openSocket, type Socket } from "./ws-socket.js";
 // worker, the file watcher) and feeds their results back in as events.
 
 export const DEFAULT_BASE_URL = "https://cloud.ratel.sh";
+/** Used until the controller states its own in `registered`. */
+const DEFAULT_LEASE_INTERVAL_MS = 15_000;
+/** One run at a time: a local runner serves one developer. */
+const MAX_CONCURRENCY = 1;
 
 export interface DevOptions {
   readonly root: string;
@@ -27,7 +32,7 @@ export interface DevOptions {
   readonly watch?: boolean;
   readonly fetch?: typeof fetch;
   readonly random?: () => number;
-  /** Frames for the run layer (run.start, run.cancel, events.ack, drain). */
+  /** Frames neither the connection nor the run layer handles (tool.* in a later version). */
   readonly onFrame?: (frame: Envelope) => void;
 }
 
@@ -41,16 +46,20 @@ export interface DevHandle {
 export async function startDev(options: DevOptions): Promise<DevHandle> {
   const child = new ChildHost(options.root);
   const manifest = await loadManifest(child, options.root);
+  const stamp = frameStamp();
   const connection = new Connection({
     runner: runnerInfo(options.root),
     manifest,
-    stamp: frameStamp(),
-    maxConcurrency: 1,
+    stamp,
+    maxConcurrency: MAX_CONCURRENCY,
     random: options.random,
   });
+  const runs = new Runs({ stamp, maxConcurrency: MAX_CONCURRENCY });
   const sockets = new Map<number, Socket>();
   let projectId: string | undefined;
   let retryTimer: NodeJS.Timeout | undefined;
+  let leaseTimer: NodeJS.Timeout | undefined;
+  let reloadWaiting = false;
   let stopWatching = () => {};
   let settle: { resolve(): void; reject(err: Error): void } | undefined;
   const done = new Promise<void>((resolve, reject) => {
@@ -59,6 +68,68 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
 
   const step = (event: ConnectionEvent): void => {
     for (const effect of connection.step(event)) perform(effect);
+  };
+
+  /** Sends on the live socket. While there is none, event frames wait in Runs for the resend. */
+  const sendLive = (frame: Envelope): void => {
+    const phase = connection.phase;
+    if (phase.kind === "ready") perform({ type: "send", socket: phase.socket, frame });
+  };
+
+  const apply = (effects: RunsEffect[]): void => {
+    for (const effect of effects) {
+      switch (effect.type) {
+        case "send":
+          sendLive(effect.frame);
+          break;
+        case "execute":
+          execute(effect.runId, effect.start);
+          break;
+        case "abort":
+          child.cancel(effect.runId, effect.reason);
+          break;
+      }
+    }
+  };
+
+  const execute = (runId: string, start: RunStartPayload): void => {
+    const startedAt = Date.now();
+    options.out(`run ${runId}: ${start.twinId} started`);
+    child.run(runId, start, {
+      onEvent: (payload) => apply(runs.event(runId, payload)),
+      onEnd: (result) => {
+        apply(runs.end(runId, result));
+        options.out(`run ${runId}: ${result.status} in ${Date.now() - startedAt} ms`);
+        if (reloadWaiting && runs.active === 0) {
+          reloadWaiting = false;
+          void reload();
+        }
+      },
+    });
+  };
+
+  const onRunFrame = (frame: Envelope): void => {
+    const runId = frame.runId;
+    switch (frame.type) {
+      case "run.start":
+        apply(runs.start(frame, connection.manifest, new Date()));
+        return;
+      case "run.cancel":
+        if (runId) apply(runs.cancel(runId, (frame.payload as { reason?: string }).reason));
+        return;
+      case "events.ack": {
+        const seq = (frame.payload as { seq?: unknown }).seq;
+        if (runId && typeof seq === "number") runs.ack(runId, seq);
+        return;
+      }
+      default:
+        options.onFrame?.(frame);
+    }
+  };
+
+  const startLeases = (intervalMs: number): void => {
+    clearInterval(leaseTimer);
+    leaseTimer = setInterval(() => apply(runs.lease(new Date())), intervalMs);
   };
 
   const perform = (effect: ConnectionEffect): void => {
@@ -111,8 +182,13 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
         retryTimer = setTimeout(() => step({ type: "retry.due" }), effect.delayMs);
         return;
       case "registered":
+        startLeases(effect.limits.leaseIntervalMs || DEFAULT_LEASE_INTERVAL_MS);
+        // A new socket gets every event the controller has not acked, in seq order.
+        for (const frame of runs.unacked()) sendLive(frame);
         if (effect.reconnected) {
-          options.out(`reconnected (${effect.connectionId})`);
+          options.out(
+            `${effect.drained ? "moved to a new gateway" : "reconnected"} (${effect.connectionId})`,
+          );
         } else {
           options.out(`connected (${effect.connectionId})`);
           for (const line of playgroundLines(options.baseUrl, projectId, connection.manifest))
@@ -129,12 +205,18 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
         settle?.reject(new Error(effect.message));
         return;
       case "frame":
-        options.onFrame?.(effect.frame);
+        onRunFrame(effect.frame);
         return;
     }
   };
 
   const reload = async (): Promise<void> => {
+    if (runs.active > 0) {
+      // A restart would kill the live run. Reload when it ends.
+      if (!reloadWaiting) options.out("change seen; reloading after the live run");
+      reloadWaiting = true;
+      return;
+    }
     try {
       const next = await loadManifest(child, options.root);
       const changed = canonicalJson(next) !== canonicalJson(connection.manifest);
@@ -148,6 +230,7 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   const shutdown = (): void => {
     stopWatching();
     clearTimeout(retryTimer);
+    clearInterval(leaseTimer);
     child.stop();
   };
 

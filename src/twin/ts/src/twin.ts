@@ -14,7 +14,14 @@ export interface RunContext {
   readonly context: Readonly<Record<string, unknown>>;
   /** Aborted when the run is canceled. */
   readonly signal: AbortSignal;
+  /** Streams one log line to the playground as a `log` event. A no-op in a local run. */
+  log(message: string, level?: LogLevel): void;
 }
+
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/** One event payload of a run, as it would leave the runner (protocol twin/v1 `run.event`). */
+export type TwinEventPayload = { readonly kind: string } & Readonly<Record<string, unknown>>;
 
 export interface TwinDefinition<P extends ParamMap, I, O, M> {
   readonly params: P;
@@ -24,6 +31,11 @@ export interface TwinDefinition<P extends ParamMap, I, O, M> {
   // Method syntax on purpose: a Twin<P, LabelInput> must be usable where any Twin is expected.
   resolve?(modelId: string): M;
   run(args: { input: I; params: ParamValues<P, M>; ctx: RunContext }): Promise<O> | O;
+  /**
+   * Runs on every event payload and on the run.end payload before they leave
+   * the runner. Return a copy with sensitive values removed.
+   */
+  redact?(payload: TwinEventPayload): TwinEventPayload;
 }
 
 export interface Twin<P extends ParamMap = ParamMap, I = unknown, O = unknown, M = unknown>

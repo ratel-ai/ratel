@@ -36,10 +36,12 @@ export { type ResolvedParams, resolveParams } from "./resolve.js";
 export { type RunTwinOptions, type RunTwinResult, runTwin } from "./run.js";
 export {
   isTwin,
+  type LogLevel,
   type RunContext,
   type StructuredInput,
   type Twin,
   type TwinDefinition,
+  type TwinEventPayload,
 } from "./twin.js";
 
 /** `twin(id, { params, input, run })` plus the param and input builders. */

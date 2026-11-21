@@ -83,7 +83,13 @@ describe("Connection", () => {
     });
     expect(conn.phase.kind).toBe("registering");
     expect(conn.step({ type: "socket.frame", socket: 1, frame: registered() })).toEqual([
-      { type: "registered", connectionId: "conn_1", limits: LIMITS, reconnected: false },
+      {
+        type: "registered",
+        connectionId: "conn_1",
+        limits: LIMITS,
+        reconnected: false,
+        drained: false,
+      },
     ]);
     expect(conn.phase).toMatchObject({ kind: "ready", connectionId: "conn_1" });
   });
@@ -172,5 +178,67 @@ describe("Connection", () => {
     const conn = ready();
     expect(conn.step({ type: "stop" })).toEqual([{ type: "close-socket", socket: 1 }]);
     expect(conn.phase.kind).toBe("stopped");
+  });
+
+  it("drains make-before-break: registers on a new socket, then closes the old one", () => {
+    const conn = ready();
+    const drain: Envelope = { ...registered(), type: "drain", payload: { deadlineMs: 30_000 } };
+    expect(conn.step({ type: "socket.frame", socket: 1, frame: drain })).toEqual([
+      { type: "exchange-token" },
+    ]);
+    expect(conn.step({ type: "token.ok", gatewayUrl: "wss://gw2", token: "tok_2" })).toEqual([
+      { type: "open-socket", socket: 2, gatewayUrl: "wss://gw2", token: "tok_2" },
+    ]);
+    // The old socket keeps serving the run layer during the switch.
+    const cancel: Envelope = { ...registered(), type: "run.cancel", runId: "r", payload: {} };
+    expect(conn.step({ type: "socket.frame", socket: 1, frame: cancel })).toEqual([
+      { type: "frame", frame: cancel },
+    ]);
+    const [register] = sent(conn.step({ type: "socket.open", socket: 2 }));
+    expect(register?.type).toBe("register");
+    const next = { ...registered(), payload: { connectionId: "conn_2", limits: LIMITS } };
+    expect(conn.step({ type: "socket.frame", socket: 2, frame: next })).toEqual([
+      { type: "close-socket", socket: 1 },
+      {
+        type: "registered",
+        connectionId: "conn_2",
+        limits: LIMITS,
+        reconnected: true,
+        drained: true,
+      },
+    ]);
+    expect(conn.phase).toEqual({
+      kind: "ready",
+      socket: 2,
+      connectionId: "conn_2",
+      limits: LIMITS,
+    });
+  });
+
+  it("lets the replacement carry on when the old socket closes first during a drain", () => {
+    const conn = ready();
+    const drain: Envelope = { ...registered(), type: "drain", payload: {} };
+    conn.step({ type: "socket.frame", socket: 1, frame: drain });
+    conn.step({ type: "token.ok", gatewayUrl: "wss://gw2", token: "tok_2" });
+    expect(conn.step({ type: "socket.closed", socket: 1, reason: "1001" })).toEqual([]);
+    expect(conn.phase).toMatchObject({ kind: "opening", socket: 2 });
+    conn.step({ type: "socket.open", socket: 2 });
+    expect(conn.step({ type: "socket.frame", socket: 2, frame: registered() })).toEqual([
+      expect.objectContaining({ type: "registered", reconnected: true, drained: false }),
+    ]);
+  });
+
+  it("keeps the old socket when the replacement fails during a drain", () => {
+    const conn = ready();
+    const drain: Envelope = { ...registered(), type: "drain", payload: {} };
+    conn.step({ type: "socket.frame", socket: 1, frame: drain });
+    conn.step({ type: "token.ok", gatewayUrl: "wss://gw2", token: "tok_2" });
+    expect(conn.step({ type: "socket.closed", socket: 2, reason: "refused" })).toEqual([]);
+    expect(conn.phase).toEqual({
+      kind: "ready",
+      socket: 1,
+      connectionId: "conn_1",
+      limits: LIMITS,
+    });
   });
 });

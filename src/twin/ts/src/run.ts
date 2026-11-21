@@ -1,12 +1,14 @@
 import type { ParamMap } from "./params.js";
 import { resolveParams } from "./resolve.js";
-import type { Twin } from "./twin.js";
+import type { LogLevel, Twin } from "./twin.js";
 
 export interface RunTwinOptions<I> {
   readonly input: I;
   readonly overrides?: Readonly<Record<string, unknown>>;
   readonly context?: Readonly<Record<string, unknown>>;
   readonly signal?: AbortSignal;
+  /** Receives each `ctx.log` line. */
+  readonly onLog?: (message: string, level: LogLevel) => void;
 }
 
 export interface RunTwinResult<O> {
@@ -28,6 +30,7 @@ export async function runTwin<P extends ParamMap, I, O, M>(
       twinId: twin.id,
       context: { ...twin.context, ...options.context },
       signal: options.signal ?? new AbortController().signal,
+      log: (message, level = "info") => options.onLog?.(String(message), level),
     },
   });
   return { output, configHash: resolved.configHash, overrides: resolved.overrides };
