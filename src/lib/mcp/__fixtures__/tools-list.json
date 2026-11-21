@@ -1612,6 +1612,9 @@
     },
     "execution": {
       "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
     }
   },
   {
@@ -1671,6 +1674,9 @@
     },
     "execution": {
       "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
     }
   },
   {
@@ -1713,6 +1719,9 @@
     },
     "execution": {
       "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
     }
   },
   {
@@ -1764,6 +1773,9 @@
     },
     "execution": {
       "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
     }
   },
   {
