@@ -162,6 +162,12 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["get_analysis_freshness", false],
   ["get_session", false],
   ["get_session_step_content", false],
+  // The MCP servers page (RC-777).
+  ["list_mcp_servers", false],
+  ["get_mcp_server", false],
+  // The Agents page (RC-775).
+  ["list_agents", false],
+  ["get_agent", false],
   // Writes the console offers: hide a slow signal, ask for a reading, review a
   // description rewrite, start a metered quality analysis.
   ["set_health_signal_hidden", true],

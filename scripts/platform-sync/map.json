@@ -2065,6 +2065,23 @@
     { "from": "apps/web/app/(app)/project/[projectId]/tasks/[taskId]/TaskScoring.tsx", "to": "apps/web/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskScoring.tsx", "mode": "owned", "$why": "keeps the links to the task Simulations pages, which upstream re-pointed when its Evals area replaced them" },
     { "from": "apps/web/components/tasks/RunToTest.tsx", "to": "apps/web/components/console/tasks/RunToTest.tsx", "mode": "copy" },
     { "from": "apps/web/components/tasks/TopLevelTasksTable.tsx", "to": "apps/web/components/console/tasks/TopLevelTasksTable.tsx", "mode": "copy" },
-    { "from": "apps/web/lib/tasks/top-level-ui.test.ts", "to": "apps/web/lib/views/tasks/top-level-ui.test.ts", "mode": "copy" }
+    { "from": "apps/web/lib/tasks/top-level-ui.test.ts", "to": "apps/web/lib/views/tasks/top-level-ui.test.ts", "mode": "copy" },
+    { "$slice": "agents-mcp-servers", "from": "apps/web/lib/agents", "to": "apps/web/lib/views/agents", "mode": "copy" },
+    { "from": "apps/web/lib/agents/navigation.ts", "mode": "excluded", "$why": "the rail's check lands with the Agents pages and the console navigation (RP-28); upstream decides its flag per organization and person through the Cloud flag service" },
+    { "from": "apps/web/lib/agents/tests/navigation.test.ts", "mode": "excluded", "$why": "with navigation.ts (RP-28)" },
+    { "from": "apps/web/lib/agents/tests/override-controls-ui.test.ts", "mode": "excluded", "$why": "tests the AgentOverrideControls component, which lands with the Agents pages (RP-28)" },
+    { "from": "apps/web/lib/agents/tests/drizzle-store.integration.test.ts", "to": "apps/web/lib/views/agents/tests/drizzle-store.integration.test.ts", "mode": "owned", "$why": "the organizations fixture row has no plan column: the edition owns the table and its plans" },
+    { "from": "apps/web/lib/db/schema.ts", "to": "apps/web/lib/views/agents/schema.ts", "mode": "owned", "$why": "agent_overrides: the agents partition of the upstream schema hub" },
+    { "from": "apps/web/lib/mcp-servers", "to": "apps/web/lib/views/mcp-servers", "mode": "copy" },
+    { "from": "apps/web/lib/mcp-servers/queries.integration.test.ts", "to": "apps/web/lib/views/mcp-servers/queries.integration.test.ts", "mode": "owned", "$why": "the organizations fixture row has no plan column: the edition owns the table and its plans" },
+    { "from": "apps/web/lib/mcp-servers/navigation.ts", "mode": "excluded", "$why": "the rail's check lands with the MCP servers pages and the console navigation (RP-28); upstream decides its flag per organization and person through the Cloud flag service" },
+    { "from": "apps/web/lib/mcp-servers/navigation.test.ts", "mode": "excluded", "$why": "with navigation.ts (RP-28)" },
+    { "from": "apps/web/lib/project-entities/flag.ts", "to": "apps/web/lib/views/project-entities/flag.ts", "mode": "owned", "$why": "the switch is the core's FF_AGENTS_PAGES, read with featureEnabled (the edition's featureFlags port decides it per subject), not upstream's cloud-project-entities flag service; keeps upstream's names" },
+    { "from": "apps/web/lib/mcp/operations/agents.ts", "to": "apps/web/lib/mcp/operations/agents.ts", "mode": "owned", "$why": "the default gate is featureEnabled(FF_AGENTS_PAGES, { projectId, actor }), not upstream's sessionFlagForActor over the Cloud flag service; off still refuses as forbidden" },
+    { "from": "apps/web/lib/mcp/operations/mcp-servers.ts", "to": "apps/web/lib/mcp/operations/mcp-servers.ts", "mode": "owned", "$why": "the default gate is featureEnabled(FF_AGENTS_PAGES, { projectId, actor }), not upstream's sessionFlagForActor over the Cloud flag service; off still refuses as forbidden" },
+    { "from": "apps/web/app/api/projects/[projectId]/agents/overrides/route.ts", "to": "apps/web/app/api/projects/[projectId]/agents/overrides/route.ts", "mode": "copy", "$why": "works after the import rewrite: the session port, the console scope (it takes the project id only and ignores the user id), the support-session guard, the telemetry shim and FF_AGENTS_PAGES through views/project-entities/flag.ts" },
+    { "from": "apps/web/lib/project-entities/flag.test.ts", "to": "apps/web/lib/views/project-entities/flag.test.ts", "mode": "owned", "$why": "no upstream counterpart: pins FF_AGENTS_PAGES as the switch, off by default, for a person, an MCP caller and the override write" },
+    { "from": "apps/web/lib/mcp/operations/entities-gate.test.ts", "to": "apps/web/lib/mcp/operations/entities-gate.test.ts", "mode": "owned", "$why": "no upstream counterpart: pins the default gate of the Agents and MCP servers tools, FF_AGENTS_PAGES; keeps it out of the folder mirror" }
+
   ]
 }

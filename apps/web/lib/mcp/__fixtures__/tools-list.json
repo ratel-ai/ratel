@@ -1573,6 +1573,200 @@
     }
   },
   {
+    "name": "list_mcp_servers",
+    "title": "List MCP servers",
+    "description": "The MCP servers this project's traces show, one row per server and side: provided (the server's own spans) or consumed (an agent's calls to it). Each has calls, error rate, p95 latency, sessions, first and last seen in the window. Call get_mcp_server for one server's tools and calling agents.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the calls of this deployment environment (deployment.environment.name). The servers stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "annotations": {
+      "title": "List MCP servers",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_mcp_server",
+    "title": "Get an MCP server",
+    "description": "One MCP server from list_mcp_servers: its stats, per-tool calls, errors and p50/p95 latency, the agents that call it, and the protocol versions and transports in use when the spans name them.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "server": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The server key, as list_mcp_servers returns it."
+        },
+        "role": {
+          "description": "Which side: provided or consumed. Defaults to the side with the most calls.",
+          "type": "string",
+          "enum": [
+            "provided",
+            "consumed"
+          ]
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the calls of this deployment environment (deployment.environment.name). The servers stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "server"
+      ]
+    },
+    "annotations": {
+      "title": "Get an MCP server",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_agents",
+    "title": "List agents",
+    "description": "The agents this project's traces show, detected from the spans. Each has runs (traces it ran in), errors, error rate, cost, p95 run latency, first and last seen in the window. Also returns the handoffs: one edge per calling agent and called agent, with a count. Call get_agent for one agent's tools and MCP servers.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the runs of this deployment environment. The agents stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "annotations": {
+      "title": "List agents",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_agent",
+    "title": "Get an agent",
+    "description": "One agent from list_agents: its stats, the tools it calls (calls, errors, p95 latency), the MCP servers it calls, and the agents it hands work to and gets work from.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The agent key, as list_agents returns it."
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the runs of this deployment environment. The agents stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "agent"
+      ]
+    },
+    "annotations": {
+      "title": "Get an agent",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
     "name": "get_agent_health",
     "title": "Get agent health",
     "description": "The Agent health page for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",

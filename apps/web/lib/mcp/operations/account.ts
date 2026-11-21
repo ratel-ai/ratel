@@ -56,6 +56,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_MCP_APPS",
     note: "this MCP server publishes interactive ui:// views (MCP Apps) and points its tools at them",
   },
+  {
+    key: "FF_AGENTS_PAGES",
+    note: "the Agents and MCP servers pages, their tools (list_agents, get_agent, list_mcp_servers, get_mcp_server) and agent overrides",
+  },
 ];
 
 export interface AccountOperationDeps {

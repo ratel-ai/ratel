@@ -50,6 +50,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   and `get_quota_status` gives upstream's hint pointing at it only then.
   `operations/contract.test.ts` and `compatibility.test.ts` pin the core's surface, without it.
 - `operations/index.ts`: also places the edition's tools (`operations/edition.ts`).
+- `operations/agents.ts` and `operations/mcp-servers.ts`: the default gate is the core's
+  `FF_AGENTS_PAGES` (`views/project-entities/flag.ts`), not upstream's flag service; off, the four
+  tools refuse as forbidden. `operations/entities-gate.test.ts` (no upstream counterpart) pins it.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a

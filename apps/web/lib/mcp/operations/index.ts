@@ -1,5 +1,6 @@
 import type { Registration } from "@/lib/contracts/registry";
 import { accountOperations } from "@/lib/mcp/operations/account";
+import { agentsOperations } from "@/lib/mcp/operations/agents";
 import { calibrationOperations } from "@/lib/mcp/operations/calibration";
 import { catalogOperations } from "@/lib/mcp/operations/catalog";
 import { developerOperations } from "@/lib/mcp/operations/developer";
@@ -19,6 +20,7 @@ import {
   loopEvalSetWriteOperations,
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
+import { mcpServersOperations } from "@/lib/mcp/operations/mcp-servers";
 import { observabilityOperations } from "@/lib/mcp/operations/observability";
 import { playgroundOperations } from "@/lib/mcp/operations/playground";
 import { qualityOperations } from "@/lib/mcp/operations/quality";
@@ -59,6 +61,8 @@ export function assembleOperations(
     ...catalogOperations(),
     ...observabilityOperations(),
     ...runsOperations(),
+    ...mcpServersOperations(),
+    ...agentsOperations(),
     ...healthOperations(),
     ...intentsOperations(),
     ...calibrationOperations(),

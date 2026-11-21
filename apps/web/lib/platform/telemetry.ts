@@ -105,6 +105,7 @@ export const SERVER_EVENT_NAMES = [
   "fix_eval_run",
   "fix_experiment_created",
   "fix_shipped",
+  "agent_override_updated",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
