@@ -1,0 +1,73 @@
+== Ratel OSS, local dev server: http://localhost:3131/api/mcp (git 0ca0bdd6)
+== Server env: FF_EVAL_GATE=1 RATEL_EXPERIMENTAL_FEATURES=1 in-process cron ON (the eval-set refresh job runs in the background).
+== Caller project 11111111-... (org 2222...). Customer project 55555555-... (org 4444...).
+
+### initialize
+$ curl -s -X POST http://localhost:3131/api/mcp -H 'Authorization: Bearer rtl_53…' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"proof","version":"1"}}}' | jq '{serverInfo: .result.serverInfo, protocolVersion: .result.protocolVersion}'
+{
+  "serverInfo": {
+    "name": "ratel",
+    "version": "0.1.0"
+  },
+  "protocolVersion": "2025-06-18"
+}
+
+### a) change_task_eval_set add: run whose ask names the Customer org's project -> REFUSED expected
+$ curl -s -X POST http://localhost:3131/api/mcp -H 'Authorization: Bearer rtl_53…' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"change_task_eval_set","arguments":{"taskId":"cluster_intents","action":"add","runId":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001"}}}' | jq '{isError: (.result.isError // false), result: .result.structuredContent}'
+{
+  "isError": true,
+  "result": {
+    "ok": false,
+    "error": "conflict",
+    "message": "This run works on a project of another organization, so it cannot become an eval here."
+  }
+}
+
+### b) draft_task_test: same foreign run -> REFUSED expected (before any model call)
+$ curl -s -X POST http://localhost:3131/api/mcp -H 'Authorization: Bearer rtl_53…' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"draft_task_test","arguments":{"taskId":"cluster_intents","runId":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001"}}}' | jq '{isError: (.result.isError // false), result: .result.structuredContent}'
+{
+  "isError": true,
+  "result": {
+    "ok": false,
+    "error": "conflict",
+    "message": "This run works on a project of another organization, so it cannot become an eval here."
+  }
+}
+
+### c) control: change_task_eval_set add: run whose ask names no other org's project -> 'Run added.' expected
+$ curl -s -X POST http://localhost:3131/api/mcp -H 'Authorization: Bearer rtl_53…' -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"change_task_eval_set","arguments":{"taskId":"cluster_intents","action":"add","runId":"aaaaaaaa-aaaa-4aaa-8aaa-000000000002"}}}' | jq '{isError: (.result.isError // false), result: .result.structuredContent}'
+{
+  "isError": false,
+  "result": {
+    "ok": true,
+    "operation_id": "change_task_eval_set",
+    "data": {
+      "taskId": "cluster_intents",
+      "action": "add",
+      "message": "Run added."
+    },
+    "hint": "get_task shows the task's eval set."
+  }
+}
+
+### d) wait for the background refresh_task_eval_set job (the automatic pick from scored runs)
+$ until psql ... -c "select 1 from jobs where kind='refresh_task_eval_set' and status='done'"; do sleep 2; done
+         kind          | status 
+-----------------------+--------
+ score_tasks           | done
+ refresh_task_eval_set | done
+(2 rows)
+
+
+### task_eval_cases rows in the proof DB (the foreign run ...0001 must not be there)
+$ psql -d ratel_rp10_proof -c 'select task_id, turn_id, origin from task_eval_cases'
+     task_id     |               turn_id                | origin 
+-----------------+--------------------------------------+--------
+ cluster_intents | aaaaaaaa-aaaa-4aaa-8aaa-000000000002 | user
+(1 row)
+
+
+### server log: the refusals (warn level)
+{"msg":"refused a run of another organization as an eval","reason":"foreign_project","foreign_projects":1,"skipped":null,"turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001"}
+{"msg":"refused to draft a test from a run of another organization","reason":"foreign_project","foreign_projects":1,"skipped":null,"turn_id":"aaaaaaaa-aaaa-4aaa-8aaa-000000000001"}
+{"msg":"skipped runs of another organization in the eval-set refresh","reason":"foreign_project","foreign_projects":null,"skipped":1,"turn_id":null}
