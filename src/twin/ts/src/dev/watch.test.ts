@@ -129,7 +129,8 @@ describe("watchProject", () => {
         onPolling: (reason, files) => polling.push(`${reason} (${files} files)`),
         onError: (m) => errors.push(m),
       },
-      { watch: throwing, pollIntervalMs: 50 },
+      // Mode "watch" as such: a run with RATEL_TWIN_WATCH=poll must not skip the fallback.
+      { watch: throwing, mode: "watch", pollIntervalMs: 50 },
     );
     try {
       expect(watcher.mode).toBe("poll");
