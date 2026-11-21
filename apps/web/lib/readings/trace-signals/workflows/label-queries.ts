@@ -3,6 +3,7 @@ import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { jobs } from "@/lib/jobs/schema";
+import { AGENT_RUN_EVENT_TYPE } from "@/lib/ledger/constants";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { traceSignalRuns, traceWorkflowLabels } from "@/lib/readings/trace-signals/schema";
@@ -184,8 +185,9 @@ export async function loadTurnAsks(
 
 /**
  * Where a run's ask came from, best first: the user's own message (the SDK's
- * `turn_start`), the first user message an OTel model call carried, or, as a
- * stand-in when neither was sent, the agent's first search query.
+ * `turn_start`), the OTel run's ask (its `invoke_agent` root's, else the first
+ * user message a model call carried), or, as a stand-in when neither was
+ * sent, the agent's first search query.
  */
 export type AskSource = "user_message" | "prompt" | "search";
 
@@ -310,14 +312,21 @@ async function otlpAsks(
     .where(
       and(
         eq(traceEvents.projectId, projectId),
-        // Model calls carry the ask; so do the tool rows of imported runs, which have no model call.
-        inArray(traceEvents.type, [OTLP_MODEL_CALL, "invoke_end", "invoke_error"]),
+        // Model calls carry the ask; so do the tool rows of imported runs, which
+        // have no model call, and agent runs (RC-742), whose ask wins: a model
+        // call's own prompt is the job's instruction, not what the run was asked.
+        inArray(traceEvents.type, [
+          AGENT_RUN_EVENT_TYPE,
+          OTLP_MODEL_CALL,
+          "invoke_end",
+          "invoke_error",
+        ]),
         sql`${traceEvents.payload} ? 'prompt'`,
         sql`${at} >= ${from} and ${at} <= ${to}`,
         inArray(traceEvents.traceId, traceIds),
       ),
     )
-    .orderBy(asc(at));
+    .orderBy(sql`(${traceEvents.type} = ${AGENT_RUN_EVENT_TYPE}) desc`, asc(at));
   const out = new Map<string, string>();
   for (const row of rows)
     if (row.traceId && row.prompt && !out.has(row.traceId)) out.set(row.traceId, row.prompt);

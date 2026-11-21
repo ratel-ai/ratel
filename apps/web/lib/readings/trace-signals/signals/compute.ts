@@ -9,6 +9,7 @@ import { type AnalysisResult, createAnalysis } from "@/lib/readings/trace-signal
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
 import { linkRunsPage as linkRunsPageFn } from "@/lib/readings/trace-signals/signals/linked-runs-query";
 import type { AnalysisContext, SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
 
 /**
  * The compute pass over the stored ledger: page closed turns by `(ended_at,
@@ -112,6 +113,8 @@ export interface ComputeDeps {
   timeBudgetMs: number;
   pageSize: number;
   floors: Floors;
+  /** Workflow mining tunables over the defaults (RC-725, `cloud-tool-run-insights`); absent, the defaults. */
+  workflowMining?: Partial<WorkflowConfig>;
 }
 
 function defaultDeps(): ComputeDeps {
@@ -153,7 +156,11 @@ export async function computeSignals(
     start: window.start,
     end: window.end,
   });
-  const analysis = createAnalysis(context, { floors: deps.floors, scanStart: window.scanStart });
+  const analysis = createAnalysis(context, {
+    floors: deps.floors,
+    scanStart: window.scanStart,
+    ...(deps.workflowMining ? { workflowMining: deps.workflowMining } : {}),
+  });
   let pages = 0;
 
   const link = sendsModelCalls(context);

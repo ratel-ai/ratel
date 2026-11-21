@@ -3,6 +3,7 @@ import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import type { CarriedRow } from "@/lib/readings/labelling/carry";
 import { traceWorkflowInsights, traceWorkflowVerdicts } from "@/lib/readings/trace-signals/schema";
+import { agentStepId } from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import {
   type AskGroup,
   normalizeAsk,
@@ -79,7 +80,11 @@ export async function loadRecentAskGroups(
   return [...groups.values()].slice(0, maxGroups);
 }
 
-/** The distinct tools each turn called. */
+/**
+ * The distinct tools each turn called. An agent step (RC-747) reads as its
+ * agent task's one step, `agent:<name>`, so a tool-less agent run counts as
+ * inside its agent's task, not as an ask that called no tool.
+ */
 async function loadTurnTools(
   turnIds: readonly string[],
   db: LabelDb,
@@ -88,17 +93,22 @@ async function loadTurnTools(
   const CHUNK = 500;
   for (let i = 0; i < turnIds.length; i += CHUNK) {
     const rows = await db
-      .select({ turnId: traceTurnSteps.turnId, tool: traceTurnSteps.targetId })
+      .select({
+        turnId: traceTurnSteps.turnId,
+        kind: traceTurnSteps.kind,
+        tool: traceTurnSteps.targetId,
+      })
       .from(traceTurnSteps)
       .where(
         and(
           inArray(traceTurnSteps.turnId, turnIds.slice(i, i + CHUNK)),
-          eq(traceTurnSteps.kind, "invoke"),
+          inArray(traceTurnSteps.kind, ["invoke", "agent"]),
         ),
       );
     for (const row of rows) {
       if (!row.tool) continue;
-      out.set(row.turnId, (out.get(row.turnId) ?? new Set()).add(row.tool));
+      const tool = row.kind === "agent" ? agentStepId(row.tool) : row.tool;
+      out.set(row.turnId, (out.get(row.turnId) ?? new Set()).add(tool));
     }
   }
   return new Map([...out].map(([id, set]) => [id, [...set]]));

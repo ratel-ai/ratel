@@ -17,12 +17,24 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias, unionAll } from "drizzle-orm/pg-core";
+import { GEN_AI } from "@/lib/ingest/otlp/constants";
 import { events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/schema";
 import { OTLP_RAW_PRUNE_BATCH_SIZE, otlpRawRetentionDays } from "@/lib/ingest/otlp-raw/domain";
 import { otlpRawExports } from "@/lib/ingest/otlp-raw/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
+import {
+  type AgentDimension,
+  type AgentDimensionFilters,
+  isAgentDimension,
+} from "./agent-dimensions";
 import { containsText } from "./query-text";
+import {
+  agentDimensionExpression,
+  agentDimensionFilter,
+  durationWithoutHumanWait,
+  rolledUpToolName,
+} from "./span-dimensions";
 import { type TraceFilter, traceFilterMatch } from "./trace-filters";
 import { isUnpricedCall } from "./v2/cost-label";
 
@@ -65,7 +77,7 @@ export interface SpanCursor {
   sortValue?: number;
 }
 
-export interface ListSpansOptions extends TraceFacetFilters {
+export interface ListSpansOptions extends TraceFacetFilters, AgentDimensionFilters {
   since?: Date;
   until?: Date;
   scope?: SpanScope;
@@ -111,7 +123,7 @@ export interface TraceFacetFilters {
   maxCostUsd?: number;
 }
 
-export interface TraceFacetOptions extends TraceFacetFilters {
+export interface TraceFacetOptions extends TraceFacetFilters, AgentDimensionFilters {
   since?: Date;
   until?: Date;
   scope?: SpanScope;
@@ -193,7 +205,8 @@ export interface SpanPage {
   nextCursor: SpanCursor | null;
 }
 
-export type OperationGroupBy = "name" | "model" | "tool";
+/** `server`, `command`, `skill` and `agent` are the coding-agent dimensions (AOBS-5). */
+export type OperationGroupBy = "name" | "model" | "tool" | AgentDimension;
 export type RecordSort = "started" | "duration" | "tokens" | "cost";
 export type OperationSort =
   | "key"
@@ -206,7 +219,7 @@ export type OperationSort =
   | "tokens";
 export type SortDirection = "asc" | "desc";
 
-export interface ListOperationsOptions extends TraceFacetFilters {
+export interface ListOperationsOptions extends TraceFacetFilters, AgentDimensionFilters {
   since?: Date;
   until?: Date;
   groupBy?: OperationGroupBy;
@@ -242,6 +255,8 @@ export interface ListTracesOptions extends TraceFacetFilters {
   spanName?: string;
   model?: string;
   tool?: string;
+  /** Keep the runs of one conversation: a span of the run carries this exact `gen_ai.conversation.id` (AOBS-3). */
+  conversation?: string;
   errorOnly?: boolean;
   experiment?: string;
   arm?: string;
@@ -428,8 +443,13 @@ export async function listTraces(
   db: TraceQueriesDb = getDb(),
 ): Promise<TracePage> {
   const limit = pageSize(options.limit);
-  const { dimensionTraceIds, errorTraceIds, experimentTraceIds, facetTraceIds } =
-    traceMembershipSubqueries(projectId, options, db);
+  const {
+    dimensionTraceIds,
+    conversationTraceIds,
+    errorTraceIds,
+    experimentTraceIds,
+    facetTraceIds,
+  } = traceMembershipSubqueries(projectId, options, db);
   const representativeColumns = {
     traceId: otelSpans.traceId,
     rootSpanId: otelSpans.spanId,
@@ -543,6 +563,7 @@ export async function listTraces(
     errorTraceIds ? inArray(representatives.traceId, errorTraceIds) : undefined,
     experimentTraceIds ? inArray(representatives.traceId, experimentTraceIds) : undefined,
     dimensionTraceIds ? inArray(representatives.traceId, dimensionTraceIds) : undefined,
+    conversationTraceIds ? inArray(representatives.traceId, conversationTraceIds) : undefined,
     facetTraceIds ? inArray(representatives.traceId, facetTraceIds) : undefined,
     traceFilterMatch(projectId, options.traces, sql`${representatives.traceId}`) ?? undefined,
   );
@@ -949,11 +970,17 @@ export async function getTraceAggregates(
   db: TraceQueriesDb = getDb(),
 ): Promise<TraceAggregateSummary> {
   const rollups = traceRollups(projectId, options, db);
-  const { dimensionTraceIds, errorTraceIds, experimentTraceIds, facetTraceIds } =
-    traceMembershipSubqueries(projectId, options, db);
+  const {
+    dimensionTraceIds,
+    conversationTraceIds,
+    errorTraceIds,
+    experimentTraceIds,
+    facetTraceIds,
+  } = traceMembershipSubqueries(projectId, options, db);
   const where = and(
     options.rootName ? containsText(rollups.rootName, options.rootName) : undefined,
     dimensionTraceIds ? inArray(rollups.traceId, dimensionTraceIds) : undefined,
+    conversationTraceIds ? inArray(rollups.traceId, conversationTraceIds) : undefined,
     errorTraceIds ? inArray(rollups.traceId, errorTraceIds) : undefined,
     experimentTraceIds ? inArray(rollups.traceId, experimentTraceIds) : undefined,
     facetTraceIds ? inArray(rollups.traceId, facetTraceIds) : undefined,
@@ -1015,15 +1042,22 @@ export async function listOperations(
   db: TraceQueriesDb = getDb(),
 ): Promise<OperationAggregate[]> {
   const groupBy = options.groupBy ?? "name";
-  const toolName = sql<string | null>`${otelSpans.attributes} ->> 'gen_ai.tool.name'`;
-  const groupKey =
-    groupBy === "model" ? otelSpans.model : groupBy === "tool" ? toolName : otelSpans.name;
+  const groupKey = isAgentDimension(groupBy)
+    ? agentDimensionExpression(groupBy)
+    : groupBy === "model"
+      ? otelSpans.model
+      : groupBy === "tool"
+        ? // A per-command tool reads its base name: `Bash:git` is `Bash` (AOBS-5).
+          rolledUpToolName()
+        : otelSpans.name;
   const count = sql<number>`count(*)::int`;
   const errorCount = sql<number>`count(*) filter (where ${otelSpans.statusCode} = 2)::int`;
   const errorRate = sql<number>`(count(*) filter (where ${otelSpans.statusCode} = 2))::float8 / count(*)`;
-  const p50 = sql<number>`percentile_cont(0.5) within group (order by ${otelSpans.durationMs})::float8`;
-  const p95 = sql<number>`percentile_cont(0.95) within group (order by ${otelSpans.durationMs})::float8`;
-  const p99 = sql<number>`percentile_cont(0.99) within group (order by ${otelSpans.durationMs})::float8`;
+  // The latency of a group leaves out the time a step waited for a person (AOBS-7).
+  const duration = durationWithoutHumanWait();
+  const p50 = sql<number>`percentile_cont(0.5) within group (order by ${duration})::float8`;
+  const p95 = sql<number>`percentile_cont(0.95) within group (order by ${duration})::float8`;
+  const p99 = sql<number>`percentile_cont(0.99) within group (order by ${duration})::float8`;
   const cost = sql<number>`coalesce(sum(${otelSpans.costUsd}), 0)::float8`;
   const tokens = sql<number>`coalesce(sum(coalesce(${otelSpans.inputTokens}, 0) + coalesce(${otelSpans.outputTokens}, 0)), 0)::float8`;
   const sort = operationSortExpression(options.sort ?? "count", groupKey, {
@@ -1206,7 +1240,7 @@ export async function getTraceKpisFromSummaries(
   const [row] = await db
     .select({
       traceCount: sql<number>`count(*)::int`,
-      errorTraceCount: sql<number>`count(*) filter (where ${otelTraceSummaries.hasError})::int`,
+      errorTraceCount: sql<number>`count(*) filter (where ${summaryIsError()})::int`,
       averageLatencyMs: sql<number | null>`avg(${otelTraceSummaries.durationMs})::float8`,
       p50LatencyMs: sql<
         number | null
@@ -1235,7 +1269,7 @@ export async function getTraceDailyAggregatesFromSummaries(
     .select({
       day,
       traceCount: sql<number>`count(*)::int`,
-      errorTraceCount: sql<number>`count(*) filter (where ${otelTraceSummaries.hasError})::int`,
+      errorTraceCount: sql<number>`count(*) filter (where ${summaryIsError()})::int`,
       averageLatencyMs: sql<number>`coalesce(avg(${otelTraceSummaries.durationMs}), 0)::float8`,
       inputTokens: sql<number>`coalesce(sum(${otelTraceSummaries.inputTokens}), 0)::float8`,
       outputTokens: sql<number>`coalesce(sum(${otelTraceSummaries.outputTokens}), 0)::float8`,
@@ -1431,6 +1465,22 @@ function traceMembershipSubqueries(
           )
           .groupBy(otelSpans.traceId)
       : undefined;
+  // Its own membership, not a `dimensionTraceIds` condition: the id sits on
+  // the root and the model calls, the other dimensions often on a tool span.
+  const conversationTraceIds = options.conversation
+    ? db
+        .select({ traceId: otelSpans.traceId })
+        .from(otelSpans)
+        .where(
+          and(
+            eq(otelSpans.projectId, projectId),
+            options.since ? gte(otelSpans.startedAt, options.since) : undefined,
+            options.until ? lt(otelSpans.startedAt, options.until) : undefined,
+            sql`${otelSpans.attributes} ->> ${GEN_AI.conversationId} = ${options.conversation}`,
+          ),
+        )
+        .groupBy(otelSpans.traceId)
+    : undefined;
   const errorTraceIds = options.errorOnly
     ? db
         .select({ traceId: otelSpans.traceId })
@@ -1503,6 +1553,7 @@ function traceMembershipSubqueries(
 
   return {
     dimensionTraceIds,
+    conversationTraceIds,
     errorTraceIds,
     experimentTraceIds,
     facetTraceIds,
@@ -1515,6 +1566,7 @@ function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb
     rootName: otelSpans.name,
     startedAt: otelSpans.startedAt,
     durationMs: otelSpans.durationMs,
+    statusCode: otelSpans.statusCode,
   };
   const windowBounds = and(
     gte(otelSpans.startedAt, window.since),
@@ -1575,6 +1627,7 @@ function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb
       rootName: rootlessRepresentative.rootName,
       startedAt: rootlessRepresentative.startedAt,
       durationMs: rootlessRepresentative.durationMs,
+      statusCode: rootlessRepresentative.statusCode,
     })
     .from(rootlessCandidates)
     .crossJoinLateral(rootlessRepresentative);
@@ -1586,7 +1639,9 @@ function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb
       rootName: selectedRoots.rootName,
       startedAt: selectedRoots.startedAt,
       durationMs: selectedRoots.durationMs,
-      hasError: sql<number>`max(case when ${otelSpans.statusCode} = 2 then 1 else 0 end)::int`.as(
+      // 1 when the run is an error (AOBS-3): its representative (root) span
+      // reports an error. A failed step the agent recovered from does not fail the run.
+      hasError: sql<number>`(case when ${selectedRoots.statusCode} = 2 then 1 else 0 end)::int`.as(
         "has_error",
       ),
       inputTokens: sql<number>`coalesce(sum(${otelSpans.inputTokens}), 0)::float8`.as(
@@ -1607,8 +1662,18 @@ function traceRollups(projectId: string, window: TraceWindow, db: TraceQueriesDb
       selectedRoots.rootName,
       selectedRoots.startedAt,
       selectedRoots.durationMs,
+      selectedRoots.statusCode,
     )
     .as("trace_rollups");
+}
+
+/**
+ * Whether a summary row is an error: its root span reports one (AOBS-3). A row
+ * written before `root_error` existed has none: it counts by any span until it
+ * is recomputed.
+ */
+function summaryIsError() {
+  return sql`coalesce(${otelTraceSummaries.rootError}, ${otelTraceSummaries.hasError})`;
 }
 
 /** Window predicate for the summary reads, riding `(project_id, started_at)`. */
@@ -1767,6 +1832,7 @@ function spanFacetFilter(options: TraceFacetOptions, omittedFacet?: TraceFacetKe
     options.experiment ? containsText(otelSpans.experimentName, options.experiment) : undefined,
     options.arm ? containsText(otelSpans.experimentArm, options.arm) : undefined,
     options.errorOnly ? eq(otelSpans.statusCode, 2) : undefined,
+    agentDimensionFilter(options),
     omittedFacet !== "service" && options.services?.length
       ? inArray(otelSpans.serviceName, [...options.services])
       : undefined,

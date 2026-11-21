@@ -16,8 +16,10 @@ import {
   preferSpanContent,
   type TraceContentView,
 } from "@/lib/synthesis/traces/content-view";
+import type { AgentSubtree } from "@/lib/synthesis/traces/v2/agent-rollup";
 import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import { formatDuration, formatInteger, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import type { RunEvent, RunMetrics } from "@/lib/synthesis/traces/v2/run-metrics";
 import { TURN_NOUN as noun } from "@/lib/synthesis/traces/v2/run-noun";
 import type { RunTotals } from "@/lib/synthesis/traces/v2/run-summary";
 import { INCOMPLETE_HINT, RUN_STATUS_LABEL, type RunStatus } from "@/lib/synthesis/traces/v2/runs";
@@ -33,8 +35,10 @@ import type { TraceSession } from "@/lib/views/session-chat/trace-session";
 import { KIND_ORDER } from "./kind";
 import { SpanDetails, SpanInspector } from "./SpanInspector";
 import { type RawState, SpanIOPanel } from "./SpanIOPanel";
+import { TraceAgents } from "./TraceAgents";
 import { TraceConversation } from "./TraceConversation";
 import { type LifecycleRecord, TraceRanking } from "./TraceRanking";
+import { TraceRunMetrics } from "./TraceRunMetrics";
 import { TraceSessionBar } from "./TraceSessionBar";
 import { TraceTimeline } from "./TraceTimeline";
 
@@ -50,6 +54,10 @@ export interface TraceViewProps {
   status: RunStatus;
   totals: RunTotals;
   waterfall: TraceWaterfallView;
+  /** The run's agents with each subtree's totals (AOBS-5); empty without a sub-agent. */
+  agents?: readonly AgentSubtree[];
+  /** How the run ran (AOBS-7): time split, context, cache and run events; null with nothing to show. */
+  runMetrics?: RunMetrics | null;
   truncated: boolean;
   /** The run's `events.payload` content, read on the server; the spans' own content wins when they carry any. */
   payloadContent?: TraceContentView | null;
@@ -88,6 +96,17 @@ export function TraceView(props: TraceViewProps) {
     () => preferSpanContent(buildTraceContentView(rows.map((row) => row.span)), payloadContent),
     [rows, payloadContent],
   );
+  const runMetrics = props.runMetrics ?? null;
+  // Each step's events, for its markers on the time axis and its inspector.
+  const eventsBySpan = useMemo(() => {
+    const bySpan = new Map<string, RunEvent[]>();
+    for (const event of runMetrics?.events ?? []) {
+      const list = bySpan.get(event.spanId);
+      if (list) list.push(event);
+      else bySpan.set(event.spanId, [event]);
+    }
+    return bySpan;
+  }, [runMetrics]);
   const [tab, setTab] = useState<TraceTab>(
     props.lifecycle.length === 0 && props.initialTab === "ranking" ? "timeline" : props.initialTab,
   );
@@ -245,40 +264,54 @@ export function TraceView(props: TraceViewProps) {
             value: "timeline",
             label: "Timeline",
             content: (
-              <div
-                className={cn(
-                  "grid items-start gap-4",
-                  "xl:grid-cols-[minmax(0,1fr)_28rem] 2xl:grid-cols-[minmax(0,1fr)_34rem]",
-                )}
-              >
-                <TraceTimeline
-                  rows={rows}
-                  durationMs={waterfall.durationMs}
-                  shape={shape}
-                  collapsed={collapsed}
-                  selected={shown}
-                  onSelect={select}
-                  onToggle={toggle}
-                />
-                {selectedRow ? (
-                  <SpanInspector
-                    span={selectedRow.span}
-                    offsetMs={Math.max(0, Date.parse(selectedRow.span.startedAt) - traceStart)}
-                    runtimeEventsRoot={props.runtimeEventsRoot}
-                    onShowDetails={() => changeTab("details")}
-                  >
-                    <SpanIOPanel
-                      key={selectedRow.span.spanId}
-                      span={selectedRow.span}
-                      raw={raw.spans.get(selectedRow.span.spanId) ?? null}
-                      rawState={raw.state}
-                      payload={payloadContent}
-                      descendants={descendants}
-                      turnHasContent={content.contentCaptured}
-                      onSelectSpan={selectSpan}
-                    />
-                  </SpanInspector>
+              <div className="flex flex-col gap-6">
+                {runMetrics ? <TraceRunMetrics metrics={runMetrics} onSelect={selectSpan} /> : null}
+                {props.agents && props.agents.length > 0 ? (
+                  <TraceAgents
+                    agents={props.agents}
+                    truncated={props.truncated}
+                    selectedSpanId={selectedRow?.span.spanId ?? null}
+                    onSelect={selectSpan}
+                  />
                 ) : null}
+                <div
+                  className={cn(
+                    "grid items-start gap-4",
+                    "xl:grid-cols-[minmax(0,1fr)_28rem] 2xl:grid-cols-[minmax(0,1fr)_34rem]",
+                  )}
+                >
+                  <TraceTimeline
+                    rows={rows}
+                    durationMs={waterfall.durationMs}
+                    shape={shape}
+                    collapsed={collapsed}
+                    selected={shown}
+                    onSelect={select}
+                    onToggle={toggle}
+                    eventsBySpan={runMetrics ? eventsBySpan : undefined}
+                  />
+                  {selectedRow ? (
+                    <SpanInspector
+                      span={selectedRow.span}
+                      offsetMs={Math.max(0, Date.parse(selectedRow.span.startedAt) - traceStart)}
+                      runtimeEventsRoot={props.runtimeEventsRoot}
+                      onShowDetails={() => changeTab("details")}
+                      events={runMetrics ? eventsBySpan.get(selectedRow.span.spanId) : undefined}
+                      showWait={runMetrics !== null}
+                    >
+                      <SpanIOPanel
+                        key={selectedRow.span.spanId}
+                        span={selectedRow.span}
+                        raw={raw.spans.get(selectedRow.span.spanId) ?? null}
+                        rawState={raw.state}
+                        payload={payloadContent}
+                        descendants={descendants}
+                        turnHasContent={content.contentCaptured}
+                        onSelectSpan={selectSpan}
+                      />
+                    </SpanInspector>
+                  ) : null}
+                </div>
               </div>
             ),
           },

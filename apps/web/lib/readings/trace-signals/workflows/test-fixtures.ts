@@ -87,6 +87,30 @@ export function wfTurn(calls: readonly Call[], opts: WfTurnOptions = {}): Signal
   };
 }
 
+/**
+ * One closed OTLP turn of a tool-less agent run (RC-742): a single `agent`
+ * step whose target id is the agent's name (RC-747), as the build stores it.
+ */
+export function agentTurn(
+  agent: string | null,
+  opts: { outcome?: InvokeOutcome; tookMs?: number } = {},
+): SignalTurn {
+  const turn = wfTurn([], { turnSource: "otlp", durationMs: opts.tookMs ?? 4_000 });
+  const agentStep: StepDraft = {
+    ...step(
+      { tool: agent ?? "", outcome: opts.outcome ?? "ok", tookMs: opts.tookMs ?? 4_000 },
+      0,
+      turn.startedAt,
+      turn.id,
+    ),
+    kind: "agent",
+    eventType: "agent_run",
+    targetType: null,
+    targetId: agent,
+  };
+  return { ...turn, invokeCount: 0, steps: [agentStep] };
+}
+
 /** `n` turns of `make(i)`. */
 export function many(n: number, make: (i: number) => SignalTurn): SignalTurn[] {
   return Array.from({ length: n }, (_, i) => make(i));

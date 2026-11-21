@@ -71,8 +71,13 @@ export function isModelOnlyTurn(id: string): boolean {
   return id.startsWith(MODEL_ONLY_PREFIX);
 }
 
-/** Where a turn's ask was read from: the SDK turn scope's user message, an OTel prompt, or the agent's first search. */
-export type AskSourceKind = "user" | "prompt" | "search";
+/**
+ * Where a turn's ask was read from: the SDK turn scope's user message, an OTel
+ * prompt, the agent's first search, or `derived` for a tool-only run (RC-743,
+ * flag `cloud-tool-run-insights`): its task's name or its tool path, never the
+ * user's words (`derived-asks.ts`).
+ */
+export type AskSourceKind = "user" | "prompt" | "search" | "derived";
 
 /**
  * A turn's place: in a topic, asking the previous turn's question again, in
@@ -253,8 +258,8 @@ export interface TopicInsights {
   modelOnlyTurns?: number;
   /** Of those, turns that ran a tool but whose captured reply says the agent could not do it. */
   refusedTurns?: number;
-  /** Turns by where their ask came from; `none` had nothing to read. */
-  sources: { user: number; prompt: number; search: number; none: number };
+  /** Turns by where their ask came from; `none` had nothing to read. `derived` is absent when no turn had a derived ask. */
+  sources: { user: number; prompt: number; search: number; none: number; derived?: number };
   verdicts: Record<TopicVerdict, number>;
   /** Turns whose sentiment was read (the users' own words only). */
   sentimentMeasured: number;

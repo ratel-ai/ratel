@@ -17,6 +17,12 @@ export const NO_DRAFT_MODEL_MESSAGE =
   "No Claude backend is configured (ANTHROPIC_API_KEY or ANTHROPIC_BACKEND), so this fix's text can't be drafted.";
 export const DRAFT_FIX_ACTOR = "system:fix-drafts";
 
+/** A `draft_fix` job's payload: the fix, and the actor whose gate it runs under (a user id or {@link DRAFT_FIX_ACTOR}). */
+export interface DraftFixJobPayload {
+  fixId: string;
+  requestedBy: string;
+}
+
 /** Owned (ADR-0030): the gate reads `env` (`FF_EVAL_GATE`) where upstream takes flag deps. */
 export interface ResolveDraftDeps {
   db?: EvalDb;
@@ -69,6 +75,10 @@ export async function enqueueDraftFix(
   if (existing) return;
   await db
     .insert(jobs)
-    .values({ projectId, kind: "draft_fix", payload: { fixId, requestedBy } })
+    .values({
+      projectId,
+      kind: "draft_fix",
+      payload: { fixId, requestedBy } satisfies DraftFixJobPayload,
+    })
     .onConflictDoNothing();
 }

@@ -141,6 +141,21 @@ export const DEFAULT_WINDOW_DAYS: WindowDays = 7;
 /** Turns needed before the band and signals render instead of the collecting meter. */
 export const FIRST_READING_FLOOR = 50;
 
+/**
+ * Closed turns from which a reading shows before {@link FIRST_READING_FLOOR},
+ * marked low confidence (RC-828). Only with `cloud-tool-run-insights` on:
+ * the page passes it as `lowConfidenceFloor`.
+ */
+export const LOW_CONFIDENCE_FLOOR = 10;
+
+/** A reading shown from fewer turns than the usual floor (RC-828). */
+export interface LowConfidence {
+  /** Closed turns the reading uses. */
+  turns: number;
+  /** Closed turns from which the reading is no longer low confidence. */
+  firmsUpAt: number;
+}
+
 /* - Health band ------------------------------------------------------------- */
 
 /**
@@ -623,6 +638,12 @@ export interface HealthPageModel {
    * each issue would win back. Null before the first run; absent on fixtures.
    */
   score?: HealthScoreView | null;
+  /**
+   * The reading reads fewer turns than the usual floor (RC-828): `floor` is
+   * then the low floor, and the page warns that the reading is low
+   * confidence. Absent on a usual reading and before the first run.
+   */
+  lowConfidence?: LowConfidence;
 }
 
 /** The header's words for a window: "this week", "in the last 30 days". */

@@ -1,14 +1,8 @@
 import type { ParsedTraceEvent } from "@/lib/ingest/trace-events/parse";
 import { attrNumber, attrString } from "./anyvalue";
-import {
-  AGENT_KEYS,
-  ancestorsOf,
-  indexSpans,
-  resolveUp,
-  SESSION_KEYS,
-  USER_KEYS,
-} from "./attr-resolve";
+import { ancestorsOf, indexSpans, resolveUp, SESSION_KEYS, USER_KEYS } from "./attr-resolve";
 import { GEN_AI } from "./constants";
+import { namedAgentOf } from "./dimensions";
 import { isSystemPrompt, promptOf } from "./prompt-text";
 import { plausibleOccurredAt } from "./reconstruct";
 import { isModelRoundTrip, toolMenuOf } from "./span-facts";
@@ -115,7 +109,10 @@ export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEven
     const menu = nearest(span, byId, toolMenuOf);
     const model = modelOf(span);
     const prompt = nearest(span, byId, (s) => promptOf(s.attributes));
-    const agent = resolveUp(span, byId, AGENT_KEYS)?.slice(0, MAX_ID);
+    // Only an agent the export names: a model call does not take the span
+    // name of an `invoke_agent` ancestor (a tool call does).
+    const spanAgent = namedAgentOf(span, byId);
+    const agent = spanAgent?.source === "attribute" ? spanAgent.name : undefined;
     out.push({
       ingestSource: "otlp",
       clientEventId: `otlp:model:${span.traceId}:${span.spanId}`,

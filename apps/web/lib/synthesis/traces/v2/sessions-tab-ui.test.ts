@@ -14,6 +14,8 @@ import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import {
   SessionListPanelBody,
   SessionListTable,
+  SessionListView,
+  type SessionListViewProps,
 } from "@/components/console/traces-sessions/SessionListView";
 import type { RunRow } from "@/lib/synthesis/traces/v2/runs";
 import type { SessionListRow } from "@/lib/synthesis/traces/v2/sessions-list";
@@ -233,4 +235,39 @@ test("the session Panel shows every turn of the session as chat, each linking to
     assert.equal(html.split(text).length - 1, 1, text);
   assert.match(html, new RegExp(`href="${ROOT}/${"a".repeat(32)}"[^>]*>Open turn 1`));
   assert.match(html, /href="[^"]*sessions\/session-0123456789[^"]*"[^>]*>Open turn 2/);
+});
+
+// RC-752: an empty Sessions list with turns points at Turns and says how to get sessions.
+
+function renderEmptySessions(empty: SessionListViewProps["empty"]): string {
+  return renderToStaticMarkup(
+    inRouter(
+      ROOT,
+      createElement(SessionListView, {
+        projectId: PROJECT,
+        filter: "all",
+        rows: [],
+        nextCursor: null,
+        now: "2026-11-02T09:10:00.000Z",
+        empty,
+      }),
+    ),
+  );
+}
+
+test("turns but no sessions: 'No sessions yet', a link to Turns, the attribute to add and a copy-prompt button", () => {
+  const html = renderEmptySessions("no-sessions");
+  assert.match(html, /data-sessions-empty="no-sessions"/);
+  assert.match(html, />No sessions yet</);
+  assert.doesNotMatch(html, /No turns yet/);
+  assert.match(html, new RegExp(`href="${ROOT}/turns"[^>]*>View turns<`));
+  assert.match(html, /<code[^>]*>gen_ai\.conversation\.id<\/code>/);
+  assert.match(html, />Copy prompt for your coding agent</);
+});
+
+test("no telemetry at all keeps the send-your-first-trace empty state", () => {
+  const html = renderEmptySessions("no-telemetry");
+  assert.match(html, /data-sessions-empty="no-telemetry"/);
+  assert.match(html, /Send your first trace/);
+  assert.doesNotMatch(html, /No sessions yet/);
 });

@@ -7,8 +7,15 @@ import {
   evidenceSpanDays,
   windowDays,
 } from "@/lib/readings/trace-signals/signals/project-metrics";
-import { healthReadiness, runWindowLabel, windowPhrase } from "@/lib/readings/trace-signals/view";
+import {
+  FIRST_READING_FLOOR,
+  healthReadiness,
+  LOW_CONFIDENCE_FLOOR,
+  runWindowLabel,
+  windowPhrase,
+} from "@/lib/readings/trace-signals/view";
 import { pendingHealthModel, shouldUseHealthFixture } from "@/lib/views/health/page-model";
+import { lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
 import type { SignalRecord } from "@/lib/views/health/signals/claims-model";
 import { buildHealthPageModel, type PageInputs } from "@/lib/views/health/signals/page-view";
 
@@ -188,4 +195,73 @@ test("a window with no turns gets no mark (RC-255)", () => {
     run: { ...inputs.run!, summary: { ...inputs.run!.summary, daily: [] } },
   };
   assert.equal("emptyEarlyReading" in buildHealthPageModel(empty, RUN_END), false);
+});
+
+/* - Low-confidence reading (RC-828) ------------------------------------------ */
+
+/** A completed run over the last week whose window holds `turns` closed turns. */
+function smallReadingInputs(turns: number, lowConfidenceFloor?: number): PageInputs {
+  const daily = recentDaily(7, 0).map((bucket, i) => ({ ...bucket, turns: i === 6 ? turns : 0 }));
+  return {
+    windowDays: 7,
+    run: { ...runWith(7, daily)!, turnsScanned: turns },
+    liveTurns: 0,
+    signals: [MISS],
+    evidence: new Map(),
+    names: new Map(),
+    ...(lowConfidenceFloor !== undefined ? { lowConfidenceFloor } : {}),
+  };
+}
+
+test("24 turns with the low floor on make a reading marked low confidence (RC-828)", () => {
+  const model = buildHealthPageModel(smallReadingInputs(24, LOW_CONFIDENCE_FLOOR), RUN_END);
+  assert.equal(healthReadiness(model), "ready");
+  assert.deepEqual(model.lowConfidence, { turns: 24, firmsUpAt: FIRST_READING_FLOOR });
+  assert.notEqual(model.score, null, "the health score is shown");
+  assert.equal(model.signals.length, 1, "the issues are shown");
+  assert.ok(
+    model.tiles.every((tile) => tile.sub !== "Waiting for enough turns."),
+    "the tiles are read",
+  );
+});
+
+test("without the low floor, 24 turns are today's collecting page (RC-828)", () => {
+  const model = buildHealthPageModel(smallReadingInputs(24), RUN_END);
+  assert.equal(healthReadiness(model), "collecting");
+  assert.equal(model.floor, FIRST_READING_FLOOR);
+  assert.equal("lowConfidence" in model, false);
+  assert.ok(
+    model.tiles.every((tile) => tile.value === null && tile.sub === "Waiting for enough turns."),
+  );
+});
+
+test("below the low floor the page is today's collecting page (RC-828)", () => {
+  const model = buildHealthPageModel(
+    smallReadingInputs(LOW_CONFIDENCE_FLOOR - 1, LOW_CONFIDENCE_FLOOR),
+    RUN_END,
+  );
+  assert.equal(healthReadiness(model), "collecting");
+  assert.equal(model.floor, FIRST_READING_FLOOR);
+  assert.equal("lowConfidence" in model, false);
+});
+
+test("from the usual floor on, the reading is not marked (RC-828)", () => {
+  const model = buildHealthPageModel(
+    smallReadingInputs(FIRST_READING_FLOOR, LOW_CONFIDENCE_FLOOR),
+    RUN_END,
+  );
+  assert.equal(healthReadiness(model), "ready");
+  assert.equal(model.floor, FIRST_READING_FLOOR);
+  assert.equal("lowConfidence" in model, false);
+});
+
+test("the low-confidence warning says how many turns the reading uses (RC-828)", () => {
+  assert.equal(
+    lowConfidenceCopy({ turns: 24, firmsUpAt: 50 }),
+    "Low confidence: read from 24 turns. It firms up at 50.",
+  );
+  assert.equal(
+    lowConfidenceCopy({ turns: 1, firmsUpAt: 50 }),
+    "Low confidence: read from 1 turn. It firms up at 50.",
+  );
 });

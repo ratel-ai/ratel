@@ -18,12 +18,14 @@ import {
 } from "@/lib/ingest/trace-events/turns-schedule";
 import type { LogError } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
-import { agentHealthToolRows } from "./agent-health-bridge";
+import { type AgentHealthBridgeDeps, agentHealthToolRows } from "./agent-health-bridge";
 import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-dedupe";
 import { attrString } from "./anyvalue";
+import { indexSpans } from "./attr-resolve";
 import { type ModelPricingIngestDeps, resolveBatchPrices } from "./batch-prices";
 import { GEN_AI } from "./constants";
 import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
+import { deriveSpanDimensions, NO_SPAN_DIMENSIONS, type SpanDimensionsById } from "./dimensions";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import { toRows } from "./reconstruct";
@@ -77,8 +79,12 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   insertOtelSpans: typeof insertOtelSpansFn;
   incrementEventUsage?: IncrementEventUsage;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
+  /** The span dimension derivation (`lib/ingest/otlp/dimensions`). Absent, the real one; a test passes one that throws. */
+  deriveSpanDimensions?: typeof deriveSpanDimensions;
   traceTurns?: TraceTurnsIngestDeps;
   findRuntimeInvokes?: FindRuntimeInvokes;
+  /** `FF_TOOL_RUN_INSIGHTS` for agent-run rows (RC-742). Absent, the switch is read. */
+  agentRunsEnabled?: AgentHealthBridgeDeps["agentRunsEnabled"];
   /**
    * The agent-span dedupe's storage lookup: an agent wrapper with the run's
    * summed usage is not one more model call. `null` turns the dedupe off; only
@@ -159,6 +165,17 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
+  // Which entity each span belongs to, decided one time for every row builder
+  // below. Fail open: no builder derives it again, so when this throws the
+  // batch is stored as before, with null dimension columns.
+  let dimensions: SpanDimensionsById = NO_SPAN_DIMENSIONS;
+  try {
+    dimensions = (deps.deriveSpanDimensions ?? deriveSpanDimensions)(spans, indexSpans(spans));
+  } catch (err) {
+    logError("span dimension derivation failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
+
   const dedupe = deps.agentSpanDedupe
     ? await resolveAgentSpanDedupe(spans, projectId, deps.agentSpanDedupe, (err, traceIds) => {
         logError("agent span model call lookup failed", err, {
@@ -213,11 +230,17 @@ export async function persistDecodedSpans(
       .filter((g) => !sdkQueries.has(g.query)),
     ...ratelDerived,
     // Agent health: the host's own tool-call spans as ledger invocations.
-    ...(await agentHealthToolRows(spans, projectId, {
-      traceTurns: deps.traceTurns,
-      findRuntimeInvokes: deps.findRuntimeInvokes,
-      logError,
-    })),
+    ...(await agentHealthToolRows(
+      spans,
+      projectId,
+      {
+        traceTurns: deps.traceTurns,
+        findRuntimeInvokes: deps.findRuntimeInvokes,
+        agentRunsEnabled: deps.agentRunsEnabled,
+        logError,
+      },
+      dimensions,
+    )),
   ];
   if (derived.length > 0) {
     try {
@@ -268,7 +291,7 @@ export async function persistDecodedSpans(
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
   try {
-    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices });
+    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices, dimensions });
     if (spanRows.length > 0) {
       if (spanConflict === "update") {
         await deps.insertOtelSpans(projectId, spanRows, undefined, { onConflict: "update" });

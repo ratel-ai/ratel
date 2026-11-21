@@ -1,0 +1,73 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "docs-mcp"
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "mcp.server"
+          },
+          "spans": [
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "6666666666666666",
+              "name": "tools/call search",
+              "kind": 2,
+              "startTimeUnixNano": "1794000000340000000",
+              "endTimeUnixNano": "1794000000780000000",
+              "attributes": [
+                {
+                  "key": "mcp.method.name",
+                  "value": {
+                    "stringValue": "tools/call"
+                  }
+                },
+                {
+                  "key": "gen_ai.tool.name",
+                  "value": {
+                    "stringValue": "search"
+                  }
+                },
+                {
+                  "key": "mcp.session.id",
+                  "value": {
+                    "stringValue": "sess-docs-1"
+                  }
+                }
+              ],
+              "status": {},
+              "parentSpanId": "5555555555555555"
+            },
+            {
+              "traceId": "5b8efff798038103d269b633813fc60c",
+              "spanId": "7777777777777777",
+              "name": "db.query",
+              "kind": 1,
+              "startTimeUnixNano": "1794000000350000000",
+              "endTimeUnixNano": "1794000000700000000",
+              "attributes": [
+                {
+                  "key": "db.system.name",
+                  "value": {
+                    "stringValue": "postgresql"
+                  }
+                }
+              ],
+              "status": {},
+              "parentSpanId": "6666666666666666"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

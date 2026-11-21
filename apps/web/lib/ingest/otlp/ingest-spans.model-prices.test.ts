@@ -92,3 +92,28 @@ test("without the model pricing deps a batch pays the current built-in prices", 
   await persist(deps);
   assert.equal(chatSpan(h)?.costUsd, "0.00186");
 });
+
+test("an unpriced call stores the cost its emitter sent (AOBS-3)", async () => {
+  const { h, deps } = harness({ overrides: async () => ({}) as typeof OWN_PRICE });
+  const spans = claudeAgentSdkTrace().map((span) =>
+    span.spanId === CHAT_SPAN
+      ? {
+          ...span,
+          attributes: {
+            ...span.attributes,
+            "gen_ai.request.model": "my-own-model",
+            "gen_ai.response.model": "my-own-model",
+            "ratel.usage.cost_usd": 0.0421,
+          },
+        }
+      : span,
+  );
+  const result = await persistDecodedSpans(
+    spans,
+    { projectId: "project-1", organization: null, endpoint: "/v1/traces" },
+    deps,
+  );
+  assert.ok(result.ok);
+  assert.equal(chatSpan(h)?.costUsd, "0.0421");
+  assert.equal(chatEvent(h)?.event.costUsd, "0.0421");
+});

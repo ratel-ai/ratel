@@ -75,6 +75,7 @@ import {
   startSignalRun as startSignalRunFn,
 } from "@/lib/readings/trace-signals/signals/queries";
 import { withStoredToolStandings } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
+import { workflowMiningFor } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   FIRST_READING_FLOOR,
   SIGNAL_KINDS,
@@ -85,6 +86,7 @@ import {
   type PlacementWriteResult,
   writeTaskPlacement as writeTaskPlacementFn,
 } from "@/lib/readings/trace-signals/workflows/place-queries";
+import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
 
 /**
  * The `compute_trace_signals` job: one signal run for one project.
@@ -162,6 +164,14 @@ export interface ComputeJobDeps {
     turnsRead: number,
     pillars: readonly PillarReading[],
   ) => Promise<unknown>;
+  /**
+   * Workflow mining tunables for the project (RC-725, `FF_TOOL_RUN_INSIGHTS`
+   * via `workflowMiningFor`); null, the defaults.
+   */
+  workflowMining?: (
+    projectId: string,
+    organization: unknown,
+  ) => Promise<Partial<WorkflowConfig> | null>;
   now: () => Date;
   timeBudgetMs: number;
 }
@@ -214,6 +224,7 @@ function defaultDeps(env: Env): ComputeJobDeps {
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: (projectId) => editionImportRunning(projectId),
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
+    workflowMining: (projectId, organization) => workflowMiningFor(projectId, organization, env),
     storeHealthScore: async (projectId, runId, turnsRead, pillars) => {
       const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
       await setRunHealthScoreFn(runId, {
@@ -356,9 +367,11 @@ export async function computeProjectTraceSignals(
     window_days: days,
   };
   try {
+    const mining = (await deps.workflowMining?.(projectId, organization)) ?? null;
     const { result, fingerprint } = await deps.compute(projectId, window, {
       now: deps.now,
       timeBudgetMs: deps.timeBudgetMs,
+      ...(mining ? { workflowMining: mining } : {}),
     });
     // The alert is for workflows hidden by mixed runs; once turn ids carry the reading it has nothing to say.
     const basis = result.summary.workflows?.basis;

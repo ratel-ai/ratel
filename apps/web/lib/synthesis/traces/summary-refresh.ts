@@ -203,6 +203,7 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
     representatives as (
       select distinct on (s.project_id, s.trace_id)
         s.project_id, s.trace_id, s.started_at, s.duration_ms,
+        (s.status_code = 2) as root_error,
         nullif(btrim(s.service_name), '') as service_name,
         nullif(btrim(coalesce(
           s.attributes ->> 'deployment.environment.name',
@@ -236,7 +237,15 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
           array_agg(distinct ${TOOL_NAME} order by ${TOOL_NAME})
             filter (where s.span_class = 'tool' and ${TOOL_NAME} <> ''),
           '{}'
-        ) as tools
+        ) as tools,
+        coalesce(
+          array_agg(distinct s.agent_key order by s.agent_key) filter (where s.agent_key is not null),
+          '{}'
+        ) as agents,
+        coalesce(
+          array_agg(distinct s.mcp_server order by s.mcp_server) filter (where s.mcp_server is not null),
+          '{}'
+        ) as mcp_servers
       from otel_spans s
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
@@ -245,7 +254,7 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
-      models, tools, service_name, environment
+      models, tools, service_name, environment, agents, mcp_servers, root_error
     )
     select
       r.project_id,
@@ -261,7 +270,10 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       a.models,
       a.tools,
       r.service_name,
-      r.environment
+      r.environment,
+      a.agents,
+      a.mcp_servers,
+      r.root_error
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
@@ -277,7 +289,10 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       models = excluded.models,
       tools = excluded.tools,
       service_name = excluded.service_name,
-      environment = excluded.environment
+      environment = excluded.environment,
+      agents = excluded.agents,
+      mcp_servers = excluded.mcp_servers,
+      root_error = excluded.root_error
   `);
 }
 

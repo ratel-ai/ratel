@@ -1,4 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { JOB_ASKS, jobAskFor, type NoPayload } from "@/lib/jobs/job-ask";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { runIntentEngine } from "./job";
 import { enqueueDueIntentEngineRuns, expireIntentEngineClusters } from "./jobs";
@@ -12,7 +13,9 @@ import { enqueueDueIntentEngineRuns, expireIntentEngineClusters } from "./jobs";
 export const intentEngineRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    cluster_intents: inProjectLogContext((job) => runIntentEngine(job.projectId)),
+    cluster_intents: inProjectLogContext(jobAskFor<NoPayload>(JOB_ASKS.cluster_intents), (job) =>
+      runIntentEngine(job.projectId),
+    ),
   },
   drainSteps: [
     {

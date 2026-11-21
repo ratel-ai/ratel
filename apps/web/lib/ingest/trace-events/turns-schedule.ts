@@ -21,6 +21,21 @@ export const TURN_EVENT_TYPES = [
   "skill_invoke",
 ] as const;
 
+/**
+ * One agent run, an OTLP `invoke_agent` root span (RC-742): a turn of its own
+ * for a run that calls no tool, such as the platform's own backend jobs. Ingest
+ * writes it and the build reads it only with `FF_TOOL_RUN_INSIGHTS` on
+ * (upstream's `cloud-tool-run-insights`), so it stays out of
+ * {@link TURN_EVENT_TYPES} and of the partial index those types mirror.
+ */
+export const AGENT_RUN_EVENT_TYPE = "agent_run";
+
+/** The turn event types a build reads with `FF_TOOL_RUN_INSIGHTS` on. */
+export const TURN_EVENT_TYPES_WITH_AGENT_RUNS = [
+  ...TURN_EVENT_TYPES,
+  AGENT_RUN_EVENT_TYPE,
+] as const;
+
 export interface TraceTurnsIngestDeps {
   enqueueBuild: (projectId: string) => Promise<{ id: string } | null>;
   scheduleProjectDrain: (projectId: string) => void;
@@ -38,7 +53,8 @@ export interface ScheduleTraceTurnBuildInput {
   reportServerException?: typeof reportServerExceptionFn;
 }
 
-const TRIGGER_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES);
+// Agent runs are written only with `FF_TOOL_RUN_INSIGHTS` on (RC-742), so they kick a build only then.
+const TRIGGER_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES_WITH_AGENT_RUNS);
 const logger = getLogger("trace-signals/schedule");
 const defaultLogError: LogError = (message, error, fields) =>
   logger.error({ ...fields, err: error }, message);

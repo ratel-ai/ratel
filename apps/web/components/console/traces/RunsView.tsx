@@ -1,16 +1,16 @@
 "use client";
 
-import { StatusDot } from "@ratel/design-system/badge";
 import { Button, IconButton } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@ratel/design-system/menu";
 import { Page, PageBody } from "@ratel/design-system/page-header";
 import { usePeek } from "@ratel/design-system/panel";
-import { type StatProps, StatRow } from "@ratel/design-system/stat-row";
 import { Callout } from "@ratel/design-system/states";
 import type { SortDirection } from "@ratel/design-system/table-model";
 import { Check, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
+import { MiniVolume } from "@/components/console/traces-sessions/MiniVolume";
+import { SummaryFigure, SummaryNumbers } from "@/components/console/traces-sessions/TabSummary";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { TraceFacets } from "@/lib/synthesis/traces/queries";
 import {
@@ -41,7 +41,6 @@ import { fetchRunSummary } from "./run-summary-client";
 import { TraceFilterBar } from "./TraceFilterBar";
 import { TracesEmpty, type TracesEmptyKind } from "./TracesEmpty";
 import { isToday, type TimeWindow, TracesHeader } from "./TracesHeader";
-import { VolumeChart } from "./VolumeChart";
 
 /** A calibration running in this window, in plain words (DESIGN.md, Glossary: arm is "variant"). */
 export interface RunningExperiment {
@@ -68,6 +67,8 @@ export interface RunsViewProps {
   >;
   /** `rollup` (RC-506): the property bar on the trace rollup. */
   filterTab?: "runs" | "rollup";
+  /** `cloud-project-entities`: the rollup bar offers the Agent and MCP server filters (RC-790). */
+  entities?: boolean;
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */
   nextCursor: string | null;
@@ -135,6 +136,7 @@ export function RunsView(props: RunsViewProps) {
         {showFilterBar ? (
           <TraceFilterBar
             tab={props.filterTab ?? "runs"}
+            entities={props.entities}
             search={search}
             pending={pending}
             facets={facets}
@@ -180,7 +182,14 @@ export function RunsView(props: RunsViewProps) {
               unit="runs"
               projectId={projectId}
               latestAt={props.latestRunAt}
-              onClearFilters={() => go((current) => withoutFilters("runs", current))}
+              onClearFilters={() =>
+                go((current) => {
+                  const cleared = withoutFilters("runs", current);
+                  return props.entities
+                    ? withoutFilters("rollup", cleared, { entities: true })
+                    : cleared;
+                })
+              }
               onWiden={
                 props.widerPreset
                   ? {
@@ -200,16 +209,44 @@ export function RunsView(props: RunsViewProps) {
             aria-busy={pending || undefined}
           >
             {stats && volume ? (
-              <>
-                <StatRow stats={stats.map(toStatProps)} />
-                <VolumeChart
-                  model={volume}
-                  zoomed={timeWindow.preset === "custom" && !isToday(timeWindow)}
-                  pending={false}
-                  onSelectDays={(days) => go((current) => withSelectedDays(current, days))}
-                  onReset={() => go((current) => withDefaultRange(current))}
+              // RC-752: the same summary card as the Sessions tab (TabSummaryView): numbers beside a small volume chart.
+              <section
+                aria-label={`${noun.many} summary`}
+                data-tab-summary="turns"
+                className="flex flex-col gap-3 rounded-lg border border-line bg-raised px-4 py-3"
+              >
+                {timeWindow.preset === "custom" && !isToday(timeWindow) ? (
+                  <div className="flex justify-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => go((current) => withDefaultRange(current))}
+                    >
+                      Reset range
+                    </Button>
+                  </div>
+                ) : null}
+                <SummaryNumbers
+                  figures={stats.map((stat) => (
+                    <SummaryFigure
+                      key={stat.id}
+                      label={stat.label}
+                      value={stat.value}
+                      hint={stat.hint}
+                      danger={stat.tone === "danger"}
+                    />
+                  ))}
+                  chart={
+                    <MiniVolume
+                      model={volume}
+                      unit={noun.lowerMany}
+                      errorLabel="failed"
+                      className="min-w-60 flex-1"
+                      onSelectDays={(days) => go((current) => withSelectedDays(current, days))}
+                    />
+                  }
                 />
-              </>
+              </section>
             ) : (
               // A failed read is a Callout in place; the rest of the page still works (DESIGN.md, Errors).
               <Callout
@@ -285,17 +322,4 @@ function searchWithout(search: string, name: string): string {
   params.delete(name);
   const text = params.toString();
   return text ? `?${text}` : "";
-}
-
-function toStatProps(stat: RunStat): StatProps {
-  return {
-    label: stat.label,
-    value: stat.value,
-    hint:
-      stat.tone === "danger" && stat.hint ? (
-        <StatusDot tone="danger" label={stat.hint} className="text-xs" />
-      ) : (
-        stat.hint
-      ),
-  };
 }

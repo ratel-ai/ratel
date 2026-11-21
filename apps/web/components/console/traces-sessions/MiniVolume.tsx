@@ -3,7 +3,11 @@
 import { cn } from "@ratel/design-system/cn";
 import { useState } from "react";
 import { formatClock, formatDay, formatInteger } from "@/lib/synthesis/traces/v2/format";
-import type { VolumeBucket, VolumeModel } from "@/lib/synthesis/traces/v2/volume";
+import {
+  canSelectDays,
+  type VolumeBucket,
+  type VolumeModel,
+} from "@/lib/synthesis/traces/v2/volume";
 
 /** Chart height in px (DESIGN.md, Data visualization: big enough to read at a glance). */
 export const MINI_VOLUME_HEIGHT = 56;
@@ -13,18 +17,22 @@ const GAP = 1;
 /**
  * The volume chart of a Traces tab's summary: one bar per bucket of the
  * timeframe in the data color, its errors in red on the baseline, start and
- * end labels under it, and the hovered bar's value above it.
+ * end labels under it, and the hovered bar's value above it. With
+ * `onSelectDays`, a click on a bar narrows the window to its days, when the
+ * window has more than one day to narrow to.
  */
 export function MiniVolume({
   model,
   unit,
   errorLabel,
   className,
+  onSelectDays,
 }: {
   model: VolumeModel;
   unit: string;
   errorLabel: string;
   className?: string;
+  onSelectDays?: (days: { from: string; to: string }) => void;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
   const buckets = model.buckets;
@@ -35,6 +43,7 @@ export function MiniVolume({
   const active = hovered === null ? null : buckets[hovered];
   const first = buckets[0];
   const last = buckets[buckets.length - 1];
+  const select = onSelectDays && canSelectDays(buckets) ? onSelectDays : null;
 
   return (
     <figure
@@ -54,6 +63,7 @@ export function MiniVolume({
                 , {formatInteger(active.errorCount)} {errorLabel}
               </span>
             ) : null}
+            {select ? <span className="text-fg-subtle"> · click to zoom</span> : null}
           </span>
         ) : model.totals.count === 0 ? (
           <span>No {unit} in this timeframe</span>
@@ -99,7 +109,11 @@ export function MiniVolume({
                 width={bar}
                 height={MINI_VOLUME_HEIGHT}
                 fill="transparent"
+                className={select ? "cursor-pointer" : undefined}
                 onMouseEnter={() => setHovered(index)}
+                onClick={
+                  select ? () => select({ from: bucket.fromDay, to: bucket.toDay }) : undefined
+                }
               />
               {total > failed ? (
                 <rect

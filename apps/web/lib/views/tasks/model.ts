@@ -10,6 +10,7 @@ import { taskFinish } from "@/lib/readings/trace-signals/workflows/finish";
 import { runsInFixedOrder } from "@/lib/readings/trace-signals/workflows/fixed-order";
 import { type WorkflowIconKey, workflowIcon } from "@/lib/readings/trace-signals/workflows/icons";
 import {
+  stepFallbackName,
   WORKFLOW_NAME_SEPARATOR,
   type WorkflowLabels,
   workflowDescription,
@@ -159,7 +160,8 @@ function readingOf(item: StoredWorkflow): TaskReading | null {
   return reading as unknown as TaskReading;
 }
 
-const nameOf = (names: ReadonlyMap<string, string>) => (id: string) => names.get(id) ?? id;
+const nameOf = (names: ReadonlyMap<string, string>) => (id: string) =>
+  names.get(id) ?? stepFallbackName(id);
 
 /** The route a finding's fix takes: the one the detector stored, else its kind's. */
 function fixRouteOf(record: SignalRecord): string {

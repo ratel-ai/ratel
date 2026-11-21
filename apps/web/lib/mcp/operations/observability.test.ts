@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { ToolsByName } from "@/lib/ingest/categorize";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchSuccess, dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
@@ -35,7 +36,7 @@ const stubDeps = {
   listTraceOperations: async () => [],
   getTracesIngestDiagnostics: async () => ({}),
   getDailyAggregates: async () => [],
-  getToolMetrics: async () => ({}),
+  getToolMetrics: async () => [],
   listRunTools: async () => new Map(),
   listRunAsks: async () => new Map(),
   loadTraceViewProps: async () => null,
@@ -145,6 +146,7 @@ test("list_traces pages with a cursor tied to its filters, sort and window", asy
   const filters = {
     rootName: "support",
     arm: "candidate",
+    conversationId: "conv-a",
     status: ["error"],
     sort: "duration",
     limit: 1,
@@ -157,6 +159,7 @@ test("list_traces pages with a cursor tied to its filters, sort and window", asy
   assert.equal(typeof first.data.nextCursor, "string");
   assert.equal(seen[0].rootName, "support");
   assert.equal(seen[0].arm, "candidate");
+  assert.equal(seen[0].conversation, "conv-a", "AOBS-3: the runs of one conversation");
   assert.deepEqual(seen[0].statuses, [2]);
   assert.equal(seen[0].sort, "duration");
   assert.equal(first.truncated, true);
@@ -444,4 +447,105 @@ test("get_trace's view gets the console trace page's TraceView props; without co
     "gen_ai.tool.name": "lookup_order",
     "error.type": "timeout",
   });
+});
+
+test("get_cost_by_tool returns one row per tool, keyed by its name, largest footprint first (AOBS-3)", async () => {
+  // One map per model call, as `event_metrics.tools_by_name` stores them.
+  const getToolMetrics = async (): Promise<ToolsByName[]> => [
+    { Bash: { calls: 2, tokens: 300 }, Read: { calls: 0, tokens: 50 } },
+    { Bash: { calls: 1, tokens: 100 }, search_capabilities: { calls: 1, tokens: 20 } },
+  ];
+  const result = (await dispatchWith(
+    "get_cost_by_tool",
+    {},
+    { getToolMetrics },
+  )) as DispatchSuccess & {
+    data: { count: number; total: number; tools: Array<Record<string, unknown>> };
+  };
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.tools, [
+    {
+      name: "Bash",
+      isGatewayMetaTool: false,
+      calls: 3,
+      tokens: 400,
+      usedTokens: 400,
+      unusedTokens: 0,
+    },
+    {
+      name: "Read",
+      isGatewayMetaTool: false,
+      calls: 0,
+      tokens: 50,
+      usedTokens: 0,
+      unusedTokens: 50,
+    },
+    {
+      name: "search_capabilities",
+      isGatewayMetaTool: true,
+      calls: 1,
+      tokens: 20,
+      usedTokens: 20,
+      unusedTokens: 0,
+    },
+  ]);
+  assert.deepEqual([result.data.count, result.data.total], [3, 3]);
+
+  const capped = (await dispatchWith(
+    "get_cost_by_tool",
+    { limit: 1 },
+    { getToolMetrics },
+  )) as DispatchSuccess & {
+    data: { count: number; total: number; tools: Array<{ name: string }> };
+  };
+  assert.deepEqual(
+    capped.data.tools.map((tool) => tool.name),
+    ["Bash"],
+  );
+  assert.deepEqual([capped.data.count, capped.data.total, capped.truncated], [1, 3, true]);
+});
+
+/** AOBS-5: `list_span_groups` takes the coding-agent groupings. */
+function spanGroups() {
+  const calls: Array<Record<string, unknown>> = [];
+  const operation = observabilityOperations({
+    ...stubDeps,
+    listTraceOperations: (async (_projectId: string, options: Record<string, unknown>) => {
+      calls.push(options);
+      return [];
+    }) as never,
+  }).find((candidate) => candidate.id === "list_span_groups")!;
+  const run = (args: Record<string, unknown>) =>
+    operation.execute(
+      {
+        auth,
+        projectId: PROJECT,
+        organizationId: "org-1",
+        logger: { info() {}, warn() {}, error() {} } as never,
+      },
+      operation.params.parse(args) as never,
+    );
+  return { calls, run };
+}
+
+test("list_span_groups groups by MCP server, command, skill and agent", async () => {
+  const { calls, run } = spanGroups();
+  for (const groupBy of ["server", "command", "skill", "agent"]) {
+    const result = await run({ groupBy });
+    assert.equal((result.data as { groupBy: string }).groupBy, groupBy);
+  }
+  assert.deepEqual(
+    calls.map((call) => call.groupBy),
+    ["server", "command", "skill", "agent"],
+  );
+});
+
+test("list_span_groups groups cost by chat, task and repo", async () => {
+  const { calls, run } = spanGroups();
+  for (const groupBy of ["chat", "task", "repo"]) await run({ groupBy });
+  assert.deepEqual(
+    calls.map((call) => call.groupBy),
+    ["chat", "task", "repo"],
+  );
 });

@@ -42,12 +42,14 @@ async function span(
   model: string | null,
   usage: { input: number | null; output: number | null; cached?: number; written?: number },
   costUsd: string | null = null,
+  extraAttributes: Record<string, unknown> = {},
 ): Promise<string> {
   spanSeq += 1;
   const id = `b0000000-0000-4000-8000-${String(spanSeq).padStart(12, "0")}`;
-  const attributes = usage.written
-    ? { "gen_ai.usage.cache_creation.input_tokens": usage.written }
-    : {};
+  const attributes = {
+    ...(usage.written ? { "gen_ai.usage.cache_creation.input_tokens": usage.written } : {}),
+    ...extraAttributes,
+  };
   await client.query(
     `insert into otel_spans (id, project_id, trace_id, span_id, name, kind, span_class, started_at, ended_at, duration_ms, status_code, model, input_tokens, output_tokens, cached_tokens, cost_usd, attributes)
      values ($1, $2, 'trace', $3, 'chat', 1, 'llm_call', now(), now(), 1, 0, $4, $5, $6, $7, $8, $9)`,
@@ -533,3 +535,34 @@ async function overOneDollar(db: Db, projectId: string): Promise<string[]> {
     (row) => row.trace_id,
   );
 }
+
+test("a stored call with no book price keeps, or gets, the cost its emitter sent (AOBS-3)", async () => {
+  const { client, db } = await setup();
+  try {
+    const usage = { input: 100_000, output: 0 };
+    const stored = await span(client, PROJECT, "my-own-model", usage, "0.420000", {
+      "ratel.usage.cost_usd": 0.42,
+    });
+    // As ingest: a first key that holds no amount gives way to the next one.
+    const missing = await span(client, PROJECT, "my-own-model", usage, null, {
+      "ratel.usage.cost_usd": "n/a",
+      "gen_ai.usage.cost": "0.07",
+    });
+    // The book wins over the emitter: gpt-5.5 at $5 per 1M input.
+    const priced = await span(client, PROJECT, "gpt-5.5", usage, "9.000000", {
+      "ratel.usage.cost_usd": 9,
+    });
+    // opus prices as claude-opus-5-5: $4 per 1M input.
+    const alias = await span(client, PROJECT, "opus", usage);
+
+    await repriceStored(db, { projectId: PROJECT });
+    assert.equal(await spanCost(client, stored), "0.420000");
+    assert.equal(await spanCost(client, priced), "0.500000");
+
+    await repriceUnpriced(db, { projectId: PROJECT });
+    assert.equal(await spanCost(client, missing), "0.070000");
+    assert.equal(await spanCost(client, alias), "0.400000");
+  } finally {
+    await client.close();
+  }
+});

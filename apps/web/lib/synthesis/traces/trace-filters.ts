@@ -15,6 +15,10 @@ export interface TraceFilter {
   tools?: readonly string[];
   services?: readonly string[];
   environments?: readonly string[];
+  /** Agents of the trace's spans (`agent_key`), behind `cloud-project-entities` (RC-790). */
+  agents?: readonly string[];
+  /** MCP servers of the trace's spans (`mcp_server`), behind `cloud-project-entities` (RC-790). */
+  mcpServers?: readonly string[];
   /** "failed": any span reported an error; "ok": none did. */
   status?: "failed" | "ok";
   minCostUsd?: number;
@@ -22,7 +26,16 @@ export interface TraceFilter {
 }
 
 export type TraceFilterFacetKey = "model" | "tool" | "service" | "environment";
-export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]>;
+/** The facets `cloud-project-entities` adds (RC-790). */
+export type TraceEntityFacetKey = "agent" | "server";
+/** `agent` and `server` are present only when the entity filters are on. */
+export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]> &
+  Partial<Record<TraceEntityFacetKey, TraceFacetValue[]>>;
+
+export interface TraceFilterFacetOptions {
+  /** `cloud-project-entities`: also read the agent and MCP server values. Off, the query is as before. */
+  entities?: boolean;
+}
 
 export interface TraceFilterWindow {
   since?: Date;
@@ -38,6 +51,7 @@ export const EMPTY_TRACE_FILTER_FACETS: TraceFilterFacets = {
   environment: [],
 };
 const FACET_KEYS: readonly TraceFilterFacetKey[] = ["model", "tool", "service", "environment"];
+const ENTITY_FACET_KEYS: readonly TraceEntityFacetKey[] = ["agent", "server"];
 
 /**
  * The rollup condition for a filter on the summary row aliased `s`, or null
@@ -52,6 +66,8 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
     anyOf(sql`s.tools`, filter.tools),
     oneOf(sql`s.service_name`, filter.services),
     oneOf(sql`s.environment`, filter.environments),
+    anyOf(sql`s.agents`, filter.agents),
+    anyOf(sql`s.mcp_servers`, filter.mcpServers),
     filter.status === "failed"
       ? sql`s.has_error`
       : filter.status === "ok"
@@ -86,16 +102,18 @@ export async function getTraceFilterFacets(
   window: TraceFilterWindow,
   db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
   limit = TRACE_FILTER_FACET_LIMIT,
+  options: TraceFilterFacetOptions = {},
 ): Promise<TraceFilterFacets> {
-  const result = await db.execute(traceFacetsQuery(projectId, window, limit));
+  const result = await db.execute(traceFacetsQuery(projectId, window, limit, options));
   const rows = ((result as unknown as { rows?: unknown[] }).rows ??
     (result as unknown as unknown[])) as Array<{
-    facet: TraceFilterFacetKey;
+    facet: TraceFilterFacetKey | TraceEntityFacetKey;
     value: string;
     count: number | string;
   }>;
+  const keys = options.entities ? [...FACET_KEYS, ...ENTITY_FACET_KEYS] : FACET_KEYS;
   const facets = Object.fromEntries(
-    FACET_KEYS.map((key) => [key, [] as TraceFacetValue[]]),
+    keys.map((key) => [key, [] as TraceFacetValue[]]),
   ) as TraceFilterFacets;
   for (const row of rows) facets[row.facet]?.push({ value: row.value, count: Number(row.count) });
   return facets;
@@ -113,10 +131,15 @@ export function defaultTraceFilterFacetWindow(now: Date): TraceFilterWindow {
 }
 
 /** The facet query: the window's rollup rows once, then each property's top values. */
-export function traceFacetsQuery(projectId: string, window: TraceFilterWindow, limit: number): SQL {
+export function traceFacetsQuery(
+  projectId: string,
+  window: TraceFilterWindow,
+  limit: number,
+  { entities = false }: TraceFilterFacetOptions = {},
+): SQL {
   return sql`
     with w as (
-      select s.models, s.tools, s.service_name, s.environment
+      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers` : sql``}
       from otel_trace_summaries s
       where s.project_id = ${projectId}
         ${window.since ? sql`and s.started_at >= ${window.since.toISOString()}::timestamptz` : sql``}
@@ -130,6 +153,14 @@ export function traceFacetsQuery(projectId: string, window: TraceFilterWindow, l
       select 'service', w.service_name, count(*)::int from w where w.service_name is not null group by w.service_name
       union all
       select 'environment', w.environment, count(*)::int from w where w.environment is not null group by w.environment
+      ${
+        entities
+          ? sql`union all
+      select 'agent', v, count(*)::int from w, unnest(w.agents) v group by v
+      union all
+      select 'server', v, count(*)::int from w, unnest(w.mcp_servers) v group by v`
+          : sql``
+      }
     ),
     ranked as (
       select facet, value, count, row_number() over (partition by facet order by count desc, value collate "C") as rank

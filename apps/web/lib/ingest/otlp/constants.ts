@@ -92,6 +92,20 @@ export const RATEL = {
   searchQuery: "ratel.search.query",
 } as const;
 
+/**
+ * Coding-agent dimensions of a span (AOBS-5): which MCP server, shell command,
+ * skill and agent it belongs to. `mcp.server.name` is an OpenTelemetry
+ * proposal; the `ratel.*` keys are not published in the Ratel SDK yet.
+ */
+export const AGENT_DIMENSION = {
+  mcpServer: "mcp.server.name",
+  toolType: "gen_ai.tool.type",
+  toolBaseName: "ratel.tool.base_name",
+  toolCommand: "ratel.tool.command",
+  skillName: "ratel.skill.name",
+  agentName: "gen_ai.agent.name",
+} as const;
+
 /** `ratel.catalog.definition` log-record vocabulary. */
 export const RATEL_CATALOG = {
   definition: "ratel.catalog.definition",

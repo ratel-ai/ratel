@@ -88,8 +88,8 @@ export function buildTraceContentView(spans: readonly TraceContentSpan[]): Trace
     }
 
     if (span.spanClass !== "tool") continue;
-    const argumentsValue = valueOrNull(structuredAttribute(attributes, GEN_AI.toolCallArguments));
-    const resultValue = valueOrNull(structuredAttribute(attributes, GEN_AI.toolCallResult));
+    const argumentsValue = toolPayload(attributes, GEN_AI.toolCallArguments);
+    const resultValue = toolPayload(attributes, GEN_AI.toolCallResult);
     toolCalls.push({
       id: stringAttribute(attributes, GEN_AI.toolCallId) ?? span.spanId,
       name: stringAttribute(attributes, GEN_AI.toolName) ?? span.name,
@@ -105,12 +105,72 @@ export function buildTraceContentView(spans: readonly TraceContentSpan[]): Trace
   return { messages, toolCalls, contentCaptured };
 }
 
-/** Span content wins when the spans carry any; the payload (`lib/traces/payload-content.ts`) fills in when they carry none. */
+/**
+ * Span content wins when the spans carry any; the payload (`lib/traces/payload-content.ts`) fills in when they carry none.
+ * Spans that carry only tool content (an `execute_tool` span keeps its arguments and result, RC-725) and no message
+ * join the payload instead: its messages, with each tool call completed from its span (AOBS-5).
+ */
 export function preferSpanContent(
   spans: TraceContentView,
   payload: TraceContentView | null,
 ): TraceContentView {
-  return !spans.contentCaptured && payload?.contentCaptured ? payload : spans;
+  if (!payload?.contentCaptured) return spans;
+  if (!spans.contentCaptured) return payload;
+  if (spans.messages.length > 0) return spans;
+  return {
+    messages: payload.messages,
+    toolCalls: joinToolCalls(spans.toolCalls, payload.toolCalls),
+    contentCaptured: true,
+  };
+}
+
+/**
+ * The payload's tool calls in their order, each completed from its span (the
+ * span has the real name, timing, status, and the arguments and result when
+ * captured), then the span calls the payload did not name. A span is matched
+ * by its call id; a span that carries none (its id is its span id) is matched
+ * to the first payload call of the same tool. Each span is used once.
+ */
+function joinToolCalls(
+  spanCalls: readonly TraceToolCallView[],
+  payloadCalls: readonly TraceToolCallView[],
+): TraceToolCallView[] {
+  const used = new Set<TraceToolCallView>();
+  const take = (matches: (span: TraceToolCallView) => boolean): TraceToolCallView | undefined => {
+    const span = spanCalls.find((candidate) => !used.has(candidate) && matches(candidate));
+    if (span) used.add(span);
+    return span;
+  };
+  const joined = payloadCalls.map((call): TraceToolCallView => {
+    const span =
+      take((candidate) => candidate.id === call.id) ??
+      take((candidate) => candidate.id === candidate.spanId && sameTool(candidate.name, call.name));
+    if (!span) return call;
+    return {
+      ...call,
+      ...span,
+      id: call.id,
+      arguments: span.arguments ?? call.arguments,
+      result: span.result ?? call.result,
+    };
+  });
+  return [...joined, ...spanCalls.filter((call) => !used.has(call))];
+}
+
+/** A span names a per-command tool `Bash:git`; the model's own call names it `Bash`. */
+function sameTool(spanName: string, payloadName: string): boolean {
+  return spanName === payloadName || spanName.startsWith(`${payloadName}:`);
+}
+
+/**
+ * A tool span's arguments or result: parsed when it is JSON, else the text
+ * itself (a shell command's output is plain text), else null.
+ */
+function toolPayload(attributes: Readonly<Record<string, unknown>>, key: string): unknown | null {
+  const structured = structuredAttribute(attributes, key);
+  if (structured !== undefined) return structured;
+  const text = stringAttribute(attributes, key);
+  return text !== undefined && text.trim() !== "" ? text : null;
 }
 
 function structuredAttribute(
@@ -169,8 +229,4 @@ function blockText(block: ContentBlock): string[] {
   if (block.type === "image") return ["[Image attachment]"];
   if (block.type === "file") return ["[File attachment]"];
   return [];
-}
-
-function valueOrNull(value: AttrValue | undefined): AttrValue | null {
-  return value === undefined ? null : value;
 }

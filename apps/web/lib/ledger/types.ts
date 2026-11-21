@@ -1,4 +1,4 @@
-import type { TURN_EVENT_TYPES } from "@/lib/ledger/constants";
+import type { AGENT_RUN_EVENT_TYPE, TURN_EVENT_TYPES } from "@/lib/ledger/constants";
 
 /**
  * Shared shapes of the turn ledger. Three layers:
@@ -14,12 +14,14 @@ import type { TURN_EVENT_TYPES } from "@/lib/ledger/constants";
  *   read a replay's in-memory turns and the stored ledger the same way.
  */
 
-export type TurnEventType = (typeof TURN_EVENT_TYPES)[number];
+/** A search, an invocation event, or (OTLP lane, RC-742) one agent run. */
+export type TurnEventType = (typeof TURN_EVENT_TYPES)[number] | typeof AGENT_RUN_EVENT_TYPE;
 export type TurnLane = "runtime" | "otlp";
 export type TurnSource = "declared" | "inferred" | "otlp";
 export type TurnStatus = "open" | "closed";
 export type TurnEndedBy = "next_turn" | "gap" | "cap" | "idle";
-export type StepKind = "search" | "invoke";
+/** `agent`: an agent run itself (RC-742), neither a search nor a tool call. */
+export type StepKind = "search" | "invoke" | "agent";
 export type SearchType = "search" | "skill_search" | "gateway_search";
 export type TargetType = "tool" | "skill";
 export type InvokeOutcome = "ok" | "error" | "unknown";
@@ -53,6 +55,14 @@ export interface TurnEventRow {
    * every other row.
    */
   rootTool?: boolean;
+  /** An `agent_run` row whose run failed. Absent on every other row. */
+  failed?: boolean;
+  /**
+   * An `agent_run` row's agent name (`gen_ai.agent.name`, RC-747): its agent
+   * step's `targetId`, with no target type, so no tool fact reads it. Absent
+   * or null on every other row.
+   */
+  agent?: string | null;
 }
 
 /** One `trace_event_hits` row; `rank` is 0-based as stored. */
@@ -66,9 +76,10 @@ export interface TurnEventHit {
 /**
  * How an event takes part in a turn: a search, the start of an invocation, the
  * end or error closing one, or a complete invocation in one event
- * (`skill_invoke`, `gateway_invoke`, `gateway_error`).
+ * (`skill_invoke`, `gateway_invoke`, `gateway_error`), or a whole agent run
+ * (`agent_run`).
  */
-export type EventRole = "search" | "start" | "end" | "single";
+export type EventRole = "search" | "start" | "end" | "single" | "run";
 
 export interface NormalizedEvent {
   id: string;

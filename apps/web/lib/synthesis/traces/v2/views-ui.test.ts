@@ -127,17 +127,17 @@ test("the Runs page is one frame: a single h1, its tabs, one filter row, the num
   assert.equal(html.match(/role="toolbar"/g)?.length, 1, "one filter row, not three");
   assert.match(html, /role="search"/);
   assert.equal(html.match(/<dt/g)?.length, 5, "five key numbers");
+  // RC-752: the numbers and the chart sit in the Sessions tab's summary card.
   assert.match(
     html,
-    /role="listbox"[^>]*aria-label="Turns over time: 60 turns, 2 failed\."[^>]*aria-multiselectable="true"/,
+    /<section aria-label="Turns summary" data-tab-summary="turns" class="[^"]*rounded-lg border border-line bg-raised/,
   );
-  assert.doesNotMatch(html, /role="img"/, "an interactive chart is not an image");
-  assert.match(html, /class="[^"]*touch-pan-y/, "vertical swipes still scroll the page on phones");
+  assert.match(html, /data-mini-volume="true" aria-label="60 turns, 2 failed, from /);
   assert.match(
     html,
-    /role="option" aria-selected="false" class="sr-only">Oct 9, 10:00 to 12:00\u00a0UTC: 36 turns, 2 failed</,
+    /<dd class="text-xs text-fg-subtle tabular-nums">2 failed<\/dd>/,
+    "a number's hint sits under it",
   );
-  assert.match(html, />Times in UTC</);
   assert.match(html, /<caption class="sr-only">Turns<\/caption>/);
   assert.match(html, /aria-label="Time window: Last 7 days"/);
   assert.doesNotMatch(html, /uppercase/, "no tracked eyebrows");
@@ -159,16 +159,15 @@ test("a one-day window on today reads as Today; other custom windows show their 
       points: [{ day: "2026-10-15", hour: 9, count: 4, errorCount: 0 }],
     }),
   });
-  assert.match(
-    oneDay,
-    /role="listbox"[^>]*aria-readonly="true"/,
+  assert.equal(
+    oneDay.includes('fill="transparent" class="cursor-pointer"'),
+    false,
     "one UTC day has nothing narrower to select",
   );
-  assert.doesNotMatch(oneDay, /aria-multiselectable/);
-  assert.match(
-    oneDay,
-    /Use the left and right arrow keys to read each bar\.</,
-    "and does not offer to select",
+  assert.equal(
+    renderRuns("?range=7d").includes('fill="transparent" class="cursor-pointer"'),
+    true,
+    "a wider window zooms on a bar",
   );
   const zoomed = renderRuns("?range=custom&from=2026-10-09&to=2026-10-11", {
     timeWindow: { preset: "custom", from: "2026-10-09", to: "2026-10-11", today: "2026-10-15" },
@@ -224,7 +223,7 @@ test("numbers that did not load say so with a retry, never as zeros; the list st
   assert.match(html, /These numbers did not load/);
   assert.match(html, />Try again</);
   assert.doesNotMatch(html, /No failed turns/);
-  assert.doesNotMatch(html, /role="listbox"/);
+  assert.doesNotMatch(html, /data-mini-volume/);
   assert.equal(html.match(/<dt/g), null, "no key numbers at all");
   assert.match(html, /<caption class="sr-only">Turns<\/caption>/);
   const bare = renderRuns("?range=7d", { detailsUnavailable: true });
@@ -297,6 +296,15 @@ function otelSpan(overrides: Partial<OtelSpan> & { spanId: string; at?: number }
     experimentAttrs: {},
     attributes: {},
     attrsTruncated: false,
+    agentKey: null,
+    agentSource: null,
+    callerAgentKey: null,
+    mcpServer: null,
+    mcpServerSource: null,
+    mcpRole: null,
+    mcpSessionId: null,
+    events: null,
+    links: null,
     ...rest,
   };
 }

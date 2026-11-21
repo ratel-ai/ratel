@@ -1,6 +1,6 @@
 import { attrString } from "./anyvalue";
 import { parsedValue } from "./attr-resolve";
-import { EXECUTE_TOOL, GEN_AI, NON_ROUND_TRIP_OPERATIONS } from "./constants";
+import { AGENT_DIMENSION, EXECUTE_TOOL, GEN_AI, NON_ROUND_TRIP_OPERATIONS } from "./constants";
 import { isAnchor } from "./group";
 import type { DecodedSpan } from "./types";
 
@@ -62,6 +62,33 @@ export function toolNameOf(span: DecodedSpan): string | null {
     }
   }
   return null;
+}
+
+const MAX_DIMENSION = 256;
+/**
+ * Claude Code's and Codex's name of an MCP tool: `mcp__<server>__<tool>`. A
+ * server name that itself holds `__` is cut at the first one; `mcp.server.name`
+ * is read first, so only an emitter that sends the name alone is affected.
+ */
+const MCP_TOOL_NAME = /^mcp__(.+?)__./;
+
+/**
+ * The MCP server a tool call went to (AOBS-5): `mcp.server.name`, else the
+ * server inside a `mcp__<server>__<tool>` name, for emitters that send only
+ * the name. Null for a tool that is not an MCP tool.
+ */
+export function mcpServerOf(span: DecodedSpan, toolName: string | null): string | null {
+  const named = attrString(span.attributes, AGENT_DIMENSION.mcpServer)?.trim();
+  if (named) return named.slice(0, MAX_DIMENSION);
+  const parsed = toolName?.match(MCP_TOOL_NAME)?.[1];
+  return parsed ? parsed.slice(0, MAX_DIMENSION) : null;
+}
+
+/** The skill a span loaded or ran under (`ratel.skill.name`, AOBS-5), or null. */
+export function skillNameOf(span: DecodedSpan): string | null {
+  return (
+    attrString(span.attributes, AGENT_DIMENSION.skillName)?.trim().slice(0, MAX_DIMENSION) || null
+  );
 }
 
 /** A model round trip (one chat / completion call), in any dialect. */

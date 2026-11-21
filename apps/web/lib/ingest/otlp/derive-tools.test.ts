@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { indexSpans } from "./attr-resolve";
 import {
   deriveToolInvocations,
   isEmptyResult,
   resultFailureOf,
   toolErrorType,
 } from "./derive-tools";
+import { deriveSpanDimensions } from "./dimensions";
 import type { AttrMap, DecodedSpan } from "./types";
+
+/** The tool rows as ingest builds them: with the export's span dimensions. */
+function withDimensions(spans: DecodedSpan[]) {
+  return deriveToolInvocations(spans, deriveSpanDimensions(spans, indexSpans(spans)));
+}
 
 const T0 = Date.UTC(2026, 8, 30, 12, 0, 0);
 const TRACE = "a".repeat(32);
@@ -443,4 +450,146 @@ test("a plain-text result that says the tool does not exist is recorded beside t
   ]) {
     assert.equal(rowFor(fine).payload.result_no_such_tool, undefined, fine);
   }
+});
+
+test("an MCP tool row names its server in `server`; a tool row with no MCP server keeps it null (RC-808)", () => {
+  const root = span({
+    spanId: "9".repeat(16),
+    name: "invoke_agent pm",
+    attributes: { "gen_ai.operation.name": "invoke_agent" },
+  });
+  const [prefixed] = withDimensions([
+    root,
+    span({
+      parentSpanId: "9".repeat(16),
+      attributes: {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "github__create_issue",
+      },
+    }),
+  ]);
+  assert.equal(prefixed.server, "github");
+  assert.equal(
+    prefixed.payload.agent,
+    "invoke_agent pm",
+    "the payload agent keeps its old rule: the span name",
+  );
+
+  const [plain] = withDimensions([
+    span({
+      attributes: { "gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "find_task" },
+    }),
+  ]);
+  assert.equal(plain.server, null);
+  assert.equal(
+    "agent" in plain.payload,
+    false,
+    "no agent attribute: the payload names none, as before",
+  );
+
+  const [provided] = withDimensions([
+    span({
+      kind: 2,
+      name: "tools/call find_task",
+      attributes: { "mcp.method.name": "tools/call", "gen_ai.tool.name": "find_task" },
+      resourceAttributes: { "service.name": "tasks-mcp" },
+    }),
+  ]);
+  assert.equal(provided.server, "tasks-mcp", "the server's own span: its service");
+
+  for (const row of [prefixed, plain, provided]) {
+    for (const key of ["agentKey", "agentSource", "mcpServer", "mcpServerSource", "mcpRole"]) {
+      assert.equal(key in row, false, `a row has no ${key} field: trace_events has no such column`);
+    }
+  }
+});
+
+test("a framework tool span takes the MCP server of the MCP client span under it (RC-808)", () => {
+  const [row] = withDimensions([
+    span({
+      attributes: { "gen_ai.operation.name": "execute_tool", "gen_ai.tool.name": "find_task" },
+    }),
+    span({
+      spanId: "2".repeat(16),
+      parentSpanId: "1".repeat(16),
+      kind: 3,
+      name: "tools/call find_task",
+      attributes: {
+        "mcp.method.name": "tools/call",
+        "gen_ai.tool.name": "find_task",
+        "ratel.upstream.server": "tasks",
+      },
+    }),
+  ]);
+  assert.equal(row.spanId, "1".repeat(16));
+  assert.equal(row.server, "tasks");
+});
+
+test("without the export's dimensions a tool row is the row of main: no server, the same payload agent (RC-811)", () => {
+  const spans = [
+    span({
+      spanId: "9".repeat(16),
+      name: "invoke_agent pm",
+      attributes: { "gen_ai.operation.name": "invoke_agent" },
+    }),
+    span({
+      parentSpanId: "9".repeat(16),
+      attributes: {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "github__create_issue",
+      },
+    }),
+  ];
+  const [bare] = deriveToolInvocations(spans);
+  const [full] = withDimensions(spans);
+  assert.equal(bare.server, null, "the dimensions are never derived inside the builder");
+  assert.equal(bare.payload.agent, "invoke_agent pm");
+  assert.deepEqual({ ...full, server: null }, bare, "only `server` comes from the dimensions");
+});
+
+// AOBS-5: the MCP server and the skill of a tool call.
+test("an MCP tool row carries its server from mcp.server.name", () => {
+  const [row] = deriveToolInvocations([
+    span({
+      name: "execute_tool mcp__beluga_board__task_update",
+      attributes: {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "mcp__beluga_board__task_update",
+        "gen_ai.tool.type": "extension",
+        "mcp.server.name": "beluga_board",
+        "ratel.tool.base_name": "task_update",
+      },
+    }),
+  ]);
+  assert.equal(row.server, "beluga_board");
+  assert.equal(row.skillId, null);
+  assert.equal(row.toolId, "mcp__beluga_board__task_update");
+});
+
+test("the server falls back to the mcp__server__tool name", () => {
+  const [row] = deriveToolInvocations([
+    span({
+      attributes: {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "mcp__claude_ai_Slack__slack_read_channel",
+      },
+    }),
+  ]);
+  assert.equal(row.server, "claude_ai_Slack");
+});
+
+test("a Skill tool row carries the skill's name", () => {
+  const [row] = deriveToolInvocations([
+    span({
+      attributes: {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": "Skill",
+        "ratel.skill.name": "pr-review",
+        "ratel.skill.source": "userSettings",
+        "ratel.skill.trigger": "model",
+      },
+    }),
+  ]);
+  assert.equal(row.skillId, "pr-review");
+  assert.equal(row.server, null);
 });

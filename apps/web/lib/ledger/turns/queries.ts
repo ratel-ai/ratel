@@ -18,6 +18,7 @@ import { jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
 import {
+  AGENT_RUN_EVENT_TYPE,
   TURN_BUILD_DUE_LIMIT,
   TURN_BUILD_ERROR_BACKOFF_MS,
   TURN_BUILD_PAGE_LIMIT,
@@ -119,12 +120,18 @@ export interface TurnEventPageRow extends TurnEventRow {
  * `>` cursor would then skip the rest of it forever. When a page comes back full, the
  * remainder of the last timestamp is appended, so the cursor always lands on a complete
  * boundary. A page is therefore at most `limit + one batch`.
+ *
+ * `types` defaults to {@link TURN_EVENT_TYPES}, the partial index's list. A
+ * project with `FF_TOOL_RUN_INSIGHTS` on also reads agent runs
+ * (`TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742); that wider list cannot use
+ * the partial index.
  */
 export async function listTurnEventsPage(
   projectId: string,
   since: Date | string,
   db: TraceTurnsDb = getDb(),
   limit: number = TURN_BUILD_PAGE_LIMIT,
+  types: readonly string[] = TURN_EVENT_TYPES,
 ): Promise<TurnEventPageRow[]> {
   const after = cursorValue(since);
   const columns = {
@@ -149,8 +156,14 @@ export async function listTurnEventsPage(
     endUserId: traceEvents.endUserId,
     // Set by OTLP ingest on a tool call that is its trace's root span.
     rootTool: sql<boolean>`coalesce((${traceEvents.payload} ->> 'root_tool') = 'true', false)`,
+    // An agent run that failed (RC-742).
+    failed: sql<boolean>`(${traceEvents.type} = ${AGENT_RUN_EVENT_TYPE} and ${traceEvents.errorMessage} is not null)`,
+    // An agent run's agent name (RC-747): its step's target id.
+    agent: sql<
+      string | null
+    >`case when ${traceEvents.type} = ${AGENT_RUN_EVENT_TYPE} then ${traceEvents.payload} ->> 'agent' end`,
   };
-  const inTypes = inArray(traceEvents.type, [...TURN_EVENT_TYPES]);
+  const inTypes = inArray(traceEvents.type, [...types]);
   const eventTime = sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
   const page = await db
     .select(columns)

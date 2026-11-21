@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import type { ParsedTraceEvent } from "@/lib/ingest/trace-events/parse";
 import { attrBool, attrString } from "./anyvalue";
 import {
-  AGENT_KEYS,
   ancestorsOf,
   firstString,
   indexSpans,
@@ -13,9 +12,21 @@ import {
   USER_KEYS,
 } from "./attr-resolve";
 import { GEN_AI } from "./constants";
+import {
+  mcpServerOfCall,
+  NO_SPAN_DIMENSIONS,
+  namedAgentOf,
+  type SpanDimensionsById,
+} from "./dimensions";
 import { promptOf } from "./prompt-text";
 import { plausibleOccurredAt } from "./reconstruct";
-import { type ToolDialect, toolNameOf, toolSpanDialect } from "./span-facts";
+import {
+  mcpServerOf,
+  skillNameOf,
+  type ToolDialect,
+  toolNameOf,
+  toolSpanDialect,
+} from "./span-facts";
 import type { DecodedSpan } from "./types";
 
 /**
@@ -205,15 +216,6 @@ function insideAnotherToolSpan(span: DecodedSpan, byId: ReadonlyMap<string, Deco
   return ancestorsOf(span, byId).some((a) => toolSpanDialect(a) !== null);
 }
 
-function agentOf(span: DecodedSpan, byId: ReadonlyMap<string, DecodedSpan>): string | null {
-  const named = resolveUp(span, byId, AGENT_KEYS);
-  if (named) return named.slice(0, MAX_ID);
-  const invoker = ancestorsOf(span, byId).find(
-    (a) => attrString(a.attributes, GEN_AI.operationName) === "invoke_agent",
-  );
-  return invoker ? invoker.name.slice(0, MAX_ID) : null;
-}
-
 /** The conversation id up the span, else the MCP transport session. */
 export function sessionOf(
   span: DecodedSpan,
@@ -278,8 +280,18 @@ function importedAsk(span: DecodedSpan, byId: ReadonlyMap<string, DecodedSpan>):
   return promptOf(root.attributes);
 }
 
-/** Every tool-call span in the export as an `invoke_end` / `invoke_error` row. */
-export function deriveToolInvocations(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
+/**
+ * Every tool-call span in the export as an `invoke_end` / `invoke_error` row.
+ * `dimensions` is the export's span dimensions, which ingest derives one time
+ * (`lib/otlp/dimensions`): a row takes its `server` from them. They are never
+ * derived here: a span they hold no MCP server for takes it from
+ * `mcp.server.name` or its `mcp__server__tool` name (AOBS-5). Each row also
+ * names its skill. The payload's agent does not depend on the dimensions.
+ */
+export function deriveToolInvocations(
+  spans: readonly DecodedSpan[],
+  dimensions: SpanDimensionsById = NO_SPAN_DIMENSIONS,
+): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
   const childrenOf = childrenIndex(spans);
   const out: ParsedTraceEvent[] = [];
@@ -289,7 +301,23 @@ export function deriveToolInvocations(spans: readonly DecodedSpan[]): ParsedTrac
     if (insideAnotherToolSpan(span, byId)) continue;
     const toolId = toolNameOf(span);
     if (!toolId) continue;
-    out.push(toolRow(span, byId, dialect, toolId, callSpanId(span, byId, childrenOf)));
+    const callSpan = callSpanId(span, byId, childrenOf);
+    // The MCP client span under a framework's tool span names the server.
+    const server = mcpServerOfCall(dimensions.get(span.spanId), dimensions.get(callSpan));
+    const row = toolRow(
+      span,
+      byId,
+      dialect,
+      toolId,
+      callSpan,
+      namedAgentOf(span, byId)?.name ?? null,
+      server,
+    );
+    out.push({
+      ...row,
+      server: row.server ?? mcpServerOf(span, toolId),
+      skillId: skillNameOf(span),
+    });
   }
   return out;
 }
@@ -300,6 +328,8 @@ function toolRow(
   dialect: ToolDialect,
   toolId: string,
   callSpan: string,
+  agent: string | null,
+  server: string | null,
 ): ParsedTraceEvent {
   // A call can fail without saying so on the span: its result says it instead.
   const errorType = toolErrorType(span) ?? resultFailure(span);
@@ -316,7 +346,6 @@ function toolRow(
   const tookMs = startOk ? Math.max(0, Math.round(span.endUnixMs - span.startUnixMs)) : null;
   const empty = errorType ? null : resultEmpty(span);
   const argHash = argumentHash(span);
-  const agent = agentOf(span, byId);
   const ask = importedAsk(span, byId);
   return {
     ingestSource: "otlp",
@@ -339,7 +368,8 @@ function toolRow(
     errorMessage: errorType,
     topK: null,
     hitCount: null,
-    server: null,
+    // The MCP server the call reached or, on the server's own span, the server (RC-808).
+    server,
     searchId: null,
     correlationId: null,
     catalogVersion: null,

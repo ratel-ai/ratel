@@ -18,6 +18,7 @@ import {
   mapToolDefinitions,
   systemFromInstructions,
 } from "./content";
+import { emitterCostUsd } from "./emitter-cost";
 import type { AttrMap, DecodedSpan, GroupedCall } from "./types";
 
 /**
@@ -561,17 +562,18 @@ function rowOf(
   const inputTokens = usage?.input_tokens ?? null;
   const outputTokens = usage?.output_tokens ?? null;
   const latencyMs = e.latency_ms != null ? Math.round(e.latency_ms) : null;
+  // As `toOtelSpanRows`: the book first, then the emitter's own cost (AOBS-3).
   const cost =
-    prices === PRICES_UNKNOWN
+    prices === PRICES_UNKNOWN || !usage
       ? null
-      : costFor(
+      : (costFor(
           e.model,
-          usage && {
+          {
             ...usage,
             cache_write_tokens: attrNumber(call.anchor.attributes, GEN_AI.usageCacheCreation),
           },
           prices,
-        );
+        ) ?? emitterCostUsd(call.anchor.attributes));
   const costUsd = cost != null ? cost.toString() : null;
 
   // Every OTLP call counts only the tool calls it produced (ToolCallScope).

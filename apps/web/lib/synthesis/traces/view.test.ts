@@ -36,6 +36,9 @@ test("trace views serialize dates without formatting or coercing raw values", ()
   delete clientSpan.id;
   delete clientSpan.projectId;
   delete clientSpan.traceId;
+  // AOBS-7: the turn view reads events from its run metrics, not from each span.
+  delete clientSpan.events;
+  delete clientSpan.links;
   delete clientSpan.startedAt;
   delete clientSpan.endedAt;
   assert.deepEqual(toTraceSpanView(span), {
@@ -678,6 +681,15 @@ function otelSpan(overrides: Partial<OtelSpan> = {}): OtelSpan {
     experimentAttrs: {},
     attributes: { "gen_ai.operation.name": "chat" },
     attrsTruncated: false,
+    agentKey: null,
+    agentSource: null,
+    callerAgentKey: null,
+    mcpServer: null,
+    mcpServerSource: null,
+    mcpRole: null,
+    mcpSessionId: null,
+    events: null,
+    links: null,
     ...overrides,
   };
 }

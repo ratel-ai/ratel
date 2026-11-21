@@ -45,8 +45,12 @@ type TestDb = TraceMaintenanceDb &
   NonNullable<Parameters<typeof insertOtelLogs>[2]> &
   NonNullable<Parameters<typeof refreshTraceSummaries>[1]>;
 
+// Upstream shares one database among the read-only cases (`sharedReadOnlyDatabase`,
+// not in this test-support): here each case gets a fresh one, as before.
+const readOnlySetup = setup;
+
 test("getTraceSpans returns only the requested project's trace in stable span order", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -96,11 +100,10 @@ test("getTraceSpans returns only the requested project's trace in stable span or
       { projectId: PROJECT_ID, spanId: spanId(3), name: "tied-child" },
     ],
   );
-  await client.close();
 });
 
 test("trace span loading caps an oversized trace and reports truncation", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const rows = Array.from({ length: 5_001 }, (_, index) =>
     span({
       id: uuid(index + 1),
@@ -115,11 +118,10 @@ test("trace span loading caps an oversized trace and reports truncation", async 
   assert.equal(spans.length, 5_000);
   assert.equal(spans.at(-1)?.spanId, spanId(5_000));
   assert.equal(truncated, true);
-  await client.close();
 });
 
 test("listSpans filters child-span dimensions and paginates tied starts without overlap", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -220,11 +222,10 @@ test("listSpans filters child-span dimensions and paginates tied starts without 
     grouped.map(({ key, count }) => ({ key, count })),
     [{ key: "execute_tool", count: 1 }],
   );
-  await client.close();
 });
 
 test("telemetry text filters match workspace values by substring", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -266,11 +267,10 @@ test("telemetry text filters match workspace values by substring", async () => {
     "chat claude-haiku-4-5",
     "chat claude-opus-4-1",
   ]);
-  await client.close();
 });
 
 test("listSpans sorts and paginates by started, duration, tokens, and cost", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -347,11 +347,10 @@ test("listSpans sorts and paginates by started, duration, tokens, and cost", asy
     cost.items.map(({ name }) => name),
     ["smallest", "middle", "largest"],
   );
-  await client.close();
 });
 
 test("getTraceFacets composes span filters and keeps alternate values selectable", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -435,11 +434,10 @@ test("getTraceFacets composes span filters and keeps alternate values selectable
   assert.deepEqual(facets.tool, [{ value: "search_docs", count: 1 }]);
   assert.deepEqual(facets.experiment, [{ value: "ranking-v2", count: 1 }]);
   assert.deepEqual(facets.arm, [{ value: "control", count: 1 }]);
-  await client.close();
 });
 
 test("getTraceFacets preserves facet counts across active-filter combinations", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -629,11 +627,10 @@ test("getTraceFacets preserves facet counts across active-filter combinations", 
   for (const { options, expected } of cases) {
     assert.deepEqual(await getTraceFacets(PROJECT_ID, options, db), expected);
   }
-  await client.close();
 });
 
 test("getTraceFacets shares scans across dimensions with the same filters", async () => {
-  const { client, db } = await setup();
+  const { client, db } = await readOnlySetup();
   // Count executed SQL statements (each `countFacetValues` is a single nested
   // query), not query-builder calls — the row-bound rewrite nests subqueries so
   // one scan now spans several `.select()` calls but still one round-trip.
@@ -654,11 +651,10 @@ test("getTraceFacets shares scans across dimensions with the same filters", asyn
     { noSelections, twoSelections: queryCount },
     { noSelections: 1, twoSelections: 3 },
   );
-  await client.close();
 });
 
 test("getTraceFacets limits each grouped dimension to its top 50 values", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     Array.from({ length: 52 }, (_, index) =>
@@ -691,7 +687,6 @@ test("getTraceFacets limits each grouped dimension to its top 50 values", async 
       names: Array.from({ length: 50 }, (_, index) => `name-${index.toString().padStart(2, "0")}`),
     },
   );
-  await client.close();
 });
 
 test("getTraceFacets bounds each facet's row set inside SQL, not just in JS", async () => {
@@ -712,7 +707,7 @@ test("getTraceFacets bounds each facet's row set inside SQL, not just in JS", as
 });
 
 test("getTraceFacets drops a unicode-whitespace-only value without spending a top-50 slot", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   // A value that JS `.trim()` treats as blank but POSIX `[[:space:]]` would not.
   const NBSP_ONLY = "\u00a0\u00a0";
   await insertOtelSpans(
@@ -752,11 +747,10 @@ test("getTraceFacets drops a unicode-whitespace-only value without spending a to
     facets.service.map(({ value }) => value).sort(),
     Array.from({ length: 50 }, (_, index) => `svc-${index.toString().padStart(2, "0")}`),
   );
-  await client.close();
 });
 
 test("getSpanAggregates calculates filtered percentiles and stacked UTC volume", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -839,11 +833,10 @@ test("getSpanAggregates calculates filtered percentiles and stacked UTC volume",
       { day: "2026-07-30", count: 1, errorCount: 1 },
     ],
   });
-  await client.close();
 });
 
 test("getTraceAggregates keeps trace grain while filtering on matching child spans", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -898,22 +891,22 @@ test("getTraceAggregates keeps trace grain while filtering on matching child spa
     db,
   );
 
+  // The failed child does not fail the run: only its root span's status does (AOBS-3).
   assert.deepEqual(aggregate, {
     count: 1,
-    errorCount: 1,
-    errorRate: 1,
+    errorCount: 0,
+    errorRate: 0,
     p50DurationMs: 100,
     p95DurationMs: 100,
     p99DurationMs: 100,
     costUsd: 0.2,
     totalTokens: 20,
-    volume: [{ day: "2026-07-29", count: 1, errorCount: 1 }],
+    volume: [{ day: "2026-07-29", count: 1, errorCount: 0 }],
   });
-  await client.close();
 });
 
 test("listOperations calculates continuous percentiles and sortable span aggregates", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -962,11 +955,10 @@ test("listOperations calculates continuous percentiles and sortable span aggrega
     { count: 4, errorRate: 0.25, p50: 25, p95: 38.5, cost: 0.01, tokens: 14 },
   );
   assert.ok(Math.abs((chat?.p99DurationMs ?? 0) - 39.7) < 0.000001);
-  await client.close();
 });
 
 test("listOperations switches between model and tool dimensions and omits unattributed spans", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1000,11 +992,10 @@ test("listOperations switches between model and tool dimensions and omits unattr
     tools.map(({ key }) => key),
     ["search_docs", "search_web"],
   );
-  await client.close();
 });
 
 test("listOperations sorts cost numerically rather than by its text representation", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1020,11 +1011,10 @@ test("listOperations sorts cost numerically rather than by its text representati
     operations.map(({ key }) => key),
     ["expensive", "cheap"],
   );
-  await client.close();
 });
 
 test("listOperations honours the variant and top-level filters the span list applies", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1076,11 +1066,10 @@ test("listOperations honours the variant and top-level filters the span list app
     both.map(({ key, count }) => ({ key, count })),
     [{ key: "agent.run", count: 1 }],
   );
-  await client.close();
 });
 
 test("listOperations returns at most 200 groups", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     Array.from({ length: 201 }, (_, index) => {
@@ -1099,11 +1088,10 @@ test("listOperations returns at most 200 groups", async () => {
 
   assert.equal(operations.length, 200);
   assert.equal(operations.at(-1)?.key, "operation-200");
-  await client.close();
 });
 
 test("listTraceLifecycleEvents returns ordered arm events for one project trace", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const otherTraceId = traceId(99);
   await insertLifecycleRecords(db, PROJECT_ID, [
     lifecycleRecord("drop", "2026-07-30T10:04:00.000Z", {
@@ -1197,11 +1185,10 @@ test("listTraceLifecycleEvents returns ordered arm events for one project trace"
       },
     ],
   );
-  await client.close();
 });
 
 test("listTraces returns project-scoped trace summaries newest first", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const olderTraceId = traceId(10);
   const newerTraceId = traceId(20);
   await insertOtelSpans(
@@ -1308,11 +1295,10 @@ test("listTraces returns project-scoped trace summaries newest first", async () 
       },
     ],
   );
-  await client.close();
 });
 
 test("listTraces sorts and paginates by started, duration, tokens, and cost", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1382,11 +1368,10 @@ test("listTraces sorts and paginates by started, duration, tokens, and cost", as
     cost.items.map(({ rootName }) => rootName),
     ["smallest", "middle", "largest"],
   );
-  await client.close();
 });
 
 test("listTraces sorts window-straddling traces by in-window token and cost totals", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const window = {
     since: new Date("2026-07-30T10:00:00.000Z"),
     until: new Date("2026-07-30T11:00:00.000Z"),
@@ -1463,11 +1448,10 @@ test("listTraces sorts window-straddling traces by in-window token and cost tota
     cost.items.map(({ rootName }) => rootName),
     ["inside-window", "window-edge"],
   );
-  await client.close();
 });
 
 test("listTraces filters representative roots by time window and name", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1517,11 +1501,10 @@ test("listTraces filters representative roots by time window and name", async ()
     page.items.map(({ traceId: id }) => id),
     [traceId(41)],
   );
-  await client.close();
 });
 
 test("listTraces errorOnly includes a trace when any child span errored", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1557,11 +1540,10 @@ test("listTraces errorOnly includes a trace when any child span errored", async 
     page.items.map(({ traceId: id }) => id),
     [traceId(51)],
   );
-  await client.close();
 });
 
 test("listTraces filters traces by dimensions found only on child spans", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1621,11 +1603,67 @@ test("listTraces filters traces by dimensions found only on child spans", async 
     page.items.map(({ traceId }) => traceId),
     [traceId(40)],
   );
+});
+
+test("listTraces and getTraceAggregates keep the runs of one conversation, with any other filter (AOBS-3)", async () => {
+  const { client, db } = await setup();
+  const chat = (n: number, conversation: string | null, child: Partial<NewOtelSpan> = {}) => [
+    // The id is on the root and the model call, never on the tool span.
+    span({
+      id: uuid(n),
+      traceId: traceId(n),
+      spanId: spanId(n),
+      attributes: conversation ? { "gen_ai.conversation.id": conversation } : {},
+    }),
+    span({
+      id: uuid(n + 1),
+      traceId: traceId(n),
+      spanId: spanId(n + 1),
+      parentSpanId: spanId(n),
+      name: "execute_tool Bash",
+      attributes: { "gen_ai.tool.name": "Bash" },
+      ...child,
+    }),
+  ];
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      ...chat(60, "conv-a"),
+      ...chat(62, "conv-a", {
+        name: "execute_tool Read",
+        attributes: { "gen_ai.tool.name": "Read" },
+      }),
+      ...chat(64, "conv-b"),
+      ...chat(66, null),
+    ],
+    db,
+  );
+  await insertOtelSpans(OTHER_PROJECT_ID, chat(68, "conv-a"), db);
+  const ids = async (options: Parameters<typeof listTraces>[1]) =>
+    (await listTraces(PROJECT_ID, options, db)).items.map(({ traceId }) => traceId).sort();
+
+  assert.deepEqual(await ids({ conversation: "conv-a" }), [traceId(60), traceId(62)]);
+  assert.deepEqual(await ids({ conversation: "conv-a", tool: "Bash" }), [traceId(60)]);
+  assert.deepEqual(
+    await ids({ conversation: "conv" }),
+    [],
+    "the id matches whole, not as a substring",
+  );
+  assert.equal((await ids({})).length, 4);
+
+  const window = {
+    since: new Date("2000-01-01T00:00:00Z"),
+    until: new Date("2100-01-01T00:00:00Z"),
+  };
+  assert.equal(
+    (await getTraceAggregates(PROJECT_ID, { ...window, conversation: "conv-a" }, db)).count,
+    2,
+  );
   await client.close();
 });
 
 test("listTraces ORs values within a facet and ANDs different facets", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1674,11 +1712,10 @@ test("listTraces ORs values within a facet and ANDs different facets", async () 
     page.items.map(({ traceId: id }) => id).sort(),
     [traceId(80), traceId(81)].sort(),
   );
-  await client.close();
 });
 
 test("listTraces ignores membership matches outside the selected window", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const since = new Date("2026-07-30T00:00:00.000Z");
   const until = new Date("2026-07-31T00:00:00.000Z");
   await insertOtelSpans(
@@ -1732,11 +1769,10 @@ test("listTraces ignores membership matches outside the selected window", async 
     },
     { dimension: [], error: [], experiment: [], facet: [] },
   );
-  await client.close();
 });
 
 test("listTraces returns the matching experiment pair from any span in the trace", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1783,11 +1819,10 @@ test("listTraces returns the matching experiment pair from any span in the trace
       },
     ],
   );
-  await client.close();
 });
 
 test("listTraces prefers a filtered arm pair but keeps the root pair when unfiltered", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1832,11 +1867,10 @@ test("listTraces prefers a filtered arm pair but keeps the root pair when unfilt
       unfiltered: [{ experimentName: "ranking-v2", experimentArm: "control" }],
     },
   );
-  await client.close();
 });
 
 test("listTraces composite cursor paginates tied timestamps without overlap", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const tiedAt = new Date("2026-07-30T12:00:00.000Z");
   await insertOtelSpans(
     PROJECT_ID,
@@ -1877,11 +1911,10 @@ test("listTraces composite cursor paginates tied timestamps without overlap", as
     second.items.map(({ traceId: id }) => id),
     [traceId(70), traceId(69)],
   );
-  await client.close();
 });
 
 test("listTraces represents a malformed multi-root trace exactly once", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1908,11 +1941,10 @@ test("listTraces represents a malformed multi-root trace exactly once", async ()
   assert.equal(page.items.length, 1);
   assert.equal(page.items[0]?.rootName, "primary.root");
   assert.equal(page.items[0]?.spanCount, 2);
-  await client.close();
 });
 
 test("listTraces promotes the earliest surviving span when a trace root is absent", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -1954,11 +1986,10 @@ test("listTraces promotes the earliest surviving span when a trace root is absen
       },
     ],
   );
-  await client.close();
 });
 
 test("getTraceKpis aggregates trace-level latency, errors, tokens, and cost", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const since = new Date("2026-07-30T00:00:00.000Z");
   const until = new Date("2026-07-31T00:00:00.000Z");
   const durations = [100, 200, 300, 400, 500];
@@ -2016,10 +2047,11 @@ test("getTraceKpis aggregates trace-level latency, errors, tokens, and cost", as
 
   const kpis = await getTraceKpis(PROJECT_ID, { since, until }, db);
 
+  // Only the root that errored fails its run; trace 91's failed child does not (AOBS-3).
   assert.deepEqual(kpis, {
     traceCount: 5,
-    errorTraceCount: 2,
-    errorRate: 0.4,
+    errorTraceCount: 1,
+    errorRate: 0.2,
     averageLatencyMs: 300,
     p50LatencyMs: 300,
     p95LatencyMs: 480,
@@ -2028,11 +2060,10 @@ test("getTraceKpis aggregates trace-level latency, errors, tokens, and cost", as
     totalTokens: 165,
     costUsd: 0.015,
   });
-  await client.close();
 });
 
 test("trace aggregates include a rootless trace using its earliest surviving span", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const since = new Date("2026-07-30T00:00:00.000Z");
   const until = new Date("2026-07-31T00:00:00.000Z");
   await insertOtelSpans(
@@ -2070,10 +2101,11 @@ test("trace aggregates include a rootless trace using its earliest surviving spa
   assert.deepEqual(
     { kpis, days },
     {
+      // The promoted root reports no error, so the run is not failed (AOBS-3).
       kpis: {
         traceCount: 1,
-        errorTraceCount: 1,
-        errorRate: 1,
+        errorTraceCount: 0,
+        errorRate: 0,
         averageLatencyMs: 250,
         p50LatencyMs: 250,
         p95LatencyMs: 250,
@@ -2086,7 +2118,7 @@ test("trace aggregates include a rootless trace using its earliest surviving spa
         {
           day: "2026-07-30",
           traceCount: 1,
-          errorTraceCount: 1,
+          errorTraceCount: 0,
           averageLatencyMs: 250,
           inputTokens: 10,
           outputTokens: 4,
@@ -2096,11 +2128,10 @@ test("trace aggregates include a rootless trace using its earliest surviving spa
       ],
     },
   );
-  await client.close();
 });
 
 test("getTraceDailyAggregates groups selected traces into UTC days", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const since = new Date("2026-07-30T00:00:00.000Z");
   const until = new Date("2026-08-01T00:00:00.000Z");
   await insertOtelSpans(
@@ -2157,11 +2188,12 @@ test("getTraceDailyAggregates groups selected traces into UTC days", async () =>
 
   const days = await getTraceDailyAggregates(PROJECT_ID, { since, until }, db);
 
+  // Trace 111's failed child does not fail its run (AOBS-3).
   assert.deepEqual(days, [
     {
       day: "2026-07-30",
       traceCount: 2,
-      errorTraceCount: 1,
+      errorTraceCount: 0,
       averageLatencyMs: 200,
       inputTokens: 30,
       outputTokens: 3,
@@ -2179,11 +2211,10 @@ test("getTraceDailyAggregates groups selected traces into UTC days", async () =>
       costUsd: 0.003,
     },
   ]);
-  await client.close();
 });
 
 test("trace aggregates use an in-window root when an earlier root precedes the window", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const since = new Date("2026-07-30T00:00:00.000Z");
   const until = new Date("2026-07-31T00:00:00.000Z");
   await insertOtelSpans(
@@ -2241,7 +2272,6 @@ test("trace aggregates use an in-window root when an earlier root precedes the w
       ],
     },
   );
-  await client.close();
 });
 
 test("summary-backed aggregates reproduce the live rollups", async () => {
@@ -2258,6 +2288,7 @@ test("summary-backed aggregates reproduce the live rollups", async () => {
         spanId: spanId(210),
         startedAt: new Date("2026-07-30T01:00:00.000Z"),
         durationMs: 100,
+        statusCode: 2,
         inputTokens: 10,
         outputTokens: 1,
         costUsd: "0.001000",
@@ -2473,7 +2504,7 @@ test("summary-backed aggregates drop a trace whose canonical root precedes the w
 });
 
 test("getTracesIngestDiagnostics distinguishes telemetry from persisted spans", async () => {
-  const { client, db } = await setup();
+  const { client, db } = await readOnlySetup();
   const eventAt = new Date("2026-07-30T09:00:00.000Z");
   const spanAt = new Date("2026-07-30T10:00:00.000Z");
   await client.exec(`
@@ -2505,11 +2536,10 @@ test("getTracesIngestDiagnostics distinguishes telemetry from persisted spans", 
     latestEventAt: null,
     latestSpanAt: null,
   });
-  await client.close();
 });
 
 test("listTraces represents a window-straddling multi-root trace by its earliest in-window root", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -2548,11 +2578,10 @@ test("listTraces represents a window-straddling multi-root trace by its earliest
     })),
     [{ id: traceId(90), rootName: "in-window.root", spanCount: 2 }],
   );
-  await client.close();
 });
 
 test("listTraces represents a window-straddling rootless trace by its earliest in-window span", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   await insertOtelSpans(
     PROJECT_ID,
     [
@@ -2593,7 +2622,6 @@ test("listTraces represents a window-straddling rootless trace by its earliest i
     })),
     [{ id: traceId(92), rootName: "in-window.child", spanCount: 2 }],
   );
-  await client.close();
 });
 
 test("pruneExpiredOtelSpans expires spans by server receipt time", async () => {
@@ -2914,7 +2942,7 @@ test("log pruning defaults to 30 days when retention config is invalid", async (
 });
 
 test("listTraces counts each run's model calls stored without a cost, and listSpans marks them (RC-482)", async () => {
-  const { client, db } = await setup();
+  const { db } = await readOnlySetup();
   const priced = traceId(901);
   const unpriced = traceId(902);
   await insertOtelSpans(
@@ -2996,7 +3024,64 @@ test("listTraces counts each run's model calls stored without a cost, and listSp
       ["unpriced.run", false],
     ],
   );
+});
+
+test("the error rate counts a run as failed from its root span (AOBS-3)", async () => {
+  const { client, db } = await setup();
+  const window = {
+    since: new Date("2026-07-30T00:00:00.000Z"),
+    until: new Date("2026-07-31T00:00:00.000Z"),
+  };
+  const run = (n: number, rootStatus: number, toolStatus: number) => [
+    span({ id: uuid(n), traceId: traceId(n), spanId: spanId(n), statusCode: rootStatus }),
+    span({
+      id: uuid(n + 1),
+      traceId: traceId(n),
+      spanId: spanId(n + 1),
+      parentSpanId: spanId(n),
+      name: "execute_tool Bash",
+      statusCode: toolStatus,
+    }),
+  ];
+  // 300: the run succeeded after one tool call failed. 302: the run failed. 304: clean.
+  await insertOtelSpans(PROJECT_ID, [...run(300, 1, 2), ...run(302, 2, 1), ...run(304, 1, 1)], db);
+  await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+
+  assert.deepEqual(await errorCounts(), {
+    aggregate: 1,
+    rate: 1 / 3,
+    volume: 1,
+    kpis: 1,
+    daily: 1,
+    summaryKpis: 1,
+    summaryDaily: 1,
+  });
+
+  // A summary written before the column existed has no root outcome: it keeps counting by any span.
+  await client.exec(`update otel_trace_summaries set root_error = null`);
+  const stale = await errorCounts();
+  assert.deepEqual([stale.summaryKpis, stale.summaryDaily], [2, 2]);
   await client.close();
+
+  async function errorCounts() {
+    const options = window;
+    const aggregate = await getTraceAggregates(PROJECT_ID, options, db);
+    return {
+      aggregate: aggregate.errorCount,
+      rate: aggregate.errorRate,
+      volume: aggregate.volume.reduce((sum, bucket) => sum + bucket.errorCount, 0),
+      kpis: (await getTraceKpis(PROJECT_ID, options, db)).errorTraceCount,
+      daily: (await getTraceDailyAggregates(PROJECT_ID, options, db)).reduce(
+        (sum, day) => sum + day.errorTraceCount,
+        0,
+      ),
+      summaryKpis: (await getTraceKpisFromSummaries(PROJECT_ID, options, db)).errorTraceCount,
+      summaryDaily: (await getTraceDailyAggregatesFromSummaries(PROJECT_ID, options, db)).reduce(
+        (sum, day) => sum + day.errorTraceCount,
+        0,
+      ),
+    };
+  }
 });
 
 async function setup(): Promise<{ client: PGlite; db: TestDb }> {

@@ -222,6 +222,15 @@ function span(overrides: Partial<OtelSpan> & { spanId: string; at?: number }): O
     experimentAttrs: {},
     attributes: {},
     attrsTruncated: false,
+    agentKey: null,
+    agentSource: null,
+    callerAgentKey: null,
+    mcpServer: null,
+    mcpServerSource: null,
+    mcpRole: null,
+    mcpSessionId: null,
+    events: null,
+    links: null,
     ...rest,
   };
 }

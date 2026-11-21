@@ -25,8 +25,9 @@ async function handleGet(
   const params = new URL(request.url).searchParams;
   const filter = parseSessionsFilter(params.getAll(SESSIONS_FILTER_PARAM));
   const cursor = params.get("cursor");
-  // RC-506: the next page keeps the property filters.
-  const traces = traceFilterFromSearch(params.toString());
+  // RC-506: the next page keeps the property filters. RC-790: the Agent and MCP
+  // server filters too, always on here: the core has no `cloud-project-entities` flag.
+  const traces = traceFilterFromSearch(params.toString(), { entities: true });
   const load = (id: string) => loadSessionListPage(id, { filter, cursor, traces });
   return tracesSessionsResponse(projectId, load, {
     dbConfigured: isDbConfigured,

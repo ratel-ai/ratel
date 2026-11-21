@@ -1,8 +1,11 @@
 import type { ParsedTraceEvent } from "@/lib/ingest/trace-events/parse";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
 import type { LogError } from "@/lib/platform/logger";
+import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
+import { deriveAgentRuns } from "./derive-agent-runs";
 import { deriveModelCalls } from "./derive-model-calls";
 import { deriveToolInvocations } from "./derive-tools";
+import type { SpanDimensionsById } from "./dimensions";
 import {
   type FindRuntimeInvokes,
   runtimeInvokeProbe,
@@ -21,12 +24,20 @@ import type { DecodedSpan } from "./types";
  * only when the SDK already recorded the same tool in the same session within
  * a few seconds (`runtime-duplicates.ts`), so one agent sending both is never
  * double counted while a second, OTel-only agent in the project keeps its runs.
+ *
+ * A tool row carries its MCP server and its skill (AOBS-5).
+ *
+ * With `FF_TOOL_RUN_INSIGHTS` on (RC-742, upstream's `cloud-tool-run-insights`),
+ * each `invoke_agent` root span is also an `agent_run` row, so a run with no
+ * tool call makes a turn.
  */
 
 export interface AgentHealthBridgeDeps {
   traceTurns?: TraceTurnsIngestDeps;
   /** The project's SDK invokes near a batch's tool rows. Absent, nothing is dropped. */
   findRuntimeInvokes?: FindRuntimeInvokes;
+  /** `FF_TOOL_RUN_INSIGHTS` for the project. Absent, the switch is read (off unless set). Never throws. */
+  agentRunsEnabled?: (projectId: string) => Promise<boolean>;
   logError: LogError;
 }
 
@@ -34,10 +45,17 @@ export async function agentHealthToolRows(
   spans: readonly DecodedSpan[],
   projectId: string,
   deps: AgentHealthBridgeDeps,
+  /** The export's span dimensions, derived one time by ingest. Absent, a tool row names no MCP server. */
+  dimensions?: SpanDimensionsById,
 ): Promise<ParsedTraceEvent[]> {
   if (!deps.traceTurns) return [];
   try {
-    const rows = [...deriveToolInvocations(spans), ...deriveModelCalls(spans)];
+    const agentRuns = await (deps.agentRunsEnabled ?? readAgentRunsSwitch)(projectId);
+    const rows = [
+      ...deriveToolInvocations(spans, dimensions),
+      ...deriveModelCalls(spans),
+      ...(agentRuns ? deriveAgentRuns(spans) : []),
+    ];
     if (rows.length === 0) return [];
     return await withoutSdkDuplicates(rows, projectId, deps);
   } catch (err) {
@@ -65,4 +83,8 @@ async function withoutSdkDuplicates(
     deps.logError("agent health sdk duplicate check failed", err, { project_id: projectId });
     return rows;
   }
+}
+
+async function readAgentRunsSwitch(): Promise<boolean> {
+  return toolRunInsightsOn();
 }

@@ -19,6 +19,7 @@ import {
   formatMoney,
   formatTimestamp,
 } from "@/lib/synthesis/traces/v2/format";
+import { isRoutineHook, type RunEvent, spanWait } from "@/lib/synthesis/traces/v2/run-metrics";
 import {
   STEP_KIND_LABEL,
   stepKind,
@@ -37,12 +38,18 @@ export function SpanInspector({
   offsetMs,
   runtimeEventsRoot,
   onShowDetails,
+  events,
+  showWait = false,
   children,
 }: {
   span: TraceSpanView;
   offsetMs: number;
   runtimeEventsRoot: string | null;
   onShowDetails: () => void;
+  /** The step's run events (AOBS-7): compactions, permission decisions, hooks and waits. */
+  events?: readonly RunEvent[];
+  /** Say in words that the step waited for a person (AOBS-7). */
+  showWait?: boolean;
   /** The span's content pane: input, output and raw attributes (RC-412). */
   children: ReactNode;
 }) {
@@ -50,8 +57,21 @@ export function SpanInspector({
   const failed = span.statusCode === 2;
   const tokens = (span.inputTokens ?? 0) + (span.outputTokens ?? 0);
   const errorType = failed ? stringAttribute(span.attributes, "error.type") : null;
+  const wait = showWait ? spanWait(span.attributes) : null;
+  // The routine hooks last: a compaction or a wait must not hide below them.
+  const listedEvents = events
+    ? [...events.filter((event) => !isRoutineHook(event)), ...events.filter(isRoutineHook)]
+    : [];
   const facts: { label: string; value: ReactNode }[] = [
     { label: "Duration", value: formatDuration(span.durationMs) },
+    ...(wait
+      ? [
+          {
+            label: "Waited",
+            value: `${wait.humanMs !== null ? `${formatDuration(wait.humanMs)} for a person` : "For a person"}: ${[wait.kind, wait.label.toLowerCase()].filter(Boolean).join(", ")}`,
+          },
+        ]
+      : []),
     { label: "Starts at", value: `+${formatDuration(offsetMs)}` },
     ...(span.model ? [{ label: "Model", value: span.model }] : []),
     ...(tokens > 0
@@ -100,6 +120,28 @@ export function SpanInspector({
           </div>
         ))}
       </dl>
+
+      {listedEvents.length > 0 ? (
+        <div className="flex flex-col gap-2" data-span-events>
+          <h3 className="text-xs font-medium text-fg-subtle">Events</h3>
+          <ol className="flex max-h-48 flex-col gap-1.5 overflow-auto text-ui">
+            {listedEvents.map((event, index) => (
+              <li
+                key={`${event.kind}:${event.offsetMs}:${index}`}
+                className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3"
+              >
+                <span className="text-fg-subtle tabular-nums">
+                  +{formatDuration(event.offsetMs)}
+                </span>
+                <span className="min-w-0 break-words text-fg">
+                  {event.label}
+                  {event.detail ? <span className="text-fg-muted"> {event.detail}</span> : null}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
 
       {children}
 

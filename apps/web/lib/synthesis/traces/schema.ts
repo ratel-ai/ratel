@@ -46,6 +46,9 @@ export const otelTraceSummaries = pgTable(
     durationMs: doublePrecision("duration_ms").notNull(),
     // Any span in the trace reported status_code = 2.
     hasError: boolean("has_error").notNull(),
+    // AOBS-3: the canonical representative (the root span) reported status_code = 2:
+    // the run's own outcome. Null on a row last written before migration 0041.
+    rootError: boolean("root_error"),
     // Whole-trace sums. bigint/numeric(18,6) so a long trace can't overflow.
     inputTokens: bigint("input_tokens", { mode: "number" }).notNull(),
     outputTokens: bigint("output_tokens", { mode: "number" }).notNull(),
@@ -57,6 +60,10 @@ export const otelTraceSummaries = pgTable(
     // The canonical representative's service and deployment environment.
     serviceName: text("service_name"),
     environment: text("environment"),
+    // The agents and MCP servers of the trace's spans (RC-790): the distinct
+    // `agent_key` and `mcp_server` of `otel_spans`, for the Traces filters.
+    agents: text("agents").array().notNull().default(sql`'{}'::text[]`),
+    mcpServers: text("mcp_servers").array().notNull().default(sql`'{}'::text[]`),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -74,6 +81,9 @@ export const otelTraceSummaries = pgTable(
     // The model and tool filters (`models && $1`).
     index("otel_trace_summaries_models_idx").using("gin", t.models),
     index("otel_trace_summaries_tools_idx").using("gin", t.tools),
+    // The agent and MCP server filters (`agents && $1`).
+    index("otel_trace_summaries_agents_idx").using("gin", t.agents),
+    index("otel_trace_summaries_mcp_servers_idx").using("gin", t.mcpServers),
   ],
 );
 

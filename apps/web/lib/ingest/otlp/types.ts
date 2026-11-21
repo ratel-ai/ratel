@@ -25,6 +25,13 @@ export interface DecodedEvent {
   attributes: AttrMap;
 }
 
+/** One span link: another span, of this trace or of another one. */
+export interface DecodedLink {
+  traceId: string;
+  spanId: string;
+  attributes: AttrMap;
+}
+
 export type CatalogKind = "tool" | "skill" | "fact";
 
 /** Validated content carried by one `ratel.catalog.definition` record. */
@@ -55,6 +62,8 @@ export interface DecodedSpan {
   endUnixMs: number;
   attributes: AttrMap;
   events: DecodedEvent[];
+  /** Absent on spans built in code (importers, tests): the same as none. */
+  links?: DecodedLink[];
   /** OTLP Status code (0 unset · 1 ok · 2 error). */
   statusCode: number;
   /** Resource-level attributes from the owning ResourceSpans (e.g. `service.name`). */

@@ -68,8 +68,14 @@ export async function RunsPageV2({
   const search = searchFromParams(params);
   // RC-506: Turns filters on the per-trace rollup. Its parameters never reach
   // the span-scan options.
-  const view = resolveTraceListView(paramsOf(withoutRollupFilters(search)), now);
-  view.queryOptions = { ...view.queryOptions, traces: traceFilterFromSearch(search) };
+  // RC-790: the Agent and MCP server filters. Always on here: the core has no
+  // `cloud-project-entities` flag.
+  const filterOptions = { entities: true };
+  const view = resolveTraceListView(paramsOf(withoutRollupFilters(search, filterOptions)), now);
+  view.queryOptions = {
+    ...view.queryOptions,
+    traces: traceFilterFromSearch(search, filterOptions),
+  };
   const distinctId = `project:${project.id}`;
   const timeoutMs = supplementaryReadTimeoutMs();
   const hourly = needsHourlyVolume(view.range.days.length);
@@ -90,6 +96,8 @@ export async function RunsPageV2({
               project.id,
               { since: view.range.since, until: view.range.until },
               db,
+              undefined,
+              filterOptions,
             )),
           }),
           { operation: "trace_facets", timeoutMs },
@@ -162,7 +170,7 @@ export async function RunsPageV2({
   let empty: TracesEmptyKind | null = null;
   let latestRunAt: string | null = null;
   if (page.items.length === 0 && !view.queryOptions.cursor) {
-    if (hasFilters("rollup", search)) {
+    if (hasFilters("rollup", search, filterOptions)) {
       empty = "filtered";
     } else {
       const diagnostics = await getTracesIngestDiagnostics(project.id);
@@ -218,6 +226,7 @@ export async function RunsPageV2({
       detailsUnavailable={tools === null || asks === null}
       facets={facets}
       filterTab="rollup"
+      entities={filterOptions.entities}
       sort={{ id: view.filters.sort, direction: view.filters.direction }}
       nextCursor={
         page.hasMore && page.nextCursor ? serializeTraceCursor(page.nextCursor, view.filters) : null

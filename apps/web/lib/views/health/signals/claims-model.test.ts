@@ -465,3 +465,63 @@ test("an unknown_tool in the catalog failing as not found says so, without sayin
     "No tool to add. Check that lookup_order is available everywhere the agent runs.",
   );
 });
+
+test("an agent task's claim names its agent step in words, not by its raw id", () => {
+  const agentTask = {
+    subjectKind: "workflow" as const,
+    subjectKey: "wf-agent",
+    subjectIds: ["agent:draft_fix"],
+  };
+  const failing = claimModel(
+    record("workflow_failing", {
+      ...agentTask,
+      metrics: { failedRuns: 4, runs: 10, completion: 0.6, failingStep: "agent:draft_fix" },
+    }),
+    new Map(),
+    30,
+  );
+  assert.equal(failing.claim, "Runs of Draft fix fail 40% of the time, most often at Draft fix.");
+  assert.match(failing.fix, /^Start with Draft fix:/);
+  assert.deepEqual(
+    failing.subject.chips.map((chip) => chip.label),
+    ["Draft fix"],
+  );
+  assert.equal(failing.subject.label, "Draft fix");
+  const slow = claimModel(
+    record("workflow_slow", {
+      ...agentTask,
+      metrics: {
+        slowestStep: "agent:draft_fix",
+        ratio: 3,
+        slowestStepShare: 1,
+        medianMs: 9_000,
+        baselineMs: 3_000,
+      },
+    }),
+    new Map(),
+    30,
+  );
+  assert.ok(!slow.claim.includes("agent:"), slow.claim);
+  assert.match(slow.fix, /^Make Draft fix faster first/);
+});
+
+test("a tool whose id starts with agent: keeps its id when it is not an agent task", () => {
+  // A customer tool named `agent:lookup` in a mined task of two or more tools, or a tool signal: never humanized.
+  const workflow = claimModel(
+    record("workflow_failing", {
+      subjectKind: "workflow",
+      subjectKey: "wf-tools",
+      subjectIds: ["agent:lookup", "create_task"],
+      metrics: { failedRuns: 4, runs: 10, completion: 0.6, failingStep: "agent:lookup" },
+    }),
+    NAMES,
+    30,
+  );
+  assert.match(workflow.claim, /most often at agent:lookup\./);
+  const tool = claimModel(
+    record("latency_outlier", { subjectIds: ["agent:lookup"], subjectKey: "agent:lookup" }),
+    new Map(),
+    30,
+  );
+  assert.equal(tool.subject.label, "agent:lookup");
+});

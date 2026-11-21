@@ -40,6 +40,30 @@ test("a turn is answered when a tool ran and the last call did not fail", () => 
   );
 });
 
+test("an agent run is answered by how its root span ended (RC-813)", () => {
+  assert.equal(
+    isAnswered({ calls: [], agentRun: "ok" }),
+    true,
+    "a finished run that called no tool",
+  );
+  assert.equal(isAnswered({ calls: [], agentRun: "error" }), false, "a failed run");
+  assert.equal(
+    isAnswered({ calls: [{ tool: "a", outcome: "ok" }], agentRun: "error" }),
+    false,
+    "a failed run, whatever its tools did",
+  );
+  assert.equal(
+    isAnswered({ calls: [{ tool: "a", outcome: "error" }], agentRun: "ok" }),
+    false,
+    "a run that ended on a failed call",
+  );
+  assert.equal(
+    isAnswered({ calls: [{ tool: "a", outcome: "ok" }], agentRun: "ok", refused: true }),
+    false,
+    "the agent said it could not",
+  );
+});
+
 test("the users' own words win once there are enough of them; searches stand in until then", () => {
   const few = new Map([
     ["t1", { text: "what is the status of PO 12", source: "user_message" as const }],

@@ -17,6 +17,7 @@ import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/de
 import { taskFinish } from "@/lib/readings/trace-signals/workflows/finish";
 import { workflowIcon } from "@/lib/readings/trace-signals/workflows/icons";
 import {
+  stepFallbackName,
   type WorkflowLabels,
   workflowDescription,
   workflowDisplayName,
@@ -90,7 +91,7 @@ export function parseStoredWorkflows(value: unknown): StoredWorkflows | null {
 }
 
 function toolView(id: string, names: ReadonlyMap<string, string>): WorkflowToolView {
-  return { id, label: names.get(id) ?? id };
+  return { id, label: names.get(id) ?? stepFallbackName(id) };
 }
 
 function stepView(

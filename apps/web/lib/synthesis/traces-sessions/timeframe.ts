@@ -41,7 +41,7 @@ interface TabSummaryBase {
   volume: VolumeModel;
 }
 
-/** Sessions tab: sessions (and runs with no session) by their last activity in the window. */
+/** Sessions tab: sessions, open or closed, by their last activity in the window, as the list shows them (RC-752). */
 export interface SessionsTabSummary extends TabSummaryBase {
   tab: "sessions";
   sessions: number;

@@ -28,6 +28,8 @@ import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { capRows, limitParam, round, TruncationTracker } from "@/lib/mcp/serialize";
 import { resolveWindow, WINDOW_PRESETS, windowParams } from "@/lib/mcp/windows";
 import { getLogger } from "@/lib/platform/logger";
+import { buildToolUsage } from "@/lib/synthesis/dashboard";
+import { AGENT_DIMENSIONS } from "@/lib/synthesis/traces/agent-dimensions";
 import {
   getSpanAggregates,
   getTraceDailyAggregates,
@@ -163,7 +165,7 @@ export function observabilityOperations(
       domain: "observability",
       title: "Latency and error rate",
       description:
-        "Headline health over a window, from spans: trace count, error rate, p50 and p95 latency, plus token and cost totals. The cheapest answer to how a project is performing. For spend questions prefer get_cost_by_day, which reads the metrics the customer sees on their own dashboard and works even when trace surfaces are off.",
+        "Headline health over a window, from spans: trace count, error rate (a trace failed when its root span reports an error), p50 and p95 latency, plus token and cost totals. The cheapest answer to how a project is performing. For spend questions prefer get_cost_by_day, which reads the metrics the customer sees on their own dashboard and works even when trace surfaces are off.",
       keywords: ["latency", "p95", "slow", "error rate", "performance", "how fast"],
       scope: "project",
       mutates: false,
@@ -387,15 +389,28 @@ export function observabilityOperations(
       domain: "observability",
       title: "Spans grouped by model, tool or operation",
       description:
-        "Span statistics grouped by operation name, model, or tool: call counts, error counts, latency and token usage. The one to reach for when the question is which model or tool dominates, and the only grouped view carrying latency. For per-tool token and cost totals that match the dashboard, prefer get_cost_by_tool.",
-      keywords: ["group by model", "which model dominates", "by tool", "by operation", "grouped"],
+        "Span statistics grouped by operation name, model or tool: call counts, error counts, latency and token usage. The only grouped view carrying latency, which leaves out the time a step waited for a person. Also by MCP server, command, skill, agent, chat, task or repo; tool counts each Bash:<command> as Bash. For per-tool token and cost totals that match the dashboard, prefer get_cost_by_tool.",
+      keywords: [
+        "group by model",
+        "which model dominates",
+        "by tool",
+        "by operation",
+        "grouped",
+        "mcp server",
+        "command",
+        "skill",
+        "sub-agent",
+        "cost by repo",
+        "cost by task",
+        "cost by chat",
+      ],
       scope: "project",
       mutates: false,
       params: z.object({
         ...projectScoped,
         ...windowParams,
         ...traceFilters,
-        groupBy: z.enum(["name", "model", "tool"]).default("name"),
+        groupBy: z.enum(["name", "model", "tool", ...AGENT_DIMENSIONS]).default("name"),
         limit: limitParam,
       }),
       async execute(ctx, params) {
@@ -474,7 +489,7 @@ export function observabilityOperations(
       domain: "observability",
       title: "Cost and tokens per tool",
       description:
-        "Token and call totals per tool over a window, from the derived event metrics, which is the source to quote for per-tool spend. Ratel gateway meta-tools are marked so they are not mistaken for the agent's own. Use list_span_groups grouped by tool instead when you need latency or error counts per tool.",
+        "Calls and context tokens per tool over a window, one row per tool name, largest first, from the derived event metrics: the source to quote for per-tool spend. usedTokens counts the model calls that called the tool, unusedTokens those that only declared it. Ratel gateway meta-tools are marked. Use list_span_groups by tool for latency or error counts.",
       keywords: [
         "cost per tool",
         "which tool costs most",
@@ -488,18 +503,24 @@ export function observabilityOperations(
       async execute(ctx, params) {
         const window = resolveWindow(params, WINDOW_PRESETS.aggregates);
         const tracker = new TruncationTracker();
-        const metrics = await deps.getToolMetrics(ctx.projectId, window.since, window.until);
-        const entries = Object.entries(metrics ?? {});
-        const page = tracker.take(capRows(entries, params.limit));
+        // One map per model call: merged into one row per tool, as the dashboard does.
+        const { tools } = buildToolUsage(
+          (await deps.getToolMetrics(ctx.projectId, window.since, window.until)) ?? [],
+          0,
+        );
+        const page = tracker.take(capRows(tools, params.limit));
         return {
           data: {
             source: METRICS_SOURCE,
             count: page.length,
-            total: entries.length,
-            tools: page.map(([name, value]) => ({
-              name,
-              isGatewayMetaTool: isGatewayTool(name),
-              ...(value as Record<string, unknown>),
+            total: tools.length,
+            tools: page.map((tool) => ({
+              name: tool.name,
+              isGatewayMetaTool: isGatewayTool(tool.name),
+              calls: tool.calls,
+              tokens: tool.usedTokens + tool.unusedTokens,
+              usedTokens: tool.usedTokens,
+              unusedTokens: tool.unusedTokens,
             })),
           },
           truncated: tracker.value,

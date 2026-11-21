@@ -14,7 +14,8 @@ import {
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
 import { WORKFLOW_SIGNAL_KINDS } from "@/lib/readings/trace-signals/signals/workflow-run";
 import { storedHelperTools } from "@/lib/readings/trace-signals/signals/workflow-stored";
-import { many, wfTurn } from "@/lib/readings/trace-signals/workflows/test-fixtures";
+import { TOOL_RUN_MINING } from "@/lib/readings/trace-signals/tool-run-insights";
+import { agentTurn, many, wfTurn } from "@/lib/readings/trace-signals/workflows/test-fixtures";
 
 /**
  * Workflows inside a whole signal run: a planted failing workflow comes out as
@@ -157,4 +158,41 @@ test("the run stores the miner's helper tools, so other readers set them aside w
     ["a"],
     "stored JSON is untrusted",
   );
+});
+
+/* RC-805: tool-less agent runs are not tool runs, and their reading was dropped from the summary. */
+
+function agentOnly(perAgent: number): SignalTurn[] {
+  return [
+    ...many(perAgent, () => agentTurn("label_workflows")),
+    ...many(perAgent, () => agentTurn("assign_topics")),
+    agentTurn("cluster_intents"),
+  ];
+}
+
+test("flag on: a run of tool-less agent runs alone stores its agent tasks", () => {
+  const turns = agentOnly(3);
+  const result = analyzeTurns(turns, contextFor(turns), { workflowMining: TOOL_RUN_MINING });
+  const stored = result.summary.workflows;
+  assert.ok(stored, "the reading is stored without a tool call");
+  assert.equal(stored.turnsWithTools, 0);
+  assert.equal(stored.basis?.blocked, null);
+  assert.deepEqual(stored.items.map((item) => [item.coreTools[0], item.runs]).sort(), [
+    ["agent:assign_topics", 3],
+    ["agent:label_workflows", 3],
+  ]);
+});
+
+test("flag on: agent runs under the floor store a reading with no task, not an absent one", () => {
+  const turns = agentOnly(2);
+  const stored = analyzeTurns(turns, contextFor(turns), { workflowMining: TOOL_RUN_MINING }).summary
+    .workflows;
+  assert.deepEqual(stored?.items, []);
+  assert.equal(stored?.basis?.blocked, null);
+});
+
+test("flag off: a run of tool-less agent runs alone stores what it did before", () => {
+  const turns = agentOnly(3);
+  const off = analyzeTurns(turns, contextFor(turns));
+  assert.deepEqual(off.summary, baseline(turns).summary);
 });

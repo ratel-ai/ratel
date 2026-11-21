@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import { sliceWellFormed } from "@/lib/readings/text/well-formed";
+import { agentTaskName } from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import {
   WORKFLOW_ICON_KEYS,
   WORKFLOW_ICONS,
@@ -73,7 +74,15 @@ function clip(text: string, max: number): string {
   return flat.length > max ? `${sliceWellFormed(flat, max - 1)}…` : sliceWellFormed(flat, max);
 }
 
-function toolLine(id: string, tools: ReadonlyMap<string, LabelTool>): string {
+/**
+ * One step's line. An agent task's one step (`agent:<name>`, RC-747) is an
+ * agent run with no tools: it reads as the agent in words, never as a tool
+ * with no description. A catalog tool, or a step of a mined task of two or
+ * more tools, is a tool line even when its id starts with `agent:`.
+ */
+function toolLine(id: string, tools: ReadonlyMap<string, LabelTool>, agentTask = false): string {
+  const agent = agentTask && !tools.has(id) ? agentTaskName(id) : null;
+  if (agent) return `- agent: ${agent} (an agent run that calls no tools)`;
   const tool = tools.get(id);
   const description = tool?.description ? `: ${clip(tool.description, MAX_TOOL_DESCRIPTION)}` : "";
   return `- ${tool?.name || id}${description}`;
@@ -84,7 +93,9 @@ export function buildLabelPrompt(input: LabelInput): { system: string; user: str
   const tools = new Map(input.tools.map((t) => [t.id, t]));
   const lines = [
     "Tools the agent runs, in its usual order:",
-    ...input.typicalOrder.map((id) => toolLine(id, tools)),
+    ...input.typicalOrder.map((id) =>
+      toolLine(id, tools, input.typicalOrder.length === 1 && input.optionalTools.length === 0),
+    ),
   ];
   if (input.optionalTools.length > 0) {
     lines.push(

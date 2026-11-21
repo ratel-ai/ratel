@@ -258,7 +258,13 @@ export type OtelSpanConflict = "ignore" | "update";
 const OTEL_SPAN_REWRITE_SET = Object.fromEntries(
   Object.entries(getTableColumns(otelSpans))
     .filter(([key]) => key !== "id" && key !== "projectId" && key !== "receivedAt")
-    .map(([key, column]) => [key, sql.raw(`excluded."${column.name}"`)]),
+    // A rewrite without events or links keeps the stored ones.
+    .map(([key, column]) => [
+      key,
+      key === "events" || key === "links"
+        ? sql.raw(`coalesce(excluded."${column.name}", "otel_spans"."${column.name}")`)
+        : sql.raw(`excluded."${column.name}"`),
+    ]),
 );
 
 /**

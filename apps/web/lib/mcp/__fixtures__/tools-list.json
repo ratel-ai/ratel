@@ -408,7 +408,7 @@
   {
     "name": "get_trace_health",
     "title": "Latency and error rate",
-    "description": "Headline health over a window, from spans: trace count, error rate, p50 and p95 latency, plus token and cost totals. The cheapest answer to how a project is performing. For spend questions prefer get_cost_by_day, which reads the metrics the customer sees on their own dashboard and works even when trace surfaces are off.",
+    "description": "Headline health over a window, from spans: trace count, error rate (a trace failed when its root span reports an error), p50 and p95 latency, plus token and cost totals. The cheapest answer to how a project is performing. For spend questions prefer get_cost_by_day, which reads the metrics the customer sees on their own dashboard and works even when trace surfaces are off.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -505,6 +505,12 @@
           "description": "Experiment variant (arm) contains this text.",
           "type": "string",
           "maxLength": 200
+        },
+        "conversationId": {
+          "description": "Keep the runs of one conversation: the exact gen_ai.conversation.id, which is also the session id get_session takes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         },
         "status": {
           "description": "Span status, any of.",
@@ -665,7 +671,7 @@
   {
     "name": "list_span_groups",
     "title": "Spans grouped by model, tool or operation",
-    "description": "Span statistics grouped by operation name, model, or tool: call counts, error counts, latency and token usage. The one to reach for when the question is which model or tool dominates, and the only grouped view carrying latency. For per-tool token and cost totals that match the dashboard, prefer get_cost_by_tool.",
+    "description": "Span statistics grouped by operation name, model or tool: call counts, error counts, latency and token usage. The only grouped view carrying latency, which leaves out the time a step waited for a person. Also by MCP server, command, skill, agent, chat, task or repo; tool counts each Bash:<command> as Bash. For per-tool token and cost totals that match the dashboard, prefer get_cost_by_tool.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -710,7 +716,14 @@
           "enum": [
             "name",
             "model",
-            "tool"
+            "tool",
+            "server",
+            "command",
+            "skill",
+            "agent",
+            "chat",
+            "task",
+            "repo"
           ]
         },
         "limit": {
@@ -830,7 +843,7 @@
   {
     "name": "get_cost_by_tool",
     "title": "Cost and tokens per tool",
-    "description": "Token and call totals per tool over a window, from the derived event metrics, which is the source to quote for per-tool spend. Ratel gateway meta-tools are marked so they are not mistaken for the agent's own. Use list_span_groups grouped by tool instead when you need latency or error counts per tool.",
+    "description": "Calls and context tokens per tool over a window, one row per tool name, largest first, from the derived event metrics: the source to quote for per-tool spend. usedTokens counts the model calls that called the tool, unusedTokens those that only declared it. Ratel gateway meta-tools are marked. Use list_span_groups by tool for latency or error counts.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -1417,7 +1430,7 @@
   {
     "name": "get_run_stats",
     "title": "Run totals for a filtered set",
-    "description": "Totals for the runs matching the same filters as list_traces, as the Runs page header shows them: run count, failed runs, error rate, p50, p95 and p99 duration, tokens, cost, and runs per day or hour. For the unfiltered project get_trace_health is cheaper; for spend to quote prefer get_cost_by_day.",
+    "description": "Totals for the runs matching the same filters as list_traces, as the Runs page header shows them: run count, failed runs (a run failed when its root span reports an error), error rate, p50, p95 and p99 duration, tokens, cost, and runs per day or hour. For the unfiltered project get_trace_health is cheaper; for spend to quote prefer get_cost_by_day.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -1470,6 +1483,12 @@
           "description": "Experiment variant (arm) contains this text.",
           "type": "string",
           "maxLength": 200
+        },
+        "conversationId": {
+          "description": "Keep the runs of one conversation: the exact gen_ai.conversation.id, which is also the session id get_session takes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
         },
         "status": {
           "description": "Span status, any of.",

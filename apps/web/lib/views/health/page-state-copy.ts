@@ -1,6 +1,6 @@
 import { planName } from "@/lib/platform/entitlements";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
-import type { WindowDays } from "@/lib/readings/trace-signals/view";
+import type { LowConfidence, WindowDays } from "@/lib/readings/trace-signals/view";
 import { SOURCE_LABEL } from "@/lib/views/health/imports-types";
 import type { HealthPageState, WindowSuggestion } from "@/lib/views/health/page-state";
 
@@ -249,4 +249,9 @@ export function earlyReadingCopy(input: EarlyReadingCopyInput): StateCopy {
     title: "Early reading: we are still processing",
     body: `This first look comes from ${from}. We are still working through ${rest}, so issues, numbers and tasks will fill in and may change. ${next}`,
   };
+}
+
+/** The low-confidence warning (RC-828): "Low confidence: read from 24 turns. It firms up at 50." */
+export function lowConfidenceCopy(mark: LowConfidence): string {
+  return `Low confidence: read from ${formatCount(mark.turns)} ${mark.turns === 1 ? "turn" : "turns"}. It firms up at ${formatCount(mark.firmsUpAt)}.`;
 }

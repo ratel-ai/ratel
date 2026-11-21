@@ -1,4 +1,4 @@
-import { isAnswered, type TopicTurn } from "@/lib/readings/topics/asks";
+import { isAnswered, isUserWords, type TopicTurn } from "@/lib/readings/topics/asks";
 import {
   buildFlows,
   conversations,
@@ -126,8 +126,8 @@ function mainTask(tasks: ReadonlyMap<string, number>): string | null {
 function examples(rows: readonly PlacedTurn[], limit: number): string[] {
   const newestFirst = [...rows].sort(
     (a, b) =>
-      Number(b.source !== null && b.source !== "search") -
-        Number(a.source !== null && a.source !== "search") ||
+      Number(b.source !== null && isUserWords(b.source)) -
+        Number(a.source !== null && isUserWords(a.source)) ||
       b.turn.startedAt.getTime() - a.turn.startedAt.getTime() ||
       (a.turn.id < b.turn.id ? -1 : 1),
   );
@@ -269,14 +269,14 @@ export function buildTopicInsights(input: InsightsInput): TopicInsights {
     .sort((a, b) => b.calls - a.calls || (a.id < b.id ? -1 : 1));
 
   const verdicts: Record<TopicVerdict, number> = { topic: 0, retry: 0, none: 0, no_ask: 0 };
-  const sources = { user: 0, prompt: 0, search: 0, none: 0 };
+  const sources: TopicInsights["sources"] = { user: 0, prompt: 0, search: 0, none: 0 };
   let sentimentMeasured = 0;
   const sentimentRead = { model: 0, words: 0 };
   const lanes = { telemetry: 0, sdk: 0, telemetryWithoutConversation: 0 };
   const unplaced = { turns: 0, answered: 0 };
   for (const row of placed) {
     verdicts[row.verdict] += 1;
-    if (row.source) sources[row.source] += 1;
+    if (row.source) sources[row.source] = (sources[row.source] ?? 0) + 1;
     else sources.none += 1;
     if (row.sentiment) {
       sentimentMeasured += 1;

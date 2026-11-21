@@ -2,7 +2,7 @@ import { and, desc, eq, gte, inArray, isNotNull, lt, or, sql } from "drizzle-orm
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { events } from "@/lib/ingest/otlp/schema";
 import { jobs } from "@/lib/jobs/schema";
-import { TURN_EVENT_TYPES } from "@/lib/ledger/constants";
+import { TURN_EVENT_TYPES_WITH_AGENT_RUNS } from "@/lib/ledger/constants";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { parseStoredPattern } from "@/lib/readings/topics/patterns";
@@ -91,8 +91,9 @@ export async function loadModelOnlyTraces(
   db: Pick<TopicsDb, "execute"> = getDb(),
 ): Promise<ModelOnlyTrace[]> {
   const at = sql`coalesce(e.occurred_at, e.received_at)`;
+  // An agent run (RC-742) makes a ledger turn too: its trace is read there, not here.
   const steps = sql.join(
-    TURN_EVENT_TYPES.map((type) => sql`${type}`),
+    TURN_EVENT_TYPES_WITH_AGENT_RUNS.map((type) => sql`${type}`),
     sql`, `,
   );
   const result = await db.execute(sql`
