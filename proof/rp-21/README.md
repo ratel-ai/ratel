@@ -10,3 +10,4 @@ The Cloud edition stopped filling `EditionUi.OperatorConsole` (ratel-platform, d
 | `02-typecheck.log` | Typecheck of the open-source edition (no `ee/src`) and of the Cloud edition: both exit 0 |
 | `03-admin-quality-routes.log`, `03-admin-quality-404.png` | `/admin/quality` and a project's page answer 404 for an elevated platform admin on a local Cloud build |
 | `04-quality-removal-vs-f6f918d9.diff` | The full diff against the base |
+| `pr-377.json`, `pr-116.json` | `gh pr view` records: ratel-ai/ratel#377 (head `bc50fb77`) and ratel-ai/ratel-platform#116 (head `21009916`), both drafts on `feat/simplify-admin` |
