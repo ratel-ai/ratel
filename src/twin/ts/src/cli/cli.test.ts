@@ -46,6 +46,18 @@ function ratel(...args: string[]): Promise<CliResult> {
   });
 }
 
+/**
+ * The stderr lines of the CLI itself. Node prints runtime warnings there too
+ * (Node 26: a deprecation of `module.register()` that tsx calls), which depend
+ * on the Node version, not on the CLI.
+ */
+function ownLines(stderr: string): string[] {
+  return stderr
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .filter((line) => !/^\(node:\d+\) /.test(line) && !/^\(Use `node --trace-/.test(line));
+}
+
 function hashIn(stdout: string): string {
   return /config hash\s+([0-9a-f]{64})/.exec(stdout)?.[1] ?? "";
 }
@@ -59,7 +71,7 @@ function outputIn(stdout: string): Record<string, unknown> {
 describe("ratel twin list", () => {
   it("prints the fixture twin with its params and defaults", async () => {
     const r = await ratel("twin", "list");
-    expect(r.stderr).toBe("");
+    expect(ownLines(r.stderr)).toEqual([]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("workflow-label");
     expect(r.stdout).toContain("agents/label.twin.ts");
@@ -78,7 +90,7 @@ describe("ratel twin list", () => {
 describe("ratel twin run", () => {
   it("runs the twin in a child process with the defaults and the project .env", async () => {
     const r = await ratel("twin", "run", "workflow-label", "--input", "in.json");
-    expect(r.stderr).toBe("");
+    expect(ownLines(r.stderr)).toEqual([]);
     expect(r.code).toBe(0);
     const output = outputIn(r.stdout);
     expect(output).toMatchObject({

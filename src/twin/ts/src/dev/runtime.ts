@@ -9,7 +9,7 @@ import { Connection, type ConnectionEffect, type ConnectionEvent } from "./conne
 import { type Envelope, type FrameStamp, MAX_FRAME_BYTES, parseFrame } from "./protocol.js";
 import { type RunStartPayload, Runs, type RunsEffect } from "./runs.js";
 import { playgroundResource } from "./tracing.js";
-import { watchProject } from "./watch.js";
+import { type ProjectWatcher, watchProject } from "./watch.js";
 import { openSocket, type Socket } from "./ws-socket.js";
 
 // `ratel dev`: the runtime around the pure Connection machine. It performs the
@@ -75,7 +75,7 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   let retryTimer: NodeJS.Timeout | undefined;
   let leaseTimer: NodeJS.Timeout | undefined;
   let reloadWaiting = false;
-  let stopWatching = () => {};
+  let watcher: ProjectWatcher | undefined;
   let settle: { resolve(): void; reject(err: Error): void } | undefined;
   const done = new Promise<void>((resolve, reject) => {
     settle = { resolve, reject };
@@ -245,13 +245,15 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
       // Always: the controller must learn of every reload, also one that only changed code.
       options.out(`reloaded ${next.twins.length} twin(s); manifest updated`);
       step({ type: "manifest.changed", manifest: next });
+      // A new twin file or import can add a folder to watch.
+      watcher?.refresh();
     } catch (err) {
       options.out(`reload failed, still serving the last good code: ${messageOf(err)}`);
     }
   };
 
   const shutdown = (): void => {
-    stopWatching();
+    watcher?.close();
     clearTimeout(retryTimer);
     clearInterval(leaseTimer);
     child.stop();
@@ -260,7 +262,14 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   options.out(
     `ratel dev: ${manifest.twins.length} twin(s): ${manifest.twins.map((t) => t.id).join(", ") || "(none)"}`,
   );
-  if (options.watch ?? true) stopWatching = watchProject(options.root, () => void reload());
+  if (options.watch ?? true)
+    watcher = watchProject(options.root, {
+      onChange: () => void reload(),
+      onError: (message) =>
+        options.out(
+          `hot reload is off: the file watcher failed (${message}). Still serving the last good code; restart ratel dev to reload`,
+        ),
+    });
   step({ type: "start" });
 
   return {
