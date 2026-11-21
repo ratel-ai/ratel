@@ -1,6 +1,7 @@
 import { type ParamIssue, TwinParamError } from "./errors.js";
-import { configHash } from "./hash.js";
+import { canonicalJson, configHash } from "./hash.js";
 import { bareModelId, checkParamValue, type ParamMap, type ParamValues } from "./params.js";
+import { editedToolset, type ToolEdit, toolsHashValue } from "./tools.js";
 import type { Twin } from "./twin.js";
 
 export interface ResolvedParams<P extends ParamMap, M> {
@@ -9,7 +10,10 @@ export interface ResolvedParams<P extends ParamMap, M> {
    * An async resolve leaves a promise here: settleParams waits for it.
    */
   readonly values: ParamValues<P, M | PromiseLike<M>>;
-  /** The param values as data (models as `provider/model`). The config hash covers these. */
+  /**
+   * The param values as data (models as `provider/model`, tools as their enabled
+   * names and descriptions). The config hash covers these. Tool modes are not here.
+   */
   readonly raw: Readonly<Record<string, unknown>>;
   readonly configHash: string;
   /** Names of params whose value differs from the default, in declaration order. */
@@ -34,12 +38,19 @@ export function resolveParams<P extends ParamMap, M>(
   const changed: string[] = [];
   for (const [name, param] of Object.entries(twin.params)) {
     if (!Object.hasOwn(overrides, name)) {
-      raw[name] = param.default;
+      raw[name] = param.kind === "tools" ? toolsHashValue(param) : param.default;
       continue;
     }
     const value = overrides[name];
     const problem = checkParamValue(param, value);
     if (problem) issues.push({ param: name, message: problem });
+    if (param.kind === "tools") {
+      // The hash form: enabled tools and their descriptions. Modes are never in it.
+      raw[name] = problem ? value : toolsHashValue(param, value as ToolEdit[]);
+      if (!problem && canonicalJson(raw[name]) !== canonicalJson(toolsHashValue(param)))
+        changed.push(name);
+      continue;
+    }
     raw[name] = value;
     if (value !== param.default) changed.push(name);
   }
@@ -49,7 +60,12 @@ export function resolveParams<P extends ParamMap, M>(
   const resolveModel = resolve ? (id: string) => resolve(id) : bareModelId;
   const values: Record<string, unknown> = {};
   for (const [name, param] of Object.entries(twin.params)) {
-    values[name] = param.kind === "model" ? resolveModel(raw[name] as string) : raw[name];
+    values[name] =
+      param.kind === "model"
+        ? resolveModel(raw[name] as string)
+        : param.kind === "tools"
+          ? editedToolset(param, overrides[name] as ToolEdit[] | undefined)
+          : raw[name];
   }
   return {
     values: values as ParamValues<P, M | PromiseLike<M>>,

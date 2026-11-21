@@ -9,6 +9,7 @@ import type { LanguageModel, ModelMessage } from "ai";
 import { ModelResolutionError } from "./errors.js";
 import { bareModelId } from "./params.js";
 import type { CallableProvider } from "./providers.js";
+import type { FakeAnswer, FakeRequest } from "./tools.js";
 import {
   type ChatInput,
   type ChatRunInput,
@@ -28,6 +29,15 @@ export interface AiSdkProvider {
 }
 
 export const GATEWAY_KEY = "AI_GATEWAY_API_KEY";
+
+/**
+ * The small model that generates a fake tool result in a local run, with the
+ * user's own key. The gateway names models with dots, Anthropic with dashes.
+ */
+export const FAKE_MODEL = {
+  gateway: "anthropic/claude-haiku-5.5",
+  direct: "anthropic/claude-haiku-5-5",
+} as const;
 
 /** The built-in map of a model prefix to its `@ai-sdk/*` provider package. */
 export const AI_SDK_PROVIDERS: Readonly<Record<string, AiSdkProvider>> = {
@@ -62,6 +72,8 @@ export function aiSdkModels(options: AiSdkModelsOptions = {}): ModelResolver<Lan
   return Object.assign(resolve, {
     modelKind: "language-model" as const,
     callableProviders: (env: Env) => aiSdkCallableProviders(env, installed),
+    generateFake: (request: FakeRequest, signal: AbortSignal) =>
+      generateFake(request, envOf(), load, signal),
   });
 }
 
@@ -101,6 +113,49 @@ export async function forwardText(
     ctx.textDelta(piece);
   }
   return text;
+}
+
+/**
+ * Asks a small model for a plausible result of one tool call: the tool's
+ * description and schemas, the arguments and the last messages. Local runs
+ * only; in the playground Ratel generates fakes.
+ */
+async function generateFake(
+  request: FakeRequest,
+  env: Env,
+  load: ModuleLoader,
+  signal: AbortSignal,
+): Promise<FakeAnswer> {
+  const modelId = env[GATEWAY_KEY] ? FAKE_MODEL.gateway : FAKE_MODEL.direct;
+  const model = await resolveModel(modelId, env, load);
+  const ai = await loadOrExplain(load, "ai", modelId, "the ai package is not installed");
+  const generateText = ai.generateText as (options: Record<string, unknown>) => Promise<{
+    text: string;
+  }>;
+  const { text } = await generateText({
+    model,
+    abortSignal: signal,
+    system:
+      "You stand in for a tool in a test run of an AI agent. Reply with only the JSON value the tool would return for this call: no prose, no code fence. Keep it short and consistent with the arguments.",
+    prompt: JSON.stringify({
+      tool: request.tool,
+      description: request.description,
+      inputSchema: request.inputSchema,
+      outputSchema: request.outputSchema,
+      args: request.args,
+      recentMessages: request.messages,
+    }),
+  });
+  return { result: parseJsonLoose(text), isError: false, source: "generated" };
+}
+
+function parseJsonLoose(text: string): unknown {
+  const trimmed = text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
 }
 
 async function resolveModel(modelId: string, env: Env, load: ModuleLoader): Promise<LanguageModel> {

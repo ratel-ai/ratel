@@ -91,7 +91,7 @@ async function runCommand(
   root: string,
   files: string[],
 ): Promise<number> {
-  const input = readInput(command.input);
+  const input = readJson("--input", command.input);
   const reply = await askWorker({
     kind: "run",
     root,
@@ -100,25 +100,28 @@ async function runCommand(
     input,
     sets: command.sets,
     tools: command.tools,
+    fakes: Object.fromEntries(
+      Object.entries(command.fakes).map(([tool, file]) => [tool, readJson("--fake", file)]),
+    ),
   });
   if (reply.kind !== "run") throw new Error("the twin worker answered the wrong request");
-  process.stdout.write(formatRun({ twinId: command.twinId, tools: command.tools, ...reply }));
+  process.stdout.write(formatRun({ twinId: command.twinId, tools: reply.toolModes, ...reply }));
   return 0;
 }
 
-function readInput(path: string): unknown {
+function readJson(flag: string, path: string): unknown {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
   } catch (err) {
     throw new CliError(
-      `cannot read --input ${path}: ${(err as NodeJS.ErrnoException).code ?? String(err)}`,
+      `cannot read ${flag} ${path}: ${(err as NodeJS.ErrnoException).code ?? String(err)}`,
     );
   }
   try {
     return JSON.parse(text);
   } catch {
-    throw new CliError(`--input ${path} is not valid JSON`);
+    throw new CliError(`${flag} ${path} is not valid JSON`);
   }
 }
 

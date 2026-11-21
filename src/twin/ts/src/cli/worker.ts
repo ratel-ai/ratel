@@ -4,8 +4,10 @@ import { ModelResolutionError, TwinInputError, TwinParamError } from "../errors.
 import { buildManifest } from "../manifest.js";
 import { coerceOverride } from "../params.js";
 import { runTwin } from "../run.js";
+import { ToolModeError } from "../tools.js";
 import type { Twin } from "../twin.js";
 import { loadTwins, messageOf } from "./load.js";
+import { localToolChannel } from "./local-tools.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
 
 // The child process of the `ratel` CLI. It is the only process that loads user
@@ -40,6 +42,15 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
       input: request.input,
       overrides,
       onText: (text) => process.stderr.write(text),
+      toolModes: request.tools,
+      toolChannel: localToolChannel(found, request.fakes, (line) =>
+        process.stderr.write(`${line}\n`),
+      ),
+      onEvent: (event) => {
+        if (event.kind === "tool.call") process.stderr.write(`\n[${event.tool} ${event.mode}] `);
+        if (event.kind === "tool.result")
+          process.stderr.write(`${JSON.stringify(event.result)?.slice(0, 200)}\n`);
+      },
     });
     return {
       ok: true,
@@ -47,12 +58,14 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
       output: result.output,
       configHash: result.configHash,
       overrides: result.overrides,
+      toolModes: result.toolModes,
     };
   } catch (err) {
     if (
       err instanceof TwinParamError ||
       err instanceof TwinInputError ||
-      err instanceof ModelResolutionError
+      err instanceof ModelResolutionError ||
+      err instanceof ToolModeError
     )
       throw err;
     throw new Error(`${found.id}: run() threw: ${messageOf(err)}`);

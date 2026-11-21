@@ -1,5 +1,6 @@
 import { checkParamValue, type ParamMap, type ParamValues } from "./params.js";
 import type { CallableProvider } from "./providers.js";
+import type { FakeAnswer, FakeRequest } from "./tools.js";
 
 /** The input of a structured twin: one JSON object described by a JSON Schema. */
 export interface StructuredInput<I> {
@@ -43,6 +44,8 @@ export interface ModelResolver<M> {
   readonly callableProviders?: (
     env: Readonly<Record<string, string | undefined>>,
   ) => CallableProvider[];
+  /** Set by a built-in resolver: generates a fake tool result with the user's key (local runs). */
+  readonly generateFake?: (request: FakeRequest, signal: AbortSignal) => Promise<FakeAnswer>;
 }
 
 export interface RunContext {

@@ -103,6 +103,9 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
         case "abort":
           child.cancel(effect.runId, effect.reason);
           break;
+        case "tool-answer":
+          child.answer(effect.runId, effect.answerType, effect.payload);
+          break;
       }
     }
   };
@@ -112,6 +115,7 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
     options.out(`run ${runId}: ${start.twinId} started`);
     child.run(runId, start, {
       onEvent: (payload) => apply(runs.event(runId, payload)),
+      onToolRequest: (type, payload) => apply(runs.toolRequest(runId, type, payload)),
       onEnd: (result) => {
         apply(runs.end(runId, result));
         options.out(`run ${runId}: ${result.status} in ${Date.now() - startedAt} ms`);
@@ -131,6 +135,10 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
         return;
       case "run.cancel":
         if (runId) apply(runs.cancel(runId, (frame.payload as { reason?: string }).reason));
+        return;
+      case "tool.fake.result":
+      case "tool.confirm.decision":
+        apply(runs.toolAnswer(frame));
         return;
       case "events.ack": {
         const seq = (frame.payload as { seq?: unknown }).seq;

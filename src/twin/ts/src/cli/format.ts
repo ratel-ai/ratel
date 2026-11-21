@@ -22,6 +22,7 @@ export interface RunSummary {
   readonly twinId: string;
   readonly output: unknown;
   readonly overrides: readonly string[];
+  /** The mode each tool ran in. */
   readonly tools: Readonly<Record<string, ToolMode>>;
   readonly configHash: string;
 }
@@ -32,7 +33,7 @@ export function formatRun(run: RunSummary): string {
   const rows = [
     ["twin", run.twinId],
     ["changed", run.overrides.join(", ") || "(none)"],
-    ...(tools.length > 0 ? [["tool modes", `${tools.join(", ")} (stored; not applied yet)`]] : []),
+    ...(tools.length > 0 ? [["tool modes", tools.join(", ")]] : []),
     ["config hash", run.configHash],
   ];
   return `${JSON.stringify(run.output, null, 2)}\n\n${table(rows).join("\n")}\n`;

@@ -103,13 +103,10 @@ describe("ratel twin run", () => {
       "maxTokens=100",
       "--set",
       "model=anthropic/claude-haiku-5-5",
-      "--tool",
-      "createTicket=fake",
     );
     expect(r.code).toBe(0);
     expect(outputIn(r.stdout)).toMatchObject({ model: "claude-haiku-5-5", maxTokens: 100 });
     expect(r.stdout).toMatch(/changed\s+model, maxTokens/);
-    expect(r.stdout).toMatch(/tool modes\s+createTicket=fake/);
     expect(hashIn(r.stdout)).toMatch(/^[0-9a-f]{64}$/);
     expect(hashIn(r.stdout)).not.toBe(hashIn(base.stdout));
   }, 30_000);
@@ -138,6 +135,14 @@ describe("ratel twin run", () => {
     [
       ["twin", "run", "workflow-label", "--input", "in.json", "--tool", "createTicket=mock"],
       /--tool createTicket=mock: mode must be real, fake or confirm/,
+    ],
+    [
+      ["twin", "run", "workflow-label", "--input", "in.json", "--tool", "createTicket=fake"],
+      /workflow-label: toolModes createTicket: is an unknown tool/,
+    ],
+    [
+      ["twin", "run", "workflow-label", "--input", "in.json", "--fake", "createTicket"],
+      /--fake createTicket: expected name=value/,
     ],
     [
       ["twin", "run", "workflow-label", "--input", "missing.json"],

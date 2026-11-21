@@ -2,7 +2,13 @@ import { type ChildProcess, fork } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { Manifest } from "../manifest.js";
 import type { ChildReply, ChildRequest } from "./child-messages.js";
-import type { RunEventPayload, RunResult, RunStartPayload } from "./runs.js";
+import type {
+  RunEventPayload,
+  RunResult,
+  RunStartPayload,
+  ToolAnswerType,
+  ToolRequestType,
+} from "./runs.js";
 import type { PlaygroundTelemetryConfig } from "./tracing.js";
 
 // The parent side of the `ratel dev` child worker: forks it under tsx, asks it
@@ -14,6 +20,10 @@ type Pending = (reply: Extract<ChildReply, { id: number }>) => void;
 export interface RunHandlers {
   onEvent(payload: RunEventPayload): void;
   onEnd(result: RunResult): void;
+  onToolRequest?(
+    type: ToolRequestType,
+    payload: { readonly callId: string } & Readonly<Record<string, unknown>>,
+  ): void;
 }
 
 export class ChildHost {
@@ -67,6 +77,17 @@ export class ChildHost {
     child.send({ kind: "run", runId, start } satisfies ChildRequest);
   }
 
+  /** Hands the controller's answer to the child that runs the run. */
+  answer(
+    runId: string,
+    answerType: ToolAnswerType,
+    payload: Readonly<Record<string, unknown>>,
+  ): void {
+    this.#runs
+      .get(runId)
+      ?.child.send({ kind: "tool.answer", runId, answerType, payload } satisfies ChildRequest);
+  }
+
   cancel(runId: string, reason: string): void {
     this.#runs.get(runId)?.child.send({ kind: "cancel", runId, reason } satisfies ChildRequest);
   }
@@ -111,6 +132,10 @@ export class ChildHost {
     if (!run) return;
     if (reply.kind === "run.event") {
       run.handlers.onEvent(reply.payload);
+      return;
+    }
+    if (reply.kind === "tool.request") {
+      run.handlers.onToolRequest?.(reply.type, reply.payload);
       return;
     }
     this.#runs.delete(reply.runId);

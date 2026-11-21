@@ -4,6 +4,7 @@
  * the production import path: it opens no socket and does no network I/O.
  */
 import { bool, enumParam, int, model, number, prompt, string } from "./params.js";
+import { tools } from "./tools.js";
 import { chat, context, defineTwin, structured } from "./twin.js";
 
 export {
@@ -45,6 +46,30 @@ export { type CallableProvider, callableProviders, PROVIDER_KEYS } from "./provi
 export { type ResolvedParams, resolveParams, settleParams } from "./resolve.js";
 export { type RunTwinOptions, type RunTwinResult, runTwin } from "./run.js";
 export {
+  CONFIRM_TIMEOUT_MS,
+  type ConfirmAnswer,
+  type ConfirmDecision,
+  type ConfirmRequest,
+  defaultMode,
+  type FakeAnswer,
+  type FakeRequest,
+  type FakeSource,
+  prepareTools,
+  RATEL_TOOL_CONFIRM_DECISION,
+  RATEL_TOOL_FAKE_SOURCE,
+  RATEL_TOOL_MODE,
+  REJECTED_RESULT,
+  resolveToolModes,
+  type ToolChannel,
+  type ToolDescriptor,
+  type ToolEdit,
+  type ToolHint,
+  type ToolHints,
+  type ToolMode,
+  ToolModeError,
+  type ToolsParam,
+} from "./tools.js";
+export {
   type ChatInput,
   type ChatMessage,
   type ChatRunInput,
@@ -60,7 +85,7 @@ export {
   type TwinInput,
 } from "./twin.js";
 
-/** `twin(id, { params, input, context, run })` plus the param, input and context builders. */
+/** `twin(id, { params, input, context, run })` plus the param (incl. `tools`), input and context builders. */
 export const twin = Object.assign(defineTwin, {
   model,
   prompt,
@@ -72,4 +97,5 @@ export const twin = Object.assign(defineTwin, {
   structured,
   chat,
   context,
+  tools,
 });

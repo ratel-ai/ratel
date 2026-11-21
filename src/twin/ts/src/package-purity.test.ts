@@ -16,7 +16,7 @@ describe("@ratel-ai/twin entry stays network-free", () => {
   });
 
   it("keeps ai out of the core: only the ai-sdk entry names it, as a type", () => {
-    expect([...packagesReachableFrom("ai-sdk.ts")]).toEqual(["ai"]);
+    expect([...packagesReachableFrom("ai-sdk.ts")].sort()).toEqual(["@opentelemetry/api", "ai"]);
     const source = readFileSync(new URL("ai-sdk.ts", import.meta.url), "utf8");
     expect(source).toMatch(/^import type \{[^}]*\} from "ai";$/m);
   });

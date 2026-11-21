@@ -3,10 +3,12 @@ import { join } from "node:path";
 import { trace } from "@opentelemetry/api";
 import { type LoadedTwin, loadTwins, messageOf } from "../cli/load.js";
 import { buildManifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
+import { prepareTools } from "../tools.js";
 import type { Twin, TwinEventPayload } from "../twin.js";
 import type { ChildReply, ChildRequest } from "./child-messages.js";
 import { executeRun } from "./execute.js";
-import type { RunResult, RunStartPayload } from "./runs.js";
+import type { RunResult, RunStartPayload, ToolAnswerType } from "./runs.js";
+import { IpcToolChannel } from "./tool-channel.js";
 import {
   attachPlaygroundExport,
   type PlaygroundExport,
@@ -23,6 +25,8 @@ let twins: LoadedTwin[] = [];
 let loading: Promise<unknown> = Promise.resolve();
 /** Live runs by ID. Deleted when the run ends or is canceled. */
 const live = new Map<string, AbortController>();
+/** The tool channel of each live run: its fake and confirm calls wait here for the controller. */
+const channels = new Map<string, IpcToolChannel>();
 let telemetry: PlaygroundTelemetryConfig | undefined;
 /** Attached before the first run, after the project's code had the chance to set up its provider. */
 let exporter: PlaygroundExport | undefined;
@@ -40,6 +44,9 @@ process.on("message", (request: ChildRequest) => {
     case "cancel":
       cancel(request.runId, request.reason);
       return;
+    case "tool.answer":
+      channels.get(request.runId)?.answer(request.answerType as ToolAnswerType, request.payload);
+      return;
   }
 });
 process.on("disconnect", () => {
@@ -52,6 +59,7 @@ async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): P
   const load = loadTwins(request.root, request.files);
   loading = load.catch(() => {});
   twins = await load;
+  await prepareTools(twins.flatMap(({ twin }) => Object.values(twin.params)));
   return {
     id: request.id,
     ok: true,
@@ -73,6 +81,10 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
   }
   const abort = new AbortController();
   live.set(runId, abort);
+  const channel = new IpcToolChannel((type, payload) =>
+    reply({ kind: "tool.request", runId, type, payload }),
+  );
+  channels.set(runId, channel);
   const playground = attachOnce();
   const result = await executeRun(twin, {
     runId,
@@ -81,6 +93,7 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
     signal: abort.signal,
     onEvent: (payload) => event(twin, runId, payload),
     onTrace: (traceId) => playground?.track(traceId),
+    toolChannel: channel,
   });
   end(runId, twin, result);
   await playground?.flush().catch((err: unknown) => {
@@ -116,6 +129,8 @@ function event(twin: Twin, runId: string, payload: TwinEventPayload): void {
 function end(runId: string, twin: Twin | undefined, result: RunResult): void {
   if (twin !== undefined && !live.has(runId)) return;
   live.delete(runId);
+  channels.get(runId)?.close(new Error("the run ended"));
+  channels.delete(runId);
   reply({ kind: "run.end", runId, result: twin ? redactEnd(twin, result) : result });
 }
 

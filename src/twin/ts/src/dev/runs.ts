@@ -1,5 +1,6 @@
 import type { Manifest, ManifestTwin } from "../manifest.js";
 import { checkParamValue } from "../params.js";
+import { type ToolDescriptor, toolModeProblems } from "../tools.js";
 import { checkInput } from "../twin.js";
 import { jsonBytes, splitText, truncateText, truncateValue } from "./frame-size.js";
 import { type Envelope, type FrameStamp, frame, MAX_FRAME_BYTES } from "./protocol.js";
@@ -38,6 +39,14 @@ export interface RunResult {
 
 export type RejectReason = "busy" | "unknown_twin" | "invalid_params";
 
+/** A tool call that waits for the controller: a fake value or a reviewer decision. */
+export type ToolRequestType = "tool.fake.request" | "tool.confirm.request";
+export type ToolAnswerType = "tool.fake.result" | "tool.confirm.decision";
+const ANSWER_OF: Readonly<Record<ToolAnswerType, ToolRequestType>> = {
+  "tool.fake.result": "tool.fake.request",
+  "tool.confirm.decision": "tool.confirm.request",
+};
+
 export type RunsEffect =
   /** Send on the live socket, if there is one. Event frames stay buffered until acked. */
   | { readonly type: "send"; readonly frame: Envelope }
@@ -46,7 +55,14 @@ export type RunsEffect =
       readonly runId: string;
       readonly start: RunStartPayload;
     }
-  | { readonly type: "abort"; readonly runId: string; readonly reason: string };
+  | { readonly type: "abort"; readonly runId: string; readonly reason: string }
+  /** Hand the controller's answer to the run that asked. */
+  | {
+      readonly type: "tool-answer";
+      readonly runId: string;
+      readonly answerType: ToolAnswerType;
+      readonly payload: Readonly<Record<string, unknown>>;
+    };
 
 export interface RunsOptions {
   readonly stamp: FrameStamp;
@@ -64,6 +80,8 @@ interface LiveRun {
   ended: boolean;
   /** Sent frames (run.event, run.end) above `acked`, in seq order. */
   readonly unacked: Envelope[];
+  /** Tool requests without an answer, by callId. Resent on a new socket. */
+  readonly toolRequests: Map<string, Envelope>;
 }
 
 export class Runs {
@@ -97,6 +115,7 @@ export class Runs {
       acked: 0,
       ended: false,
       unacked: [],
+      toolRequests: new Map(),
     });
     return [this.#ack(runId), { type: "execute", runId, start }];
   }
@@ -108,11 +127,41 @@ export class Runs {
     return this.#fit(payload).map((part) => this.#buffer(run, "run.event", part));
   }
 
+  /** A tool call of the run waits for the controller. The request stays until it is answered. */
+  toolRequest(
+    runId: string,
+    type: ToolRequestType,
+    payload: { readonly callId: string } & Readonly<Record<string, unknown>>,
+  ): RunsEffect[] {
+    const run = this.#runs.get(runId);
+    if (!run || run.ended) return [];
+    const fitted =
+      jsonBytes(payload) <= this.#payloadBudget ? payload : shrink(payload, this.#payloadBudget);
+    const out = frame(this.#options.stamp, type, fitted, { runId });
+    run.toolRequests.set(payload.callId, out);
+    return [{ type: "send", frame: out }];
+  }
+
+  /** tool.fake.result or tool.confirm.decision from the controller. Unknown or repeated answers are dropped. */
+  toolAnswer(incoming: Envelope): RunsEffect[] {
+    const runId = incoming.runId;
+    const run = runId ? this.#runs.get(runId) : undefined;
+    const payload = incoming.payload as Readonly<Record<string, unknown>>;
+    const callId = typeof payload?.callId === "string" ? payload.callId : undefined;
+    if (!run || run.ended || !callId) return [];
+    const answerType = incoming.type as ToolAnswerType;
+    const request = run.toolRequests.get(callId);
+    if (!request || request.type !== ANSWER_OF[answerType]) return [];
+    run.toolRequests.delete(callId);
+    return [{ type: "tool-answer", runId: run.runId, answerType, payload }];
+  }
+
   /** The run finished. Its run.end takes the next seq and stays buffered until acked. */
   end(runId: string, result: RunResult): RunsEffect[] {
     const run = this.#runs.get(runId);
     if (!run || run.ended) return [];
     run.ended = true;
+    run.toolRequests.clear();
     const effect = this.#buffer(run, "run.end", this.#fitEnd(result));
     this.#forgetIfDone(run);
     return [effect];
@@ -150,7 +199,10 @@ export class Runs {
 
   /** Every event and end frame the controller has not acked, per run in seq order. For a new socket. */
   unacked(): Envelope[] {
-    return [...this.#runs.values()].flatMap((run) => run.unacked);
+    return [...this.#runs.values()].flatMap((run) => [
+      ...run.unacked,
+      ...run.toolRequests.values(),
+    ]);
   }
 
   #check(
@@ -187,6 +239,11 @@ export class Runs {
       const problem = uncallable(param, param.default);
       if (problem) errors.push({ param: param.name, message: problem });
     }
+    const tools = twin.params.flatMap((p) =>
+      p.kind === "tools" ? (p.default as readonly ToolDescriptor[]) : [],
+    );
+    for (const message of toolModeProblems(tools, start.toolModes ?? {}))
+      errors.push({ param: "toolModes", message });
     const inputProblem = twin.input.kind === "chat" ? checkInput(twin.input, start.input) : null;
     if (inputProblem) errors.push({ param: "input", message: inputProblem });
     if (errors.length > 0) {

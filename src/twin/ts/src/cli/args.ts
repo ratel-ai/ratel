@@ -10,6 +10,8 @@ export type Command =
       readonly input: string;
       readonly sets: readonly (readonly [name: string, raw: string])[];
       readonly tools: Readonly<Record<string, ToolMode>>;
+      /** A JSON file per tool whose content is its fake result. */
+      readonly fakes: Readonly<Record<string, string>>;
     };
 
 /** A usage error: printed as one line, no stack. */
@@ -20,7 +22,8 @@ export class CliError extends Error {
 export const USAGE = `Usage:
   ratel dev [--url <ratel url>]
   ratel twin list [--json]
-  ratel twin run <id> --input <file> [--set name=value]... [--tool name=real|fake|confirm]...`;
+  ratel twin run <id> --input <file> [--set name=value]... [--tool name=real|fake|confirm]...
+                       [--fake name=<file.json>]...`;
 
 const TOOL_MODES: readonly ToolMode[] = ["real", "fake", "confirm"];
 
@@ -57,14 +60,18 @@ function parseRun(rest: readonly string[]): Command {
   let input: string | undefined;
   const sets: [string, string][] = [];
   const tools: Record<string, ToolMode> = {};
+  const fakes: Record<string, string> = {};
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i] as string;
-    if (arg === "--input" || arg === "--set" || arg === "--tool") {
+    if (arg === "--input" || arg === "--set" || arg === "--tool" || arg === "--fake") {
       const value = rest[++i];
       if (value === undefined) throw new CliError(`${arg} needs a value`);
       if (arg === "--input") input = value;
       else if (arg === "--set") sets.push(splitPair(arg, value));
-      else {
+      else if (arg === "--fake") {
+        const [tool, file] = splitPair(arg, value);
+        fakes[tool] = file;
+      } else {
         const [tool, mode] = splitPair(arg, value);
         if (!TOOL_MODES.includes(mode as ToolMode)) {
           throw new CliError(`--tool ${value}: mode must be real, fake or confirm`);
@@ -81,7 +88,7 @@ function parseRun(rest: readonly string[]): Command {
   }
   if (twinId === undefined) throw new CliError(`a twin id is required\n${USAGE}`);
   if (input === undefined) throw new CliError(`--input <file> is required\n${USAGE}`);
-  return { command: "run", twinId, input, sets, tools };
+  return { command: "run", twinId, input, sets, tools, fakes };
 }
 
 function splitPair(flag: string, value: string): [string, string] {

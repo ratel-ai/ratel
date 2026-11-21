@@ -17,6 +17,8 @@ export type WorkerRequest =
       readonly input: unknown;
       readonly sets: readonly (readonly [string, string])[];
       readonly tools: Readonly<Record<string, ToolMode>>;
+      /** Fake results by tool name, read from the --fake files. */
+      readonly fakes: Readonly<Record<string, unknown>>;
     };
 
 export type WorkerReply =
@@ -27,5 +29,6 @@ export type WorkerReply =
       readonly output: unknown;
       readonly configHash: string;
       readonly overrides: readonly string[];
+      readonly toolModes: Readonly<Record<string, ToolMode>>;
     }
   | { readonly ok: false; readonly error: string };

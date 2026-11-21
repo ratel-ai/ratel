@@ -67,18 +67,46 @@ The manifest lists only the providers the runner can call, by key name. A run wh
 listed provider can call is rejected (`invalid_params`) with what to set or install. The
 playground session ID becomes `gen_ai.conversation.id` on the `invoke_agent <twin id>` root.
 
+## Tools and tool modes
+
+`twin.tools(defaults.tools, hints)` makes the toolset a param. Per run, `run()` gets a toolset of
+the same type: edited descriptions applied, disabled tools removed and each `execute` wrapped by
+its mode.
+
+```ts
+tools: twin.tools(defaults.tools, {
+  searchDocs: { readOnly: true },     // real by default
+  createTicket: { sideEffect: true }, // fake by default; never real without allowReal: true
+  // a tool with no hint runs in confirm mode
+}),
+```
+
+- `real` runs the production `execute`.
+- `fake` checks the arguments against the tool schema, then returns a fake value: from the
+  playground (`tool.fake.request`), or locally from `--fake name=<file.json>` or a small model
+  with your own key.
+- `confirm` waits for a reviewer: approve, edit and approve, fake, or reject
+  (`{ "error": "Rejected by reviewer" }`). No decision in 10 minutes rejects. A local run has no
+  reviewer, so it rejects.
+
+Tool modes are not in the config hash. A run that asks `real` for a `sideEffect` tool without
+`allowReal: true` is refused by the runner, whatever the server sends. Each `execute_tool` span
+gets `ratel.tool.mode`, `ratel.tool.fake.source` and `ratel.tool.confirm.decision`.
+
 ## Local runs: the `ratel` CLI
 
 ```bash
 ratel twin list [--json]                    # finds **/*.twin.* and prints the manifest
-ratel twin run workflow-label --input in.json --set maxTokens=100 [--tool createTicket=fake]
+ratel twin run workflow-label --input in.json --set maxTokens=100
+ratel twin run docs-agent --input chat.json --tool createTicket=fake [--fake createTicket=ticket.json]
 ```
 
 `twin run` prints the output, the names of the changed params and the config hash. A bad id or
 value exits non-zero with a message that names the twin and the param. Discovery skips
 `node_modules` and build output. The CLI never loads your code itself: a child worker (under
-`tsx`) loads the twins and the project's `.env`. `--tool` modes are parsed and stored; they take
-effect in a later version.
+`tsx`) loads the twins and the project's `.env`. `--tool` sets a tool's mode for the run and
+`--fake` gives a fake result from a file. A chat twin streams its reply and its tool calls to
+stderr.
 
 ## The playground runner: `ratel dev`
 

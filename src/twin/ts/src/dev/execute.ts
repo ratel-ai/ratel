@@ -18,6 +18,7 @@ import {
 } from "../otel.js";
 import { resolveParams } from "../resolve.js";
 import { runTwin } from "../run.js";
+import { resolveToolModes, type ToolChannel, ToolModeError, type ToolsParam } from "../tools.js";
 import type { Twin, TwinEventPayload } from "../twin.js";
 import type { RunResult, RunStartPayload } from "./runs.js";
 
@@ -38,6 +39,9 @@ export interface ExecuteRunOptions {
   readonly onEvent: (payload: TwinEventPayload) => void;
   /** Called with the trace ID as soon as the root span exists. */
   readonly onTrace?: (traceId: string) => void;
+  /** Answers the run's fake and confirm tool calls. */
+  readonly toolChannel?: ToolChannel;
+  readonly confirmTimeoutMs?: number;
 }
 
 /** Runs the twin once under a root span with the twin attributes. Never throws. */
@@ -46,8 +50,13 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
   let resolved: ReturnType<typeof resolveParams>;
   try {
     resolved = resolveParams(twin, start.params);
+    // Refuses a real side effect without allowReal before anything runs: the server cannot override it.
+    resolveToolModes(twin.id, toolDescriptors(twin), start.toolModes);
   } catch (err) {
-    const code = err instanceof TwinParamError ? "invalid_params" : "run_failed";
+    const code =
+      err instanceof TwinParamError || err instanceof ToolModeError
+        ? "invalid_params"
+        : "run_failed";
     return { status: "error", error: { code, message: messageOf(err) } };
   }
   const operation = twin.input.kind === "chat" ? INVOKE_AGENT : INVOKE_WORKFLOW;
@@ -69,6 +78,12 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
           signal: options.signal,
           onLog: (message, level) => options.onEvent({ kind: "log", level, message }),
           onText: (text) => options.onEvent({ kind: "text.delta", text }),
+          onEvent: options.onEvent,
+          ...(start.toolModes ? { toolModes: start.toolModes } : {}),
+          ...(options.toolChannel ? { toolChannel: options.toolChannel } : {}),
+          ...(options.confirmTimeoutMs !== undefined
+            ? { confirmTimeoutMs: options.confirmTimeoutMs }
+            : {}),
         });
         return {
           status: "ok",
@@ -96,6 +111,12 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
         span.end();
       }
     },
+  );
+}
+
+function toolDescriptors(twin: Twin) {
+  return Object.values(twin.params).flatMap((p) =>
+    p.kind === "tools" ? (p as ToolsParam).default : [],
   );
 }
 

@@ -1,7 +1,15 @@
 import { TwinInputError } from "./errors.js";
-import type { ParamMap } from "./params.js";
+import type { ParamMap, ParamValues } from "./params.js";
 import { resolveParams, settleParams } from "./resolve.js";
-import { checkInput, type LogLevel, type Twin } from "./twin.js";
+import {
+  resolveToolModes,
+  type ToolChannel,
+  type ToolDescriptor,
+  type ToolMode,
+  type ToolsParam,
+  wrapTools,
+} from "./tools.js";
+import { checkInput, type LogLevel, type Twin, type TwinEventPayload } from "./twin.js";
 
 export interface RunTwinOptions<I> {
   readonly input: I;
@@ -12,12 +20,22 @@ export interface RunTwinOptions<I> {
   readonly onLog?: (message: string, level: LogLevel) => void;
   /** Receives each `ctx.textDelta` piece. */
   readonly onText?: (text: string) => void;
+  /** Mode per tool name. A tool not named runs in the default mode of its hint. */
+  readonly toolModes?: Readonly<Record<string, string>>;
+  /** Answers fake and confirm calls. Absent: a fake call fails and a confirm call is rejected. */
+  readonly toolChannel?: ToolChannel;
+  /** Receives each `tool.call` and `tool.result` event. */
+  readonly onEvent?: (payload: TwinEventPayload) => void;
+  /** Default: 10 minutes. */
+  readonly confirmTimeoutMs?: number;
 }
 
 export interface RunTwinResult<O> {
   readonly output: O;
   readonly configHash: string;
   readonly overrides: readonly string[];
+  /** The mode each tool ran in. */
+  readonly toolModes: Readonly<Record<string, ToolMode>>;
 }
 
 /**
@@ -32,19 +50,39 @@ export async function runTwin<P extends ParamMap, I, O, M>(
   const problem = checkInput(twin.input, options.input);
   if (problem) throw new TwinInputError(twin.id, problem);
   const resolved = resolveParams(twin, options.overrides ?? {});
-  const params = await settleParams(resolved.values);
+  const toolsParams = Object.entries(twin.params).filter(
+    (entry): entry is [string, ToolsParam] => entry[1].kind === "tools",
+  );
+  const descriptors: ToolDescriptor[] = toolsParams.flatMap(([, param]) => param.default);
+  const toolModes = resolveToolModes(twin.id, descriptors, options.toolModes);
+  const params: Record<string, unknown> = await settleParams(resolved.values);
+  const signal = options.signal ?? new AbortController().signal;
+  for (const [name, param] of toolsParams) {
+    params[name] = wrapTools({
+      twinId: twin.id,
+      param,
+      toolset: params[name] as Parameters<typeof wrapTools>[0]["toolset"],
+      modes: toolModes,
+      signal,
+      ...(options.toolChannel ? { channel: options.toolChannel } : {}),
+      ...(options.onEvent ? { onEvent: options.onEvent } : {}),
+      ...(options.confirmTimeoutMs !== undefined
+        ? { confirmTimeoutMs: options.confirmTimeoutMs }
+        : {}),
+    });
+  }
   const output = await twin.run({
     input: options.input,
-    params,
+    params: params as ParamValues<P, M>,
     ctx: {
       twinId: twin.id,
       context: { ...twin.context, ...options.context },
-      signal: options.signal ?? new AbortController().signal,
+      signal,
       log: (message, level = "info") => options.onLog?.(String(message), level),
       textDelta: (text) => {
         if (text !== "") options.onText?.(String(text));
       },
     },
   });
-  return { output, configHash: resolved.configHash, overrides: resolved.overrides };
+  return { output, configHash: resolved.configHash, overrides: resolved.overrides, toolModes };
 }

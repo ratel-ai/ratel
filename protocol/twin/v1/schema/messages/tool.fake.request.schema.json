@@ -36,7 +36,12 @@
         "outputSchema": {
           "type": "object"
         },
-        "args": true
+        "args": true,
+        "messages": {
+          "description": "Optional. Up to the last 6 messages of the conversation before the call.",
+          "type": "array",
+          "maxItems": 6
+        }
       }
     }
   }

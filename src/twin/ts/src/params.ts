@@ -1,5 +1,7 @@
+import { checkToolsValue, type ToolsParam } from "./tools.js";
+
 /** A param Ratel can change per run. `T` is the type of its value inside run(). */
-export type Param<T = unknown> = ModelParam | PromptParam | ScalarParam<T>;
+export type Param<T = unknown> = ModelParam | PromptParam | ScalarParam<T> | ToolsParam<T>;
 
 export interface ModelParam {
   readonly kind: "model";
@@ -43,7 +45,9 @@ export type ParamValues<P extends ParamMap, M = string> = {
       ? string
       : P[K] extends ScalarParam<infer T>
         ? T
-        : never;
+        : P[K] extends ToolsParam<infer T>
+          ? T
+          : never;
 };
 
 const MODEL_ID = /^[a-z0-9][a-z0-9-]*\/.+$/;
@@ -131,6 +135,8 @@ export function checkParamValue(param: Param, value: unknown): string | null {
       return typeof value === "string" ? null : "must be a string";
     case "scalar":
       return checkScalar(param, value);
+    case "tools":
+      return checkToolsValue(param, value);
   }
 }
 

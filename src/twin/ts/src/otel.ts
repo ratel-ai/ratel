@@ -1,5 +1,6 @@
 import { trace } from "@opentelemetry/api";
 import { configHash } from "./hash.js";
+import { hashableTools } from "./tools.js";
 
 export const RATEL_TWIN_ID = "ratel.twin.id";
 export const RATEL_TWIN_CONFIG_HASH = "ratel.twin.config_hash";
@@ -44,7 +45,11 @@ export function stampTwinInput(input: unknown, options: { maxChars?: number } = 
 function memoizedHash(defaults: object): string {
   let hash = hashes.get(defaults);
   if (hash === undefined) {
-    hash = configHash(defaults as Record<string, unknown>);
+    // A production toolset hashes as its tool names and descriptions, like a tools param.
+    const values = Object.fromEntries(
+      Object.entries(defaults).map(([k, v]) => [k, hashableTools(v) ?? v]),
+    );
+    hash = configHash(values);
     hashes.set(defaults, hash);
   }
   return hash;
