@@ -33,6 +33,40 @@ const cfg = resolveLocal(labelDefaults, { twin: "workflow-label" });
 `stampTwinInput(input)` stamps `ratel.twin.input` on the span of one structured item, so a
 recorded item can open in the playground.
 
+## Chat twins on the AI SDK
+
+A chat twin runs one user turn per run: `input.messages` holds the conversation so far. With
+`resolve: aiSdkModels()` from `@ratel-ai/twin/ai-sdk`, a model param becomes an AI SDK
+`LanguageModel`: through AI Gateway when `AI_GATEWAY_API_KEY` is set, else through the
+project's own `@ai-sdk/anthropic`, `@ai-sdk/openai` or `@ai-sdk/google` package and its key.
+The entry imports only the packages your project has. Supports `ai` 6 and 7. The core entry
+`@ratel-ai/twin` never imports `ai`.
+
+```ts
+// docs-agent.twin.ts
+import { twin } from "@ratel-ai/twin";
+import { aiSdkChat, aiSdkModels, forwardText } from "@ratel-ai/twin/ai-sdk";
+import { streamText } from "ai";
+import { docsDefaults } from "./agent.js";
+
+export default twin("docs-agent", {
+  params: {
+    model: twin.model(docsDefaults.model), // run gets a LanguageModel
+    system: twin.prompt(docsDefaults.system),
+  },
+  input: aiSdkChat(), // run gets { messages: ModelMessage[] }
+  context: twin.context({ userId: "demo-user" }), // fixed inputs, not under test
+  resolve: aiSdkModels(),
+  run: ({ input, params, ctx }) =>
+    // forwardText streams each piece to the playground as a text.delta event.
+    forwardText(streamText({ ...params, messages: input.messages }).textStream, ctx),
+});
+```
+
+The manifest lists only the providers the runner can call, by key name. A run whose model no
+listed provider can call is rejected (`invalid_params`) with what to set or install. The
+playground session ID becomes `gen_ai.conversation.id` on the `invoke_agent <twin id>` root.
+
 ## Local runs: the `ratel` CLI
 
 ```bash

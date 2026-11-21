@@ -5,7 +5,7 @@ import {
   type Tracer,
 } from "@opentelemetry/api";
 import { messageOf } from "../cli/load.js";
-import { TwinParamError } from "../errors.js";
+import { ModelResolutionError, TwinInputError, TwinParamError } from "../errors.js";
 import {
   RATEL_REPLAY_ARM,
   RATEL_REPLAY_SOURCE_SESSION_ID,
@@ -22,11 +22,13 @@ import type { Twin, TwinEventPayload } from "../twin.js";
 import type { RunResult, RunStartPayload } from "./runs.js";
 
 // One playground run inside its root span (spec §10). A structured twin has no
-// agent loop, so its root is `invoke_workflow <twin id>`.
+// agent loop, so its root is `invoke_workflow <twin id>`. A chat twin runs one
+// user turn of an agent: `invoke_agent <twin id>`.
 
 export const GEN_AI_OPERATION_NAME = "gen_ai.operation.name";
 export const GEN_AI_CONVERSATION_ID = "gen_ai.conversation.id";
 export const INVOKE_WORKFLOW = "invoke_workflow";
+export const INVOKE_AGENT = "invoke_agent";
 
 export interface ExecuteRunOptions {
   readonly runId: string;
@@ -48,15 +50,17 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
     const code = err instanceof TwinParamError ? "invalid_params" : "run_failed";
     return { status: "error", error: { code, message: messageOf(err) } };
   }
-  const attributes = rootAttributes(twin, options.runId, start, resolved);
+  const operation = twin.input.kind === "chat" ? INVOKE_AGENT : INVOKE_WORKFLOW;
+  const attributes = rootAttributes(twin, operation, options.runId, start, resolved);
   return options.tracer.startActiveSpan(
-    `${INVOKE_WORKFLOW} ${twin.id}`,
+    `${operation} ${twin.id}`,
     { attributes },
     async (span): Promise<RunResult> => {
       const spanContext = span.spanContext();
       const traceId = isSpanContextValid(spanContext) ? spanContext.traceId : undefined;
       if (traceId) options.onTrace?.(traceId);
-      stampTwinInput(start.input);
+      // A chat input is the conversation: the AI SDK adapter records it under its content rules.
+      if (twin.input.kind === "structured") stampTwinInput(start.input);
       try {
         const result = await runTwin(twin, {
           input: start.input,
@@ -64,6 +68,7 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
           context: start.context,
           signal: options.signal,
           onLog: (message, level) => options.onEvent({ kind: "log", level, message }),
+          onText: (text) => options.onEvent({ kind: "text.delta", text }),
         });
         return {
           status: "ok",
@@ -75,6 +80,13 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
         const canceled = options.signal.aborted;
         span.setStatus({ code: SpanStatusCode.ERROR, message: messageOf(err) });
         if (canceled) return { status: "canceled", ...(traceId ? { traceId } : {}) };
+        if (err instanceof TwinInputError || err instanceof ModelResolutionError) {
+          return {
+            status: "error",
+            error: { code: "invalid_params", message: `${twin.id}: ${messageOf(err)}` },
+            ...(traceId ? { traceId } : {}),
+          };
+        }
         return {
           status: "error",
           error: { code: "run_failed", message: `${twin.id}: run() threw: ${messageOf(err)}` },
@@ -89,12 +101,13 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
 
 function rootAttributes(
   twin: Twin,
+  operation: string,
   runId: string,
   start: RunStartPayload,
   resolved: ReturnType<typeof resolveParams>,
 ): Attributes {
   return {
-    [GEN_AI_OPERATION_NAME]: INVOKE_WORKFLOW,
+    [GEN_AI_OPERATION_NAME]: operation,
     ...(start.sessionId ? { [GEN_AI_CONVERSATION_ID]: start.sessionId } : {}),
     [RATEL_TWIN_ID]: twin.id,
     [RATEL_TWIN_CONFIG_HASH]: resolved.configHash,

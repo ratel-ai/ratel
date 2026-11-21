@@ -15,3 +15,32 @@ export class TwinParamError extends Error {
     this.name = "TwinParamError";
   }
 }
+
+/** The run input does not fit the twin's input kind (structured object, or chat `{ messages }`). */
+export class TwinInputError extends Error {
+  readonly reason = "invalid_params" as const;
+
+  constructor(
+    readonly twinId: string,
+    readonly problem: string,
+  ) {
+    super(`${twinId}: input ${problem}`);
+    this.name = "TwinInputError";
+  }
+}
+
+/**
+ * A `provider/model` value has no way to run here: no gateway key, no key for
+ * its provider or no provider package. The message says what to set or install.
+ */
+export class ModelResolutionError extends Error {
+  readonly reason = "invalid_params" as const;
+
+  constructor(
+    readonly modelId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ModelResolutionError";
+  }
+}

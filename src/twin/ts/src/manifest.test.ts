@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
-import { buildManifest, callableProviders, SDK_VERSION } from "./index.js";
+import { buildManifest, callableProviders, SDK_VERSION, type StructuredInput } from "./index.js";
 import { labelTwin } from "./test-support/label.twin.js";
 
 const SCHEMA_DIR = fileURLToPath(new URL("../../../../protocol/twin/v1/schema", import.meta.url));
@@ -45,7 +45,7 @@ describe("buildManifest", () => {
       id: "workflow-label",
       file: "src/label.twin.ts",
       modelResolver: "builtin",
-      input: { kind: "structured", schema: labelTwin.input.schema },
+      input: { kind: "structured", schema: (labelTwin.input as StructuredInput<unknown>).schema },
       params: [
         { name: "model", kind: "model", default: "anthropic/claude-sonnet-5-5" },
         { name: "system", kind: "prompt", default: "You name agent workflows." },

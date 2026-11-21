@@ -1,4 +1,5 @@
 import { checkParamValue, type ParamMap, type ParamValues } from "./params.js";
+import type { CallableProvider } from "./providers.js";
 
 /** The input of a structured twin: one JSON object described by a JSON Schema. */
 export interface StructuredInput<I> {
@@ -6,6 +7,42 @@ export interface StructuredInput<I> {
   readonly schema: Readonly<Record<string, unknown>>;
   /** Type-level marker of the input type. Never set at runtime. */
   readonly __input?: I;
+}
+
+/**
+ * The input of a chat twin: the conversation so far, ending with the user turn
+ * under test. One run per user turn. `I` is `{ messages: Message[] }`.
+ */
+export interface ChatInput<I = ChatRunInput> {
+  readonly kind: "chat";
+  /** Type-level marker of the input type. Never set at runtime. */
+  readonly __input?: I;
+}
+
+export interface ChatRunInput<M = ChatMessage> {
+  readonly messages: M[];
+}
+
+/** The smallest message shape a chat input accepts. AI SDK twins use `ModelMessage`. */
+export interface ChatMessage {
+  readonly role: string;
+  readonly content: unknown;
+}
+
+export type TwinInput<I> = StructuredInput<I> | ChatInput<I>;
+
+/**
+ * Maps a `provider/model` value to what run() gets. It can be async, for a
+ * resolver that imports the provider package of the project at run time.
+ */
+export interface ModelResolver<M> {
+  (modelId: string): M | PromiseLike<M>;
+  /** Set by a built-in resolver: run() gets an AI SDK `LanguageModel`. */
+  readonly modelKind?: "language-model";
+  /** Set by a built-in resolver: the providers it can call with `env`. Key names only. */
+  readonly callableProviders?: (
+    env: Readonly<Record<string, string | undefined>>,
+  ) => CallableProvider[];
 }
 
 export interface RunContext {
@@ -16,6 +53,8 @@ export interface RunContext {
   readonly signal: AbortSignal;
   /** Streams one log line to the playground as a `log` event. A no-op in a local run. */
   log(message: string, level?: LogLevel): void;
+  /** Streams one piece of the reply to the playground as a `text.delta` event. */
+  textDelta(text: string): void;
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
@@ -25,11 +64,11 @@ export type TwinEventPayload = { readonly kind: string } & Readonly<Record<strin
 
 export interface TwinDefinition<P extends ParamMap, I, O, M> {
   readonly params: P;
-  readonly input: StructuredInput<I>;
+  readonly input: TwinInput<I>;
+  /** Fixed inputs that are not under test, by name: see `twin.context()`. */
   readonly context?: Readonly<Record<string, unknown>>;
   /** Maps a `provider/model` value to what run() gets. Default: the bare model ID. */
-  // Method syntax on purpose: a Twin<P, LabelInput> must be usable where any Twin is expected.
-  resolve?(modelId: string): M;
+  readonly resolve?: ModelResolver<M>;
   run(args: { input: I; params: ParamValues<P, M>; ctx: RunContext }): Promise<O> | O;
   /**
    * Runs on every event payload and on the run.end payload before they leave
@@ -61,6 +100,9 @@ export function defineTwin<P extends ParamMap, I, O, M = string>(
     const problem = checkParamValue(param, param.default);
     if (problem) throw new TypeError(`${id}: ${name} default: ${problem}`);
   }
+  for (const name of Object.keys(definition.context ?? {})) {
+    if (!PARAM_NAME.test(name)) throw new TypeError(`${id}: "${name}" is not a valid context name`);
+  }
   return Object.freeze({ kind: "ratel.twin", id, ...definition });
 }
 
@@ -74,4 +116,31 @@ export function isTwin(value: unknown): value is Twin {
 
 export function structured<I>(schema: Readonly<Record<string, unknown>>): StructuredInput<I> {
   return { kind: "structured", schema };
+}
+
+/** A chat input: run() gets `{ messages }`, the conversation so far. One run per user turn. */
+export function chat<M = ChatMessage>(): ChatInput<ChatRunInput<M>> {
+  return { kind: "chat" };
+}
+
+/**
+ * Declares the fixed inputs of a twin that are not under test (tenant, org,
+ * user). The values are the defaults. A run can change them, never add one.
+ */
+export function context<C extends Readonly<Record<string, unknown>>>(values: C): Readonly<C> {
+  return Object.freeze({ ...values });
+}
+
+/** Why `value` does not fit the twin's input kind, or null when it fits. */
+export function checkInput(input: TwinInput<unknown>, value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return "must be a JSON object";
+  if (input.kind === "structured") return null;
+  const messages = (value as { messages?: unknown }).messages;
+  if (!Array.isArray(messages) || messages.length === 0)
+    return "must have a non-empty messages array";
+  const bad = messages.findIndex(
+    (m) => typeof m !== "object" || m === null || typeof (m as ChatMessage).role !== "string",
+  );
+  return bad < 0 ? null : `messages[${bad}] must be an object with a string role`;
 }

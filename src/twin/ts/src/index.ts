@@ -4,9 +4,14 @@
  * the production import path: it opens no socket and does no network I/O.
  */
 import { bool, enumParam, int, model, number, prompt, string } from "./params.js";
-import { defineTwin, structured } from "./twin.js";
+import { chat, context, defineTwin, structured } from "./twin.js";
 
-export { type ParamIssue, TwinParamError } from "./errors.js";
+export {
+  ModelResolutionError,
+  type ParamIssue,
+  TwinInputError,
+  TwinParamError,
+} from "./errors.js";
 export { canonicalJson, configHash } from "./hash.js";
 export {
   buildManifest,
@@ -37,19 +42,25 @@ export {
   type ParamValues,
 } from "./params.js";
 export { type CallableProvider, callableProviders, PROVIDER_KEYS } from "./providers.js";
-export { type ResolvedParams, resolveParams } from "./resolve.js";
+export { type ResolvedParams, resolveParams, settleParams } from "./resolve.js";
 export { type RunTwinOptions, type RunTwinResult, runTwin } from "./run.js";
 export {
+  type ChatInput,
+  type ChatMessage,
+  type ChatRunInput,
+  checkInput,
   isTwin,
   type LogLevel,
+  type ModelResolver,
   type RunContext,
   type StructuredInput,
   type Twin,
   type TwinDefinition,
   type TwinEventPayload,
+  type TwinInput,
 } from "./twin.js";
 
-/** `twin(id, { params, input, run })` plus the param and input builders. */
+/** `twin(id, { params, input, context, run })` plus the param, input and context builders. */
 export const twin = Object.assign(defineTwin, {
   model,
   prompt,
@@ -59,4 +70,6 @@ export const twin = Object.assign(defineTwin, {
   enum: enumParam,
   string,
   structured,
+  chat,
+  context,
 });

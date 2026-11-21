@@ -110,7 +110,7 @@ export const PACKAGE_OUTPUTS = {
   "src/adapters/ts-vercel-ai-sdk": ["sdk", "ai_sdk"],
   "src/adapters/ts-mastra": ["sdk"],
   "src/rankers/ts": ["sdk", "rankers_ts"],
-  "src/twin/ts": ["sdk"],
+  "src/twin/ts": ["sdk", "ai_sdk"],
 };
 
 const ALL_TRUE = Object.fromEntries(OUTPUTS.map((k) => [k, true]));

@@ -15,6 +15,12 @@ describe("@ratel-ai/twin entry stays network-free", () => {
     expect([...packagesReachableFrom("index.ts")].sort()).toEqual(ALLOWED);
   });
 
+  it("keeps ai out of the core: only the ai-sdk entry names it, as a type", () => {
+    expect([...packagesReachableFrom("ai-sdk.ts")]).toEqual(["ai"]);
+    const source = readFileSync(new URL("ai-sdk.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/^import type \{[^}]*\} from "ai";$/m);
+  });
+
   it("opens no socket and calls no fetch on import", async () => {
     const connect = vi.spyOn(net.Socket.prototype, "connect");
     const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -42,7 +48,20 @@ describe("@ratel-ai/twin entry stays network-free", () => {
       ws: "^8.21.1",
     });
     expect(pkg.bin).toEqual({ ratel: "./dist/cli/main.js" });
-    expect(pkg.peerDependencies).toEqual({ "@opentelemetry/api": "^1.9.0" });
+    // The AI SDK packages are optional peers: the ai-sdk entry imports the ones the project has, at run time.
+    expect(pkg.peerDependencies).toEqual({
+      "@ai-sdk/anthropic": "^3.0.0 || ^4.0.0",
+      "@ai-sdk/google": "^3.0.0 || ^4.0.0",
+      "@ai-sdk/openai": "^3.0.0 || ^4.0.0",
+      "@opentelemetry/api": "^1.9.0",
+      ai: "^6.0.0 || ^7.0.0",
+    });
+    for (const name of ["ai", "@ai-sdk/anthropic", "@ai-sdk/google", "@ai-sdk/openai"])
+      expect(pkg.peerDependenciesMeta[name]).toEqual({ optional: true });
+    expect(pkg.exports["./ai-sdk"]).toEqual({
+      types: "./dist/ai-sdk.d.ts",
+      default: "./dist/ai-sdk.js",
+    });
     expect(pkg.license).toBe("MIT");
     expect(pkg.publishConfig).toEqual({ access: "public", provenance: true });
   });

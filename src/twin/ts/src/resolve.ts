@@ -4,8 +4,11 @@ import { bareModelId, checkParamValue, type ParamMap, type ParamValues } from ".
 import type { Twin } from "./twin.js";
 
 export interface ResolvedParams<P extends ParamMap, M> {
-  /** What run() gets: models mapped by the twin's resolve, or to their bare ID. */
-  readonly values: ParamValues<P, M>;
+  /**
+   * What run() gets: models mapped by the twin's resolve, or to their bare ID.
+   * An async resolve leaves a promise here: settleParams waits for it.
+   */
+  readonly values: ParamValues<P, M | PromiseLike<M>>;
   /** The param values as data (models as `provider/model`). The config hash covers these. */
   readonly raw: Readonly<Record<string, unknown>>;
   readonly configHash: string;
@@ -42,17 +45,28 @@ export function resolveParams<P extends ParamMap, M>(
   }
   if (issues.length > 0) throw new TwinParamError(twin.id, sortByDeclaration(issues, twin.params));
 
-  const resolveModel = twin.resolve ? (id: string) => twin.resolve?.(id) : bareModelId;
+  const resolve = twin.resolve;
+  const resolveModel = resolve ? (id: string) => resolve(id) : bareModelId;
   const values: Record<string, unknown> = {};
   for (const [name, param] of Object.entries(twin.params)) {
     values[name] = param.kind === "model" ? resolveModel(raw[name] as string) : raw[name];
   }
   return {
-    values: values as ParamValues<P, M>,
+    values: values as ParamValues<P, M | PromiseLike<M>>,
     raw,
     configHash: configHash(raw),
     overrides: changed,
   };
+}
+
+/** Waits for every model value an async resolve returned. */
+export async function settleParams<P extends ParamMap, M>(
+  values: ParamValues<P, M | PromiseLike<M>>,
+): Promise<ParamValues<P, M>> {
+  const entries = await Promise.all(
+    Object.entries(values).map(async ([name, value]) => [name, await value] as const),
+  );
+  return Object.fromEntries(entries) as ParamValues<P, M>;
 }
 
 function sortByDeclaration(issues: ParamIssue[], params: ParamMap): ParamIssue[] {

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { TwinParamError } from "../errors.js";
+import { ModelResolutionError, TwinInputError, TwinParamError } from "../errors.js";
 import { buildManifest } from "../manifest.js";
 import { coerceOverride } from "../params.js";
 import { runTwin } from "../run.js";
@@ -35,7 +35,12 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
   }
   const overrides = coerceSets(found, request.sets);
   try {
-    const result = await runTwin(found, { input: request.input, overrides });
+    // A chat twin streams its reply: show it as it comes, on stderr, so stdout keeps only the result.
+    const result = await runTwin(found, {
+      input: request.input,
+      overrides,
+      onText: (text) => process.stderr.write(text),
+    });
     return {
       ok: true,
       kind: "run",
@@ -44,7 +49,12 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
       overrides: result.overrides,
     };
   } catch (err) {
-    if (err instanceof TwinParamError) throw err;
+    if (
+      err instanceof TwinParamError ||
+      err instanceof TwinInputError ||
+      err instanceof ModelResolutionError
+    )
+      throw err;
     throw new Error(`${found.id}: run() threw: ${messageOf(err)}`);
   }
 }

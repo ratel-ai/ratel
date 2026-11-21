@@ -61,6 +61,10 @@
           "description": "builtin: the runner maps provider/model values. custom: the twin passes its own resolve.",
           "enum": ["builtin", "custom"]
         },
+        "modelKind": {
+          "description": "Optional. language-model: run() gets an AI SDK LanguageModel, so a model value is callable only through a listed provider (gateway, or the model's own provider). Absent: run() gets the bare model ID.",
+          "enum": ["language-model"]
+        },
         "input": { "$ref": "#/$defs/input" },
         "params": {
           "description": "The params Ratel can change per run, in declaration order. Names are unique.",

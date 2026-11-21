@@ -1,5 +1,6 @@
-import type { Manifest } from "../manifest.js";
+import type { Manifest, ManifestTwin } from "../manifest.js";
 import { checkParamValue } from "../params.js";
+import { checkInput } from "../twin.js";
 import { jsonBytes, splitText, truncateText, truncateValue } from "./frame-size.js";
 import { type Envelope, type FrameStamp, frame, MAX_FRAME_BYTES } from "./protocol.js";
 
@@ -165,15 +166,29 @@ export class Runs {
     }
     const errors: { param: string; message: string }[] = [];
     const params = start.params ?? {};
+    // An AI SDK twin calls the model itself: its provider must be callable here.
+    const uncallable = (param: ManifestTwin["params"][number], value: unknown) =>
+      param.kind === "model" &&
+      twin.modelKind === "language-model" &&
+      twin.modelResolver === "builtin"
+        ? uncallableModel(String(value), manifest)
+        : null;
     for (const name of Object.keys(params)) {
       const param = twin.params.find((p) => p.name === name);
       if (!param) {
         errors.push({ param: name, message: "is an unknown param" });
         continue;
       }
-      const problem = checkParamValue(param, params[name]);
+      const problem = checkParamValue(param, params[name]) ?? uncallable(param, params[name]);
       if (problem) errors.push({ param: name, message: problem });
     }
+    for (const param of twin.params) {
+      if (Object.hasOwn(params, param.name)) continue;
+      const problem = uncallable(param, param.default);
+      if (problem) errors.push({ param: param.name, message: problem });
+    }
+    const inputProblem = twin.input.kind === "chat" ? checkInput(twin.input, start.input) : null;
+    if (inputProblem) errors.push({ param: "input", message: inputProblem });
     if (errors.length > 0) {
       const detail = errors.map((e) => `${e.param} ${e.message}`).join("; ");
       return { reason: "invalid_params", message: `${twin.id}: ${detail}`, errors };
@@ -236,6 +251,18 @@ export class Runs {
     const keep = this.#options.rememberFinished ?? 1000;
     if (this.#finished.length > keep) this.#finished.splice(0, this.#finished.length - keep);
   }
+}
+
+/**
+ * Why an AI SDK model value cannot run on this worker, or null. The gateway
+ * reaches every provider; otherwise the model's own provider must be listed.
+ */
+function uncallableModel(modelId: string, manifest: Manifest): string | null {
+  const names = manifest.providers.map((p) => p.provider);
+  const provider = modelId.slice(0, modelId.indexOf("/"));
+  if (names.includes("gateway") || names.includes(provider)) return null;
+  const listed = names.length > 0 ? names.join(", ") : "none";
+  return `cannot run ${modelId} on this runner: set AI_GATEWAY_API_KEY, or install the @ai-sdk/${provider} package and set its API key (callable providers: ${listed})`;
 }
 
 /** Room left for the envelope fields (v, type, id, ts, runId, seq) of one frame. */
