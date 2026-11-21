@@ -326,3 +326,43 @@ test("the main providers' current models are priced", () => {
     assert.ok(priceFor(model, C), `${model} has a price`);
   }
 });
+
+// The Codex models (developers.openai.com/api/docs/pricing, standard tier, checked 2026-11-19).
+// Each row: 100k in + 100k out, 100k cached reads, 100k cache writes, and 300k in + 10k out over 272k.
+for (const [model, base, cached, written, long] of [
+  // gpt-6-sol: $2/$10, cache $0.20, write $2.50; long $4/$15.
+  ["gpt-6-sol", 1.2, 0.02, 0.25, 1.35],
+  // gpt-6-luna: $0.10/$0.50, cache $0.01, write $0.125; long $0.20/$0.75.
+  ["gpt-6-luna", 0.06, 0.001, 0.0125, 0.0675],
+  // gpt-5.6-terra: $2/$12, cache $0.20, write $2.50; long $4/$18.
+  ["gpt-5.6-terra", 1.4, 0.02, 0.25, 1.38],
+  // gpt-5.6-luna: $0.20/$1.20, cache $0.02, write $0.25; long $0.40/$1.80.
+  ["gpt-5.6-luna", 0.14, 0.002, 0.025, 0.138],
+] as const) {
+  test(`${model} is priced at its official standard rates`, () => {
+    assert.equal(costFor(model, { input_tokens: 100_000, output_tokens: 100_000 }, C), base);
+    assert.equal(
+      costFor(model, { input_tokens: 100_000, output_tokens: 0, cached_tokens: 100_000 }, C),
+      cached,
+    );
+    assert.equal(
+      costFor(model, { input_tokens: 100_000, output_tokens: 0, cache_write_tokens: 100_000 }, C),
+      written,
+    );
+    assert.equal(costFor(model, { input_tokens: 300_000, output_tokens: 10_000 }, C), long);
+  });
+}
+
+test("the Codex models double their cache rates over 272k prompt tokens", () => {
+  // 300k prompt, 200k cache reads and 50k cache writes, 50k uncached; 10k out.
+  const usage = {
+    input_tokens: 300_000,
+    output_tokens: 10_000,
+    cached_tokens: 200_000,
+    cache_write_tokens: 50_000,
+  };
+  // gpt-6-sol long: 50k * $4 + 200k * $0.40 + 50k * $5 + 10k * $15.
+  assert.equal(costFor("gpt-6-sol", usage, C), 0.68);
+  // gpt-5.6-luna long: 50k * $0.40 + 200k * $0.04 + 50k * $0.50 + 10k * $1.80.
+  assert.equal(costFor("gpt-5.6-luna", usage, C), 0.071);
+});

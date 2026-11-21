@@ -150,69 +150,42 @@ function Body({ state }: { state: TabSummaryState }): ReactNode {
   }
   const { unit, errors } = VOLUME_UNIT[state.tab];
   return (
+    <SummaryNumbers
+      figures={figures(state)}
+      chart={
+        <MiniVolume
+          model={state.volume}
+          unit={unit}
+          errorLabel={errors}
+          className="min-w-60 flex-1"
+        />
+      }
+    />
+  );
+}
+
+/** A summary's numbers beside its volume chart: the layout every Traces tab shares (RC-752: Turns too). */
+export function SummaryNumbers({ figures, chart }: { figures: ReactNode; chart: ReactNode }) {
+  return (
     <div className="flex flex-col gap-x-8 gap-y-3 lg:flex-row lg:items-end" data-summary-state="ok">
-      <dl className="flex shrink-0 flex-wrap gap-x-6 gap-y-2">{figures(state)}</dl>
-      <MiniVolume
-        model={state.volume}
-        unit={unit}
-        errorLabel={errors}
-        className="min-w-60 flex-1"
-      />
+      <dl className="flex shrink-0 flex-wrap gap-x-6 gap-y-2">{figures}</dl>
+      {chart}
     </div>
   );
 }
 
-function figures(state: TracesTabSummary & { status: "ok" }): ReactNode {
-  if (state.tab === "sessions") {
-    return (
-      <>
-        <Figure label="Sessions" value={formatInteger(state.sessions)} />
-        <Figure label="Failed" value={formatInteger(state.failed)} danger={state.failed > 0} />
-        <Figure
-          label="Typical duration"
-          value={state.typicalDurationMs === null ? "–" : formatDuration(state.typicalDurationMs)}
-        />
-        <Figure label="Cost" value={formatMoney(state.costUsd)} />
-      </>
-    );
-  }
-  if (state.tab === "spans") {
-    return (
-      <>
-        <Figure label="Spans" value={formatInteger(state.spans)} />
-        <Figure label="Errors" value={formatInteger(state.errors)} danger={state.errors > 0} />
-        <Figure
-          label="p50"
-          value={state.p50DurationMs === null ? "–" : formatDuration(state.p50DurationMs)}
-        />
-        <Figure
-          label="p95"
-          value={state.p95DurationMs === null ? "–" : formatDuration(state.p95DurationMs)}
-        />
-        <Groups
-          label="By kind"
-          groups={state.kinds.map((row) => ({ name: row.kind, count: row.count }))}
-        />
-      </>
-    );
-  }
-  return (
-    <>
-      <Figure label="Logs" value={formatInteger(state.logs)} />
-      <Figure label="Errors" value={formatInteger(state.errors)} danger={state.errors > 0} />
-      <Groups
-        label="By level"
-        groups={state.levels.map((row) => ({
-          name: row.level,
-          count: row.count,
-          danger: row.level === "error" || row.level === "fatal",
-        }))}
-      />
-    </>
-  );
-}
-
-function Figure({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
+/** One number of a summary, with an optional quiet line under it. */
+export function SummaryFigure({
+  label,
+  value,
+  hint,
+  danger,
+}: {
+  label: string;
+  value: string;
+  hint?: ReactNode;
+  danger?: boolean;
+}) {
   return (
     <div className="flex flex-col" data-figure={label}>
       <dt className="text-xs text-fg-subtle">{label}</dt>
@@ -225,7 +198,66 @@ function Figure({ label, value, danger }: { label: string; value: string; danger
       >
         {value}
       </dd>
+      {hint ? <dd className="text-xs text-fg-subtle tabular-nums">{hint}</dd> : null}
     </div>
+  );
+}
+
+function figures(state: TracesTabSummary & { status: "ok" }): ReactNode {
+  if (state.tab === "sessions") {
+    return (
+      <>
+        <SummaryFigure label="Sessions" value={formatInteger(state.sessions)} />
+        <SummaryFigure
+          label="Failed"
+          value={formatInteger(state.failed)}
+          danger={state.failed > 0}
+        />
+        <SummaryFigure
+          label="Typical duration"
+          value={state.typicalDurationMs === null ? "–" : formatDuration(state.typicalDurationMs)}
+        />
+        <SummaryFigure label="Cost" value={formatMoney(state.costUsd)} />
+      </>
+    );
+  }
+  if (state.tab === "spans") {
+    return (
+      <>
+        <SummaryFigure label="Spans" value={formatInteger(state.spans)} />
+        <SummaryFigure
+          label="Errors"
+          value={formatInteger(state.errors)}
+          danger={state.errors > 0}
+        />
+        <SummaryFigure
+          label="p50"
+          value={state.p50DurationMs === null ? "–" : formatDuration(state.p50DurationMs)}
+        />
+        <SummaryFigure
+          label="p95"
+          value={state.p95DurationMs === null ? "–" : formatDuration(state.p95DurationMs)}
+        />
+        <Groups
+          label="By kind"
+          groups={state.kinds.map((row) => ({ name: row.kind, count: row.count }))}
+        />
+      </>
+    );
+  }
+  return (
+    <>
+      <SummaryFigure label="Logs" value={formatInteger(state.logs)} />
+      <SummaryFigure label="Errors" value={formatInteger(state.errors)} danger={state.errors > 0} />
+      <Groups
+        label="By level"
+        groups={state.levels.map((row) => ({
+          name: row.level,
+          count: row.count,
+          danger: row.level === "error" || row.level === "fatal",
+        }))}
+      />
+    </>
   );
 }
 

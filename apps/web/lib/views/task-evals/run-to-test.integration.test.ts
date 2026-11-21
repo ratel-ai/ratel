@@ -73,6 +73,23 @@ test("a valid model answer gives a proposal and charges the shared organization 
   }
 });
 
+test("a proposal in a json code fence is read", async () => {
+  const f = await setup();
+  try {
+    f.deps.model = {
+      model: "claude-haiku-5-5",
+      standIn: false,
+      draft: async () => ({
+        text: `\`\`\`json\n${JSON.stringify(PROPOSAL, null, 2)}\n\`\`\``,
+        usage: { inputTokens: 100, outputTokens: 100 },
+      }),
+    };
+    assert.deepEqual(await draftTestFromRun(PROJECT, "task-a", TURN, f.deps), PROPOSAL);
+  } finally {
+    await f.client.close();
+  }
+});
+
 test("invalid output gives a clear error and still counts the model charge", async () => {
   const f = await setup();
   try {

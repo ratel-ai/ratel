@@ -1,4 +1,3 @@
-import type { TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -19,7 +18,12 @@ import {
   traceFilterFromSearch,
 } from "@/lib/synthesis/traces/v2/filters";
 import { loadSessionListPage } from "@/lib/synthesis/traces/v2/sessions-list";
-import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
+import {
+  parseSessionsFilter,
+  SESSIONS_FILTER_PARAM,
+  type SessionsEmptyKind,
+  sessionsEmptyKind,
+} from "@/lib/synthesis/traces-sessions/view";
 import { SessionListView } from "./SessionListView";
 
 /**
@@ -62,14 +66,20 @@ export async function SessionListPage({
         ),
     }),
   ]);
-  let empty: TracesEmptyKind | "no-failed" | null = null;
+  // RC-752: turns with no session read "No sessions yet", not "No turns yet".
+  let empty: SessionsEmptyKind | null = null;
   if (page.items.length === 0) {
-    if (hasFilters("rollup", search)) empty = "filtered";
-    else if (filter === "failed") empty = "no-failed";
-    else {
-      const diagnostics = await getTracesIngestDiagnostics(project.id);
-      empty = diagnostics.hasEvents && !diagnostics.hasSpans ? "events-only" : "no-telemetry";
-    }
+    const filtered = hasFilters("rollup", search);
+    const diagnostics =
+      filtered || filter === "failed"
+        ? { hasEvents: false, hasSpans: false }
+        : await getTracesIngestDiagnostics(project.id);
+    empty = sessionsEmptyKind({
+      filter,
+      filtered,
+      hasEvents: diagnostics.hasEvents,
+      hasSpans: diagnostics.hasSpans,
+    });
   }
   return (
     <SessionListView

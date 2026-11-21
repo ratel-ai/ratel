@@ -112,8 +112,11 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
   // https://platform.openai.com/docs/models (checked 2026-11-09). Standard tier.
   // cacheWrite is the 30-minute write rate (1.25x input) where OpenAI bills
   // writes; older models do not. Over 272k prompt tokens the whole call pays 2x
-  // input (and cache, on GPT-6) and 1.5x output. `gpt-6-luna` is priced only where
-  // Ratel's own calls are (the edition's vendor prices), never for customer ingest.
+  // input and cache and 1.5x output. The Codex models gpt-6-sol, gpt-6-luna,
+  // gpt-5.6-terra and gpt-5.6-luna: https://developers.openai.com/api/docs/pricing
+  // (checked 2026-11-19). `gpt-6-luna` here is the general Responses/Chat price
+  // of customer calls; Ratel's own Decisions calls keep the input-only Decisions
+  // price of the edition's vendor prices.
   "gpt-6-astra": {
     input: 10,
     output: 50,
@@ -135,6 +138,26 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
     cacheWrite: 1.25,
     longContext: { threshold: 272_000, input: 2, output: 7.5, cachedInput: 0.1, cacheWrite: 2.5 },
   },
+  "gpt-6-sol": {
+    input: 2,
+    output: 10,
+    cachedInput: 0.2,
+    cacheWrite: 2.5,
+    longContext: { threshold: 272_000, input: 4, output: 15, cachedInput: 0.4, cacheWrite: 5 },
+  },
+  "gpt-6-luna": {
+    input: 0.1,
+    output: 0.5,
+    cachedInput: 0.01,
+    cacheWrite: 0.125,
+    longContext: {
+      threshold: 272_000,
+      input: 0.2,
+      output: 0.75,
+      cachedInput: 0.02,
+      cacheWrite: 0.25,
+    },
+  },
   // Promotional price until 2026-11-30 (then $5/$30). `gpt-5.6` routes to Sol.
   "gpt-5.6-sol": {
     input: 4,
@@ -149,6 +172,26 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
     cachedInput: 0.4,
     cacheWrite: 5,
     longContext: { threshold: 272_000, input: 8, output: 30, cachedInput: 0.8, cacheWrite: 10 },
+  },
+  "gpt-5.6-terra": {
+    input: 2,
+    output: 12,
+    cachedInput: 0.2,
+    cacheWrite: 2.5,
+    longContext: { threshold: 272_000, input: 4, output: 18, cachedInput: 0.4, cacheWrite: 5 },
+  },
+  "gpt-5.6-luna": {
+    input: 0.2,
+    output: 1.2,
+    cachedInput: 0.02,
+    cacheWrite: 0.25,
+    longContext: {
+      threshold: 272_000,
+      input: 0.4,
+      output: 1.8,
+      cachedInput: 0.04,
+      cacheWrite: 0.5,
+    },
   },
   "gpt-5.5": {
     input: 5,

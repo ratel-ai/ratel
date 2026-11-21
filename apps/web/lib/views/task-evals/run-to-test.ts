@@ -36,6 +36,7 @@ export interface RunTestDraftDeps {
 export class TestDraftError extends Error {}
 
 const logger = getLogger("task-evals/run-to-test");
+const INVALID_PROPOSAL = "The model returned an invalid test proposal. Try again.";
 
 /** Draft a test from a completed run in this task and project. */
 export async function draftTestFromRun(
@@ -157,13 +158,27 @@ export async function draftTestFromRun(
     usd = meter.price(model.model, reply.usage);
     let raw: unknown;
     try {
-      raw = JSON.parse(reply.text);
+      raw = JSON.parse(withoutCodeFence(reply.text));
     } catch {
-      throw new TestDraftError("The model returned an invalid test proposal. Try again.");
+      logger.warn(
+        { project_id: projectId, task_id: taskId, reason: "not_json", chars: reply.text.length },
+        "task test proposal rejected",
+      );
+      throw new TestDraftError(INVALID_PROPOSAL);
     }
     const parsed = testProposalSchema.safeParse(raw);
-    if (!parsed.success)
-      throw new TestDraftError("The model returned an invalid test proposal. Try again.");
+    if (!parsed.success) {
+      logger.warn(
+        {
+          project_id: projectId,
+          task_id: taskId,
+          reason: "schema",
+          issues: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.code}`),
+        },
+        "task test proposal rejected",
+      );
+      throw new TestDraftError(INVALID_PROPOSAL);
+    }
     outcome = "drafted";
     return parsed.data;
   } catch (err) {
@@ -211,4 +226,9 @@ export async function runIsInEvalSet(
     )
     .limit(1);
   return !!row;
+}
+
+/** The small model often wraps its JSON in a ```json fence (as in upstream's `lib/evals/fill/filler.ts`). */
+function withoutCodeFence(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
 }

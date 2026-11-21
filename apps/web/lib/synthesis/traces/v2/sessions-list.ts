@@ -18,11 +18,16 @@ import type { SessionsFilter } from "@/lib/synthesis/traces-sessions/view";
  * update first, paged by a cursor. A turn with no session id (OTLP ingest
  * keys it by its own trace id) is not a session and is not listed.
  *
+ * A session with only an open turn (a live session the idle sweep has not
+ * closed yet) is listed too (RC-752): its head is its open turn.
+ *
  * The page reads only the turn ledger (`trace_turns`, and `trace_turn_steps`
- * with their `trace_events` to find a runtime-lane turn's trace) and the
- * per-trace rollup (`otel_trace_summaries`): one walk for the page's heads on
- * `trace_turns_closed_ended_idx`, one aggregate for their numbers. The first
- * and last turn's text is read by trace id for the page's rows only.
+ * with their `trace_events` to find the traces of a runtime-lane or MCP
+ * `otlp-run:` turn) and the per-trace rollup (`otel_trace_summaries`): one
+ * walk for the page's heads (closed heads on `trace_turns_closed_ended_idx`,
+ * open heads on `trace_turns_open_received_idx`), one aggregate for their
+ * numbers. The first and last turn's text is read by trace id for the page's
+ * rows only.
  *
  * Status (derived): Active when the session has an open turn or its last
  * activity is less than 5 minutes old; else Failed when a turn failed (an
@@ -129,8 +134,9 @@ export function loadSessionListPage(
 }
 
 /**
- * Session heads past the cursor: each session's latest closed turn, walked
- * backwards on `trace_turns_closed_ended_idx` under the LIMIT. Turns keyed by
+ * Session heads past the cursor: each session's latest turn, open or closed.
+ * Closed heads walk backwards on `trace_turns_closed_ended_idx` under the
+ * LIMIT; open heads (few: one per live session) join them. Turns keyed by
  * their own trace id (no session id) are skipped.
  */
 export function sessionListPageQuery(
@@ -146,27 +152,37 @@ export function sessionListPageQuery(
   // `trace_turns_project_turn_key_idx`), not one lookup per walked turn.
   const failedSessions = sql`with failed_sessions as (
       select f.session_id from trace_turns f
-      where f.project_id = ${projectId} and f.status = 'closed' and f.error_count > 0
+      where f.project_id = ${projectId} and f.error_count > 0
       union
       select f.session_id from otel_trace_summaries s
       join trace_turns f on f.project_id = s.project_id and f.turn_key = ${OTLP_KEY} || s.trace_id
-      where s.project_id = ${projectId} and s.has_error and f.status = 'closed'
+      where s.project_id = ${projectId} and s.has_error
     )`;
   return sql`
     ${filter === "failed" ? failedSessions : sql``}
     ${matches ? matchedSessions(projectId, matches, filter === "failed" ? sql`,` : sql`with`) : sql``}
-    select t.session_id as id, to_char(t.ended_at at time zone 'UTC', ${AT_FORMAT}) as at
-    from trace_turns t
-    where t.project_id = ${projectId} and t.status = 'closed' and t.turn_key <> ${OTLP_KEY} || t.session_id
-      ${cursor ? sql`and t.ended_at <= ${cursor.at}::timestamptz and (t.ended_at < ${cursor.at}::timestamptz or t.session_id collate "C" < ${cursor.id})` : sql``}
-      and not exists (
-        select 1 from trace_turns n
-        where n.project_id = t.project_id and n.session_id = t.session_id and n.status = 'closed' and (n.ended_at, n.id) > (t.ended_at, t.id)
-      )
-      ${filter === "failed" ? sql`and t.session_id in (select session_id from failed_sessions)` : sql``}
-      ${matches ? sql`and t.session_id in (select session_id from matched_sessions)` : sql``}
-    order by t.ended_at desc, t.session_id collate "C" desc
+    select h.id, to_char(h.ended_at at time zone 'UTC', ${AT_FORMAT}) as at from (
+      (${heads("closed")})
+      union all
+      (${heads("open")})
+    ) h
+    order by h.ended_at desc, h.id collate "C" desc
     limit ${limit}`;
+
+  function heads(status: "open" | "closed"): SQL {
+    return sql`select t.session_id as id, t.ended_at
+      from trace_turns t
+      where t.project_id = ${projectId} and t.status = ${status} and t.turn_key <> ${OTLP_KEY} || t.session_id
+        ${cursor ? sql`and t.ended_at <= ${cursor.at}::timestamptz and (t.ended_at < ${cursor.at}::timestamptz or t.session_id collate "C" < ${cursor.id})` : sql``}
+        and not exists (
+          select 1 from trace_turns n
+          where n.project_id = t.project_id and n.session_id = t.session_id and (n.ended_at, n.id) > (t.ended_at, t.id)
+        )
+        ${filter === "failed" ? sql`and t.session_id in (select session_id from failed_sessions)` : sql``}
+        ${matches ? sql`and t.session_id in (select session_id from matched_sessions)` : sql``}
+      order by t.ended_at desc, t.session_id collate "C" desc
+      limit ${limit}`;
+  }
 }
 
 /**
@@ -180,13 +196,13 @@ function matchedSessions(projectId: string, condition: SQL, lead: SQL): SQL {
   return sql`${lead} matched_sessions as (
       select m.session_id from otel_trace_summaries s
       join trace_turns m on m.project_id = s.project_id and m.turn_key = ${OTLP_KEY} || s.trace_id
-      where s.project_id = ${projectId} and m.status = 'closed' and ${condition}
+      where s.project_id = ${projectId} and ${condition}
       union
       select m.session_id from trace_turns m
       join trace_turn_steps st on st.project_id = m.project_id and st.turn_id = m.id
       join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
       join otel_trace_summaries s on s.project_id = e.project_id and s.trace_id = e.trace_id
-      where m.project_id = ${projectId} and m.status = 'closed' and ${condition}
+      where m.project_id = ${projectId} and ${condition}
     )`;
 }
 
@@ -214,9 +230,11 @@ interface SessionAggregate {
 
 /**
  * The page's sessions in head order: one aggregate on `(project, session,
- * status)`, then the two asks. A turn's trace is its `otlp:` key, else the
- * first trace its steps' events carry (a runtime-lane turn); each trace counts
- * once per session, however many turns of both lanes hold it.
+ * status)`, then the two asks. Every turn counts, open or closed. A turn's
+ * ask is its `otlp:` key's trace, else the first trace its steps' events carry
+ * (a runtime-lane or `otlp-run:` turn). Tokens and cost add every trace of the
+ * session's turns (an MCP `otlp-run:` turn holds one trace per tool call),
+ * each trace once per session, however many turns of both lanes hold it.
  */
 async function loadRows(
   projectId: string,
@@ -242,22 +260,30 @@ async function loadRows(
           sql`, `,
         )})
       ),
+      session_traces as (
+        select session_id, trace_id from turns where trace_id is not null
+        union
+        select t.session_id, e.trace_id from turns t
+        join trace_turn_steps st on st.project_id = ${projectId} and st.turn_id = t.id
+        join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
+        where e.trace_id is not null
+      ),
       traces as (
         select r.session_id, sum(s.input_tokens + s.output_tokens) as tokens, sum(s.cost_usd) as cost, bool_or(s.has_error) as has_error
-        from (select distinct session_id, trace_id from turns where status = 'closed' and trace_id is not null) r
+        from session_traces r
         join otel_trace_summaries s on s.project_id = ${projectId} and s.trace_id = r.trace_id
         group by r.session_id
       )
       select t.session_id as id,
-        count(*) filter (where t.status = 'closed')::int as turns,
-        to_char(min(t.started_at) filter (where t.status = 'closed') at time zone 'UTC', ${AT_FORMAT}) as started_at,
-        to_char(max(t.ended_at) filter (where t.status = 'closed') at time zone 'UTC', ${AT_FORMAT}) as ended_at,
+        count(*)::int as turns,
+        to_char(min(t.started_at) at time zone 'UTC', ${AT_FORMAT}) as started_at,
+        to_char(max(t.ended_at) at time zone 'UTC', ${AT_FORMAT}) as ended_at,
         bool_or(t.status = 'open') as open,
-        coalesce(bool_or(t.error_count > 0) filter (where t.status = 'closed'), false) or coalesce(max(x.has_error::int) = 1, false) as failed,
+        bool_or(t.error_count > 0) or coalesce(max(x.has_error::int) = 1, false) as failed,
         max(x.tokens) as tokens,
         max(x.cost) as cost,
-        (array_agg(t.trace_id order by t.started_at, t.id) filter (where t.status = 'closed'))[1] as first_trace,
-        (array_agg(t.trace_id order by t.started_at desc, t.id desc) filter (where t.status = 'closed'))[1] as last_trace
+        (array_agg(t.trace_id order by t.started_at, t.id))[1] as first_trace,
+        (array_agg(t.trace_id order by t.started_at desc, t.id desc))[1] as last_trace
       from turns t
       left join traces x on x.session_id = t.session_id
       group by t.session_id`),

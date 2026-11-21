@@ -9,14 +9,15 @@ import { Page, PageBody } from "@ratel/design-system/page-header";
 import { Panel, usePeek } from "@ratel/design-system/panel";
 import { Callout, EmptyState, Skeleton } from "@ratel/design-system/states";
 import { SegmentedControl } from "@ratel/design-system/tabs";
-import { ArrowRight } from "lucide-react";
+import { useCopyToClipboard } from "@ratel/design-system/use-copy-to-clipboard";
+import { ArrowRight, Check, Copy } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SessionChatTranscript } from "@/components/console/session-chat/SessionChatView";
 import { RelativeTime, TruncatedText } from "@/components/console/traces/cells";
 import { useTraceNavigation } from "@/components/console/traces/navigation";
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
-import { TracesEmpty, type TracesEmptyKind } from "@/components/console/traces/TracesEmpty";
+import { TracesEmpty } from "@/components/console/traces/TracesEmpty";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import { TracesListTable } from "@/components/console/traces/TracesListTable";
 import type { TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
@@ -28,9 +29,12 @@ import type {
   SessionStatus,
 } from "@/lib/synthesis/traces/v2/sessions-list";
 import {
+  SESSION_ID_ATTRIBUTE,
+  SESSION_ID_PROMPT,
   SESSIONS_FILTER_LABEL,
   SESSIONS_FILTER_PARAM,
   SESSIONS_FILTERS,
+  type SessionsEmptyKind,
   type SessionsFilter,
   withSessionsFilter,
 } from "@/lib/synthesis/traces-sessions/view";
@@ -66,7 +70,7 @@ export interface SessionListViewProps {
   nextCursor: string | null;
   /** The request's time, for relative times. */
   now: string;
-  empty: TracesEmptyKind | "no-failed" | null;
+  empty: SessionsEmptyKind | null;
   /** The property bar's values (RC-506); null hides the bar. */
   filterFacets?: TraceFilterFacets | null;
   loadPage?: LoadSessionListPage;
@@ -140,6 +144,10 @@ export function SessionListView(props: SessionListViewProps) {
               }
             />
           </div>
+        ) : empty === "no-sessions" ? (
+          <div className="rounded-lg border border-line" data-sessions-empty="no-sessions">
+            <NoSessionsEmpty projectId={projectId} />
+          </div>
         ) : empty ? (
           <div className="rounded-lg border border-line" data-sessions-empty={empty}>
             <TracesEmpty kind={empty} unit="runs" projectId={projectId} />
@@ -155,6 +163,49 @@ export function SessionListView(props: SessionListViewProps) {
         )}
       </PageBody>
     </Page>
+  );
+}
+
+/**
+ * Turns arrive, but none is part of a session (RC-752): point at Turns, name
+ * the attribute that groups turns, and give a prompt a coding agent can apply.
+ */
+function NoSessionsEmpty({ projectId }: { projectId: string }) {
+  const { copyStatus, copyToClipboard } = useCopyToClipboard();
+  return (
+    <EmptyState
+      emblem
+      title="No sessions yet"
+      description={
+        <>
+          We see turns, but none of them is part of a session. Set{" "}
+          <code className="font-mono text-xs text-fg">{SESSION_ID_ATTRIBUTE}</code> on every span of
+          one conversation to group its turns into a session.
+        </>
+      }
+      action={
+        <Button
+          variant="primary"
+          onClick={() => void copyToClipboard(SESSION_ID_PROMPT)}
+          data-copy-session-prompt
+        >
+          {copyStatus === "copied" ? <Check aria-hidden /> : <Copy aria-hidden />}
+          {copyStatus === "copied"
+            ? "Prompt copied"
+            : copyStatus === "failed"
+              ? "Copy failed"
+              : "Copy prompt for your coding agent"}
+        </Button>
+      }
+      secondary={
+        <Link
+          href={`/project/${encodeURIComponent(projectId)}/traces/turns`}
+          className={buttonVariants({ variant: "secondary" })}
+        >
+          View turns
+        </Link>
+      }
+    />
   );
 }
 

@@ -11,9 +11,11 @@ import { getLogsAggregate, getSessionsAggregate, getSpansAggregate } from "./tab
 /**
  * RC-331: the aggregate behind each Traces tab's summary, on a seeded project.
  * In the window: session-a (two runs, the second failed a tool call, $0.02),
- * session-b (runtime lane, an error step), run 4 (its turn is still open),
- * run 5 (failed root) and run 6 (two roots, $0.005). Out of it: session-old
- * and run 8, a day before. Another project's rows are newer than all of them.
+ * session-b (runtime lane, an error step), session-open (its turn is still
+ * open), run 5 (failed root) and run 6 (two roots, $0.005). Runs 5 and 6 have
+ * no session, so the Sessions list does not show them and the summary does
+ * not count them (RC-752). Out of the window: session-old and run 8, a day
+ * before. Another project's rows are newer than all of them.
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -25,7 +27,7 @@ const WINDOW = { since: new Date(T0 - 3_600_000), until: new Date(T0 + 3_600_000
 
 type TestDb = SessionsDb & NonNullable<Parameters<typeof insertOtelSpans>[2]>;
 
-test("getSessionsAggregate counts sessions and runs with no session, as the list shows them", async () => {
+test("getSessionsAggregate counts sessions, open or closed, as the list shows them", async () => {
   const { client, db } = await seeded();
   try {
     const aggregate = await getSessionsAggregate(
@@ -35,13 +37,13 @@ test("getSessionsAggregate counts sessions and runs with no session, as the list
     );
     assert.deepEqual(
       { count: aggregate.count, failed: aggregate.failed, p50DurationMs: aggregate.p50DurationMs },
-      { count: 5, failed: 3, p50DurationMs: 100 },
-      "session-a, session-b and runs 4, 5, 6; a, b and 5 failed; durations 10 100, 1 000, 100, 100, 100 ms",
+      { count: 3, failed: 2, p50DurationMs: 1_000 },
+      "session-a, session-b and session-open; a and b failed; durations 10 100, 1 000, 100 ms",
     );
-    assert.ok(Math.abs(aggregate.costUsd - 0.025) < 1e-9, `cost ${aggregate.costUsd}`);
-    assert.deepEqual(aggregate.volume, [{ day: "2026-11-02", hour: 9, count: 5, errorCount: 3 }]);
+    assert.ok(Math.abs(aggregate.costUsd - 0.02) < 1e-9, `cost ${aggregate.costUsd}`);
+    assert.deepEqual(aggregate.volume, [{ day: "2026-11-02", hour: 9, count: 3, errorCount: 2 }]);
     const daily = await getSessionsAggregate(PROJECT_ID, WINDOW, db);
-    assert.deepEqual(daily.volume, [{ day: "2026-11-02", count: 5, errorCount: 3 }]);
+    assert.deepEqual(daily.volume, [{ day: "2026-11-02", count: 3, errorCount: 2 }]);
   } finally {
     await client.close();
   }
@@ -59,8 +61,8 @@ test("getSessionsAggregate reads an empty window as zeros and never another proj
     const other = await getSessionsAggregate(OTHER_PROJECT_ID, WINDOW, db);
     assert.deepEqual(
       { count: other.count, failed: other.failed },
-      { count: 2, failed: 1 },
-      "session-x (its trace 1 failed there) and run 7",
+      { count: 1, failed: 1 },
+      "session-x (its trace 1 failed there); run 7 has no session",
     );
   } finally {
     await client.close();
