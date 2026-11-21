@@ -46,6 +46,21 @@ value exits non-zero with a message that names the twin and the param. Discovery
 `tsx`) loads the twins and the project's `.env`. `--tool` modes are parsed and stored; they take
 effect in a later version.
 
+## The playground runner: `ratel dev`
+
+```bash
+RATEL_API_KEY=rtl_... ratel dev [--url https://cloud.ratel.sh]
+```
+
+`ratel dev` finds the twins, trades the project key for a 15-minute gateway token
+(`POST /api/v1/runner/connect`), opens one outbound websocket (`protocol/twin/v1`), sends
+`register` and prints one playground URL per twin. The project key goes to the token exchange
+only, never onto the socket. The manifest names provider keys, never their values. A dropped
+socket reconnects with a jittered backoff from 1 s to 60 s and a fresh token. A file change
+restarts the child worker and sends `manifest.update` on the same socket. `RATEL_API_KEY` and
+`RATEL_URL` come from the environment or the project's `.env`. The CLI parent reads only those
+two names from `.env`.
+
 ## Rules
 
 - An override applies to one run. Values are resolved per run, with no module-level state.
@@ -63,8 +78,13 @@ effect in a later version.
   the `protocol/twin/v1` manifest.
 - `src/otel.ts` — `resolveLocal` and `stampTwinInput` (`@opentelemetry/api` peer).
 - `src/cli/` — the `ratel` bin (`main.ts`, a separate entrypoint) and its child worker
-  (`worker.ts`), argument parsing, discovery and output.
-- `src/test-support/` — fixture twins and a fixture project for the tests. Not built.
+  (`worker.ts`, `load.ts`), argument parsing, discovery, build info and output.
+- `src/dev/` — `ratel dev`. `connection.ts` is the pure twin/v1 connection state machine
+  (`protocol.ts`, `backoff.ts`). The adapters are `connect-http.ts` (token exchange),
+  `ws-socket.ts` (the socket) and `child-host.ts` / `child.ts` (the long-lived child worker).
+  `runtime.ts` performs the machine's effects. `watch.ts` reloads on a file change.
+- `src/test-support/` — fixture twins, a fixture project and an in-process twin/v1 test
+  controller (`controller.ts`) that checks every frame against the protocol schemas. Not built.
 
 ```bash
 pnpm --filter @ratel-ai/twin typecheck

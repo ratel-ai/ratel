@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-import { execFileSync, fork } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { fork } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Manifest } from "../manifest.js";
+import { parseEnv } from "node:util";
+import { DEFAULT_BASE_URL, startDev } from "../dev/runtime.js";
 import { CliError, type Command, parseArgs, USAGE } from "./args.js";
+import { buildInfo } from "./build-info.js";
 import { discoverTwinFiles } from "./discover.js";
 import { formatManifest, formatRun } from "./format.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
 
 // The `ratel` CLI parent. It never loads user code: discovery reads file names
-// only, and a child worker (worker.ts, under tsx) imports the twins and runs them.
+// only, and a child worker (worker.ts, or dev/child.ts for `ratel dev`, under
+// tsx) imports the twins and runs them.
 
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),
@@ -26,6 +30,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   const root = process.cwd();
+  if (command.command === "dev") return devCommand(command, root);
   const files = discoverTwinFiles(root);
   if (command.command === "list") {
     const reply = await askWorker({ kind: "list", root, files, build: buildInfo(root) });
@@ -38,6 +43,47 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   return runCommand(command, root, files);
+}
+
+/** `ratel dev`: runs until Ctrl-C. Exits 1 on a fatal connection error (bad key, twins off). */
+async function devCommand(
+  command: Extract<Command, { command: "dev" }>,
+  root: string,
+): Promise<number> {
+  const env = { ...readRatelEnv(root), ...pickRatelEnv(process.env) };
+  const apiKey = env.RATEL_API_KEY;
+  if (!apiKey) throw new CliError("set RATEL_API_KEY to a Ratel project key (rtl_...)");
+  const handle = await startDev({
+    root,
+    baseUrl: command.url ?? env.RATEL_URL ?? DEFAULT_BASE_URL,
+    apiKey,
+    out: (line) => process.stdout.write(`${line}\n`),
+  });
+  const stop = () => handle.stop();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  await handle.done;
+  return 0;
+}
+
+/**
+ * RATEL_API_KEY and RATEL_URL from the project's .env. The parent reads these
+ * two names only and never loads the rest of the file: provider keys stay in
+ * the child worker.
+ */
+function readRatelEnv(root: string): RatelEnv {
+  const file = join(root, ".env");
+  if (!existsSync(file)) return {};
+  return pickRatelEnv(parseEnv(readFileSync(file, "utf8")));
+}
+
+type RatelEnv = { RATEL_API_KEY?: string; RATEL_URL?: string };
+
+function pickRatelEnv(env: Readonly<Record<string, string | undefined>>): RatelEnv {
+  return {
+    ...(env.RATEL_API_KEY ? { RATEL_API_KEY: env.RATEL_API_KEY } : {}),
+    ...(env.RATEL_URL ? { RATEL_URL: env.RATEL_URL } : {}),
+  };
 }
 
 async function runCommand(
@@ -98,18 +144,4 @@ function askWorker(request: WorkerRequest): Promise<Extract<WorkerReply, { ok: t
     });
     worker.send(request);
   });
-}
-
-function buildInfo(root: string): Manifest["build"] {
-  try {
-    const git = (...args: string[]) =>
-      execFileSync("git", args, {
-        cwd: root,
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }).trim();
-    return { id: git("rev-parse", "HEAD"), dirty: git("status", "--porcelain") !== "" };
-  } catch {
-    return undefined;
-  }
 }

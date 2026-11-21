@@ -1,11 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { TwinParamError } from "../errors.js";
 import { buildManifest } from "../manifest.js";
 import { coerceOverride } from "../params.js";
 import { runTwin } from "../run.js";
-import { isTwin, type Twin } from "../twin.js";
+import type { Twin } from "../twin.js";
+import { loadTwins, messageOf } from "./load.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
 
 // The child process of the `ratel` CLI. It is the only process that loads user
@@ -49,29 +49,6 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
   }
 }
 
-async function loadTwins(
-  root: string,
-  files: readonly string[],
-): Promise<{ twin: Twin; file: string }[]> {
-  const twins: { twin: Twin; file: string }[] = [];
-  for (const file of files) {
-    let mod: Record<string, unknown>;
-    try {
-      mod = await import(pathToFileURL(join(root, file)).href);
-    } catch (err) {
-      throw new Error(`cannot load ${file}: ${messageOf(err)}`);
-    }
-    for (const value of new Set(Object.values(mod))) {
-      if (!isTwin(value)) continue;
-      const clash = twins.find(({ twin }) => twin.id === value.id);
-      if (clash)
-        throw new Error(`twin id "${value.id}" is declared in both ${clash.file} and ${file}`);
-      twins.push({ twin: value, file });
-    }
-  }
-  return twins;
-}
-
 function coerceSets(
   twin: Twin,
   sets: readonly (readonly [string, string])[],
@@ -82,8 +59,4 @@ function coerceSets(
     overrides[name] = param ? coerceOverride(param, raw) : raw;
   }
   return overrides;
-}
-
-function messageOf(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

@@ -2,7 +2,7 @@ import { readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 /** Directories discovery never enters: dependencies and build output. */
-const IGNORED_DIRS = new Set([
+export const IGNORED_DIRS: ReadonlySet<string> = new Set([
   "node_modules",
   ".git",
   "dist",

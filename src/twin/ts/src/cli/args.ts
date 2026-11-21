@@ -3,6 +3,7 @@ export type ToolMode = "real" | "fake" | "confirm";
 export type Command =
   | { readonly command: "help" }
   | { readonly command: "list"; readonly json: boolean }
+  | { readonly command: "dev"; readonly url?: string }
   | {
       readonly command: "run";
       readonly twinId: string;
@@ -17,6 +18,7 @@ export class CliError extends Error {
 }
 
 export const USAGE = `Usage:
+  ratel dev [--url <ratel url>]
   ratel twin list [--json]
   ratel twin run <id> --input <file> [--set name=value]... [--tool name=real|fake|confirm]...`;
 
@@ -27,9 +29,21 @@ export function parseArgs(argv: readonly string[]): Command {
   const [group, sub, ...rest] = argv;
   if (group === undefined || group === "help" || group === "--help" || group === "-h")
     return { command: "help" };
+  if (group === "dev") return parseDev(argv.slice(1));
   if (group === "twin" && sub === "list") return parseList(rest);
   if (group === "twin" && sub === "run") return parseRun(rest);
   throw new CliError(`unknown command "${[group, sub].filter(Boolean).join(" ")}"\n${USAGE}`);
+}
+
+function parseDev(rest: readonly string[]): Command {
+  let url: string | undefined;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i] as string;
+    if (arg !== "--url") throw new CliError(`unknown option ${arg} for "dev"`);
+    url = rest[++i];
+    if (url === undefined) throw new CliError("--url needs a value");
+  }
+  return url === undefined ? { command: "dev" } : { command: "dev", url };
 }
 
 function parseList(rest: readonly string[]): Command {
