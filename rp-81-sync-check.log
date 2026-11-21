@@ -1,0 +1,36 @@
+# RP-81 platform:sync --check against the frozen upstream
+# date: 2026-11-21T18:54:31Z
+# code: ratel e47daefa; upstream 1ce9942f
+# cwd: ratel/rp-17-port-ratel-cloud-s/.beluga/scratch/ratel
+# command: node scripts/platform-sync/sync.mjs --source ../ratel-cloud --check
+# expected: pending changes only in RP-27 (mcp/operations agents, mcp-servers), RP-10 (views/task-evals, eval-actions.ts) and the #509 test (ingest/trace-events/queries.integration.test.ts); exit 1
+
+
+copied (6)
+  apps/web/lib/mcp/operations/agents.test.ts
+  apps/web/lib/mcp/operations/agents.ts
+  apps/web/lib/mcp/operations/mcp-servers.test.ts
+  apps/web/lib/mcp/operations/mcp-servers.ts
+  apps/web/lib/views/task-evals/foreign-project.ts
+  apps/web/lib/views/task-evals/foreign-run.integration.test.ts
+
+updated (3)
+  apps/web/lib/ingest/trace-events/queries.integration.test.ts
+  apps/web/lib/views/task-evals/actions.ts
+  apps/web/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/eval-actions.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (10)
+  {"path":"apps/web/lib/mcp/operations/agents.test.ts","specifier":"@/lib/agents/domain/types"}
+  {"path":"apps/web/lib/mcp/operations/agents.ts","specifier":"@/lib/agents/adapters/drizzle-store"}
+  {"path":"apps/web/lib/mcp/operations/agents.ts","specifier":"@/lib/agents/domain/types"}
+  {"path":"apps/web/lib/mcp/operations/agents.ts","specifier":"@/lib/agents/paths"}
+  {"path":"apps/web/lib/mcp/operations/agents.ts","specifier":"@/lib/agents/ports/store"}
+  {"path":"apps/web/lib/mcp/operations/agents.ts","specifier":"@/lib/project-entities/flag"}
+  {"path":"apps/web/lib/mcp/operations/mcp-servers.test.ts","specifier":"@/lib/mcp-servers/queries"}
+  {"path":"apps/web/lib/mcp/operations/mcp-servers.ts","specifier":"@/lib/mcp-servers/paths"}
+  {"path":"apps/web/lib/mcp/operations/mcp-servers.ts","specifier":"@/lib/mcp-servers/queries"}
+  {"path":"apps/web/lib/mcp/operations/mcp-servers.ts","specifier":"@/lib/project-entities/flag"}
+
+9 change(s) pending; run without --check to apply
+
+# exit code: 1
