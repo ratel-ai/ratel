@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "type": "run.event",
+  "id": "msg_0015",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "seq": 5,
+  "payload": {
+    "kind": "span.ref",
+    "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "spanId": "00f067aa0ba902b7",
+    "name": "invoke_agent workflow-label"
+  }
+}

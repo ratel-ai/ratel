@@ -1,0 +1,14 @@
+{
+  "name": "@ratel-ai/twin-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The twin/v1 runner protocol: JSON Schemas and conformance fixtures. Not published.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test conformance/conformance.test.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
+}

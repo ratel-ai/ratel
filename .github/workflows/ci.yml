@@ -314,6 +314,14 @@ jobs:
         run: pnpm --filter @ratel-ai/vercel-ai-sdk typecheck
       - name: Test
         run: pnpm --filter @ratel-ai/vercel-ai-sdk test
+      # The twin's AI SDK entry (`@ratel-ai/twin/ai-sdk`) supports ai@6 and ai@7
+      # only: its type tests and its chat and model-resolution tests per row.
+      - name: Twin AI SDK path (v6/v7 rows)
+        if: ${{ !startsWith(matrix.ai-version, '5.') }}
+        run: |
+          pnpm --filter @ratel-ai/twin add --save-dev --save-exact "ai@${AI_SDK_VERSION}" --no-lockfile
+          pnpm --filter @ratel-ai/twin typecheck
+          pnpm --filter @ratel-ai/twin exec vitest run src/ai-sdk.test.ts src/chat.test.ts src/tools.test.ts src/project-packages.test.ts
       # `@ratel-ai/telemetry` is packed alongside them because both tarballs turn
       # their `workspace:^` on it into a hard `^<workspace version>` — a version
       # that only reaches npm at release time, so a registry-only install of the
@@ -592,20 +600,26 @@ jobs:
   # Catalog-source contract's conformance vectors: recomputes every frozen ETag and
   # re-checks the If-None-Match / scope-overlay outcomes against the committed
   # expectations, so a drift in the wire contract or the vectors fails CI. Node
-  # stdlib only, no install.
+  # stdlib only for v1/v2; twin/v1 validates its fixtures with ajv.
   protocol:
     needs: changes
     if: needs.changes.outputs.protocol == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: pnpm
       - name: Verify v1 conformance vectors
         run: node protocol/v1/conformance/verify.mjs
       - name: Verify v2 conformance vectors
         run: node protocol/v2/conformance/verify.mjs
+      - name: Install twin/v1 validator
+        run: pnpm install --frozen-lockfile --filter @ratel-ai/twin-protocol
+      - name: Validate twin/v1 fixtures
+        run: pnpm --filter @ratel-ai/twin-protocol test
 
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.

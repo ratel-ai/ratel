@@ -1,0 +1,103 @@
+{
+  "name": "@ratel-ai/twin",
+  "version": "0.1.0",
+  "description": "Ratel agent twins — declare the params of your agent (model, prompt, scalars) next to its code and run it with overrides from the Ratel playground or the local `ratel` CLI.",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ratel": "./dist/cli/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/ai-sdk.d.ts",
+      "default": "./dist/ai-sdk.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "license": "MIT",
+  "author": "Agentified",
+  "homepage": "https://github.com/ratel-ai/ratel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ratel-ai/ratel.git",
+    "directory": "src/twin/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/ratel-ai/ratel/issues"
+  },
+  "keywords": [
+    "ratel",
+    "agent",
+    "playground",
+    "twin",
+    "ai-agents",
+    "ai-sdk"
+  ],
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p tsconfig.type-tests.json",
+    "lint": "biome check src",
+    "test": "vitest run",
+    "controller": "node --import tsx src/test-support/start-controller.ts"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "@ai-sdk/anthropic": "^3.0.0 || ^4.0.0",
+    "@ai-sdk/google": "^3.0.0 || ^4.0.0",
+    "@ai-sdk/openai": "^3.0.0 || ^4.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "ai": "^6.0.0 || ^7.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.18.2",
+    "ai": "7.0.37",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5",
+    "zod": "^4.4.3"
+  },
+  "dependencies": {
+    "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+    "@opentelemetry/resources": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "tsx": "^4.21.0",
+    "ws": "^8.21.1"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/anthropic": {
+      "optional": true
+    },
+    "@ai-sdk/google": {
+      "optional": true
+    },
+    "@ai-sdk/openai": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    }
+  }
+}

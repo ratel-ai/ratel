@@ -1,0 +1,13 @@
+{
+  "messages": [
+    { "role": "user", "content": "How do I send my first trace to Ratel?" },
+    {
+      "role": "assistant",
+      "content": "Create a project API key under Settings > API keys, then post a span to the traces endpoint with that key as a Bearer token."
+    },
+    {
+      "role": "user",
+      "content": "I did that and got a 401. Can you open a ticket for me? My key starts with rtl_ and the project is demo."
+    }
+  ]
+}
