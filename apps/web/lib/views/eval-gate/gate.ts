@@ -1,5 +1,5 @@
 import type { getDb } from "@/lib/platform/db/client";
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
+import { experimentalFeatureEnabled, featureEnabled } from "@/lib/platform/experimental-features";
 import type { Organization } from "@/lib/platform/organizations";
 
 /** What the gate reads: a project's organization and the asking person's email. */
@@ -9,11 +9,13 @@ export type GateDb = Pick<ReturnType<typeof getDb>, "select">;
  * Whether the eval gate (RC-46 and its follow-up RC-61: holdout, outcome
  * checks, the judge and model replay) is on.
  *
- * Owned (ADR-0030): one switch for the deployment, `FF_EVAL_GATE` (or
- * `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition), read from the
- * environment and off by default. Upstream decides it per organization and
- * person through its flag service; the functions keep upstream's names and
- * arguments so every call site stays identical, and ignore who is asking.
+ * Owned (ADR-0030): the `FF_EVAL_GATE` switch, off by default. Without the
+ * edition's flags port it is one switch for the deployment, read from the
+ * environment (or `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition);
+ * with it, the edition decides it for the organization or the asking person
+ * (`featureEnabled`). The functions keep upstream's names and arguments so
+ * every call site stays identical. `evalGateEnabled` reads the environment
+ * only: it has no one to ask about, so pages use the others.
  */
 
 type Env = Record<string, string | undefined>;
@@ -25,12 +27,23 @@ export function evalGateEnabled(env: Env = process.env): boolean {
   return experimentalFeatureEnabled("FF_EVAL_GATE", env);
 }
 
-/** The signed-in person, in this organization (the project's, from its scope). */
-export function evalGateEnabledFor(
-  _organization: Organization,
+/**
+ * The gate for a project's eval pages, before the page resolves its organization: the layout's
+ * check, so a switched-off gate answers a 404 before anything streams.
+ */
+export function evalGateEnabledForProject(
+  projectId: string,
   env: Env = process.env,
 ): Promise<boolean> {
-  return Promise.resolve(evalGateEnabled(env));
+  return featureEnabled("FF_EVAL_GATE", { projectId }, { env });
+}
+
+/** The signed-in person, in this organization (the project's, from its scope). */
+export function evalGateEnabledFor(
+  organization: Organization,
+  env: Env = process.env,
+): Promise<boolean> {
+  return featureEnabled("FF_EVAL_GATE", { organizationId: organization.id }, { env });
 }
 
 /**
@@ -38,12 +51,12 @@ export function evalGateEnabledFor(
  * it simulates, and the background job before it runs a queued simulation.
  */
 export function evalGateEnabledForActor(
-  _projectId: string,
-  _actor: string,
+  projectId: string,
+  actor: string,
   _db?: GateDb,
   env: Env = process.env,
 ): Promise<boolean> {
-  return Promise.resolve(evalGateEnabled(env));
+  return featureEnabled("FF_EVAL_GATE", { projectId, actor }, { env });
 }
 
 /** The background job's check, before it runs a queued simulation. */

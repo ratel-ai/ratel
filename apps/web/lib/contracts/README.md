@@ -10,6 +10,14 @@ side annotates against it, so the two shapes cannot drift. Its optional `product
 edition names the product in copy (`full` for the MCP server, `short` for the service in a
 sentence); without it the copy keeps its neutral words.
 
+`feature-flags.ts` names the core's switches (`CORE_FLAGS`: `FF_EVAL_GATE`,
+`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`) and the optional `featureFlags` port. Without it each
+switch is its environment variable for the deployment (in the open-source edition also
+`RATEL_EXPERIMENTAL_FEATURES`). With it, the edition decides each switch per organization,
+project and person; an `FF_*` value in the environment still comes first, and a failed read is
+off. The core reads switches through `featureEnabled` (`lib/platform/experimental-features.ts`),
+and `get_flag_status` reports what it returns.
+
 `entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
 table of an edition that sells plans: the organization's plan and subscription state
 (`summary`), the cheapest plan whose Agent health window reaches a number of days, the cheapest
