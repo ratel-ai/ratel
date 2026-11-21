@@ -65,6 +65,7 @@ function deps(overrides: Partial<AccountOperationDeps> = {}): AccountOperationDe
     countMatchQualityRunsSince: async () => 0,
     now: () => NOW,
     editionToolListed: () => false,
+    featureEnabled: async () => false,
     ...overrides,
   };
 }
@@ -269,4 +270,29 @@ test("get_job_status refuses a job id that is not a UUID as the other id params 
   );
   assert.equal(result.ok, false);
   assert.match(JSON.stringify(result), /Must be a UUID\./);
+});
+
+test("get_flag_status reports each switch as the flags port decides it for this project and caller", async () => {
+  const asked: unknown[] = [];
+  const result = await run("get_flag_status", {
+    featureEnabled: async (flag, subject) => {
+      asked.push([flag, subject]);
+      return flag === "FF_EVAL_GATE";
+    },
+  });
+  const flags = result.data.flags as { key: string; enabled: boolean }[];
+  assert.deepEqual(
+    flags.map(({ key, enabled }) => [key, enabled]),
+    [
+      ["FF_EVAL_GATE", true],
+      ["FF_RANKING_CATALOG_DRIFT", false],
+      ["FF_MCP_APPS", false],
+    ],
+  );
+  const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
+  assert.deepEqual(asked, [
+    ["FF_EVAL_GATE", subject],
+    ["FF_RANKING_CATALOG_DRIFT", subject],
+    ["FF_MCP_APPS", subject],
+  ]);
 });

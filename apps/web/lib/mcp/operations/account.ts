@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { countSkills } from "@/lib/catalog/queries";
 import { composition } from "@/lib/composition/ports";
+import type { CoreFlag } from "@/lib/contracts/feature-flags";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
 import { notFound } from "@/lib/mcp/errors";
 import { editionToolListed } from "@/lib/mcp/operations/edition";
+import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped, uuidParam } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import {
@@ -15,7 +17,7 @@ import {
   planSummary,
   type QuotaKey,
 } from "@/lib/platform/entitlements";
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 import { projectCapacity } from "@/lib/platform/projects/capacity";
 import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
@@ -38,12 +40,12 @@ import { budgetLine, type RunBudget } from "@/lib/views/quality/run-menu";
  * only when it is listed.
  */
 /**
- * The deployment's switches, as `get_flag_status` reports them. Owned (ADR-0030): upstream
- * evaluates its flag service per organization and person; here each surface is one `FF_*`
- * environment switch for the deployment (in the open-source edition also
- * `RATEL_EXPERIMENTAL_FEATURES`).
+ * The core's switches, as `get_flag_status` reports them, each read as its callers read it
+ * (`featureEnabled`): without the edition's flags port, one `FF_*` environment switch for the
+ * deployment (in the open-source edition also `RATEL_EXPERIMENTAL_FEATURES`); with it, the
+ * edition's value for this organization and caller, after any `FF_*` value the operator set.
  */
-const DEPLOYMENT_SWITCHES = [
+const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
   {
     key: "FF_RANKING_CATALOG_DRIFT",
@@ -53,7 +55,7 @@ const DEPLOYMENT_SWITCHES = [
     key: "FF_MCP_APPS",
     note: "this MCP server publishes interactive ui:// views (MCP Apps) and points its tools at them",
   },
-] as const;
+];
 
 export interface AccountOperationDeps {
   getOrganizationByProjectId: typeof getOrganizationByProjectId;
@@ -67,6 +69,8 @@ export interface AccountOperationDeps {
   now: () => Date;
   /** Whether the edition lists a tool, so a hint names only tools the caller has. */
   editionToolListed: (id: string) => boolean;
+  /** A core switch for whoever asks: the edition's flags port when it has one, else the environment. */
+  featureEnabled: typeof featureEnabled;
 }
 
 export const defaultAccountDeps: AccountOperationDeps = {
@@ -79,6 +83,7 @@ export const defaultAccountDeps: AccountOperationDeps = {
   countMatchQualityRunsSince: (projectId, since) => countRunsSince(projectId, since),
   now: () => new Date(),
   editionToolListed: (id) => editionToolListed(id),
+  featureEnabled: (flag, subject) => featureEnabled(flag, subject),
 };
 
 const QUOTA_KEYS: readonly QuotaKey[] = ["maxProjects", "maxSkillsPerProject", "maxMembers"];
@@ -153,15 +158,24 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
       scope: "project",
       mutates: false,
       params: z.object({ ...projectScoped }),
-      async execute() {
-        const flags = DEPLOYMENT_SWITCHES.map(({ key, note }) => ({
-          key,
-          enabled: experimentalFeatureEnabled(key),
-          note,
-        }));
+      async execute(ctx) {
+        const subject = {
+          ...(ctx.organizationId ? { organizationId: ctx.organizationId } : {}),
+          projectId: ctx.projectId,
+          actor: mcpActor(ctx.auth, ctx.projectId),
+        };
+        const flags = await Promise.all(
+          DEPLOYMENT_SWITCHES.map(async ({ key, note }) => ({
+            key,
+            enabled: await deps.featureEnabled(key, subject),
+            note,
+          })),
+        );
         return {
           data: { count: flags.length, flags },
-          hint: "A switch is set for the whole deployment by its operator, not per organization.",
+          hint: composition.featureFlags
+            ? "Each switch is decided for this organization and caller; an FF_* value set by the operator comes first."
+            : "A switch is set for the whole deployment by its operator, not per organization.",
         };
       },
     }),
