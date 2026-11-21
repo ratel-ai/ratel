@@ -1,5 +1,5 @@
 import type { ConfirmAnswer, FakeAnswer, FakeRequest, ToolChannel } from "../tools.js";
-import type { Twin } from "../twin.js";
+import type { ResolveContext, Twin } from "../twin.js";
 
 // The tool channel of a local `ratel twin run`. There is no playground: a fake
 // comes from a --fake file, else the twin's resolver generates it with the
@@ -9,6 +9,7 @@ export function localToolChannel(
   twin: Twin,
   fakes: Readonly<Record<string, unknown>>,
   note: (line: string) => void,
+  context: ResolveContext = {},
 ): ToolChannel {
   return {
     async fake(request: FakeRequest, signal: AbortSignal): Promise<FakeAnswer> {
@@ -20,7 +21,7 @@ export function localToolChannel(
           `no fake for ${request.tool}: pass --fake ${request.tool}=<file.json>, or use a resolver that can generate one`,
         );
       }
-      return generate(request, signal);
+      return generate(request, signal, context);
     },
     async confirm(request): Promise<ConfirmAnswer> {
       note(

@@ -12,7 +12,8 @@ import {
   type ToolChannel,
 } from "@ratel-ai/twin";
 import type { LanguageModel, ModelMessage } from "ai";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import docsTwin from "../docs-agent.twin.js";
 import { docsDefaults, reply } from "../src/agent.js";
 import { SESSIONS } from "../src/seed.js";
@@ -164,6 +165,52 @@ describe("the docs-agent twin", () => {
     await expect(
       runTwin(docsTwin, { input: { messages: CONVERSATION }, toolModes: { createTicket: "real" } }),
     ).rejects.toThrow("createTicket: real needs allowReal: true in the twin file");
+  });
+});
+
+describe("the runner's real model resolver", () => {
+  const twinFile = fileURLToPath(new URL("../docs-agent.twin.ts", import.meta.url));
+
+  it("gives the example's own ai@6 streamText a gateway model it accepts (no network)", async () => {
+    const previous = process.env.AI_GATEWAY_API_KEY;
+    process.env.AI_GATEWAY_API_KEY = "gw_test_not_a_key";
+    // The gateway's HTTP call is the first thing after the model checks: answer it locally.
+    const fetchMock = vi.fn(async (_url: unknown, _init?: unknown) => new Response(JSON.stringify({ error: { message: "stubbed", type: "stub" } }), { status: 400, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const run = runTwin(docsTwin, {
+        input: { messages: CONVERSATION },
+        resolveContext: { from: twinFile },
+      });
+      const error = await run.then(
+        () => undefined,
+        (err: unknown) => err as Error,
+      );
+      expect(error?.name).not.toBe("AI_UnsupportedModelVersionError");
+      expect(String(error?.message)).not.toMatch(/Unsupported model version/i);
+      expect(fetchMock).toHaveBeenCalled();
+      expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/gateway/);
+    } finally {
+      vi.unstubAllGlobals();
+      if (previous === undefined) delete process.env.AI_GATEWAY_API_KEY;
+      else process.env.AI_GATEWAY_API_KEY = previous;
+    }
+  });
+
+  it("resolves the model from the example's ai@6, not the twin package's ai@7", async () => {
+    const { aiSdkModels } = await import("@ratel-ai/twin/ai-sdk");
+    const model = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(docsDefaults.model, {
+      from: twinFile,
+    })) as { specificationVersion: string };
+    // ai@6 speaks the v3 model spec. Resolved from where @ratel-ai/twin lives (its dev
+    // ai@7), the same call hands back a v4 model, which ai@6's streamText refuses.
+    expect(model.specificationVersion).toBe("v3");
+    const twinPackage = fileURLToPath(new URL("../../../src/twin/ts/package.json", import.meta.url));
+    const fromTwinPackage = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(
+      docsDefaults.model,
+      { from: twinPackage },
+    )) as { specificationVersion: string };
+    expect(fromTwinPackage.specificationVersion).toBe("v4");
   });
 });
 

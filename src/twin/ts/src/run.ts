@@ -9,7 +9,13 @@ import {
   type ToolsParam,
   wrapTools,
 } from "./tools.js";
-import { checkInput, type LogLevel, type Twin, type TwinEventPayload } from "./twin.js";
+import {
+  checkInput,
+  type LogLevel,
+  type ResolveContext,
+  type Twin,
+  type TwinEventPayload,
+} from "./twin.js";
 
 export interface RunTwinOptions<I> {
   readonly input: I;
@@ -28,6 +34,8 @@ export interface RunTwinOptions<I> {
   readonly onEvent?: (payload: TwinEventPayload) => void;
   /** Default: 10 minutes. */
   readonly confirmTimeoutMs?: number;
+  /** Where the twin's resolver imports packages from. The runner passes the twin file. */
+  readonly resolveContext?: ResolveContext;
 }
 
 export interface RunTwinResult<O> {
@@ -54,7 +62,7 @@ export async function runTwin<P extends ParamMap, I, O, M>(
   );
   const descriptors: ToolDescriptor[] = toolsParams.flatMap(([, param]) => param.default);
   const toolModes = resolveToolModes(twin.id, descriptors, options.toolModes);
-  const resolved = resolveParams(twin, options.overrides ?? {});
+  const resolved = resolveParams(twin, options.overrides ?? {}, options.resolveContext);
   const params: Record<string, unknown> = await settleParams(resolved.values);
   const signal = options.signal ?? new AbortController().signal;
   for (const [name, param] of toolsParams) {

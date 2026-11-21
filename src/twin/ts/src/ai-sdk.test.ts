@@ -54,9 +54,7 @@ describe("aiSdkModels", () => {
         throw new Error(`Cannot find package '${specifier}'`);
       },
     });
-    await expect(resolve(MODEL)).rejects.toThrow(
-      "@ai-sdk/anthropic is not installed in this project. Install it, or set AI_GATEWAY_API_KEY",
-    );
+    await expect(resolve(MODEL)).rejects.toThrow("Install it there, or set AI_GATEWAY_API_KEY");
   });
 
   it("rejects a prefix without a built-in provider unless the gateway is set", async () => {
@@ -129,7 +127,7 @@ describe("run.start for an AI SDK twin", () => {
           {
             param: "model",
             message:
-              "cannot run anthropic/claude-sonnet-5-5 on this runner: set AI_GATEWAY_API_KEY, or install the @ai-sdk/anthropic package and set its API key (callable providers: none)",
+              "cannot run anthropic/claude-sonnet-5-5 on this runner: set AI_GATEWAY_API_KEY with the ai package installed in the project, or install @ai-sdk/anthropic there and set its API key (callable providers: none)",
           },
         ],
       },

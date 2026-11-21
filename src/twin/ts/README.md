@@ -39,7 +39,8 @@ A chat twin runs one user turn per run: `input.messages` holds the conversation 
 `resolve: aiSdkModels()` from `@ratel-ai/twin/ai-sdk`, a model param becomes an AI SDK
 `LanguageModel`: through AI Gateway when `AI_GATEWAY_API_KEY` is set, else through the
 project's own `@ai-sdk/anthropic`, `@ai-sdk/openai` or `@ai-sdk/google` package and its key.
-The entry imports only the packages your project has. Supports `ai` 6 and 7. The core entry
+The runner imports `ai` and the provider from the project of the twin file (never from where
+`@ratel-ai/twin` is installed), so the model and your `streamText` come from the same `ai`. Supports `ai` 6 and 7. The core entry
 `@ratel-ai/twin` never imports `ai`.
 
 ```ts

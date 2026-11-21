@@ -321,7 +321,7 @@ jobs:
         run: |
           pnpm --filter @ratel-ai/twin add --save-dev --save-exact "ai@${AI_SDK_VERSION}" --no-lockfile
           pnpm --filter @ratel-ai/twin typecheck
-          pnpm --filter @ratel-ai/twin exec vitest run src/ai-sdk.test.ts src/chat.test.ts src/tools.test.ts
+          pnpm --filter @ratel-ai/twin exec vitest run src/ai-sdk.test.ts src/chat.test.ts src/tools.test.ts src/project-packages.test.ts
       # `@ratel-ai/telemetry` is packed alongside them because both tarballs turn
       # their `workspace:^` on it into a hard `^<workspace version>` — a version
       # that only reaches npm at release time, so a registry-only install of the

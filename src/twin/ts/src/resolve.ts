@@ -2,7 +2,7 @@ import { type ParamIssue, TwinParamError } from "./errors.js";
 import { canonicalJson, configHash } from "./hash.js";
 import { bareModelId, checkParamValue, type ParamMap, type ParamValues } from "./params.js";
 import { editedToolset, type ToolEdit, toolsHashValue } from "./tools.js";
-import type { Twin } from "./twin.js";
+import type { ResolveContext, Twin } from "./twin.js";
 
 export interface ResolvedParams<P extends ParamMap, M> {
   /**
@@ -28,6 +28,7 @@ export interface ResolvedParams<P extends ParamMap, M> {
 export function resolveParams<P extends ParamMap, M>(
   twin: Twin<P, unknown, unknown, M>,
   overrides: Readonly<Record<string, unknown>>,
+  context: ResolveContext = {},
 ): ResolvedParams<P, M> {
   const issues: ParamIssue[] = [];
   for (const name of Object.keys(overrides)) {
@@ -57,7 +58,7 @@ export function resolveParams<P extends ParamMap, M>(
   if (issues.length > 0) throw new TwinParamError(twin.id, sortByDeclaration(issues, twin.params));
 
   const resolve = twin.resolve;
-  const resolveModel = resolve ? (id: string) => handled(resolve(id)) : bareModelId;
+  const resolveModel = resolve ? (id: string) => handled(resolve(id, context)) : bareModelId;
   const values: Record<string, unknown> = {};
   for (const [name, param] of Object.entries(twin.params)) {
     values[name] =

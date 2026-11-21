@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 // runner and the CLI (src/cli, the `ratel` bin) live behind their own entrypoints. This walks the real
 // module graph of the root entry, then imports it and watches for a socket.
 
-const ALLOWED = ["@opentelemetry/api", "node:crypto"];
+const ALLOWED = ["@opentelemetry/api", "node:crypto", "node:path"];
 
 describe("@ratel-ai/twin entry stays network-free", () => {
   it("reaches only the allowed packages from index.ts", () => {
@@ -16,7 +16,14 @@ describe("@ratel-ai/twin entry stays network-free", () => {
   });
 
   it("keeps ai out of the core: only the ai-sdk entry names it, as a type", () => {
-    expect([...packagesReachableFrom("ai-sdk.ts")].sort()).toEqual(["@opentelemetry/api", "ai"]);
+    // node:fs, node:path and node:url find `ai` and the providers in the user's project.
+    expect([...packagesReachableFrom("ai-sdk.ts")].sort()).toEqual([
+      "@opentelemetry/api",
+      "ai",
+      "node:fs",
+      "node:path",
+      "node:url",
+    ]);
     const source = readFileSync(new URL("ai-sdk.ts", import.meta.url), "utf8");
     expect(source).toMatch(/^import type \{[^}]*\} from "ai";$/m);
   });

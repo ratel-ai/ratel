@@ -21,6 +21,8 @@ import {
 
 let envLoaded = false;
 let twins: LoadedTwin[] = [];
+/** The project root of the loaded twins: their files are relative to it. */
+let projectRoot = process.cwd();
 /** Settles when the last twin load ends. A run that arrives during a load waits for it. */
 let loading: Promise<unknown> = Promise.resolve();
 /** Live runs by ID. Deleted when the run ends or is canceled. */
@@ -56,6 +58,7 @@ process.on("disconnect", () => {
 async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): Promise<ChildReply> {
   loadEnvOnce(request.root);
   telemetry = request.telemetry;
+  projectRoot = request.root;
   const load = loadTwins(request.root, request.files);
   loading = load.catch(() => {});
   twins = await load;
@@ -64,14 +67,15 @@ async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): P
     id: request.id,
     ok: true,
     kind: "manifest",
-    manifest: buildManifest({ twins, build: request.build, env: process.env }),
+    manifest: buildManifest({ twins, build: request.build, env: process.env, root: request.root }),
   };
 }
 
 /** One run. Reports its events and exactly one run.end, unless it was canceled first. */
 async function execute(runId: string, start: RunStartPayload): Promise<void> {
   await loading;
-  const twin = twins.find((t) => t.twin.id === start.twinId)?.twin;
+  const loaded = twins.find((t) => t.twin.id === start.twinId);
+  const twin = loaded?.twin;
   if (!twin) {
     end(runId, undefined, {
       status: "error",
@@ -94,6 +98,7 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
     onEvent: (payload) => event(twin, runId, payload),
     onTrace: (traceId) => playground?.track(traceId),
     toolChannel: channel,
+    ...(loaded ? { twinFile: join(projectRoot, loaded.file) } : {}),
   });
   end(runId, twin, result);
   await playground?.flush().catch((err: unknown) => {

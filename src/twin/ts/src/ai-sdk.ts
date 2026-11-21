@@ -3,11 +3,14 @@
  * AI SDK `LanguageModel`, through AI Gateway when `AI_GATEWAY_API_KEY` is set,
  * else through the project's own `@ai-sdk/<provider>` package and key. It
  * imports `ai` and the provider packages only when a run resolves a model, and
- * only those the project has installed. The core entry never imports `ai`.
+ * from the project of the twin file, never from where @ratel-ai/twin is
+ * installed: the model must come from the same `ai` the agent's `streamText`
+ * uses. The core entry never imports `ai`.
  */
 import type { LanguageModel, ModelMessage } from "ai";
 import { ModelResolutionError } from "./errors.js";
 import { bareModelId } from "./params.js";
+import { type ProjectPackages, projectPackages } from "./project-packages.js";
 import type { CallableProvider } from "./providers.js";
 import type { FakeAnswer, FakeRequest } from "./tools.js";
 import {
@@ -15,6 +18,7 @@ import {
   type ChatRunInput,
   chat,
   type ModelResolver,
+  type ResolveContext,
   type RunContext,
 } from "./twin.js";
 
@@ -53,10 +57,17 @@ export const AI_SDK_PROVIDERS: Readonly<Record<string, AiSdkProvider>> = {
 export interface AiSdkModelsOptions {
   /** Read at each resolve. Default: `process.env`. */
   readonly env?: Env;
-  /** Imports a package. Default: a dynamic `import()`. */
+  /** Imports a package. Default: from the project of the twin file. */
   readonly load?: ModuleLoader;
-  /** True when the project can import the package. Default: `import.meta.resolve`. */
+  /** True when the project has the package. Default: from the project of the twin file. */
   readonly installed?: (specifier: string) => boolean;
+}
+
+/** The packages one resolve sees: the twin file's project, or the test's stand-ins. */
+interface Packages {
+  readonly where: string;
+  readonly load: ModuleLoader;
+  readonly installed: (specifier: string) => boolean;
 }
 
 /**
@@ -66,14 +77,23 @@ export interface AiSdkModelsOptions {
  */
 export function aiSdkModels(options: AiSdkModelsOptions = {}): ModelResolver<LanguageModel> {
   const envOf = () => options.env ?? process.env;
-  const load = options.load ?? importPackage;
-  const installed = options.installed ?? isInstalled;
-  const resolve = (modelId: string) => resolveModel(modelId, envOf(), load);
+  const packagesOf = (context: ResolveContext = {}): Packages => {
+    // The runner passes the twin file. Without it (a direct call), the current folder's project.
+    const project: ProjectPackages = projectPackages(context.from ?? process.cwd());
+    return {
+      where: `the project at ${project.root}`,
+      load: options.load ?? project.load,
+      installed: options.installed ?? project.installed,
+    };
+  };
+  const resolve = (modelId: string, context?: ResolveContext) =>
+    resolveModel(modelId, envOf(), packagesOf(context));
   return Object.assign(resolve, {
     modelKind: "language-model" as const,
-    callableProviders: (env: Env) => aiSdkCallableProviders(env, installed),
-    generateFake: (request: FakeRequest, signal: AbortSignal) =>
-      generateFake(request, envOf(), load, signal),
+    callableProviders: (env: Env, context?: ResolveContext) =>
+      aiSdkCallableProviders(env, packagesOf(context).installed),
+    generateFake: (request: FakeRequest, signal: AbortSignal, context?: ResolveContext) =>
+      generateFake(request, envOf(), packagesOf(context), signal),
   });
 }
 
@@ -83,7 +103,7 @@ export function aiSdkModels(options: AiSdkModelsOptions = {}): ModelResolver<Lan
  */
 export function aiSdkCallableProviders(
   env: Env,
-  installed: (specifier: string) => boolean = isInstalled,
+  installed: (specifier: string) => boolean = projectPackages(process.cwd()).installed,
 ): CallableProvider[] {
   const providers: CallableProvider[] = [];
   if (env[GATEWAY_KEY] && installed("ai"))
@@ -123,12 +143,17 @@ export async function forwardText(
 async function generateFake(
   request: FakeRequest,
   env: Env,
-  load: ModuleLoader,
+  packages: Packages,
   signal: AbortSignal,
 ): Promise<FakeAnswer> {
   const modelId = env[GATEWAY_KEY] ? FAKE_MODEL.gateway : FAKE_MODEL.direct;
-  const model = await resolveModel(modelId, env, load);
-  const ai = await loadOrExplain(load, "ai", modelId, "the ai package is not installed");
+  const model = await resolveModel(modelId, env, packages);
+  const ai = await loadOrExplain(
+    packages,
+    "ai",
+    modelId,
+    `the ai package is not installed in ${packages.where}`,
+  );
   const generateText = ai.generateText as (options: Record<string, unknown>) => Promise<{
     text: string;
   }>;
@@ -158,10 +183,15 @@ function parseJsonLoose(text: string): unknown {
   }
 }
 
-async function resolveModel(modelId: string, env: Env, load: ModuleLoader): Promise<LanguageModel> {
+async function resolveModel(modelId: string, env: Env, packages: Packages): Promise<LanguageModel> {
   const gatewayKey = env[GATEWAY_KEY];
   if (gatewayKey) {
-    const ai = await loadOrExplain(load, "ai", modelId, "the ai package is not installed");
+    const ai = await loadOrExplain(
+      packages,
+      "ai",
+      modelId,
+      `the ai package is not installed in ${packages.where}. Install it there`,
+    );
     const createGateway = factoryOf(ai, "createGateway", "ai", modelId);
     return createGateway({ apiKey: gatewayKey })(modelId) as LanguageModel;
   }
@@ -181,23 +211,23 @@ async function resolveModel(modelId: string, env: Env, load: ModuleLoader): Prom
     );
   }
   const mod = await loadOrExplain(
-    load,
+    packages,
     entry.package,
     modelId,
-    `${entry.package} is not installed in this project. Install it, or set ${GATEWAY_KEY}`,
+    `${entry.package} is not installed in ${packages.where}. Install it there, or set ${GATEWAY_KEY}`,
   );
   const create = factoryOf(mod, entry.factory, entry.package, modelId);
   return create({ apiKey: key })(bareModelId(modelId)) as LanguageModel;
 }
 
 async function loadOrExplain(
-  load: ModuleLoader,
+  packages: Packages,
   specifier: string,
   modelId: string,
   why: string,
 ): Promise<Record<string, unknown>> {
   try {
-    return await load(specifier);
+    return await packages.load(specifier);
   } catch {
     throw new ModelResolutionError(modelId, `cannot run ${modelId}: ${why}`);
   }
@@ -219,17 +249,4 @@ function factoryOf(
     );
   }
   return factory as ProviderFactory;
-}
-
-function importPackage(specifier: string): Promise<Record<string, unknown>> {
-  return import(specifier) as Promise<Record<string, unknown>>;
-}
-
-function isInstalled(specifier: string): boolean {
-  try {
-    import.meta.resolve(specifier);
-    return true;
-  } catch {
-    return false;
-  }
 }

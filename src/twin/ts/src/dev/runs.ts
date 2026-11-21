@@ -319,7 +319,7 @@ function uncallableModel(modelId: string, manifest: Manifest): string | null {
   const provider = modelId.slice(0, modelId.indexOf("/"));
   if (names.includes("gateway") || names.includes(provider)) return null;
   const listed = names.length > 0 ? names.join(", ") : "none";
-  return `cannot run ${modelId} on this runner: set AI_GATEWAY_API_KEY, or install the @ai-sdk/${provider} package and set its API key (callable providers: ${listed})`;
+  return `cannot run ${modelId} on this runner: set AI_GATEWAY_API_KEY with the ai package installed in the project, or install @ai-sdk/${provider} there and set its API key (callable providers: ${listed})`;
 }
 
 /** Room left for the envelope fields (v, type, id, ts, runId, seq) of one frame. */

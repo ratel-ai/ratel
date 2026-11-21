@@ -27,11 +27,17 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
     return {
       ok: true,
       kind: "list",
-      manifest: buildManifest({ twins, build: request.build, env: process.env }),
+      manifest: buildManifest({
+        twins,
+        build: request.build,
+        env: process.env,
+        root: request.root,
+      }),
     };
   }
-  const found = twins.find(({ twin }) => twin.id === request.twinId)?.twin;
-  if (!found) {
+  const loaded = twins.find(({ twin }) => twin.id === request.twinId);
+  const found = loaded?.twin;
+  if (!found || !loaded) {
     const known = twins.map(({ twin }) => twin.id).join(", ") || "(none)";
     return { ok: false, error: `unknown twin "${request.twinId}". Known twins: ${known}` };
   }
@@ -41,10 +47,15 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
     const result = await runTwin(found, {
       input: request.input,
       overrides,
+      // The resolver imports `ai` and the providers from the twin file's project.
+      resolveContext: { from: join(request.root, loaded.file) },
       onText: (text) => process.stderr.write(text),
       toolModes: request.tools,
-      toolChannel: localToolChannel(found, request.fakes, (line) =>
-        process.stderr.write(`${line}\n`),
+      toolChannel: localToolChannel(
+        found,
+        request.fakes,
+        (line) => process.stderr.write(`${line}\n`),
+        { from: join(request.root, loaded.file) },
       ),
       onEvent: (event) => {
         if (event.kind === "tool.call") process.stderr.write(`\n[${event.tool} ${event.mode}] `);

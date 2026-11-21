@@ -32,20 +32,31 @@ export interface ChatMessage {
 
 export type TwinInput<I> = StructuredInput<I> | ChatInput<I>;
 
+/** Where a run resolves its packages from: the runner passes the twin file. */
+export interface ResolveContext {
+  /** Absolute path of the twin file. Its project's packages are the ones a resolver imports. */
+  readonly from?: string;
+}
+
 /**
  * Maps a `provider/model` value to what run() gets. It can be async, for a
  * resolver that imports the provider package of the project at run time.
  */
 export interface ModelResolver<M> {
-  (modelId: string): M | PromiseLike<M>;
+  (modelId: string, context?: ResolveContext): M | PromiseLike<M>;
   /** Set by a built-in resolver: run() gets an AI SDK `LanguageModel`. */
   readonly modelKind?: "language-model";
   /** Set by a built-in resolver: the providers it can call with `env`. Key names only. */
   readonly callableProviders?: (
     env: Readonly<Record<string, string | undefined>>,
+    context?: ResolveContext,
   ) => CallableProvider[];
   /** Set by a built-in resolver: generates a fake tool result with the user's key (local runs). */
-  readonly generateFake?: (request: FakeRequest, signal: AbortSignal) => Promise<FakeAnswer>;
+  readonly generateFake?: (
+    request: FakeRequest,
+    signal: AbortSignal,
+    context?: ResolveContext,
+  ) => Promise<FakeAnswer>;
 }
 
 export interface RunContext {

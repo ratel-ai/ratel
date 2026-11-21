@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { Param } from "./params.js";
 import { type CallableProvider, callableProviders } from "./providers.js";
 import type { Twin } from "./twin.js";
@@ -43,6 +44,8 @@ export interface BuildManifestOptions {
   readonly build?: Manifest["build"];
   /** Read for key names only. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /** The project root the twin files are relative to: a resolver checks packages from there. */
+  readonly root?: string;
 }
 
 /** Plain data describing what a worker can run. No code and no key values. */
@@ -51,10 +54,7 @@ export function buildManifest(options: BuildManifestOptions): Manifest {
   return {
     sdk: { language: "typescript", name: SDK_NAME, version: SDK_VERSION },
     ...(options.build ? { build: options.build } : {}),
-    providers: manifestProviders(
-      options.twins.map(({ twin }) => twin),
-      env,
-    ),
+    providers: manifestProviders(options.twins, env, options.root),
     twins: options.twins.map(({ twin, file }) => manifestTwin(twin, file)),
   };
 }
@@ -81,11 +81,15 @@ export function manifestTwin(twin: Twin, file?: string): ManifestTwin {
  * enough. The list is the union over the twins, sorted by name.
  */
 function manifestProviders(
-  twins: readonly Twin[],
+  twins: BuildManifestOptions["twins"],
   env: Readonly<Record<string, string | undefined>>,
+  root: string | undefined,
 ): CallableProvider[] {
   const byName = new Map<string, CallableProvider>();
-  const lists = twins.map((t) => t.resolve?.callableProviders?.(env) ?? callableProviders(env));
+  const lists = twins.map(({ twin, file }) => {
+    const from = root && file ? join(root, file) : undefined;
+    return twin.resolve?.callableProviders?.(env, from ? { from } : {}) ?? callableProviders(env);
+  });
   for (const provider of (twins.length > 0 ? lists : [callableProviders(env)]).flat()) {
     byName.set(provider.provider, provider);
   }

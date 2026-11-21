@@ -39,6 +39,8 @@ export interface ExecuteRunOptions {
   readonly onEvent: (payload: TwinEventPayload) => void;
   /** Called with the trace ID as soon as the root span exists. */
   readonly onTrace?: (traceId: string) => void;
+  /** Absolute path of the twin file: the resolver imports the AI SDK from its project. */
+  readonly twinFile?: string;
   /** Answers the run's fake and confirm tool calls. */
   readonly toolChannel?: ToolChannel;
   readonly confirmTimeoutMs?: number;
@@ -49,7 +51,7 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
   const { start } = options;
   let resolved: ReturnType<typeof resolveParams>;
   try {
-    resolved = resolveParams(twin, start.params);
+    resolved = resolveParams(twin, start.params, resolveContextOf(options));
     // Refuses a real side effect without allowReal before anything runs: the server cannot override it.
     resolveToolModes(twin.id, toolDescriptors(twin), start.toolModes);
   } catch (err) {
@@ -79,6 +81,7 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
           onLog: (message, level) => options.onEvent({ kind: "log", level, message }),
           onText: (text) => options.onEvent({ kind: "text.delta", text }),
           onEvent: options.onEvent,
+          resolveContext: resolveContextOf(options),
           ...(start.toolModes ? { toolModes: start.toolModes } : {}),
           ...(options.toolChannel ? { toolChannel: options.toolChannel } : {}),
           ...(options.confirmTimeoutMs !== undefined
@@ -112,6 +115,10 @@ export async function executeRun(twin: Twin, options: ExecuteRunOptions): Promis
       }
     },
   );
+}
+
+function resolveContextOf(options: ExecuteRunOptions) {
+  return options.twinFile ? { from: options.twinFile } : {};
 }
 
 function toolDescriptors(twin: Twin) {
