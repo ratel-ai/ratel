@@ -7,7 +7,7 @@
 // route stubs the private repository ships into app/(ee). It copies rather than symlinks:
 // `next build` follows a symlinked route directory but `next dev` does not discover routes
 // inside one. The stubs are one-line re-exports, so a copy costs nothing; the code they point
-// at stays in ee/src. Without ee/src the repository is the open-source edition.
+// at stays in ee/src/src. Without ee/src the repository is the open-source edition.
 //
 // The proxy is the same exception: Next.js only reads it from src/proxy.ts, and the
 // open-source edition must not have one.
@@ -38,12 +38,14 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const ROUTES = join(ROOT, "ee", "src", "routes");
+// The private repository's checkout (ee/src) keeps its modules under its own src/.
+const EE_SRC = join(ROOT, "ee", "src", "src");
+const ROUTES = join(EE_SRC, "routes");
 // Generated and gitignored: nothing tracked ever lives here.
 const TARGET = join(ROOT, "src", "app", "(ee)");
-const PROXY_SOURCE = join(ROOT, "ee", "src", "proxy.ts");
+const PROXY_SOURCE = join(EE_SRC, "proxy.ts");
 const PROXY_TARGET = join(ROOT, "src", "proxy.ts");
-const PUBLIC_SOURCE = join(ROOT, "ee", "src", "public");
+const PUBLIC_SOURCE = join(EE_SRC, "public");
 const PUBLIC_TARGET = join(ROOT, "src", "public");
 // Outside public/, so it is never served.
 const PUBLIC_PLACED = join(ROOT, "src", ".ee-public.json");

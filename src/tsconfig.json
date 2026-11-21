@@ -27,7 +27,7 @@
         "./lib/composition/ee-absent.ts"
       ],
       "@ee/*": [
-        "../ee/src/*"
+        "../ee/src/src/*"
       ],
       "@/*": [
         "./*"

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 // Owned (ADR-0030): upstream's cases, less the vendor prices of Ratel's own model calls, which
-// live with their clients in the private edition (`ee/src/observability/pricing.ts`).
+// live with their clients in the private edition (`ee/src/src/observability/pricing.ts`).
 import {
   CURRENT_PRICES,
   costFor,
