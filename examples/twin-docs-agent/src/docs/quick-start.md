@@ -10,4 +10,4 @@ cd ratel
 docker compose up -d --build --wait
 ```
 
-Open http://localhost:3000. No configuration is needed. If port 3000 or 5432 is taken, set `RATEL_PORT` and `RATEL_DB_PORT` in `.env` and set `BASE_URL` to the address you open.
+Open `http://localhost:3000`. No configuration is needed. If port 3000 or 5432 is taken, set `RATEL_PORT` and `RATEL_DB_PORT` in `.env` and set `BASE_URL` to the address you open.
