@@ -18,6 +18,10 @@
       "types": "./dist/ai-sdk.d.ts",
       "default": "./dist/ai-sdk.js"
     },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
     "./package.json": "./package.json"
   },
   "license": "MIT",

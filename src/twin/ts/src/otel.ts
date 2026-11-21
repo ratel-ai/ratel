@@ -29,9 +29,25 @@ export function resolveLocal<D extends Readonly<Record<string, unknown>>>(
   const span = trace.getActiveSpan();
   if (span) {
     span.setAttribute(RATEL_TWIN_ID, options.twin);
-    span.setAttribute(RATEL_TWIN_CONFIG_HASH, memoizedHash(defaults));
+    span.setAttribute(RATEL_TWIN_CONFIG_HASH, localConfigHash(defaults));
   }
   return defaults;
+}
+
+/**
+ * The config hash `resolveLocal` stamps for `defaults`: a toolset hashes as its
+ * tool names and descriptions, like a tools param. Memoized per defaults object.
+ */
+export function localConfigHash(defaults: Readonly<Record<string, unknown>>): string {
+  let hash = hashes.get(defaults);
+  if (hash === undefined) {
+    const values = Object.fromEntries(
+      Object.entries(defaults).map(([k, v]) => [k, hashableTools(v) ?? v]),
+    );
+    hash = configHash(values);
+    hashes.set(defaults, hash);
+  }
+  return hash;
 }
 
 /** Stamps `ratel.twin.input` (the input JSON, capped at maxChars) on the active span of a structured item call. */
@@ -40,17 +56,4 @@ export function stampTwinInput(input: unknown, options: { maxChars?: number } = 
   if (!span) return;
   const json = JSON.stringify(input) ?? "null";
   span.setAttribute(RATEL_TWIN_INPUT, json.slice(0, options.maxChars ?? TWIN_INPUT_MAX_CHARS));
-}
-
-function memoizedHash(defaults: object): string {
-  let hash = hashes.get(defaults);
-  if (hash === undefined) {
-    // A production toolset hashes as its tool names and descriptions, like a tools param.
-    const values = Object.fromEntries(
-      Object.entries(defaults).map(([k, v]) => [k, hashableTools(v) ?? v]),
-    );
-    hash = configHash(values);
-    hashes.set(defaults, hash);
-  }
-  return hash;
 }

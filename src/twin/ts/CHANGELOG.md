@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - `configHash` (SHA-256 of canonical JSON), `buildManifest` (protocol `twin/v1`), `callableProviders`.
 - `resolveLocal(defaults, { twin })` and `stampTwinInput(input)`: the production stamps `ratel.twin.id`, `ratel.twin.config_hash` and `ratel.twin.input`.
 - The `ratel` CLI: `ratel twin list` and `ratel twin run <id> --input <file> [--set k=v] [--tool t=mode]`, with user code in a child worker under `tsx`.
+- `ratel twin verify <id> [--input <file>] [--model <provider/model>] [--dry]`: one sentinel run per param, read from in-memory spans (prompt sentinel, `gen_ai.request.model`, tool descriptions, disabled tools, `ratel.tool.mode`, request scalars, config hash vs `resolveLocal`). Exits 1 and names each param that is not wired. `verifyTwin` and `installVerifyTracing` from `@ratel-ai/twin/verify`; `defaults` and `example` on `twin()`.
 - `coerceOverride` turns `--set` text into the param's value type.
 - `ratel dev`: token exchange, one outbound twin/v1 websocket, `register` with provider key names only, playground URLs, reconnect with a 1–60 s jittered backoff and a fresh token, and hot reload with `manifest.update`.
 - `ratel dev` runs: idempotent `run.start` with `run.ack` / `run.reject`, `run.lease`, `run.event` by `seq` with resend of unacked events after a reconnect, `run.end` with the trace ID, `run.cancel` (aborts `ctx.signal`), make-before-break `drain` and frames of at most 64 KB.

@@ -4,6 +4,7 @@ import { docsDefaults, reply } from "./src/agent.js";
 
 // The docs agent's twin: Ratel can change its model, system prompt, max steps
 // and tools per run, and runs the real `reply` with them. One run per user turn.
+// `pnpm ratel twin verify docs-agent` proves that each of them reaches the model call.
 
 export default twin("docs-agent", {
   params: {
@@ -18,6 +19,16 @@ export default twin("docs-agent", {
   },
   input: aiSdkChat(),
   resolve: aiSdkModels(),
+  // What production passes to resolveLocal, and the input of `ratel twin verify`.
+  defaults: docsDefaults,
+  example: {
+    messages: [
+      {
+        role: "user",
+        content: "I get a 401 when I send traces. Can you open a ticket? My project is demo.",
+      },
+    ],
+  },
   run: async ({ input, params, ctx }) => {
     const { text } = await reply(input.messages, params, {
       onText: ctx.textDelta,

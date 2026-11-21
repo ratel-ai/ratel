@@ -79,6 +79,10 @@ pnpm ratel twin list
 pnpm ratel twin run docs-agent --input chat.json --tool createTicket=fake
 pnpm ratel twin run docs-agent --input chat.json --fake createTicket=ticket.json   # a fixed fake
 
+# Prove that the model, the prompt and the tools reach the model call (--dry: no model call).
+pnpm ratel twin verify docs-agent
+pnpm ratel twin verify docs-agent --dry
+
 # Connect the twin to the Ratel playground.
 pnpm ratel dev
 ```

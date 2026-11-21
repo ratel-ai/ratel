@@ -83,6 +83,14 @@ export interface TwinDefinition<P extends ParamMap, I, O, M> {
   readonly context?: Readonly<Record<string, unknown>>;
   /** Maps a `provider/model` value to what run() gets. Default: the bare model ID. */
   readonly resolve?: ModelResolver<M>;
+  /**
+   * The defaults object that production passes to `resolveLocal`. `ratel twin
+   * verify` checks that a run with no overrides has its config hash. Never sent
+   * to Ratel.
+   */
+  readonly defaults?: Readonly<Record<string, unknown>>;
+  /** The input `ratel twin verify` uses when it gets no `--input`. Never sent to Ratel. */
+  readonly example?: I;
   run(args: { input: I; params: ParamValues<P, M>; ctx: RunContext }): Promise<O> | O;
   /**
    * Runs on every event payload and on the run.end payload before they leave

@@ -1,4 +1,5 @@
 import type { Manifest } from "../manifest.js";
+import type { VerifyReport } from "../verify.js";
 import type { ToolMode } from "./args.js";
 
 /** What the CLI parent asks its worker over IPC. */
@@ -19,6 +20,16 @@ export type WorkerRequest =
       readonly tools: Readonly<Record<string, ToolMode>>;
       /** Fake results by tool name, read from the --fake files. */
       readonly fakes: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly kind: "verify";
+      readonly root: string;
+      readonly files: readonly string[];
+      readonly twinId: string;
+      /** Absent: the twin's example input. */
+      readonly input?: unknown;
+      readonly model?: string;
+      readonly dry: boolean;
     };
 
 export type WorkerReply =
@@ -31,4 +42,5 @@ export type WorkerReply =
       readonly overrides: readonly string[];
       readonly toolModes: Readonly<Record<string, ToolMode>>;
     }
+  | { readonly ok: true; readonly kind: "verify"; readonly report: VerifyReport }
   | { readonly ok: false; readonly error: string };

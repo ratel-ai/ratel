@@ -109,6 +109,31 @@ value exits non-zero with a message that names the twin and the param. Discovery
 `--fake` gives a fake result from a file. A chat twin streams its reply and its tool calls to
 stderr.
 
+### Prove each param is wired: `ratel twin verify`
+
+```bash
+ratel twin verify docs-agent [--input chat.json] [--model anthropic/claude-haiku-5.5] [--dry]
+```
+
+`twin verify` runs the twin once with no overrides, then once per param with a sentinel
+override, and reads the spans of each run from an in-memory span processor:
+
+| Param | Wired when |
+|---|---|
+| `prompt` | A unique sentinel appended to the prompt shows in a model-call span (a span with `gen_ai.request.model`). |
+| `model` | `gen_ai.request.model` equals a second model: `--model`, else a param option, else a built-in alternate of a callable provider. With no second callable model, the check is skipped. |
+| `tools` | A sentinel in each description shows in the tool definitions, a disabled tool is absent, and each called tool has `ratel.tool.mode` on its `execute_tool` span. |
+| scalar | `maxTokens`, `temperature`, `topP` and `topK` must show as `gen_ai.request.*`. Other scalars are reported as "cannot verify automatically". |
+| config hash | It changes with each override. With no overrides it equals the hash `resolveLocal` stamps for the twin's `defaults`. |
+
+The input is `--input`, else the twin's `example`. The worker registers the only tracer provider
+before your code loads and turns content capture on for its own process, so the sentinels and the
+captured content stay in memory and are never exported. Verify calls your model with your keys.
+`--dry` swaps the models of an AI SDK twin for a stand-in that calls each tool once, and fakes
+side effects with a fixed value. The command exits 1 when a param is not wired, and names it.
+Pass `defaults` (the object production gives `resolveLocal`) and `example` to `twin()` to check
+the production hash and to run without `--input`.
+
 ## The playground runner: `ratel dev`
 
 ```bash

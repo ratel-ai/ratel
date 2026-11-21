@@ -8,7 +8,7 @@ import { DEFAULT_BASE_URL, startDev } from "../dev/runtime.js";
 import { CliError, type Command, parseArgs, USAGE } from "./args.js";
 import { buildInfo } from "./build-info.js";
 import { discoverTwinFiles } from "./discover.js";
-import { formatManifest, formatRun } from "./format.js";
+import { formatManifest, formatRun, formatVerify } from "./format.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
 
 // The `ratel` CLI parent. It never loads user code: discovery reads file names
@@ -42,7 +42,33 @@ async function main(argv: readonly string[]): Promise<number> {
     );
     return 0;
   }
+  if (command.command === "verify") return verifyCommand(command, root, files);
   return runCommand(command, root, files);
+}
+
+/** `ratel twin verify`: exits 1 when a param is not wired. */
+async function verifyCommand(
+  command: Extract<Command, { command: "verify" }>,
+  root: string,
+  files: string[],
+): Promise<number> {
+  process.stderr.write(
+    command.dry
+      ? `Verifying ${command.twinId} with a stand-in model (--dry): AI SDK models make no call.\n`
+      : `Verifying ${command.twinId}: it runs the twin once per param and calls its model with your own keys. Use --dry for a stand-in model.\n`,
+  );
+  const reply = await askWorker({
+    kind: "verify",
+    root,
+    files,
+    twinId: command.twinId,
+    dry: command.dry,
+    ...(command.input !== undefined ? { input: readJson("--input", command.input) } : {}),
+    ...(command.model !== undefined ? { model: command.model } : {}),
+  });
+  if (reply.kind !== "verify") throw new Error("the twin worker answered the wrong request");
+  process.stdout.write(formatVerify(reply.report));
+  return reply.report.ok ? 0 : 1;
 }
 
 /** `ratel dev`: runs until Ctrl-C. Exits 1 on a fatal connection error (bad key, twins off). */

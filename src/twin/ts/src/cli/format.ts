@@ -1,5 +1,6 @@
 import type { Manifest, ManifestParam } from "../manifest.js";
 import { defaultMode } from "../tools.js";
+import type { VerifyReport, VerifyStatus } from "../verify.js";
 import type { ToolMode } from "./args.js";
 
 /** The manifest as a readable table: one block per twin, one row per param. */
@@ -38,6 +39,26 @@ export function formatRun(run: RunSummary): string {
     ["config hash", run.configHash],
   ];
   return `${JSON.stringify(run.output, null, 2)}\n\n${table(rows).join("\n")}\n`;
+}
+
+const STATUS_LABELS: Readonly<Record<VerifyStatus, string>> = {
+  wired: "wired",
+  not_wired: "NOT WIRED",
+  skipped: "skipped",
+};
+
+/** The verify report: one row per check, then a summary line. */
+export function formatVerify(report: VerifyReport): string {
+  const rows = [
+    ["param", "kind", "status", "evidence"],
+    ...report.rows.map((r) => [r.param, r.kind, STATUS_LABELS[r.status], r.detail]),
+  ];
+  const count = (status: VerifyStatus) => report.rows.filter((r) => r.status === status).length;
+  const notWired = report.rows.filter((r) => r.status === "not_wired").map((r) => r.param);
+  const summary = report.ok
+    ? `${report.twinId}: every param is wired (${count("wired")} wired, ${count("skipped")} skipped, ${report.runs} runs)`
+    : `${report.twinId}: not wired: ${notWired.join(", ")} (${report.runs} runs)`;
+  return `${table(rows).join("\n")}\n\n${summary}\n`;
 }
 
 function typeOf(p: ManifestParam): string {
