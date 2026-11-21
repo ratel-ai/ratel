@@ -1,9 +1,10 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { jobAskSpec } from "@/lib/jobs/job-ask";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { evalGateSeams } from "@/lib/views/eval-gate/seams";
 import { draftFixJob, enqueueProjectFixDrafts } from "@/lib/views/fix-drafts/job";
-import { resolveFixChange } from "@/lib/views/fix-drafts/resolve";
+import { type DraftFixJobPayload, resolveFixChange } from "@/lib/views/fix-drafts/resolve";
 import { fixDraftSpendSince } from "@/lib/views/fix-drafts/store";
 
 /**
@@ -39,6 +40,9 @@ fillComputeSeams();
 export const fixDraftsRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    draft_fix: inProjectLogContext((job) => draftFixJob(job.projectId, job.payload)),
+    draft_fix: inProjectLogContext(
+      jobAskSpec<DraftFixJobPayload>("Draft a fix", { fixId: true, requestedBy: false }),
+      (job) => draftFixJob(job.projectId, job.payload),
+    ),
   },
 };

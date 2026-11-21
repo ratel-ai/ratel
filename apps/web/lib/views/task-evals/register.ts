@@ -1,5 +1,7 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { jobAskSpec } from "@/lib/jobs/job-ask";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
+import type { SimulateFixEvalPayload } from "@/lib/views/eval-gate/job";
 import { refreshTaskEvalSetJob } from "@/lib/views/task-evals/job";
 import { simulateTaskEvalJob } from "@/lib/views/task-evals/simulation-job";
 import "./ship";
@@ -17,8 +19,9 @@ export const taskEvalsRegistration: Registration = {
   jobs: {
     refresh_task_eval_set: (job) => refreshTaskEvalSetJob(job.projectId, job.payload),
     // In the project's log context, so `model_call` lines carry the project and organization.
-    simulate_task_eval: inProjectLogContext((job) =>
-      simulateTaskEvalJob(job.projectId, job.payload),
+    simulate_task_eval: inProjectLogContext(
+      jobAskSpec<SimulateFixEvalPayload>("Simulate a task eval", { runId: true }),
+      (job) => simulateTaskEvalJob(job.projectId, job.payload),
     ),
   },
 };

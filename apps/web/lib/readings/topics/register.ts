@@ -1,4 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
+import { jobAskSpec, type NoPayload } from "@/lib/jobs/job-ask";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { computeSeams } from "@/lib/readings/trace-signals/signals/compute-job";
 import { assignProjectTopics } from "./job";
@@ -24,6 +25,8 @@ fillComputeSeams();
 export const topicsRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    assign_topics: inProjectLogContext((job) => assignProjectTopics(job.projectId)),
+    assign_topics: inProjectLogContext(jobAskSpec<NoPayload>("Assign topics", {}), (job) =>
+      assignProjectTopics(job.projectId),
+    ),
   },
 };

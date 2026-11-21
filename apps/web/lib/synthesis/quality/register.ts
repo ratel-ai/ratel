@@ -1,9 +1,11 @@
 import type { DrainStep, JobHandler, Registration } from "@/lib/contracts/registry";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
+import { jobAskSpec } from "@/lib/jobs/job-ask";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { foldSeams } from "@/lib/readings/intent-graph/fold-job";
 import type { SweepResult } from "@/lib/readings/match-quality/sweep";
+import type { MatchQualityJobPayload } from "@/lib/synthesis/match-quality/job";
 import {
   executeMatchQualityRun,
   parseMatchQualityPayload,
@@ -84,7 +86,20 @@ foldSeams.loadShadow = async (projectId) => {
 export const qualityRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    match_quality_run: inProjectLogContext((job) => matchQualityRunJob(job)),
+    match_quality_run: inProjectLogContext(
+      jobAskSpec<MatchQualityJobPayload>("Run a match quality analysis", {
+        runId: true,
+        projectId: false,
+        projectName: false,
+        experimentName: false,
+        windowStart: true,
+        windowEnd: true,
+        judge: true,
+        backtest: true,
+        judgeBudgetUsd: false,
+      }),
+      (job) => matchQualityRunJob(job),
+    ),
   },
   drainSteps: [snapshotStep(), sweepStep()],
 };

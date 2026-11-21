@@ -2015,6 +2015,8 @@
     { "from": "apps/web/lib/observability/model-call-content.test.ts", "to": "apps/web/lib/platform/model-call-content.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/jobs/handlers.ts", "to": "apps/web/lib/jobs/project-context.ts", "mode": "owned", "$why": "upstream's inProjectLogContext and jobAsk, which each module's register.ts calls for the jobs upstream wraps" },
     { "from": "apps/web/lib/jobs/handlers-agent-run.test.ts", "to": "apps/web/lib/jobs/project-context.test.ts", "mode": "owned", "$why": "jobAsk lives in lib/jobs/project-context.ts, not in a job hub" },
+    { "from": "apps/web/lib/jobs/job-ask.ts", "to": "apps/web/lib/jobs/job-ask.ts", "mode": "owned", "$why": "lib/jobs sits below the modules that own the job payloads, so each register.ts declares its kind's ask spec (jobAskSpec) instead of one upstream table; no Evals kinds; jobKindOfAsk lands with lib/topics/agent-asks.ts" },
+    { "from": "apps/web/lib/jobs/job-ask.test.ts", "to": "apps/web/lib/jobs/job-ask.test.ts", "mode": "owned", "$why": "upstream's cases for the agent job kinds this tree has, against local specs" },
     { "from": "apps/web/lib/observability/model-call.test.ts", "to": "apps/web/lib/platform/model-call.test.ts", "mode": "owned", "$why": "tests the seam" },
     { "from": "apps/web/lib/observability/project-log-context.ts", "to": "apps/web/lib/platform/project-log-context.ts", "mode": "copy" },
     { "from": "apps/web/lib/jobs/handlers.ts", "to": "apps/web/lib/views/eval-gate/register.ts", "mode": "owned", "$why": "the simulate_fix_eval handler as a registration; upstream lists it in its job hub" },
