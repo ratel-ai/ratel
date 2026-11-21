@@ -30,21 +30,47 @@ export interface AiSdkProvider {
   readonly package: string;
   readonly factory: string;
   readonly key: string;
+  /** Variable names of which any one makes the provider callable. Default: `[key]`. */
+  readonly credentials?: readonly string[];
 }
 
 export const GATEWAY_KEY = "AI_GATEWAY_API_KEY";
 
 /**
+ * The AWS variables that give Bedrock credentials: a profile (SSO or a shared
+ * file), static keys, a Bedrock API key, web identity or container credentials.
+ */
+export const AWS_CREDENTIAL_KEYS = [
+  "AWS_PROFILE",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "AWS_WEB_IDENTITY_TOKEN_FILE",
+  "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+  "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+] as const;
+
+/**
  * The small model that generates a fake tool result in a local run, with the
- * user's own key. The gateway names models with dots, Anthropic with dashes.
+ * user's own key. The gateway names models with dots, Anthropic with dashes,
+ * Bedrock with a cross-region inference profile.
  */
 export const FAKE_MODEL = {
   gateway: "anthropic/claude-haiku-5.5",
   direct: "anthropic/claude-haiku-5-5",
+  bedrock: "amazon-bedrock/global.anthropic.claude-haiku-5-5",
 } as const;
+
+const BEDROCK = "amazon-bedrock";
+const AWS_CREDENTIAL_PACKAGE = "@aws-sdk/credential-providers";
 
 /** The built-in map of a model prefix to its `@ai-sdk/*` provider package. */
 export const AI_SDK_PROVIDERS: Readonly<Record<string, AiSdkProvider>> = {
+  [BEDROCK]: {
+    package: "@ai-sdk/amazon-bedrock",
+    factory: "createAmazonBedrock",
+    key: "AWS_PROFILE",
+    credentials: AWS_CREDENTIAL_KEYS,
+  },
   anthropic: { package: "@ai-sdk/anthropic", factory: "createAnthropic", key: "ANTHROPIC_API_KEY" },
   google: {
     package: "@ai-sdk/google",
@@ -109,7 +135,8 @@ export function aiSdkCallableProviders(
   if (env[GATEWAY_KEY] && installed("ai"))
     providers.push({ provider: "gateway", keys: [GATEWAY_KEY] });
   for (const [provider, entry] of Object.entries(AI_SDK_PROVIDERS)) {
-    if (env[entry.key] && installed(entry.package)) providers.push({ provider, keys: [entry.key] });
+    const keys = setKeys(entry, env);
+    if (keys.length > 0 && installed(entry.package)) providers.push({ provider, keys });
   }
   return providers.sort((a, b) => a.provider.localeCompare(b.provider));
 }
@@ -146,7 +173,7 @@ async function generateFake(
   packages: Packages,
   signal: AbortSignal,
 ): Promise<FakeAnswer> {
-  const modelId = env[GATEWAY_KEY] ? FAKE_MODEL.gateway : FAKE_MODEL.direct;
+  const modelId = fakeModelId(env);
   const model = await resolveModel(modelId, env, packages);
   const ai = await loadOrExplain(
     packages,
@@ -172,6 +199,15 @@ async function generateFake(
     }),
   });
   return { result: parseJsonLoose(text), isError: false, source: "generated" };
+}
+
+/** The gateway first, then Anthropic with its key, then Bedrock with AWS credentials. */
+function fakeModelId(env: Env): string {
+  if (env[GATEWAY_KEY]) return FAKE_MODEL.gateway;
+  const bedrock = AI_SDK_PROVIDERS[BEDROCK];
+  if (!env.ANTHROPIC_API_KEY && bedrock && setKeys(bedrock, env).length > 0)
+    return FAKE_MODEL.bedrock;
+  return FAKE_MODEL.direct;
 }
 
 function parseJsonLoose(text: string): unknown {
@@ -203,11 +239,12 @@ async function resolveModel(modelId: string, env: Env, packages: Packages): Prom
       `cannot run ${modelId}: there is no built-in AI SDK provider for "${prefix}". Set ${GATEWAY_KEY} to call it through AI Gateway, or pass your own resolve`,
     );
   }
-  const key = env[entry.key];
-  if (!key) {
+  if (setKeys(entry, env).length === 0) {
+    const others = (entry.credentials ?? []).filter((k) => k !== entry.key);
+    const names = others.length > 0 ? `${entry.key} (or ${others.join(", ")})` : entry.key;
     throw new ModelResolutionError(
       modelId,
-      `cannot run ${modelId}: set ${GATEWAY_KEY}, or set ${entry.key} and install ${entry.package}`,
+      `cannot run ${modelId}: set ${GATEWAY_KEY}, or set ${names} and install ${entry.package}`,
     );
   }
   const mod = await loadOrExplain(
@@ -217,7 +254,45 @@ async function resolveModel(modelId: string, env: Env, packages: Packages): Prom
     `${entry.package} is not installed in ${packages.where}. Install it there, or set ${GATEWAY_KEY}`,
   );
   const create = factoryOf(mod, entry.factory, entry.package, modelId);
-  return create({ apiKey: key })(bareModelId(modelId)) as LanguageModel;
+  const settings =
+    prefix === BEDROCK
+      ? await bedrockSettings(modelId, env, packages)
+      : { apiKey: env[entry.key] as string };
+  return create(settings)(bareModelId(modelId)) as LanguageModel;
+}
+
+/** The variable names of a provider's credentials that are set in `env`. Names only. */
+function setKeys(entry: AiSdkProvider, env: Env): string[] {
+  return (entry.credentials ?? [entry.key]).filter((name) => Boolean(env[name]));
+}
+
+/**
+ * Bedrock needs a region. Static keys and a Bedrock API key the package reads
+ * from the environment itself. A profile, web identity or container
+ * credentials go through the AWS credential chain of the user's project.
+ */
+async function bedrockSettings(
+  modelId: string,
+  env: Env,
+  packages: Packages,
+): Promise<Record<string, unknown>> {
+  const region = env.AWS_REGION ?? env.AWS_DEFAULT_REGION;
+  if (!region)
+    throw new ModelResolutionError(modelId, `cannot run ${modelId}: set AWS_REGION for Bedrock`);
+  if (env.AWS_ACCESS_KEY_ID || env.AWS_BEARER_TOKEN_BEDROCK) return { region };
+  const aws = await loadOrExplain(
+    packages,
+    AWS_CREDENTIAL_PACKAGE,
+    modelId,
+    `the AWS credential chain is needed for ${AWS_CREDENTIAL_KEYS[0]}: install ${AWS_CREDENTIAL_PACKAGE} in ${packages.where}`,
+  );
+  const chain = aws.fromNodeProviderChain;
+  if (typeof chain !== "function")
+    throw new ModelResolutionError(
+      modelId,
+      `cannot run ${modelId}: ${AWS_CREDENTIAL_PACKAGE} has no fromNodeProviderChain export. Check its version`,
+    );
+  return { region, credentialProvider: chain() };
 }
 
 async function loadOrExplain(
@@ -233,7 +308,7 @@ async function loadOrExplain(
   }
 }
 
-type ProviderFactory = (settings: { apiKey: string }) => (modelId: string) => unknown;
+type ProviderFactory = (settings: Record<string, unknown>) => (modelId: string) => unknown;
 
 function factoryOf(
   mod: Record<string, unknown>,

@@ -37,9 +37,20 @@ export const tools = {
   }),
 };
 
-/** The agent's config, owned by the code. The model ID goes through AI Gateway. */
+export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
+export const BEDROCK_PREFIX = "amazon-bedrock/";
+
+/** The default model: DOCS_AGENT_MODEL when set (e.g. `amazon-bedrock/eu.anthropic.claude-haiku-5-5`). */
+export function docsModelId(env: NodeJS.ProcessEnv = process.env): string {
+  return env.DOCS_AGENT_MODEL || DEFAULT_MODEL;
+}
+
+/**
+ * The agent's config, owned by the code. The model ID goes through AI Gateway,
+ * or through Bedrock for an `amazon-bedrock/` ID (see bedrock.ts).
+ */
 export const docsDefaults = {
-  model: "anthropic/claude-sonnet-5.5",
+  model: docsModelId(),
   system: SYSTEM,
   maxSteps: 5,
   tools,

@@ -91,6 +91,126 @@ describe("callable providers of an AI SDK twin", () => {
     expect(manifest.providers).toEqual([{ provider: "anthropic", keys: ["ANTHROPIC_API_KEY"] }]);
     expect(JSON.stringify(manifest)).not.toContain("sk-ant");
   });
+
+  it("lists Amazon Bedrock with the names of the AWS variables that are set, never their values", () => {
+    const env = {
+      AWS_PROFILE: "staging-profile",
+      AWS_REGION: "eu-central-1",
+      AWS_ACCESS_KEY_ID: "AKIATEST",
+    };
+    expect(aiSdkCallableProviders(env, installedOnly("@ai-sdk/amazon-bedrock"))).toEqual([
+      { provider: "amazon-bedrock", keys: ["AWS_PROFILE", "AWS_ACCESS_KEY_ID"] },
+    ]);
+    expect(aiSdkCallableProviders(env, installedOnly())).toEqual([]);
+    const manifest = buildManifest({
+      twins: [
+        { twin: docsTwin(aiSdkModels({ installed: installedOnly("@ai-sdk/amazon-bedrock") })) },
+      ],
+      env,
+    });
+    expect(manifest.providers).toEqual([
+      { provider: "amazon-bedrock", keys: ["AWS_PROFILE", "AWS_ACCESS_KEY_ID"] },
+    ]);
+    expect(JSON.stringify(manifest)).not.toMatch(/staging-profile|AKIATEST/);
+  });
+});
+
+describe("aiSdkModels on Amazon Bedrock", () => {
+  const BEDROCK = "amazon-bedrock/eu.anthropic.claude-haiku-5-5";
+  const CHAIN = () => Promise.resolve({ accessKeyId: "chain", secretAccessKey: "chain" });
+
+  /** A stub project: records each import and the settings of each Bedrock provider. */
+  function stubProject() {
+    const loaded: string[] = [];
+    const settings: Record<string, unknown>[] = [];
+    const load = async (specifier: string): Promise<Record<string, unknown>> => {
+      loaded.push(specifier);
+      if (specifier === "@ai-sdk/amazon-bedrock")
+        return {
+          createAmazonBedrock: (s: Record<string, unknown>) => {
+            settings.push(s);
+            return (id: string) => ({ provider: "amazon-bedrock", modelId: id });
+          },
+        };
+      if (specifier === "@aws-sdk/credential-providers")
+        return { fromNodeProviderChain: () => CHAIN };
+      throw new Error(`Cannot find package '${specifier}'`);
+    };
+    return { loaded, settings, load };
+  }
+
+  it("resolves with the AWS credential chain of the project when AWS_PROFILE is set", async () => {
+    const project = stubProject();
+    const resolve = aiSdkModels({
+      env: { AWS_PROFILE: "staging", AWS_REGION: "eu-central-1" },
+      load: project.load,
+    });
+    expect(await resolve(BEDROCK)).toEqual({
+      provider: "amazon-bedrock",
+      modelId: "eu.anthropic.claude-haiku-5-5",
+    });
+    expect(project.settings).toEqual([{ region: "eu-central-1", credentialProvider: CHAIN }]);
+    expect(project.loaded).toEqual(["@ai-sdk/amazon-bedrock", "@aws-sdk/credential-providers"]);
+  });
+
+  it("lets the package read static keys from the environment, without the credential chain", async () => {
+    const project = stubProject();
+    const resolve = aiSdkModels({
+      env: { AWS_ACCESS_KEY_ID: "AKIATEST", AWS_DEFAULT_REGION: "eu-west-1" },
+      load: project.load,
+    });
+    await resolve(BEDROCK);
+    expect(project.settings).toEqual([{ region: "eu-west-1" }]);
+    expect(project.loaded).toEqual(["@ai-sdk/amazon-bedrock"]);
+  });
+
+  it("rejects with a clear reason when there are no AWS credentials or no region", async () => {
+    const project = stubProject();
+    await expect(aiSdkModels({ env: {}, load: project.load })(BEDROCK)).rejects.toThrow(
+      "set AI_GATEWAY_API_KEY, or set AWS_PROFILE (or AWS_ACCESS_KEY_ID, AWS_BEARER_TOKEN_BEDROCK, AWS_WEB_IDENTITY_TOKEN_FILE, AWS_CONTAINER_CREDENTIALS_FULL_URI, AWS_CONTAINER_CREDENTIALS_RELATIVE_URI) and install @ai-sdk/amazon-bedrock",
+    );
+    await expect(
+      aiSdkModels({ env: { AWS_PROFILE: "staging" }, load: project.load })(BEDROCK),
+    ).rejects.toThrow("set AWS_REGION");
+  });
+
+  it("names the credential package when AWS_PROFILE needs it and the project lacks it", async () => {
+    const resolve = aiSdkModels({
+      env: { AWS_PROFILE: "staging", AWS_REGION: "eu-central-1" },
+      load: async (specifier) => {
+        if (specifier === "@ai-sdk/amazon-bedrock")
+          return { createAmazonBedrock: () => () => ({}) };
+        throw new Error(`Cannot find package '${specifier}'`);
+      },
+    });
+    await expect(resolve(BEDROCK)).rejects.toThrow("install @aws-sdk/credential-providers");
+  });
+
+  it("generates fakes with a small Bedrock model when Bedrock is the only callable provider", async () => {
+    const project = stubProject();
+    const asked: unknown[] = [];
+    const resolve = aiSdkModels({
+      env: { AWS_PROFILE: "staging", AWS_REGION: "eu-central-1" },
+      installed: (specifier) => specifier === "@ai-sdk/amazon-bedrock" || specifier === "ai",
+      load: async (specifier) =>
+        specifier === "ai"
+          ? {
+              generateText: async (options: { model: unknown }) => {
+                asked.push(options.model);
+                return { text: '{"ticketId":"T-9"}' };
+              },
+            }
+          : project.load(specifier),
+    });
+    const answer = await resolve.generateFake?.(
+      { callId: "c1", tool: "createTicket", description: "Open a ticket.", args: {}, messages: [] },
+      new AbortController().signal,
+    );
+    expect(answer).toEqual({ result: { ticketId: "T-9" }, isError: false, source: "generated" });
+    expect(asked).toEqual([
+      { provider: "amazon-bedrock", modelId: "global.anthropic.claude-haiku-5-5" },
+    ]);
+  });
 });
 
 describe("run.start for an AI SDK twin", () => {

@@ -64,10 +64,17 @@ export default twin("docs-agent", {
 
 ## Run it
 
-You need Node 22.13 or later (for `node:sqlite`) and an AI Gateway key.
+You need Node 22.13 or later (for `node:sqlite`) and a model: an AI Gateway key, or Amazon
+Bedrock. For Bedrock, set `DOCS_AGENT_MODEL` to an `amazon-bedrock/<model id>` value. It
+changes the code default, so the chat, the seed and the twin all use it, and the AWS credential
+chain signs the calls.
 
 ```sh
-export AI_GATEWAY_API_KEY=...   # the model
+export AI_GATEWAY_API_KEY=...   # the model, through AI Gateway
+# or, through Amazon Bedrock with an AWS profile (SSO works):
+export DOCS_AGENT_MODEL=amazon-bedrock/eu.anthropic.claude-haiku-5-5
+export AWS_PROFILE=<your profile> AWS_REGION=eu-central-1
+
 export RATEL_API_KEY=rtl_...    # optional: send traces to a Ratel project
 
 # Chat in the terminal with the three tools.

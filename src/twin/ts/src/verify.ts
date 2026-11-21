@@ -83,6 +83,10 @@ export const ALTERNATE_MODELS: Readonly<Record<string, readonly string[]>> = {
   anthropic: ["anthropic/claude-haiku-5-5", "anthropic/claude-sonnet-5-5"],
   google: ["google/gemini-3-flash", "google/gemini-3-pro"],
   openai: ["openai/gpt-5-mini", "openai/gpt-5"],
+  "amazon-bedrock": [
+    "amazon-bedrock/global.anthropic.claude-haiku-5-5",
+    "amazon-bedrock/global.anthropic.claude-sonnet-5-5",
+  ],
 };
 
 const NO_MODEL_SPAN =

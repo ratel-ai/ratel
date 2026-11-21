@@ -39,6 +39,13 @@ A chat twin runs one user turn per run: `input.messages` holds the conversation 
 `resolve: aiSdkModels()` from `@ratel-ai/twin/ai-sdk`, a model param becomes an AI SDK
 `LanguageModel`: through AI Gateway when `AI_GATEWAY_API_KEY` is set, else through the
 project's own `@ai-sdk/anthropic`, `@ai-sdk/openai` or `@ai-sdk/google` package and its key.
+An `amazon-bedrock/<model id>` value (for example
+`amazon-bedrock/eu.anthropic.claude-haiku-5-5`) goes through the project's
+`@ai-sdk/amazon-bedrock`. It needs `AWS_REGION` and AWS credentials: `AWS_ACCESS_KEY_ID` or
+`AWS_BEARER_TOKEN_BEDROCK`, which the package reads itself, or `AWS_PROFILE` (SSO or a shared
+file), web identity or container credentials, through `fromNodeProviderChain` of the project's
+`@aws-sdk/credential-providers`. The manifest lists the names of the AWS variables that are set,
+never their values.
 The runner imports `ai` and the provider from the project of the twin file (never from where
 `@ratel-ai/twin` is installed), so the model and your `streamText` come from the same `ai`. Supports `ai` 6 and 7. The core entry
 `@ratel-ai/twin` never imports `ai`.
