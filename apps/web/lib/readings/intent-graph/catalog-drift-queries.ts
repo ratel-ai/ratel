@@ -2,7 +2,7 @@ import { and, eq, gte } from "drizzle-orm";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { toolUsageCounters } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { type CatalogDrift, GONE_TOOL_GRACE_DAYS, goneTools } from "./catalog-drift";
 
 /** The facts the gone-tool rule (./catalog-drift.ts) reads, and its switch. */
@@ -60,14 +60,14 @@ export async function loadCatalogDrift(
 }
 
 /**
- * Whether the catalog-drift rule applies for whoever asked: upstream decides it per organization
- * and person; here it is the deployment switch, the same for every project and caller. The
- * project and actor are kept for the callers' shape.
+ * Whether the catalog-drift rule applies for whoever asked: the deployment switch without the
+ * edition's flags port, the edition's value for this project and caller with it
+ * (`featureEnabled`).
  */
 export async function catalogDriftEnabledForActor(
-  _projectId: string,
-  _actor: string,
+  projectId: string,
+  actor: string,
   env: Record<string, string | undefined> = process.env,
 ): Promise<boolean> {
-  return experimentalFeatureEnabled(CATALOG_DRIFT_SWITCH, env);
+  return featureEnabled(CATALOG_DRIFT_SWITCH, { projectId, actor }, { env });
 }

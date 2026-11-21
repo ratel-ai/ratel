@@ -32,3 +32,9 @@ test("FF_EVAL_GATE turns it on for everyone on the deployment, with no database 
     true,
   );
 });
+
+test("the eval pages' layout asks the gate for its project, as the switch says", async () => {
+  const { evalGateEnabledForProject } = await import("./gate");
+  assert.equal(await evalGateEnabledForProject("p1", {}), false);
+  assert.equal(await evalGateEnabledForProject("p1", ON), true);
+});

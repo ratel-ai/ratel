@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
+import type { FeatureFlagsPort } from "@/lib/contracts/feature-flags";
 import type {
   ImportedRunsPort,
   ImportSummary,
@@ -278,6 +279,13 @@ export type CompositionPorts = {
    * `APP_NAME`).
    */
   productName?: { full: string; short: string };
+  /**
+   * Absent in the open-source edition, where each core switch is its `FF_*` environment variable
+   * (or `RATEL_EXPERIMENTAL_FEATURES`) for the whole deployment. With it, the edition decides each
+   * switch per organization, project and person; an `FF_*` value in the environment still comes
+   * first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
+   */
+  featureFlags?: FeatureFlagsPort;
 };
 
 export const PORT_NAMES = [
