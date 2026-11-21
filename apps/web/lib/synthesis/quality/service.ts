@@ -481,59 +481,6 @@ function compare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-/** The admin index: every project with shadow comparisons, newest traffic first. */
-export interface QualityProjectSummary {
-  projectId: string;
-  projectName: string;
-  projectSlug: string;
-  organizationName: string | null;
-  calibrations: Array<{ experimentName: string; comparisonCount: number }>;
-  comparisonCount: number;
-  lastSeenAt: Date;
-}
-
-export async function listQualityProjectSummaries(
-  window: ExperimentWindow,
-  db: QualityServiceDb = getDb(),
-): Promise<QualityProjectSummary[]> {
-  const rows = await listQualityProjects(window, db);
-  if (rows.length === 0) return [];
-
-  const details = await db
-    .select({
-      id: projects.id,
-      name: projects.name,
-      slug: projects.slug,
-      organizationId: projects.organizationId,
-    })
-    .from(projects)
-    .where(
-      inArray(
-        projects.id,
-        rows.map((row) => row.projectId),
-      ),
-    );
-  const byId = new Map(details.map((detail) => [detail.id, detail]));
-
-  const summaries = await Promise.all(
-    rows.map(async (row) => {
-      const detail = byId.get(row.projectId);
-      return {
-        projectId: row.projectId,
-        projectName: detail?.name ?? "Unknown project",
-        projectSlug: detail?.slug ?? row.projectId,
-        organizationName: detail
-          ? ((await getOrganizationById(detail.organizationId))?.name ?? null)
-          : null,
-        calibrations: await listQualityCalibrations(row.projectId, window, db),
-        comparisonCount: row.comparisonCount,
-        lastSeenAt: row.lastSeenAt,
-      };
-    }),
-  );
-  return summaries;
-}
-
 /** How much faster an arm is than the baseline, for the headline tile. */
 export function armSpeedup(
   latency: ReadonlyMap<string, ArmLatency>,
