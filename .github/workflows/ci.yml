@@ -63,11 +63,14 @@ jobs:
           filters: |
             changed:
               - '**'
+      # The list goes in on stdin: as an env value or an argument, a large change (a folder
+      # move) passes the kernel's 128 KB limit for one string and the step dies silently.
       - name: Classify changed paths
         id: c
-        env:
-          CHANGED_FILES: ${{ steps.f.outputs.changed_files }}
-        run: node scripts/ci-filters.mjs --files-json "$CHANGED_FILES" >> "$GITHUB_OUTPUT"
+        run: |
+          node scripts/ci-filters.mjs >> "$GITHUB_OUTPUT" <<'CHANGED_FILES_JSON'
+          ${{ steps.f.outputs.changed_files }}
+          CHANGED_FILES_JSON
       - name: Contract tests
         run: node --test scripts/ci-filters.test.mjs scripts/workflow-contracts.test.mjs
 
