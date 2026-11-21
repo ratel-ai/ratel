@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "type": "run.lease",
+  "id": "msg_0010",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "payload": {
+    "elapsedMs": 15000
+  }
+}
