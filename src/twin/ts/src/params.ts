@@ -101,6 +101,23 @@ export function bareModelId(id: string): string {
   return slash < 0 ? id : id.slice(slash + 1);
 }
 
+/**
+ * Turns the text of a CLI `--set name=value` into the param's value type. Text
+ * that does not parse stays text, so checkParamValue names the problem.
+ */
+export function coerceOverride(param: Param, raw: string): unknown {
+  if (param.kind !== "scalar") return raw;
+  switch (param.type) {
+    case "int":
+    case "number":
+      return raw.trim() !== "" && Number.isFinite(Number(raw)) ? Number(raw) : raw;
+    case "bool":
+      return raw === "true" ? true : raw === "false" ? false : raw;
+    default:
+      return raw;
+  }
+}
+
 /** Why `value` does not fit `param`, or null when it fits. */
 export function checkParamValue(param: Param, value: unknown): string | null {
   switch (param.kind) {

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 // The production import path (`@ratel-ai/twin`) runs inside the user's agent in
 // production, so it must stay pure: no socket, no HTTP, no child process. The
-// runner and the CLI live behind their own entrypoints. This walks the real
+// runner and the CLI (src/cli, the `ratel` bin) live behind their own entrypoints. This walks the real
 // module graph of the root entry, then imports it and watches for a socket.
 
 const ALLOWED = ["@opentelemetry/api", "node:crypto"];
@@ -31,7 +31,9 @@ describe("@ratel-ai/twin entry stays network-free", () => {
     const tsconfig = JSON.parse(readFileSync(new URL("../tsconfig.json", import.meta.url), "utf8"));
     expect(tsconfig.exclude).toContain("src/test-support/**/*");
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    expect(pkg.dependencies ?? {}).toEqual({});
+    // tsx loads user twins in the CLI's child worker only; the entry never reaches it.
+    expect(pkg.dependencies ?? {}).toEqual({ tsx: "^4.21.0" });
+    expect(pkg.bin).toEqual({ ratel: "./dist/cli/main.js" });
     expect(pkg.peerDependencies).toEqual({ "@opentelemetry/api": "^1.9.0" });
     expect(pkg.license).toBe("MIT");
     expect(pkg.publishConfig).toEqual({ access: "public", provenance: true });

@@ -741,6 +741,10 @@ importers:
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
   src/twin/ts:
+    dependencies:
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.13

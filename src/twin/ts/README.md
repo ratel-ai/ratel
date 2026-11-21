@@ -33,6 +33,19 @@ const cfg = resolveLocal(labelDefaults, { twin: "workflow-label" });
 `stampTwinInput(input)` stamps `ratel.twin.input` on the span of one structured item, so a
 recorded item can open in the playground.
 
+## Local runs: the `ratel` CLI
+
+```bash
+ratel twin list [--json]                    # finds **/*.twin.* and prints the manifest
+ratel twin run workflow-label --input in.json --set maxTokens=100 [--tool createTicket=fake]
+```
+
+`twin run` prints the output, the names of the changed params and the config hash. A bad id or
+value exits non-zero with a message that names the twin and the param. Discovery skips
+`node_modules` and build output. The CLI never loads your code itself: a child worker (under
+`tsx`) loads the twins and the project's `.env`. `--tool` modes are parsed and stored; they take
+effect in a later version.
+
 ## Rules
 
 - An override applies to one run. Values are resolved per run, with no module-level state.
@@ -49,7 +62,9 @@ recorded item can open in the playground.
 - `src/hash.ts` — canonical JSON and the config hash. `src/manifest.ts`, `src/providers.ts` —
   the `protocol/twin/v1` manifest.
 - `src/otel.ts` — `resolveLocal` and `stampTwinInput` (`@opentelemetry/api` peer).
-- `src/test-support/` — a fixture twin for the tests. Not built.
+- `src/cli/` — the `ratel` bin (`main.ts`, a separate entrypoint) and its child worker
+  (`worker.ts`), argument parsing, discovery and output.
+- `src/test-support/` — fixture twins and a fixture project for the tests. Not built.
 
 ```bash
 pnpm --filter @ratel-ai/twin typecheck

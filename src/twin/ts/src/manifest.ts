@@ -30,7 +30,7 @@ export interface ManifestTwin {
   readonly context: readonly { readonly name: string; readonly default?: unknown }[];
 }
 
-export type ManifestParam = { readonly name: string } & Omit<Param, "__value">;
+export type ManifestParam = { readonly name: string } & Param;
 
 export interface BuildManifestOptions {
   readonly twins: readonly { readonly twin: Twin; readonly file?: string }[];

@@ -24,7 +24,13 @@ export {
   stampTwinInput,
   TWIN_INPUT_MAX_CHARS,
 } from "./otel.js";
-export { bareModelId, type Param, type ParamMap, type ParamValues } from "./params.js";
+export {
+  bareModelId,
+  coerceOverride,
+  type Param,
+  type ParamMap,
+  type ParamValues,
+} from "./params.js";
 export { type CallableProvider, callableProviders, PROVIDER_KEYS } from "./providers.js";
 export { type ResolvedParams, resolveParams } from "./resolve.js";
 export { type RunTwinOptions, type RunTwinResult, runTwin } from "./run.js";
