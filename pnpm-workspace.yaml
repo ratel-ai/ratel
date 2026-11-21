@@ -4,6 +4,7 @@ packages:
   - 'src/adapters/ts-mastra'
   - 'src/telemetry/ts'
   - 'src/rankers/ts'
+  - 'src/twin/ts'
   - 'protocol/twin/v1'
   - 'examples/*'
   - 'ee'
