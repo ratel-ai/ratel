@@ -15,7 +15,7 @@ export type GateDb = Pick<ReturnType<typeof getDb>, "select">;
  * with it, the edition decides it for the organization or the asking person
  * (`featureEnabled`). The functions keep upstream's names and arguments so
  * every call site stays identical. `evalGateEnabled` reads the environment
- * only: it has no one to ask about.
+ * only: it has no one to ask about, so pages use the others.
  */
 
 type Env = Record<string, string | undefined>;
@@ -25,6 +25,17 @@ export const EVAL_GATE_OFF_ERROR = "The eval gate is off for this organization."
 
 export function evalGateEnabled(env: Env = process.env): boolean {
   return experimentalFeatureEnabled("FF_EVAL_GATE", env);
+}
+
+/**
+ * The gate for a project's eval pages, before the page resolves its organization: the layout's
+ * check, so a switched-off gate answers a 404 before anything streams.
+ */
+export function evalGateEnabledForProject(
+  projectId: string,
+  env: Env = process.env,
+): Promise<boolean> {
+  return featureEnabled("FF_EVAL_GATE", { projectId }, { env });
 }
 
 /** The signed-in person, in this organization (the project's, from its scope). */
