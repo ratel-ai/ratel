@@ -1,0 +1,9 @@
+# date: 2026-11-21T17:29:02Z
+# ratel-platform: 468db8a (branch beluga/rp-12-manage-cloud-feature)
+# ratel:          a379576a (branch beluga/rp-12-manage-cloud-feature, baseline f6f918d9)
+# cwd: ratel
+$ grep -rnE "from ['\"]posthog|require\(['\"]posthog" apps/web --include='*.ts' --include='*.tsx' --exclude-dir=node_modules --exclude-dir=.next; echo "matches: $(grep -rlE "from ['\"]posthog" apps/web --include='*.ts' --include='*.tsx' --exclude-dir=node_modules --exclude-dir=.next | wc -l | tr -d ' ')"
+
+matches: 0
+
+# exit code: 0

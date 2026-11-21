@@ -1,0 +1,142 @@
+# date: 2026-11-21T17:28:24Z
+# ratel-platform: 468db8a (branch beluga/rp-12-manage-cloud-feature)
+# ratel:          a379576a (branch beluga/rp-12-manage-cloud-feature, baseline f6f918d9)
+# cwd: ratel/ee
+$ npx tsx --no-wasm-code-gc --test --test-force-exit src/access/feature-flags.test.ts src/access/flags.test.ts src/access/flags-registry.test.ts src/diagnostics/overlay-data.test.ts src/diagnostics/diagnostics-menu.test.ts src/composition.test.ts
+
+[PostHog] `isFeatureEnabled` is deprecated and will be removed in a future major version. Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — this consolidates flag evaluation into a single `/flags` request per incoming request.
+(node:46313) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FF_EVAL_GATE=1 turns the eval gate on, PostHog unasked (0.67875ms)
+✔ FF_EVAL_GATE=0 turns the eval gate off whatever PostHog says (0.094458ms)
+✔ FF_CLOUD_EVAL_GATE alone does not turn the eval gate on: the core never reads it (0.068291ms)
+✔ the diagnostics menu says the eval gate is on with FF_EVAL_GATE=1 and no FF_CLOUD_EVAL_GATE (0.279791ms)
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:985:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:25)
+    at async RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:16)
+    at async RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:9)
+    at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+    at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13)
+}
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:985:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:25)
+    at async RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:16)
+    at async RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:9)
+    at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+    at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13)
+}
+✔ integration: a PostHog value turns the eval gate on for one organization only (45.988083ms)
+✔ the diagnostics menu shows the PostHog value for the reader's organization (0.310625ms)
+✔ each core switch is its own PostHog flag (0.302292ms)
+✔ PostHog decides for the actor, else the signed-in person, else the organization (0.131334ms)
+✔ without PostHog, or without an answer, a switch reads its default: off (0.083958ms)
+✔ a failed decision is off and reported (0.485417ms)
+✔ the menu shows the eval gate of the displayed project's organization, not the active one (0.288334ms)
+✔ the menu asks each gate's subject: the project for the eval gate and drift, the person only for MCP Apps (0.379708ms)
+✔ with no project displayed, the project flags fall back to the active organization (0.190375ms)
+✔ the menu's project flags are refreshed only for a project the reader belongs to (0.786833ms)
+(node:46314) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FLAGS is the complete flat registry (49.111333ms)
+✔ code declarations are derived from FLAGS: the launch allowlist, the eval gate, catalog drift and MCP Apps (0.604167ms)
+✔ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (0.787083ms)
+✔ isPostHogConfigured reflects POSTHOG_KEY (0.6635ms)
+✔ importing the registry without PostHog env does not throw (0.424167ms)
+{"level":50,"time":1795282104708,"pid":46315,"hostname":"rstagis-MacBook-Pro-3.local","module":"flags","err":{"type":"Error","message":"database down","stack":"Error: database down\n    at Object.invited (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.test.ts:77:11)\n    at decideLaunchAccess (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.ts:207:31)\n    at async TestContext.<anonymous> (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.test.ts:79:16)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"msg":"launch access decision failed"}
+(node:46315) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ an invited verified email is let in (1.122583ms)
+✔ a verified email nobody invited waits (0.23325ms)
+✔ no verified email never gets in, and is not looked up (0.191417ms)
+✔ a configured platform admin is let in without a lookup (0.223542ms)
+✔ with no admins configured, upstream's seed admin dev@ratel.sh is still let in (0.244ms)
+✔ with no admins configured, anyone else still needs an invitation (0.266834ms)
+✔ signed out is never let in (0.29675ms)
+✔ a failed lookup closes the gate (1.899584ms)
+✔ FF_CLOUD_LAUNCH_ACCESS overrides the decision either way (0.10925ms)
+✔ a person reached without a session (MCP) is decided by their verified email, like the console (0.173292ms)
+✔ a person reached without a session fails closed when the provider cannot be read (0.145625ms)
+{"level":50,"time":1795282104710,"pid":46315,"hostname":"rstagis-MacBook-Pro-3.local","module":"flags","err":{"type":"Error","message":"provider down","stack":"Error: provider down\n    at Object.verifiedEmail (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.test.ts:127:11)\n    at Object.getVerifiedEmail (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.ts:186:34)\n    at decideLaunchAccess (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.ts:199:30)\n    at async TestContext.<anonymous> (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/ee/src/access/flags.test.ts:129:16)\n    at async Test.run (node:internal/test_runner/test:1409:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)"},"msg":"launch access decision failed"}
+(node:46316) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ connect keeps the core's services and registers the import source ids (0.582541ms)
+✔ the composition supplies the MCP sign-in verifier (0.047083ms)
+✔ the composition takes the core's model calls, so they are written as spend lines (0.033709ms)
+✔ the composition keeps API keys for a later reveal (0.027666ms)
+✔ connect refuses a malformed API_KEY_ENCRYPTION_KEY, so the boot stops (0.183125ms)
+✔ the composition names the product as Ratel Cloud does (0.043458ms)
+✔ the composition supplies the core switches from PostHog (0.02975ms)
+(node:46317) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the diagnostics dialog is named as upstream's (0.330625ms)
+✔ the menu reads the project on screen from a console project path only (0.387791ms)
+(node:46318) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a platform admin gets the flags link (0.800916ms)
+✔ anyone else gets no flags link, and the link is not even computed (0.132792ms)
+✔ a failed admin check gives no flags link (0.115208ms)
+✔ the diagnostics carry the environment, the session and the flag evaluations (0.175583ms)
+✔ a session that cannot be resolved leaves the diagnostics open, with no session (0.079792ms)
+✔ with a database: the session user, the active organization with its role and plan, and only its project ids and slugs (0.330833ms)
+✔ with a database but no session: none (0.049583ms)
+✔ without a database: the identity provider's user, no organization and no projects (0.074208ms)
+✔ without a database or a signed-in user: none (0.058375ms)
+✔ Debug is in the account menu for a platform admin outside a support session only (0.073334ms)
+ℹ tests 49
+ℹ suites 0
+ℹ pass 49
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1099.483167
+
+# exit code: 0
