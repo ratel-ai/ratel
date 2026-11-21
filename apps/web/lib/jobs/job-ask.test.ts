@@ -1,51 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type JobAskSpec, jobAsk, jobAskSpec, type NoPayload } from "./job-ask";
+import { JOB_ASKS, jobAsk, jobAskFor, jobAskSpec, jobKindOfAsk } from "./job-ask";
 
 /**
  * Owned (ADR-0030): upstream's `job-ask.test.ts` cases for the agent job kinds this tree has (the
- * Evals kinds `run_eval_set` and `simulate_eval_set` are not ported). The specs repeat the ones each
- * module's `register.ts` passes; the payload shapes are the producers'.
+ * Evals kinds `run_eval_set` and `simulate_eval_set` are not ported). The specs are the table each
+ * module's `register.ts` checks against its payload; the payload shapes are the producers'.
  */
 
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const PROJECT = "6f1e2d3c-4b5a-4968-8776-655443322110";
 
-const SPECS = {
-  simulate_task_eval: jobAskSpec<{ runId: string }>("Simulate a task eval", { runId: true }),
-  label_workflows: jobAskSpec<NoPayload>("Label workflows", {}),
-  assign_topics: jobAskSpec<NoPayload>("Assign topics", {}),
-  match_quality_run: jobAskSpec<{
-    runId: string;
-    projectId: string;
-    projectName: string;
-    experimentName: string;
-    windowStart: string;
-    windowEnd: string;
-    judge?: boolean;
-    backtest?: boolean;
-    judgeBudgetUsd?: number;
-  }>("Run a match quality analysis", {
-    runId: true,
-    projectId: false,
-    projectName: false,
-    experimentName: false,
-    windowStart: true,
-    windowEnd: true,
-    judge: true,
-    backtest: true,
-    judgeBudgetUsd: false,
-  }),
-  cluster_intents: jobAskSpec<NoPayload>("Cluster intents", {}),
-  draft_fix: jobAskSpec<{ fixId: string; requestedBy: string }>("Draft a fix", {
-    fixId: true,
-    requestedBy: false,
-  }),
-  what_if_step: jobAskSpec<{ runId: string; variant: unknown }>("Run a what-if step", {
-    runId: true,
-    variant: false,
-  }),
-} satisfies Record<string, JobAskSpec>;
+const SPECS = JOB_ASKS;
 
 type Kind = keyof typeof SPECS;
 
@@ -166,4 +132,46 @@ test("a job whose payload is not an object asks by its words alone", () => {
   assert.equal(jobAsk(SPECS.draft_fix, "fix-9"), "Draft a fix");
   assert.equal(jobAsk(SPECS.draft_fix, undefined), "Draft a fix");
   assert.equal(jobAsk(SPECS.simulate_task_eval, [PROJECT]), "Simulate a task eval");
+});
+
+test("a table entry is checked against its kind's payload: every key needs a decision", () => {
+  const spec = jobAskFor<{ fixId: string; requestedBy: string }>(JOB_ASKS.draft_fix);
+  assert.equal(
+    jobAsk(spec, { fixId: "fix-9", requestedBy: "user_1" }),
+    "Draft a fix (fixId fix-9)",
+  );
+  // @ts-expect-error a payload key with no decision fails typecheck
+  jobAskFor<{ fixId: string; requestedBy: string; note: string }>(JOB_ASKS.draft_fix);
+});
+
+test("every kind's ask, with or without ids, reads back as its job kind", () => {
+  for (const [kind, { payload }] of Object.entries(CASES) as [Kind, (typeof CASES)[Kind]][]) {
+    assert.equal(jobKindOfAsk(jobAsk(SPECS[kind], payload)), kind);
+    assert.equal(jobKindOfAsk(jobAsk(SPECS[kind], null)), kind);
+  }
+});
+
+test("a stored run's old machine ask still reads as its job kind", () => {
+  assert.equal(jobKindOfAsk(`draft_fix for project ${PROJECT}\n{"fixId":"f-9"}`), "draft_fix");
+  assert.equal(jobKindOfAsk(`cluster_intents for project ${PROJECT}`), "cluster_intents");
+  assert.equal(
+    jobKindOfAsk(`run_eval_set for project ${PROJECT}`),
+    null,
+    "an Evals kind is not a job here",
+  );
+});
+
+test("an ask that is not a job's reads as no job kind", () => {
+  for (const text of [
+    "Draft a fix for the refund flow",
+    "draft a fix",
+    "Cluster intents please",
+    "Draft a fix (the refund one)",
+    "Draft a fix (requestedBy user_1)",
+    "how do I refund an order",
+    "draft_fix for project p-1",
+    "",
+  ]) {
+    assert.equal(jobKindOfAsk(text), null, text);
+  }
 });

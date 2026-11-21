@@ -53,7 +53,8 @@ export const traceTurns = pgTable(
     status: text("status").notNull().default("open"),
     // "next_turn" | "gap" | "cap" | "idle"; null while open.
     endedBy: text("ended_by"),
-    // Event time of the first and last step. `ended_at` moves while the turn is open.
+    // Event time of the first and last step (an agent run's step ends at its
+    // root span's end, RC-812). `ended_at` moves while the turn is open.
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
     // Latest receipt time of any event in the turn; the idle-close clock.

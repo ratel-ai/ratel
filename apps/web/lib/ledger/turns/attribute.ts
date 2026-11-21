@@ -53,8 +53,8 @@ export function matchPendingStart(
   return index >= 0 ? { index, method: "fallback" } : null;
 }
 
-/** Build a turn's steps: one per search, and one per invocation (start + end
- * merged). Step order is the turn's event order. */
+/** Build a turn's steps: one per search, one per invocation (start + end
+ * merged), and one per agent run. Step order is the turn's event order. */
 export function attributeTurn(turn: SegmentedTurn): StepDraft[] {
   const ends = endsById(turn);
   const paired = new Set<string>();
@@ -69,6 +69,8 @@ export function attributeTurn(turn: SegmentedTurn): StepDraft[] {
     if (event.role === "search") {
       searchOrdinal += 1;
       steps.push(searchStep(event, steps.length + 1, searchOrdinal, gapMs));
+    } else if (event.role === "run") {
+      steps.push(agentStep(event, steps.length + 1, gapMs));
     } else {
       const pair = event.role === "start" ? turn.pairs.get(event.id) : undefined;
       const end = pair ? (ends.get(pair.endId) ?? null) : null;
@@ -100,6 +102,21 @@ function searchStep(
     hitCount: event.hitCount,
     hitIds: [...event.hitIds],
     hitScores: event.hitScores ? [...event.hitScores] : null,
+  };
+}
+
+/**
+ * An agent run (RC-742): no target type, so no tool fact or attribution reads
+ * it; its `targetId` is the agent's name, when it sent one (RC-747).
+ */
+function agentStep(event: NormalizedEvent, ordinal: number, gapMs: number | null): StepDraft {
+  return {
+    ...emptyStep(event, ordinal, gapMs),
+    kind: "agent",
+    targetId: event.targetId,
+    invocationId: event.invocationId,
+    outcome: event.outcome,
+    tookMs: event.tookMs,
   };
 }
 

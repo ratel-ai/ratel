@@ -31,11 +31,17 @@ import type {
  *    groups like an inferred turn instead: consecutive such calls of the
  *    session form one run (`otlp-run:<first event id>`) until a gap over
  *    `gapMs` or a cap. Without a session each call stays its own turn.
+ *    An agent run (`agent_run`, an `invoke_agent` root span, RC-742) is an
+ *    OTLP row like any other: its trace's turn, which it makes on its own
+ *    when the run called no tool.
  * 5. Every turn but the one holding the session's latest event is closed
  *    (`next_turn`, `gap`, `cap`); that one closes as `idle` once nothing was
  *    received for `idleCloseMs`, or at once when every event of it came from
  *    an Agent health import (history read once: nothing more arrives, so the
- *    reading the import asks for counts it). A declared turn that gets events
+ *    reading the import asks for counts it), or when it holds an agent run
+ *    (RC-812: the `agent_run` row is written when the run's root span ends,
+ *    so the run is finished; a late row of its trace still joins the turn,
+ *    as an `idle` turn is reloaded). A declared turn that gets events
  *    again after another started becomes the latest one again.
  * 6. Gateway rows within `gatewayDedupeMs` of the native row they summarize are
  *    dropped (see {@link dedupeGateway}); otherwise they stand in.
@@ -91,6 +97,7 @@ const LIFECYCLE_RANK: Record<TurnEventType, number> = {
   skill_search: 0,
   gateway_search: 0,
   invoke_start: 1,
+  agent_run: 1,
   gateway_invoke: 1,
   skill_invoke: 1,
   invoke_end: 2,
@@ -327,7 +334,7 @@ function segmentSession(
 
 /** Close every turn but `last` (the one the session's latest event went to);
  * that one stays open until the session has been idle long enough, unless an
- * import brought all of it. */
+ * import brought all of it or it holds a finished agent run. */
 function finalize(
   turns: readonly TurnInProgress[],
   last: number,
@@ -341,7 +348,8 @@ function finalize(
     const lastReceived = turn.events.reduce((max, e) => Math.max(max, e.receivedAt), -Infinity);
     const imported =
       turn.events.length > 0 && turn.events.every((e) => isImportedSourceId(e.sourceId));
-    const idle = i === last && (lastReceived < idleBefore || imported);
+    const finished = turn.events.some((e) => e.role === "run");
+    const idle = i === last && (lastReceived < idleBefore || imported || finished);
     const closed = i !== last || idle;
     return {
       lane,

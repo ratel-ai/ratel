@@ -1,4 +1,8 @@
-import { TURN_EVENT_TYPES } from "@/lib/ingest/trace-events/turns-schedule";
+import {
+  AGENT_RUN_EVENT_TYPE,
+  TURN_EVENT_TYPES,
+  TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+} from "@/lib/ingest/trace-events/turns-schedule";
 import { envNumber } from "@/lib/platform/env-number";
 
 /**
@@ -6,14 +10,16 @@ import { envNumber } from "@/lib/platform/env-number";
  * deployment can correct the inferred-turn rule without a release. Pure code takes a
  * {@link TurnConfig} argument defaulting to these, so tests pin their own values.
  *
- * Owned (ADR-0030): `TURN_EVENT_TYPES` has one source, the ingest kick in
+ * Owned (ADR-0030): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
+ * `TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742) has one source, the ingest kick in
  * `lib/ingest/trace-events/turns-schedule.ts`, re-exported here so the ledger reads the
  * same list that triggers it. The imported source ids are upstream's exact set less the one
  * that names a vendor this repository cannot write; an importer adds its own (see below).
  */
 
 /** The runtime event types a turn is made of. Mirrors the partial index on `trace_events`. */
-export { TURN_EVENT_TYPES };
+/** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types a build reads with `FF_TOOL_RUN_INSIGHTS` on. */
+export { AGENT_RUN_EVENT_TYPE, TURN_EVENT_TYPES, TURN_EVENT_TYPES_WITH_AGENT_RUNS };
 
 /** A silence longer than this between two events of a session starts a new inferred turn. */
 export const INFERRED_TURN_GAP_MS = envNumber("TRACE_TURNS_INFERRED_GAP_MS", 90_000);

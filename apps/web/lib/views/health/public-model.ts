@@ -83,6 +83,8 @@ const MODEL_RULES: Rules<HealthPageModel> = {
   emptyEarlyReading: () => undefined,
   // The Health score: numbers and issue ids only, no text from a run (RC-226). The loader drops it where its flag is off.
   score: (m) => m.score ?? undefined,
+  // Turn counts only; the shared page's loader never sets it (RC-828).
+  lowConfidence: same("lowConfidence"),
 };
 
 const SIGNAL_RULES: Rules<SignalView> = {

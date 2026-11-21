@@ -30,6 +30,7 @@ test("the tool row carries its MCP server", async () => {
       enqueueBuild: async () => null,
       scheduleProjectDrain: () => {},
     },
+    agentRunsEnabled: async () => false,
     logError: () => {},
   });
   assert.equal(row.server, "beluga_board");

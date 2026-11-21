@@ -4,12 +4,15 @@ import {
 } from "@/lib/jobs/observability";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
+import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
 import {
   DEFAULT_TURN_CONFIG,
   TURN_BUILD_MAX_PAGES,
   TURN_BUILD_PAGE_LIMIT,
   TURN_BUILD_SEED_WINDOW_DAYS,
   TURN_BUILD_TIME_BUDGET_MS,
+  TURN_EVENT_TYPES,
+  TURN_EVENT_TYPES_WITH_AGENT_RUNS,
   type TurnConfig,
 } from "../constants";
 import { traceSignalsHashSalt } from "../hash";
@@ -81,6 +84,13 @@ export function createMissingSaltReporter(
 const reportMissingSaltOnce = createMissingSaltReporter();
 
 export interface BuildJobDeps {
+  /**
+   * `FF_TOOL_RUN_INSIGHTS` for the project (RC-742, upstream's
+   * `cloud-tool-run-insights`): on, the build also reads agent runs
+   * (`agent_run`), so a run with no tool call makes a turn.
+   * Never throws: a failed decision is off.
+   */
+  readsAgentRuns: (projectId: string) => Promise<boolean>;
   getCursor: typeof getTraceTurnsCursorFn;
   listEvents: typeof listTurnEventsPageFn;
   listHits: typeof listTurnEventHitsFn;
@@ -131,6 +141,7 @@ export const ledgerSeams: Pick<
 
 function defaultDeps(): BuildJobDeps {
   return {
+    readsAgentRuns: async () => toolRunInsightsOn(),
     getCursor: getTraceTurnsCursorFn,
     listEvents: listTurnEventsPageFn,
     listHits: listTurnEventHitsFn,
@@ -201,6 +212,9 @@ export async function buildProjectTraceTurns(
     return SALT_MISSING;
   }
 
+  const types = (await deps.readsAgentRuns(projectId))
+    ? TURN_EVENT_TYPES_WITH_AGENT_RUNS
+    : TURN_EVENT_TYPES;
   const start = await resolveStart(projectId, deps, startedAt);
   let since = start.since;
   let pages = 0;
@@ -210,7 +224,7 @@ export async function buildProjectTraceTurns(
   let caughtUp = false;
 
   while (pages < deps.maxPages && deps.now().getTime() - startedAt.getTime() < deps.timeBudgetMs) {
-    const rows = await deps.listEvents(projectId, since, undefined, deps.pageLimit);
+    const rows = await deps.listEvents(projectId, since, undefined, deps.pageLimit, types);
     if (rows.length === 0) {
       caughtUp = true;
       break;

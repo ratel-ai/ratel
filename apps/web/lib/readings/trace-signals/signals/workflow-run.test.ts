@@ -7,9 +7,16 @@ import {
   createWorkflowCollector,
   WORKFLOW_SIGNAL_KINDS,
 } from "@/lib/readings/trace-signals/signals/workflow-run";
+import { TOOL_RUN_MINING } from "@/lib/readings/trace-signals/tool-run-insights";
+import { agentStepId } from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import { workflowDisplayName } from "@/lib/readings/trace-signals/workflows/name";
 import { workflowFingerprint } from "@/lib/readings/trace-signals/workflows/order";
-import { type Call, many, wfTurn } from "@/lib/readings/trace-signals/workflows/test-fixtures";
+import {
+  agentTurn,
+  type Call,
+  many,
+  wfTurn,
+} from "@/lib/readings/trace-signals/workflows/test-fixtures";
 
 /** 30 runs of a-b-c-d where the last step fails in 12, plus 30 clean runs of x-y. */
 function failingWorld(): SignalTurn[] {
@@ -254,4 +261,92 @@ test("every collected run is placed in one task or none, and each task counts ex
   assert.equal(abcd.reading?.steps[3]?.failures, 12);
   assert.equal(abcd.reading?.steps[3]?.gaveUp, 12);
   assert.equal(abcd.reading?.corrections.byKind.gave_up_after_error, 12);
+});
+
+/* RC-747: tool-less agent runs, one task per agent, only with `cloud-tool-run-insights` on. */
+
+function agentWorld(): SignalTurn[] {
+  return [
+    ...many(4, (i) => agentTurn("draft_fix", { outcome: i === 0 ? "error" : "ok" })),
+    ...many(2, () => agentTurn("label_workflows")),
+    agentTurn(null),
+  ];
+}
+
+function collectWith(turns: readonly SignalTurn[], mining = TOOL_RUN_MINING) {
+  const collector = createWorkflowCollector(undefined, undefined, undefined, mining);
+  for (const turn of turns) collector.collect(turn);
+  return collector;
+}
+
+test("flag on: tool-less agent runs form one task per agent at the mining floor, its runs placed in it", () => {
+  const { stored, placement, signals } = collectWith(agentWorld()).finish([]);
+  assert.equal(stored.basis?.blocked, null, "agent runs are enough to read tasks");
+  assert.equal(stored.items.length, 1, "label_workflows has 2 runs, under the floor of 3");
+  const task = stored.items[0]!;
+  assert.deepEqual(task.coreTools, [agentStepId("draft_fix")]);
+  assert.deepEqual(task.typicalOrder, ["agent:draft_fix"]);
+  assert.equal(task.id, workflowFingerprint(["agent:draft_fix"]));
+  assert.equal(task.runs, 4);
+  assert.equal(task.health.failedRuns, 1);
+  assert.equal(task.reading?.runs, 4);
+  assert.deepEqual(
+    task.reading?.steps.map((step) => step.toolId),
+    ["agent:draft_fix"],
+  );
+  assert.equal([...placement.values()].filter((id) => id === task.id).length, 4);
+  assert.equal(stored.assignedTurns, 4);
+  assert.equal(stored.turnsWithTools, 0, "agent runs are not tool runs");
+  assert.ok(
+    signals.every((signal) => signal.kind !== "workflow_fixed_chain"),
+    "one step is no chain",
+  );
+});
+
+test("flag on: an agent task keeps last run's id, and tool tasks read as before beside it", () => {
+  const tools = many(30, () => wfTurn(["x", "y"]));
+  const off = collect(tools).finish([]).stored;
+  const previous = [{ id: "wf-agent", coreTools: ["agent:draft_fix"] }];
+  const on = collectWith([...tools, ...agentWorld()]).finish(previous).stored;
+  assert.deepEqual(on.items.map((item) => item.id).sort(), [off.items[0]!.id, "wf-agent"].sort());
+  const xy = on.items.find((item) => item.coreTools.includes("x"))!;
+  assert.equal(xy.runs, off.items[0]!.runs);
+  assert.equal(on.turnsWithTools, off.turnsWithTools);
+});
+
+test("flag on: an agent run that also called tools is a tool run, never an agent task", () => {
+  const withTool = (): SignalTurn => {
+    const agent = agentTurn("draft_fix");
+    const tool = wfTurn(["search_docs"]);
+    return {
+      ...agent,
+      invokeCount: 1,
+      steps: [agent.steps[0]!, { ...tool.steps[0]!, ordinal: 1 }],
+    };
+  };
+  const { stored } = collectWith(many(5, withTool)).finish([]);
+  assert.deepEqual(stored.items, []);
+  assert.equal(stored.singleStepTurns, 5);
+});
+
+test("flag off: agent runs form no task and the basis still reads no tool calls", () => {
+  const { stored, placement } = collectWith(agentWorld(), {}).finish([]);
+  assert.deepEqual(stored.items, []);
+  assert.equal(stored.basis?.blocked, "no_tool_calls");
+  assert.equal(placement.size, 0);
+});
+
+test("flag on: a basis decided before the reading as 'no tool calls' is lifted by agent runs", () => {
+  const blocked = {
+    basis: "none",
+    blocked: "no_tool_calls",
+    excludedRuns: 0,
+    since: null,
+    mixed: false,
+  } as const;
+  const collector = createWorkflowCollector(undefined, undefined, blocked, TOOL_RUN_MINING);
+  for (const turn of agentWorld()) collector.collect(turn);
+  const { stored } = collector.finish([]);
+  assert.equal(stored.basis?.blocked, null);
+  assert.equal(stored.items.length, 1);
 });

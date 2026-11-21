@@ -13,7 +13,9 @@ import type {
   SubjectChip,
   TurnSourceMix,
 } from "@/lib/readings/trace-signals/view";
+import { isAgentStepId } from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import {
+  stepFallbackName,
   type WorkflowLabels,
   workflowDisplayName,
 } from "@/lib/readings/trace-signals/workflows/name";
@@ -357,8 +359,10 @@ export function claimModel(
   const stored =
     typeof m.route === "string" && ROUTES.has(m.route) ? (m.route as SignalFixRoute) : null;
   const route = stored ?? SIGNAL_CATALOG[record.kind].fixRoute;
-  const name = (id: string | undefined) => (id ? (names.get(id) ?? id) : "");
   const [a = "", b = ""] = record.subjectIds;
+  const agentStep = agentTaskStep(record);
+  const name = (id: string | undefined) =>
+    id ? (names.get(id) ?? (id === agentStep ? stepFallbackName(id) : id)) : "";
   const period = windowDays === 1 ? "in the last day" : `in the last ${count(windowDays)} days`;
   const copy = COPY[record.kind]({ r: record, m, name, a, b, period, route, labels });
   const claimSegments: ClaimSegment[] = copy.parts.map((part) =>
@@ -390,6 +394,22 @@ export function claimModel(
     interval: typeof low === "number" && typeof high === "number" ? { low, high } : null,
     chart: chartOf(record),
   };
+}
+
+/**
+ * The agent step of an agent task (RC-747): a workflow whose one step is
+ * `agent:<name>`, which reads as its agent in words ("Draft fix"). Tool
+ * mining needs two tools, so a one-step task is an agent's, and a customer
+ * tool whose id starts with `agent:` keeps its id. Null for any other signal.
+ */
+function agentTaskStep(record: SignalRecord): string | null {
+  const [step] = record.subjectIds;
+  return record.subjectKind === "workflow" &&
+    record.subjectIds.length === 1 &&
+    step &&
+    isAgentStepId(step)
+    ? step
+    : null;
 }
 
 function subjectLabel(

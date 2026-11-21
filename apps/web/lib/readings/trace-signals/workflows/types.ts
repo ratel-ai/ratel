@@ -44,6 +44,11 @@ export interface WorkflowConfig {
   coreShare: number;
   /** ...and in at least this share (below core) is optional. */
   optionalShare: number;
+  /**
+   * Tool-less agent runs form one task per agent, at `minSupport` runs
+   * (`agent-tasks.ts`, RC-747). On only with `cloud-tool-run-insights`.
+   */
+  agentTasks: boolean;
 }
 
 export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
@@ -60,6 +65,7 @@ export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
   closedRatio: 0.85,
   coreShare: 0.7,
   optionalShare: 0.2,
+  agentTasks: false,
 });
 
 /** The step fields mining and health read; a full `StepDraft` satisfies it. */

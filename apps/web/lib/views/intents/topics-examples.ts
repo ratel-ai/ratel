@@ -3,12 +3,14 @@ import { projectRoot } from "@/lib/console/navigation";
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { agentRunAsk } from "@/lib/readings/topics/agent-asks";
 import {
   type AskSourceKind,
   isModelOnlyTurn,
   MODEL_ONLY_PREFIX,
   type TopicInsights,
 } from "@/lib/readings/topics/types";
+import { toolRunInsightsForProject } from "@/lib/readings/trace-signals/tool-run-insights";
 import { turnTracesHref } from "@/lib/readings/trace-signals/view";
 import {
   type LabelDb,
@@ -89,11 +91,16 @@ function clip(text: string): string {
   return flat.length > MAX_TEXT ? `${flat.slice(0, MAX_TEXT - 1)}…` : flat;
 }
 
-/** The asks of the given turns, in that order; turns whose ask is gone (pruned, never captured) are left out. */
+/**
+ * The asks of the given turns, in that order; turns whose ask is gone (pruned, never captured) are left out.
+ * With `cloud-tool-run-insights` on (`toolRuns`, never throws), a backend job's machine ask reads as the
+ * job in words, as the reading placed it (RC-801, `agent-asks.ts`): no project id shows in an example.
+ */
 export async function loadExampleAsks(
   projectId: string,
   ids: readonly string[],
   db: LabelDb = getDb(),
+  toolRuns: (projectId: string) => Promise<boolean> = toolRunInsightsForProject,
 ): Promise<ExampleAsk[]> {
   const ledger = ids.filter((id) => !isModelOnlyTurn(id));
   const traces = ids.filter(isModelOnlyTurn).map((id) => id.slice(MODEL_ONLY_PREFIX.length));
@@ -103,7 +110,7 @@ export async function loadExampleAsks(
       ? modelOnlyPrompts(projectId, traces, db)
       : Promise.resolve(new Map<string, string>()),
   ]);
-  return ids.flatMap((id): ExampleAsk[] => {
+  const examples = ids.flatMap((id): ExampleAsk[] => {
     if (isModelOnlyTurn(id)) {
       const traceId = id.slice(MODEL_ONLY_PREFIX.length);
       const text = prompts.get(traceId);
@@ -129,6 +136,16 @@ export async function loadExampleAsks(
           },
         ]
       : [];
+  });
+  // The flag is read only when an example is a job's ask.
+  if (
+    !examples.some((example) => agentRunAsk(example.text) !== null) ||
+    !(await toolRuns(projectId))
+  )
+    return examples;
+  return examples.map((example) => {
+    const text = agentRunAsk(example.text);
+    return text ? { ...example, text, source: "derived" } : example;
   });
 }
 

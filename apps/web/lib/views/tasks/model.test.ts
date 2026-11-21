@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createWorkflowCollector } from "@/lib/readings/trace-signals/signals/workflow-run";
 import type { StoredWorkflows } from "@/lib/readings/trace-signals/signals/workflow-stored";
+import { TOOL_RUN_MINING } from "@/lib/readings/trace-signals/tool-run-insights";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
-import { many, wfTurn } from "@/lib/readings/trace-signals/workflows/test-fixtures";
+import { agentTurn, many, wfTurn } from "@/lib/readings/trace-signals/workflows/test-fixtures";
 import type { SignalRecord } from "@/lib/views/health/signals/claims-model";
 import type { TaskFixLike } from "@/lib/views/tasks/issues";
 import {
@@ -524,4 +525,53 @@ test("the weakest step skips helpers and steps that never failed", () => {
     weakestStep(null, (id) => id),
     null,
   );
+});
+
+/* RC-747: a task of tool-less agent runs, as the Tasks page and list_tasks read it. */
+
+function agentStored(): StoredWorkflows {
+  const collector = createWorkflowCollector(undefined, undefined, undefined, TOOL_RUN_MINING);
+  for (const turn of [
+    ...many(5, () => agentTurn("draft_fix")),
+    ...many(3, () => agentTurn("labelWorkflows")),
+  ])
+    collector.collect(turn);
+  return collector.finish([{ id: "wf-fix", coreTools: ["agent:draft_fix"] }]).stored;
+}
+
+test("an agent task reads its agent's name, made readable, without a model-written label", () => {
+  const list = buildTaskList(
+    inputs({ stored: agentStored(), labels: new Map(), names: new Map(), issues: [], fixes: [] }),
+  );
+  assert.equal(list.state, "ready");
+  assert.deepEqual(
+    list.rows.map((row) => [row.id, row.name, row.runs]),
+    [
+      ["wf-fix", "Draft fix", 5],
+      [list.rows[1]!.id, "Label workflows", 3],
+    ],
+  );
+  assert.deepEqual(list.rows[0]!.steps, [{ toolId: "agent:draft_fix", label: "Draft fix" }]);
+  const detail = buildTaskDetail(
+    inputs({ stored: agentStored(), labels: new Map(), names: new Map(), issues: [], fixes: [] }),
+    "wf-fix",
+  );
+  assert.equal(detail?.name, "Draft fix");
+  assert.deepEqual(
+    detail?.steps.map((step) => step.label),
+    ["Draft fix"],
+  );
+});
+
+test("a model-written label still names an agent task", () => {
+  const labels = new Map([
+    [
+      "wf-fix",
+      { name: "Drafting a fix", description: "Drafts a change to the tools.", icon: "wrench" },
+    ],
+  ]);
+  const list = buildTaskList(
+    inputs({ stored: agentStored(), labels, names: new Map(), issues: [], fixes: [] }),
+  );
+  assert.equal(list.rows.find((row) => row.id === "wf-fix")?.name, "Drafting a fix");
 });

@@ -39,7 +39,11 @@ import type {
   TurnSourceMix,
   WindowDays,
 } from "@/lib/readings/trace-signals/view";
-import { FIRST_READING_FLOOR, SIGNAL_KINDS } from "@/lib/readings/trace-signals/view";
+import {
+  FIRST_READING_FLOOR,
+  type LowConfidence,
+  SIGNAL_KINDS,
+} from "@/lib/readings/trace-signals/view";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
 import type { WorkflowLabels } from "@/lib/readings/trace-signals/workflows/name";
 import { claimModel, type SignalRecord } from "@/lib/views/health/signals/claims-model";
@@ -165,6 +169,12 @@ export interface PageInputs {
   insights?: WorkflowInsights | null;
   /** Defaults to `FIRST_READING_FLOOR`. */
   floor?: number;
+  /**
+   * Set only with `cloud-tool-run-insights` on (RC-828): a reading from this
+   * many closed turns up to `floor` shows, marked low confidence. Absent,
+   * a reading under `floor` is the collecting page.
+   */
+  lowConfidenceFloor?: number;
   /** Earlier readings' stored Health scores, newest first (`listEarlierHealthScores`). */
   scoreHistory?: readonly unknown[];
 }
@@ -279,12 +289,14 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
   }
   const { summary, windowEnd } = inputs.run;
   const total = totalOver(summary.daily, windowDays(windowEnd, inputs.windowDays));
+  const lowConfidence = lowConfidenceOf(total.turns, floor, inputs.lowConfidenceFloor);
+  const shownFloor = lowConfidence ? inputs.lowConfidenceFloor! : floor;
   const sourceMode = sourceModeOf(mixOrFallback(inputs.run.turnSourceMix, total.mix));
   const window = {
     end: windowEnd,
     days: inputs.windowDays,
     coveredFrom: summary.coveredFrom,
-    floor,
+    floor: shownFloor,
   };
   const readings = sourceReadings(sourceMode, summary.daily, total, window);
   // The signals and the flow come from the run's window, not the selected one;
@@ -298,7 +310,7 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
   return {
     windowDays: inputs.windowDays,
     turns: total.turns,
-    floor,
+    floor: shownFloor,
     captureLevel: readings.captureLevel,
     turnSourceMix: total.mix,
     sourceMode,
@@ -329,7 +341,18 @@ export function buildHealthPageModel(inputs: PageInputs, now: Date = new Date())
       ? { emptyEarlyReading: true as const }
       : {}),
     score: scoreFor(inputs),
+    ...(lowConfidence ? { lowConfidence } : {}),
   };
+}
+
+/** The low-confidence mark of a reading with `turns` closed turns; null outside [low floor, floor). */
+function lowConfidenceOf(
+  turns: number,
+  floor: number,
+  lowFloor: number | undefined,
+): LowConfidence | null {
+  if (lowFloor === undefined || turns < lowFloor || turns >= floor) return null;
+  return { turns, firmsUpAt: floor };
 }
 
 /**

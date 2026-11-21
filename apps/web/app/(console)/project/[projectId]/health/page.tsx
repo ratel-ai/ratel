@@ -26,9 +26,11 @@ import {
 } from "@/lib/readings/trace-signals/inferred-tools-query";
 import { type PartialReading, partialReading } from "@/lib/readings/trace-signals/partial-reading";
 import { loadPartialFacts } from "@/lib/readings/trace-signals/partial-reading-query";
+import { toolRunInsightsEnabled } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   applyPlanLimits,
   hasSignals,
+  LOW_CONFIDENCE_FLOOR,
   parseWindowDays,
   windowOptionsForPlan,
 } from "@/lib/readings/trace-signals/view";
@@ -78,6 +80,10 @@ export default async function AgentHealthPage({
   const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
+  // FF_TOOL_RUN_INSIGHTS (RC-828): a reading from 10 turns on shows, marked low confidence.
+  const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
+    ? LOW_CONFIDENCE_FLOOR
+    : undefined;
   const [loaded, imports, share, inSupportSession, tasks, fixes, corrections] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
@@ -85,9 +91,13 @@ export default async function AgentHealthPage({
       fallback: fallbackModel,
       // Example turns are not read with the page: an issue reads its own when opened.
       load: () =>
-        loadHealthPageModel({ projectId: project.id, windowDays }, process.env.NODE_ENV, {
-          getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
-        }),
+        loadHealthPageModel(
+          { projectId: project.id, windowDays, lowConfidenceFloor },
+          process.env.NODE_ENV,
+          {
+            getLimits: async () => ({ ...limits, agentHealthEvidenceTurns: 0 }),
+          },
+        ),
     }),
     loadImportState(project.id, importsSlot),
     loadShareState(project.id, editionUi?.HealthShare, limits.agentHealthWindowDays),

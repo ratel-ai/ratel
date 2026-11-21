@@ -25,6 +25,7 @@ import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
+import { agentRunAsks } from "@/lib/readings/topics/agent-asks";
 import {
   chooseAsks,
   type DistinctAsk,
@@ -34,6 +35,7 @@ import {
   type TopicTurn,
   type TurnAskText,
 } from "@/lib/readings/topics/asks";
+import { derivedAsks } from "@/lib/readings/topics/derived-asks";
 import { evolveTopics, type Namer } from "@/lib/readings/topics/evolve";
 import { buildNamePrompt, NAME_SCHEMA, parseNamedTopics } from "@/lib/readings/topics/name";
 import { topicPatterns, withTopicPatterns } from "@/lib/readings/topics/patterns";
@@ -83,6 +85,7 @@ import {
 } from "@/lib/readings/topics/types";
 import { trustOf } from "@/lib/readings/trace-signals/self-corrections/detect";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import { toolRunInsightsForProject } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   hashText,
   NONE_OPTION_ID,
@@ -96,8 +99,10 @@ import {
 } from "@/lib/readings/trace-signals/workflows/decide-queries";
 import {
   loadAskSourcesByTurn,
+  loadWorkflowLabels,
   type TurnAsk,
 } from "@/lib/readings/trace-signals/workflows/label-queries";
+import type { WorkflowLabels } from "@/lib/readings/trace-signals/workflows/name";
 import {
   chooseRunBasis,
   countRun,
@@ -110,7 +115,12 @@ import {
  *
  * 1. Each turn's ask: the user's message, else the OTel prompt, else the
  *    agent's first search; the users' own words win once there are enough.
- *    A turn asking the previous turn's question again is a retry.
+ *    With `cloud-tool-run-insights` (RC-743), a turn that called tools and
+ *    has none of these reads a derived ask: its task's name, else its tool
+ *    path (`derived-asks.ts`); and a backend job's machine ask reads as the
+ *    job in words (RC-801, `agent-asks.ts`). A turn asking the previous turn's question
+ *    again is a retry. With the same flag, an agent run that called no tool
+ *    is answered when its root span ended without an error (RC-813).
  * 2. Distinct asks are placed in the topics there are (the decision engine,
  *    cached per ask and topic set; else where they went before; else by
  *    wording). Groups of asks that fit none become new topics, named by one
@@ -171,6 +181,10 @@ export interface AssignTopicsDeps {
   /** Stored placements, so they survive topic changes behind an audit (RC-395). */
   loadCarried: typeof loadCarriedVerdictsFn;
   saveReading: typeof saveTopicReadingFn;
+  /** `cloud-tool-run-insights` for the project (RC-743): on, tool-only turns read a derived ask, and a finished agent run is answered (RC-813). Never throws. */
+  toolRunInsights: (projectId: string) => Promise<boolean>;
+  /** The project's task labels, read for derived asks only. */
+  loadTaskLabels: (projectId: string) => Promise<WorkflowLabels>;
   /** The decision engine with the topic framing; null without a key. */
   judge: JudgeEngine | null;
   /** The decision engine with the sentiment framing; null without a key. */
@@ -301,6 +315,8 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     saveVerdicts: saveVerdictsFn,
     loadCarried: loadCarriedVerdictsFn,
     saveReading: saveTopicReadingFn,
+    toolRunInsights: toolRunInsightsForProject,
+    loadTaskLabels: (projectId) => loadWorkflowLabels(projectId),
     judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
     sentimentJudge:
       "sentimentJudge" in overrides
@@ -312,8 +328,13 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
   };
 }
 
-/** A closed turn as a reading keeps it: its calls and first search, no text. */
-export function toTopicTurn(turn: SignalTurn): TopicTurn {
+/**
+ * A closed turn as a reading keeps it: its calls and first search, no text.
+ * With `agentRuns` (`cloud-tool-run-insights`, RC-813), an agent run keeps how
+ * its root span ended, so a finished run that called no tool reads as answered.
+ */
+export function toTopicTurn(turn: SignalTurn, agentRuns = false): TopicTurn {
+  const run = agentRuns ? turn.steps.find((step) => step.kind === "agent") : undefined;
   const calls = turn.steps.flatMap((step) => {
     const tool = nodeIdOf(step);
     return tool === null ? [] : [{ tool, outcome: step.outcome }];
@@ -333,6 +354,7 @@ export function toTopicTurn(turn: SignalTurn): TopicTurn {
       ? turn.turnKey.slice(OTLP_TURN_PREFIX.length)
       : null,
     ...(offersSkill(turn) ? { skillOffered: true } : {}),
+    ...(run ? { agentRun: run.outcome === "error" ? ("error" as const) : ("ok" as const) } : {}),
   };
 }
 
@@ -607,6 +629,7 @@ async function read(
 ): Promise<AssignTopicsResult> {
   const now = window.to;
   const start = await deps.readingStart(projectId, window, deps.maxTurns);
+  const toolRuns = await deps.toolRunInsights(projectId);
   const turns: TopicTurn[] = [];
   const counts = emptyRunBasisCounts();
   await walkClosedTurnPages(
@@ -621,7 +644,7 @@ async function read(
     },
     (page) => {
       for (const turn of page.turns) {
-        const kept = toTopicTurn(turn);
+        const kept = toTopicTurn(turn, toolRuns);
         turns.push(kept);
         countRun(counts, turn, new Set(kept.calls.map((call) => call.tool)).size);
       }
@@ -657,6 +680,12 @@ async function read(
   for (const turn of turns) if (turn.traceId && refused.has(turn.traceId)) turn.refused = true;
 
   const asks = chooseAsks(rawAsks);
+  if (toolRuns) {
+    for (const [id, ask] of await toolRunAsks(projectId, turns, new Set(rawAsks.keys()), deps))
+      asks.set(id, ask);
+    // A job's machine ask reads as the job in words (RC-801): one ask per job kind, with no project id.
+    for (const [id, ask] of agentRunAsks(asks)) asks.set(id, ask);
+  }
   const trust = trustOf(chooseRunBasis(counts));
   const retries = retryTurns(turns, asks, trust);
   const distinct = distinctAsks(turns, asks, new Set(retries.keys()));
@@ -791,6 +820,27 @@ async function read(
     naming: evolved.naming,
     placement,
   };
+}
+
+/**
+ * The derived asks of the turns that called tools and have no raw ask
+ * (`withAsk`), read only with `cloud-tool-run-insights` on. A failed label
+ * read is logged and reported, and the tool paths are used alone.
+ */
+async function toolRunAsks(
+  projectId: string,
+  turns: readonly TopicTurn[],
+  withAsk: ReadonlySet<string>,
+  deps: Pick<AssignTopicsDeps, "loadTaskLabels">,
+): Promise<Map<string, TurnAskText>> {
+  let labels: WorkflowLabels = new Map();
+  try {
+    labels = await deps.loadTaskLabels(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "task labels read failed");
+    reportServerException(err, `project:${projectId}`, { operation: "topic_derived_asks" });
+  }
+  return derivedAsks(turns, withAsk, labels);
 }
 
 /**

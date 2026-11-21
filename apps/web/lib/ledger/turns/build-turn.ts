@@ -97,7 +97,7 @@ export function draftTurn(turn: SegmentedTurn): TurnDraft {
   const steps = attributeTurn(turn);
   const facts = aggregateTurn(steps, turn.lane, turn.clockSuspect);
   const first = turn.events[0];
-  const times = turn.events.map((e) => e.occurredAt);
+  const times = turn.events.map(eventEnd);
   return {
     sessionId: turn.sessionId,
     sourceId: turn.events.find((e) => e.sourceId !== null)?.sourceId ?? null,
@@ -116,10 +116,21 @@ export function draftTurn(turn: SegmentedTurn): TurnDraft {
 }
 
 /**
+ * When an event ended. An agent run's row carries the root span's start and
+ * its duration (RC-812), so the run ended that much later; every other event
+ * is a point in time.
+ */
+function eventEnd(event: NormalizedEvent): number {
+  return event.role === "run"
+    ? event.occurredAt + Math.max(0, event.tookMs ?? 0)
+    : event.occurredAt;
+}
+
+/**
  * A stored turn's steps as the events they were built from. Turn-level fields
  * (source, end user, OTLP trace id) ride on every event; a declared step gets
  * its turn id back from the key. An invocation step yields its start (or
- * single event) and, when it paired, its end.
+ * single event) and, when it paired, its end; an agent step its run.
  */
 export function storedTurnEvents(turn: StoredTurn): NormalizedEvent[] {
   const declaredTurnId = turn.turnKey.startsWith("declared:")
@@ -137,9 +148,11 @@ export function storedTurnEvents(turn: StoredTurn): NormalizedEvent[] {
     endUserKey: turn.endUserKey,
     ...(rootTool ? { rootTool: true } : {}),
   });
-  return turn.steps.flatMap((step): NormalizedEvent[] =>
-    step.kind === "search" ? [searchEvent(step, base(step))] : invokeEvents(step, base(step)),
-  );
+  return turn.steps.flatMap((step): NormalizedEvent[] => {
+    if (step.kind === "search") return [searchEvent(step, base(step))];
+    if (step.kind === "agent") return [agentEvent(step, base(step))];
+    return invokeEvents(step, base(step));
+  });
 }
 
 type EventBase = Pick<
@@ -173,6 +186,23 @@ function searchEvent(step: StepDraft, base: EventBase): NormalizedEvent {
     invocationId: null,
     tookMs: null,
     outcome: null,
+  };
+}
+
+function agentEvent(step: StepDraft, base: EventBase): NormalizedEvent {
+  return {
+    ...base,
+    ...NO_SEARCH,
+    id: step.traceEventId,
+    type: step.eventType,
+    role: "run",
+    occurredAt: step.occurredAt.getTime(),
+    receivedAt: step.receivedAt.getTime(),
+    targetType: null,
+    targetId: step.targetId,
+    invocationId: step.invocationId,
+    tookMs: step.tookMs,
+    outcome: step.outcome === "error" ? "error" : "ok",
   };
 }
 

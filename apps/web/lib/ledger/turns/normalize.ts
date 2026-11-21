@@ -1,4 +1,8 @@
-import { MAX_STEP_HIT_IDS, TURN_EVENT_TYPES } from "@/lib/ledger/constants";
+import {
+  AGENT_RUN_EVENT_TYPE,
+  MAX_STEP_HIT_IDS,
+  TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+} from "@/lib/ledger/constants";
 import { hashEndUser, hashQuery } from "@/lib/ledger/hash";
 import type {
   EventRole,
@@ -18,7 +22,7 @@ import type {
  * rebuild and a re-derivation from stored steps see exactly the same lists.
  */
 
-const TURN_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES);
+const TURN_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES_WITH_AGENT_RUNS);
 
 const ROLE: Record<TurnEventType, EventRole> = {
   search: "search",
@@ -30,6 +34,7 @@ const ROLE: Record<TurnEventType, EventRole> = {
   gateway_invoke: "single",
   gateway_error: "single",
   skill_invoke: "single",
+  agent_run: "run",
 };
 
 export interface NormalizeOptions {
@@ -55,10 +60,13 @@ export function normalizeEvent(
   opts: NormalizeOptions,
 ): NormalizedEvent | null {
   if (!TURN_TYPES.has(row.type) || !row.sessionId) return null;
+  // Only OTLP ingest writes agent runs (`otlp/derive-agent-runs.ts`).
+  if (row.type === AGENT_RUN_EVENT_TYPE && row.ingestSource !== "otlp") return null;
   const type = row.type as TurnEventType;
   const role = ROLE[type];
   const listed = role === "search" ? rankedHits(type, hits) : [];
-  const target = role === "search" ? null : invocationTarget(type, row);
+  const target =
+    role === "search" ? null : role === "run" ? agentTarget(row) : invocationTarget(type, row);
   return {
     id: row.id,
     type,
@@ -80,7 +88,14 @@ export function normalizeEvent(
     targetId: target?.targetId ?? null,
     invocationId: role === "search" ? null : row.invocationId,
     tookMs: role === "search" || role === "start" ? null : row.tookMs,
-    outcome: role === "end" || role === "single" ? outcomeOf(type) : null,
+    outcome:
+      role === "run"
+        ? row.failed
+          ? "error"
+          : "ok"
+        : role === "end" || role === "single"
+          ? outcomeOf(type)
+          : null,
     ...(row.rootTool && row.ingestSource === "otlp" ? { rootTool: true } : {}),
   };
 }
@@ -95,6 +110,11 @@ function rankedHits(type: TurnEventType, hits: readonly TurnEventHit[]): TurnEve
     .slice()
     .sort((a, b) => a.rank - b.rank)
     .slice(0, MAX_STEP_HIT_IDS);
+}
+
+/** An agent run's target: its agent's name and no target type (RC-747); none without a name. */
+function agentTarget(row: TurnEventRow): { targetType: null; targetId: string } | null {
+  return row.agent ? { targetType: null, targetId: row.agent } : null;
 }
 
 function invocationTarget(

@@ -1,6 +1,6 @@
 import type { DrainStep, JobHandler, Registration } from "@/lib/contracts/registry";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
-import { jobAskSpec } from "@/lib/jobs/job-ask";
+import { JOB_ASKS, jobAskFor } from "@/lib/jobs/job-ask";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { foldSeams } from "@/lib/readings/intent-graph/fold-job";
@@ -87,17 +87,7 @@ export const qualityRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
     match_quality_run: inProjectLogContext(
-      jobAskSpec<MatchQualityJobPayload>("Run a match quality analysis", {
-        runId: true,
-        projectId: false,
-        projectName: false,
-        experimentName: false,
-        windowStart: true,
-        windowEnd: true,
-        judge: true,
-        backtest: true,
-        judgeBudgetUsd: false,
-      }),
+      jobAskFor<MatchQualityJobPayload>(JOB_ASKS.match_quality_run),
       (job) => matchQualityRunJob(job),
     ),
   },

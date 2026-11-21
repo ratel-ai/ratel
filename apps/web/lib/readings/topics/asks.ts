@@ -50,6 +50,12 @@ export interface TopicTurn {
   refused?: boolean;
   /** A skill search in the turn returned at least one skill, whether or not it ran. */
   skillOffered?: boolean;
+  /**
+   * How the turn's agent run ended (RC-813, `cloud-tool-run-insights`): the
+   * outcome of its `invoke_agent` root span. Absent on a turn that is not an
+   * agent run, and on every turn while the flag is off.
+   */
+  agentRun?: "ok" | "error";
 }
 
 /** A turn's ask as a reading uses it. */
@@ -58,19 +64,24 @@ export interface TurnAskText {
   source: AskSourceKind;
 }
 
-/** Whether the ask is the user's own words (their message or a prompt), never an agent's search. */
+/** Whether the ask is the user's own words (their message or a prompt), never an agent's search or a derived ask. */
 export function isUserWords(source: AskSourceKind): boolean {
-  return source !== "search";
+  return source !== "search" && source !== "derived";
 }
 
 /**
  * Answered: a tool ran and the turn did not end on a failed call. No call, or
  * giving up, is unanswered; so is a turn whose captured reply says the agent
  * could not do it, whatever it looked up first.
+ *
+ * An agent run (`agentRun`, RC-813) is answered by its root span: a run that
+ * called no tool is answered when its root ended without an error, and a run
+ * whose root failed is unanswered, whatever its tools did.
  */
-export function isAnswered(turn: Pick<TopicTurn, "calls" | "refused">): boolean {
+export function isAnswered(turn: Pick<TopicTurn, "calls" | "refused" | "agentRun">): boolean {
+  if (turn.refused === true || turn.agentRun === "error") return false;
   const last = turn.calls.at(-1);
-  return last !== undefined && last.outcome !== "error" && turn.refused !== true;
+  return last === undefined ? turn.agentRun === "ok" : last.outcome !== "error";
 }
 
 const SOURCE: Record<AskSource, AskSourceKind> = {

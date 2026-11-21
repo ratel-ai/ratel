@@ -10,6 +10,7 @@ import { HealthScore, type ScoreFix } from "@/components/console/health/v2/Healt
 import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
 import { InferredToolsCallout } from "@/components/console/health/v2/InferredToolsCallout";
 import { IssuesSection } from "@/components/console/health/v2/IssuesSection";
+import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
 import { PartialReading } from "@/components/console/health/v2/PartialReading";
 import { Readings } from "@/components/console/health/v2/Readings";
 import { readingViews } from "@/components/console/health/v2/reading-views";
@@ -46,7 +47,7 @@ import type { FixesModel } from "@/lib/views/fixes/types";
 import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
-import { earlyReadingCopy } from "@/lib/views/health/page-state-copy";
+import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
@@ -279,6 +280,18 @@ function Ready({
     <>
       {state?.kind === "ready" && state.updating ? <RefreshWhileBuilding /> : null}
       {inferredTools ? <InferredToolsCallout /> : null}
+      {model.lowConfidence ? (
+        <div data-health-low-confidence={model.lowConfidence.turns}>
+          <Callout
+            tone="warning"
+            title={lowConfidenceCopy(model.lowConfidence)}
+            action={imports ? <OpenImportButtonV2 /> : null}
+          >
+            Flows, tasks, the score and the numbers below are a first look. Import past runs to read
+            more now.
+          </Callout>
+        </div>
+      ) : null}
       {score ? (
         <HealthScore
           score={score}

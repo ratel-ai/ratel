@@ -219,7 +219,10 @@ export function toTurnDetail(
     status: head.status,
     startedAt: head.startedAt.toISOString(),
     endedAt: head.endedAt.toISOString(),
-    calls: steps.map((step) => toCall(step, events, knownTraces)),
+    // An agent step (RC-742) is the run itself, not a call: its model calls show as linked calls.
+    calls: steps
+      .filter((step) => step.kind !== "agent")
+      .map((step) => toCall(step, events, knownTraces)),
     ...neighbours,
   };
 }

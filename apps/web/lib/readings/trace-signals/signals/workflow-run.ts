@@ -11,6 +11,10 @@ import {
   storedWorkflows,
 } from "@/lib/readings/trace-signals/signals/workflow-stored";
 import type { SignalKind } from "@/lib/readings/trace-signals/view";
+import {
+  agentWorkflows,
+  compactAgentRun,
+} from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import { matchPrevious } from "@/lib/readings/trace-signals/workflows/assign";
 import {
   detectWorkflowSignals,
@@ -35,11 +39,13 @@ import {
 import type {
   TurnCorrection,
   Workflow,
+  WorkflowConfig,
   WorkflowCore,
   WorkflowSignal,
   WorkflowStep,
   WorkflowTurn,
 } from "@/lib/readings/trace-signals/workflows/types";
+import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/types";
 import { isToolCall, turnUnit } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
@@ -57,6 +63,11 @@ import { isToolCall, turnUnit } from "@/lib/readings/trace-signals/workflows/uni
  * and the stored result says it was truncated. Every run is counted for the
  * basis (`run-basis.ts`): which runs are clean enough to mine, and whether
  * workflows are hidden because no tool was called or runs are mixed together.
+ *
+ * With `agentTasks` on (RC-747, `cloud-tool-run-insights`), a run that called
+ * no tool but ran as a named agent is kept too, and the runs of one agent form
+ * one task (`workflows/agent-tasks.ts`); such runs also lift the "no tool
+ * calls" block. Off, they are skipped as before.
  */
 
 /** Compact turns one run keeps for mining at most. */
@@ -77,10 +88,17 @@ export interface WorkflowRunResult {
   measured: Set<SignalKind>;
   /**
    * Each collected run's task id, or null (`placeRuns`): every in-window run
-   * that called a tool, until the turn cap. Runs absent from it (no tool call,
-   * not read by the basis, past the cap) belong to no task.
+   * that called a tool, and with `agentTasks` every tool-less agent run, until
+   * the turn cap. Runs absent from it (no tool call, not read by the basis,
+   * past the cap) belong to no task.
    */
   placement: ReadonlyMap<string, string | null>;
+  /**
+   * Tool-less agent runs kept (RC-747); always 0 without `agentTasks`. Their
+   * tasks are not counted in `stored.turnsWithTools`, so the run stores its
+   * reading for them too (RC-805).
+   */
+  agentRuns: number;
 }
 
 export interface WorkflowCollector {
@@ -233,11 +251,14 @@ function placedEntries(
         },
       ];
     })
-    .sort(
-      (a, b) =>
-        b.workflow.runs - a.workflow.runs ||
-        (a.workflow.id < b.workflow.id ? -1 : a.workflow.id > b.workflow.id ? 1 : 0),
-    );
+    .sort(mostRunsFirst);
+}
+
+function mostRunsFirst(a: PlacedEntry, b: PlacedEntry): number {
+  return (
+    b.workflow.runs - a.workflow.runs ||
+    (a.workflow.id < b.workflow.id ? -1 : a.workflow.id > b.workflow.id ? 1 : 0)
+  );
 }
 
 function toDetected(signal: WorkflowSignal, entry: WorkflowWithHealth | undefined): DetectedSignal {
@@ -252,8 +273,11 @@ export function createWorkflowCollector(
   floors: Floors = DEFAULT_FLOORS,
   /** Decided before the reading from the window's run counts; absent, decided here from the runs collected. */
   fixedBasis?: RunBasis,
+  /** Mining tunables over the defaults (RC-725, `cloud-tool-run-insights`); absent, the defaults. */
+  mining: Partial<WorkflowConfig> = {},
 ): WorkflowCollector {
   const turns: WorkflowTurn[] = [];
+  const agentRuns: WorkflowTurn[] = [];
   const counts = emptyRunBasisCounts();
   let capped = false;
   return {
@@ -264,23 +288,42 @@ export function createWorkflowCollector(
         turn,
         compact ? new Set(compact.steps.map((step) => step.targetId)).size : 0,
       );
-      if (capped || !compact) return;
-      if (turns.length >= maxTurns) capped = true;
-      else turns.push(compact);
+      const agentRun = !compact && mining.agentTasks ? compactAgentRun(turn) : null;
+      if (capped || !(compact || agentRun)) return;
+      if (turns.length + agentRuns.length >= maxTurns) capped = true;
+      else if (compact) turns.push(compact);
+      else if (agentRun) agentRuns.push(agentRun);
     },
     finish(previous) {
-      const basis = fixedBasis ?? chooseRunBasis(counts);
-      const mining = mineWorkflows(turns.filter((turn) => minesRun(basis.basis, turn.turnSource)));
-      const ids = carryWorkflowIds(mining.workflows, previous);
-      const carried = mining.workflows.map((mined) => ({
-        ...mined,
-        id: ids.get(mined.id) ?? mined.id,
+      const basis = liftedByAgentRuns(fixedBasis ?? chooseRunBasis(counts), agentRuns.length);
+      const mined = mineWorkflows(
+        turns.filter((turn) => minesRun(basis.basis, turn.turnSource)),
+        mining,
+      );
+      const agents = agentWorkflows(
+        agentRuns.filter((run) => minesRun(basis.basis, run.turnSource)),
+        mining.minSupport ?? DEFAULT_WORKFLOW_CONFIG.minSupport,
+      );
+      const all = [...mined.workflows, ...agents.workflows];
+      const ids = carryWorkflowIds(all, previous);
+      const carried = all.map((workflow) => ({
+        ...workflow,
+        id: ids.get(workflow.id) ?? workflow.id,
       }));
-      const placement = placeRuns(turns, carried, { weights: mining.idf, basis: basis.basis });
-      const entries = placedEntries(carried, mining.workflows, placement, turns, {
-        ubiquitous: new Set(mining.ubiquitousTools),
-        turnsWithTools: mining.turnsWithTools,
-      });
+      const toolTasks = carried.slice(0, mined.workflows.length);
+      const agentTasks = carried.slice(mined.workflows.length);
+      const placement = placeRuns(turns, toolTasks, { weights: mined.idf, basis: basis.basis });
+      placeAgentRuns(placement, agentRuns, agentTasks, basis.basis);
+      const entries = [
+        ...placedEntries(toolTasks, mined.workflows, placement, turns, {
+          ubiquitous: new Set(mined.ubiquitousTools),
+          turnsWithTools: mined.turnsWithTools,
+        }),
+        ...placedEntries(agentTasks, agents.workflows, placement, agentRuns, {
+          ubiquitous: new Set(),
+          turnsWithTools: agents.runs,
+        }),
+      ].sort(mostRunsFirst);
       const byKey = new Map(entries.map((entry) => [entry.workflow.id, entry]));
       const signals = detectWorkflowSignals(entries, workflowThresholds(floors)).map((s) =>
         toDetected(s, byKey.get(s.subjectKey)),
@@ -290,11 +333,41 @@ export function createWorkflowCollector(
       );
       const placed = entries.reduce((sum, entry) => sum + entry.workflow.runs, 0);
       return {
-        stored: storedWorkflows({ ...mining, assignedTurns: placed }, items, capped, basis),
+        stored: storedWorkflows({ ...mined, assignedTurns: placed }, items, capped, basis),
         signals,
-        measured: new Set<SignalKind>(mining.multiToolTurns > 0 ? WORKFLOW_SIGNAL_KINDS : []),
+        measured: new Set<SignalKind>(
+          mined.multiToolTurns > 0 || agents.workflows.length > 0 ? WORKFLOW_SIGNAL_KINDS : [],
+        ),
         placement,
+        agentRuns: agentRuns.length,
       };
     },
   };
+}
+
+/**
+ * The basis, with the "no tool calls" block lifted when tool-less agent runs
+ * were kept (RC-747): they are what the tasks are read from.
+ */
+function liftedByAgentRuns(basis: RunBasis, agentRuns: number): RunBasis {
+  return basis.blocked === "no_tool_calls" && agentRuns > 0
+    ? { ...basis, basis: "all", blocked: null }
+    : basis;
+}
+
+/** Each agent run in its agent's task, or none (under the floor, or not read by the basis). */
+function placeAgentRuns(
+  placement: Map<string, string | null>,
+  runs: readonly WorkflowTurn[],
+  tasks: readonly Workflow[],
+  basis: RunBasis["basis"],
+): void {
+  const byStep = new Map(tasks.map((task) => [task.coreTools[0], task.id]));
+  for (const run of runs) {
+    const step = run.steps[0]?.targetId;
+    placement.set(
+      run.id,
+      step && minesRun(basis, run.turnSource) ? (byStep.get(step) ?? null) : null,
+    );
+  }
 }

@@ -54,6 +54,7 @@ import type {
 } from "@/lib/readings/trace-signals/signals/types";
 import { createWorkflowCollector } from "@/lib/readings/trace-signals/signals/workflow-run";
 import type { StoredWorkflows } from "@/lib/readings/trace-signals/signals/workflow-stored";
+import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
 
 /**
  * One signal run over a stream of closed turns, independent of where the
@@ -84,7 +85,8 @@ import type { StoredWorkflows } from "@/lib/readings/trace-signals/signals/workf
  * and `finish` mines them for workflows (`workflow-run.ts`), carrying ids over
  * from `context.previousWorkflows`. The workflow signals come last, and the
  * workflows go in the summary only when a turn called a tool, so a run without
- * tool calls stores exactly what it did before.
+ * tool calls stores exactly what it did before. With `cloud-tool-run-insights`
+ * on, tool-less agent runs store them too (RC-805): their tasks are the reading.
  */
 
 /** What a run stores beside its signals: see `trace_signal_runs.summary`. */
@@ -104,7 +106,7 @@ export interface RunSummary {
   /** What the project sends, data point by data point (`setup-facts.ts`). Set by the compute job; absent on older runs. */
   setup?: StoredSetup;
   /** The workflows mined from the window's turns. Absent on runs stored before
-   * workflows existed, and on runs without a single tool call. */
+   * workflows existed, and on runs without a single tool call or agent run. */
   workflows?: StoredWorkflows;
   /**
    * Turn events received but not yet built into turns when the run started
@@ -166,6 +168,8 @@ export interface AnalysisOptions {
   prereqWindowMs?: number;
   /** Compact turns kept for workflow mining at most (defaults to `MAX_WORKFLOW_TURNS`). */
   maxWorkflowTurns?: number;
+  /** Workflow mining tunables over the defaults (RC-725, `cloud-tool-run-insights`). */
+  workflowMining?: Partial<WorkflowConfig>;
 }
 
 /** Pass two needs at least this many busy tools to form a pair. */
@@ -187,7 +191,12 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
   const journey = createJourneyStats();
   const prerequisites = createPrerequisiteStats(options.prereqWindowMs);
   const daily = new DailyBuckets();
-  const workflows = createWorkflowCollector(options.maxWorkflowTurns, floors, context.runBasis);
+  const workflows = createWorkflowCollector(
+    options.maxWorkflowTurns,
+    floors,
+    context.runBasis,
+    options.workflowMining,
+  );
   // Once enough runs carry turn ids, the guessed ones are left out of the whole reading.
   const exactOnly = context.runBasis?.basis === "exact";
   const read = (turn: SignalTurn): boolean => !exactOnly || isExactRun(turn.turnSource);
@@ -281,8 +290,9 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
             ...(needs ? { prerequisites: needs } : {}),
           },
           queriesTruncated: stats.queriesEvicted > 0,
-          // Stored when a tool was called, or when the basis says why workflows are hidden.
-          ...(mined.stored.turnsWithTools > 0 || mined.stored.basis?.blocked
+          // Stored when a tool was called, when tool-less agent runs were read (RC-805; they are not
+          // tool runs, so their tasks were dropped here), or when the basis says why workflows are hidden.
+          ...(mined.stored.turnsWithTools > 0 || mined.agentRuns > 0 || mined.stored.basis?.blocked
             ? { workflows: mined.stored }
             : {}),
         },

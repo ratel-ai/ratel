@@ -1,5 +1,5 @@
 import type { Registration } from "@/lib/contracts/registry";
-import { jobAskSpec } from "@/lib/jobs/job-ask";
+import { JOB_ASKS, jobAskFor } from "@/lib/jobs/job-ask";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { whatIfStepJob } from "./job";
 import { pruneWhatIfRuns, type WhatIfJobPayload } from "./runs";
@@ -16,9 +16,8 @@ import "./spend";
 export const sessionReplayRegistration: Registration = {
   // In the project's log context, so `model_call` lines carry the project and organization.
   jobs: {
-    what_if_step: inProjectLogContext(
-      jobAskSpec<WhatIfJobPayload>("Run a what-if step", { runId: true, variant: false }),
-      (job) => whatIfStepJob(job.projectId, job.payload),
+    what_if_step: inProjectLogContext(jobAskFor<WhatIfJobPayload>(JOB_ASKS.what_if_step), (job) =>
+      whatIfStepJob(job.projectId, job.payload),
     ),
   },
   drainSteps: [

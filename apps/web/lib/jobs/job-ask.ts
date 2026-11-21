@@ -8,8 +8,10 @@
  *
  * Owned (ADR-0030): upstream keeps one table of every agent job kind, typed by each kind's
  * payload. Here `lib/jobs` sits below the modules that own those payloads (`check-layers`), so
- * each module's `register.ts` declares its kind's spec with {@link jobAskSpec} and passes it to
- * `inProjectLogContext`. The words and the allowlists are upstream's.
+ * the table ({@link JOB_ASKS}) holds the words and the allowlists without the payload types, and
+ * each module's `register.ts` checks its kind's entry against its payload with {@link jobAskFor}
+ * and passes it to `inProjectLogContext`. The words and the allowlists are upstream's; the Evals
+ * kinds are not ported.
  */
 
 /** Every payload key with its decision: `true` shows it in the ask. A new payload field fails typecheck until it has one. */
@@ -23,6 +25,42 @@ export interface JobAskSpec {
 
 /** The payload of a job queued with none. */
 export type NoPayload = Record<never, never>;
+
+/**
+ * Each job kind that runs as one agent run (`inProjectLogContext`), with its ask: the words and
+ * which payload keys it may show. Its owner checks the keys against its payload ({@link jobAskFor}).
+ */
+export const JOB_ASKS = {
+  simulate_task_eval: { words: "Simulate a task eval", allow: { runId: true } },
+  label_workflows: { words: "Label workflows", allow: {} },
+  assign_topics: { words: "Assign topics", allow: {} },
+  match_quality_run: {
+    words: "Run a match quality analysis",
+    allow: {
+      runId: true,
+      projectId: false,
+      projectName: false,
+      experimentName: false,
+      windowStart: true,
+      windowEnd: true,
+      judge: true,
+      backtest: true,
+      judgeBudgetUsd: false,
+    },
+  },
+  cluster_intents: { words: "Cluster intents", allow: {} },
+  draft_fix: { words: "Draft a fix", allow: { fixId: true, requestedBy: false } },
+  what_if_step: { words: "Run a what-if step", allow: { runId: true, variant: false } },
+} as const satisfies Record<string, JobAskSpec>;
+
+/** A job kind that runs as one agent run. */
+export type AgentJobKind = keyof typeof JOB_ASKS;
+
+const AGENT_JOB_KINDS = Object.keys(JOB_ASKS) as AgentJobKind[];
+
+/** The ask before RC-834: `<job kind> for project <uuid>`, then the JSON payload or nothing. */
+const OLD_JOB_ASK =
+  /^([a-z][a-z0-9]*(?:_[a-z0-9]+)*) for project [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\s|$)/;
 
 /** A shown value: an id, an ISO time or a setting word. Anything with spaces or longer is free text and is left out. */
 const SAFE_VALUE = /^[A-Za-z0-9_.:-]{1,64}$/;
@@ -45,6 +83,38 @@ export function jobAsk(spec: JobAskSpec, payload: unknown): string {
 /** A job kind's ask spec, checked against its payload type: every key needs a decision. */
 export function jobAskSpec<P>(words: string, allow: Allowlist<P>): JobAskSpec {
   return { words, allow };
+}
+
+/** A {@link JOB_ASKS} entry, checked against its kind's payload type: every key needs a decision. */
+export function jobAskFor<P>(spec: {
+  readonly words: string;
+  readonly allow: Allowlist<P>;
+}): JobAskSpec {
+  return spec;
+}
+
+/**
+ * The job kind whose agent run asked `text`, for Intents to read the ask as
+ * the job in words (RC-801): the ask {@link jobAsk} writes, with or without
+ * its ids, or a stored run's old machine ask (`<kind> for project <uuid>`,
+ * then its payload). Null for any other ask.
+ */
+export function jobKindOfAsk(text: string): AgentJobKind | null {
+  const trimmed = text.trim();
+  const old = OLD_JOB_ASK.exec(trimmed)?.[1];
+  if (old) return isAgentJobKind(old) ? old : null;
+  for (const kind of AGENT_JOB_KINDS) {
+    const spec: JobAskSpec = JOB_ASKS[kind];
+    if (trimmed === spec.words) return kind;
+    if (!trimmed.startsWith(`${spec.words} (`) || !trimmed.endsWith(")")) continue;
+    const shown = trimmed.slice(spec.words.length + 2, -1).split(", ");
+    if (shown.every((part) => spec.allow[part.slice(0, part.indexOf(" "))] === true)) return kind;
+  }
+  return null;
+}
+
+function isAgentJobKind(kind: string): kind is AgentJobKind {
+  return Object.hasOwn(JOB_ASKS, kind);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
