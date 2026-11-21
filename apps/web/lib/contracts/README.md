@@ -108,13 +108,6 @@ shortcuts, and the optional `AccountMenuEndItems` after them, so an edition can 
 (its profile and feedback first, its tools and sign-out last). Without `AccountMenuEndItems`
 nothing follows the shortcuts.
 
-`OperatorConsole` is the console of whoever runs the service across every tenant (Cloud's admin
-console). The core draws the operator's Quality pages (`/admin/quality` and a project's page);
-`authorize` resolves only for an operator and runs before any read, and `Frame` is the console's
-chrome around them. With it, the printable Quality report is the operator's too, and the
-calibration page no longer links members to it. Without it the operator pages answer 404 and the
-report stays the members'.
-
 `ProjectPages` fills `/project/<id>/models/<key>` by key, `{ title, Page }`, with `Page` given the
 project id and showing its own loading state; any other key is a 404. `ProjectPageSkeleton` is
 what the route shows while such a page loads, so the project Overview's skeleton never flashes
