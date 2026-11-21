@@ -192,15 +192,15 @@ apps/
 └── web/                       # @ratel/platform: the console and APIs
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
-├── design-system/             # @ratel/design-system: semantic tokens and UI primitives
-└── sdk/                       # Ratel SDK documentation; the SDK code will move here later
-src/                           # Ratel SDK: core (Rust), sdk, adapters, rankers, telemetry
-scripts/                       # Repository checks and release tooling
+└── design-system/             # @ratel/design-system: semantic tokens and UI primitives
+scripts/                       # Repository checks
 docs/
 ├── adr/                       # Architecture decision records
 └── assets/                    # Images and other static assets
 ee/                            # Manifest for the Enterprise modules
 ```
+
+The SDKs (the Rust core, the TypeScript and Python SDKs, adapters, rankers, telemetry and the catalog protocol) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).
 
 The application's own layout and commands are in [apps/web/README.md](apps/web/README.md), and the layers of its core in [apps/web/lib/README.md](apps/web/lib/README.md).
 
@@ -214,9 +214,7 @@ Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres
 
 ### Ratel SDK
 
-Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (pinned via `rust-toolchain.toml`). The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
-
-- [packages/sdk/README.md](packages/sdk/README.md)
+The SDKs are developed in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). The platform uses the published `@ratel-ai/sdk` and `@ratel-ai/telemetry` packages from npm.
 
 ## Contributing
 
@@ -226,4 +224,4 @@ Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (
 
 ## License
 
-The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine, now in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.

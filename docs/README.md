@@ -12,7 +12,7 @@ baseline-capture-distributed.md   Collecting seeding evidence from a multi-insta
 
 ## Guides
 
-[Baseline capture in a distributed host](baseline-capture-distributed.md) — how to collect the evidence for [ADR-0014](adr/0014-adaptive-usage-ranking.md) when the search and the invocation that follows land in different processes. The single-process path is [`examples/configurable-adaptive-ranking-ts`](../examples/configurable-adaptive-ranking-ts/README.md).
+[Baseline capture in a distributed host](baseline-capture-distributed.md) — how to collect the evidence for [ADR-0014](adr/0014-adaptive-usage-ranking.md) when the search and the invocation that follows land in different processes. The single-process path is [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository.
 
 ## `adr/` — Architecture decision records
 

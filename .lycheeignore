@@ -1,9 +1,4 @@
 ^https://github\.com/ratel-ai/ratel/stargazers$
-^https://www\.npmjs\.com/package/@ratel-ai/sdk$
-^https://pyo3\.rs/?$
-^https://tsx\.is/?$
-# OpenTelemetry language docs intermittently reject GitHub-hosted Lychee requests.
-^https://opentelemetry\.io/docs/languages/(python|js)/$
 # ADR-0012 ships in this branch; its blob/main URL 404s until merge. Remove once on main.
 ^https://github\.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models\.md$
 # install.sh ships in this branch; its raw main URL 404s until merge. Remove once on main.
@@ -17,3 +12,5 @@
 ^https://console\.aws\.amazon\.com/cloudformation/
 ^https://portal\.azure\.com/
 ^https://shell\.cloud\.google\.com/
+# The ADRs keep their relative links to protocol/, which moved to ratel-ai/ratel-sdk.
+^file://.*/protocol/

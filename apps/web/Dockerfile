@@ -17,40 +17,12 @@ COPY packages/brand/package.json packages/brand/
 COPY packages/design-system/package.json packages/design-system/
 COPY ee/package.json ee/
 
-COPY examples/adaptive-ranking-ts/package.json examples/adaptive-ranking-ts/
-COPY examples/ai-sdk/package.json examples/ai-sdk/
-COPY examples/configurable-adaptive-ranking-ts/package.json examples/configurable-adaptive-ranking-ts/
-COPY examples/jev-retriever-ts/package.json examples/jev-retriever-ts/
-COPY examples/mastra/package.json examples/mastra/
-COPY examples/mcp-chat/package.json examples/mcp-chat/
-COPY examples/openai-decision-retriever-ts/package.json examples/openai-decision-retriever-ts/
-COPY examples/s3-support-adaptive-ranking/package.json examples/s3-support-adaptive-ranking/
-COPY examples/telemetry-ts/package.json examples/telemetry-ts/
-
-COPY src/adapters/ts-mastra/package.json src/adapters/ts-mastra/
-COPY src/adapters/ts-vercel-ai-sdk/package.json src/adapters/ts-vercel-ai-sdk/
-COPY src/rankers/ts/package.json src/rankers/ts/
-COPY src/rankers/ts/npm/darwin-arm64/package.json src/rankers/ts/npm/darwin-arm64/
-COPY src/rankers/ts/npm/darwin-x64/package.json src/rankers/ts/npm/darwin-x64/
-COPY src/rankers/ts/npm/linux-arm64-gnu/package.json src/rankers/ts/npm/linux-arm64-gnu/
-COPY src/rankers/ts/npm/linux-x64-gnu/package.json src/rankers/ts/npm/linux-x64-gnu/
-COPY src/rankers/ts/npm/win32-x64-msvc/package.json src/rankers/ts/npm/win32-x64-msvc/
-COPY src/sdk/ts/package.json src/sdk/ts/
-COPY src/sdk/ts/npm/darwin-arm64/package.json src/sdk/ts/npm/darwin-arm64/
-COPY src/sdk/ts/npm/darwin-x64/package.json src/sdk/ts/npm/darwin-x64/
-COPY src/sdk/ts/npm/linux-arm64-gnu/package.json src/sdk/ts/npm/linux-arm64-gnu/
-COPY src/sdk/ts/npm/linux-x64-gnu/package.json src/sdk/ts/npm/linux-x64-gnu/
-COPY src/sdk/ts/npm/win32-x64-msvc/package.json src/sdk/ts/npm/win32-x64-msvc/
-COPY src/telemetry/ts/package.json src/telemetry/ts/
-
 # Hoisted node_modules, in the image only: `next build` with `output: "standalone"` traces real
 # files and does not recreate pnpm's symlinks for serverExternalPackages, so with the workspace's
 # isolated linker the native @ratel-ai/sdk addon would land only under .pnpm and fail to load at
 # runtime. The lockfile is linker-independent, so the workspace itself stays isolated.
 RUN pnpm install --frozen-lockfile --config.node-linker=hoisted --filter @ratel/platform... --filter @ratel/ee...
-# Fail on native-addon or base-image ABI drift before the slower Next build. From the app
-# directory: the workspace package at src/sdk/ts shares the SDK's name, so the hoisted install
-# keeps the registry build beside the app instead of at the root.
+# Fail on native-addon or base-image ABI drift before the slower Next build.
 RUN cd apps/web && node -e 'import("@ratel-ai/sdk")'
 
 # --- source: app + shared packages only (ee/ stays out until build-cloud) ---

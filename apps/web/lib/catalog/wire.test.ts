@@ -13,7 +13,7 @@ import {
 
 /**
  * The vendored copy of the protocol's conformance vectors
- * (`protocol/v1/conformance/vectors.json` in the `ratel` repo). Re-running its
+ * (`protocol/v1/conformance/vectors.json` in the `ratel-ai/ratel-sdk` repo). Re-running its
  * committed expectations against this module is the byte-for-byte proof that
  * Cloud's ETag/resolve implementation conforms. If these drift, re-vendor the
  * file and reconcile — do not "fix" the module to match a stale copy.

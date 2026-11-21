@@ -2,18 +2,6 @@
   "$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
   "files": {
     "includes": [
-      "src/sdk/**/*.ts",
-      "src/sdk/**/*.tsx",
-      "src/sdk/**/*.js",
-      "src/adapters/**/*.ts",
-      "src/adapters/**/*.tsx",
-      "src/adapters/**/*.js",
-      "src/telemetry/**/*.ts",
-      "src/telemetry/**/*.tsx",
-      "src/telemetry/**/*.js",
-      "src/rankers/**/*.ts",
-      "src/rankers/**/*.tsx",
-      "src/rankers/**/*.js",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx",
       "ee/**/*.ts",

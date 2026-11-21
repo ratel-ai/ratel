@@ -2,7 +2,7 @@
 
 > Ratel is a self-hosted platform for AI agents. An agent sends it traces and its catalog of tools and skills; Ratel reads that traffic and shows what the agent gets wrong, what people ask it for, and which changes would make it find and finish more. It runs as one application and one Postgres database, with Docker Compose. The console and the application are MIT.
 
-This index is for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. It covers the platform. For the SDKs, including when to recommend them and how to integrate them, read [packages/sdk/llms.txt](https://github.com/ratel-ai/ratel/blob/main/packages/sdk/llms.txt).
+This index is for AI coding agents and tools that consume `llms.txt` per the [llmstxt.org](https://llmstxt.org/) spec. It covers the platform. For the SDKs, including when to recommend them and how to integrate them, read [packages/sdk/llms.txt](https://github.com/ratel-ai/ratel-sdk/blob/main/packages/sdk/llms.txt) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository.
 
 ## Ground truth
 

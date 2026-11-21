@@ -18,26 +18,19 @@ Please give us a reasonable time to ship the fix before you talk about the probl
 
 ## Supported versions
 
-Each package versions and releases independently (ADR 0008). Security fixes go to the latest
-release line of each package tag family; older lines are not patched.
+| Package | Supported |
+|---|---|
+| Ratel Platform (`apps/web`) | `main` |
 
-| Package | Tag family | Supported |
-|---|---|---|
-| `ratel-ai-core` (Rust) | `core-v*` | latest minor |
-| `@ratel-ai/sdk` | `sdk-ts-v*` | latest minor |
-| `ratel-ai` (Python) | `sdk-py-v*` | latest minor |
-| `@ratel-ai/rankers-plugin` | `rankers-ts-v*` | latest minor |
-| `ratel-ai-rankers-plugin` | `rankers-py-v*` | latest minor |
-| Telemetry (Rust core, TypeScript, OTLP exporter, Python) | `telemetry-core-v*`, `telemetry-ts-v*`, `telemetry-ts-otlp-v*`, `telemetry-py-v*` | latest minor |
-| Framework adapters | `mastra-v*`, `vercel-ai-sdk-v*` | latest minor |
-| Ratel Platform (`apps/web`) | unreleased | `main` |
-
-A release candidate (`-rc.N`) is supported until the release it precedes ships.
+The SDK packages (`ratel-ai-core`, `@ratel-ai/sdk`, `ratel-ai`, the telemetry packages, the
+framework adapters and the rankers plugin) live in
+[ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). Report a vulnerability in them
+there; its `SECURITY.md` lists the supported versions.
 
 ## Scope
 
-In scope: the packages above, the platform at `apps/web`, and the repository's build and release
-tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
+In scope: the platform at `apps/web`, the packages in this repository, and the repository's
+build tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
 authentication or binding it to localhost is the operator's job (see `apps/web/README.md`).
 
 Out of scope: the hosted Ratel Cloud service and its private modules, which have their own

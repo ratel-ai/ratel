@@ -2,7 +2,7 @@
  * The `protocol/v1` catalog-source wire shapes and the frozen ETag algorithm.
  *
  * This is a faithful TypeScript port of the reference verifier
- * (`protocol/v1/conformance/verify.mjs` in the `ratel` repo). The text spec in
+ * (`protocol/v1/conformance/verify.mjs` in the `ratel-ai/ratel-sdk` repo). The text spec in
  * `protocol/v1/README.md` is normative; this module reproduces it so Cloud can
  * serve a conforming `GET /v1/catalog`. Its conformance is pinned by
  * `wire.test.ts`, which runs the committed vectors (`__fixtures__/catalog-vectors.json`,
