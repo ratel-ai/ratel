@@ -57,6 +57,10 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   get_session_step_content: null,
   list_sdk_events: "monitor",
   get_sdk_event: "monitor",
+  list_mcp_servers: "monitor",
+  get_mcp_server: "monitor",
+  list_agents: "monitor",
+  get_agent: "monitor",
 
   // Insights: what the data says is wrong or worth changing.
   list_insights: "insights",
