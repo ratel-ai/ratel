@@ -15,6 +15,7 @@ import { loadModelCalls } from "@/lib/views/eval-gate/calls";
 import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { type EvalDb, loadRuns } from "@/lib/views/eval-gate/runs";
 import { recordedView } from "@/lib/views/eval-gate/simulate";
+import { foreignProjectsOfRuns } from "@/lib/views/task-evals/foreign-project";
 import { taskEvalCases, taskEvalSets } from "@/lib/views/task-evals/schema";
 import { selectTaskEvalRunsWithStats } from "@/lib/views/task-evals/selection";
 import { type TaskEvalRefresh, taskEvalRow } from "@/lib/views/task-evals/view";
@@ -99,7 +100,7 @@ export async function refreshTaskEvalSet(
         )
         .map((row) => row.turnId),
     );
-    const { candidates: selected, issueCapped } = await selectTaskEvalRunsWithStats(
+    const { candidates: picked, issueCapped } = await selectTaskEvalRunsWithStats(
       {
         projectId,
         taskId,
@@ -108,6 +109,7 @@ export async function refreshTaskEvalSet(
       },
       tx,
     );
+    const selected = await withoutForeignRuns(projectId, taskId, picked, tx);
     const selectedIds = selected.map((row) => row.turnId);
     await tx
       .delete(taskEvalCases)
@@ -185,6 +187,32 @@ export async function refreshTaskEvalSet(
 }
 
 /** Read all cases, including exclusions. The caller chooses the cases for each simulation. */
+/**
+ * RC-853, owned (ADR-0030): drop the picked runs that work on a project of another organization
+ * (`foreign-project.ts`). Upstream guards its score suggestions (lib/evals, not ported); here the
+ * automatic pick from scored runs is this refresh.
+ */
+async function withoutForeignRuns<T extends { turnId: string }>(
+  projectId: string,
+  taskId: string,
+  picked: readonly T[],
+  db: EvalDb,
+): Promise<T[]> {
+  const foreign = await foreignProjectsOfRuns(
+    projectId,
+    picked.map(({ turnId }) => ({ turnId })),
+    db,
+  );
+  const kept = picked.filter((row) => !foreign.has(row.turnId));
+  const skipped = picked.length - kept.length;
+  if (skipped > 0)
+    logger.warn(
+      { project_id: projectId, task_id: taskId, skipped, reason: "foreign_project" },
+      "skipped runs of another organization in the eval-set refresh",
+    );
+  return kept;
+}
+
 export async function taskEvalSetFor(projectId: string, taskId: string, db: EvalDb = getDb()) {
   const [set] = await db
     .select()
