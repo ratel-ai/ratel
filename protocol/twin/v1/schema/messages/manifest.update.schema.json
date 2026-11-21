@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/twin/v1/messages/manifest.update.schema.json",
+  "title": "manifest.update",
+  "description": "From the worker. The worker loaded new code (hot reload). The manifest replaces the previous one.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "const": "manifest.update"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "manifest"
+      ],
+      "properties": {
+        "manifest": {
+          "$ref": "../manifest.schema.json"
+        }
+      }
+    }
+  }
+}

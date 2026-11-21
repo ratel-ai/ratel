@@ -1,0 +1,27 @@
+# Changelog
+
+All notable changes to `@ratel-ai/twin` are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this package adheres to [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+
+- `twin(id, { params, input, run, resolve? })` with `twin.model`, `twin.prompt`, `twin.int`, `twin.number`, `twin.bool`, `twin.enum`, `twin.string` and `twin.structured`.
+- `resolveParams` / `runTwin`: per-run overrides checked against each param (`invalid_params`).
+- `configHash` (SHA-256 of canonical JSON), `buildManifest` (protocol `twin/v1`), `callableProviders`.
+- `resolveLocal(defaults, { twin })` and `stampTwinInput(input)`: the production stamps `ratel.twin.id`, `ratel.twin.config_hash` and `ratel.twin.input`.
+- The `ratel` CLI: `ratel twin list` and `ratel twin run <id> --input <file> [--set k=v] [--tool t=mode]`, with user code in a child worker under `tsx`.
+- `ratel twin verify <id> [--input <file>] [--model <provider/model>] [--dry]`: one sentinel run per param, read from in-memory spans (prompt sentinel, `gen_ai.request.model`, tool descriptions, disabled tools, `ratel.tool.mode`, request scalars, config hash vs `resolveLocal`). Exits 1 and names each param that is not wired. `verifyTwin` and `installVerifyTracing` from `@ratel-ai/twin/verify`; `defaults` and `example` on `twin()`.
+- `aiSdkModels()` runs `amazon-bedrock/<model id>` through the project's `@ai-sdk/amazon-bedrock`, with `AWS_REGION` and AWS credentials (static keys, a Bedrock API key, or `AWS_PROFILE`/web identity/container credentials through the project's `@aws-sdk/credential-providers`). Local fakes use a Bedrock Haiku when Bedrock is the only callable provider.
+- `coerceOverride` turns `--set` text into the param's value type.
+- `ratel dev`: token exchange, one outbound twin/v1 websocket, `register` with provider key names only, playground URLs, reconnect with a 1–60 s jittered backoff and a fresh token, and hot reload with `manifest.update`.
+- `ratel dev` runs: idempotent `run.start` with `run.ack` / `run.reject`, `run.lease`, `run.event` by `seq` with resend of unacked events after a reconnect, `run.end` with the trace ID, `run.cancel` (aborts `ctx.signal`), make-before-break `drain` and frames of at most 64 KB.
+- `ctx.log(message, level?)` and an optional `redact(payload)` on the twin definition.
+- Chat twins: `twin.chat()` (one run per user turn, `input.messages`), `twin.context(values)`, `ctx.textDelta(text)` (a `text.delta` event) and the `invoke_agent <twin id>` root span. `resolve` can be async.
+- `@ratel-ai/twin/ai-sdk`: `aiSdkModels()` resolves a model param to an AI SDK `LanguageModel` through AI Gateway or the project's `@ai-sdk/*` provider, `aiSdkChat()`, `forwardText()`. The manifest lists only callable providers and marks AI SDK twins with `modelKind: "language-model"`; `ratel dev` rejects a run whose model no listed provider can call. `ai` 6 and 7.
+- The AI SDK resolver imports `ai` and the `@ai-sdk/*` providers from the twin file's project (the runner passes the file), and the manifest's callable providers use the same lookup. A project without `ai` gets a clear rejection; nothing falls back to the twin package's own copy.
+- `twin.tools(toolset, hints)`: a tools param with `readOnly` / `sideEffect` / `allowReal` / `opaque` hints and per-run `real`, `fake` and `confirm` modes. `ratel dev` sends `tool.fake.request` / `tool.confirm.request` and continues with the answer (resent after a reconnect; confirm rejects after 10 minutes) and refuses `real` for a side effect without `allowReal`. `ratel twin run --tool name=mode --fake name=<file.json>` applies modes locally. Tool modes stay out of the config hash; a production toolset hashes like the param.
+- Playground traces: the `ratel dev` child exports each run to `/api/v1/traces` on the project's tracer provider (or the only one it registers), with the root span `invoke_workflow <twin id>`, the `ratel.twin.*` attributes and the playground resource. New constants `RATEL_TWIN_RUN_ID`, `RATEL_TWIN_OVERRIDES` and `RATEL_REPLAY_*`.
+- `ratel dev` sends `manifest.update` after every successful reload, with `build.revision` (SHA-256 of the twin files). A failed reload keeps the last good child worker.

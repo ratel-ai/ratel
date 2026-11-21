@@ -1,0 +1,36 @@
+{
+  "v": 1,
+  "type": "run.start",
+  "id": "msg_0005",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "payload": {
+    "twinId": "docs-agent",
+    "sessionId": "pgs_77aa",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "How do I rotate a key?"
+        }
+      ]
+    },
+    "params": {
+      "model": "openai/gpt-5.6-terra"
+    },
+    "toolModes": {
+      "searchDocs": "real",
+      "createTicket": "fake",
+      "askExpert": "confirm"
+    },
+    "context": {
+      "orgId": "org_demo"
+    },
+    "configHash": "9f2c4e1a7b3d5f60812a4c6e8b0d2f4a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d",
+    "replay": {
+      "sourceTraceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "sourceSessionId": "sess_prod_19",
+      "arm": "candidate"
+    }
+  }
+}
