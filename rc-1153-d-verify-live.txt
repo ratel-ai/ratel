@@ -1,0 +1,16 @@
+Verifying docs-agent: it runs the twin once per param and calls its model with your own keys. Use --dry for a stand-in model.
+  run 1: no overrides
+  run 2: model
+  run 3: system
+  run 4: tools (descriptions, createTicket off)
+param               kind         status   evidence
+model               model        wired    gen_ai.request.model = amazon-bedrock/global.anthropic.claude-haiku-5-5
+system              prompt       wired    sentinel seen in span "ai.streamText.doStream"
+maxSteps            int          skipped  cannot verify automatically: no model request attribute records it
+tools               tools        wired    description sentinels seen in the tool definitions; createTicket off and absent
+tools.searchDocs    tool (real)  wired    ratel.tool.mode=real on execute_tool searchDocs
+tools.readDoc       tool (real)  wired    ratel.tool.mode=real on execute_tool readDoc
+tools.createTicket  tool (fake)  wired    ratel.tool.mode=fake on execute_tool createTicket
+config hash         hash         wired    changes with each override; no overrides = production (40fbb6316c69)
+
+docs-agent: every param is wired (7 wired, 1 skipped, 4 runs)

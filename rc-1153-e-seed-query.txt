@@ -1,0 +1,34 @@
+ sessions | turns | root_spans | spans_with_input_content | spans_with_output_content | tool_spans 
+----------+-------+------------+--------------------------+---------------------------+------------
+       20 |    31 |         31 |                        0 |                         0 |         54
+(1 row)
+
+     session      | turns | first_prompt 
+------------------+-------+--------------
+ seed_mwpyxkgi_01 |     2 | 
+ seed_mwpyxkgi_02 |     2 | 
+ seed_mwpyxkgi_03 |     1 | 
+ seed_mwpyxkgi_04 |     2 | 
+ seed_mwpyxkgi_05 |     2 | 
+ seed_mwpyxkgi_06 |     1 | 
+(6 rows)
+
+ model_call_events | sessions | with_seed_question_text 
+-------------------+----------+-------------------------
+                 0 |        0 |                       0
+(1 row)
+
+ sessions | turns | model_calls | calls_with_messages | calls_with_output 
+----------+-------+-------------+---------------------+-------------------
+       20 |    31 |          78 |                  78 |                47
+(1 row)
+
+     session      |                      first_user_message                      
+------------------+--------------------------------------------------------------
+ seed_mwpyxkgi_01 | [{"text": "How do I run Ratel on my laptop?", "type": "text"
+ seed_mwpyxkgi_02 | [{"text": "Where do I create an API key?", "type": "text"}]
+ seed_mwpyxkgi_03 | [{"text": "What is the traces endpoint on Ratel Cloud?", "ty
+ seed_mwpyxkgi_04 | [{"text": "My exporter gets a 401 from /v1/traces.", "type":
+ seed_mwpyxkgi_05 | [{"text": "Does Ratel need message content in traces?", "typ
+(5 rows)
+
