@@ -1,0 +1,13 @@
+# ratel #382: monorepo leftovers removed (RP-35, commit 9ceeae3f)
+# pair: ratel 9ceeae3f (refactor/move-apps-web-to-src) / ratel-platform c0d67c56 (refactor/move-apps-web-to-src)
+
+- `biome.json` includes `benchmark/agent/src/**/*.ts(x)`
+  reason: `benchmark/` no longer exists
+- `.dockerignore` `benchmark/`
+  reason: `benchmark/` no longer exists
+- `.gitignore` Python block (`__pycache__`, `*.py[cod]`, `*.egg*`, `build/`, `.venv`, pytest/mypy/ruff caches, `*.whl`)
+  reason: no Python left in the repository
+- `.gitignore` SDK demo scratch (`embedding_demo.*`, `embedding_usage_demo.*`, `adaptive_demo*`)
+  reason: SDK demos, now in ratel-sdk
+
+Kept on purpose: `packages/brand` and `packages/design-system` (used by `src` and ratel-platform). `dist/` in `.gitignore` (MCP Apps views and package builds). `docs/baseline-capture-distributed.md`, an SDK guide that ratel-sdk does not have yet. The SDK ADRs, which stay as decision history. The root package name `ratel-monorepo`, which is only a label of a workspace that still has four packages.

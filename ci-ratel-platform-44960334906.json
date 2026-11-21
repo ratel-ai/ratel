@@ -1,0 +1,852 @@
+{
+  "pair": {
+    "ratel": "9ceeae3f",
+    "ratel_branch": "refactor/move-apps-web-to-src",
+    "ratel_platform": "c0d67c56",
+    "ratel_platform_branch": "refactor/move-apps-web-to-src"
+  },
+  "run": {
+    "conclusion": "success",
+    "databaseId": 44960334906,
+    "event": "workflow_dispatch",
+    "headSha": "c0d67c56cfb2d0ea0b9c8483402b9f8176e50ec2",
+    "jobs": [
+      {
+        "completedAt": "2026-11-21T23:09:03Z",
+        "conclusion": "success",
+        "databaseId": 137017520745,
+        "name": "public-ref",
+        "startedAt": "2026-11-21T23:09:00Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:00Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:00Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:01Z",
+            "conclusion": "success",
+            "name": "Pick the public branch",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:01Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:01Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017520745"
+      },
+      {
+        "completedAt": "2026-11-21T23:09:12Z",
+        "conclusion": "success",
+        "databaseId": 137017520990,
+        "name": "deploy",
+        "startedAt": "2026-11-21T23:09:00Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:03Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:04Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:03Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:07Z",
+            "conclusion": "success",
+            "name": "actionlint",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:08Z",
+            "conclusion": "success",
+            "name": "shellcheck",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Run azure/setup-helm@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:08Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Render staging task definitions",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Render prod task definitions",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 14,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 15,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017520990"
+      },
+      {
+        "completedAt": "2026-11-21T23:10:37Z",
+        "conclusion": "success",
+        "databaseId": 137017521033,
+        "name": "terraform",
+        "startedAt": "2026-11-21T23:09:01Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:03Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:02Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:04Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:03Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:05Z",
+            "conclusion": "success",
+            "name": "Run hashicorp/setup-terraform@v3",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:06Z",
+            "conclusion": "success",
+            "name": "Run terraform fmt -check -recursive infra",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:05Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:46Z",
+            "conclusion": "success",
+            "name": "Validate module and roots",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:10:34Z",
+            "conclusion": "success",
+            "name": "Terraform test (module, mocked providers)",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:46Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:10:34Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 12,
+            "startedAt": "2026-11-21T23:10:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:10:34Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 13,
+            "startedAt": "2026-11-21T23:10:34Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017521033"
+      },
+      {
+        "completedAt": "2026-11-21T23:09:10Z",
+        "conclusion": "success",
+        "databaseId": 137017521106,
+        "name": "secret-scan",
+        "startedAt": "2026-11-21T23:09:00Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:01Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:02Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:01Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "gitleaks",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:02Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017521106"
+      },
+      {
+        "completedAt": "2026-11-21T23:25:18Z",
+        "conclusion": "success",
+        "databaseId": 137017545064,
+        "name": "cloud",
+        "startedAt": "2026-11-21T23:09:05Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:07Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:18Z",
+            "conclusion": "success",
+            "name": "Initialize containers",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:20Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:21Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:20Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:22Z",
+            "conclusion": "success",
+            "name": "Run pnpm/action-setup@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:21Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:24Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:22Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:39Z",
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:24Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:12:32Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform build",
+            "number": 8,
+            "startedAt": "2026-11-21T23:09:39Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:13:35Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform typecheck",
+            "number": 9,
+            "startedAt": "2026-11-21T23:12:32Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:14:55Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/ee lint && pnpm --filter @ratel/platform lint",
+            "number": 10,
+            "startedAt": "2026-11-21T23:13:35Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:21:14Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/ee test",
+            "number": 11,
+            "startedAt": "2026-11-21T23:14:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:21:14Z",
+            "conclusion": "success",
+            "name": "Run node --test ee/src/platform-sync/*.test.mjs ee/src/scripts/*.test.mjs",
+            "number": 12,
+            "startedAt": "2026-11-21T23:21:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:02Z",
+            "conclusion": "success",
+            "name": "Run docker build -f src/Dockerfile --target cloud -t ratel-cloud .",
+            "number": 13,
+            "startedAt": "2026-11-21T23:21:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:14Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 22,
+            "startedAt": "2026-11-21T23:25:02Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:14Z",
+            "conclusion": "success",
+            "name": "Post Run pnpm/action-setup@v4",
+            "number": 23,
+            "startedAt": "2026-11-21T23:25:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:15Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 24,
+            "startedAt": "2026-11-21T23:25:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:15Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 25,
+            "startedAt": "2026-11-21T23:25:15Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:16Z",
+            "conclusion": "success",
+            "name": "Stop containers",
+            "number": 26,
+            "startedAt": "2026-11-21T23:25:15Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:25:16Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 27,
+            "startedAt": "2026-11-21T23:25:16Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017545064"
+      },
+      {
+        "completedAt": "2026-11-21T23:17:59Z",
+        "conclusion": "success",
+        "databaseId": 137017545079,
+        "name": "platform-tests (1)",
+        "startedAt": "2026-11-21T23:09:11Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:13Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:12Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:15Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:13Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:17Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:15Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:18Z",
+            "conclusion": "success",
+            "name": "Run pnpm/action-setup@v4",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:17Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:21Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:34Z",
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:21Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:51Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform test",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:55Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 11,
+            "startedAt": "2026-11-21T23:17:51Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:55Z",
+            "conclusion": "success",
+            "name": "Post Run pnpm/action-setup@v4",
+            "number": 12,
+            "startedAt": "2026-11-21T23:17:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:56Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 13,
+            "startedAt": "2026-11-21T23:17:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:56Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 14,
+            "startedAt": "2026-11-21T23:17:56Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:56Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 15,
+            "startedAt": "2026-11-21T23:17:56Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017545079"
+      },
+      {
+        "completedAt": "2026-11-21T23:19:06Z",
+        "conclusion": "success",
+        "databaseId": 137017545080,
+        "name": "platform-tests (2)",
+        "startedAt": "2026-11-21T23:09:05Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:07Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:10Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:11Z",
+            "conclusion": "success",
+            "name": "Run pnpm/action-setup@v4",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:10Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:13Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:11Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:28Z",
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:13Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:18:54Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform test",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:28Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:19:04Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 11,
+            "startedAt": "2026-11-21T23:18:54Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:19:04Z",
+            "conclusion": "success",
+            "name": "Post Run pnpm/action-setup@v4",
+            "number": 12,
+            "startedAt": "2026-11-21T23:19:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:19:04Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 13,
+            "startedAt": "2026-11-21T23:19:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:19:05Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 14,
+            "startedAt": "2026-11-21T23:19:04Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:19:05Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 15,
+            "startedAt": "2026-11-21T23:19:05Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017545080"
+      },
+      {
+        "completedAt": "2026-11-21T23:15:57Z",
+        "conclusion": "success",
+        "databaseId": 137017545104,
+        "name": "platform-tests (4)",
+        "startedAt": "2026-11-21T23:09:05Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:07Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:06Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:09Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:10Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:09Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:12Z",
+            "conclusion": "success",
+            "name": "Run pnpm/action-setup@v4",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:10Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:15Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:12Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:28Z",
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:15Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:44Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform test",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:28Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:55Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 11,
+            "startedAt": "2026-11-21T23:15:44Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:55Z",
+            "conclusion": "success",
+            "name": "Post Run pnpm/action-setup@v4",
+            "number": 12,
+            "startedAt": "2026-11-21T23:15:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:56Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 13,
+            "startedAt": "2026-11-21T23:15:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:56Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 14,
+            "startedAt": "2026-11-21T23:15:56Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:15:56Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 15,
+            "startedAt": "2026-11-21T23:15:56Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017545104"
+      },
+      {
+        "completedAt": "2026-11-21T23:17:37Z",
+        "conclusion": "success",
+        "databaseId": 137017545195,
+        "name": "platform-tests (3)",
+        "startedAt": "2026-11-21T23:09:06Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-11-21T23:09:08Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-11-21T23:09:07Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:11Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-11-21T23:09:08Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:11Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 3,
+            "startedAt": "2026-11-21T23:09:11Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:13Z",
+            "conclusion": "success",
+            "name": "Run pnpm/action-setup@v4",
+            "number": 4,
+            "startedAt": "2026-11-21T23:09:11Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:14Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 5,
+            "startedAt": "2026-11-21T23:09:13Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:09:29Z",
+            "conclusion": "success",
+            "name": "Run pnpm install --frozen-lockfile --filter @ratel/platform... --filter @ratel/ee...",
+            "number": 6,
+            "startedAt": "2026-11-21T23:09:14Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:28Z",
+            "conclusion": "success",
+            "name": "Run pnpm --filter @ratel/platform test",
+            "number": 7,
+            "startedAt": "2026-11-21T23:09:29Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:33Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 11,
+            "startedAt": "2026-11-21T23:17:28Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:33Z",
+            "conclusion": "success",
+            "name": "Post Run pnpm/action-setup@v4",
+            "number": 12,
+            "startedAt": "2026-11-21T23:17:33Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:34Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 13,
+            "startedAt": "2026-11-21T23:17:33Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:34Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 14,
+            "startedAt": "2026-11-21T23:17:34Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-11-21T23:17:34Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 15,
+            "startedAt": "2026-11-21T23:17:34Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906/job/137017545195"
+      }
+    ],
+    "url": "https://github.com/ratel-ai/ratel-platform/actions/runs/44960334906"
+  }
+}
