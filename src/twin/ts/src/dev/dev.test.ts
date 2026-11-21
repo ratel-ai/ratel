@@ -51,7 +51,10 @@ const HOT_RELOAD_MODES: { mode: string; env: Record<string, string> }[] = [
   { mode: "poll", env: { RATEL_TWIN_WATCH: "poll" } },
 ];
 
-describe.each(HOT_RELOAD_MODES)("ratel dev against the test controller (hot reload: $mode)", ({ mode, env }) => {
+describe.each(HOT_RELOAD_MODES)("ratel dev against the test controller (hot reload: $mode)", ({
+  mode,
+  env,
+}) => {
   let project: string;
   let controller: TestController;
   let dev: Dev;
