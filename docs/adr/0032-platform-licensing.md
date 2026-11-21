@@ -12,7 +12,7 @@ engine, the SDKs, the telemetry helpers or the examples.
 ## Context
 
 ADR-0009 predates the platform. The repository now also holds the self-hosted Ratel Platform: the
-application in `apps/web` (`@ratel/platform`), the shared UI packages `packages/brand` and
+application in `src` (`@ratel/platform`), the shared UI packages `packages/brand` and
 `packages/design-system`, and the `ee/` manifest whose source is a separate private repository
 (ADR-0029, ADR-0030). The root `LICENSE.md` is MIT and the application and both packages already
 declare `"license": "MIT"`, but no decision covered them.
@@ -27,7 +27,7 @@ The open-source platform is **MIT**, like the rest of the repository outside the
 
 | Component | License |
 |---|---|
-| `apps/web` (`@ratel/platform`), the open-source server and its Docker image | MIT |
+| `src` (`@ratel/platform`), the open-source server and its Docker image | MIT |
 | `packages/brand`, `packages/design-system` | MIT |
 | `ee/package.json` (a manifest only, `"private": true`) | not distributed as a package; no license field |
 | `ee/src` (the Cloud modules) | proprietary, in the private `ratel-ai/ratel-platform` repository, not in this repository |

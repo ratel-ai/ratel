@@ -27,9 +27,9 @@ outside contributor clones, installs, tests and opens a pull request with no ext
 
 ## Decision
 
-**One application, two compositions.** `apps/web` (`@ratel/platform`) holds the core. Every
-capability that differs by edition is a port declared in `apps/web/lib/contracts/`, with an OSS
-implementation in `apps/web/lib/adapters/oss/`. A composition root reads `RATEL_COMPOSITION`
+**One application, two compositions.** `src` (`@ratel/platform`) holds the core. Every
+capability that differs by edition is a port declared in `src/lib/contracts/`, with an OSS
+implementation in `src/lib/adapters/oss/`. A composition root reads `RATEL_COMPOSITION`
 (`oss` or `cloud`; unset means `oss`), mounts one set of implementations, and exits the process
 at startup if the set is incomplete — never "ready" and then failing on every request.
 
@@ -41,19 +41,19 @@ change and publish private commit hashes.
 
 **Routes are copied, not committed.** The private repository holds one-line route stubs in
 `routes/`. `scripts/link-ee.mjs --auto` runs before `dev`, `build` and `typecheck`: it copies them
-to `apps/web/app/(ee)/` (ignored by git) when `ee/src` exists, and removes them when it does not.
+to `src/app/(ee)/` (ignored by git) when `ee/src` exists, and removes them when it does not.
 Copied rather than symlinked, because Turbopack rejects symlinks leaving the project root and
 `next dev` does not discover routes behind a symlink. With the checkout absent, every command
 builds Ratel OSS; nobody runs a step to get the right tree. The proxy is the same case: Next.js reads it only from
-`apps/web/proxy.ts`, so the script copies a stub there, and the open-source edition has none.
-Static files too: Next.js serves only `apps/web/public`, so the script copies the edition's
+`src/proxy.ts`, so the script copies a stub there, and the open-source edition has none.
+Static files too: Next.js serves only `src/public`, so the script copies the edition's
 `public/` files there (real files, which the image keeps; ignored by git), never over one the app
 ships, and removes them without the checkout.
 
 **One boundary rule, checked mechanically** by `scripts/check-ee-boundary.mjs`, which the test
 suite runs, and the paired CI below will run in the private repository: nothing outside `ee/`
-imports from `ee/` except the copied stubs: anything under `apps/web/app/(ee)`, a gitignored
-folder that holds only them, and `apps/web/proxy.ts`. `ee/src` imports only
+imports from `ee/` except the copied stubs: anything under `src/app/(ee)`, a gitignored
+folder that holds only them, and `src/proxy.ts`. `ee/src` imports only
 `@/lib/contracts/*`, itself, and npm packages.
 
 **One Dockerfile, two targets** (`oss`, `cloud`). The Cloud adapters are reached through one

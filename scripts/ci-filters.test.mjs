@@ -41,8 +41,8 @@ test("brand-only change runs design_system, platform, compose", () => {
   assertFalse(r, ["lockfiles"]);
 });
 
-test("apps/web-only change runs platform and compose", () => {
-  const r = on(["apps/web/app/page.tsx"]);
+test("src-only change runs platform and compose", () => {
+  const r = on(["src/app/page.tsx"]);
   assertTrue(r, ["platform", "compose"]);
   assertFalse(r, ["design_system", "lockfiles"]);
 });
@@ -53,8 +53,8 @@ test("ee change runs platform and compose", () => {
   assertFalse(r, ["design_system", "lockfiles"]);
 });
 
-test("markdown under apps/web and docs sets no output", () => {
-  const r = on(["apps/web/README.md", "docs/README.md", "README.md"]);
+test("markdown under src and docs sets no output", () => {
+  const r = on(["src/README.md", "docs/README.md", "README.md"]);
   assertFalse(r, ["design_system", "platform", "compose", "lockfiles"]);
 });
 
@@ -128,7 +128,7 @@ test("lockfile and exceptions-file changes set lockfiles", () => {
   for (const f of ["pnpm-lock.yaml", ".trivyignore.yaml"]) {
     assertTrue(on([f]), ["lockfiles"]);
   }
-  assertFalse(on(["apps/web/package.json"]), ["lockfiles"]);
+  assertFalse(on(["src/package.json"]), ["lockfiles"]);
 });
 
 test("dependabot.yml alone runs no leg", () => {
@@ -139,7 +139,7 @@ test("dependabot.yml alone runs no leg", () => {
 test("removed SDK paths are unclaimed and fall back to a full run", () => {
   // The SDKs moved to ratel-ai/ratel-sdk. A path that comes back here is unknown to the
   // classifier, so it runs every leg instead of silently skipping.
-  for (const f of ["src/sdk/ts/src/index.ts", "Cargo.toml", "examples/ai-sdk/package.json"]) {
+  for (const f of ["protocol/v2/conformance/verify.mjs", "Cargo.toml", "examples/ai-sdk/package.json"]) {
     assertTrue(on([f]), OUTPUTS);
   }
 });

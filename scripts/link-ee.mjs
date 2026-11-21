@@ -9,13 +9,13 @@
 // inside one. The stubs are one-line re-exports, so a copy costs nothing; the code they point
 // at stays in ee/src. Without ee/src the repository is the open-source edition.
 //
-// The proxy is the same exception: Next.js only reads it from apps/web/proxy.ts, and the
+// The proxy is the same exception: Next.js only reads it from src/proxy.ts, and the
 // open-source edition must not have one.
 //
-// So are static files: Next.js serves only apps/web/public, so the files of the edition's
+// So are static files: Next.js serves only src/public, so the files of the edition's
 // public/ folder (the invite email's images) are copied there, beside the app's own. Real
-// files, not links: the image copies apps/web/public on its own, and a link out of the app
-// would not survive it. The placed paths are listed in apps/web/.ee-public.json so they can be
+// files, not links: the image copies src/public on its own, and a link out of the app
+// would not survive it. The placed paths are listed in src/.ee-public.json so they can be
 // removed without the checkout; both are gitignored. A file the app ships itself is never
 // replaced.
 //
@@ -40,13 +40,13 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ROUTES = join(ROOT, "ee", "src", "routes");
 // Generated and gitignored: nothing tracked ever lives here.
-const TARGET = join(ROOT, "apps", "web", "app", "(ee)");
+const TARGET = join(ROOT, "src", "app", "(ee)");
 const PROXY_SOURCE = join(ROOT, "ee", "src", "proxy.ts");
-const PROXY_TARGET = join(ROOT, "apps", "web", "proxy.ts");
+const PROXY_TARGET = join(ROOT, "src", "proxy.ts");
 const PUBLIC_SOURCE = join(ROOT, "ee", "src", "public");
-const PUBLIC_TARGET = join(ROOT, "apps", "web", "public");
+const PUBLIC_TARGET = join(ROOT, "src", "public");
 // Outside public/, so it is never served.
-const PUBLIC_PLACED = join(ROOT, "apps", "web", ".ee-public.json");
+const PUBLIC_PLACED = join(ROOT, "src", ".ee-public.json");
 
 /** Every file under a folder, as paths relative to it. */
 const filesUnder = (folder) =>
@@ -74,7 +74,7 @@ const installPublic = () => {
   for (const file of filesUnder(PUBLIC_SOURCE)) {
     const to = join(PUBLIC_TARGET, file);
     if (existsSync(to)) {
-      console.warn(`kept apps/web/public/${file.split(sep).join("/")}: the app ships its own`);
+      console.warn(`kept src/public/${file.split(sep).join("/")}: the app ships its own`);
       continue;
     }
     mkdirSync(dirname(to), { recursive: true });

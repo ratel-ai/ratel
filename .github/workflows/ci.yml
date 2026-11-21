@@ -94,7 +94,7 @@ jobs:
           --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed
           --ignorefile /src/.trivyignore.yaml --exit-code 1 /src
 
-  # Brand + design-system packages. An apps/web-only change skips this job.
+  # Brand + design-system packages. An src-only change skips this job.
   design-system:
     needs: changes
     if: needs.changes.outputs.design_system == 'true' || github.event_name != 'pull_request'
@@ -131,8 +131,8 @@ jobs:
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
-          path: apps/web/.next/cache
-          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**', 'packages/brand/**', 'packages/design-system/**', 'ee/**') }}
+          path: src/.next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'packages/brand/**', 'packages/design-system/**', 'ee/**') }}
           restore-keys: |
             next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             next-${{ runner.os }}-

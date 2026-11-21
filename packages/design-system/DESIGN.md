@@ -372,4 +372,4 @@ Variants for Micro screens, not for ordinary pages:
 | Semantic tokens | `packages/design-system/src/styles.css` |
 | Primitives | `packages/design-system/src/components/` |
 | Noun pins and icons, task colors | `packages/design-system/src/components/entity.tsx`, `task-colors.ts` |
-| Console shell | `apps/web/app/(console)/layout.tsx` |
+| Console shell | `src/app/(console)/layout.tsx` |

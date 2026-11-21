@@ -20,7 +20,7 @@ Please give us a reasonable time to ship the fix before you talk about the probl
 
 | Package | Supported |
 |---|---|
-| Ratel Platform (`apps/web`) | `main` |
+| Ratel Platform (`src`) | `main` |
 
 The SDK packages (`ratel-ai-core`, `@ratel-ai/sdk`, `ratel-ai`, the telemetry packages, the
 framework adapters and the rankers plugin) live in
@@ -29,9 +29,9 @@ there; its `SECURITY.md` lists the supported versions.
 
 ## Scope
 
-In scope: the platform at `apps/web`, the packages in this repository, and the repository's
+In scope: the platform at `src`, the packages in this repository, and the repository's
 build tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
-authentication or binding it to localhost is the operator's job (see `apps/web/README.md`).
+authentication or binding it to localhost is the operator's job (see `src/README.md`).
 
 Out of scope: the hosted Ratel Cloud service and its private modules, which have their own
 reporting channel.

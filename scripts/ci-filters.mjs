@@ -59,7 +59,7 @@ export const SCRIPT_OWNERS = {
 
 /** Package directory -> package.json name, for the workspace-dependency contract. */
 export const PACKAGE_DIRS = {
-  "apps/web": "@ratel/platform",
+  "src": "@ratel/platform",
   "packages/brand": "@ratel/brand",
   "packages/design-system": "@ratel/design-system",
   ee: "@ratel/ee",
@@ -72,7 +72,7 @@ export const PACKAGE_DIRS = {
  * starting platform) live in classify(), not here.
  */
 export const PACKAGE_OUTPUTS = {
-  "apps/web": ["platform", "compose"],
+  "src": ["platform", "compose"],
   "packages/brand": ["design_system"],
   "packages/design-system": ["design_system"],
   ee: ["platform"],
@@ -211,14 +211,14 @@ const CLAIMS = [
   "biome.json",
   ".github/dependabot.yml",
   ".trivyignore.yaml",
-  "apps/web/**",
+  "src/**",
   "packages/brand/**",
   "packages/design-system/**",
   "ee/**",
   "docker-compose.yml",
   ".env.example",
   ".dockerignore",
-  "apps/web/Dockerfile",
+  "src/Dockerfile",
   "install.sh",
   "docker-compose.caddy.yml",
   "deploy.sh",
@@ -270,10 +270,10 @@ function applyFile(result, file) {
   }
 
   if (
-    matches("apps/web/**", file) ||
+    matches("src/**", file) ||
     matches("ee/**", file)
   ) {
-    // Markdown under apps/web is handled by DOC_ALLOW before we get here.
+    // Markdown under src is handled by DOC_ALLOW before we get here.
     merge(result, ["platform", "compose"]);
   }
 
@@ -281,7 +281,7 @@ function applyFile(result, file) {
     file === "docker-compose.yml" ||
     file === ".env.example" ||
     file === ".dockerignore" ||
-    file === "apps/web/Dockerfile" ||
+    file === "src/Dockerfile" ||
     file === "install.sh" ||
     file === "docker-compose.caddy.yml" ||
     file === "scripts/link-ee.mjs"

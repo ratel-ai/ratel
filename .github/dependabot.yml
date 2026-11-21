@@ -8,7 +8,7 @@ updates:
   - package-ecosystem: npm
     directories:
       - "/"
-      - "/apps/*"
+      - "/src"
       - "/packages/*"
     schedule:
       interval: weekly
@@ -35,7 +35,7 @@ updates:
   - package-ecosystem: docker
     directories:
       - "/"
-      - "/apps/web"
+      - "/src"
     schedule:
       interval: weekly
     commit-message:

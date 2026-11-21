@@ -1,4 +1,4 @@
 packages:
   - 'ee'
-  - 'apps/*'
+  - 'src'
   - 'packages/*'

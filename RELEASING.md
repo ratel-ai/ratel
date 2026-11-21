@@ -12,10 +12,10 @@ workflows and tooling. Read its
 
 ## Platform
 
-The platform (`apps/web`) is not published as a package. It ships from `main`, and operators
+The platform (`src`) is not published as a package. It ships from `main`, and operators
 build it with `docker compose` (see [README.md](README.md)). It uses the published SDK
 packages from npm: to take a new SDK version, bump `@ratel-ai/sdk` and `@ratel-ai/telemetry`
-in `apps/web/package.json` and `ee/package.json`.
+in `src/package.json` and `ee/package.json`.
 
 Every change to `main` goes through the single required `ci-gate` check in
 `.github/workflows/ci.yml` ([ADR-0016](docs/adr/0016-single-ci-gate.md)).

@@ -12,7 +12,7 @@ importers:
         specifier: ^2.4.13
         version: 2.4.13
 
-  apps/web:
+  src:
     dependencies:
       '@anthropic-ai/bedrock-sdk':
         specifier: ^0.36.0
@@ -79,10 +79,10 @@ importers:
         version: 0.5.0
       '@ratel/brand':
         specifier: workspace:*
-        version: link:../../packages/brand
+        version: link:../packages/brand
       '@ratel/design-system':
         specifier: workspace:*
-        version: link:../../packages/design-system
+        version: link:../packages/design-system
       canvas-confetti:
         specifier: ^1.9.4
         version: 1.9.4

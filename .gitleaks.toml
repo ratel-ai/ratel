@@ -12,17 +12,17 @@ useDefault = true
 description = "Fake API-key fixtures and a placeholder OTLP bearer token in unit tests"
 targetRules = ["generic-api-key"]
 paths = [
-  '''^apps/web/lib/platform/api-key-actions\.test\.ts$''',
-  '''^apps/web/lib/console/settings/api-keys\.test\.ts$''',
-  '''^apps/web/lib/console/settings/api-key-access-ui\.test\.ts$''',
-  '''^apps/web/lib/console/settings/support-session-ui\.test\.ts$''',
-  '''^apps/web/lib/platform/otel/config\.test\.ts$''',
+  '''^src/lib/platform/api-key-actions\.test\.ts$''',
+  '''^src/lib/console/settings/api-keys\.test\.ts$''',
+  '''^src/lib/console/settings/api-key-access-ui\.test\.ts$''',
+  '''^src/lib/console/settings/support-session-ui\.test\.ts$''',
+  '''^src/lib/platform/otel/config\.test\.ts$''',
 ]
 
 [[allowlists]]
 description = "MCP Apps view bindings and their tests: a column's or stat's `key` is a field path (p95DurationMs, kpis.p95LatencyMs), not a credential"
 targetRules = ["generic-api-key"]
 paths = [
-  '''^apps/web/mcp-apps/views/[^/]+/bindings\.ts$''',
-  '''^apps/web/mcp-apps/shell/config\.test\.ts$''',
+  '''^src/mcp-apps/views/[^/]+/bindings\.ts$''',
+  '''^src/mcp-apps/shell/config\.test\.ts$''',
 ]

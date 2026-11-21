@@ -33,14 +33,14 @@ build/
 *.tsbuildinfo
 
 # Commercial source: the private repository is checked out at ee/src, and
-# scripts/link-ee.mjs copies its route stubs to apps/web/app/(ee)
+# scripts/link-ee.mjs copies its route stubs to src/app/(ee)
 ee/src
-apps/web/app/(ee)
-# ...and places its public/ files under apps/web/public, listed in .ee-public.json
-apps/web/public/email/
-apps/web/.ee-public.json
+src/app/(ee)
+# ...and places its public/ files under src/public, listed in .ee-public.json
+src/public/email/
+src/.ee-public.json
 
-apps/web/proxy.ts
+src/proxy.ts
 # Next.js
 .next/
 out/
