@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "type": "tool.confirm.decision",
+  "id": "msg_0020",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "payload": {
+    "callId": "call_2",
+    "decision": "edit",
+    "args": {
+      "question": "Is SSO in the Pro plan?"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "type": "drain",
+  "id": "msg_0025",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "payload": {
+    "reason": "gateway deploy",
+    "deadlineMs": 30000
+  }
+}

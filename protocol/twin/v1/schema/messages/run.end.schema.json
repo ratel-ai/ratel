@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/twin/v1/messages/run.end.schema.json",
+  "title": "run.end",
+  "description": "From the worker. The run finished. seq is one more than the last run.event.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload",
+    "runId",
+    "seq"
+  ],
+  "properties": {
+    "type": {
+      "const": "run.end"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "ok",
+            "error",
+            "canceled"
+          ]
+        },
+        "output": {
+          "description": "The value run() returned (status ok)."
+        },
+        "error": {
+          "$ref": "../envelope.schema.json#/$defs/error"
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "inputTokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "outputTokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "traceId": {
+          "$ref": "../envelope.schema.json#/$defs/traceId"
+        },
+        "overrides": {
+          "description": "The names of params whose value differs from the default.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "error"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

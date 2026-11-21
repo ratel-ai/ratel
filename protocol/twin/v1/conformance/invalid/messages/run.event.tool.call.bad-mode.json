@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "type": "run.event",
+  "id": "msg_0028",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "seq": 1,
+  "payload": {
+    "kind": "tool.call",
+    "callId": "c",
+    "tool": "t",
+    "args": {},
+    "mode": "mock"
+  }
+}

@@ -557,6 +557,15 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  protocol/twin/v1:
+    devDependencies:
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
+
   src/adapters/ts-mastra:
     dependencies:
       '@ratel-ai/telemetry':
@@ -724,6 +733,52 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
+
+  src/twin/ts:
+    dependencies:
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: ^0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      ws:
+        specifier: ^8.21.1
+        version: 8.21.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.13
+        version: 2.4.13
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
@@ -3171,6 +3226,9 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
   '@vercel/oidc@3.2.0':
     resolution: {integrity: sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==}
@@ -7295,6 +7353,10 @@ snapshots:
     optional: true
 
   '@types/unist@3.0.3': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 24.12.2
 
   '@vercel/oidc@3.2.0': {}
 

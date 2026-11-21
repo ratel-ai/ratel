@@ -1,0 +1,25 @@
+{
+  "v": 1,
+  "type": "run.end",
+  "id": "msg_0016",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "seq": 6,
+  "payload": {
+    "status": "ok",
+    "output": {
+      "name": "Refund lookup",
+      "description": "Finds the refund policy.",
+      "icon": "receipt"
+    },
+    "usage": {
+      "inputTokens": 812,
+      "outputTokens": 64
+    },
+    "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "overrides": [
+      "model",
+      "maxTokens"
+    ]
+  }
+}

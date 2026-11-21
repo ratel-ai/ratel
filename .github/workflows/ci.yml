@@ -592,20 +592,26 @@ jobs:
   # Catalog-source contract's conformance vectors: recomputes every frozen ETag and
   # re-checks the If-None-Match / scope-overlay outcomes against the committed
   # expectations, so a drift in the wire contract or the vectors fails CI. Node
-  # stdlib only, no install.
+  # stdlib only for v1/v2; twin/v1 validates its fixtures with ajv.
   protocol:
     needs: changes
     if: needs.changes.outputs.protocol == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: pnpm
       - name: Verify v1 conformance vectors
         run: node protocol/v1/conformance/verify.mjs
       - name: Verify v2 conformance vectors
         run: node protocol/v2/conformance/verify.mjs
+      - name: Install twin/v1 validator
+        run: pnpm install --frozen-lockfile --filter @ratel-ai/twin-protocol
+      - name: Validate twin/v1 fixtures
+        run: pnpm --filter @ratel-ai/twin-protocol test
 
   # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
