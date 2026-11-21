@@ -87,3 +87,6 @@ adaptive_demo_graph.json
 
 # Ratel local-scope MCP config (per-user, never committed)
 .ratel/config.local.json
+
+# install.sh --access public writes it (it holds the login hash)
+/Caddyfile

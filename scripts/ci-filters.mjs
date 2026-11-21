@@ -72,6 +72,7 @@ export const SCRIPT_OWNERS = {
   "scripts/platform-sync/sync.test.mjs": "platform",
   "scripts/platform-sync/undecided.mjs": "platform",
   "scripts/quick-start.test.mjs": "platform",
+  "scripts/install.test.mjs": "platform",
 
   "scripts/workflow-contracts.test.mjs": "changes",
   "scripts/ci-filters.mjs": "changes",
@@ -269,6 +270,8 @@ const CLAIMS = [
   ".env.example",
   ".dockerignore",
   "apps/web/Dockerfile",
+  "install.sh",
+  "docker-compose.caddy.yml",
   ...Object.keys(SCRIPT_OWNERS),
 ];
 
@@ -438,6 +441,8 @@ function applyFile(result, file) {
     file === ".env.example" ||
     file === ".dockerignore" ||
     file === "apps/web/Dockerfile" ||
+    file === "install.sh" ||
+    file === "docker-compose.caddy.yml" ||
     file === "scripts/link-ee.mjs"
   ) {
     merge(result, ["compose", "platform"]);
