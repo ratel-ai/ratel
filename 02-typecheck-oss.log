@@ -1,0 +1,17 @@
+
+> @ratel/platform@0.1.0 typecheck /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-34-move-ratel-apps/.beluga/scratch/ratel-move/src
+> node ../scripts/link-ee.mjs --auto && pnpm mcp-apps:build && tsc --noEmit
+
+
+> @ratel/platform@0.1.0 mcp-apps:build /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-34-move-ratel-apps/.beluga/scratch/ratel-move/src
+> tsx scripts/build-mcp-apps.mts
+
+(node:48702) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+mcp-apps: detail 381 KB, 6 bindings
+mcp-apps: health 530 KB, 1 bindings
+mcp-apps: list 615 KB, 13 bindings
+mcp-apps: replay 503 KB, 3 bindings
+mcp-apps: series 393 KB, 2 bindings
+mcp-apps: trace 567 KB, 1 bindings
+mcp-apps: built 6 views in 1230 ms
