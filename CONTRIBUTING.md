@@ -6,20 +6,12 @@ This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md) v2.1. By par
 
 ## Prerequisites
 
-- **Rust** stable — pinned via `rust-toolchain.toml`; rustup picks it up automatically.
 - **Node** 24+
 - **pnpm** 10.28+ (see `packageManager` in `package.json`)
 
 ## Build & test
 
 ```bash
-# Rust
-cargo build --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --check --all
-cargo test --workspace
-
-# TS
 pnpm install
 pnpm -r build
 pnpm -r typecheck
@@ -36,7 +28,11 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the si
 
 ## Backend before frontend
 
-For features that aren't frontend-only, implement on the Rust core first (with tests), then surface in the TS SDK.
+For features that aren't frontend-only, implement on the backend first (with tests), then surface in the console.
+
+## SDKs
+
+The SDKs (Rust core, TypeScript and Python SDKs, adapters, rankers, telemetry, protocol and examples) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). Contribute to them there.
 
 ## TDD
 
@@ -53,27 +49,12 @@ For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Statu
 ## Commit messages
 
 - Concise, imperative mood; sacrifice grammar for brevity
-- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful — the prefix picks the CHANGELOG section (`feat`→Added, `fix`→Fixed, `perf`/`refactor`→Changed; `docs`/`chore`/`ci`/`build`/`test` are skipped). See Releases
-- A scope (`feat(core):`, `fix(sdk):`) is cosmetic — it's shown in the entry but does not decide which unit's CHANGELOG a commit lands in. That routing is by the files a commit touches (git-cliff scopes each unit to its own paths), so keep a commit within one unit's tree where practical
+- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful
 - No tool-attribution lines (no `Co-Authored-By` for AI assistants)
 
 ## Releases
 
-Independently-versioned units publish from this repo (ADR-0008): `ratel-ai-core` (crates.io, `core-v*`), `@ratel-ai/sdk` + its per-OS packages (npm, `sdk-ts-v*`), `ratel-ai` (PyPI, `sdk-py-v*`), the three telemetry units — `ratel-ai-telemetry` (crates.io, `telemetry-core-v*`), `@ratel-ai/telemetry` (npm, `telemetry-ts-v*`), and `ratel-ai-telemetry` (PyPI, `telemetry-py-v*`) — and the two framework adapters, `@ratel-ai/vercel-ai-sdk` (npm, `vercel-ai-sdk-v*`) and `@ratel-ai/mastra` (npm, `mastra-v*`) — and the rankers plugin, `@ratel-ai/rankers-plugin` + its per-OS packages (npm, `rankers-ts-v*`) and `ratel-ai-rankers-plugin` (PyPI, `rankers-py-v*`). Ten in total; [`scripts/release-units.mjs`](scripts/release-units.mjs) is the single source of truth. Each has a `CHANGELOG.md` in its package directory and its own tag prefix. `@ratel-ai/mcp-server` publishes independently from [ratel-ai/ratel-mcp](https://github.com/ratel-ai/ratel-mcp).
-
-Two rules the unit list doesn't show:
-
-- **Publish in dependency order.** `@ratel-ai/telemetry` before `@ratel-ai/sdk`, and `@ratel-ai/sdk` before either adapter. Adapter `@ratel-ai/sdk` peers are rewritten at pack time to the floor range in [ADR-0020](docs/adr/0020-adapter-sdk-peer-floor.md), not `^X.Y.Z`. Telemetry runtime deps still become `^X.Y.Z` of the in-repo telemetry version, so a tag cut before `telemetry-ts` publishes an immutable version whose telemetry dependency is not on the registry yet. The adapter publish jobs check that telemetry pin against npm and fail before publishing rather than after.
-- **At 0.x, a breaking change takes a MINOR bump** (`0.4.1` → `0.5.0`), never a major and never a patch. Removing or narrowing a public surface is what makes a change breaking; adding to it is not, however large the addition.
-
-To cut a release — one unit at a time; see [RELEASING.md](RELEASING.md) for the full flow:
-
-1. `node scripts/releasable.mjs` to see which units have unreleased commits.
-2. Bump that unit's version in its manifest(s) — the release workflow validates the tag against every manifest the unit owns.
-3. Run the `/changelog` skill (`.claude/skills/changelog/`) for the unit. It drafts entries with [git-cliff](https://git-cliff.org), lets you curate, and writes the unit's CHANGELOG; for GA versions it collapses the unit's `## [X.Y.Z-rc.*]` sections into a single `## [X.Y.Z]`.
-4. Commit the bump + CHANGELOG together (`release: <unit>-vX.Y.Z`), tag `<unit>-vX.Y.Z`, push.
-
-The release workflow's `tag-version-check` job rejects any tag whose unit CHANGELOG lacks a `## [<version>]` heading. See [ADR 0008](docs/adr/0008-release-engineering.md) (per-unit versions, tags, and CHANGELOG gates) for the rationale.
+The SDK packages release from [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); see [RELEASING.md](RELEASING.md). The platform (`apps/web`) is not released as a package: it ships from `main`.
 
 ## Pull requests
 
