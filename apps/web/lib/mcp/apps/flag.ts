@@ -30,11 +30,15 @@ export async function mcpAppsEnabled(
   auth: McpAuthContext,
   env: Record<string, string | undefined> = process.env,
 ): Promise<boolean> {
-  return featureEnabled(MCP_APPS_FLAG, flagSubjectOf(auth), { env });
+  return featureEnabled(MCP_APPS_FLAG, mcpAppsFlagSubject(auth), { env });
 }
 
-/** Who asks, as the caller's credential says: a project key, or a person. */
-function flagSubjectOf(auth: McpAuthContext): FlagSubject {
+/**
+ * Who the MCP Apps flag is decided for, as the connection says (decision mcp-apps-scope): a
+ * project key for its project and organization; an OAuth connection for the person alone, since
+ * one connection serves every project they open. `get_flag_status` reports the flag with it too.
+ */
+export function mcpAppsFlagSubject(auth: McpAuthContext): FlagSubject {
   if (auth.kind === "api-key") {
     return {
       ...(auth.organization ? { organizationId: auth.organization.id } : {}),

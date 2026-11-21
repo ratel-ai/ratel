@@ -296,3 +296,68 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["FF_MCP_APPS", subject],
   ]);
 });
+
+// RP-63, decision mcp-apps-scope: under an OAuth connection the MCP Apps flag is connection-wide,
+// decided for the person alone. get_flag_status must report what the real gate decides.
+test("get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection", async (t) => {
+  const { featureEnabled } = await import("@/lib/platform/experimental-features");
+  const { mcpAppsEnabled } = await import("@/lib/mcp/apps/flag");
+  // The edition's flags service turns Apps on for organization org-1 only.
+  const port = {
+    enabled: async (flag: string, subject: { organizationId?: string }) =>
+      flag === "FF_MCP_APPS" && subject.organizationId === "org-1",
+  };
+  const ports = composition as { featureFlags?: unknown };
+  const previous = ports.featureFlags;
+  ports.featureFlags = port;
+  t.after(() => {
+    ports.featureFlags = previous;
+  });
+  const oauth: McpAuthContext = {
+    kind: "oauth",
+    externalUserId: "user_ada",
+    userId: "u-1",
+    memberships: [
+      {
+        organizationId: "org-1",
+        role: "admin",
+        organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
+      },
+    ],
+  };
+  const result = await dispatchOperation(
+    "get_flag_status",
+    { projectId: PROJECT },
+    {
+      registry: buildRegistry(accountOperations(deps({ featureEnabled }))),
+      auth: oauth,
+      projectOwner: async () => ({ organizationId: "org-1" }),
+      logger: quiet,
+    },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+  const flags = (result as { data: { flags: { key: string; enabled: boolean }[] } }).data.flags;
+  const reported = flags.find(({ key }) => key === "FF_MCP_APPS")?.enabled;
+  assert.equal(reported, await mcpAppsEnabled(oauth, {}));
+  assert.equal(reported, false);
+});
+
+test("get_flag_status reports MCP Apps for a project key with that project, as the gate does", async (t) => {
+  const { featureEnabled } = await import("@/lib/platform/experimental-features");
+  const { mcpAppsEnabled } = await import("@/lib/mcp/apps/flag");
+  const port = {
+    enabled: async (flag: string, subject: { projectId?: string }) =>
+      flag === "FF_MCP_APPS" && subject.projectId === PROJECT,
+  };
+  const ports = composition as { featureFlags?: unknown };
+  const previous = ports.featureFlags;
+  ports.featureFlags = port;
+  t.after(() => {
+    ports.featureFlags = previous;
+  });
+  const result = await run("get_flag_status", { featureEnabled });
+  const flags = result.data.flags as { key: string; enabled: boolean }[];
+  const reported = flags.find(({ key }) => key === "FF_MCP_APPS")?.enabled;
+  assert.equal(reported, await mcpAppsEnabled(keyAuth, {}));
+  assert.equal(reported, true);
+});

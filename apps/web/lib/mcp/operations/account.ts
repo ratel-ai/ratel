@@ -3,6 +3,7 @@ import { countSkills } from "@/lib/catalog/queries";
 import { composition } from "@/lib/composition/ports";
 import type { CoreFlag } from "@/lib/contracts/feature-flags";
 import { getJobForProject, listInFlightJobs } from "@/lib/jobs/queries";
+import { MCP_APPS_FLAG, mcpAppsFlagSubject } from "@/lib/mcp/apps/flag";
 import { notFound } from "@/lib/mcp/errors";
 import { editionToolListed } from "@/lib/mcp/operations/edition";
 import { mcpActor } from "@/lib/mcp/operations/health";
@@ -164,10 +165,13 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
           projectId: ctx.projectId,
           actor: mcpActor(ctx.auth, ctx.projectId),
         };
+        // Each switch with its gate's subject: MCP Apps for the connection, the others for the project.
+        const subjectOf = (key: CoreFlag) =>
+          key === MCP_APPS_FLAG ? mcpAppsFlagSubject(ctx.auth) : subject;
         const flags = await Promise.all(
           DEPLOYMENT_SWITCHES.map(async ({ key, note }) => ({
             key,
-            enabled: await deps.featureEnabled(key, subject),
+            enabled: await deps.featureEnabled(key, subjectOf(key)),
             note,
           })),
         );
