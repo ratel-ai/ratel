@@ -1,0 +1,27 @@
+# date: 2026-11-21T17:27:52Z
+# ratel-platform: 468db8a (branch beluga/rp-12-manage-cloud-feature)
+# ratel:          a379576a (branch beluga/rp-12-manage-cloud-feature, baseline f6f918d9)
+# cwd: ratel/apps/web
+$ npx tsx --no-wasm-code-gc --test --test-force-exit lib/mcp/operations/account.test.ts
+
+(node:45261) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the demo project does not count toward the project limit, as in the console (8.4205ms)
+✔ Enterprise limits say unlimited rather than serializing as null (1.70375ms)
+✔ plan and subscription state come from the same helpers as the Billing page (11.037ms)
+✔ match quality not on the plan says so (1.353166ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.051334ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (0.587917ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (0.75075ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (1.132292ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (1.178958ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1668.923084
+
+# exit code: 0

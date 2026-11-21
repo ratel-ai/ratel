@@ -1,0 +1,26 @@
+# date: 2026-11-21T17:27:54Z
+# ratel-platform: 468db8a (branch beluga/rp-12-manage-cloud-feature)
+# ratel:          a379576a (branch beluga/rp-12-manage-cloud-feature, baseline f6f918d9)
+# cwd: ratel/apps/web
+$ npx tsx --no-wasm-code-gc --test --test-force-exit lib/platform/experimental-features.test.ts
+
+(node:45306) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ an experimental feature is off with nothing set (0.359083ms)
+✔ its own flag turns it on in either edition, and only it (0.05975ms)
+✔ RATEL_EXPERIMENTAL_FEATURES turns every feature on in the open-source edition (0.045625ms)
+✔ Cloud ignores RATEL_EXPERIMENTAL_FEATURES (0.041375ms)
+✔ without a port, featureEnabled reads the environment as experimentalFeatureEnabled does (0.371166ms)
+✔ with a port, the edition decides each switch for whoever asks (0.424208ms)
+✔ with a port, the FF_* environment value comes first, either way (0.175958ms)
+✔ with a port, a failed read is off (0.162167ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 149.012583
+
+# exit code: 0

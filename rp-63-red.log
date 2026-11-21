@@ -1,0 +1,46 @@
+# RP-63 red run (new tests, fix not applied)
+# date: 2026-11-21T17:27:06Z
+# ratel: f9f32b33 + uncommitted RP-63 tests, baseline f6f918d9 / ratel-platform: 468db8a
+# cwd: ratel/apps/web
+$ npx tsx --no-wasm-code-gc --test --test-force-exit lib/mcp/operations/account.test.ts
+
+(node:42067) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ the demo project does not count toward the project limit, as in the console (14.020917ms)
+✔ Enterprise limits say unlimited rather than serializing as null (1.778708ms)
+✔ plan and subscription state come from the same helpers as the Billing page (12.760167ms)
+✔ match quality not on the plan says so (1.1615ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.942917ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.24075ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.027791ms)
+✖ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (4.92875ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (2.449917ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 8
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3542.010292
+
+✖ failing tests:
+
+test at lib/mcp/operations/account.test.ts:1:7782
+✖ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (4.92875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-12-manage-cloud-feature/.beluga/scratch/ratel/apps/web/lib/mcp/operations/account.test.ts:341:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+# exit code: 1
