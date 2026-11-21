@@ -1,0 +1,124 @@
+# ratel-platform flag tests (cloud-project-entities → FF_AGENTS_PAGES)
+# date: 2026-11-21T19:17:51Z
+# ratel 41d82b21 (beluga/rp-27-agents-mcp-core) · ratel-platform c4332a0 (beluga/rp-25-ship-better-agents)
+# command: cd ee && npx tsx --test-force-exit <file>
+
+## src/access/feature-flags.test.ts
+[PostHog] `isFeatureEnabled` is deprecated and will be removed in a future major version. Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — this consolidates flag evaluation into a single `/flags` request per incoming request.
+✔ FF_EVAL_GATE=1 turns the eval gate on, PostHog unasked (1.106792ms)
+✔ FF_EVAL_GATE=0 turns the eval gate off whatever PostHog says (0.126208ms)
+✔ FF_CLOUD_EVAL_GATE alone does not turn the eval gate on: the core never reads it (0.069417ms)
+✔ the diagnostics menu says the eval gate is on with FF_EVAL_GATE=1 and no FF_CLOUD_EVAL_GATE (0.448125ms)
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:985:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:25)
+    at async RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:16)
+    at async RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:9)
+    at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+    at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13)
+}
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:985:27)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:25)
+    at async RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:16)
+    at async RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:9)
+    at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+    at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (/Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/ee/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.mjs:158:50)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:968:41)
+      at retriable (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.mjs:54:31)
+      at RatelPostHog.fetchWithRetry (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:944:22)
+      at RatelPostHog.sendBatch (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:774:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async RatelPostHog._flushRoute (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:826:17)
+      at async RatelPostHog._flush (file:///Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-25-ship-better-agents/.beluga/scratch/ratel/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.mjs:786:13)
+}
+✔ integration: a PostHog value turns the eval gate on for one organization only (58.239875ms)
+✔ the diagnostics menu shows the PostHog value for the reader's organization (0.249709ms)
+✔ each core switch is its own PostHog flag (0.343667ms)
+✔ PostHog decides for the actor, else the signed-in person, else the organization (0.164875ms)
+✔ without PostHog, or without an answer, a switch reads its default: off (0.150917ms)
+✔ a failed decision is off and reported (0.151458ms)
+✔ the menu shows the eval gate of the displayed project's organization, not the active one (0.472084ms)
+✔ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (0.307417ms)
+✔ with no project displayed, the project flags fall back to the active organization (0.109417ms)
+✔ the menu's project flags are refreshed only for a project the reader belongs to (0.483917ms)
+✔ off a project page, the menu's flags are the active organization's (RP-65) (0.217458ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67.624291
+
+## src/access/flags-registry.test.ts
+✔ FLAGS is the complete flat registry (26.253042ms)
+✔ code declarations are derived from FLAGS: the launch allowlist, the eval gate, catalog drift and MCP Apps (0.538ms)
+✔ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (0.430084ms)
+✔ isPostHogConfigured reflects POSTHOG_KEY (0.318167ms)
+✔ importing the registry without PostHog env does not throw (0.227625ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30.060541
+
+## src/diagnostics/menu-flags.test.ts
+✔ a project path is the project's scope, any other path the active organization's (0.925833ms)
+✔ project B (eval on) then a non-project page of org A (eval off) shows A's value, in the report too (0.221875ms)
+✔ project B then project A with a failed response shows no value of B's (0.123916ms)
+✔ two responses arriving out of order keep the newer scope's values (0.073ms)
+✔ reopening the same scope keeps its values while they refresh (0.065709ms)
+✔ an ingest-scoped flag keeps its own label, not a scope state (0.062459ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4.167708
+

@@ -1,0 +1,309 @@
+{
+  "list_agents": {
+    "ok": true,
+    "operation_id": "list_agents",
+    "data": {
+      "agents": [
+        {
+          "key": "claude",
+          "name": "claude",
+          "runs": 12,
+          "errors": 5,
+          "errorRate": 0.4167,
+          "costUsd": 5.773748,
+          "p95Ms": 378297.5,
+          "firstSeenAt": "2026-11-20T17:21:00.000Z",
+          "lastSeenAt": "2026-11-21T15:21:52.252Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/agents/claude"
+        },
+        {
+          "key": "Explore",
+          "name": "Explore",
+          "runs": 8,
+          "errors": 0,
+          "errorRate": 0,
+          "costUsd": 0.007416,
+          "p95Ms": 17600,
+          "firstSeenAt": "2026-11-20T17:21:08.937Z",
+          "lastSeenAt": "2026-11-21T13:21:20.887Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/agents/Explore"
+        },
+        {
+          "key": "Plan",
+          "name": "Plan",
+          "runs": 4,
+          "errors": 0,
+          "errorRate": 0,
+          "costUsd": 0.030168,
+          "p95Ms": 4340,
+          "firstSeenAt": "2026-11-20T17:21:16.547Z",
+          "lastSeenAt": "2026-11-21T13:21:20.247Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/agents/Plan"
+        }
+      ],
+      "handoffs": [
+        {
+          "from": "claude",
+          "to": "Explore",
+          "fromName": "claude",
+          "toName": "Explore",
+          "count": 8
+        },
+        {
+          "from": "Explore",
+          "to": "Plan",
+          "fromName": "Explore",
+          "toName": "Plan",
+          "count": 4
+        }
+      ],
+      "environments": []
+    },
+    "window": {
+      "since": "2026-11-19T00:00:00.000Z",
+      "until": "2026-11-22T00:00:00.000Z"
+    }
+  },
+  "get_agent": {
+    "ok": true,
+    "operation_id": "get_agent",
+    "data": {
+      "key": "claude",
+      "name": "claude",
+      "runs": 12,
+      "errors": 5,
+      "errorRate": 0.4167,
+      "costUsd": 5.773748,
+      "p95Ms": 378297.5,
+      "firstSeenAt": "2026-11-20T17:21:00.000Z",
+      "lastSeenAt": "2026-11-21T15:21:52.252Z",
+      "tools": [
+        {
+          "tool": "Bash:git",
+          "calls": 27,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 9120
+        },
+        {
+          "tool": "Bash:pnpm",
+          "calls": 15,
+          "errors": 3,
+          "errorRate": 0.2,
+          "p95Ms": 4200
+        },
+        {
+          "tool": "mcp__beluga_board__task_update",
+          "calls": 15,
+          "errors": 3,
+          "errorRate": 0.2,
+          "p95Ms": 52
+        },
+        {
+          "tool": "Edit",
+          "calls": 12,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 15
+        },
+        {
+          "tool": "mcp__beluga_board__task_get",
+          "calls": 12,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 45
+        },
+        {
+          "tool": "Read",
+          "calls": 12,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 12
+        },
+        {
+          "tool": "Write",
+          "calls": 12,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 18
+        },
+        {
+          "tool": "Agent",
+          "calls": 8,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 17600
+        },
+        {
+          "tool": "AskUserQuestion",
+          "calls": 6,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 300030
+        },
+        {
+          "tool": "ExitPlanMode",
+          "calls": 6,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 29570
+        },
+        {
+          "tool": "Skill",
+          "calls": 6,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 8
+        },
+        {
+          "tool": "Bash:gh",
+          "calls": 4,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 1300
+        },
+        {
+          "tool": "mcp__slack__send_message",
+          "calls": 2,
+          "errors": 2,
+          "errorRate": 1,
+          "p95Ms": 30000
+        }
+      ],
+      "mcpServers": [
+        {
+          "server": "beluga_board",
+          "calls": 27,
+          "errors": 3
+        },
+        {
+          "server": "slack",
+          "calls": 2,
+          "errors": 2
+        }
+      ],
+      "callers": [],
+      "callees": [
+        {
+          "from": "claude",
+          "to": "Explore",
+          "fromName": "claude",
+          "toName": "Explore",
+          "count": 8
+        }
+      ],
+      "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/agents/claude",
+      "tracesHref": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/traces/turns?facetAgent=claude"
+    },
+    "window": {
+      "since": "2026-11-19T00:00:00.000Z",
+      "until": "2026-11-22T00:00:00.000Z"
+    }
+  },
+  "list_mcp_servers": {
+    "ok": true,
+    "operation_id": "list_mcp_servers",
+    "data": {
+      "servers": [
+        {
+          "key": "beluga_board",
+          "role": "consumed",
+          "name": "beluga_board",
+          "version": null,
+          "calls": 27,
+          "errors": 3,
+          "errorRate": 0.1111,
+          "p95Ms": 52,
+          "sessions": 12,
+          "firstSeenAt": "2026-11-20T17:21:05.000Z",
+          "lastSeenAt": "2026-11-21T15:21:19.800Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/mcp/beluga_board?role=consumed"
+        },
+        {
+          "key": "context7",
+          "role": "consumed",
+          "name": "context7",
+          "version": null,
+          "calls": 4,
+          "errors": 0,
+          "errorRate": 0,
+          "p95Ms": 640,
+          "sessions": 4,
+          "firstSeenAt": "2026-11-20T17:21:20.247Z",
+          "lastSeenAt": "2026-11-21T13:21:20.247Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/mcp/context7?role=consumed"
+        },
+        {
+          "key": "slack",
+          "role": "consumed",
+          "name": "slack",
+          "version": null,
+          "calls": 2,
+          "errors": 2,
+          "errorRate": 1,
+          "p95Ms": 30000,
+          "sessions": 2,
+          "firstSeenAt": "2026-11-21T03:21:20.220Z",
+          "lastSeenAt": "2026-11-21T15:21:19.852Z",
+          "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/mcp/slack?role=consumed"
+        }
+      ],
+      "environments": []
+    },
+    "window": {
+      "since": "2026-11-19T00:00:00.000Z",
+      "until": "2026-11-22T00:00:00.000Z"
+    }
+  },
+  "get_mcp_server": {
+    "ok": true,
+    "operation_id": "get_mcp_server",
+    "data": {
+      "key": "beluga_board",
+      "role": "consumed",
+      "name": "beluga_board",
+      "version": null,
+      "calls": 27,
+      "errors": 3,
+      "errorRate": 0.1111,
+      "p95Ms": 52,
+      "sessions": 12,
+      "firstSeenAt": "2026-11-20T17:21:05.000Z",
+      "lastSeenAt": "2026-11-21T15:21:19.800Z",
+      "roles": [
+        "consumed"
+      ],
+      "tools": [
+        {
+          "tool": "task_update",
+          "calls": 15,
+          "errors": 3,
+          "errorRate": 0.2,
+          "p50Ms": 52,
+          "p95Ms": 52
+        },
+        {
+          "tool": "task_get",
+          "calls": 12,
+          "errors": 0,
+          "errorRate": 0,
+          "p50Ms": 45,
+          "p95Ms": 45
+        }
+      ],
+      "agents": [
+        {
+          "agent": "claude",
+          "calls": 27
+        }
+      ],
+      "href": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/mcp/beluga_board?role=consumed",
+      "tracesHref": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/traces/turns?facetServer=beluga_board",
+      "catalogHref": "/project/76f22cfc-78fb-8646-897f-12c2401c1746/catalogs?q=beluga_board"
+    },
+    "window": {
+      "since": "2026-11-19T00:00:00.000Z",
+      "until": "2026-11-22T00:00:00.000Z"
+    }
+  }
+}

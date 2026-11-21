@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Agents and MCP servers — proposal mocks</title>
+<style>
+  :root {
+    --bg: #0b0b0b; --panel: #111111; --raise: #161616; --line: #232323; --line-2: #2e2e2e;
+    --fg: #ededed; --fg-2: #a3a3a3; --fg-3: #6b6b6b;
+    --accent: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --brand: #f04438;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "Geist", "SF Pro Text", -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; font-family: var(--sans); color: var(--fg); font-size: 13px; -webkit-font-smoothing: antialiased; }
+  .frame { width: 1440px; display: grid; grid-template-columns: 240px 1fr; background: var(--bg); margin-bottom: 40px; min-height: 900px; }
+  .frame-label { width: 1440px; padding: 14px 20px; color: var(--fg-3); font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  /* sidebar */
+  aside { border-right: 1px solid var(--line); padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .proj { display: flex; gap: 10px; align-items: center; padding: 6px 8px 12px; }
+  .proj b { display: block; font-size: 13px; } .proj small { color: var(--fg-2); font-size: 12px; }
+  .logo { width: 22px; height: 14px; border-radius: 7px 7px 2px 7px; background: var(--fg); }
+  .search { border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 10px; color: var(--fg-3); margin-bottom: 14px; display: flex; justify-content: space-between; }
+  .nav-h { color: var(--fg-3); font-size: 12px; padding: 10px 8px 4px; }
+  .nav { padding: 7px 8px; color: var(--fg-2); border-radius: 6px; }
+  .nav.sub { padding-left: 38px; position: relative; }
+  .nav.sub::before { content: ""; position: absolute; left: 28px; top: 13px; width: 4px; height: 4px; border-radius: 50%; background: var(--fg-3); }
+  .nav.on { background: #1c1c1c; color: var(--fg); }
+  .nav.on::before { background: var(--brand); }
+  .nav .new { font: 600 9px var(--mono); color: var(--accent); border: 1px solid #1e3a8a; border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
+  /* main */
+  main { min-width: 0; }
+  header.top { height: 64px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 32px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
+  h1 .crumb { color: var(--fg-3); font-weight: 500; }
+  .range { border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 12px; line-height: 1.2; }
+  .range small { display: block; font: 10px var(--mono); color: var(--fg-3); }
+  .content { padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 24px; }
+  .row { display: flex; gap: 12px; align-items: center; }
+  .btn { border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 10px; color: var(--fg); background: var(--raise); font-size: 12px; white-space: nowrap; }
+  .btn.ghost { background: none; color: var(--fg-2); }
+  .chip { font: 500 11px var(--sans); color: var(--fg-2); border: 1px solid var(--line-2); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .chip.entry { color: #93c5fd; border-color: #1e3a8a; background: #0b1a33; }
+  .chip.bad { color: #fca5a5; border-color: #7f1d1d; background: #2a0d0d; }
+  .chip.warn { color: #fcd34d; border-color: #78350f; background: #261a06; }
+  .chip.ok { color: #86efac; border-color: #14532d; background: #071a0e; }
+  .filters { display: flex; gap: 8px; align-items: center; }
+  .input { border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 10px; color: var(--fg-3); width: 240px; }
+  .spacer { flex: 1; }
+  /* kpis */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .kpi { padding: 14px 16px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+  .kpi:last-child { border-right: 0; }
+  .kpi label { color: var(--fg-2); font-size: 12px; }
+  .kpi .v { font-size: 24px; font-weight: 600; letter-spacing: -.02em; display: flex; align-items: baseline; gap: 8px; }
+  .kpi .d { font: 11px var(--mono); color: var(--fg-3); }
+  .kpi .d.up-bad { color: var(--bad); } .kpi .d.down-good { color: var(--ok); }
+  .kpi svg { height: 24px; width: 100%; }
+  /* tables */
+  h2 { font-size: 14px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+  h2 small { color: var(--fg-3); font-weight: 400; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: right; color: var(--fg-3); font-weight: 500; font-size: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+  td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.hover td { background: #141414; }
+  td .name { font-weight: 500; }
+  td .sub { color: var(--fg-3); font-size: 11px; display: block; margin-top: 2px; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12px; }
+  .tree { color: var(--line-2); font-family: var(--mono); margin-right: 6px; }
+  .bar { display: inline-block; width: 50px; height: 6px; border-radius: 3px; background: #1d1d1d; vertical-align: middle; margin-left: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--fg-3); }
+  .bar.bad i { background: var(--bad); } .bar.warn i { background: var(--warn); } .bar.acc i { background: var(--accent); }
+  .err { display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--ok); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px #3b0d0d; } .dot.warn { background: var(--warn); }
+  .spark { width: 60px; height: 20px; vertical-align: middle; }
+  .grouprow td { color: var(--fg-2); font-size: 12px; background: #0e0e0e; padding: 7px 12px; }
+  .grouprow a { color: var(--accent); text-decoration: none; }
+  /* layout helpers */
+  .split { display: grid; grid-template-columns: minmax(0,1fr) 330px; gap: 24px; align-items: start; }
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .card .hd { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+  .card .bd { padding: 16px; }
+  .legend { display: flex; gap: 14px; color: var(--fg-3); font-size: 11px; }
+  .legend span { display: inline-flex; gap: 5px; align-items: center; }
+  .note { border-left: 2px solid var(--accent); padding: 2px 0 2px 10px; color: var(--fg-2); font-size: 12px; }
+  .ann { position: relative; }
+  .pin { position: absolute; width: 20px; height: 20px; border-radius: 50%; background: #facc15; color: #000; font: 700 11px var(--sans); display: grid; place-items: center; box-shadow: 0 0 0 3px rgba(250,204,21,.25); z-index: 5; }
+  .muted { color: var(--fg-3); }
+  .menu { position: absolute; right: 0; top: 40px; width: 300px; background: var(--raise); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 20px 40px rgba(0,0,0,.6); padding: 14px; display: flex; flex-direction: column; gap: 12px; z-index: 4; }
+  .menu label { color: var(--fg-2); font-size: 12px; display: block; margin-bottom: 6px; }
+  .menu .field { border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 10px; background: var(--bg); }
+  .menu hr { border: 0; border-top: 1px solid var(--line); }
+  .flow { display: grid; grid-template-columns: 1fr 80px 1fr 80px 1fr; align-items: center; }
+  .node { border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px; background: var(--raise); }
+  .node.me { border-color: var(--accent); background: #0b1a33; }
+  .node b { display: block; } .node small { color: var(--fg-3); font-size: 11px; }
+  .arrow { height: 1px; background: var(--fg-3); position: relative; margin: 0 6px; }
+  .arrow::after { content: ""; position: absolute; right: -1px; top: -4px; border: 4px solid transparent; border-left: 6px solid var(--fg-3); }
+  .arrow span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font: 11px var(--mono); color: var(--fg-2); }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .errline { font: 12px var(--mono); color: #fca5a5; }
+</style>
+</head>
+<body>
+
+<!-- ============ FRAME 1: AGENTS LIST ============ -->
+<div class="frame-label">A · Agents — list with hierarchy, health and map</div>
+<div class="frame" id="f-agents">
+  <aside>
+    <div class="proj"><span class="logo"></span><div><b>Coding Agent</b><small>Local Developer</small></div></div>
+    <div class="search"><span>Search…</span><span class="mono">⌘K</span></div>
+    <div class="nav-h">Monitor</div>
+    <div class="nav">Overview</div><div class="nav">Agent health</div><div class="nav">Traces</div>
+    <div class="nav sub">All traces</div><div class="nav sub on">Agents</div><div class="nav sub">MCP servers</div>
+    <div class="nav-h">Insights</div><div class="nav">Tasks</div><div class="nav">Intents</div>
+    <div class="nav-h">Improve</div><div class="nav">Improvements</div>
+    <div class="nav-h">Ship</div><div class="nav">Ship</div>
+  </aside>
+  <main>
+    <header class="top"><h1>Agents</h1><div class="range">Last 30 days<small>Oct 23 – Nov 21</small></div></header>
+    <div class="content">
+      <div class="kpis ann">
+        <span class="pin" style="left:-26px;top:-10px">1</span>
+        <div class="kpi"><label>Agents</label><div class="v">3</div><div class="d">1 entry · 2 sub-agents</div></div>
+        <div class="kpi"><label>Runs</label><div class="v">12</div><svg viewBox="0 0 100 24"><polyline fill="none" stroke="#3b82f6" stroke-width="1.5" points="0,20 15,18 30,19 45,12 60,14 75,8 90,10 100,4"/></svg></div>
+        <div class="kpi"><label>Cost</label><div class="v">$5.81</div><div class="d">99% claude</div></div>
+        <div class="kpi"><label>Failed runs</label><div class="v" style="color:#fca5a5">5</div><div class="d up-bad">42% of entry runs</div></div>
+        <div class="kpi"><label>Handoffs</label><div class="v">12</div><div class="d">claude → Explore → Plan</div></div>
+      </div>
+
+      <div class="filters">
+        <span class="input">Filter agents…</span>
+        <span class="btn ghost">Environment: all ▾</span>
+        <span class="spacer"></span>
+        <span class="btn ghost">Hidden (0)</span>
+      </div>
+
+      <div class="split">
+        <div class="ann">
+          <span class="pin" style="left:-10px;top:30px">2</span>
+          <table>
+            <thead><tr><th>Agent</th><th>Runs</th><th>Trend</th><th>Cost</th><th>Error rate</th><th>p95 run</th><th>Last seen</th></tr></thead>
+            <tbody>
+              <tr class="hover"><td><span class="name">claude</span> <span class="chip entry">entry</span><span class="sub">calls 2 MCP servers · hands off to Explore</span></td><td>12</td>
+                <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#6b6b6b" stroke-width="1.5" points="0,16 14,15 28,16 42,9 56,11 70,6 84,3"/></svg></td>
+                <td>$5.77<span class="bar acc"><i style="width:99%"></i></span></td>
+                <td><span class="err"><span class="chip bad">42% · 5 failed</span></span></td><td>6 min 18 s</td><td>2 h ago</td></tr>
+              <tr><td><span class="tree">└─</span><span class="name">Explore</span> <span class="chip">sub-agent</span><span class="sub" style="margin-left:26px">from claude ×8</span></td><td>8</td>
+                <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#6b6b6b" stroke-width="1.5" points="0,16 14,16 28,12 42,12 56,10 70,10 84,8"/></svg></td>
+                <td>$0.01<span class="bar acc"><i style="width:1%"></i></span></td><td><span class="err"><span class="dot"></span>0%</span></td><td>18 s</td><td>4 h ago</td></tr>
+              <tr><td><span class="tree">&nbsp;&nbsp;&nbsp;└─</span><span class="name">Plan</span> <span class="chip">sub-agent</span><span class="sub" style="margin-left:44px">from Explore ×4</span></td><td>4</td>
+                <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#6b6b6b" stroke-width="1.5" points="0,18 14,18 28,14 42,14 56,14 70,12 84,12"/></svg></td>
+                <td>$0.03<span class="bar acc"><i style="width:1%"></i></span></td><td><span class="err"><span class="dot"></span>0%</span></td><td>4.3 s</td><td>4 h ago</td></tr>
+            </tbody>
+          </table>
+          <p class="note" style="margin-top:14px">Rows nest by handoff: an entry agent first, then the agents it hands work to. Sort by any column flattens the tree. Click a row for the agent.</p>
+        </div>
+
+        <div class="card ann">
+          <span class="pin" style="left:-10px;top:-10px">3</span>
+          <div class="hd"><h2>Handoff map</h2><div class="legend"><span><span class="dot"></span>healthy</span><span><span class="dot bad"></span>&gt;10% errors</span></div></div>
+          <div class="bd">
+            <svg viewBox="0 0 348 230" width="100%">
+              <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#6b6b6b"/></marker></defs>
+              <path d="M110,115 C150,115 150,115 186,115" stroke="#6b6b6b" stroke-width="3.2" fill="none" marker-end="url(#a)"/>
+              <text x="148" y="106" fill="#a3a3a3" font-family="Menlo, monospace" font-size="11" text-anchor="middle">8</text>
+              <path d="M262,115 C280,115 285,115 300,115" stroke="#6b6b6b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+              <text x="281" y="106" fill="#a3a3a3" font-family="Menlo, monospace" font-size="11" text-anchor="middle">4</text>
+              <rect x="10" y="92" width="100" height="46" rx="8" fill="#2a0d0d" stroke="#ef4444"/>
+              <text x="60" y="112" fill="#ededed" font-family="-apple-system, Helvetica, sans-serif" font-size="12" font-weight="600" text-anchor="middle">claude</text>
+              <text x="60" y="128" fill="#fca5a5" font-family="Menlo, monospace" font-size="10" text-anchor="middle">12 runs · 42%</text>
+              <rect x="188" y="96" width="74" height="38" rx="8" fill="#161616" stroke="#2e2e2e"/>
+              <text x="225" y="113" fill="#ededed" font-family="-apple-system, Helvetica, sans-serif" font-size="12" font-weight="600" text-anchor="middle">Explore</text>
+              <text x="225" y="127" fill="#6b6b6b" font-family="Menlo, monospace" font-size="10" text-anchor="middle">8 runs</text>
+              <rect x="302" y="100" width="44" height="30" rx="8" fill="#161616" stroke="#2e2e2e"/>
+              <text x="324" y="119" fill="#ededed" font-family="-apple-system, Helvetica, sans-serif" font-size="11" font-weight="600" text-anchor="middle">Plan</text>
+            </svg>
+            <p class="muted" style="font-size:12px;margin-top:8px">Left to right: who hands work to whom. Box size = runs. Edge width = handoffs. Click a node to open the agent. Hidden when no agent hands off.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ FRAME 2: AGENT DETAIL ============ -->
+<div class="frame-label">B · Agent detail — status first, corrections in a menu, tools grouped by MCP server</div>
+<div class="frame" id="f-agent">
+  <aside>
+    <div class="proj"><span class="logo"></span><div><b>Coding Agent</b><small>Local Developer</small></div></div>
+    <div class="search"><span>Search…</span><span class="mono">⌘K</span></div>
+    <div class="nav-h">Monitor</div>
+    <div class="nav">Overview</div><div class="nav">Agent health</div><div class="nav">Traces</div>
+    <div class="nav sub">All traces</div><div class="nav sub on">Agents</div><div class="nav sub">MCP servers</div>
+  </aside>
+  <main>
+    <header class="top">
+      <h1><span class="crumb">Agents /</span> claude <span class="chip entry">entry</span><span class="chip bad">42% errors</span></h1>
+      <div class="row" style="position:relative">
+        <span class="btn ghost">Open in Traces</span>
+        <span class="btn ann">Edit agent ▾<span class="pin" style="right:-10px;top:-12px">4</span></span>
+        <div class="range">Last 30 days<small>Oct 23 – Nov 21</small></div>
+        <div class="menu" style="right:150px;top:52px">
+          <div><label>Display name</label><div class="field">claude <span class="muted">· detected “claude”</span></div></div>
+          <div><label>Same agent as</label><div class="field muted">Choose an agent… ▾</div></div>
+          <hr><div class="row" style="justify-content:space-between"><span class="muted" style="font-size:12px">Hide from lists</span><span class="btn ghost">Hide agent</span></div>
+          <p class="muted" style="font-size:11px">Changes only how the agent shows. Detection stays automatic. Admins only.</p>
+        </div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="kpis">
+        <div class="kpi"><label>Runs</label><div class="v">12</div><div class="d">+4 vs prev. 30 d</div></div>
+        <div class="kpi"><label>Cost</label><div class="v">$5.77</div><div class="d">$0.48 / run</div></div>
+        <div class="kpi"><label>Error rate</label><div class="v" style="color:#fca5a5">42%</div><div class="d up-bad">5 failed · view failures →</div></div>
+        <div class="kpi"><label>p95 run</label><div class="v">6 min 18 s</div><div class="d">p50 2 min 4 s</div></div>
+        <div class="kpi"><label>Last seen</label><div class="v">2 h ago</div><div class="d">first seen yesterday</div></div>
+      </div>
+
+      <div class="card ann"><span class="pin" style="left:-10px;top:-10px">5</span>
+        <div class="hd"><h2>Flow <small>who hands work to claude, and to whom claude hands work</small></h2></div>
+        <div class="bd flow">
+          <div class="node" style="border-style:dashed"><b class="muted">No caller</b><small>entry agent: runs start here</small></div>
+          <div class="arrow" style="opacity:.3"></div>
+          <div class="node me"><b>claude</b><small>12 runs · 2 MCP servers</small></div>
+          <div class="arrow"><span>×8</span></div>
+          <div class="node"><b>Explore</b><small>8 runs · 0% errors</small></div>
+        </div>
+      </div>
+
+      <div class="ann"><span class="pin" style="left:-10px;top:-6px">6</span>
+        <h2 style="margin-bottom:8px">Tools <small>13 tools · 2 from MCP servers</small></h2>
+        <table>
+          <thead><tr><th>Tool</th><th>Calls</th><th>Errors</th><th>Error rate</th><th>p95</th></tr></thead>
+          <tbody>
+            <tr class="grouprow"><td colspan="5">MCP · <a href="#">beluga_board ↗</a> &nbsp;<span class="muted">27 calls · 3 errors</span></td></tr>
+            <tr><td class="mono">task_update</td><td>15</td><td>3</td><td><span class="err">20%<span class="bar warn"><i style="width:20%"></i></span></span></td><td>52 ms</td></tr>
+            <tr><td class="mono">task_get</td><td>12</td><td>0</td><td><span class="err">0%<span class="bar"><i style="width:0"></i></span></span></td><td>45 ms</td></tr>
+            <tr class="grouprow"><td colspan="5">MCP · <a href="#">slack ↗</a> &nbsp;<span class="muted">2 calls · 2 errors</span></td></tr>
+            <tr><td class="mono">send_message <span class="errline" style="margin-left:10px">timeout after 30 s</span></td><td>2</td><td>2</td><td><span class="err">100%<span class="bar bad"><i style="width:100%"></i></span></span></td><td>30 s</td></tr>
+            <tr class="grouprow"><td colspan="5">Built-in</td></tr>
+            <tr><td class="mono">Bash:git</td><td>27</td><td>0</td><td><span class="err">0%<span class="bar"><i style="width:0"></i></span></span></td><td>9.1 s</td></tr>
+            <tr><td class="mono">Bash:pnpm</td><td>15</td><td>3</td><td><span class="err">20%<span class="bar warn"><i style="width:20%"></i></span></span></td><td>4.2 s</td></tr>
+            <tr><td class="mono">Edit · Read · Write · +6 more</td><td>62</td><td>0</td><td><span class="err">0%<span class="bar"><i style="width:0"></i></span></span></td><td>5 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ FRAME 3: MCP LIST ============ -->
+<div class="frame-label">C · MCP servers — status, reach and the failing server first</div>
+<div class="frame" id="f-mcp">
+  <aside>
+    <div class="proj"><span class="logo"></span><div><b>Coding Agent</b><small>Local Developer</small></div></div>
+    <div class="search"><span>Search…</span><span class="mono">⌘K</span></div>
+    <div class="nav-h">Monitor</div>
+    <div class="nav">Overview</div><div class="nav">Agent health</div><div class="nav">Traces</div>
+    <div class="nav sub">All traces</div><div class="nav sub">Agents</div><div class="nav sub on">MCP servers</div>
+  </aside>
+  <main>
+    <header class="top"><h1>MCP servers</h1><div class="range">Last 30 days<small>Oct 23 – Nov 21</small></div></header>
+    <div class="content">
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><label>Servers</label><div class="v">3</div><div class="d">1 failing</div></div>
+        <div class="kpi"><label>Calls</label><div class="v">33</div><div class="d">18 sessions</div></div>
+        <div class="kpi"><label>Failed calls</label><div class="v" style="color:#fca5a5">5</div><div class="d up-bad">15% of calls</div></div>
+        <div class="kpi"><label>Slowest p95</label><div class="v">30 s</div><div class="d">slack</div></div>
+      </div>
+      <div class="filters"><span class="input">Filter servers…</span><span class="btn ghost">Status: all ▾</span><span class="spacer"></span></div>
+      <div class="ann"><span class="pin" style="left:-10px;top:30px">7</span>
+        <table>
+          <thead><tr><th>Server</th><th>Status</th><th>Calls</th><th>Trend</th><th>Error rate</th><th>p95</th><th>Tools</th><th>Agents</th><th>Last seen</th></tr></thead>
+          <tbody>
+            <tr class="hover"><td><span class="name">slack</span><span class="sub errline">send_message: timeout after 30 s</span></td><td><span class="chip bad">failing</span></td><td>2</td>
+              <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#ef4444" stroke-width="1.5" points="0,18 60,18 70,10 84,10"/></svg></td>
+              <td><span class="err">100%<span class="bar bad"><i style="width:100%"></i></span></span></td><td>30 s</td><td>1</td><td>claude</td><td>2 h ago</td></tr>
+            <tr><td><span class="name">beluga_board</span><span class="sub">task_update, task_get</span></td><td><span class="chip warn">degraded</span></td><td>27</td>
+              <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#6b6b6b" stroke-width="1.5" points="0,16 14,14 28,15 42,9 56,10 70,6 84,4"/></svg></td>
+              <td><span class="err">11%<span class="bar warn"><i style="width:11%"></i></span></span></td><td>52 ms</td><td>2</td><td>claude</td><td>2 h ago</td></tr>
+            <tr><td><span class="name">context7</span><span class="sub">resolve-library-id, query-docs</span></td><td><span class="chip ok">healthy</span></td><td>4</td>
+              <td><svg class="spark" viewBox="0 0 84 20"><polyline fill="none" stroke="#6b6b6b" stroke-width="1.5" points="0,18 28,18 42,12 56,12 84,14"/></svg></td>
+              <td><span class="err">0%<span class="bar"><i style="width:0"></i></span></span></td><td>640 ms</td><td>2</td><td>claude</td><td>4 h ago</td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin-top:14px">Default sort: status, then calls. “Seen from” shows as a column only when servers differ (agent spans vs server spans). Thresholds: failing ≥ 50%, degraded ≥ 5% errors.</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ FRAME 4: MCP DETAIL ============ -->
+<div class="frame-label">D · MCP server detail — what fails, for whom, with the last errors (error text illustrative)</div>
+<div class="frame" id="f-mcp-detail">
+  <aside>
+    <div class="proj"><span class="logo"></span><div><b>Coding Agent</b><small>Local Developer</small></div></div>
+    <div class="search"><span>Search…</span><span class="mono">⌘K</span></div>
+    <div class="nav-h">Monitor</div>
+    <div class="nav">Overview</div><div class="nav">Agent health</div><div class="nav">Traces</div>
+    <div class="nav sub">All traces</div><div class="nav sub">Agents</div><div class="nav sub on">MCP servers</div>
+  </aside>
+  <main>
+    <header class="top">
+      <h1><span class="crumb">MCP servers /</span> beluga_board <span class="chip warn">degraded</span></h1>
+      <div class="row"><span class="btn ghost">Open in Traces</span><span class="btn ghost">Clients</span><span class="btn ghost">Catalog</span><div class="range">Last 30 days<small>Oct 23 – Nov 21</small></div></div>
+    </header>
+    <div class="content">
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi"><label>Calls</label><div class="v">27</div><div class="d">12 sessions · 1 agent</div></div>
+        <div class="kpi"><label>Error rate</label><div class="v" style="color:#fcd34d">11%</div><div class="d">3 failed · all task_update</div></div>
+        <div class="kpi"><label>p95 latency</label><div class="v">52 ms</div><div class="d">p50 48 ms</div></div>
+        <div class="kpi"><label>Last seen</label><div class="v">2 h ago</div><div class="d">first seen yesterday</div></div>
+      </div>
+      <div class="split">
+        <div class="ann"><span class="pin" style="left:-10px;top:-6px">8</span>
+          <h2 style="margin-bottom:8px">Tools <small>sorted by errors</small></h2>
+          <table>
+            <thead><tr><th>Tool</th><th>Calls</th><th>Error rate</th><th>p50</th><th>p95</th><th>Callers</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">task_update<span class="sub errline">“in_review is refused while a criterion is open” ×3</span></td><td>15</td><td><span class="err">20%<span class="bar warn"><i style="width:20%"></i></span></span></td><td>50 ms</td><td>52 ms</td><td>claude</td></tr>
+              <tr><td class="mono">task_get</td><td>12</td><td><span class="err">0%<span class="bar"><i style="width:0"></i></span></span></td><td>44 ms</td><td>45 ms</td><td>claude</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="stack">
+          <div class="card"><div class="hd"><h2>Calling agents</h2></div><div class="bd stack">
+            <div class="row" style="justify-content:space-between"><span><b>claude</b> <span class="chip entry">entry</span></span><span class="mono">27 · 100%<span class="bar acc"><i style="width:100%"></i></span></span></div>
+          </div></div>
+          <div class="card ann"><span class="pin" style="left:-10px;top:-10px">9</span><div class="hd"><h2>Recent errors</h2><span class="btn ghost">All in Traces →</span></div><div class="bd stack">
+            <div><div class="errline">task_update · refused: criterion open</div><div class="muted mono" style="font-size:11px">claude · 2 h ago · trace 4f1c…</div></div>
+            <div><div class="errline">task_update · refused: criterion open</div><div class="muted mono" style="font-size:11px">claude · 6 h ago · trace 9a02…</div></div>
+            <div><div class="errline">task_update · refused: criterion open</div><div class="muted mono" style="font-size:11px">claude · yesterday · trace 11be…</div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

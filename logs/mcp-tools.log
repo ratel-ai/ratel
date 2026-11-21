@@ -1,0 +1,94 @@
+# The four MCP tools: list_agents, get_agent, list_mcp_servers, get_mcp_server
+# date: 2026-11-21T19:15:49Z
+# ratel 41d82b21 (beluga/rp-27-agents-mcp-core) · ratel-platform c4332a0 (beluga/rp-25-ship-better-agents)
+# command: cd apps/web && npx tsx --no-wasm-code-gc --test-force-exit <file> (one file at a time)
+
+## lib/mcp/operations/agents.test.ts
+✔ list_agents lists the agents with their stats, the handoffs, the environments and each page link (10.683958ms)
+✔ get_agent returns the tools, the MCP servers, the handoffs and the filtered Traces link (1.009333ms)
+✔ get_agent of an agent with no run in the window is not found (0.550042ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (0.855209ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15.196583
+
+## lib/mcp/operations/mcp-servers.test.ts
+✔ list_mcp_servers lists the servers with their stats, the environments and each page link (8.325417ms)
+✔ get_mcp_server returns the tools, the calling agents and no protocol or transport when none is kept (1.065083ms)
+✔ get_mcp_server of a server with no call in the window is not found (0.483917ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (0.769791ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12.809375
+
+## lib/mcp/operations/entities-gate.test.ts
+✔ with FF_AGENTS_PAGES off, every Agents and MCP servers tool refuses as forbidden (10.835ms)
+✔ with FF_AGENTS_PAGES on, the tools read (6.26475ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19.163292
+
+## lib/mcp/operations/contract.test.ts
+✔ ids are unique, snake_case, and stable-looking (0.510417ms)
+✔ every operation is discoverable: title, description, known domain (0.164292ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.232667ms)
+✔ every params schema converts to JSON Schema for discovery (10.501666ms)
+✔ write operations are exactly those declaring mutates (0.35675ms)
+✔ read-only assembly drops every mutating operation (5.37775ms)
+✔ the operation contract matches the reviewed snapshot (6.477208ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 25.953417
+
+## lib/mcp/operations/compatibility.test.ts
+✔ no tool a connected client knows about has disappeared (0.38525ms)
+✔ no tool has gained a required parameter (0.083542ms)
+✔ adding a tool does not require touching this file (0.071542ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2.392584
+
+## lib/mcp/operations/account.test.ts
+✔ the demo project does not count toward the project limit, as in the console (27.209666ms)
+✔ Enterprise limits say unlimited rather than serializing as null (3.8785ms)
+✔ plan and subscription state come from the same helpers as the Billing page (55.462208ms)
+✔ match quality not on the plan says so (2.161ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (2.611583ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.504459ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (2.013459ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.400333ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (2.390708ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 105.749792
+

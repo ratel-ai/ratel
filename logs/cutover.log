@@ -1,0 +1,39 @@
+# ratel-platform cutover integration test (no drift with core 0043 = upstream 0108)
+# date: 2026-11-21T19:17:22Z
+# ratel 41d82b21 (beluga/rp-27-agents-mcp-core) · ratel-platform c4332a0 (beluga/rp-25-ship-better-agents)
+# command: cd ee && npx tsx --test-force-exit src/db/cutover.integration.test.ts
+
+▶ cutover on synthetic production
+  ✔ records both journals, drops the projects key, keeps the data, and the migrators then find nothing to apply (5119.24225ms)
+  ✔ runs the unlisted migration older than a recorded one, which the migrator would skip (2325.708875ms)
+  ✔ rollback refuses once a newer migration ran (2272.695333ms)
+  ✔ fails on drift and changes nothing (2043.061875ms)
+  ✔ fails when production ran a migration newer than the one it was compared with (890.437084ms)
+  ✔ rollback restores the key and ratel-cloud's journal, once (990.348041ms)
+  ✔ rollback refuses when a table the cutover created has rows (1098.424667ms)
+  ✔ carries ratel-cloud's sample-project marker into sample_project_seeds, once (1337.181583ms)
+  ✔ rollback drops the carried markers, which ratel-cloud's column still holds (842.569542ms)
+  ✔ keys: seals every plaintext ratel-cloud holds, leaves key_plaintext, and a second run seals nothing (975.623583ms)
+  ✔ keys: refuses before the private migrators made api_key_secrets (942.034833ms)
+  ✔ rollback after the keys step drops api_key_secrets; ratel-cloud still holds every plaintext (1543.687458ms)
+  ✔ rollback refuses while a key made after the switch exists only sealed (1217.634541ms)
+  ✔ clear: a dry run changes nothing; applied, it empties only what opens to the same plaintext (1195.409458ms)
+  ✔ rollback refuses projects whose organization is gone (1178.472708ms)
+✔ cutover on synthetic production (23983.240875ms)
+﹣ cutover on ratel-cloud's migrations (0.0635ms) # SKIP
+✔ the production lists name real migrations, in order, and leave only 0022 out (0.292333ms)
+✔ ratel-cloud's Evals tables are not drift; a truly unknown table still is (2244.943333ms)
+✔ ratel-cloud's 0106–0110 on top of 0105 are not drift (920.242459ms)
+✔ the Evals tables ratel-cloud's 0088–0105 create stay in place, listed as unported (0.281666ms)
+✔ createdTables reads CREATE TABLE in drizzle's styles (0.060625ms)
+✔ an unlisted migration that creates a table production has is named (512.054084ms)
+✔ a newer ALTER of a table production has is named (0.187875ms)
+✔ newerAlters has nothing to say today (5.025042ms)
+ℹ tests 23
+ℹ suites 2
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 27669.935583

@@ -1,0 +1,8 @@
+# upstream: 1ce9942f (ratel-cloud), core: 41d82b21 (ratel)
+# seed: ratel-cloud scripts/seed-coding-agent.mts, project 76f22cfc-78fb-8646-897f-12c2401c1746
+# window: 2026-11-19T00:00:00.000Z .. 2026-11-22T00:00:00.000Z, agent claude, server beluga_board
+# ignored fields: none
+list_agents: IDENTICAL (true)
+get_agent: IDENTICAL (true)
+list_mcp_servers: IDENTICAL (true)
+get_mcp_server: IDENTICAL (true)

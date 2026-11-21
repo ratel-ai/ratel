@@ -1,0 +1,176 @@
+# Agents and MCP servers pages: flag wiring, view models, queries
+# date: 2026-11-21T19:16:02Z
+# ratel 41d82b21 (beluga/rp-27-agents-mcp-core) · ratel-platform c4332a0 (beluga/rp-25-ship-better-agents)
+# command: cd apps/web && npx tsx --no-wasm-code-gc --test-force-exit <file> (one file at a time)
+
+## app/(console)/project/[projectId]/entity-pages.test.ts
+✔ Agents: flag off and no database, the page is not found (0.701334ms)
+✔ Agents: flag on and no database, the page shows the setup notice (0.271375ms)
+✔ Agent detail: flag off and no database, the page is not found (0.17225ms)
+✔ Agent detail: flag on and no database, the page shows the setup notice (0.069458ms)
+✔ MCP servers: flag off and no database, the page is not found (0.185583ms)
+✔ MCP servers: flag on and no database, the page shows the setup notice (0.064916ms)
+✔ MCP server detail: flag off and no database, the page is not found (0.164875ms)
+✔ MCP server detail: flag on and no database, the page shows the setup notice (0.063875ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4.422083
+
+## app/(console)/project/[projectId]/agents/context.test.ts
+✔ flag off: the page is not found (0.523166ms)
+✔ flag on: the context has the window, the environment and the links' query (1.553708ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3.916958
+
+## app/(console)/project/[projectId]/mcp/context.test.ts
+✔ flag off: the page is not found (0.770167ms)
+✔ flag on: the context has the window, the environment and the links' query (1.406042ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4.81725
+
+## lib/views/project-entities/nav.test.ts
+✔ flag off: no organization shows the pages, and the rail is unchanged (1.21175ms)
+✔ flag on: every organization shows the pages, and Traces holds All traces, Agents and MCP servers (0.292792ms)
+✔ a failed decision hides the pages for that organization only (0.094667ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3.630667
+
+## lib/views/project-entities/agents-model.test.ts
+✔ the tree nests each agent under its caller, entry agents first, with roles and the from line (0.829292ms)
+✔ an agent with two callers nests under the busier one; a loop does not nest (6.399875ms)
+✔ with no handoff every agent is a flat row with no role (0.151042ms)
+✔ a handoff to an agent outside the list does not nest or count (0.069708ms)
+✔ no sort keeps the tree; a sort by a column flattens it (0.148167ms)
+✔ the error pill shows above 10%, not at it (0.040792ms)
+✔ the handoff chain is the deepest path of the tree; one agent has none (0.092833ms)
+✔ tools group by MCP server, busiest first, then built-in with the quiet tail folded (0.256709ms)
+✔ one tool past the cap is shown, not folded (0.078625ms)
+✔ the map lays agents left to right by depth, sizes boxes by runs and edges by handoffs, and marks failing agents (0.342333ms)
+✔ the map is empty with no handoff (0.057375ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10.750291
+
+## lib/views/project-entities/mcp-model.test.ts
+✔ status: failing at 50% errors or more, degraded at 5% or more, healthy below (0.424917ms)
+✔ the default order is status, then calls (0.368667ms)
+✔ Seen from shows only when the rows' sides differ (0.065ms)
+✔ under 20 calls the latency KPI says the sample size instead of the p50 (0.052542ms)
+✔ the error rate KPI names the tool the errors come from (0.080417ms)
+✔ KPIs count a server once: a server seen from both sides keeps its busiest side (0.068209ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3.298625
+
+## lib/views/project-entities/queries.integration.test.ts
+✔ runs per day and MCP servers per agent, merged keys read as their target (1277.698833ms)
+✔ an agent's tools carry their MCP server, the name without its prefix and the newest error text (140.324667ms)
+✔ each server side has calls per day, its tools and agents busiest first, and its newest error (142.406791ms)
+✔ the detail's p50, the top error per tool with its count, the callers, and the newest failed calls (142.999667ms)
+✔ the environment narrows the reads to that environment's calls and traces (144.280917ms)
+✔ read budget: every query reads otel_spans through an entity index, bounded by project and window (757.323833ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2608.856417
+
+## lib/console/wiring.test.ts
+✔ the Tasks page's freshness waits on the task scores, a job this edition runs (0.44775ms)
+✔ the sidebar renders the analysis freshness line inside a project (0.540375ms)
+✔ project home decides whether to offer the guided tour (0.430542ms)
+✔ Settings › API keys renders the quickstart under the key list (0.303959ms)
+✔ a turn page offers "run to test" behind the eval gate (0.287667ms)
+✔ the trace span inspector is given the SDK events page to link to (0.574333ms)
+✔ Settings › Developer builds each SDK event's trace link (0.31275ms)
+✔ a project page asks for the last-project cookie when it names another project (0.217333ms)
+✔ the project layout returns its page when no database is configured (0.082375ms)
+✔ project home and onboarding build the ingest address with the same function (0.910041ms)
+✔ the capture nudge's unchanged lines are lines of the quickstart it is a diff against (0.129125ms)
+✔ the playground rank route and the traces routes resolve the project through findProjectScope (0.945459ms)
+✔ the Sessions list page checks the project scope itself, as its two routes do (0.305042ms)
+✔ root metadata sets a title template on the product name, a description and an icon (0.802708ms)
+✔ every job that works on one project runs in the project log context (45.161792ms)
+✔ startup lends the edition the onboarding service with the other core services (0.480584ms)
+✔ the playground page is headed "Test a search", under Catalog (0.334792ms)
+✔ the shell hands the edition's overlays and palette actions to the frame, which mounts the overlays after the shortcuts dialog (0.390583ms)
+✔ the shell decides FF_AGENTS_PAGES per organization and the rail reads it (RP-28) (0.137542ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 55.259417
+
+## lib/console/navigation.test.ts
+✔ project URLs are rooted at /project/<id>, encoded (0.480959ms)
+✔ the project id is read back from the path (0.129458ms)
+✔ with a project, the rail links every core destination to that project (0.671958ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.046208ms)
+✔ outside a project, the organization rail lists its projects page (0.304042ms)
+✔ composition additions follow the core destinations with stable ids (0.102125ms)
+✔ the OSS composition adds no destination (0.092709ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.2255ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (0.574375ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.256791ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.154875ms)
+✔ the active item matches exact index pages and nested paths (0.155208ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.146125ms)
+✔ switching project keeps the section the reader is on (0.048584ms)
+✔ a project outside the organization's list is not found (0.042ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.035042ms)
+✔ the command menu lists the project's pages, the organization's, then every project (0.212042ms)
+✔ outside a project the command menu lists the organization's pages only (0.07775ms)
+✔ the command menu finds a page by its keywords, not only its name (0.375666ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.193375ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.07775ms)
+✔ visibleOrganizationNav hides only the paths given (0.042708ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.20975ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.087458ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7.405041
+

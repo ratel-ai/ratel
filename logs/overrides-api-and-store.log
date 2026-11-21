@@ -1,0 +1,143 @@
+# Agent overrides API and the agents/MCP-servers store tests
+# date: 2026-11-21T19:15:24Z
+# ratel 41d82b21 (beluga/rp-27-agents-mcp-core) · ratel-platform c4332a0 (beluga/rp-25-ship-better-agents)
+# command: cd apps/web && npx tsx --no-wasm-code-gc --test-force-exit <file> (one file at a time)
+
+## lib/views/agents/tests/overrides-api.test.ts
+{"level":30,"time":1795288526351,"pid":68396,"hostname":"rstagis-MacBook-Pro-3.local","module":"agents/overrides-api","project_id":"p1","outcome":"saved","msg":"agent override changed"}
+✔ an admin renames an agent: saved and tracked (63.639792ms)
+✔ a member who is not an admin cannot write an override (0.673583ms)
+✔ a merge chain is rejected with a clear error (1.012ms)
+✔ signed out, not a member, flag off, a support session or a bad body write nothing (4.831125ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 75.680459
+{"level":30,"time":1795288526357,"pid":68396,"hostname":"rstagis-MacBook-Pro-3.local","module":"agents/overrides-api","project_id":"p1","reason":"merge_target_is_merged","outcome":"rejected","msg":"agent override rejected"}
+
+## lib/views/agents/tests/overrides.test.ts
+✔ a change keeps the fields it leaves out and clears the ones set to null (1.881417ms)
+✔ a merge into itself, into a merged agent, or of a merge target is rejected: no chains, no cycles (0.378917ms)
+✔ a second key can merge into the same target, and undo clears the merge (0.368333ms)
+✔ the read view maps merges, names and hidden keys (0.404458ms)
+✔ another surface's per-agent counts sum merges under the target's override name (0.173667ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8.598292
+
+## lib/views/agents/tests/drizzle-store.integration.test.ts
+✔ the list has one row per agent with runs, errors, cost, p95 and first and last seen (2866.192875ms)
+✔ the environment filter narrows the list and the detail to that environment's traces, and the environments stay all of them (421.119334ms)
+✔ the detail has the agent's tools, the MCP servers it calls, and its handoffs both ways (368.532125ms)
+✔ the handoffs are one edge per caller and callee, counted by invoke_agent spans, else by traces (528.671667ms)
+✔ navigation: a project with 2+ agent keys or 1 named key has agents; one whose only agent is its service.name has none (322.160541ms)
+✔ merge sums both keys' history under the target, in the list, the detail and the handoffs; undo restores both (317.093917ms)
+✔ rename shows the name on the list, the detail and both ends of a handoff (296.749209ms)
+✔ hide removes the agent from the list and the graph, and show hidden brings it back (320.343375ms)
+✔ a merge chain or cycle is rejected and writes nothing (345.61825ms)
+✔ read budget: every span query reads otel_spans through the agent index, bounded by project and window (1903.185625ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7698.44075
+
+## lib/views/agents/tests/handoff-network.test.ts
+✔ one mark per agent sized by runs, one directed link per handoff, strongest first (1.675708ms)
+✔ a rare handoff keeps a strength floor, and an agent seen only in a handoff still gets a mark (11.021583ms)
+✔ the tool network layout settles the handoff graph: every agent placed, the same every time (15.524833ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 31.604458
+
+## lib/views/agents/tests/paths.test.ts
+✔ the list and detail links keep the window and the environment (0.976042ms)
+✔ the agent key round-trips through its path segment, and a bad escape stays as it is (0.191792ms)
+✔ the Traces link filters Turns by the agent with the same window (0.183583ms)
+✔ a merged agent's Traces link filters by every key merged into it (RC-776) (0.115708ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7.504291
+
+## lib/views/agents/tests/override-controls-ui.test.ts
+✔ the merge picker never passes a value: Base UI's Select stays uncontrolled for its whole life (1.696792ms)
+✔ an agent with no merge into it offers rename, hide and the merge picker; a merge target offers undo instead (38.743875ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 46.833167
+
+## lib/views/mcp-servers/queries.integration.test.ts
+✔ the list has one row per server and role, with calls, errors, p95, sessions and first and last seen (1314.72675ms)
+✔ the environment filter narrows the stats, and the environments stay all of them (136.027333ms)
+✔ the detail has per-tool stats and the calling agents, and no protocol or transport when no span names one (128.485209ms)
+✔ the detail lists protocol versions and transports when the spans name them (134.020042ms)
+✔ a consumed server's tools lose the server prefix, and its agents are the agents that call it (132.116334ms)
+✔ the detail picks the server's busiest role when none is asked, and is null for a server with no calls (137.326417ms)
+✔ hasMcpSpans is true only for a project with an MCP span in the recent window (122.246958ms)
+✔ read budget: every query reads otel_spans through the MCP server index, bounded by project and window (731.112292ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2840.171125
+
+## lib/views/mcp-servers/paths.test.ts
+✔ the list keeps the window and the environment (0.415667ms)
+✔ the detail encodes the server key in the path, and the role in the query (0.092917ms)
+✔ only the two roles parse (0.058333ms)
+✔ Traces opens Turns filtered by the server, in the same window and environment (0.059958ms)
+✔ Clients and Catalog are filtered by the server (0.056917ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2.619167
+
+## lib/views/project-entities/flag.test.ts
+{"level":30,"time":1795288549239,"pid":70576,"hostname":"rstagis-MacBook-Pro-3.local","module":"agents/overrides-api","project_id":"p1","outcome":"saved","msg":"agent override changed"}
+✔ the project-entities switch is the core's FF_AGENTS_PAGES (0.345125ms)
+✔ off by default, for a person and for an MCP caller (0.122125ms)
+✔ FF_AGENTS_PAGES turns it on for a person and for an MCP caller (0.069333ms)
+✔ the override write reads FF_AGENTS_PAGES: off, it is not found and writes nothing (34.58275ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37.32375
+
