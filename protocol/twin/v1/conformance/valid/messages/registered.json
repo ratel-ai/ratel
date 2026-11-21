@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "type": "registered",
+  "id": "msg_0002",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "payload": {
+    "connectionId": "conn_8d2f",
+    "limits": {
+      "maxFrameBytes": 65536,
+      "ackTimeoutMs": 10000,
+      "leaseIntervalMs": 15000,
+      "leaseTimeoutMs": 60000,
+      "confirmTimeoutMs": 600000,
+      "maxConcurrentRuns": 2
+    }
+  }
+}

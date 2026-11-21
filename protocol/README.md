@@ -23,6 +23,14 @@ Both versions publish the `IntentGraph` usage-ranking shape — a producer contr
 the local learner and Ratel Cloud, not a synced endpoint
 ([ADR-0014](../docs/adr/0014-adaptive-usage-ranking.md)).
 
+## twin/v1
+
+`twin/v1/` is a separate contract: the websocket protocol between Ratel (the **controller**) and
+the `ratel dev` runner (the **worker**) that runs twins of a user's agent. It holds JSON Schemas
+for the envelope `{ v, type, id, ts, runId?, seq?, payload }`, one schema per message type and
+the twin manifest, plus valid and invalid conformance fixtures. It is an experimental preview
+and versions apart from the catalog contract. See [twin/v1/README.md](twin/v1/README.md).
+
 ## Versioning
 
 Each **major** version is a subfolder. Preview versions may change before graduation. Within a

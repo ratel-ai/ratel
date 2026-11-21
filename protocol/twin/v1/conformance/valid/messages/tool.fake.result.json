@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "type": "tool.fake.result",
+  "id": "msg_0023",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "payload": {
+    "callId": "call_3",
+    "result": {
+      "ticketId": "T-1042"
+    },
+    "isError": false,
+    "source": "generated"
+  }
+}

@@ -1,0 +1,31 @@
+import type { Manifest } from "../manifest.js";
+import type { ToolMode } from "./args.js";
+
+/** What the CLI parent asks its worker over IPC. */
+export type WorkerRequest =
+  | {
+      readonly kind: "list";
+      readonly root: string;
+      readonly files: readonly string[];
+      readonly build?: Manifest["build"];
+    }
+  | {
+      readonly kind: "run";
+      readonly root: string;
+      readonly files: readonly string[];
+      readonly twinId: string;
+      readonly input: unknown;
+      readonly sets: readonly (readonly [string, string])[];
+      readonly tools: Readonly<Record<string, ToolMode>>;
+    };
+
+export type WorkerReply =
+  | { readonly ok: true; readonly kind: "list"; readonly manifest: Manifest }
+  | {
+      readonly ok: true;
+      readonly kind: "run";
+      readonly output: unknown;
+      readonly configHash: string;
+      readonly overrides: readonly string[];
+    }
+  | { readonly ok: false; readonly error: string };

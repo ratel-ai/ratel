@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "type": "run.reject",
+  "id": "msg_0009",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "payload": {
+    "reason": "invalid_params",
+    "message": "workflow-label: maxTokens must be at most 2000.",
+    "errors": [
+      {
+        "param": "maxTokens",
+        "message": "must be at most 2000"
+      }
+    ]
+  }
+}

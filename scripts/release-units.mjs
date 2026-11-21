@@ -92,6 +92,18 @@ export const UNITS = {
       includePaths: ["src/telemetry/ts/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
     },
   },
+  "twin-ts": {
+    tagPrefix: "twin-ts-v",
+    label: "@ratel-ai/twin → npm",
+    versionManifest: { path: "src/twin/ts/package.json", kind: "json" },
+    manifests: [{ path: "src/twin/ts/package.json", kind: "json" }],
+    changelogs: ["src/twin/ts/CHANGELOG.md"],
+    srcPaths: ["src/twin/ts", "protocol/twin/v1"],
+    changelog: {
+      name: "@ratel-ai/twin",
+      includePaths: ["src/twin/ts/**", "protocol/twin/v1/**"],
+    },
+  },
   "telemetry-py": {
     tagPrefix: "telemetry-py-v",
     label: "ratel-ai-telemetry → PyPI",

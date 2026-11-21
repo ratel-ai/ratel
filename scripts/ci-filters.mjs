@@ -91,6 +91,7 @@ export const PACKAGE_DIRS = {
   "src/adapters/ts-vercel-ai-sdk": "@ratel-ai/vercel-ai-sdk",
   "src/adapters/ts-mastra": "@ratel-ai/mastra",
   "src/rankers/ts": "@ratel-ai/rankers-plugin",
+  "src/twin/ts": "@ratel-ai/twin",
 };
 
 /**
@@ -109,6 +110,7 @@ export const PACKAGE_OUTPUTS = {
   "src/adapters/ts-vercel-ai-sdk": ["sdk", "ai_sdk"],
   "src/adapters/ts-mastra": ["sdk"],
   "src/rankers/ts": ["sdk", "rankers_ts"],
+  "src/twin/ts": ["sdk"],
 };
 
 const ALL_TRUE = Object.fromEntries(OUTPUTS.map((k) => [k, true]));
@@ -256,6 +258,7 @@ const CLAIMS = [
   "src/telemetry/python/**",
   "src/telemetry/conformance/**",
   "src/rankers/**",
+  "src/twin/**",
   "examples/**",
   "examples/pydantic-ai/**",
   "examples/telemetry-python/**",
@@ -363,6 +366,8 @@ function applyFile(result, file) {
     matches("src/telemetry/conformance/**", file) ||
     matches("src/rankers/ts/**", file) ||
     matches("src/rankers/core/**", file) ||
+    matches("src/twin/**", file) ||
+    matches("protocol/twin/**", file) ||
     matches("examples/**", file)
   ) {
     // Python-only examples are under examples/ but not in the pnpm workspace.
