@@ -83,6 +83,7 @@ export function consoleNav({
   additions,
   organizationAdditions = [],
   projectGroups = [],
+  entityPages = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -94,6 +95,12 @@ export function consoleNav({
    * Catalog and Settings, or a group with `row` as one collapsible row between them.
    */
   projectGroups?: readonly ProjectNavGroup[];
+  /**
+   * `FF_AGENTS_PAGES` on for the shown organization (RP-28): Agents and MCP servers under Traces.
+   * Upstream also needs the project's data for each (`lib/agents/navigation.ts`); here both show
+   * whenever the flag is on, and each page has its own empty state.
+   */
+  entityPages?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -371,7 +378,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -393,6 +400,7 @@ function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
+  entityPages: boolean,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -429,8 +437,38 @@ function stageRailNav(
     shortcut: "l",
     keywords: ["shipped", "live", "released", "deployed", "applied", "shipments"],
   };
+  // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget.
+  const classicTraces = pick("traces");
+  const traces: NavItem = entityPages
+    ? {
+        ...classicTraces,
+        children: [
+          {
+            id: "traces-all",
+            label: "All traces",
+            href: classicTraces.href,
+            icon: "traces",
+            activeId: classicTraces.id,
+          },
+          {
+            id: "agents",
+            label: "Agents",
+            href: `${root}/agents`,
+            icon: "traces",
+            keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
+          },
+          {
+            id: "mcp-servers",
+            label: "MCP servers",
+            href: `${root}/mcp`,
+            icon: "traces",
+            keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
+          },
+        ],
+      }
+    : classicTraces;
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), health, pick("traces")]),
+    ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
     ...stage("insights", "Insights", [tasks, pick("intents")]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
