@@ -10,3 +10,10 @@
 ^https://raw\.githubusercontent\.com/ratel-ai/ratel/main/install\.sh$
 # deploy.sh ships in this branch; its raw main URL 404s until merge. Remove once on main.
 ^https://raw\.githubusercontent\.com/ratel-ai/ratel/main/deploy\.sh$
+# The one-click templates ship in this branch: 404 until merge, and until the S3 upload.
+^https://raw\.githubusercontent\.com/ratel-ai/ratel/main/deploy/azure/azuredeploy\.json$
+^https://ratel-public-templates\.s3\.amazonaws\.com/
+# The one-click buttons open cloud consoles, which need a login.
+^https://console\.aws\.amazon\.com/cloudformation/
+^https://portal\.azure\.com/
+^https://shell\.cloud\.google\.com/

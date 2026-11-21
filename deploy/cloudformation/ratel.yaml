@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: "2010-09-09"
+# Ratel on one EC2 VM, for the README's "Launch Stack" button. The user data runs install.sh,
+# as deploy.sh does. It uses the default VPC. CI uploads this file to S3 (deploy-templates.yml).
+Description: Ratel, self-hosted, on one Ubuntu 24.04 VM (install.sh).
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Access }
+        Parameters: [AccessMode, LoginPassword, Domain, WebCidr]
+      - Label: { default: VM }
+        Parameters: [InstanceType, KeyName, SshCidr, Ref]
+
+Parameters:
+  AccessMode:
+    Type: String
+    Default: public
+    AllowedValues: [public, private]
+    Description: "public: Caddy with TLS and a login (user ratel) on 80 and 443. private: no web port, reach the console through an SSH tunnel."
+  LoginPassword:
+    Type: String
+    NoEcho: true
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9._~-]{12,64}$"
+    ConstraintDescription: 12 to 64 letters, digits or . _ ~ -
+    Description: "public: the console password for user ratel. Empty in private mode."
+  Domain:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$"
+    Description: "public: a DNS name that points at the VM. Empty: <ip>.sslip.io."
+  WebCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: "^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$"
+    Description: "public: who reaches 80 and 443. Not 0.0.0.0/0: Caddy uses its own CA, because Let's Encrypt cannot reach the VM."
+  InstanceType:
+    Type: String
+    Default: t3.large
+    AllowedValues: [t3.large, t3.xlarge, m6i.large, m7i.large]
+    Description: 2 vCPU and 8 GB of RAM or more.
+  KeyName:
+    Type: String
+    Default: ""
+    Description: An EC2 key pair for SSH as user ubuntu. Empty for none.
+  SshCidr:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$"
+    Description: "Who reaches SSH (22), for example your IP with /32. Empty: SSH stays closed."
+  Ref:
+    Type: String
+    Default: main
+    AllowedPattern: "^(?!.*\\.\\.)[A-Za-z0-9._][A-Za-z0-9._/-]*$"
+    ConstraintDescription: letters, digits and . _ / - with no ..
+    Description: The branch, tag or commit that install.sh checks out.
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Ubuntu 24.04 LTS, from Canonical's public SSM parameter.
+
+Rules:
+  PublicNeedsPassword:
+    RuleCondition: !Equals [!Ref AccessMode, public]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref LoginPassword, ""]]
+        AssertDescription: The public mode needs LoginPassword.
+
+Conditions:
+  IsPublic: !Equals [!Ref AccessMode, public]
+  HasKey: !Not [!Equals [!Ref KeyName, ""]]
+  HasSsh: !Not [!Equals [!Ref SshCidr, ""]]
+  HasDomain: !Not [!Equals [!Ref Domain, ""]]
+  WebOpen: !Equals [!Ref WebCidr, 0.0.0.0/0]
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Ratel
+      SecurityGroupIngress: !If
+        - IsPublic
+        - - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: !Ref WebCidr }
+          - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: !Ref WebCidr }
+          - !If [HasSsh, { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr }, !Ref AWS::NoValue]
+        - - !If [HasSsh, { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SshCidr }, !Ref AWS::NoValue]
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasKey, !Ref KeyName, !Ref AWS::NoValue]
+      SecurityGroupIds: [!GetAtt SecurityGroup.GroupId]
+      MetadataOptions: { HttpTokens: required }
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs: { VolumeSize: 30, VolumeType: gp3, Encrypted: true }
+      Tags: [{ Key: Name, Value: !Ref AWS::StackName }]
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/sh
+            # Ratel bootstrap (deploy/cloudformation): hashes the password, then runs install.sh.
+            set -eu
+            export HOME=/root
+            access='${AccessMode}'
+            args="--access private"
+            if [ "$access" = public ]; then
+              apt-get update -q && apt-get install -yq apache2-utils
+              password=$(echo '${PasswordB64}' | base64 -d)
+              hash=$(htpasswd -nbBC 12 ratel "$password" | cut -d: -f2 | sed 's/^[$]2y[$]/$2a$/')
+              args="--access public --tls ${Tls} --auth-hash $hash"
+              [ -z '${Domain}' ] || args="$args --domain ${Domain}"
+            fi
+            # shellcheck disable=SC2086
+            curl -fsSL "https://raw.githubusercontent.com/ratel-ai/ratel/${Ref}/install.sh" | sh -s -- --yes --ref '${Ref}' --dir /opt/ratel $args
+          - PasswordB64: { "Fn::Base64": !Ref LoginPassword }
+            Tls: !If [WebOpen, acme, internal]
+
+  Address:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      InstanceId: !Ref Instance
+
+Outputs:
+  Url:
+    Condition: IsPublic
+    Description: The console. Log in as user ratel with LoginPassword. The install takes 5 to 10 minutes.
+    Value: !If [HasDomain, !Sub "https://${Domain}", !Sub "https://${Address}.sslip.io"]
+  PublicIp:
+    Value: !Ref Address
+  Tunnel:
+    Description: "private: run this, then open http://localhost:3000."
+    Value: !Sub "ssh -N -L 3000:127.0.0.1:3000 ubuntu@${Address}"
