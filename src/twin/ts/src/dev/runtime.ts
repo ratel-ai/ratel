@@ -9,7 +9,7 @@ import { Connection, type ConnectionEffect, type ConnectionEvent } from "./conne
 import { type Envelope, type FrameStamp, MAX_FRAME_BYTES, parseFrame } from "./protocol.js";
 import { type RunStartPayload, Runs, type RunsEffect } from "./runs.js";
 import { playgroundResource } from "./tracing.js";
-import { type ProjectWatcher, watchProject } from "./watch.js";
+import { POLL_INTERVAL_MS, type ProjectWatcher, watchProject } from "./watch.js";
 import { openSocket, type Socket } from "./ws-socket.js";
 
 // `ratel dev`: the runtime around the pure Connection machine. It performs the
@@ -265,9 +265,13 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   if (options.watch ?? true)
     watcher = watchProject(options.root, {
       onChange: () => void reload(),
+      onPolling: (reason, files) =>
+        options.out(
+          `hot reload now polls ${files} file(s) every ${POLL_INTERVAL_MS / 1000} s (file watcher unavailable: ${reason})`,
+        ),
       onError: (message) =>
         options.out(
-          `hot reload is off: the file watcher failed (${message}). Still serving the last good code; restart ratel dev to reload`,
+          `hot reload is off: the file watcher and polling failed (${message}). Still serving the last good code; restart ratel dev to reload`,
         ),
     });
   step({ type: "start" });

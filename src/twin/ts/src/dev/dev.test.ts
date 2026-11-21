@@ -44,7 +44,14 @@ function revisionOf(f: ReceivedFrame | undefined): unknown {
 const registers = (c: TestController): ReceivedFrame[] =>
   c.frames.filter((f) => f.frame.type === "register");
 
-describe("ratel dev against the test controller", () => {
+// Each mode of hot reload once: `fs.watch` (the default; it falls back to
+// polling where fs.watch fails), and polling forced with RATEL_TWIN_WATCH=poll.
+const HOT_RELOAD_MODES: { mode: string; env: Record<string, string> }[] = [
+  { mode: "default", env: {} },
+  { mode: "poll", env: { RATEL_TWIN_WATCH: "poll" } },
+];
+
+describe.each(HOT_RELOAD_MODES)("ratel dev against the test controller (hot reload: $mode)", ({ mode, env }) => {
   let project: string;
   let controller: TestController;
   let dev: Dev;
@@ -55,7 +62,7 @@ describe("ratel dev against the test controller", () => {
     writeFileSync(join(project, "agents", "label.twin.ts"), twinSource(400));
     writeFileSync(join(project, ".env"), `ANTHROPIC_API_KEY=${PROVIDER_SECRET}\n`);
     controller = await startTestController({ keys: [PROJECT_KEY] });
-    dev = startRatelDev(project, controller.url);
+    dev = startRatelDev(project, controller.url, PROJECT_KEY, env);
   });
 
   afterAll(async () => {
@@ -94,6 +101,7 @@ describe("ratel dev against the test controller", () => {
   });
 
   it("sends manifest.update on the same socket when a twin file changes", async () => {
+    if (mode === "poll") expect(dev.stdout()).toContain("hot reload now polls");
     const before = controller.frames.length;
     writeFileSync(join(project, "agents", "label.twin.ts"), twinSource(500));
     const update = await controller.waitForFrame(

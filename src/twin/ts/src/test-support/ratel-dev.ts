@@ -17,8 +17,20 @@ export interface Dev {
   exited: Promise<number | null>;
 }
 
-export function startRatelDev(cwd: string, url: string, apiKey = PROJECT_KEY): Dev {
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, NO_COLOR: "1", RATEL_API_KEY: apiKey };
+export function startRatelDev(
+  cwd: string,
+  url: string,
+  apiKey = PROJECT_KEY,
+  extraEnv: Readonly<Record<string, string>> = {},
+): Dev {
+  const env: NodeJS.ProcessEnv = {
+    PATH: process.env.PATH,
+    NO_COLOR: "1",
+    RATEL_API_KEY: apiKey,
+    // A whole-suite run with RATEL_TWIN_WATCH=poll reaches the runner too.
+    ...(process.env.RATEL_TWIN_WATCH ? { RATEL_TWIN_WATCH: process.env.RATEL_TWIN_WATCH } : {}),
+    ...extraEnv,
+  };
   const child = spawn(process.execPath, ["--import", TSX, MAIN, "dev", "--url", url], { cwd, env });
   let out = "";
   const listeners = new Set<() => void>();

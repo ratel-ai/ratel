@@ -3,7 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { MAX_WATCHED_DIRS, type WatchFn, watchedDirs, watchProject } from "./watch.js";
+import {
+  MAX_WATCHED_DIRS,
+  WATCH_MODE_ENV,
+  type WatchFn,
+  watchedDirs,
+  watchProject,
+} from "./watch.js";
 
 // The hot-reload watcher of `ratel dev`: it watches only the folders of the
 // twin files and their local imports (never node_modules, .git or build
@@ -52,7 +58,7 @@ function fakeWatch() {
     emitters.push(emitter);
     return emitter;
   };
-  return { watch, watched, emitters };
+  return { watch, watched, emitters, mode: "watch" as const };
 }
 
 describe("watchedDirs", () => {
@@ -106,44 +112,123 @@ describe("watchProject", () => {
     expect(fake.watched.every((w) => w.closed)).toBe(true);
   });
 
-  it("turns hot reload off on a watcher error, once, without throwing", () => {
+  it("polls the bounded file list when watch() throws, and one edit gives one change", async () => {
     const root = project({ "a.twin.ts": 'import "./src/x.js";\n', "src/x.ts": "export {};\n" });
-    const fake = fakeWatch();
-    const errors: string[] = [];
-    watchProject(root, { onChange: () => {}, onError: (m) => errors.push(m) }, fake);
-    const emfile = Object.assign(new Error("EMFILE: too many open files, watch"), {
-      code: "EMFILE",
-    });
-    for (const emitter of fake.emitters) emitter.emit("error", emfile);
-    expect(errors).toEqual(["EMFILE: too many open files, watch"]);
-    expect(fake.watched.every((w) => w.closed)).toBe(true);
-  });
-
-  it("turns hot reload off when watch() throws", () => {
-    const root = project({ "a.twin.ts": "export {};\n" });
-    const errors: string[] = [];
     const throwing: WatchFn = () => {
       throw Object.assign(new Error("EMFILE: too many open files, watch"), { code: "EMFILE" });
     };
+    const polling: string[] = [];
+    const errors: string[] = [];
+    let changes = 0;
+    const watcher = watchProject(
+      root,
+      {
+        onChange: () => {
+          changes++;
+        },
+        onPolling: (reason, files) => polling.push(`${reason} (${files} files)`),
+        onError: (m) => errors.push(m),
+      },
+      { watch: throwing, pollIntervalMs: 50 },
+    );
+    try {
+      expect(watcher.mode).toBe("poll");
+      expect(watcher.files).toEqual(["a.twin.ts", "src/x.ts"]);
+      expect(polling).toEqual(["EMFILE: too many open files, watch (2 files)"]);
+      writeFileSync(join(root, "src", "x.ts"), "export const changed = true;\n");
+      await expect.poll(() => changes, { timeout: 3000 }).toBe(1);
+      await new Promise((r) => setTimeout(r, 400));
+      expect(changes).toBe(1);
+      expect(errors).toEqual([]);
+    } finally {
+      watcher.close();
+    }
+  });
+
+  it("polls after an async watcher error, and the next edit is still seen", async () => {
+    const root = project({ "a.twin.ts": 'import "./src/x.js";\n', "src/x.ts": "export {};\n" });
+    const fake = fakeWatch();
+    const polling: string[] = [];
+    let changes = 0;
+    const watcher = watchProject(
+      root,
+      {
+        onChange: () => {
+          changes++;
+        },
+        onPolling: (reason) => polling.push(reason),
+        onError: () => {},
+      },
+      { ...fake, pollIntervalMs: 50 },
+    );
+    try {
+      expect(watcher.mode).toBe("watch");
+      const emfile = Object.assign(new Error("EMFILE: too many open files, watch"), {
+        code: "EMFILE",
+      });
+      // Every watcher of the process gets the error: polling starts once.
+      for (const emitter of fake.emitters) emitter.emit("error", emfile);
+      expect(polling).toEqual(["EMFILE: too many open files, watch"]);
+      expect(fake.watched.every((w) => w.closed)).toBe(true);
+      expect(watcher.mode).toBe("poll");
+      writeFileSync(join(root, "a.twin.ts"), 'import "./src/x.js";\nexport const v = 2;\n');
+      await expect.poll(() => changes, { timeout: 3000 }).toBe(1);
+    } finally {
+      watcher.close();
+    }
+  });
+
+  it("polls from the start with RATEL_TWIN_WATCH=poll", () => {
+    const root = project({ "a.twin.ts": "export {};\n", ".env": "A=1\n" });
+    const fake = fakeWatch();
+    const polling: string[] = [];
+    const before = process.env[WATCH_MODE_ENV];
+    process.env[WATCH_MODE_ENV] = "poll";
+    try {
+      const watcher = watchProject(
+        root,
+        { onChange: () => {}, onPolling: (reason) => polling.push(reason), onError: () => {} },
+        { watch: fake.watch },
+      );
+      expect(watcher.mode).toBe("poll");
+      expect(watcher.files).toEqual([".env", "a.twin.ts"]);
+      expect(fake.watched).toEqual([]);
+      expect(polling).toEqual(["RATEL_TWIN_WATCH=poll"]);
+      watcher.close();
+    } finally {
+      if (before === undefined) delete process.env[WATCH_MODE_ENV];
+      else process.env[WATCH_MODE_ENV] = before;
+    }
+  });
+
+  it("turns hot reload off, once and without throwing, only when polling fails too", () => {
+    const root = project({ "a.twin.ts": "export {};\n" });
+    const errors: string[] = [];
     const watcher = watchProject(
       root,
       { onChange: () => {}, onError: (m) => errors.push(m) },
-      { watch: throwing },
+      {
+        mode: "poll",
+        stat: () => {
+          throw new Error("EPERM: operation not permitted, stat");
+        },
+      },
     );
-    expect(errors).toEqual(["EMFILE: too many open files, watch"]);
-    expect(watcher.dirs).toEqual([]);
+    expect(watcher.mode).toBe("off");
+    expect(errors).toEqual(["EPERM: operation not permitted, stat"]);
+    expect(watcher.files).toEqual([]);
   });
 
   it("calls onChange once per burst of changes in a watched folder, and ignores other dot-files", async () => {
     const root = project({ "a.twin.ts": 'import "./src/x.js";\n', "src/x.ts": "export {};\n" });
     let changes = 0;
+    const errors: string[] = [];
     const watcher = watchProject(root, {
       onChange: () => {
         changes++;
       },
-      onError: (m) => {
-        throw new Error(m);
-      },
+      // Records: a throw here would run inside the watcher callback.
+      onError: (m) => errors.push(m),
     });
     try {
       // FSEvents can deliver the writes of the setup late: let them settle first.
@@ -155,6 +240,7 @@ describe("watchProject", () => {
       writeFileSync(join(root, "src", "x.ts"), "export const y = 2;\n");
       writeFileSync(join(root, ".env"), "A=1\n");
       await expect.poll(() => changes, { timeout: 3000 }).toBe(1);
+      expect(errors).toEqual([]);
     } finally {
       watcher.close();
     }
