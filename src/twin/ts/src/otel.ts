@@ -4,6 +4,12 @@ import { configHash } from "./hash.js";
 export const RATEL_TWIN_ID = "ratel.twin.id";
 export const RATEL_TWIN_CONFIG_HASH = "ratel.twin.config_hash";
 export const RATEL_TWIN_INPUT = "ratel.twin.input";
+/** Playground runs only (spec §10): the run, the changed param names, the replay source. */
+export const RATEL_TWIN_RUN_ID = "ratel.twin.run_id";
+export const RATEL_TWIN_OVERRIDES = "ratel.twin.overrides";
+export const RATEL_REPLAY_SOURCE_TRACE_ID = "ratel.replay.source_trace_id";
+export const RATEL_REPLAY_SOURCE_SESSION_ID = "ratel.replay.source_session_id";
+export const RATEL_REPLAY_ARM = "ratel.replay.arm";
 
 /** Default cap of the stamped input JSON, in characters. */
 export const TWIN_INPUT_MAX_CHARS = 8000;

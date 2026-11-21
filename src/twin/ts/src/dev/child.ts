@@ -1,12 +1,17 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { isSpanContextValid, SpanStatusCode, trace } from "@opentelemetry/api";
+import { trace } from "@opentelemetry/api";
 import { type LoadedTwin, loadTwins, messageOf } from "../cli/load.js";
-import { buildManifest } from "../manifest.js";
-import { runTwin } from "../run.js";
+import { buildManifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
 import type { Twin, TwinEventPayload } from "../twin.js";
 import type { ChildReply, ChildRequest } from "./child-messages.js";
+import { executeRun } from "./execute.js";
 import type { RunResult, RunStartPayload } from "./runs.js";
+import {
+  attachPlaygroundExport,
+  type PlaygroundExport,
+  type PlaygroundTelemetryConfig,
+} from "./tracing.js";
 
 // The long-lived child of `ratel dev`. It is the only process that loads user
 // code and the project's .env. The parent restarts it on a file change, so each
@@ -18,6 +23,9 @@ let twins: LoadedTwin[] = [];
 let loading: Promise<unknown> = Promise.resolve();
 /** Live runs by ID. Deleted when the run ends or is canceled. */
 const live = new Map<string, AbortController>();
+let telemetry: PlaygroundTelemetryConfig | undefined;
+/** Attached before the first run, after the project's code had the chance to set up its provider. */
+let exporter: PlaygroundExport | undefined;
 
 process.on("message", (request: ChildRequest) => {
   switch (request.kind) {
@@ -34,10 +42,13 @@ process.on("message", (request: ChildRequest) => {
       return;
   }
 });
-process.on("disconnect", () => process.exit(0));
+process.on("disconnect", () => {
+  void (exporter?.flush() ?? Promise.resolve()).finally(() => process.exit(0));
+});
 
 async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): Promise<ChildReply> {
   loadEnvOnce(request.root);
+  telemetry = request.telemetry;
   const load = loadTwins(request.root, request.files);
   loading = load.catch(() => {});
   twins = await load;
@@ -62,35 +73,30 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
   }
   const abort = new AbortController();
   live.set(runId, abort);
-  const tracer = trace.getTracer("@ratel-ai/twin");
-  await tracer.startActiveSpan(`invoke_workflow ${twin.id}`, async (span) => {
-    const spanContext = span.spanContext();
-    const traceId = isSpanContextValid(spanContext) ? spanContext.traceId : undefined;
-    try {
-      const result = await runTwin(twin, {
-        input: start.input,
-        overrides: start.params,
-        context: start.context,
-        signal: abort.signal,
-        onLog: (message, level) => event(twin, runId, { kind: "log", level, message }),
-      });
-      end(runId, twin, {
-        status: "ok",
-        output: result.output,
-        overrides: result.overrides,
-        ...(traceId ? { traceId } : {}),
-      });
-    } catch (err) {
-      span.setStatus({ code: SpanStatusCode.ERROR, message: messageOf(err) });
-      end(runId, twin, {
-        status: "error",
-        error: { code: "run_failed", message: `${twin.id}: run() threw: ${messageOf(err)}` },
-        ...(traceId ? { traceId } : {}),
-      });
-    } finally {
-      span.end();
-    }
+  const playground = attachOnce();
+  const result = await executeRun(twin, {
+    runId,
+    start,
+    tracer: trace.getTracer(SDK_NAME, SDK_VERSION),
+    signal: abort.signal,
+    onEvent: (payload) => event(twin, runId, payload),
+    onTrace: (traceId) => playground?.track(traceId),
   });
+  end(runId, twin, result);
+  await playground?.flush().catch((err: unknown) => {
+    process.stderr.write(`ratel dev: trace export failed: ${messageOf(err)}\n`);
+  });
+}
+
+function attachOnce(): PlaygroundExport | undefined {
+  if (exporter || !telemetry) return exporter;
+  exporter = attachPlaygroundExport(telemetry);
+  if (exporter.mode === "unsupported") {
+    process.stderr.write(
+      "ratel dev: cannot add the Ratel exporter to this project's tracer provider; playground traces are not sent\n",
+    );
+  }
+  return exporter;
 }
 
 function cancel(runId: string, reason: string): void {

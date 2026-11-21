@@ -52,9 +52,29 @@ export interface TestController {
    * order: what the gateway's twin_run_events table would hold.
    */
   stored(runId: string): Envelope[];
+  /** Bodies of POST /api/v1/traces (OTLP JSON), with the bearer key they came with. */
+  readonly traces: { key: string; body: OtlpTraces }[];
   /** Answers each run.event and run.end with events.ack while true. Default true. */
   autoAck: boolean;
   close(): Promise<void>;
+}
+
+/** The parts of an OTLP/JSON ExportTraceServiceRequest the tests read. */
+export interface OtlpTraces {
+  resourceSpans: {
+    resource: { attributes: OtlpKeyValue[] };
+    scopeSpans: { spans: { traceId: string; name: string; attributes: OtlpKeyValue[] }[] }[];
+  }[];
+}
+
+export interface OtlpKeyValue {
+  key: string;
+  value: {
+    stringValue?: string;
+    boolValue?: boolean;
+    intValue?: number | string;
+    arrayValue?: { values: OtlpKeyValue["value"][] };
+  };
 }
 
 export interface TestControllerOptions {
@@ -125,6 +145,7 @@ export async function startTestController(
     stored: (runId) =>
       [...(storedEvents.get(runId)?.entries() ?? [])].sort(([a], [b]) => a - b).map(([, f]) => f),
     autoAck: true,
+    traces: [],
     close: async () => {
       for (const ws of open) ws.terminate();
       wss.close();
@@ -133,6 +154,16 @@ export async function startTestController(
   };
 
   function handleHttp(req: IncomingMessage, res: ServerResponse): void {
+    if (req.method === "POST" && req.url === "/api/v1/traces") {
+      let body = "";
+      req.on("data", (d) => (body += d));
+      req.on("end", () => {
+        const key = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "";
+        controller.traces.push({ key, body: JSON.parse(body) as OtlpTraces });
+        res.writeHead(200, { "content-type": "application/json" }).end("{}");
+      });
+      return;
+    }
     if (req.method !== "POST" || req.url !== "/api/v1/runner/connect") {
       res.writeHead(404).end();
       return;

@@ -72,6 +72,14 @@ a live run keeps going. No frame is over 64 KB: long `text.delta` text is split,
 are cut with a marker. An optional `redact(payload)` in the twin runs on every event and on the
 `run.end` payload before they leave the child worker. A file change during a run reloads after it.
 
+Traces: a playground run is a normal Ratel trace. Its root span is `invoke_workflow <twin id>`
+with `gen_ai.conversation.id` (the playground session), `ratel.twin.id`,
+`ratel.twin.config_hash`, `ratel.twin.run_id`, `ratel.twin.overrides` (names only) and
+`ratel.twin.input`. The runner adds one OTLP exporter to `/api/v1/traces` on the tracer provider
+your code registered, or registers the only provider when there is none. It exports only the
+traces of playground runs, with the resource `deployment.environment.name=playground`,
+`ratel.build.*` and `ratel.runner.*` ([CONVENTIONS](../../telemetry/CONVENTIONS.md)).
+
 ## Rules
 
 - An override applies to one run. Values are resolved per run, with no module-level state.
@@ -95,6 +103,7 @@ are cut with a marker. An optional `redact(payload)` in the twin runs on every e
   (`protocol.ts`, `backoff.ts`). The adapters are `connect-http.ts` (token exchange),
   `ws-socket.ts` (the socket) and `child-host.ts` / `child.ts` (the long-lived child worker).
   `runtime.ts` performs the machine's effects. `watch.ts` reloads on a file change.
+  `execute.ts` runs one twin under its root span; `tracing.ts` adds the playground exporter.
 - `src/test-support/` — fixture twins, a fixture project and an in-process twin/v1 test
   controller (`controller.ts`) that checks every frame against the protocol schemas. Not built.
 

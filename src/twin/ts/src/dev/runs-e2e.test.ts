@@ -3,11 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  type OtlpKeyValue,
   type ReceivedFrame,
   startTestController,
   type TestController,
 } from "../test-support/controller.js";
-import { type Dev, INDEX, startRatelDev } from "../test-support/ratel-dev.js";
+import { type Dev, INDEX, PROJECT_KEY, startRatelDev } from "../test-support/ratel-dev.js";
 import { MAX_FRAME_BYTES } from "./protocol.js";
 
 // Runs over the socket, end to end: the real `ratel dev` executes a twin that
@@ -106,6 +107,31 @@ describe("runs over the socket", () => {
     });
     expect(ofRun(runId, "run.lease").length).toBeGreaterThanOrEqual(2);
     expect(dev.stdout()).not.toContain("sk-live-123");
+  });
+
+  it("exports the run's trace to /api/v1/traces with the playground attributes", async () => {
+    const runId = nextRunId();
+    controller.startRun(runId, { input: { steps: 1 }, sessionId: "pgs_e2e" });
+    const end = await waitFor(runId, "run.end");
+    const traceId = (end.frame.payload as { traceId: string }).traceId;
+    await expect.poll(() => exportedRoot(controller, traceId), { timeout: 10_000 }).toBeDefined();
+    const found = exportedRoot(controller, traceId);
+    expect(found?.key).toBe(PROJECT_KEY);
+    expect(found?.resource).toMatchObject({
+      "deployment.environment.name": "playground",
+      "ratel.runner.instance_id": expect.stringMatching(/^rnr_/),
+      "ratel.runner.sdk.name": "@ratel-ai/twin",
+    });
+    expect(found?.span).toMatchObject({
+      name: "invoke_workflow workflow-label",
+      attributes: {
+        "gen_ai.conversation.id": "pgs_e2e",
+        "ratel.twin.id": "workflow-label",
+        "ratel.twin.run_id": runId,
+        "ratel.twin.overrides": ["model", "maxTokens"],
+        "ratel.twin.config_hash": expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    });
   });
 
   it("re-acks a duplicate run.start and runs the twin once", async () => {
@@ -212,3 +238,28 @@ describe("runs over the socket", () => {
     expect(controller.invalid).toEqual([]);
   });
 });
+
+/** The exported root span of a trace, with its resource and the key it was sent with. */
+function exportedRoot(controller: TestController, traceId: string) {
+  for (const { key, body } of controller.traces) {
+    for (const rs of body.resourceSpans) {
+      for (const ss of rs.scopeSpans) {
+        const span = ss.spans.find((s) => s.traceId === traceId && s.name.startsWith("invoke_"));
+        if (span) {
+          return {
+            key,
+            resource: plain(rs.resource.attributes),
+            span: { name: span.name, attributes: plain(span.attributes) },
+          };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function plain(attributes: OtlpKeyValue[]): Record<string, unknown> {
+  const value = (v: OtlpKeyValue["value"]): unknown =>
+    v.arrayValue ? v.arrayValue.values.map(value) : (v.stringValue ?? v.boolValue ?? v.intValue);
+  return Object.fromEntries(attributes.map((a) => [a.key, value(a.value)]));
+}

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { Manifest } from "../manifest.js";
 import type { ChildReply, ChildRequest } from "./child-messages.js";
 import type { RunEventPayload, RunResult, RunStartPayload } from "./runs.js";
+import type { PlaygroundTelemetryConfig } from "./tracing.js";
 
 // The parent side of the `ratel dev` child worker: forks it under tsx, asks it
 // for the manifest, hands it runs and replaces it on reload. The parent never
@@ -27,10 +28,20 @@ export class ChildHost {
   }
 
   /** Starts a fresh child (stopping the old one) and loads the manifest from it. */
-  async restart(files: readonly string[], build: Manifest["build"]): Promise<Manifest> {
+  async restart(
+    files: readonly string[],
+    build: Manifest["build"],
+    telemetry?: PlaygroundTelemetryConfig,
+  ): Promise<Manifest> {
     this.stop();
     this.#child = this.#fork();
-    const reply = await this.#ask({ kind: "manifest", root: this.#root, files, build });
+    const reply = await this.#ask({
+      kind: "manifest",
+      root: this.#root,
+      files,
+      build,
+      ...(telemetry ? { telemetry } : {}),
+    });
     if (!reply.ok) throw new Error(reply.error);
     return reply.manifest;
   }

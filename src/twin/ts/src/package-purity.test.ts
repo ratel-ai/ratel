@@ -31,9 +31,16 @@ describe("@ratel-ai/twin entry stays network-free", () => {
     const tsconfig = JSON.parse(readFileSync(new URL("../tsconfig.json", import.meta.url), "utf8"));
     expect(tsconfig.exclude).toContain("src/test-support/**/*");
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    // tsx loads user twins in the CLI's child worker only, and ws holds the
-    // `ratel dev` socket in the CLI parent only. The entry reaches neither.
-    expect(pkg.dependencies ?? {}).toEqual({ tsx: "^4.21.0", ws: "^8.21.1" });
+    // CLI only, never reached from the entry: tsx loads user twins in the child
+    // worker, ws holds the `ratel dev` socket, and the OpenTelemetry SDK and
+    // OTLP exporter send playground traces from the `ratel dev` child.
+    expect(pkg.dependencies ?? {}).toEqual({
+      "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
+      "@opentelemetry/resources": "^2.9.0",
+      "@opentelemetry/sdk-trace-node": "^2.9.0",
+      tsx: "^4.21.0",
+      ws: "^8.21.1",
+    });
     expect(pkg.bin).toEqual({ ratel: "./dist/cli/main.js" });
     expect(pkg.peerDependencies).toEqual({ "@opentelemetry/api": "^1.9.0" });
     expect(pkg.license).toBe("MIT");

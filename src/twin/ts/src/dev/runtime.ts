@@ -3,12 +3,13 @@ import { hostname } from "node:os";
 import { buildInfo } from "../cli/build-info.js";
 import { discoverTwinFiles } from "../cli/discover.js";
 import { canonicalJson } from "../hash.js";
-import type { Manifest } from "../manifest.js";
+import { type Manifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
 import { ChildHost } from "./child-host.js";
 import { ConnectError, exchangeToken, runnerSocketUrl } from "./connect-http.js";
 import { Connection, type ConnectionEffect, type ConnectionEvent } from "./connection.js";
 import { type Envelope, type FrameStamp, MAX_FRAME_BYTES, parseFrame } from "./protocol.js";
 import { type RunStartPayload, Runs, type RunsEffect } from "./runs.js";
+import { playgroundResource } from "./tracing.js";
 import { watchProject } from "./watch.js";
 import { openSocket, type Socket } from "./ws-socket.js";
 
@@ -45,10 +46,24 @@ export interface DevHandle {
 /** Loads the twins, connects to Ratel and keeps the connection alive until stop(). */
 export async function startDev(options: DevOptions): Promise<DevHandle> {
   const child = new ChildHost(options.root);
-  const manifest = await loadManifest(child, options.root);
+  const runner = runnerInfo(options.root);
+  const loadManifest = (): Promise<Manifest> => {
+    const build = buildInfo(options.root);
+    const resource = playgroundResource({
+      build,
+      runner,
+      sdk: { name: SDK_NAME, version: SDK_VERSION },
+    });
+    return child.restart(discoverTwinFiles(options.root), build, {
+      baseUrl: options.baseUrl,
+      apiKey: options.apiKey,
+      resource,
+    });
+  };
+  const manifest = await loadManifest();
   const stamp = frameStamp();
   const connection = new Connection({
-    runner: runnerInfo(options.root),
+    runner,
     manifest,
     stamp,
     maxConcurrency: MAX_CONCURRENCY,
@@ -218,7 +233,7 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
       return;
     }
     try {
-      const next = await loadManifest(child, options.root);
+      const next = await loadManifest();
       const changed = canonicalJson(next) !== canonicalJson(connection.manifest);
       options.out(`reloaded ${next.twins.length} twin(s)${changed ? "; manifest updated" : ""}`);
       if (changed) step({ type: "manifest.changed", manifest: next });
@@ -260,10 +275,6 @@ export function playgroundLines(
   const prefix = projectId ? `${base}/project/${encodeURIComponent(projectId)}` : base;
   const width = Math.max(0, ...manifest.twins.map((t) => t.id.length));
   return manifest.twins.map((t) => `  ${t.id.padEnd(width)}  ${prefix}/twins/${t.id}`);
-}
-
-async function loadManifest(child: ChildHost, root: string): Promise<Manifest> {
-  return child.restart(discoverTwinFiles(root), buildInfo(root));
 }
 
 /** Stable across restarts of the same project on the same machine. */

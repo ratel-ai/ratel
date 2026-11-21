@@ -16,6 +16,11 @@ export interface RunStartPayload {
   readonly toolModes?: Readonly<Record<string, string>>;
   readonly context?: Readonly<Record<string, unknown>>;
   readonly configHash: string;
+  readonly replay?: {
+    readonly sourceTraceId?: string;
+    readonly sourceSessionId?: string;
+    readonly arm?: "baseline" | "candidate";
+  };
 }
 
 /** One `run.event` payload, as the child worker reports it. */
