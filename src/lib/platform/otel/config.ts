@@ -63,13 +63,21 @@ export function resolveSelfTelemetryConfig(
   if (!traces || !logs) return null;
 
   return {
-    resourceAttributes: {
-      [ATTR_SERVICE_NAME]: serviceName(environment),
-      [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: staticEnvironment.deploymentEnvironment || "development",
-    },
+    resourceAttributes: processResourceAttributes(environment, staticEnvironment),
     tracesSamplerRatio: resolveTracesSamplerRatio(environment.OTEL_TRACES_SAMPLER_ARG),
     traces,
     logs,
+  };
+}
+
+/** The resource every exporter of this process starts from: its service and deployment. */
+export function processResourceAttributes(
+  environment: Environment,
+  staticEnvironment: StaticTelemetryEnvironment,
+): SelfTelemetryConfig["resourceAttributes"] {
+  return {
+    [ATTR_SERVICE_NAME]: serviceName(environment),
+    [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: staticEnvironment.deploymentEnvironment || "development",
   };
 }
 
@@ -130,7 +138,8 @@ export function selfTelemetryConfigWarnings(
   return warnings;
 }
 
-function resolveTracesSamplerRatio(value: string | undefined): number {
+/** `OTEL_TRACES_SAMPLER_ARG` as a 0..1 root sampling ratio; 1 when unset or invalid. */
+export function resolveTracesSamplerRatio(value: string | undefined): number {
   const ratio = Number.parseFloat(value ?? "");
   return Number.isNaN(ratio) ? 1 : Math.min(1, Math.max(0, ratio));
 }

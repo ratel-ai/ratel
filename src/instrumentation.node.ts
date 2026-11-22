@@ -13,9 +13,11 @@ let registeredShutdown: TelemetryShutdown | undefined;
 
 /**
  * The platform's own traces and logs (owned port of upstream's registration, without its
- * analytics vendor). Nothing is registered, and the OpenTelemetry SDK is not even loaded, unless
- * both OTLP endpoints are set (`lib/platform/otel/config.ts`): an unconfigured process exports
- * nothing. Returns the flush to run before the process exits.
+ * analytics vendor), and its server traces for APM. Nothing is registered, and the OpenTelemetry
+ * SDK is not even loaded, unless both self-telemetry OTLP endpoints are set
+ * (`lib/platform/otel/config.ts`) or the APM collector's `OTEL_EXPORTER_OTLP_ENDPOINT` is
+ * (`lib/platform/otel/server-traces.ts`): an unconfigured process exports nothing. Returns the
+ * flush to run before the process exits.
  *
  * Call it before anything loads `pg`: the instrumentations patch modules as they load.
  */
@@ -25,13 +27,20 @@ export async function registerNodeInstrumentation(
 ): Promise<TelemetryShutdown | undefined> {
   if (registered) return registeredShutdown;
 
-  const { isTelemetryExportOrigin, resolveSelfTelemetryConfig, selfTelemetryConfigWarnings } =
-    await import("@/lib/platform/otel/config");
+  const {
+    isTelemetryExportOrigin,
+    processResourceAttributes,
+    resolveSelfTelemetryConfig,
+    resolveTracesSamplerRatio,
+    selfTelemetryConfigWarnings,
+  } = await import("@/lib/platform/otel/config");
+  const { resolveServerTracesConfig } = await import("@/lib/platform/otel/server-traces");
   const config = resolveSelfTelemetryConfig(environment, staticEnvironment);
   for (const warning of selfTelemetryConfigWarnings(environment, staticEnvironment, config)) {
     console.warn(warning);
   }
-  if (!config) return undefined;
+  const serverTraces = resolveServerTracesConfig(environment);
+  if (!config && !serverTraces) return undefined;
 
   const [
     { logs },
@@ -53,6 +62,7 @@ export async function registerNodeInstrumentation(
     { FilteredSpanProcessor, isModelCallSpan, resolveRatelExportConfig, sameOrigin },
     { isMcpToolSpan, mcpExportProcessors, resolveMcpExportConfig },
     { editionAnalyticsShutdown },
+    { serverTracesProcessor },
   ] = await Promise.all([
     import("@opentelemetry/api-logs"),
     import("@opentelemetry/context-async-hooks"),
@@ -73,25 +83,45 @@ export async function registerNodeInstrumentation(
     import("@/lib/platform/otel/ratel-export"),
     import("@/lib/mcp/telemetry/export"),
     import("@/lib/platform/edition-telemetry"),
+    import("@/lib/platform/otel/server-traces"),
   ]);
 
-  const resource = resourceFromAttributes(config.resourceAttributes);
+  const resource = resourceFromAttributes(
+    config?.resourceAttributes ?? processResourceAttributes(environment, staticEnvironment),
+  );
   // Ratel's own model calls go to a Ratel project (lib/platform/otel/ratel-export.ts),
-  // and only there: the self-telemetry exporter keeps every other span, as before.
-  const ratelExport = resolveRatelExportConfig(environment);
+  // and only there: the self-telemetry exporter keeps every other span, as before. Both ride
+  // on self-telemetry, so neither is on without it.
+  const ratelExport = config ? resolveRatelExportConfig(environment) : null;
   // Ratel's own MCP tool calls go to their own project (lib/mcp/telemetry/export.ts).
-  const mcpExport = resolveMcpExportConfig(environment);
+  const mcpExport = config ? resolveMcpExportConfig(environment) : null;
   const tracerProvider = new NodeTracerProvider({
     resource,
-    sampler: createSelfTelemetrySampler(config.tracesSamplerRatio),
+    sampler: createSelfTelemetrySampler(
+      config?.tracesSamplerRatio ?? resolveTracesSamplerRatio(environment.OTEL_TRACES_SAMPLER_ARG),
+    ),
     spanProcessors: [
       new SelfTimeSpanProcessor(),
-      new FilteredSpanProcessor(
-        new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
-          exportTimeoutMillis: EXPORT_TIMEOUT_MS,
-        }),
-        (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
-      ),
+      ...(config
+        ? [
+            new FilteredSpanProcessor(
+              new BatchSpanProcessor(new OTLPTraceExporter(config.traces), {
+                exportTimeoutMillis: EXPORT_TIMEOUT_MS,
+              }),
+              (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
+            ),
+          ]
+        : []),
+      // Server traces for APM (Cloud: the Datadog Agent sidecar), with their own resource.
+      ...(serverTraces
+        ? [
+            serverTracesProcessor(serverTraces, {
+              accept: (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
+              baseResource: resource,
+              exportTimeoutMillis: EXPORT_TIMEOUT_MS,
+            }),
+          ]
+        : []),
       ...(ratelExport
         ? [
             new FilteredSpanProcessor(
@@ -105,37 +135,41 @@ export async function registerNodeInstrumentation(
       ...mcpExportProcessors(mcpExport),
     ],
   });
-  const loggerProvider = new LoggerProvider({
-    resource,
-    processors: [
-      new BatchLogRecordProcessor({
-        exporter: new OTLPLogExporter(config.logs),
-        exportTimeoutMillis: EXPORT_TIMEOUT_MS,
-        scheduledDelayMillis: LOG_SCHEDULE_DELAY_MS,
-      }),
-    ],
-  });
+  // Logs are self-telemetry's only: server traces send none.
+  const loggerProvider = config
+    ? new LoggerProvider({
+        resource,
+        processors: [
+          new BatchLogRecordProcessor({
+            exporter: new OTLPLogExporter(config.logs),
+            exportTimeoutMillis: EXPORT_TIMEOUT_MS,
+            scheduledDelayMillis: LOG_SCHEDULE_DELAY_MS,
+          }),
+        ],
+      })
+    : undefined;
 
   tracerProvider.register({ contextManager: new AsyncLocalStorageContextManager() });
-  logs.setGlobalLoggerProvider(loggerProvider);
+  if (loggerProvider) logs.setGlobalLoggerProvider(loggerProvider);
   registerInstrumentations({
     tracerProvider,
     loggerProvider,
     instrumentations: [
       new UndiciInstrumentation({
         ignoreRequestHook: ({ origin }) =>
-          isTelemetryExportOrigin(origin, config) ||
+          (config !== null && isTelemetryExportOrigin(origin, config)) ||
+          (serverTraces !== null && sameOrigin(origin, serverTraces.url)) ||
           (ratelExport !== null && sameOrigin(origin, ratelExport.url)) ||
           (mcpExport !== null && sameOrigin(origin, mcpExport.url)),
       }),
       new PgInstrumentation({ requireParentSpan: true }),
-      new PinoInstrumentation(),
+      ...(loggerProvider ? [new PinoInstrumentation()] : []),
     ],
   });
 
   registeredShutdown = createTelemetryShutdown({
     tracerProvider,
-    loggerProvider,
+    loggerProvider: loggerProvider ?? { forceFlush: async () => {} },
     // The edition's analytics flush, its port loaded only now: the composition loads after
     // this registration, so its modules see the patched `pg` and `fetch`.
     shutdownAnalytics: editionAnalyticsShutdown(EXPORT_TIMEOUT_MS),
