@@ -8,7 +8,7 @@ import { defaultMcpAppLoadDeps, loadMcpAppCatalog } from "@/lib/mcp/apps/load";
 import type { McpAppView } from "@/lib/mcp/apps/types";
 
 /**
- * The built views (pnpm mcp-apps:build, which `pnpm test` runs first): one
+ * The built views (pnpm --filter @ratel/mcp-apps build, which `pnpm test` runs first): one
  * self-contained document each, within budget, and bindings the server accepts.
  */
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,7 @@ test("every view is built", () => {
   for (const view of viewNames)
     assert.ok(
       existsSync(path.join(DIST, `${view}.html`)),
-      `${view}.html is missing: run pnpm mcp-apps:build`,
+      `${view}.html is missing: run pnpm --filter @ratel/mcp-apps build`,
     );
 });
 
@@ -99,9 +99,7 @@ function sources(dir: string): string[] {
 test("views reuse components/ds rather than copy it, and reach next/* only through the shims", () => {
   // Owned (ADR-0030): the design system is the workspace package here, not components/ds.
   const dsFiles = new Set(
-    readdirSync(
-      path.join(HERE, "..", "..", "..", "packages", "design-system", "src", "components"),
-    ),
+    readdirSync(path.join(HERE, "..", "packages", "design-system", "src", "components")),
   );
   for (const file of sources(HERE)) {
     const text = readFileSync(file, "utf8");
@@ -202,15 +200,13 @@ test("every view makes room for an open DS Panel in an inline frame (shell/view.
 });
 
 test("a server action module a console component imports reaches a view as a stub, never its server code", async () => {
-  const { isServerActionModule, serverActionStub } = await import(
-    "../../scripts/build-mcp-apps.mjs"
-  );
+  const { isServerActionModule, serverActionStub } = await import("./scripts/build.mjs");
   const source =
     '"use server";\n\nimport { getDb } from "@/lib/platform/db/client";\nexport async function loadThing(id: string) { return getDb(); }\nexport type Thing = string;\n';
   assert.equal(isServerActionModule(source), true);
   assert.equal(isServerActionModule('/** doc */\n"use server";\nexport const x = 1;'), true);
   assert.equal(isServerActionModule('"use client";\nexport const x = 1;'), false);
-  const stub = serverActionStub(source, path.join(HERE, "..", "lib", "x.ts"));
+  const stub = serverActionStub(source, path.join(HERE, "..", "web", "src", "lib", "x.ts"));
   assert.match(stub, /export async function loadThing\(\) \{ throw new Error/);
   assert.doesNotMatch(stub, /getDb|type Thing/);
   // The replay's inspector imports lib/session-chat/actions.ts as its default loader.
@@ -220,7 +216,7 @@ test("a server action module a console component imports reaches a view as a stu
 });
 
 test("the console's stylesheet does not scan mcp-apps/: its compiled CSS is what it is without the views", async () => {
-  const web = path.join(HERE, "..", "..");
+  const web = path.join(HERE, "..", "web");
   const { default: postcss } = await import("postcss");
   const { default: tailwind } = await import("@tailwindcss/postcss");
   const { createRequire } = await import("node:module");
@@ -265,7 +261,7 @@ test("no view reaches for Node's process: it runs in a browser frame", () => {
 });
 
 test("an inlined bundle cannot end or derail its <script>: </script and <!-- are escaped, and still read the same", async () => {
-  const { inlineScript } = await import("../../scripts/build-mcp-apps.mjs");
+  const { inlineScript } = await import("./scripts/build.mjs");
   const js = `var a="</script><!--<script>",b=/<!--/,c=\`</SCRIPT>\`;globalThis.out=[a,b.test("x<!--y"),c];`;
   const safe = inlineScript(js);
   assert.equal(/<\/script|<!--/i.test(safe), false);

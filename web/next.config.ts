@@ -33,10 +33,12 @@ const nextConfig: NextConfig = {
   // `@ratel-ai/sdk` addon are copied into .next/standalone.
   output: "standalone",
   outputFileTracingRoot: path.join(process.cwd(), ".."),
-  // The MCP Apps views (scripts/build-mcp-apps.mts) are read from disk by
-  // lib/mcp/apps/load.ts, which tracing cannot see: ship them with the route.
+  // The MCP Apps views (the @ratel/mcp-apps package, built before Next) are read from disk by
+  // lib/mcp/apps/load.ts through the package's VIEWS_PATH. Turbopack copies that file into
+  // .next/server/assets (it is a `new URL(..., import.meta.url)`); the include keeps it in the
+  // standalone output for a build that does not bundle the package.
   outputFileTracingIncludes: {
-    "/api/mcp": ["./src/mcp-apps/dist/views.json"],
+    "/api/mcp": ["../mcp-apps/dist/views.json"],
   },
   turbopack: {
     resolveAlias: {

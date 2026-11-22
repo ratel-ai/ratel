@@ -8,7 +8,7 @@ const path = require("node:path");
  *
  * Tailwind finds a stylesheet's classes by scanning every source under the
  * project, mcp-apps/ included. The views compile app/globals.css themselves
- * (scripts/build-mcp-apps.mts, which calls PostCSS directly and never reads
+ * (scripts/build.mts, which calls PostCSS directly and never reads
  * this config) with their own sources, so the exclusion cannot live in
  * globals.css: there it would strip the views' classes too. Here it applies to
  * Next's build of app/globals.css alone, ahead of @tailwindcss/postcss.

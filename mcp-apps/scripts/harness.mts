@@ -2,8 +2,8 @@
  * The MCP Apps dev harness: any view, with any of its fixtures, in light and
  * dark side by side, hosted by ext-apps' AppBridge. No server, no MCP host.
  *
- *   pnpm mcp-apps:dev              http://localhost:4180
- *   PORT=4200 pnpm mcp-apps:dev
+ *   pnpm --filter @ratel/mcp-apps dev   http://localhost:4180
+ *   PORT=4200 pnpm --filter @ratel/mcp-apps dev
  *
  * Each page load rebuilds the view, so editing a view or a DS component and
  * reloading shows the change. Fixtures are views/<view>/fixtures.ts.
@@ -13,16 +13,16 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
-import type { ViewFixtures } from "../src/mcp-apps/shell/types";
-import type { HarnessConfig } from "../src/mcp-apps/harness/host";
-import { buildView, listViews } from "@/scripts/build-mcp-apps.mjs";
+import type { ViewFixtures } from "../shell/types";
+import type { HarnessConfig } from "../harness/host";
+import { buildView, listViews } from "./build.mjs";
 
-const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT ?? 4180);
 
 async function hostScript(): Promise<string> {
   const result = await build({
-    entryPoints: [path.join(WEB, "src", "mcp-apps", "harness", "host.ts")],
+    entryPoints: [path.join(ROOT, "harness", "host.ts")],
     bundle: true,
     write: false,
     format: "iife",
@@ -34,7 +34,7 @@ async function hostScript(): Promise<string> {
 }
 
 async function fixturesFor(view: string): Promise<ViewFixtures> {
-  const file = path.join(WEB, "src", "mcp-apps", "views", view, "fixtures.ts");
+  const file = path.join(ROOT, "views", view, "fixtures.ts");
   if (!existsSync(file)) return {};
   const imported = (await import(`${pathToFileURL(file).href}?t=${Date.now()}`)) as { default: ViewFixtures | { default: ViewFixtures } };
   const value = imported.default as ViewFixtures & { default?: ViewFixtures };

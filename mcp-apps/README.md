@@ -3,7 +3,9 @@
 Interactive views the Ratel MCP server shows inside MCP hosts (Claude,
 ChatGPT, VS Code…), built from the console's own design system
 (`@ratel/design-system`). The server side (resources, tool binding, the
-`FF_MCP_APPS` switch) is in `lib/mcp/apps/README.md`.
+`FF_MCP_APPS` switch) is in `web/src/lib/mcp/apps/README.md`. This folder is
+the `@ratel/mcp-apps` workspace package: web/ depends on it and reads only its
+built `dist/views.json`.
 
 ```
 mcp-apps/
@@ -16,9 +18,11 @@ mcp-apps/
 │   ├── state.ts        the view's states as a reducer (connecting, partial, waiting,
 │   │                   ready, error, cancelled) over Ratel's result envelope
 │   ├── view-frame.tsx  skeleton, error and cancelled rendered the DS way
-│   ├── view.css        app/globals.css + the light set of the --ds-* tokens
+│   ├── view.css        web/src/app/globals.css + the light set of the --ds-* tokens
 │   └── shims/          next/link and next/navigation, the only next/* a view reaches
 ├── harness/host.ts   the dev harness's host (ext-apps' AppBridge)
+├── scripts/          build.mts (the view build), harness.mts (the dev harness)
+├── index.mjs         VIEWS_PATH: where the build writes dist/views.json
 ├── views/<view>/
 │   ├── main.tsx        mountView({ name, bindings }, <View />)
 │   ├── bindings.ts     default export: { title, description, bindings[] }
@@ -28,10 +32,14 @@ mcp-apps/
 
 ## Commands
 
-- `pnpm mcp-apps:build` builds every view into `dist/<view>.html` (script and
+- `pnpm --filter @ratel/mcp-apps build` builds every view into `dist/<view>.html` (script and
   styles inlined, nothing fetched) and `dist/views.json` (what the server serves).
-  `build`, `dev`, `typecheck` and `test` run it first.
-- `pnpm mcp-apps:dev` opens the harness on `http://localhost:4180`: any view, any
+  web's `build`, `dev`, `typecheck` and `test` run it first (`pnpm mcp-apps:build` there).
+  web reads only `dist/views.json`, through this package's `VIEWS_PATH` (`index.mjs`).
+- `pnpm --filter @ratel/mcp-apps test` builds the views, then runs this package's tests.
+- `pnpm --filter @ratel/mcp-apps typecheck`: the views import the console's code as `@/`
+  (`../web/src`, `tsconfig.json`), as the private modules do.
+- `pnpm --filter @ratel/mcp-apps dev` opens the harness on `http://localhost:4180`: any view, any
   fixture, light and dark side by side, rebuilt on every reload.
 
 ## Try them in Claude Desktop (local)
@@ -166,4 +174,4 @@ A view shows what its console page shows. Three rules keep it so:
   app-only tool (listed only with `FF_MCP_APPS` on, `visibility: ["app"]`).
   Opening a step or a turn sends `ui/update-model-context`; fullscreen goes
   through `requestDisplayMode`. A `"use server"` module a console component
-  imports reaches a view as a stub (`scripts/build-mcp-apps.mts`).
+  imports reaches a view as a stub (`scripts/build.mts`).

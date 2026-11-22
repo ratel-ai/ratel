@@ -1,7 +1,7 @@
 /**
  * The dev harness's host: ext-apps' own AppBridge, the reference host side of
  * MCP Apps, driving each view frame with a fixture instead of a server.
- * Bundled by scripts/mcp-apps-harness.mts; the page embeds its config.
+ * Bundled by scripts/harness.mts; the page embeds its config.
  */
 
 import type { McpUiHostContext } from "@modelcontextprotocol/ext-apps";

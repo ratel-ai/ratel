@@ -1,5 +1,5 @@
 /**
- * next/link inside a view (aliased by scripts/build-mcp-apps.mts).
+ * next/link inside a view (aliased by scripts/build.mts).
  *
  * A console path ("/projects/…") means nothing inside a host's iframe, so a
  * link becomes a plain <a> to the same page on the console, and a click asks

@@ -16,7 +16,7 @@ Thumbs.db
 # Node
 node_modules/
 
-# Build output (web/src/mcp-apps/dist, package builds)
+# Build output (mcp-apps/dist, package builds)
 dist/
 
 # TypeScript

@@ -13,6 +13,7 @@ WORKDIR /app
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY web/package.json web/
+COPY mcp-apps/package.json mcp-apps/
 COPY packages/brand/package.json packages/brand/
 COPY packages/design-system/package.json packages/design-system/
 COPY ee/package.json ee/
@@ -28,6 +29,7 @@ RUN cd web && node -e 'import("@ratel-ai/sdk")'
 # --- source: app + shared packages only (ee/ stays out until build-cloud) ---
 FROM deps AS source
 COPY web web
+COPY mcp-apps mcp-apps
 COPY packages/brand packages/brand
 COPY packages/design-system packages/design-system
 COPY scripts/link-ee.mjs scripts/
@@ -44,11 +46,11 @@ RUN rm -rf "web/src/app/(ee)"
 # NODE_OPTIONS raises the heap to 4 GB, as upstream's image does: the Next type-check worker
 # needs more than the default.
 RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
-# The MCP Apps views are read from disk at runtime (lib/mcp/apps/load.ts) and reach
-# the standalone output only through outputFileTracingIncludes in next.config.ts.
+# The MCP Apps views (@ratel/mcp-apps, built first) are read from disk at runtime
+# (lib/mcp/apps/load.ts): the server build copies them into .next/server/assets.
 # Without the file the server runs and serves no views, with only a warning in the
 # log: fail the build instead.
-RUN test -s web/.next/standalone/web/src/mcp-apps/dist/views.json
+RUN ls web/.next/standalone/web/.next/server/assets/views.*.json
 
 # --- build-cloud: bring in commercial modules -----------------------------
 FROM source AS build-cloud
@@ -61,7 +63,7 @@ COPY ee ee
 # to the edition and deletes them before anything reaches the runtime image.
 RUN BROWSER_SOURCEMAPS=1 NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 # As in build-oss: the MCP Apps views must be in the standalone output.
-RUN test -s web/.next/standalone/web/src/mcp-apps/dist/views.json
+RUN ls web/.next/standalone/web/.next/server/assets/views.*.json
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
 RUN node ee/src/src/db/bundle-migrator.mjs /app/migrator
 # The edition's source-map step (ee/src/scripts/browser-sourcemaps.sh): it uploads the maps for its

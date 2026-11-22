@@ -1,4 +1,5 @@
 packages:
   - 'ee'
   - 'web'
+  - 'mcp-apps'
   - 'packages/*'

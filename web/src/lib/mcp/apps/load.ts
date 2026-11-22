@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import path from "node:path";
+import { VIEWS_PATH } from "@ratel/mcp-apps";
 import { buildMcpAppCatalog, type McpAppCatalog } from "@/lib/mcp/apps/catalog";
 import type { McpAppView } from "@/lib/mcp/apps/types";
 import { assembleOperations } from "@/lib/mcp/operations";
@@ -9,10 +9,10 @@ import { reportServerException } from "@/lib/platform/telemetry";
 const logger = getLogger("mcp/apps");
 
 /**
- * Where the view build writes its output, relative to src. Gitignored:
+ * Where the view build (the @ratel/mcp-apps package) writes its output. Gitignored:
  * `pnpm build`, `dev`, `typecheck` and `test` run the view build first.
  */
-export const GENERATED_VIEWS_PATH = path.join("src", "mcp-apps", "dist", "views.json");
+export const GENERATED_VIEWS_PATH = VIEWS_PATH;
 
 export interface McpAppLoadDeps {
   /** The built views, or null when the view build has not run. */
@@ -27,7 +27,7 @@ export interface McpAppLoadDeps {
  * the route handler (appsFor) serves the server without views.
  */
 export function readGeneratedViews(
-  file: string = path.join(process.cwd(), GENERATED_VIEWS_PATH),
+  file: string = GENERATED_VIEWS_PATH,
 ): readonly McpAppView[] | null {
   let raw: string;
   try {

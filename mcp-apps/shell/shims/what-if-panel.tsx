@@ -1,6 +1,6 @@
 /**
  * components/session-replay/WhatIfPanel inside a view (swapped in by
- * scripts/build-mcp-apps.mts).
+ * scripts/build.mts).
  *
  * What if… runs a model call again through the console's server actions; a view
  * has none, and passes no `whatIf` to the replay, so the step inspector never

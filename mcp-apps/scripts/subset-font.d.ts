@@ -1,4 +1,4 @@
-/** subset-font ships no types; the part scripts/build-mcp-apps.mts uses. */
+/** subset-font ships no types; the part scripts/build.mts uses. */
 declare module "subset-font" {
   interface SubsetOptions {
     targetFormat?: "sfnt" | "woff" | "woff2" | "truetype";

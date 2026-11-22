@@ -1,8 +1,8 @@
 /**
  * Build every MCP Apps view into one self-contained HTML document.
  *
- *   pnpm mcp-apps:build            every view in mcp-apps/views
- *   pnpm mcp-apps:build list       only these views (the harness's fast path)
+ *   pnpm --filter @ratel/mcp-apps build             every view in views/
+ *   pnpm --filter @ratel/mcp-apps build list        only these views (the harness's fast path)
  *
  * A host loads a view into a sandboxed iframe whose CSP blocks the network by
  * default, so nothing may be fetched: esbuild bundles views/<view>/main.tsx
@@ -12,8 +12,8 @@
  * next/navigation resolve to the shims in mcp-apps/shell/shims, the only
  * next/* a view can reach.
  *
- * Writes src/mcp-apps/dist/<view>.html and src/mcp-apps/dist/views.json, the McpAppView[]
- * the MCP server serves (lib/mcp/apps). Bindings come from views/<view>/bindings.ts.
+ * Writes dist/<view>.html and dist/views.json, the McpAppView[]
+ * the MCP server serves (web/src/lib/mcp/apps reads it through this package's VIEWS_PATH). Bindings come from views/<view>/bindings.ts.
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -23,12 +23,13 @@ import { build, type Plugin } from "esbuild";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 import subsetFont from "subset-font";
-import type { McpAppView } from "../src/lib/mcp/apps/types";
-import type { ViewBindings } from "../src/mcp-apps/shell/types";
+import type { McpAppView } from "@/lib/mcp/apps/types";
+import type { ViewBindings } from "../shell/types";
 
-const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SRC = path.join(WEB, "src");
-const ROOT = path.join(SRC, "mcp-apps");
+/** This package (mcp-apps/), the repository root, and the app code the views import through `@/`. */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO = path.resolve(ROOT, "..");
+const WEB_SRC = path.join(REPO, "web", "src");
 const VIEWS = path.join(ROOT, "views");
 const SHELL = path.join(ROOT, "shell");
 export const DIST = path.join(ROOT, "dist");
@@ -52,7 +53,7 @@ export function isServerActionModule(source: string): boolean {
  */
 export function serverActionStub(source: string, file: string): string {
   const names = [...source.matchAll(/^export\s+(?:async\s+)?(?:function\s*\*?|const|let)\s+([A-Za-z_$][\w$]*)/gm)].map((match) => match[1]);
-  const where = path.relative(WEB, file);
+  const where = path.relative(REPO, file);
   return names
     .map((name) => `export async function ${name}() { throw new Error(${JSON.stringify(`${name} (${where}) is a server action; an MCP view provides its own`)}); }`)
     .join("\n");
@@ -76,14 +77,14 @@ const serverActions: Plugin = {
  */
 const CONSOLE_ONLY: Readonly<Record<string, string>> = {
   // Owned (ADR-0030): the panel lands in components/console here.
-  [path.join(SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
+  [path.join(WEB_SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
 };
 
 const consoleOnly: Plugin = {
   name: "console-only-shims",
   setup(build) {
     build.onResolve({ filter: /WhatIfPanel$/ }, (args) => {
-      const target = args.path.startsWith("@/") ? path.join(SRC, args.path.slice(2)) : path.resolve(args.resolveDir, args.path);
+      const target = args.path.startsWith("@/") ? path.join(WEB_SRC, args.path.slice(2)) : path.resolve(args.resolveDir, args.path);
       const shim = CONSOLE_ONLY[target];
       return shim ? { path: shim } : undefined;
     });
@@ -97,7 +98,7 @@ const consoleOnly: Plugin = {
 export async function bundleScript(entry: string): Promise<{ script: string; importedCss: string; sources: string[] }> {
   const result = await build({
     entryPoints: [entry],
-    absWorkingDir: WEB,
+    absWorkingDir: ROOT,
     bundle: true,
     write: false,
     outdir: path.join(DIST, ".esbuild"),
@@ -107,7 +108,7 @@ export async function bundleScript(entry: string): Promise<{ script: string; imp
     minify: true,
     legalComments: "none",
     jsx: "automatic",
-    tsconfig: path.join(WEB, "tsconfig.json"),
+    tsconfig: path.join(ROOT, "tsconfig.json"),
     alias: {
       "next/link": path.join(SHELL, "shims", "next-link.tsx"),
       "next/navigation": path.join(SHELL, "shims", "next-navigation.ts"),
@@ -142,17 +143,17 @@ export function inlineScript(js: string): string {
 }
 
 /**
- * The app's own files a bundle took in beyond components/ds and mcp-apps
+ * The app's own files (web/src) a bundle took in beyond components/ds
  * (which view.css already scans): a console component a view imports, such as
  * components/health/v2/HealthScore.tsx, keeps its Tailwind classes. Absolute
- * paths; esbuild names its inputs relative to `absWorkingDir` (WEB).
+ * paths; esbuild names its inputs relative to `absWorkingDir` (ROOT).
  */
 export function tailwindSources(inputs: readonly string[]): string[] {
   return inputs
     .filter((input) => !input.includes("node_modules") && /\.(tsx|ts)$/.test(input))
-    .map((input) => path.resolve(WEB, input))
-    .filter((file) => file.startsWith(WEB + path.sep))
-    .filter((file) => !file.startsWith(path.join(SRC, "mcp-apps") + path.sep) && !file.startsWith(path.join(SRC, "components", "ds") + path.sep))
+    .map((input) => path.resolve(ROOT, input))
+    .filter((file) => file.startsWith(WEB_SRC + path.sep))
+    .filter((file) => !file.startsWith(path.join(WEB_SRC, "components", "ds") + path.sep))
     .sort();
 }
 

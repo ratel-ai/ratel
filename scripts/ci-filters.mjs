@@ -60,6 +60,7 @@ export const SCRIPT_OWNERS = {
 /** Package directory -> package.json name, for the workspace-dependency contract. */
 export const PACKAGE_DIRS = {
   web: "@ratel/platform",
+  "mcp-apps": "@ratel/mcp-apps",
   "packages/brand": "@ratel/brand",
   "packages/design-system": "@ratel/design-system",
   ee: "@ratel/ee",
@@ -73,6 +74,7 @@ export const PACKAGE_DIRS = {
  */
 export const PACKAGE_OUTPUTS = {
   web: ["platform", "compose"],
+  "mcp-apps": ["platform", "compose"],
   "packages/brand": ["design_system"],
   "packages/design-system": ["design_system"],
   ee: ["platform"],
@@ -212,6 +214,7 @@ const CLAIMS = [
   ".github/dependabot.yml",
   ".trivyignore.yaml",
   "web/**",
+  "mcp-apps/**",
   "packages/brand/**",
   "packages/design-system/**",
   "ee/**",
@@ -271,9 +274,10 @@ function applyFile(result, file) {
 
   if (
     matches("web/**", file) ||
+    matches("mcp-apps/**", file) ||
     matches("ee/**", file)
   ) {
-    // Markdown under src is handled by DOC_ALLOW before we get here.
+    // Markdown under them is handled by DOC_ALLOW before we get here.
     merge(result, ["platform", "compose"]);
   }
 

@@ -1,5 +1,5 @@
 /**
- * next/navigation inside a view (aliased by scripts/build-mcp-apps.mts).
+ * next/navigation inside a view (aliased by scripts/build.mts).
  *
  * A view has no router and often no real URL (hosts load it from srcdoc or a
  * sandbox proxy, where history writes throw). The DS keeps UI state such as the

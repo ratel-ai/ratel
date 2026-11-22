@@ -3,16 +3,10 @@ import { test } from "node:test";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { buildMcpAppCatalog } from "@/lib/mcp/apps/catalog";
+import { readGeneratedViews } from "@/lib/mcp/apps/load";
 import { BINDING_META_KEY, type McpAppView, VIEW_META_KEY } from "@/lib/mcp/apps/types";
 import { buildRequestRegistry } from "@/lib/mcp/operations";
 import { buildRegistry, type McpOperation } from "@/lib/mcp/registry";
-import type { ViewBindings } from "@/mcp-apps/shell/types";
-import detail from "@/mcp-apps/views/detail/bindings";
-import health from "@/mcp-apps/views/health/bindings";
-import list from "@/mcp-apps/views/list/bindings";
-import replay from "@/mcp-apps/views/replay/bindings";
-import series from "@/mcp-apps/views/series/bindings";
-import trace from "@/mcp-apps/views/trace/bindings";
 import type { McpAuthContext } from "./auth";
 import { createRatelMcpServer, viewHint } from "./server";
 import { SingleMessageTransport } from "./transport";
@@ -40,12 +34,16 @@ const auth: McpAuthContext = {
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 
-const PUBLISHED: Record<string, ViewBindings> = { detail, health, list, replay, series, trace };
-const VIEWS: McpAppView[] = Object.entries(PUBLISHED).map(([view, bindings]) => ({
+// The published views as the @ratel/mcp-apps build lists them (`pnpm test` builds it first), with
+// a stand-in document: this test pins the server, not the views' HTML.
+const BUILT = readGeneratedViews();
+if (!BUILT)
+  throw new Error("mcp-apps views are not built: run pnpm --filter @ratel/mcp-apps build");
+const VIEWS: McpAppView[] = BUILT.map(({ view, title, bindings }) => ({
   view,
-  ...(bindings.title ? { title: bindings.title } : {}),
+  ...(title ? { title } : {}),
   html: `<!doctype html><html><head></head><body>${view}</body></html>`,
-  bindings: bindings.bindings,
+  bindings,
 }));
 const BOUND = VIEWS.flatMap((view) => view.bindings.map((binding) => binding.tool));
 

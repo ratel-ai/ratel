@@ -7,6 +7,10 @@
       "web/**/*.ts",
       "web/**/*.tsx",
       "web/**/*.mjs",
+      "mcp-apps/**/*.ts",
+      "mcp-apps/**/*.tsx",
+      "mcp-apps/**/*.mjs",
+      "!**/dist",
       "packages/**/*.ts",
       "packages/**/*.tsx",
       "!**/.next"
@@ -26,7 +30,7 @@
   },
   "overrides": [
     {
-      "includes": ["web/**"],
+      "includes": ["web/**", "mcp-apps/**"],
       "linter": {
         "rules": {
           "style": {
@@ -117,6 +121,7 @@
         "web/src/lib/platform/http/client-address.test.ts",
         "web/src/lib/platform/http/gone.test.ts",
         "web/src/lib/platform/otel/**",
+        "!web/src/lib/platform/otel/server-traces.test.ts",
         "!web/src/lib/platform/otel/ratel-export.ts",
         "!web/src/lib/platform/otel/ratel-export.test.ts",
         "!web/src/lib/platform/otel/config.ts",
@@ -166,6 +171,7 @@
         "web/src/lib/ingest/trace-events/queries.integration.test.ts",
         "web/src/lib/ingest/otlp/**",
         "!web/src/lib/ingest/otlp/schema.ts",
+        "!web/src/lib/ingest/otlp/__fixtures__/real/README.md",
         "!web/src/lib/ingest/otlp/semconv/gen-ai-log-join.ts",
         "!web/src/lib/ingest/otlp/semconv/gen-ai-log-join.integration.test.ts",
         "!web/src/lib/ingest/otlp/prompt-cache-totals.integration.test.ts",
@@ -196,6 +202,7 @@
         "web/src/lib/ledger/turns/real-fixtures.test.ts",
         "web/src/lib/ingest/otlp/runtime-facts-query.integration.test.ts",
         "web/src/lib/ingest/otlp/__fixtures__/**",
+        "!web/src/lib/ingest/otlp/__fixtures__/real/README.md",
         "web/src/lib/ingest/catalogs/**",
         "!web/src/lib/ingest/catalogs/schema.ts",
         "!web/src/lib/ingest/catalogs/queries.ts",
@@ -797,7 +804,6 @@
         "web/src/lib/views/health/summary/task-chains.test.ts",
         "web/src/lib/views/tasks/flow-layout.test.ts",
         "web/src/lib/views/tasks/tasks-ui.test.ts",
-        "web/src/lib/views/health/self-corrections/self-corrections-ui.test.ts",
         "web/src/lib/views/health/kind-icons-consistency.test.ts",
         "web/src/components/console/intents/FlowCanvas.tsx",
         "web/src/components/console/intents/FlowStepPanel.tsx",
@@ -1050,6 +1056,7 @@
         "web/src/app/(console)/project/\\[projectId\\]/catalogs/skills/loading.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/playground/loading.tsx",
         "web/src/components/console/badgers/**",
+        "!web/src/components/console/badgers/honeybadger-assets.ts",
         "web/src/components/console/errors/ScopedTraceListLink.tsx",
         "web/src/components/console/errors/BrandedNotFound.tsx",
         "web/src/components/console/errors/StatusLink.tsx",
@@ -1063,6 +1070,8 @@
         "web/src/app/api/v1/jobs/\\[id\\]/route.ts",
         "web/src/app/api/v1/suggestions/\\[\\[...path\\]\\]/route.ts",
         "web/src/lib/mcp/**",
+        "!web/src/lib/mcp/server.view-meta.test.ts",
+        "!web/src/lib/mcp/apps/load.ts",
         "!web/src/lib/mcp/telemetry/export.ts",
         "!web/src/lib/mcp/telemetry/export.test.ts",
         "!web/src/lib/mcp/telemetry/trace-tool-call.ts",
@@ -1112,13 +1121,23 @@
         "!web/src/lib/mcp/operations/agents.ts",
         "!web/src/lib/mcp/operations/mcp-servers.ts",
         "!web/src/lib/mcp/operations/entities-gate.test.ts",
-        "web/src/mcp-apps/**",
-        "!web/src/mcp-apps/README.md",
-        "!web/src/mcp-apps/build.test.ts",
+        "mcp-apps/**",
+        "!mcp-apps/tsconfig.json",
+        "!mcp-apps/shell/view.css",
+        "!mcp-apps/shell/shims/what-if-panel.tsx",
+        "!mcp-apps/shell/shims/next-navigation.ts",
+        "!mcp-apps/shell/shims/next-link.tsx",
+        "!mcp-apps/package.json",
+        "!mcp-apps/index.mjs",
+        "!mcp-apps/index.d.ts",
+        "!mcp-apps/harness/host.ts",
+        "!mcp-apps/README.md",
+        "!mcp-apps/scripts/build.mts",
+        "!mcp-apps/build.test.ts",
+        "!mcp-apps/scripts/harness.mts",
+        "!mcp-apps/scripts/subset-font.d.ts",
         "web/src/lib/views/traces/trace-view-props.ts",
         "web/src/lib/views/traces/without-captured-text.ts",
-        "web/scripts/mcp-apps-harness.mts",
-        "web/scripts/subset-font.d.ts",
         "web/src/lib/mcp/connect/**",
         "!web/src/lib/mcp/connect/connect-ui.test.ts",
         "!web/src/lib/mcp/connect/snippets.ts",
@@ -1212,8 +1231,6 @@
         "web/src/components/console/health/surface.tsx",
         "web/src/components/console/health/tiers.tsx",
         "web/src/components/console/health/workflow-icons.ts",
-        "web/src/lib/console/badgers.test.ts",
-        "web/src/lib/platform/db/tenant-scope.test.ts",
         "web/src/lib/ingest/otlp/otel-spans.integration.test.ts",
         "web/src/lib/ingest/trace-events/query-intents-trigger.integration.test.ts",
         "web/src/lib/ingest/runtime-catalog/runtime-catalog-chunking.integration.test.ts",
@@ -1223,7 +1240,6 @@
         "web/src/lib/readings/tool-explorer/tool-explorer-ui.test.ts",
         "web/src/lib/readings/intent-graph/maintenance.integration.test.ts",
         "web/postcss.config.mjs",
-        "web/postcss-console-sources.cjs",
         "web/public/icon.png",
         "web/src/lib/console/scope/cookie.ts",
         "web/src/lib/console/scope/cookie.test.ts",
@@ -1398,7 +1414,7 @@
         "web/src/components/console/shell/ShellSkeleton.tsx",
         "web/src/components/console/onboarding/GuidedTour.tsx",
         "web/src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/**",
-        "web/src/mcp-apps/**"
+        "mcp-apps/**"
       ],
       "linter": {
         "rules": {
@@ -1471,7 +1487,7 @@
       }
     },
     {
-      "includes": ["web/src/mcp-apps/shell/shims/next-link.tsx"],
+      "includes": ["mcp-apps/shell/shims/next-link.tsx"],
       "linter": {
         "rules": {
           "a11y": {

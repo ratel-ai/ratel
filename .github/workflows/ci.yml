@@ -135,7 +135,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: web/.next/cache
-          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('web/**', 'packages/brand/**', 'packages/design-system/**', 'ee/**') }}
+          key: next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('web/**', 'mcp-apps/**', 'packages/brand/**', 'packages/design-system/**', 'ee/**') }}
           restore-keys: |
             next-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             next-${{ runner.os }}-
@@ -144,10 +144,13 @@ jobs:
       - name: Build
         run: pnpm --filter @ratel/platform... build
       - name: Typecheck
-        run: pnpm --filter @ratel/platform typecheck
+        run: |
+          pnpm --filter @ratel/platform typecheck
+          pnpm --filter @ratel/mcp-apps typecheck
       - name: Lint
         run: |
           pnpm --filter @ratel/platform lint
+          pnpm --filter @ratel/mcp-apps lint
           pnpm --filter @ratel/ee lint
       - name: Check ee boundary, layers and private strings
         run: pnpm check:boundary && pnpm check:layers && pnpm check:private
@@ -155,6 +158,8 @@ jobs:
         run: pnpm --filter @ratel/platform db:check
       - name: Test ee
         run: pnpm --filter @ratel/ee test
+      - name: Test the MCP Apps views
+        run: pnpm --filter @ratel/mcp-apps test
       - name: Test platform-owned scripts
         run: >
           node --test

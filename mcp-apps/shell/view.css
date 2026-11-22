@@ -4,20 +4,20 @@
  * view, this shell and components/ds use, with the few page rules a view must
  * not inherit overridden below. One stylesheet for console and views (decided
  * on RW-42); its page styles and animations cost a view ~35 KB.
- * scripts/build-mcp-apps.mts adds the view's folder as a source.
+ * scripts/build.mts adds the view's folder as a source.
  *
  * The console is dark only (DESIGN.md: "light mode comes later through the
  * same semantic tokens"). A host can be light, so views carry that light set
  * here, on the same --ds-* names, switched by the bridge's data-theme.
  */
-@import "../../app/globals.css";
+@import "../../web/src/app/globals.css";
 
-@source "../../components/ds";
+@source "../../web/src/components/ds";
 @source "./";
 
 /* The console sets these from next/font, which a view cannot load. The build
    inlines Geist and Geist Mono under these family names (geistFontFaces in
-   scripts/build-mcp-apps.mts), so a view sets its text in the console's
+   scripts/build.mts), so a view sets its text in the console's
    typeface whatever the host uses. */
 :root {
   --font-geist-sans: "Geist";

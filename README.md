@@ -188,7 +188,8 @@ An organization holds projects, and each project is one agent's view:
 ## Repo layout
 
 ```
-web/                           # @ratel/platform: the console and APIs
+web/                           # @ratel/platform: the console and APIs (code in web/src)
+mcp-apps/                      # @ratel/mcp-apps: the MCP Apps views, built for web/'s MCP server
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
 └── design-system/             # @ratel/design-system: semantic tokens and UI primitives

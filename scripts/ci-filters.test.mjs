@@ -41,8 +41,14 @@ test("brand-only change runs design_system, platform, compose", () => {
   assertFalse(r, ["lockfiles"]);
 });
 
-test("src-only change runs platform and compose", () => {
+test("web-only change runs platform and compose", () => {
   const r = on(["web/src/app/page.tsx"]);
+  assertTrue(r, ["platform", "compose"]);
+  assertFalse(r, ["design_system", "lockfiles"]);
+});
+
+test("mcp-apps change runs platform and compose: web builds it and serves its views", () => {
+  const r = on(["mcp-apps/views/list/main.tsx"]);
   assertTrue(r, ["platform", "compose"]);
   assertFalse(r, ["design_system", "lockfiles"]);
 });
