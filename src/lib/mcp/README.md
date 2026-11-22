@@ -18,7 +18,7 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS` and `FF_SANDBOXES`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS` and `FF_SANDBOXES`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `telemetry/` | each tool call as an `execute_tool` span with its arguments and result (`trace-tool-call.ts`, owned for one comment; `session.ts`: the client, credential and session ids), sent only to a Ratel project of its own (`export.ts`, owned: off unless `RATEL_SELF_TELEMETRY_MCP_API_KEY` and `RATEL_SELF_TELEMETRY_ENDPOINT` are both set, no default destination; ratel-cloud #482) |
@@ -50,9 +50,6 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   and `get_quota_status` gives upstream's hint pointing at it only then.
   `operations/contract.test.ts` and `compatibility.test.ts` pin the core's surface, without it.
 - `operations/index.ts`: also places the edition's tools (`operations/edition.ts`).
-- `operations/agents.ts`, `operations/mcp-servers.ts` and `operations/clients.ts`: the default gate
-  is the core's `FF_AGENTS_PAGES` (`views/project-entities/flag.ts`), not upstream's flag service;
-  off, the five tools (`list_clients` with them, RC-778) refuse as forbidden. `operations/entities-gate.test.ts` (no upstream counterpart) pins it.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a

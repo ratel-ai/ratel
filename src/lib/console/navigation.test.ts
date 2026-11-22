@@ -479,6 +479,8 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Agent health|/project/${P1}/health`,
       `Project|Self-corrections|/project/${P1}/health/self-corrections`,
       `Project|Traces|/project/${P1}/traces`,
+      `Project|Agents|/project/${P1}/agents`,
+      `Project|MCP servers|/project/${P1}/mcp`,
       `Project|Tasks|/project/${P1}/tasks`,
       `Project|Intents|/project/${P1}/intents`,
       `Project|Flows|/project/${P1}/intents/flows`,
@@ -736,4 +738,21 @@ test("Sandboxes sits under Improvements after Adaptive ranking and selects itsel
       (entry) => entry.href === "/project/p1/sandboxes",
     ),
   );
+});
+
+// RP-138: FF_AGENTS_PAGES is gone (ratel-cloud #529), so Traces always holds the entity pages.
+test("Traces holds All traces, Agents and MCP servers for every project", () => {
+  const rail = consoleNav({ projectId: P1, additions: [] });
+  const traces = rail.find((item) => item.id === "traces");
+  assert.deepEqual(
+    traces?.children?.map(({ id, label, href }) => ({ id, label, href })),
+    [
+      { id: "traces-all", label: "All traces", href: `/project/${P1}/traces` },
+      { id: "agents", label: "Agents", href: `/project/${P1}/agents` },
+      { id: "mcp-servers", label: "MCP servers", href: `/project/${P1}/mcp` },
+    ],
+  );
+  assert.equal(activeNavItemId(`/project/${P1}/agents/claude`, rail), "agents");
+  assert.equal(activeNavItemId(`/project/${P1}/mcp/slack`, rail), "mcp-servers");
+  assert.equal(activeNavItemId(`/project/${P1}/traces/turns`, rail), "traces");
 });

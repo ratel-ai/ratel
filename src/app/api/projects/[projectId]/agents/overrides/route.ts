@@ -6,7 +6,6 @@ import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { createDrizzleAgentOverrideStore } from "@/lib/views/agents/adapters/drizzle-store";
 import { handleAgentOverrideChange } from "@/lib/views/agents/overrides-api";
-import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +18,6 @@ export const PUT = withRequestLog(
     return handleAgentOverrideChange(request, projectId, {
       getSession: getSessionContext,
       findProjectScope,
-      projectEntitiesEnabled,
       isRestricted: isRestrictedBySupportSession,
       store: () => createDrizzleAgentOverrideStore(getDb()),
       track: ({ externalId, projectId: id, organizationId, change, override }) =>

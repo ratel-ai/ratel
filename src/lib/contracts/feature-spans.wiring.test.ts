@@ -6,6 +6,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { notFound } from "next/navigation";
 import { resolveAgentsPageContext } from "@/app/(console)/project/[projectId]/agents/context";
 import { resolveMcpPageContext } from "@/app/(console)/project/[projectId]/mcp/context";
 import type { Organization } from "@/lib/platform/organizations";
@@ -24,10 +25,12 @@ beforeEach(() => exporter.reset());
 
 const PROJECT = { id: "p1", organizationId: "org-1" } as Project;
 const ORGANIZATION = { id: "org-1", slug: "acme" } as Organization;
-const pageDeps = (flag: boolean) => ({
+const pageDeps = (inScope: boolean) => ({
   getSessionContext: async () => ({ user: { id: "u1", externalId: "user_1" } }),
-  getProjectScope: async () => ({ project: PROJECT, organization: ORGANIZATION, role: "member" }),
-  projectEntitiesEnabled: async () => flag,
+  getProjectScope: async () => {
+    if (!inScope) notFound();
+    return { project: PROJECT, organization: ORGANIZATION, role: "member" };
+  },
 });
 
 const spans = () =>
@@ -54,7 +57,9 @@ test("the Agents and MCP servers pages each resolve their context in a feature.a
   ]);
 });
 
-test("with the flag off the page's not-found is its outcome, not an error", async () => {
+// RP-138: no switch decides first any more (FF_AGENTS_PAGES is gone); a project out of the
+// reader's scope is the not-found the span records.
+test("a page's not-found is its outcome, not an error", async () => {
   await assert.rejects(resolveAgentsPageContext("p1", {}, pageDeps(false)));
   const [span] = exporter.getFinishedSpans();
   assert.equal(span?.status.code, SpanStatusCode.UNSET);

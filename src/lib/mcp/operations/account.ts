@@ -57,10 +57,6 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     note: "this MCP server publishes interactive ui:// views (MCP Apps) and points its tools at them",
   },
   {
-    key: "FF_AGENTS_PAGES",
-    note: "the Agents and MCP servers pages, their tools (list_agents, get_agent, list_mcp_servers, get_mcp_server) and agent overrides",
-  },
-  {
     key: "FF_TOOL_RUN_INSIGHTS",
     note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns",
   },

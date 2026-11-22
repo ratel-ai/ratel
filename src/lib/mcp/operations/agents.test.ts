@@ -7,8 +7,7 @@ import type { AgentDetail, AgentRow, AgentWindow } from "@/lib/views/agents/doma
 import { type AgentsOperationDeps, agentsOperations } from "./agents";
 
 /**
- * The Agents page over MCP (RC-775): the same reads as the page, behind the
- * same flag (`cloud-project-entities`), refused as forbidden when it is off.
+ * The Agents page over MCP (RC-775): the same reads as the page.
  */
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -38,12 +37,8 @@ const ROW: AgentRow = {
 };
 
 function harness(overrides: Partial<AgentsOperationDeps> = {}) {
-  const calls = { windows: [] as AgentWindow[], keys: [] as string[], actors: [] as string[] };
+  const calls = { windows: [] as AgentWindow[], keys: [] as string[] };
   const deps: AgentsOperationDeps = {
-    projectEntitiesEnabled: async (_projectId, actor) => {
-      calls.actors.push(actor);
-      return true;
-    },
     listAgents: async (_projectId, window) => {
       calls.windows.push(window);
       return { agents: [ROW], environments: ["prod", "staging"] };
@@ -123,7 +118,6 @@ test("list_agents lists the agents with their stats, the handoffs, the environme
     },
   ]);
   assert.deepEqual(out.environments, ["prod", "staging"]);
-  assert.deepEqual(calls.actors, [`project:${PROJECT}`], "a key is decided as its project");
   const window = { since: new Date("2026-10-18T12:00:00.000Z"), until: NOW, environment: "prod" };
   assert.deepEqual(calls.windows, [window, window], "the entities default: the last 30 days");
 });
@@ -152,17 +146,4 @@ test("get_agent of an agent with no run in the window is not found", async () =>
   const { run } = harness();
   const result = await run("get_agent", { agent: "nobody" });
   assert.equal(result.ok === false && result.error, "not_found");
-});
-
-test("both tools refuse as forbidden with cloud-project-entities off, and read nothing", async () => {
-  const { run, calls } = harness({ projectEntitiesEnabled: async () => false });
-  for (const [id, params] of [
-    ["list_agents", {}],
-    ["get_agent", { agent: "researcher" }],
-  ] as const) {
-    const result = await run(id, params);
-    assert.equal(result.ok === false && result.error, "forbidden", id);
-    assert.equal(result.ok === false && result.reason, "project_entities_off", id);
-  }
-  assert.deepEqual(calls.windows, []);
 });

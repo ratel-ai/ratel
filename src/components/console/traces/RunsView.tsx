@@ -67,8 +67,6 @@ export interface RunsViewProps {
   >;
   /** `rollup` (RC-506): the property bar on the trace rollup. */
   filterTab?: "runs" | "rollup";
-  /** `cloud-project-entities`: the rollup bar offers the Agent and MCP server filters (RC-790). */
-  entities?: boolean;
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */
   nextCursor: string | null;
@@ -136,7 +134,6 @@ export function RunsView(props: RunsViewProps) {
         {showFilterBar ? (
           <TraceFilterBar
             tab={props.filterTab ?? "runs"}
-            entities={props.entities}
             search={search}
             pending={pending}
             facets={facets}
@@ -183,12 +180,7 @@ export function RunsView(props: RunsViewProps) {
               projectId={projectId}
               latestAt={props.latestRunAt}
               onClearFilters={() =>
-                go((current) => {
-                  const cleared = withoutFilters("runs", current);
-                  return props.entities
-                    ? withoutFilters("rollup", cleared, { entities: true })
-                    : cleared;
-                })
+                go((current) => withoutFilters("rollup", withoutFilters("runs", current)))
               }
               onWiden={
                 props.widerPreset

@@ -67,18 +67,7 @@ export interface FilterField {
   options: FilterOption[];
 }
 
-/**
- * What a rollup helper needs to know about the page (RC-790). With
- * `entities` off (the default) `facetAgent` and `facetServer` are not filter
- * parameters at all: no chip, no field, no query filter, and they are not
- * removed from a query string either, exactly as before the flag.
- */
-export interface TraceFilterOptions {
-  /** `cloud-project-entities`: the Agent and MCP server filters exist. */
-  entities?: boolean;
-}
-
-/** The rollup facets: `agent` and `server` come only with the entity filters on. */
+/** The rollup facets: the entity facets (`agent`, `server`, `harness`, `country`) are absent when not read. */
 export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
   Partial<Record<"agent" | "server" | "harness" | "country", readonly TraceFacetValue[]>>;
@@ -87,6 +76,13 @@ export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service
 const VOLATILE = ["cursor", "peek"] as const;
 
 /** The rollup bar's parameters (RC-506), besides the name search. */
+/** The entity parameters (RC-790, RC-778): agent, MCP server, client and country. */
+export const ENTITY_FILTER_PARAMS = [
+  "facetAgent",
+  "facetServer",
+  "facetHarness",
+  "facetCountry",
+] as const;
 const ROLLUP_FILTER_PARAMS_LIST = [
   "errorOnly",
   "status",
@@ -94,17 +90,11 @@ const ROLLUP_FILTER_PARAMS_LIST = [
   "facetTool",
   "facetService",
   "facetEnvironment",
+  ...ENTITY_FILTER_PARAMS,
   "minCostUsd",
   "minTokens",
 ] as const;
 export const ROLLUP_FILTER_PARAMS: readonly string[] = ROLLUP_FILTER_PARAMS_LIST;
-/** The rollup bar's parameters behind `cloud-project-entities` (RC-790). */
-export const ENTITY_FILTER_PARAMS = [
-  "facetAgent",
-  "facetServer",
-  "facetHarness",
-  "facetCountry",
-] as const;
 
 /** Every parameter that narrows a list. The search box owns `name` (and `eventName` on Logs). */
 const RUN_FILTER_PARAMS = [
@@ -162,22 +152,12 @@ const OTEL_KIND_LABEL: Readonly<Record<string, string>> = {
   "5": "Consumer",
 };
 
-function filterParams(tab: TraceTab, options: TraceFilterOptions = {}): readonly string[] {
-  return tab === "rollup" ? ["name", ...rollupParams(options)] : FILTER_PARAMS[tab];
-}
-
-function rollupParams({ entities = false }: TraceFilterOptions): readonly string[] {
-  return entities
-    ? [...ROLLUP_FILTER_PARAMS_LIST, ...ENTITY_FILTER_PARAMS]
-    : ROLLUP_FILTER_PARAMS_LIST;
+function filterParams(tab: TraceTab): readonly string[] {
+  return tab === "rollup" ? ["name", ...ROLLUP_FILTER_PARAMS_LIST] : FILTER_PARAMS[tab];
 }
 
 /** The chips for what the URL filters by. Every narrowing parameter shows up, so none hides. */
-export function filterChips(
-  tab: TraceTab,
-  search: string,
-  options: TraceFilterOptions = {},
-): FilterChipModel[] {
+export function filterChips(tab: TraceTab, search: string): FilterChipModel[] {
   const params = parse(search);
   if (tab === "logs") {
     return compact([
@@ -200,10 +180,10 @@ export function filterChips(
       multi(params, "facetTool", "Tool is"),
       multi(params, "facetService", "Service is"),
       multi(params, "facetEnvironment", "Environment is"),
-      options.entities ? multi(params, "facetAgent", "Agent is") : null,
-      options.entities ? multi(params, "facetServer", "MCP server is") : null,
-      options.entities ? multi(params, "facetHarness", "Client is") : null,
-      options.entities ? multi(params, "facetCountry", "Country is") : null,
+      multi(params, "facetAgent", "Agent is"),
+      multi(params, "facetServer", "MCP server is"),
+      multi(params, "facetHarness", "Client is"),
+      multi(params, "facetCountry", "Country is"),
       measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
       measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
     ]);
@@ -253,25 +233,17 @@ export function withoutChip(search: string, chip: Pick<FilterChipModel, "params"
   return withoutVolatile(params);
 }
 
-export function hasFilters(
-  tab: TraceTab,
-  search: string,
-  options: TraceFilterOptions = {},
-): boolean {
+export function hasFilters(tab: TraceTab, search: string): boolean {
   const params = parse(search);
-  return filterParams(tab, options).some(
+  return filterParams(tab).some(
     (name) => name !== "exactTags" && params.getAll(name).some((value) => value.trim()),
   );
 }
 
 /** Every filter off; the window, sort, view options and selection stay. */
-export function withoutFilters(
-  tab: TraceTab,
-  search: string,
-  options: TraceFilterOptions = {},
-): string {
+export function withoutFilters(tab: TraceTab, search: string): string {
   const params = parse(search);
-  for (const name of filterParams(tab, options)) params.delete(name);
+  for (const name of filterParams(tab)) params.delete(name);
   return withoutVolatile(params);
 }
 
@@ -299,7 +271,6 @@ export function filterFields(
   tab: TraceTab,
   search: string,
   facets: TraceFilterBarFacets,
-  options: TraceFilterOptions = {},
 ): FilterField[] {
   const params = parse(search);
   if (tab === "rollup") {
@@ -325,36 +296,28 @@ export function filterFields(
         new Set(params.getAll("facetEnvironment")),
         true,
       ),
-      options.entities
-        ? field("agent", "Agent", facets.agent ?? [], new Set(params.getAll("facetAgent")), true)
-        : null,
-      options.entities
-        ? field(
-            "server",
-            "MCP server",
-            facets.server ?? [],
-            new Set(params.getAll("facetServer")),
-            true,
-          )
-        : null,
-      options.entities
-        ? field(
-            "harness",
-            "Client",
-            facets.harness ?? [],
-            new Set(params.getAll("facetHarness")),
-            true,
-          )
-        : null,
-      options.entities
-        ? field(
-            "country",
-            "Country",
-            facets.country ?? [],
-            new Set(params.getAll("facetCountry")),
-            true,
-          )
-        : null,
+      field("agent", "Agent", facets.agent ?? [], new Set(params.getAll("facetAgent")), true),
+      field(
+        "server",
+        "MCP server",
+        facets.server ?? [],
+        new Set(params.getAll("facetServer")),
+        true,
+      ),
+      field(
+        "harness",
+        "Client",
+        facets.harness ?? [],
+        new Set(params.getAll("facetHarness")),
+        true,
+      ),
+      field(
+        "country",
+        "Country",
+        facets.country ?? [],
+        new Set(params.getAll("facetCountry")),
+        true,
+      ),
       {
         id: "cost",
         label: "Cost",
@@ -482,13 +445,9 @@ export function withFilterToggled(
 /**
  * The Sessions and Turns property filters in the URL (RC-505), as the
  * rollup query reads them. Status reads
- * `errorOnly` (what v1 links write) or `status=ok|failed`. `facetAgent` and
- * `facetServer` are read only with `entities` on (RC-790).
+ * `errorOnly` (what v1 links write) or `status=ok|failed`.
  */
-export function traceFilterFromSearch(
-  search: string,
-  options: TraceFilterOptions = {},
-): TraceFilter {
+export function traceFilterFromSearch(search: string): TraceFilter {
   const params = parse(search);
   const values = (name: string) => [
     ...new Set(
@@ -506,10 +465,10 @@ export function traceFilterFromSearch(
     tools: values("facetTool"),
     services: values("facetService"),
     environments: values("facetEnvironment"),
-    agents: options.entities ? values("facetAgent") : undefined,
-    mcpServers: options.entities ? values("facetServer") : undefined,
-    harnesses: options.entities ? values("facetHarness") : undefined,
-    countries: options.entities ? values("facetCountry") : undefined,
+    agents: values("facetAgent"),
+    mcpServers: values("facetServer"),
+    harnesses: values("facetHarness"),
+    countries: values("facetCountry"),
     status,
     minCostUsd: minCostUsd ?? undefined,
     minTokens: minTokens ?? undefined,
@@ -522,21 +481,18 @@ export function traceFilterFromSearch(
 }
 
 /** Only the rollup bar's parameters of a query string, for a request that pages the same list. */
-export function rollupFilterQuery(
-  search: string,
-  options: TraceFilterOptions = {},
-): URLSearchParams {
+export function rollupFilterQuery(search: string): URLSearchParams {
   const params = parse(search);
   const kept = new URLSearchParams();
-  for (const name of rollupParams(options))
+  for (const name of ROLLUP_FILTER_PARAMS_LIST)
     for (const value of params.getAll(name)) kept.append(name, value);
   return kept;
 }
 
 /** A query string without the rollup bar's parameters, so the span-scan filters never also read them. */
-export function withoutRollupFilters(search: string, options: TraceFilterOptions = {}): string {
+export function withoutRollupFilters(search: string): string {
   const params = parse(search);
-  for (const name of rollupParams(options)) params.delete(name);
+  for (const name of ROLLUP_FILTER_PARAMS_LIST) params.delete(name);
   const text = params.toString();
   return text ? `?${text}` : "";
 }
@@ -767,7 +723,6 @@ const ROLLUP_MULTI: Partial<Record<FilterFieldId, string>> = {
   tool: "facetTool",
   service: "facetService",
   environment: "facetEnvironment",
-  // Offered only with `cloud-project-entities` on, so a toggle never comes without it.
   agent: "facetAgent",
   server: "facetServer",
   harness: "facetHarness",

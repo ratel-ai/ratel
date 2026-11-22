@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { Organization } from "@/lib/platform/organizations";
@@ -7,7 +7,6 @@ import { getSessionContext } from "@/lib/platform/session";
 import { type ResolvedRange, resolveRange } from "@/lib/synthesis/dashboard";
 import { MCP_ENVIRONMENT_PARAM, type McpServersQuery } from "@/lib/views/mcp-servers/paths";
 import type { McpServerWindow } from "@/lib/views/mcp-servers/queries";
-import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 export type McpSearchParams = Record<string, string | string[] | undefined>;
 
@@ -22,25 +21,23 @@ export interface McpPageContext {
   query: McpServersQuery;
 }
 
-/** What the context reads, injectable for the flag test (as the Agents context). */
+/** What the context reads, injectable for tests (as the Agents context). */
 export interface McpPageDeps {
   getSessionContext: () => Promise<{ user: { id: string; externalId: string } } | null>;
   getProjectScope: (
     projectId: string,
     userId: string,
   ) => Promise<{ project: Project; organization: Organization }>;
-  projectEntitiesEnabled: (organization: Organization) => Promise<boolean>;
 }
 
 const defaultMcpPageDeps: McpPageDeps = {
   getSessionContext,
   getProjectScope,
-  projectEntitiesEnabled,
 };
 
 /**
  * What both MCP servers pages (RC-777) start from: the signed-in person's
- * project, the flag (`FF_AGENTS_PAGES`; off, the pages do not exist),
+ * project,
  * the window (`range`, `from`, `to`, 30 days by default) and the environment.
  */
 export async function resolveMcpPageContext(
@@ -64,7 +61,6 @@ async function buildMcpPageContext(
   const session = await deps.getSessionContext();
   if (!session) redirect("/");
   const { project, organization } = await deps.getProjectScope(projectId, session.user.id);
-  if (!(await deps.projectEntitiesEnabled(organization))) notFound();
 
   const range = resolveRange({
     range: text(searchParams.range),

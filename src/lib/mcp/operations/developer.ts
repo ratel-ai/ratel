@@ -39,7 +39,6 @@ import {
   readContentOptIn,
   withheldMarker,
 } from "@/lib/mcp/operations/content-access";
-import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
 import { capRows, limitParam, MAX_LIMIT, TruncationTracker } from "@/lib/mcp/serialize";
@@ -53,7 +52,6 @@ import {
 import { getProjectById, listApiKeysForProject } from "@/lib/platform/projects/queries";
 import { publicUrl } from "@/lib/platform/public-url";
 import { buildMcpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
-import { projectEntitiesEnabledForActor } from "@/lib/views/project-entities/flag";
 
 /**
  * Settings › Developer and Settings › API keys over MCP. Owned: upstream also reads Models ›
@@ -90,8 +88,6 @@ export interface DeveloperOperationDeps extends ContentAccessDeps {
   listApiKeysForProject: (projectId: string) => Promise<ApiKeyRecord[]>;
   getProject: (projectId: string) => Promise<{ id: string; slug: string } | null>;
   publicUrl: (path: string) => string;
-  /** `FF_AGENTS_PAGES` for the caller: on, get_sdk_setup also returns the MCP server guide (RC-780). */
-  projectEntitiesEnabled: (projectId: string, actor: string) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -140,8 +136,6 @@ export const defaultDeveloperDeps: DeveloperOperationDeps = {
   listApiKeysForProject: (projectId) => listApiKeysForProject(projectId),
   getProject: (projectId) => getProjectById(projectId),
   publicUrl,
-  // The core's FF_AGENTS_PAGES switch (upstream's cloud-project-entities flag service).
-  projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   now: () => new Date(),
   contentOptIn: readContentOptIn,
 };
@@ -441,7 +435,7 @@ export function developerOperations(
       domain: "account",
       title: "SDK setup",
       description:
-        "The quickstart Settings › API keys shows: the traces endpoint, the key's env var, the install line and a snippet per language (TypeScript, curl). With the MCP servers page on, mcpServer adds the guide to trace an MCP server with standard OpenTelemetry. captureContent adds the content capture lines. No key is inlined; list_api_keys lists the project's keys.",
+        "The quickstart Settings › API keys shows: the traces endpoint, the key's env var, the install line and a snippet per language (TypeScript, curl). mcpServer is the guide to trace an MCP server with standard OpenTelemetry. captureContent adds the content capture lines. No key is inlined; list_api_keys lists the project's keys.",
       keywords: [
         "setup",
         "quickstart",
@@ -471,12 +465,10 @@ export function developerOperations(
           serviceName: project.slug,
           captureContent: params.captureContent,
         });
-        const mcpServer = (await deps.projectEntitiesEnabled(
-          ctx.projectId,
-          mcpActor(ctx.auth, ctx.projectId),
-        ))
-          ? buildMcpServerGuide({ tracesEndpoint: endpoint, serviceName: "my-mcp-server" })
-          : null;
+        const mcpServer = buildMcpServerGuide({
+          tracesEndpoint: endpoint,
+          serviceName: "my-mcp-server",
+        });
         return {
           data: {
             endpoint,
@@ -496,7 +488,7 @@ export function developerOperations(
               install: snippets[lang].install,
               code: snippets[lang].code,
             })),
-            ...(mcpServer ? { mcpServer } : {}),
+            mcpServer,
           },
           hint: `Set ${QUICKSTART_KEY_ENV} to a key from Settings › API keys. After the first send, list_sdk_events and get_traces_ingest_diagnostics confirm it arrived.`,
         };

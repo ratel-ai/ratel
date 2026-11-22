@@ -3251,7 +3251,7 @@
   {
     "name": "get_sdk_setup",
     "title": "SDK setup",
-    "description": "The quickstart Settings › API keys shows: the traces endpoint, the key's env var, the install line and a snippet per language (TypeScript, curl). With the MCP servers page on, mcpServer adds the guide to trace an MCP server with standard OpenTelemetry. captureContent adds the content capture lines. No key is inlined; list_api_keys lists the project's keys.",
+    "description": "The quickstart Settings › API keys shows: the traces endpoint, the key's env var, the install line and a snippet per language (TypeScript, curl). mcpServer is the guide to trace an MCP server with standard OpenTelemetry. captureContent adds the content capture lines. No key is inlined; list_api_keys lists the project's keys.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

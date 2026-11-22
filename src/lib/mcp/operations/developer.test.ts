@@ -100,7 +100,6 @@ function deps(overrides: Partial<DeveloperOperationDeps> = {}): DeveloperOperati
     listApiKeysForProject: async () => [],
     getProject: async () => ({ id: PROJECT, slug: "support-bot" }),
     publicUrl: (path) => `https://cloud.example.test${path}`,
-    projectEntitiesEnabled: async () => false,
     now: () => NOW,
     contentOptIn: async () => true,
     ...overrides,
@@ -414,11 +413,10 @@ test("get_sdk_setup hands out the page's snippets with the key read from the env
   assert.match(snippets[1]?.code ?? "", /\$RATEL_API_KEY/);
   assert.ok(!/rtl_[A-Za-z0-9]/.test(JSON.stringify(data)), "no key is ever inlined");
   assert.equal(data.contentCapture, undefined);
-  assert.equal(data.mcpServer, undefined, "no MCP server guide with FF_AGENTS_PAGES off");
 });
 
-test("get_sdk_setup adds the MCP server guide with FF_AGENTS_PAGES on (RC-780)", async () => {
-  const { data } = await run("get_sdk_setup", {}, { projectEntitiesEnabled: async () => true });
+test("get_sdk_setup adds the MCP server guide (RC-780)", async () => {
+  const { data } = await run("get_sdk_setup", {});
   const guide = data.mcpServer as {
     env: string;
     snippets: Array<{ lang: string }>;

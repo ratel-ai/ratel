@@ -20,7 +20,6 @@ function harness(overrides: Partial<AgentOverrideApiDeps> & { role?: string } = 
       organization: ORGANIZATION,
       role: overrides.role ?? "admin",
     }),
-    projectEntitiesEnabled: async () => true,
     isRestricted: async () => false,
     store: () => ({
       changeOverride: async (_projectId, change) => {
@@ -89,11 +88,10 @@ test("a merge chain is rejected with a clear error", async () => {
   assert.match(body.message, /merged into another agent/);
 });
 
-test("signed out, not a member, flag off, a support session or a bad body write nothing", async () => {
+test("signed out, not a member, a support session or a bad body write nothing", async () => {
   const cases: [Partial<AgentOverrideApiDeps>, unknown, number][] = [
     [{ getSession: async () => null }, { agentKey: "a", hidden: true }, 401],
     [{ findProjectScope: async () => null }, { agentKey: "a", hidden: true }, 404],
-    [{ projectEntitiesEnabled: async () => false }, { agentKey: "a", hidden: true }, 404],
     [{ isRestricted: async () => true }, { agentKey: "a", hidden: true }, 403],
     [{}, { agentKey: "a" }, 400],
     [{}, { agentKey: "a", hidden: "yes" }, 400],

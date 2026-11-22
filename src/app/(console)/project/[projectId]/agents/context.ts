@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { Organization } from "@/lib/platform/organizations";
@@ -11,7 +11,6 @@ import {
   AGENTS_SHOW_HIDDEN_PARAM,
   type AgentsQuery,
 } from "@/lib/views/agents/paths";
-import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 export type AgentsSearchParams = Record<string, string | string[] | undefined>;
 
@@ -30,25 +29,23 @@ export interface AgentsPageContext {
   showHidden: boolean;
 }
 
-/** What the context reads, injectable for the flag test. */
+/** What the context reads, injectable for tests. */
 export interface AgentsPageDeps {
   getSessionContext: () => Promise<{ user: { id: string; externalId: string } } | null>;
   getProjectScope: (
     projectId: string,
     userId: string,
   ) => Promise<{ project: Project; organization: Organization; role: string }>;
-  projectEntitiesEnabled: (organization: Organization) => Promise<boolean>;
 }
 
 const defaultAgentsPageDeps: AgentsPageDeps = {
   getSessionContext,
   getProjectScope,
-  projectEntitiesEnabled,
 };
 
 /**
  * What both Agents pages (RC-775) start from: the signed-in person's
- * project, the flag (`FF_AGENTS_PAGES`; off, the pages do not exist),
+ * project,
  * the window (`range`, `from`, `to`, 30 days by default) and the environment.
  */
 export async function resolveAgentsPageContext(
@@ -72,7 +69,6 @@ async function buildAgentsPageContext(
   const session = await deps.getSessionContext();
   if (!session) redirect("/");
   const { project, organization, role } = await deps.getProjectScope(projectId, session.user.id);
-  if (!(await deps.projectEntitiesEnabled(organization))) notFound();
 
   const range = resolveRange({
     range: text(searchParams.range),

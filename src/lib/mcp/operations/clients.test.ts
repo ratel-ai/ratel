@@ -6,7 +6,7 @@ import { buildRegistry } from "@/lib/mcp/registry";
 import type { ClientsOverview, ClientsWindow } from "@/lib/views/clients/queries";
 import { type ClientsOperationDeps, clientsOperations } from "./clients";
 
-/** The Clients tab over MCP (RC-778): the tab's read, behind its flag, with no raw IP. */
+/** The Clients tab over MCP (RC-778): the tab's read, with no raw IP. */
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-17T12:00:00.000Z");
@@ -64,7 +64,6 @@ const OVERVIEW: ClientsOverview = {
 function harness(overrides: Partial<ClientsOperationDeps> = {}) {
   const windows: ClientsWindow[] = [];
   const deps: ClientsOperationDeps = {
-    projectEntitiesEnabled: async () => true,
     getClientsOverview: async (_projectId, window) => (windows.push(window), OVERVIEW),
     now: () => NOW,
     ...overrides,
@@ -114,15 +113,4 @@ test("list_clients returns the harnesses, versions, countries and splits, with t
     },
   ]);
   assert.equal(/client_?ip|clientIp/i.test(JSON.stringify(result)), false);
-});
-
-test("list_clients is refused as forbidden when the flag is off", async () => {
-  let read = false;
-  const { run } = harness({
-    projectEntitiesEnabled: async () => false,
-    getClientsOverview: async () => ((read = true), OVERVIEW),
-  });
-  const result = await run({});
-  assert.equal(result.ok === false && result.error, "forbidden");
-  assert.equal(read, false);
 });

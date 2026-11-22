@@ -5,14 +5,11 @@ import { test } from "node:test";
 import { ingest, otlp, type SpanSpec } from "@/lib/ingest/otlp/dimensions/client-facts-support";
 import { mmdbGeoLookup } from "@/lib/ingest/otlp/dimensions/geo";
 import { PROJECT_ID } from "@/lib/readings/trace-signals/signals/integration-support";
-import { CLIENT_FACT_FIELDS, gateClientFacts } from "@/lib/synthesis/traces/client-facts-gate";
-import { getTraceSpansWithTruncation } from "@/lib/synthesis/traces/queries";
+import { getTraceSpansWithTruncation } from "./queries";
 
 /**
- * The span detail's Client block is behind `FF_AGENTS_PAGES` (RC-1013; upstream's
- * `cloud-project-entities`). With the switch off, no span the trace page loads
- * carries a client fact, so the Inspector renders as before the switch. With it
- * on, the facts are there. The caller's IP is never there: ingest reads its
+ * The span detail's Client block (RC-778): the spans the trace page loads
+ * carry the client facts. The caller's IP is never there: ingest reads its
  * country and drops it (RP-138), for every reader.
  */
 
@@ -53,30 +50,10 @@ const SPANS: SpanSpec[] = [
   },
 ];
 
-test("switch off: no span carries a client fact", async () => {
+test("the client facts are there, the caller's IP is not", async () => {
   const { client, db } = await ingest([otlp(SPANS)], { geo: GEO });
   try {
-    const spans = gateClientFacts(
-      (await getTraceSpansWithTruncation(PROJECT_ID, TRACE, db)).spans,
-      false,
-    );
-    for (const span of spans) {
-      for (const field of CLIENT_FACT_FIELDS)
-        assert.equal(span[field], null, `${field} of ${span.name}`);
-    }
-    assert.equal(JSON.stringify(spans).includes(IP), false);
-  } finally {
-    await client.close();
-  }
-});
-
-test("switch on: the client facts are there, the caller's IP is not", async () => {
-  const { client, db } = await ingest([otlp(SPANS)], { geo: GEO });
-  try {
-    const spans = gateClientFacts(
-      (await getTraceSpansWithTruncation(PROJECT_ID, TRACE, db)).spans,
-      true,
-    );
+    const spans = (await getTraceSpansWithTruncation(PROJECT_ID, TRACE, db)).spans;
     const call = spans.find((span) => span.spanId === CALL);
     assert.equal(call?.harness, "claude-code");
     assert.equal(call?.geoCountry, "GB");

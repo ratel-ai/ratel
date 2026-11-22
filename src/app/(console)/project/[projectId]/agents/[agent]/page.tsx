@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import {
   type AgentDetailModel,
   AgentDetailView,
@@ -21,7 +20,6 @@ import {
 } from "@/lib/views/agents/paths";
 import { mcpServerHref } from "@/lib/views/mcp-servers/paths";
 import { type AgentToolEntry, groupAgentTools } from "@/lib/views/project-entities/agents-model";
-import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import { listAgentTools } from "@/lib/views/project-entities/queries";
 import { type AgentsSearchParams, resolveAgentsPageContext } from "../context";
 
@@ -50,7 +48,6 @@ export default async function AgentPage({
   searchParams: Promise<AgentsSearchParams>;
 }) {
   const { projectId, agent: segment } = await params;
-  if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Agent">

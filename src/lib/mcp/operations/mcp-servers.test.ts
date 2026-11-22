@@ -7,8 +7,7 @@ import type { McpServerDetail, McpServerRow } from "@/lib/views/mcp-servers/quer
 import { type McpServersOperationDeps, mcpServersOperations } from "./mcp-servers";
 
 /**
- * The MCP servers page over MCP (RC-777): the same reads as the page, behind
- * the same flag (`cloud-project-entities`), refused as forbidden when it is off.
+ * The MCP servers page over MCP (RC-777): the same reads as the page.
  */
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -40,16 +39,11 @@ const ROW: McpServerRow = {
 interface Calls {
   windows: { since: Date; until: Date; environment?: string | null }[];
   refs: unknown[];
-  actors: string[];
 }
 
 function harness(overrides: Partial<McpServersOperationDeps> = {}) {
-  const calls: Calls = { windows: [], refs: [], actors: [] };
+  const calls: Calls = { windows: [], refs: [] };
   const deps: McpServersOperationDeps = {
-    projectEntitiesEnabled: async (_projectId, actor) => {
-      calls.actors.push(actor);
-      return true;
-    },
     listMcpServers: async (_projectId, window) => {
       calls.windows.push(window);
       return { servers: [ROW], environments: ["prod", "staging"] };
@@ -103,7 +97,6 @@ test("list_mcp_servers lists the servers with their stats, the environments and 
     },
   ]);
   assert.deepEqual(out.environments, ["prod", "staging"]);
-  assert.deepEqual(calls.actors, [`project:${PROJECT}`], "a key is decided as its project");
   // The entities default: the last 30 days.
   assert.deepEqual(calls.windows, [
     { since: new Date("2026-10-18T12:00:00.000Z"), until: NOW, environment: "prod" },
@@ -129,17 +122,4 @@ test("get_mcp_server of a server with no call in the window is not found", async
   const { run } = harness();
   const result = await run("get_mcp_server", { server: "nobody" });
   assert.equal(result.ok === false && result.error, "not_found");
-});
-
-test("both tools refuse as forbidden with cloud-project-entities off, and read nothing", async () => {
-  const { run, calls } = harness({ projectEntitiesEnabled: async () => false });
-  for (const [id, params] of [
-    ["list_mcp_servers", {}],
-    ["get_mcp_server", { server: "docs-mcp" }],
-  ] as const) {
-    const result = await run(id, params);
-    assert.equal(result.ok === false && result.error, "forbidden", id);
-    assert.equal(result.ok === false && result.reason, "project_entities_off", id);
-  }
-  assert.deepEqual(calls.windows, []);
 });

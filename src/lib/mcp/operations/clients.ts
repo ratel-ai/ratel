@@ -1,6 +1,4 @@
 import { z } from "zod";
-import { McpOperationError } from "@/lib/mcp/errors";
-import { mcpActor } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
@@ -13,25 +11,20 @@ import {
   type HarnessRow,
 } from "@/lib/views/clients/queries";
 import { mcpClientsHref } from "@/lib/views/mcp-servers/paths";
-import { projectEntitiesEnabledForActor } from "@/lib/views/project-entities/flag";
 
 /**
  * The Clients tab over MCP (RC-778): `list_clients`, the same read as the tab
- * (`views/clients`), behind the same switch (`FF_AGENTS_PAGES`, upstream's
- * `cloud-project-entities`; off, it refuses as forbidden). It returns harnesses, versions, countries,
+ * (`lib/clients`). It returns harnesses, versions, countries,
  * transports and protocol versions. It never returns a caller's raw IP: the
  * query selects none.
  */
 
 export interface ClientsOperationDeps {
-  projectEntitiesEnabled: (projectId: string, actor: string) => Promise<boolean>;
   getClientsOverview: (projectId: string, window: ClientsWindow) => Promise<ClientsOverview>;
   now: () => Date;
 }
 
 export const defaultClientsDeps: ClientsOperationDeps = {
-  // Owned (ADR-0030): the core's FF_AGENTS_PAGES switch, not upstream's flag service.
-  projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   getClientsOverview: (projectId, window) =>
     withStatementTimeout((db) => getClientsOverview(projectId, window, db), {
       operation: "mcp_list_clients",
@@ -77,15 +70,6 @@ export function clientsOperations(deps: ClientsOperationDeps = defaultClientsDep
           .describe("Only the calls of this deployment environment (deployment.environment.name)."),
       }),
       async execute(ctx, params) {
-        if (
-          !(await deps.projectEntitiesEnabled(ctx.projectId, mcpActor(ctx.auth, ctx.projectId)))
-        ) {
-          throw new McpOperationError(
-            "forbidden",
-            "MCP clients are not available for this project.",
-            { reason: "project_entities_off" },
-          );
-        }
         const window = resolveWindow(params, WINDOW_PRESETS.entities, deps.now());
         const overview = await deps.getClientsOverview(ctx.projectId, {
           since: window.since,

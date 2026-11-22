@@ -83,7 +83,6 @@ export function consoleNav({
   additions,
   organizationAdditions = [],
   projectGroups = [],
-  entityPages = false,
   sandboxes = false,
 }: {
   projectId: string | undefined;
@@ -96,12 +95,6 @@ export function consoleNav({
    * Catalog and Settings, or a group with `row` as one collapsible row between them.
    */
   projectGroups?: readonly ProjectNavGroup[];
-  /**
-   * `FF_AGENTS_PAGES` on for the shown organization (RP-28): Agents and MCP servers under Traces.
-   * Upstream also needs the project's data for each (`lib/agents/navigation.ts`); here both show
-   * whenever the flag is on, and each page has its own empty state.
-   */
-  entityPages?: boolean;
   /**
    * `FF_SANDBOXES` on for the shown project (RC-1102): a Sandboxes item under Improvements, the
    * playground of the caller's `ratel sandbox dev` runner.
@@ -384,7 +377,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxes) : core),
+    ...(root ? stageRailNav(root, core, setupRows, sandboxes) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -406,7 +399,6 @@ function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  entityPages: boolean,
   sandboxes = false,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
@@ -444,36 +436,36 @@ function stageRailNav(
     shortcut: "l",
     keywords: ["shipped", "live", "released", "deployed", "applied", "shipments"],
   };
-  // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget.
+  // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget. Agents
+  // and MCP servers always show (RP-138: FF_AGENTS_PAGES is gone; upstream shows each only for a
+  // project with its data, here each page has its own empty state, the owner's RP-28 decision).
   const classicTraces = pick("traces");
-  const traces: NavItem = entityPages
-    ? {
-        ...classicTraces,
-        children: [
-          {
-            id: "traces-all",
-            label: "All traces",
-            href: classicTraces.href,
-            icon: "traces",
-            activeId: classicTraces.id,
-          },
-          {
-            id: "agents",
-            label: "Agents",
-            href: `${root}/agents`,
-            icon: "traces",
-            keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
-          },
-          {
-            id: "mcp-servers",
-            label: "MCP servers",
-            href: `${root}/mcp`,
-            icon: "traces",
-            keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
-          },
-        ],
-      }
-    : classicTraces;
+  const traces: NavItem = {
+    ...classicTraces,
+    children: [
+      {
+        id: "traces-all",
+        label: "All traces",
+        href: classicTraces.href,
+        icon: "traces",
+        activeId: classicTraces.id,
+      },
+      {
+        id: "agents",
+        label: "Agents",
+        href: `${root}/agents`,
+        icon: "traces",
+        keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
+      },
+      {
+        id: "mcp-servers",
+        label: "MCP servers",
+        href: `${root}/mcp`,
+        icon: "traces",
+        keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
+      },
+    ],
+  };
   // Upstream's Sandboxes (RC-1102) folds under Improvements, so the rail keeps its budget.
   const classicImprovements = pick("improvements");
   const improvements: NavItem = sandboxes

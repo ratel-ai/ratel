@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import {
   type McpServerDetailModel,
   McpServerDetailView,
@@ -33,7 +32,6 @@ import {
   listMcpEnvironments,
   type McpServerDetail,
 } from "@/lib/views/mcp-servers/queries";
-import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import {
   getMcpServerDetailExtras,
   type McpServerDetailExtras,
@@ -65,7 +63,6 @@ export default async function McpServerPage({
   searchParams: Promise<McpSearchParams>;
 }) {
   const { projectId, server: segment } = await params;
-  if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="MCP server">

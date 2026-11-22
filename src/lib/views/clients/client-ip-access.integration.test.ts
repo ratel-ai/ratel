@@ -174,7 +174,6 @@ test("no MCP tool that reads spans, logs or clients returns the raw IP", async (
       contentOptIn: async () => true,
     }),
     ...clientsOperations({
-      projectEntitiesEnabled: async () => true,
       getClientsOverview: (projectId, window) => getClientsOverview(projectId, window, db),
       now: () => NOW,
     }),

@@ -209,6 +209,10 @@ test("facet values for a project and window come from one rollup query", async (
         { value: "prod", count: 2 },
         { value: "staging", count: 1 },
       ],
+      agent: [],
+      server: [],
+      harness: [],
+      country: [],
     });
     const text = JSON.stringify(traceFacetsQuery(PROJECT_ID, WINDOW, 10));
     assert.match(text, /otel_trace_summaries/);
@@ -232,7 +236,16 @@ test("the Sessions facet window is the Turns default range: it ignores rows outs
       defaultTraceFilterFacetWindow(new Date(T0 + 30 * 86_400_000)),
       db,
     );
-    assert.deepEqual(later, { model: [], tool: [], service: [], environment: [] });
+    assert.deepEqual(later, {
+      model: [],
+      tool: [],
+      service: [],
+      environment: [],
+      agent: [],
+      server: [],
+      harness: [],
+      country: [],
+    });
   } finally {
     await client.close();
   }
@@ -457,10 +470,10 @@ test("filter by agent and by MCP server narrows the Turns list and Sessions", as
   }
 });
 
-test("the agent and MCP server facet values are read only when the entity filters are on", async () => {
+test("the facets offer the agent and MCP server values", async () => {
   const { client, db } = await seededWithEntities();
   try {
-    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50, { entities: true });
+    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50);
     assert.deepEqual(on.agent, [
       { value: "supervisor", count: 2 },
       { value: "billing-agent", count: 1 },
@@ -470,12 +483,6 @@ test("the agent and MCP server facet values are read only when the entity filter
       { value: "orders-mcp", count: 1 },
       { value: "payments-mcp", count: 1 },
     ]);
-    const off = await getTraceFilterFacets(PROJECT_ID, WINDOW, db);
-    assert.deepEqual(Object.keys(off).sort(), ["environment", "model", "service", "tool"]);
-    assert.doesNotMatch(
-      JSON.stringify(traceFacetsQuery(PROJECT_ID, WINDOW, 10)),
-      /agents|mcp_servers/,
-    );
   } finally {
     await client.close();
   }
@@ -483,7 +490,7 @@ test("the agent and MCP server facet values are read only when the entity filter
 
 // — RC-778: the callers' harnesses and countries ———————————————————————————————
 
-test("the sweep fills harnesses and countries; Turns filter by them and the facets offer them with the entity filters on", async () => {
+test("the sweep fills harnesses and countries; Turns filter by them and the facets offer them", async () => {
   const { client, db } = await seeded();
   try {
     await client.exec(`
@@ -514,7 +521,7 @@ test("the sweep fills harnesses and countries; Turns filter by them and the face
     assert.deepEqual(await turns({ countries: ["GB"] }), [traceId(1)]);
     assert.deepEqual(await turns({ harnesses: ["cursor"], countries: ["US"] }), [traceId(3)]);
 
-    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50, { entities: true });
+    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50);
     assert.deepEqual(on.harness, [
       { value: "cursor", count: 2 },
       { value: "claude-code", count: 1 },
@@ -523,10 +530,6 @@ test("the sweep fills harnesses and countries; Turns filter by them and the face
       { value: "GB", count: 1 },
       { value: "US", count: 1 },
     ]);
-    assert.doesNotMatch(
-      JSON.stringify(traceFacetsQuery(PROJECT_ID, WINDOW, 10)),
-      /harnesses|countries/,
-    );
   } finally {
     await client.close();
   }

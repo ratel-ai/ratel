@@ -1,5 +1,4 @@
 import { TabNav } from "@ratel/design-system/tabs";
-import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { type ClientsOverviewView, ClientsView } from "@/components/console/clients/ClientsView";
 import { McpServersView } from "@/components/console/mcp-servers/McpServersView";
@@ -28,7 +27,6 @@ import {
 } from "@/lib/views/mcp-servers/paths";
 import { listMcpServers, type McpServerList } from "@/lib/views/mcp-servers/queries";
 import { buildMcpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
-import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import {
   listMcpServerExtras,
   type McpServerExtras,
@@ -47,7 +45,7 @@ type Loaded = {
 } | null;
 
 /**
- * The project's MCP servers (RC-777), behind `FF_AGENTS_PAGES`, in two tabs: Servers (the
+ * The project's MCP servers (RC-777), in two tabs: Servers (the
  * default, the approved RP-25 design: each server side with its calls per day, tools, calling
  * agents by their override names, and last error) and Clients (`?tab=clients`, RC-778: who calls
  * the project's servers).
@@ -60,7 +58,6 @@ export default async function McpServersPage({
   searchParams: Promise<McpSearchParams>;
 }) {
   const { projectId } = await params;
-  if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="MCP servers">

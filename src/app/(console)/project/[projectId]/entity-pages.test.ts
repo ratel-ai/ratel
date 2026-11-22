@@ -7,13 +7,12 @@ import McpServerPage from "./mcp/[server]/page";
 import McpServersPage from "./mcp/page";
 
 /**
- * RP-83: `FF_AGENTS_PAGES` decides first. Off, the four pages are absent (404) even when no
- * database is configured; on, a deployment without a database gets the setup notice.
+ * RP-83: a deployment without a database gets each page's setup notice. RP-138: no switch decides
+ * first any more (FF_AGENTS_PAGES is gone, ratel-cloud #529), so the pages always exist.
  */
 
-const SWITCHES = ["FF_AGENTS_PAGES", "RATEL_EXPERIMENTAL_FEATURES", "DATABASE_URL"] as const;
+const SWITCHES = ["RATEL_EXPERIMENTAL_FEATURES", "DATABASE_URL"] as const;
 const saved: Record<string, string | undefined> = {};
-const is404 = (err: { digest?: string }) => String(err.digest).includes("404");
 
 const PAGES = [
   ["Agents", () => AgentsPage({ params: project(), searchParams: none() })],
@@ -51,17 +50,8 @@ after(() => {
 });
 
 for (const [name, render] of PAGES) {
-  test(`${name}: flag off and no database, the page is not found`, async () => {
-    await assert.rejects(render(), is404);
-  });
-
-  test(`${name}: flag on and no database, the page shows the setup notice`, async () => {
-    process.env.FF_AGENTS_PAGES = "1";
-    try {
-      assert.ok(isValidElement(await render()));
-    } finally {
-      delete process.env.FF_AGENTS_PAGES;
-    }
+  test(`${name}: no database, the page shows the setup notice`, async () => {
+    assert.ok(isValidElement(await render()));
   });
 }
 

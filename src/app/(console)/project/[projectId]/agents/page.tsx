@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { AgentsView } from "@/components/console/agents/AgentsView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -10,7 +9,6 @@ import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-sto
 import { overrideView } from "@/lib/views/agents/domain/overrides";
 import type { AgentHandoff, AgentList } from "@/lib/views/agents/domain/types";
 import { agentHref } from "@/lib/views/agents/paths";
-import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import {
   type AgentListExtras,
   listAgentExtras,
@@ -24,7 +22,7 @@ export const metadata = { title: "Agents" };
 type Loaded = { list: AgentList; handoffs: AgentHandoff[]; extras: AgentListExtras } | null;
 
 /**
- * The project's agents and their handoffs (RC-775), behind `FF_AGENTS_PAGES`, in the approved
+ * The project's agents and their handoffs (RC-775), in the approved
  * RP-25 design: an admin's list always reads the hidden agents too, to count them for
  * "Hidden (n)", and shows them only with `?showHidden=1`.
  */
@@ -36,7 +34,6 @@ export default async function AgentsPage({
   searchParams: Promise<AgentsSearchParams>;
 }) {
   const { projectId } = await params;
-  if (!(await projectEntitiesEnabledForProject(projectId))) notFound();
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Agents">

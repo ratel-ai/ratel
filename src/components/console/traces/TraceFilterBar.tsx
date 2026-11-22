@@ -54,7 +54,6 @@ export function TraceFilterBar({
   onSearchChange,
   end,
   searchable = true,
-  entities = false,
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
@@ -67,16 +66,10 @@ export function TraceFilterBar({
   end?: ReactNode;
   /** False on a list without a name search (Sessions). */
   searchable?: boolean;
-  /** `cloud-project-entities`: the rollup bar has the Agent and MCP server filters (RC-790). Off, their parameters are not filters. */
-  entities?: boolean;
 }) {
-  const options = useMemo(() => ({ entities }), [entities]);
-  const chips = useMemo(() => filterChips(tab, search, options), [tab, search, options]);
-  const fields = useMemo(
-    () => filterFields(tab, search, facets, options),
-    [tab, search, facets, options],
-  );
-  const filtered = hasFilters(tab, search, options);
+  const chips = useMemo(() => filterChips(tab, search), [tab, search]);
+  const fields = useMemo(() => filterFields(tab, search, facets), [tab, search, facets]);
+  const filtered = hasFilters(tab, search);
 
   // What the box shows is kept apart from what the URL says (lib/traces/v2/
   // search-box.ts): typing never waits for a navigation to land, and the URL
@@ -145,7 +138,7 @@ export function TraceFilterBar({
               size="sm"
               onClick={() => {
                 dispatch({ type: "cleared" });
-                onSearchChange((current) => withoutFilters(tab, current, options));
+                onSearchChange((current) => withoutFilters(tab, current));
               }}
             >
               Clear filters

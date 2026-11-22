@@ -48,10 +48,7 @@ export async function SessionListPage({
   const now = new Date();
   // RC-506: the property filters, matched on the per-trace rollup.
   const search = searchFromParams(searchParams);
-  // RC-790: the Agent and MCP server filters. Always on here: the core has no
-  // `cloud-project-entities` flag.
-  const filterOptions = { entities: true };
-  const traces = traceFilterFromSearch(search, filterOptions);
+  const traces = traceFilterFromSearch(search);
   const [page, filterFacets] = await Promise.all([
     loadSessionListPage(project.id, { filter, now, traces }),
     loadOrFallback({
@@ -61,14 +58,7 @@ export async function SessionListPage({
       // Sessions have no time window: the facets use the Turns default range.
       load: () =>
         withStatementTimeout(
-          (db) =>
-            getTraceFilterFacets(
-              project.id,
-              defaultTraceFilterFacetWindow(now),
-              db,
-              undefined,
-              filterOptions,
-            ),
+          (db) => getTraceFilterFacets(project.id, defaultTraceFilterFacetWindow(now), db),
           {
             operation: "trace_filter_facets",
             timeoutMs: supplementaryReadTimeoutMs(),
@@ -79,7 +69,7 @@ export async function SessionListPage({
   // RC-752: turns with no session read "No sessions yet", not "No turns yet".
   let empty: SessionsEmptyKind | null = null;
   if (page.items.length === 0) {
-    const filtered = hasFilters("rollup", search, filterOptions);
+    const filtered = hasFilters("rollup", search);
     const diagnostics =
       filtered || filter === "failed"
         ? { hasEvents: false, hasSpans: false }
@@ -100,7 +90,6 @@ export async function SessionListPage({
       now={now.toISOString()}
       empty={empty}
       filterFacets={filterFacets}
-      entities={filterOptions.entities}
     />
   );
 }

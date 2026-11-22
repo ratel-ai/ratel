@@ -26,8 +26,6 @@ export type ShellData = {
   hiddenOrganizationNav: Record<string, readonly string[]>;
   /** Project page groups the edition adds (`composition.projectNav`). */
   projectNav: ProjectNavGroup[];
-  /** The organizations with `FF_AGENTS_PAGES` on: their rail shows Agents and MCP servers under Traces. */
-  entityPagesOrganizations?: readonly string[];
   /** RC-1102: the projects whose rail shows Sandboxes (`FF_SANDBOXES` on). */
   sandboxesProjects?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */

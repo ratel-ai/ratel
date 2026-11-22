@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { McpOperationError, notFound } from "@/lib/mcp/errors";
-import { mcpActor } from "@/lib/mcp/operations/health";
+import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
@@ -12,18 +11,14 @@ import {
   mcpServerTracesHref,
 } from "@/lib/views/mcp-servers/paths";
 import { getMcpServer, listMcpServers, type McpServerRow } from "@/lib/views/mcp-servers/queries";
-import { projectEntitiesEnabledForActor } from "@/lib/views/project-entities/flag";
 
 /**
  * The MCP servers page over MCP (RC-777): `list_mcp_servers` (the list) and
  * `get_mcp_server` (one server). They read through the page's own
- * `lib/mcp-servers` queries, behind the page's flag, `cloud-project-entities`:
- * off, they refuse as forbidden, as the page is not found.
+ * `lib/mcp-servers` queries.
  */
 
 export interface McpServersOperationDeps {
-  /** `cloud-project-entities` for the caller (`project:<id>` for a key, the identity-provider id for a person) in the project's organization. */
-  projectEntitiesEnabled: (projectId: string, actor: string) => Promise<boolean>;
   listMcpServers: (
     projectId: string,
     window: Parameters<typeof listMcpServers>[1],
@@ -37,8 +32,6 @@ export interface McpServersOperationDeps {
 }
 
 export const defaultMcpServersDeps: McpServersOperationDeps = {
-  // Owned (ADR-0030): the core's FF_AGENTS_PAGES switch, not upstream's flag service.
-  projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   listMcpServers: (projectId, window) =>
     withStatementTimeout((db) => listMcpServers(projectId, window, db), {
       operation: "mcp_list_mcp_servers",
@@ -74,7 +67,6 @@ export function mcpServersOperations(
       mutates: false,
       params: z.object({ ...projectScoped, ...windowParams, environment: environmentParam }),
       async execute(ctx, params) {
-        await requireProjectEntities(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const window = resolveWindow(params, WINDOW_PRESETS.entities, deps.now());
         const list = await deps.listMcpServers(ctx.projectId, {
           since: window.since,
@@ -122,7 +114,6 @@ export function mcpServersOperations(
         environment: environmentParam,
       }),
       async execute(ctx, params) {
-        await requireProjectEntities(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const window = resolveWindow(params, WINDOW_PRESETS.entities, deps.now());
         const detail = await deps.getMcpServer(
           ctx.projectId,
@@ -152,18 +143,6 @@ export function mcpServersOperations(
       },
     }),
   ];
-}
-
-async function requireProjectEntities(
-  deps: McpServersOperationDeps,
-  projectId: string,
-  actor: string,
-): Promise<void> {
-  if (!(await deps.projectEntitiesEnabled(projectId, actor))) {
-    throw new McpOperationError("forbidden", "MCP servers are not available for this project.", {
-      reason: "project_entities_off",
-    });
-  }
 }
 
 function serverView(row: McpServerRow) {

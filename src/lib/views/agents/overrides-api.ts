@@ -13,8 +13,7 @@ import type { AgentOverrideStore } from "./ports/store";
 /**
  * `PUT /api/projects/<id>/agents/overrides` (RC-776): rename, hide or merge
  * one detected agent. Only an admin of the project's organization changes
- * overrides; a member reads them. Behind `cloud-project-entities`: off, the
- * route is not found, as the page is.
+ * overrides; a member reads them.
  */
 
 export interface AgentOverrideApiDeps {
@@ -23,7 +22,6 @@ export interface AgentOverrideApiDeps {
     projectId: string,
     userId: string,
   ) => Promise<{ project: Project; organization: Organization; role: string } | null>;
-  projectEntitiesEnabled: (organization: Organization) => Promise<boolean>;
   /** An admin support session may look but not change. */
   isRestricted: () => Promise<boolean>;
   store: () => AgentOverrideStore;
@@ -63,7 +61,7 @@ export async function handleAgentOverrideChange(
   if (!session)
     return json(401, { ok: false, error: "signed_out", message: "Sign in to change agents." });
   const scope = await deps.findProjectScope(projectId, session.user.id);
-  if (!scope || !(await deps.projectEntitiesEnabled(scope.organization))) {
+  if (!scope) {
     return json(404, {
       ok: false,
       error: "not_found",

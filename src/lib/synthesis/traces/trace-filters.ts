@@ -15,13 +15,13 @@ export interface TraceFilter {
   tools?: readonly string[];
   services?: readonly string[];
   environments?: readonly string[];
-  /** Agents of the trace's spans (`agent_key`), behind `cloud-project-entities` (RC-790). */
+  /** Agents of the trace's spans (`agent_key`). */
   agents?: readonly string[];
-  /** MCP servers of the trace's spans (`mcp_server`), behind `cloud-project-entities` (RC-790). */
+  /** MCP servers of the trace's spans (`mcp_server`). */
   mcpServers?: readonly string[];
-  /** Harnesses that called the trace's MCP server spans (`harness`), behind `cloud-project-entities` (RC-778). */
+  /** Harnesses that called the trace's MCP server spans (`harness`). */
   harnesses?: readonly string[];
-  /** Countries of those callers (`geo_country`), behind `cloud-project-entities` (RC-778). */
+  /** Countries of those callers (`geo_country`). */
   countries?: readonly string[];
   /** "failed": any span reported an error; "ok": none did. */
   status?: "failed" | "ok";
@@ -30,16 +30,11 @@ export interface TraceFilter {
 }
 
 export type TraceFilterFacetKey = "model" | "tool" | "service" | "environment";
-/** The facets `cloud-project-entities` adds (RC-790). */
+/** The entity facets (RC-790, RC-778). */
 export type TraceEntityFacetKey = "agent" | "server" | "harness" | "country";
-/** `agent` and `server` are present only when the entity filters are on. */
+/** The facet query always fills the entity facets; a caller-built value may leave them out. */
 export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]> &
   Partial<Record<TraceEntityFacetKey, TraceFacetValue[]>>;
-
-export interface TraceFilterFacetOptions {
-  /** `cloud-project-entities`: also read the agent and MCP server values. Off, the query is as before. */
-  entities?: boolean;
-}
 
 export interface TraceFilterWindow {
   since?: Date;
@@ -108,16 +103,15 @@ export async function getTraceFilterFacets(
   window: TraceFilterWindow,
   db: Pick<ReturnType<typeof getDb>, "execute"> = getDb(),
   limit = TRACE_FILTER_FACET_LIMIT,
-  options: TraceFilterFacetOptions = {},
 ): Promise<TraceFilterFacets> {
-  const result = await db.execute(traceFacetsQuery(projectId, window, limit, options));
+  const result = await db.execute(traceFacetsQuery(projectId, window, limit));
   const rows = ((result as unknown as { rows?: unknown[] }).rows ??
     (result as unknown as unknown[])) as Array<{
     facet: TraceFilterFacetKey | TraceEntityFacetKey;
     value: string;
     count: number | string;
   }>;
-  const keys = options.entities ? [...FACET_KEYS, ...ENTITY_FACET_KEYS] : FACET_KEYS;
+  const keys = [...FACET_KEYS, ...ENTITY_FACET_KEYS];
   const facets = Object.fromEntries(
     keys.map((key) => [key, [] as TraceFacetValue[]]),
   ) as TraceFilterFacets;
@@ -137,15 +131,10 @@ export function defaultTraceFilterFacetWindow(now: Date): TraceFilterWindow {
 }
 
 /** The facet query: the window's rollup rows once, then each property's top values. */
-export function traceFacetsQuery(
-  projectId: string,
-  window: TraceFilterWindow,
-  limit: number,
-  { entities = false }: TraceFilterFacetOptions = {},
-): SQL {
+export function traceFacetsQuery(projectId: string, window: TraceFilterWindow, limit: number): SQL {
   return sql`
     with w as (
-      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers, s.harnesses, s.countries` : sql``}
+      select s.models, s.tools, s.service_name, s.environment, s.agents, s.mcp_servers, s.harnesses, s.countries
       from otel_trace_summaries s
       where s.project_id = ${projectId}
         ${window.since ? sql`and s.started_at >= ${window.since.toISOString()}::timestamptz` : sql``}
@@ -159,18 +148,14 @@ export function traceFacetsQuery(
       select 'service', w.service_name, count(*)::int from w where w.service_name is not null group by w.service_name
       union all
       select 'environment', w.environment, count(*)::int from w where w.environment is not null group by w.environment
-      ${
-        entities
-          ? sql`union all
+      union all
       select 'agent', v, count(*)::int from w, unnest(w.agents) v group by v
       union all
       select 'server', v, count(*)::int from w, unnest(w.mcp_servers) v group by v
       union all
       select 'harness', v, count(*)::int from w, unnest(w.harnesses) v group by v
       union all
-      select 'country', v, count(*)::int from w, unnest(w.countries) v group by v`
-          : sql``
-      }
+      select 'country', v, count(*)::int from w, unnest(w.countries) v group by v
     ),
     ranked as (
       select facet, value, count, row_number() over (partition by facet order by count desc, value collate "C") as rank

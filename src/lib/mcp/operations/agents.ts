@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { McpOperationError, notFound } from "@/lib/mcp/errors";
-import { mcpActor } from "@/lib/mcp/operations/health";
+import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
@@ -10,18 +9,14 @@ import { createDrizzleAgentStore } from "@/lib/views/agents/adapters/drizzle-sto
 import type { AgentRow } from "@/lib/views/agents/domain/types";
 import { agentHref, agentTracesHref } from "@/lib/views/agents/paths";
 import type { AgentStore } from "@/lib/views/agents/ports/store";
-import { projectEntitiesEnabledForActor } from "@/lib/views/project-entities/flag";
 
 /**
  * The Agents page over MCP (RC-775): `list_agents` (the list and the
  * handoffs) and `get_agent` (one agent). They read through the page's own
- * `lib/agents` store, behind the page's flag, `cloud-project-entities`: off,
- * they refuse as forbidden, as the page is not found.
+ * `lib/agents` store.
  */
 
 export interface AgentsOperationDeps {
-  /** `cloud-project-entities` for the caller (`project:<id>` for a key, the identity-provider id for a person) in the project's organization. */
-  projectEntitiesEnabled: (projectId: string, actor: string) => Promise<boolean>;
   listAgents: AgentStore["listAgents"];
   listHandoffs: AgentStore["listHandoffs"];
   getAgent: AgentStore["getAgent"];
@@ -29,8 +24,6 @@ export interface AgentsOperationDeps {
 }
 
 export const defaultAgentsDeps: AgentsOperationDeps = {
-  // Owned (ADR-0030): the core's FF_AGENTS_PAGES switch, not upstream's flag service.
-  projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   listAgents: (projectId, window) =>
     withStatementTimeout((db) => createDrizzleAgentStore(db).listAgents(projectId, window), {
       operation: "mcp_list_agents",
@@ -72,7 +65,6 @@ export function agentsOperations(deps: AgentsOperationDeps = defaultAgentsDeps):
       mutates: false,
       params: z.object({ ...projectScoped, ...windowParams, environment: environmentParam }),
       async execute(ctx, params) {
-        await requireProjectEntities(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const resolved = resolveWindow(params, WINDOW_PRESETS.entities, deps.now());
         const window = {
           since: resolved.since,
@@ -117,7 +109,6 @@ export function agentsOperations(deps: AgentsOperationDeps = defaultAgentsDeps):
         environment: environmentParam,
       }),
       async execute(ctx, params) {
-        await requireProjectEntities(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const resolved = resolveWindow(params, WINDOW_PRESETS.entities, deps.now());
         const detail = await deps.getAgent(ctx.projectId, params.agent, {
           since: resolved.since,
@@ -147,18 +138,6 @@ export function agentsOperations(deps: AgentsOperationDeps = defaultAgentsDeps):
       },
     }),
   ];
-}
-
-async function requireProjectEntities(
-  deps: AgentsOperationDeps,
-  projectId: string,
-  actor: string,
-): Promise<void> {
-  if (!(await deps.projectEntitiesEnabled(projectId, actor))) {
-    throw new McpOperationError("forbidden", "Agents are not available for this project.", {
-      reason: "project_entities_off",
-    });
-  }
 }
 
 function agentView(row: AgentRow) {

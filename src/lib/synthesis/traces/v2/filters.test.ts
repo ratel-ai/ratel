@@ -279,7 +279,7 @@ test("rollup bar (RC-506): fields come from the rollup facets, with cost and tok
   );
 });
 
-// — RC-790: the Agent and MCP server filters, behind cloud-project-entities —
+// — RC-790: the Agent and MCP server filters —
 
 const ENTITY_SEARCH =
   "?range=7d&facetAgent=researcher&facetAgent=supervisor&facetServer=docs-mcp&facetModel=gpt-4o&cursor=abc";
@@ -291,19 +291,18 @@ const ENTITY_FACETS = {
   ],
   server: [{ value: "docs-mcp", count: 3 }],
 };
-const ON = { entities: true };
 
-test("with the entity filters on, facetAgent and facetServer are read, shown as chips and offered as fields", () => {
-  assert.deepEqual(traceFilterFromSearch(ENTITY_SEARCH, ON), {
+test("facetAgent and facetServer are read, shown as chips and offered as fields", () => {
+  assert.deepEqual(traceFilterFromSearch(ENTITY_SEARCH), {
     models: ["gpt-4o"],
     agents: ["researcher", "supervisor"],
     mcpServers: ["docs-mcp"],
   });
   assert.deepEqual(
-    filterChips("rollup", ENTITY_SEARCH, ON).map((chip) => `${chip.field} ${chip.value}`),
+    filterChips("rollup", ENTITY_SEARCH).map((chip) => `${chip.field} ${chip.value}`),
     ["Model is gpt-4o", "Agent is researcher, supervisor", "MCP server is docs-mcp"],
   );
-  const fields = filterFields("rollup", ENTITY_SEARCH, ENTITY_FACETS, ON);
+  const fields = filterFields("rollup", ENTITY_SEARCH, ENTITY_FACETS);
   const agent = fields.find((field) => field.id === "agent");
   assert.equal(agent?.label, "Agent");
   assert.deepEqual(
@@ -320,50 +319,19 @@ test("with the entity filters on, facetAgent and facetServer are read, shown as 
     [["docs-mcp", true]],
   );
 
-  assert.equal(hasFilters("rollup", "?facetAgent=researcher", ON), true);
-  assert.equal(withoutFilters("rollup", ENTITY_SEARCH, ON), "?range=7d");
+  assert.equal(hasFilters("rollup", "?facetAgent=researcher"), true);
+  assert.equal(withoutFilters("rollup", ENTITY_SEARCH), "?range=7d");
   assert.equal(
-    rollupFilterQuery(ENTITY_SEARCH, ON).toString(),
+    rollupFilterQuery(ENTITY_SEARCH).toString(),
     "facetModel=gpt-4o&facetAgent=researcher&facetAgent=supervisor&facetServer=docs-mcp",
   );
-  assert.equal(withoutRollupFilters(ENTITY_SEARCH, ON), "?range=7d&cursor=abc");
+  assert.equal(withoutRollupFilters(ENTITY_SEARCH), "?range=7d&cursor=abc");
   // An entity page links to its runs with one parameter; a click adds or removes a value.
   assert.equal(
     withFilterToggled("rollup", "?range=7d", "agent", "researcher"),
     "?range=7d&facetAgent=researcher",
   );
   assert.equal(withFilterToggled("rollup", "?facetServer=docs-mcp", "server", "docs-mcp"), "");
-});
-
-test("with the entity filters off, facetAgent and facetServer are ignored and no facet shows", () => {
-  for (const options of [undefined, { entities: false }]) {
-    assert.deepEqual(traceFilterFromSearch(ENTITY_SEARCH, options), { models: ["gpt-4o"] });
-    assert.deepEqual(
-      filterChips("rollup", ENTITY_SEARCH, options).map((chip) => `${chip.field} ${chip.value}`),
-      ["Model is gpt-4o"],
-    );
-    // Even when a caller hands the values over, the fields are not offered.
-    const fields = filterFields("rollup", ENTITY_SEARCH, ENTITY_FACETS, options);
-    assert.equal(
-      fields.some((field) => field.id === "agent" || field.id === "server"),
-      false,
-    );
-    assert.equal(
-      hasFilters("rollup", "?facetAgent=researcher", options),
-      false,
-      "the list is not filtered, so its empty state is not the filtered one",
-    );
-    // The parameters are not this bar's: it leaves them where they are, as before the flag.
-    assert.equal(
-      withoutFilters("rollup", ENTITY_SEARCH, options),
-      "?range=7d&facetAgent=researcher&facetAgent=supervisor&facetServer=docs-mcp",
-    );
-    assert.equal(rollupFilterQuery(ENTITY_SEARCH, options).toString(), "facetModel=gpt-4o");
-    assert.equal(
-      withoutRollupFilters(ENTITY_SEARCH, options),
-      "?range=7d&facetAgent=researcher&facetAgent=supervisor&facetServer=docs-mcp&cursor=abc",
-    );
-  }
 });
 
 test("the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3)", () => {
@@ -375,19 +343,19 @@ test("the conversation filter is a chip on the run list, and is no filter of the
   assert.deepEqual(filterChips("spans", "?conversation=6b1af9ed"), []);
 });
 
-test("facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778)", () => {
+test("facetHarness and facetCountry are entity filters: read, chipped and offered (RC-778)", () => {
   const search = "?range=7d&facetHarness=cursor&facetCountry=GB";
   const facets = {
     ...EMPTY_TRACE_FACETS,
     harness: [{ value: "cursor", count: 2 }],
     country: [{ value: "GB", count: 1 }],
   };
-  assert.deepEqual(traceFilterFromSearch(search, ON), { harnesses: ["cursor"], countries: ["GB"] });
+  assert.deepEqual(traceFilterFromSearch(search), { harnesses: ["cursor"], countries: ["GB"] });
   assert.deepEqual(
-    filterChips("rollup", search, ON).map((chip) => `${chip.field} ${chip.value}`),
+    filterChips("rollup", search).map((chip) => `${chip.field} ${chip.value}`),
     ["Client is cursor", "Country is GB"],
   );
-  const fields = filterFields("rollup", search, facets, ON);
+  const fields = filterFields("rollup", search, facets);
   assert.deepEqual(
     fields.filter((f) => f.id === "harness" || f.id === "country").map((f) => f.label),
     ["Client", "Country"],
@@ -396,12 +364,5 @@ test("facetHarness and facetCountry are entity filters: read, chipped and offere
     withFilterToggled("rollup", "?range=7d", "harness", "codex"),
     "?range=7d&facetHarness=codex",
   );
-  assert.equal(withoutFilters("rollup", search, ON), "?range=7d");
-
-  assert.deepEqual(traceFilterFromSearch(search), {});
-  assert.deepEqual(filterChips("rollup", search), []);
-  assert.equal(
-    filterFields("rollup", search, facets).some((f) => f.id === "harness" || f.id === "country"),
-    false,
-  );
+  assert.equal(withoutFilters("rollup", search), "?range=7d");
 });
