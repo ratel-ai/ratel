@@ -158,6 +158,28 @@ describe("attachPlaygroundExport", () => {
     expect(own.resource.attributes["deployment.environment.name"]).toBeUndefined();
   });
 
+  it("sends the live span.ref events of a watched run on the project's provider", async () => {
+    userProvider();
+    const playground = attachPlaygroundExport(CONFIG, new InMemorySpanExporter());
+    const events: Record<string, unknown>[] = [];
+    const result = await executeRun(labelSandbox, {
+      runId: "run_10",
+      start: start({}),
+      tracer: trace.getTracer("@ratel-ai/sandbox"),
+      signal: new AbortController().signal,
+      onEvent: () => {},
+      onTrace: (traceId, rootSpan) => {
+        playground.track(traceId);
+        playground.live.watch(rootSpan, (e) => events.push(e));
+      },
+    });
+    expect(events.map((e) => [e.kind, e.phase, e.name])).toEqual([
+      ["span.ref", "start", "invoke_workflow workflow-label"],
+      ["span.ref", "end", "invoke_workflow workflow-label"],
+    ]);
+    expect(events[1]).toMatchObject({ traceId: result.traceId, status: "ok" });
+  });
+
   it("registers the only provider when the project has none", async () => {
     const ratel = new InMemorySpanExporter();
     const playground = attachPlaygroundExport(CONFIG, ratel);

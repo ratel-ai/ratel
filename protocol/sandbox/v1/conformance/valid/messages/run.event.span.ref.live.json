@@ -1,0 +1,24 @@
+{
+  "v": 1,
+  "type": "run.event",
+  "id": "msg_0016",
+  "ts": "2026-11-20T10:15:30.420Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "seq": 6,
+  "payload": {
+    "kind": "span.ref",
+    "phase": "end",
+    "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+    "spanId": "b7ad6b7169203331",
+    "parentSpanId": "00f067aa0ba902b7",
+    "name": "execute_tool searchDocs",
+    "startMs": 1795688130120,
+    "endMs": 1795688130410,
+    "status": "ok",
+    "attributes": {
+      "gen_ai.operation.name": "execute_tool",
+      "gen_ai.tool.name": "searchDocs",
+      "ratel.tool.mode": "fake"
+    }
+  }
+}

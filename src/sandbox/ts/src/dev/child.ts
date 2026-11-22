@@ -114,6 +114,7 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
   channels.set(runId, channel);
   const playground = attachOnce();
   let reads: readonly CatalogRead[] = [];
+  let traceId: string | undefined;
   const result = await executeRun(sandbox, {
     onCatalogReads: (r) => {
       reads = r;
@@ -123,10 +124,16 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
     tracer: trace.getTracer(SDK_NAME, SDK_VERSION),
     signal: abort.signal,
     onEvent: (payload) => event(sandbox, runId, payload),
-    onTrace: (traceId) => playground?.track(traceId),
+    onTrace: (id, root) => {
+      traceId = id;
+      playground?.track(id);
+      // The live trace: span.ref events while the run's spans start and end.
+      playground?.live.watch(root, (payload) => event(sandbox, runId, payload));
+    },
     toolChannel: channel,
     ...(loaded ? { sandboxFile: join(projectRoot, loaded.file) } : {}),
   });
+  if (traceId) playground?.live.release(traceId);
   end(runId, sandbox, result);
   growManifest(sandbox.id, reads);
   await playground?.flush().catch((err: unknown) => {

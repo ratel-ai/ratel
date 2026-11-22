@@ -17,7 +17,10 @@ later Python runner speak the same frames.
 3. Every frame is one JSON text of at most **65536 UTF-8 bytes**. Send large values by reference.
 
 Provider keys and user code never cross the wire. The worker calls models with local keys. Traces
-go to Ratel through the normal OTLP path, and `span.ref` events point at them.
+go to Ratel through the normal OTLP path, and `span.ref` events point at them. A worker sends one
+`span.ref` when a span of the run starts (`phase: "start"`) and one when it ends (`phase: "end"`),
+with `parentSpanId`, `startMs`, `endMs`, `status` and an allowlist of `attributes` (operation,
+model, token counts, tool name and mode, never content). The playground draws the live trace from them.
 
 ## Envelope
 

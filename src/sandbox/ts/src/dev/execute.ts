@@ -1,6 +1,7 @@
 import {
   type Attributes,
   isSpanContextValid,
+  type Span,
   SpanStatusCode,
   type Tracer,
 } from "@opentelemetry/api";
@@ -38,8 +39,8 @@ export interface ExecuteRunOptions {
   readonly tracer: Tracer;
   readonly signal: AbortSignal;
   readonly onEvent: (payload: TwinEventPayload) => void;
-  /** Called with the trace ID as soon as the root span exists. */
-  readonly onTrace?: (traceId: string) => void;
+  /** Called with the trace ID and the root span as soon as the root span exists. */
+  readonly onTrace?: (traceId: string, root: Span) => void;
   /** Absolute path of the sandbox file: the resolver imports the AI SDK from its project. */
   readonly sandboxFile?: string;
   /** Answers the run's fake and confirm tool calls. */
@@ -72,7 +73,7 @@ export async function executeRun(sandbox: Sandbox, options: ExecuteRunOptions): 
     async (span): Promise<RunResult> => {
       const spanContext = span.spanContext();
       const traceId = isSpanContextValid(spanContext) ? spanContext.traceId : undefined;
-      if (traceId) options.onTrace?.(traceId);
+      if (traceId) options.onTrace?.(traceId, span);
       // A chat input is the conversation: the AI SDK adapter records it under its content rules.
       if (sandbox.input.kind === "structured") stampSandboxInput(start.input);
       try {

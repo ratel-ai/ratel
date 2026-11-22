@@ -8,6 +8,7 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
+import { LiveSpans } from "./live-spans.js";
 
 // Playground trace export (spec §10) in the `ratel sandbox dev` child. The runner adds
 // one OTLP exporter to the tracer provider the project already has. It
@@ -29,6 +30,8 @@ export interface PlaygroundTelemetryConfig {
 }
 
 export interface PlaygroundExport {
+  /** Sends the span.ref events of a watched run while its spans start and end. */
+  readonly live: LiveSpans;
   /** "registered": the project had no provider. "attached": added to the project's provider. */
   readonly mode: "registered" | "attached" | "unsupported";
   /** Marks a trace as a playground run, so its spans are exported. */
@@ -71,8 +74,10 @@ export function attachPlaygroundExport(
     tracked,
   );
   const processor = new BatchSpanProcessor(filtered, { scheduledDelayMillis: 500 });
-  const mode = addProcessor(processor, config.resource);
+  const live = new LiveSpans();
+  const mode = addProcessor(bothProcessors(processor, live.processor), config.resource);
   return {
+    live,
     mode,
     track: (traceId) => {
       tracked.add(traceId);
@@ -110,6 +115,22 @@ class PlaygroundExporter implements SpanExporter {
   forceFlush(): Promise<void> {
     return this.inner.forceFlush?.() ?? Promise.resolve();
   }
+}
+
+/** One processor for the export and the live trace, so the provider gets one addition. */
+function bothProcessors(exporting: SpanProcessor, live: SpanProcessor): SpanProcessor {
+  return {
+    onStart: (span, parent) => {
+      live.onStart(span, parent);
+      exporting.onStart(span, parent);
+    },
+    onEnd: (span) => {
+      live.onEnd(span);
+      exporting.onEnd(span);
+    },
+    forceFlush: () => exporting.forceFlush(),
+    shutdown: () => exporting.shutdown(),
+  };
 }
 
 /** The project's provider gets the processor. With none, the runner registers the only one. */

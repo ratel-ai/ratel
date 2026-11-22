@@ -169,6 +169,21 @@
               },
               "name": {
                 "type": "string"
+              },
+              "phase": {
+                "description": "Live trace: start when the span starts, end when it ends.",
+                "enum": ["start", "end"]
+              },
+              "parentSpanId": {
+                "$ref": "../envelope.schema.json#/$defs/spanId"
+              },
+              "startMs": { "type": "number" },
+              "endMs": { "type": "number" },
+              "status": { "enum": ["ok", "error"] },
+              "attributes": {
+                "description": "An allowlist of span attributes: operation, model, token counts, tool name and mode. Never content.",
+                "type": "object",
+                "additionalProperties": { "type": ["string", "number", "boolean"] }
               }
             }
           }
