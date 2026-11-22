@@ -143,7 +143,7 @@ test("placement agrees with mining on a clean project", () => {
   );
 });
 
-test("typed steps on: model-only and mixed runs are placed on their tokens; a lone tool still is not", () => {
+test("model-only and mixed runs are placed on their tokens; a lone tool still is not", () => {
   const tasks = [
     core("triage", "model:triage"),
     core("mixed", "model:plan", "code:fetch", "search"),
@@ -161,33 +161,24 @@ test("typed steps on: model-only and mixed runs are placed on their tokens; a lo
     ),
     wfTurn(["search"], { id: "one-tool" }),
   ];
-  const on = placeRuns(runs, tasks, { weights: {}, basis: "all", typedSteps: true });
-  assert.deepEqual(Object.fromEntries(on), {
+  const placed = placeRuns(runs, tasks, { weights: {}, basis: "all" });
+  assert.deepEqual(Object.fromEntries(placed), {
     "model-only": "triage",
     mixed: "mixed",
     "one-tool": null,
   });
-  const off = placeRuns(runs, tasks, { weights: {}, basis: "all" });
-  assert.ok(
-    [...off.values()].every((id) => id === null),
-    "flag off: no tokens, no placement",
-  );
 });
 
-test("typed steps on: placement agrees with mining on model-only and mixed runs", () => {
+test("placement agrees with mining on model-only and mixed runs", () => {
   const turns = [
     ...many(20, () => wfTurn([{ tool: "triage", kind: "model_call" }])),
     ...many(20, () =>
       wfTurn([{ tool: "plan", kind: "model_call" }, { tool: "fetch", kind: "code" }, "search"]),
     ),
   ];
-  const mining = mineWorkflows(turns, { typedSteps: true });
+  const mining = mineWorkflows(turns);
   assert.equal(mining.workflows.length, 2);
-  const placed = placeRuns(turns, mining.workflows, {
-    weights: mining.idf,
-    basis: "all",
-    typedSteps: true,
-  });
+  const placed = placeRuns(turns, mining.workflows, { weights: mining.idf, basis: "all" });
   for (const workflow of mining.workflows) {
     assert.deepEqual(membersByTask(placed).get(workflow.id), [...workflow.memberTurnIds]);
   }

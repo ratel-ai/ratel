@@ -18,7 +18,7 @@ import {
 } from "@/lib/ingest/trace-events/turns-schedule";
 import type { LogError } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
-import { type AgentHealthBridgeDeps, agentHealthToolRows } from "./agent-health-bridge";
+import { agentHealthToolRows } from "./agent-health-bridge";
 import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-dedupe";
 import { attrString } from "./anyvalue";
 import { indexSpans } from "./attr-resolve";
@@ -83,10 +83,6 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   deriveSpanDimensions?: typeof deriveSpanDimensions;
   traceTurns?: TraceTurnsIngestDeps;
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** `FF_TOOL_RUN_INSIGHTS` for agent-run rows (RC-742). Absent, the switch is read. */
-  agentRunsEnabled?: AgentHealthBridgeDeps["agentRunsEnabled"];
-  /** `FF_TYPED_STEPS` for code, handoff and typed model-call rows (RC-1067). Absent, the switch is read. */
-  typedStepsEnabled?: AgentHealthBridgeDeps["typedStepsEnabled"];
   /**
    * The agent-span dedupe's storage lookup: an agent wrapper with the run's
    * summed usage is not one more model call. `null` turns the dedupe off; only
@@ -238,8 +234,6 @@ export async function persistDecodedSpans(
       {
         traceTurns: deps.traceTurns,
         findRuntimeInvokes: deps.findRuntimeInvokes,
-        agentRunsEnabled: deps.agentRunsEnabled,
-        typedStepsEnabled: deps.typedStepsEnabled,
         logError,
       },
       dimensions,

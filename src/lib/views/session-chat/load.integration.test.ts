@@ -191,10 +191,10 @@ async function typedSetup() {
   return fixture;
 }
 
-test("typed steps on: user messages and code are steps, task bands cross turns, and each turn says its intent", async () => {
+test("user messages and code are steps, task bands cross turns, and each turn says its intent", async () => {
   const { client, db } = await typedSetup();
   try {
-    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false, typedSteps: true }, db);
+    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false }, db);
     assert.ok(chat);
     assert.deepEqual(
       chat.segments
@@ -220,22 +220,6 @@ test("typed steps on: user messages and code are steps, task bands cross turns, 
       [stepOf("search"), stepOf("user_message")],
     );
     assert.deepEqual(chat.intents, { 2: { topic: "Flight changes", sentiment: "negative" } });
-  } finally {
-    await client.close();
-  }
-});
-
-test("typed steps off: the same rows read as today, with no bands", async () => {
-  const { client, db } = await typedSetup();
-  try {
-    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false }, db);
-    assert.ok(chat);
-    assert.equal(
-      chat.segments.some((s) => s.kind === "user_message" || s.kind === "code"),
-      false,
-    );
-    assert.equal(chat.bands, undefined);
-    assert.equal(chat.intents, undefined);
   } finally {
     await client.close();
   }

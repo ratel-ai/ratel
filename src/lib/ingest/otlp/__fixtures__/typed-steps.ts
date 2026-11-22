@@ -114,7 +114,7 @@ export function typedStepFixtures(
 }
 
 /** Encode fixtures for the local OTLP JSON endpoint. */
-export function typedStepsRequest(spans: readonly DecodedSpan[]): IExportTraceServiceRequest {
+export function typedStepRequest(spans: readonly DecodedSpan[]): IExportTraceServiceRequest {
   return {
     resourceSpans: spans.map((span) => ({
       resource: { attributes: wireAttributes(span.resourceAttributes) },

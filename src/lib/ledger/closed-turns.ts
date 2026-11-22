@@ -1,6 +1,4 @@
 import { and, asc, eq, gte, inArray, lt, min, sql } from "drizzle-orm";
-import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
-import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { traceTurnSteps, traceTurns } from "./schema";
 import { toStepDraft } from "./turns/queries";
@@ -170,29 +168,6 @@ export async function countClosedTurns(
       ),
     );
   return row?.n ?? 0;
-}
-
-/**
- * Whether OpenTelemetry model calls arrived since `since` (one row is enough). Read only
- * when no run exists: model calls without tool spans never make one.
- */
-export async function hasModelCallsSince(
-  projectId: string,
-  since: Date,
-  db: Pick<SignalsDb, "select"> = getDb(),
-): Promise<boolean> {
-  const rows = await db
-    .select({ one: sql`1` })
-    .from(traceEvents)
-    .where(
-      and(
-        eq(traceEvents.projectId, projectId),
-        eq(traceEvents.type, OTLP_MODEL_CALL),
-        gte(traceEvents.receivedAt, since),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
 }
 
 /** Whether the project has any turn at all, open or closed. */

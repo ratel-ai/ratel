@@ -41,7 +41,6 @@ export function SessionView({
   backHref,
   backLabel,
   projectId,
-  typedSteps = false,
   bands = [],
 }: {
   projectId: string;
@@ -50,8 +49,7 @@ export function SessionView({
   names: Record<string, string>;
   highlight?: readonly string[];
   crumbs: readonly Crumb[];
-  /** `cloud-typed-steps`: steps read by kind, under one band per task segment. */
-  typedSteps?: boolean;
+  /** One band per task segment over the steps, read by kind. */
   bands?: readonly SessionBand[];
   /** The task the reader came from, or Tasks. */
   backHref: string;
@@ -77,7 +75,6 @@ export function SessionView({
           highlight={highlight}
           backHref={backHref}
           backLabel={backLabel}
-          typedSteps={typedSteps}
           bands={bands}
         />
       </PageBody>
@@ -93,7 +90,6 @@ export function SessionTimeline({
   highlight = [],
   backHref,
   backLabel,
-  typedSteps = false,
   bands = [],
 }: {
   projectId: string;
@@ -103,7 +99,6 @@ export function SessionTimeline({
   highlight?: readonly string[];
   backHref: string;
   backLabel: string;
-  typedSteps?: boolean;
   bands?: readonly SessionBand[];
 }) {
   const marked = new Set(highlight);
@@ -163,7 +158,7 @@ export function SessionTimeline({
                     aria-label={`Turn ${index + 1} steps`}
                   >
                     {steps.map((row, position) => {
-                      const step = sessionStep(row, names, { typedSteps });
+                      const step = sessionStep(row, names);
                       const isMarked = step.toolId !== null && marked.has(step.toolId);
                       const band = tasks.byStep.get(`${turn.id}:${row.ordinal}`);
                       return (

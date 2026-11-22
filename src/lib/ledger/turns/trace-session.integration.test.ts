@@ -117,8 +117,6 @@ async function ingestAndBuild(db: Db, projectId: string, spans: DecodedSpan[]): 
         enqueueBuild: async () => null,
         scheduleProjectDrain: () => {},
       },
-      agentRunsEnabled: async () => false,
-      typedStepsEnabled: async () => true,
       agentSpanDedupe: null,
       logError: () => {},
       captureFailure: () => {},
@@ -126,8 +124,6 @@ async function ingestAndBuild(db: Db, projectId: string, spans: DecodedSpan[]): 
   );
   assert.ok(result.ok);
   const deps: Partial<BuildJobDeps> = {
-    readsAgentRuns: async () => false,
-    readsTypedSteps: async () => true,
     getCursor: (p) => getTraceTurnsCursor(p, db),
     listEvents: (p, since, _db, limit, types) => listTurnEventsPage(p, since, db, limit, types),
     listHits: (ids) => listTurnEventHits(ids, db),

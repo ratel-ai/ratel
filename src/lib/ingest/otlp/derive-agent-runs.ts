@@ -14,8 +14,8 @@ import { promptOf } from "./prompt-text";
 import { plausibleOccurredAt } from "./reconstruct";
 import type { DecodedSpan } from "./types";
 
-/** Root agent runs with their captured ask. Typed steps also accept workflow
- * roots. Nested agents become handoff rows in derive-steps. */
+/** Root agent and workflow runs with their captured ask. Nested agents become
+ * handoff rows in derive-steps. */
 
 export { AGENT_RUN_EVENT_TYPE };
 
@@ -23,24 +23,19 @@ const MAX_ID = 256;
 const INT4_MAX = 2_147_483_647;
 const STATUS_ERROR = 2;
 
-/** Every `invoke_agent` root span of the export as an `agent_run` row. */
-export function deriveAgentRuns(
-  spans: readonly DecodedSpan[],
-  options: { typedSteps?: boolean } = {},
-): ParsedTraceEvent[] {
+const RUN_OPERATIONS: ReadonlySet<string> = new Set(["invoke_agent", "invoke_workflow"]);
+
+/** Every `invoke_agent` or `invoke_workflow` root span of the export as an `agent_run` row. */
+export function deriveAgentRuns(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
-  return spans
-    .filter((span) => isAgentRunRoot(span, options.typedSteps))
-    .map((span) => agentRunRow(span, byId));
+  return spans.filter(isAgentRunRoot).map((span) => agentRunRow(span, byId));
 }
 
-function isAgentRunRoot(span: DecodedSpan, typedSteps = false): boolean {
+function isAgentRunRoot(span: DecodedSpan): boolean {
   return (
     !span.parentSpanId &&
     Boolean(span.spanId && span.traceId) &&
-    ["invoke_agent", ...(typedSteps ? ["invoke_workflow"] : [])].includes(
-      attrString(span.attributes, GEN_AI.operationName) ?? "",
-    )
+    RUN_OPERATIONS.has(attrString(span.attributes, GEN_AI.operationName) ?? "")
   );
 }
 

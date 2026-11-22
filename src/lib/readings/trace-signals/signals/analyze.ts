@@ -136,9 +136,9 @@ export interface RunSummary {
    */
   selfCorrections?: StoredSelfCorrections;
   /**
-   * Agent health per step kind (RC-1077, `steps/metrics.ts`). Set only with
-   * `cloud-typed-steps` on; the compute job adds the task readings once the
-   * run's segments are written.
+   * Agent health per step kind (RC-1077, `steps/metrics.ts`). The compute job
+   * adds the task readings once the run's segments are written. Absent on
+   * runs stored before it.
    */
   steps?: StepReadings;
 }
@@ -162,9 +162,10 @@ export interface AnalysisResult {
    * Runs absent from it belong to no task.
    */
   placement: ReadonlyMap<string, string | null>;
-  segmentPlacement?: SegmentPlacement;
-  /** The per-kind readings, to finish again with the stored segments (`cloud-typed-steps`). */
-  stepMetrics?: StepMetrics;
+  /** The reading's tasks and weights, for placing the window's task segments (`segments/write.ts`). */
+  segmentPlacement: SegmentPlacement;
+  /** The per-kind readings, to finish again with the stored segments. */
+  stepMetrics: StepMetrics;
 }
 
 export interface LinkingCounts {
@@ -205,13 +206,10 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
   const stats: ProjectStats = createProjectStats(options.maxQueryHashes);
   const journey = createJourneyStats();
   const prerequisites = createPrerequisiteStats(options.prereqWindowMs);
-  const typedSteps = options.workflowMining?.typedSteps === true;
-  const stepJourney = typedSteps ? createJourneyStats() : null;
+  const stepJourney = createJourneyStats();
   let hasTypedCalls = false;
-  const daily = new DailyBuckets({ typedSteps });
-  const stepMetrics = typedSteps
-    ? createStepMetrics({ modelCalls: context.modelCalls ?? undefined })
-    : null;
+  const daily = new DailyBuckets();
+  const stepMetrics = createStepMetrics({ modelCalls: context.modelCalls ?? undefined });
   const workflows = createWorkflowCollector(
     options.maxWorkflowTurns,
     floors,
@@ -255,7 +253,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       countPrerequisites(prerequisites, turn);
       if (otel && otelFacts) accumulateOtelTurn(otel, turn, otelFacts);
       workflows.collect(turn);
-      stepMetrics?.add(turn);
+      stepMetrics.add(turn);
       if (turn.lane === "runtime") linking.sdkRuns += 1;
       if (turn.linked) linking.linkedRuns += 1;
     },
@@ -327,7 +325,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
           ...(mined.stored.turnsWithTools > 0 || mined.agentRuns > 0 || mined.stored.basis?.blocked
             ? { workflows: mined.stored }
             : {}),
-          ...(stepMetrics ? { steps: stepMetrics.finish() } : {}),
+          steps: stepMetrics.finish(),
         },
         turnsScanned: stats.turns,
         turnSourceMix: { ...stats.mix },
@@ -335,8 +333,8 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
         queriesEvicted: stats.queriesEvicted,
         linking: { ...linking },
         placement: mined.placement,
-        ...(mined.segmentPlacement ? { segmentPlacement: mined.segmentPlacement } : {}),
-        ...(stepMetrics ? { stepMetrics } : {}),
+        segmentPlacement: mined.segmentPlacement,
+        stepMetrics,
       };
     },
   };

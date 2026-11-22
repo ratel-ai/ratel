@@ -18,7 +18,7 @@ import type {
 import type { StepsView } from "@/lib/readings/trace-signals/steps/view";
 
 /**
- * Agent health per step kind (RC-1078, `cloud-typed-steps`): how each kind of
+ * Agent health per step kind (RC-1078): how each kind of
  * step behaves, then the detail of the kinds that have one (model calls,
  * handoffs, user messages) and the tasks. The `?steps=` preset picks the kinds.
  */

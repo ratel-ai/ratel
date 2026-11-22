@@ -8,16 +8,8 @@ import {
   turnUnit,
 } from "@/lib/readings/trace-signals/workflows/units";
 
-const typed = { typedSteps: true };
-
-test("flag off: a unit holds the distinct tools, skills and typed steps left out", () => {
-  const turn = wfTurn([
-    "b",
-    { tool: "s", targetType: "skill" },
-    { tool: "plan", kind: "model_call" },
-    "a",
-    "b",
-  ]);
+test("a tool keeps its bare id, so a tool-only unit reads as its tools", () => {
+  const turn = wfTurn(["b", "a", "b"]);
   assert.deepEqual(turnUnit(turn), {
     turnId: turn.id,
     tools: ["a", "b"],
@@ -26,7 +18,7 @@ test("flag off: a unit holds the distinct tools, skills and typed steps left out
   });
 });
 
-test("flag on: a unit holds every step's token in first-occurrence order; user messages are no item", () => {
+test("a unit holds every step's token in first-occurrence order; user messages are no item", () => {
   const turn = wfTurn([
     { tool: "", kind: "user_message" },
     { tool: "plan", kind: "model_call" },
@@ -37,7 +29,7 @@ test("flag on: a unit holds every step's token in first-occurrence order; user m
     { tool: "plan", kind: "model_call" },
     "search",
   ]);
-  const unit = turnUnit(turn, typed);
+  const unit = turnUnit(turn);
   assert.deepEqual(unit.path, [
     "model:plan",
     "search",
@@ -57,32 +49,23 @@ test("flag on: a unit holds every step's token in first-occurrence order; user m
 
 test("the unit builder reads a step list, so a piece of a turn makes its own unit", () => {
   const turn = wfTurn([{ tool: "plan", kind: "model_call" }, "search", "fetch"]);
-  assert.deepEqual(stepsUnit("piece", turn.steps.slice(1), typed).path, ["search", "fetch"]);
+  assert.deepEqual(stepsUnit("piece", turn.steps.slice(1)).path, ["search", "fetch"]);
 });
 
 test("floor: two distinct tools, or one token when any token is not a tool", () => {
-  assert.equal(formsTask(turnUnit(wfTurn(["a", "a"]), typed)), false);
-  assert.equal(formsTask(turnUnit(wfTurn(["a", "b"]), typed)), true);
-  assert.equal(formsTask(turnUnit(wfTurn([{ tool: "plan", kind: "model_call" }]), typed)), true);
-  assert.equal(
-    formsTask(turnUnit(wfTurn([{ tool: "plan", kind: "model_call" }]))),
-    false,
-    "flag off: no token",
-  );
-  assert.equal(formsTask(turnUnit(wfTurn([{ tool: "", kind: "user_message" }]), typed)), false);
+  assert.equal(formsTask(turnUnit(wfTurn(["a", "a"]))), false);
+  assert.equal(formsTask(turnUnit(wfTurn(["a", "b"]))), true);
+  assert.equal(formsTask(turnUnit(wfTurn([{ tool: "plan", kind: "model_call" }]))), true);
+  assert.equal(formsTask(turnUnit(wfTurn([{ tool: "", kind: "user_message" }]))), false);
 });
 
-test("task steps carry the token as their target id, flag on; tool calls only, flag off", () => {
+test("task steps carry the token as their target id", () => {
   const turn = wfTurn([
     { tool: "plan", kind: "model_call", outcome: "error" },
     "search",
     { tool: "s1", targetType: "skill" },
   ]);
-  assert.deepEqual(
-    taskSteps(turn).map((step) => step.targetId),
-    ["search"],
-  );
-  const steps = taskSteps(turn, typed);
+  const steps = taskSteps(turn);
   assert.deepEqual(
     steps.map((step) => step.targetId),
     ["model:plan", "search", "skill:s1"],

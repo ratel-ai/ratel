@@ -96,7 +96,7 @@ test("health numbers on a hand-computed example", () => {
   );
 });
 
-test("examples are capped, and skills do not count as calls", () => {
+test("examples are capped, and a skill's error is a failed step", () => {
   const turns = example();
   const withSkill = wfTurn(["find", { tool: "plan", targetType: "skill", outcome: "error" }], {
     id: "t5",
@@ -107,7 +107,7 @@ test("examples are capped, and skills do not count as calls", () => {
     byIdMap([...turns, withSkill]),
     2,
   );
-  assert.equal(health.failedRuns, 2, "the skill's error is not a tool failure");
+  assert.equal(health.failedRuns, 3, "a skill is a step token, so its error fails the run");
   assert.equal(health.slowExamples.length, 2);
   assert.equal(health.recentExamples[0]!.turnId, "t5");
 });
@@ -122,7 +122,7 @@ test("an empty workflow has zeros and nulls, not NaN", () => {
   assert.equal(health.slowestStep, null);
 });
 
-test("typed steps on: a model-only run's failing and slowest step is its model token", () => {
+test("a model-only run's failing and slowest step is its model token", () => {
   const model = (outcome: "ok" | "error", tookMs: number) => ({
     tool: "triage",
     kind: "model_call" as const,
@@ -133,11 +133,7 @@ test("typed steps on: a model-only run's failing and slowest step is its model t
     wfTurn([model("ok", 900)], { id: "m1", startMs: 0 }),
     wfTurn([model("ok", 300), model("error", 600)], { id: "m2", startMs: 10_000 }),
   ];
-  const off = workflowHealth({ id: "wf", memberTurnIds: ["m1", "m2"] }, byIdMap(turns));
-  assert.equal(off.failedRuns, 0, "flag off: a model call is no step");
-  const on = workflowHealth({ id: "wf", memberTurnIds: ["m1", "m2"] }, byIdMap(turns), undefined, {
-    typedSteps: true,
-  });
+  const on = workflowHealth({ id: "wf", memberTurnIds: ["m1", "m2"] }, byIdMap(turns));
   assert.equal(on.failedRuns, 1);
   assert.deepEqual(on.failingStep, { toolId: "model:triage", count: 1, share: 1 });
   assert.equal(on.slowestStep?.toolId, "model:triage");

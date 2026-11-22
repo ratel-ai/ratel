@@ -80,7 +80,7 @@ export async function writeTaskSegments(
           turnSource: sources.get(p.turnId) as "otlp" | "declared" | "inferred",
         })),
         options.tasks,
-        { ...options, typedSteps: true },
+        options,
       );
       const segments = mergePieces(pieces, placement);
       await tx

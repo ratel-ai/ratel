@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decodeJson } from "../decode";
-import { typedStepFixtures, typedStepsRequest } from "./typed-steps";
+import { typedStepFixtures, typedStepRequest } from "./typed-steps";
 
 test("typed step fixtures survive OTLP JSON decoding with their span relationships", () => {
   const fixtures = typedStepFixtures();
   assert.deepEqual(Object.keys(fixtures), ["ratel", "bareChat", "stema", "vibiz", "cato", "docs"]);
   for (const spans of Object.values(fixtures)) {
-    const decoded = decodeJson(Buffer.from(JSON.stringify(typedStepsRequest(spans))));
+    const decoded = decodeJson(Buffer.from(JSON.stringify(typedStepRequest(spans))));
     assert.deepEqual(
       decoded.map((span) => [
         span.name,

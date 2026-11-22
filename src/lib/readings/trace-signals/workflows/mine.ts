@@ -21,10 +21,9 @@ import { formsTask, turnUnit } from "@/lib/readings/trace-signals/workflows/unit
  * alone. Pure and deterministic: the same turns give the same workflows, in
  * the same order, with the same ids.
  *
- * - Unit: one turn, as its distinct tools and its first-call path. A turn
- *   with fewer than two distinct tools is a single step, never a workflow.
- *   With `typedSteps` (`cloud-typed-steps`, RC-1072) the items are step
- *   tokens (`units.ts`): one non-tool token is enough, and such a token may
+ * - Unit: one turn, as its distinct step tokens (`units.ts`, RC-1072) and
+ *   its first-call path. A turn with fewer than two distinct tools and no
+ *   non-tool token is a single step, never a workflow. A non-tool token may
  *   be a workflow alone (a size-1 itemset), so a run of model calls is a task.
  * - IDF: a tool's weight is ln(1 + N / df) over the N multi-tool turns (the
  *   smoothed form, so a tool in every turn still weighs ln 2 rather than 0
@@ -127,9 +126,7 @@ export function mineWorkflows(
   opts: Partial<WorkflowConfig> = {},
 ): WorkflowMiningResult {
   const config: WorkflowConfig = { ...DEFAULT_WORKFLOW_CONFIG, ...opts };
-  const withTools = turns
-    .map((turn) => turnUnit(turn, config))
-    .filter((unit) => unit.tools.length > 0);
+  const withTools = turns.map((turn) => turnUnit(turn)).filter((unit) => unit.tools.length > 0);
   const multi = withTools.filter(formsTask);
   const n = multi.length;
   const floor = Math.max(config.minSupport, Math.ceil(config.minShare * n));

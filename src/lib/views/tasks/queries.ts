@@ -204,67 +204,6 @@ export interface ExampleRun {
 }
 
 /**
- * A task page's example runs: each one's calls in order, how it ended, and
- * what was asked in it. Read when the page shows them, never stored.
- */
-export async function loadExampleRuns(
-  projectId: string,
-  turnIds: readonly string[],
-  db: TasksDb,
-  names: ReadonlyMap<string, string> = new Map(),
-): Promise<Map<string, ExampleRun>> {
-  if (turnIds.length === 0) return new Map();
-  // One after another: a bounded read runs on one connection.
-  const rows = await db
-    .select({
-      id: traceTurns.id,
-      sessionId: traceTurns.sessionId,
-      startedAt: traceTurns.startedAt,
-      endedAt: traceTurns.endedAt,
-      calls: traceTurns.invokeCount,
-      failures: traceTurns.errorCount,
-    })
-    .from(traceTurns)
-    .where(and(eq(traceTurns.projectId, projectId), inArray(traceTurns.id, [...turnIds])));
-  const stepRows = await db
-    .select({
-      turnId: traceTurnSteps.turnId,
-      kind: traceTurnSteps.kind,
-      targetType: traceTurnSteps.targetType,
-      targetId: traceTurnSteps.targetId,
-      outcome: traceTurnSteps.outcome,
-    })
-    .from(traceTurnSteps)
-    .where(
-      and(eq(traceTurnSteps.projectId, projectId), inArray(traceTurnSteps.turnId, [...turnIds])),
-    )
-    .orderBy(traceTurnSteps.turnId, traceTurnSteps.ordinal);
-  const stepsByTurn = new Map<string, (typeof stepRows)[number][]>();
-  for (const step of stepRows)
-    stepsByTurn.set(step.turnId, [...(stepsByTurn.get(step.turnId) ?? []), step]);
-  const asks = await loadAskSourcesByTurn(projectId, turnIds, db);
-  return new Map(
-    rows.map((row) => {
-      const steps = exampleSteps(stepsByTurn.get(row.id) ?? [], names);
-      return [
-        row.id,
-        {
-          turnId: row.id,
-          sessionId: row.sessionId,
-          startedAt: row.startedAt,
-          endedAt: row.endedAt,
-          calls: row.calls,
-          failures: row.failures,
-          steps,
-          status: exampleStatus(steps, row.failures),
-          ask: asks.get(row.id) ?? null,
-        },
-      ];
-    }),
-  );
-}
-
-/**
  * The task an old Tool craft ask ran as, for its redirect: the ask's tools
  * (those in at least half of its turns, from the tool reading) placed with
  * the one placement rule against the latest tasks. Null when none matches.
@@ -418,7 +357,7 @@ export async function loadSegmentExamples(
             (id !== segment.endTurnId || step.ordinal <= segment.endOrdinal),
         ),
       );
-      const steps = exampleSteps(kept, names, { typedSteps: true });
+      const steps = exampleSteps(kept, names);
       const failures = steps.filter((s) => s.failed).length;
       return [
         segment.id,

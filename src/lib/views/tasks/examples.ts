@@ -1,6 +1,6 @@
 import type { PublicStepKind } from "@/lib/readings/trace-signals/steps";
 import type { WorkflowStep } from "@/lib/readings/trace-signals/workflows/types";
-import { stepToken, type UnitOptions } from "@/lib/readings/trace-signals/workflows/units";
+import { stepToken } from "@/lib/readings/trace-signals/workflows/units";
 import { tokenStepKind, tokenStepLabel } from "@/lib/views/tasks/step-kind";
 /**
  * An example run as a task's page draws it: the tools it called in order and
@@ -38,7 +38,7 @@ export function exampleStatus(
   return steps.some((step) => step.failed) ? "recovered" : "worked";
 }
 
-/** A run's calls from its stored steps, in order: invocations with a target only (searches are not steps of a task). */
+/** A run's calls from its stored steps, in order: every step with a token (`units.ts`); searches are not steps of a task. */
 export function exampleSteps(
   rows: readonly {
     kind: string;
@@ -47,25 +47,19 @@ export function exampleSteps(
     outcome: string | null;
   }[],
   names: ReadonlyMap<string, string>,
-  options: UnitOptions = {},
 ): ExampleStep[] {
   return rows.flatMap((row) => {
-    if (options.typedSteps) {
-      const toolId = stepToken(row as WorkflowStep);
-      return toolId
-        ? [
-            {
-              toolId,
-              label: tokenStepLabel(toolId, names),
-              kind: tokenStepKind(toolId),
-              failed: row.outcome === "error",
-            },
-          ]
-        : [];
-    }
-    if (row.kind !== "invoke" || !row.targetId) return [];
-    const toolId = row.targetType === "skill" ? `skill:${row.targetId}` : row.targetId;
-    return [{ toolId, label: names.get(toolId) ?? toolId, failed: row.outcome === "error" }];
+    const toolId = stepToken(row as WorkflowStep);
+    return toolId
+      ? [
+          {
+            toolId,
+            label: tokenStepLabel(toolId, names),
+            kind: tokenStepKind(toolId),
+            failed: row.outcome === "error",
+          },
+        ]
+      : [];
   });
 }
 

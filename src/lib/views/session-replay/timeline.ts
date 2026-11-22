@@ -25,7 +25,7 @@ export interface TimelineTurn {
   steps: TimelineLedgerStep[];
 }
 
-/** Typed ledger steps (`cloud-typed-steps`) drawn as steps of their own. */
+/** Typed ledger steps (RC-1067) drawn as steps of their own. */
 export type TypedStepKind = "user_message" | "code" | "handoff";
 
 export interface TimelineLedgerStep {

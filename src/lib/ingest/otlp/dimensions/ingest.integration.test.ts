@@ -153,6 +153,13 @@ test("the MCP tool row names its server in trace_events.server; the other derive
      from trace_events where ingest_source = 'otlp' order by type, span_id`,
   );
   assert.deepEqual(rows, [
+    {
+      type: "agent_run",
+      span_id: SUPERVISOR,
+      tool_id: null,
+      server: null,
+      payload_agent: "supervisor",
+    },
     // One row for the call: the client's tool span. The server's row has the same id and is not stored again.
     {
       type: "invoke_end",
@@ -167,6 +174,14 @@ test("the MCP tool row names its server in trace_events.server; the other derive
       tool_id: null,
       server: null,
       payload_agent: "researcher",
+    },
+    // The nested agent's handoff, a typed step (RC-1067).
+    {
+      type: "otlp_step",
+      span_id: RESEARCHER,
+      tool_id: null,
+      server: null,
+      payload_agent: null,
     },
   ]);
   await client.close();
@@ -229,6 +244,13 @@ test("a derivation that throws is logged, and the batch is still stored: null di
   );
   assert.deepEqual(rows, [
     {
+      type: "agent_run",
+      span_id: SUPERVISOR,
+      tool_id: null,
+      server: null,
+      payload_agent: "supervisor",
+    },
+    {
       type: "invoke_end",
       span_id: TOOL,
       tool_id: "docs__search",
@@ -241,6 +263,14 @@ test("a derivation that throws is logged, and the batch is still stored: null di
       tool_id: null,
       server: null,
       payload_agent: "researcher",
+    },
+    // The nested agent's handoff, a typed step (RC-1067).
+    {
+      type: "otlp_step",
+      span_id: RESEARCHER,
+      tool_id: null,
+      server: null,
+      payload_agent: null,
     },
   ]);
   const { rows: events } = await client.query<{ n: number }>(

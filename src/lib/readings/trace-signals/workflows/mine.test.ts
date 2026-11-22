@@ -34,7 +34,7 @@ test("support floor: the 1% share wins over 10 once there are enough multi-tool 
   assert.deepEqual(cores(tuned), ["a,b,c"]);
 });
 
-test("single-tool turns are counted as single steps and never mined; skills are left out", () => {
+test("single-tool turns are counted as single steps and never mined; a skill is a step token", () => {
   const turns = [
     ...many(20, () => wfTurn(["a", "a"])),
     ...many(20, () => wfTurn(["a", { tool: "s1", targetType: "skill" }])),
@@ -43,10 +43,10 @@ test("single-tool turns are counted as single steps and never mined; skills are 
   ];
   const result = mineWorkflows(turns);
   assert.equal(result.turnsWithTools, 52);
-  assert.equal(result.singleStepTurns, 40);
-  assert.equal(result.multiToolTurns, 12);
-  assert.deepEqual(cores(result), ["a,b"]);
-  assert.equal(result.workflows[0]!.share, 12 / 52);
+  assert.equal(result.singleStepTurns, 20);
+  assert.equal(result.multiToolTurns, 32);
+  assert.deepEqual(cores(result).sort(), ["a,b", "a,skill:s1"]);
+  assert.equal(find(result, "b")!.share, 12 / 52);
 });
 
 test("IDF and the helper rule keep a tool in 80% of turns out of every core", () => {
@@ -189,17 +189,12 @@ const model = (token: string, outcome?: "error"): Call => ({
   kind: "model_call",
   ...(outcome ? { outcome } : {}),
 });
-const typed = { typedSteps: true };
-
-test("typed steps on: runs of model calls alone form a task on their signature", () => {
+test("runs of model calls alone form a task on their signature", () => {
   const turns = [
     ...many(12, () => wfTurn([model("triage"), model("triage")])),
     ...many(3, (i) => wfTurn([model(`rare${i}`)])),
   ];
-  const off = mineWorkflows(turns);
-  assert.equal(off.workflows.length, 0, "flag off: no tool, no task");
-  assert.equal(off.turnsWithTools, 0);
-  const on = mineWorkflows(turns, typed);
+  const on = mineWorkflows(turns);
   assert.deepEqual(cores(on), ["model:triage"]);
   assert.equal(on.workflows[0]!.id, workflowFingerprint(["model:triage"]));
   assert.equal(on.workflows[0]!.runs, 12);
@@ -207,7 +202,7 @@ test("typed steps on: runs of model calls alone form a task on their signature",
   assert.equal(on.singleStepTurns, 0);
 });
 
-test("typed steps on: a mixed signature (model + code + tool) is one task in step order", () => {
+test("a mixed signature (model + code + tool) is one task in step order", () => {
   const mixed = (): Call[] => [
     { tool: "", kind: "user_message" },
     model("plan"),
@@ -216,23 +211,20 @@ test("typed steps on: a mixed signature (model + code + tool) is one task in ste
     model("plan"),
   ];
   const turns = [...many(30, () => wfTurn(mixed())), ...noise(20, "n")];
-  const workflow = find(mineWorkflows(turns, typed), "search")!;
+  const workflow = find(mineWorkflows(turns), "search")!;
   assert.deepEqual(workflow.coreTools, ["code:fetch", "model:plan", "search"]);
   assert.deepEqual(workflow.typicalOrder, ["model:plan", "code:fetch", "search"]);
   assert.equal(workflow.entryTool, "model:plan");
   assert.equal(workflow.runs, 30);
 });
 
-test("typed steps on: a single tool still forms no task", () => {
-  const result = mineWorkflows(
-    many(20, () => wfTurn(["a", "a"])),
-    typed,
-  );
+test("a single tool still forms no task", () => {
+  const result = mineWorkflows(many(20, () => wfTurn(["a", "a"])));
   assert.equal(result.workflows.length, 0);
   assert.equal(result.singleStepTurns, 20);
 });
 
-test("typed steps on: tool-only runs give the same workflows and ids as with the flag off", () => {
+test("tool-only runs mine on their bare tool ids, so their task ids are the tools' fingerprints", () => {
   const turns = [
     ...many(60, () => wfTurn(["find", "assign", "notify", "log"])),
     ...many(60, () => wfTurn(["find", "assign", "close", "archive"])),
@@ -240,5 +232,13 @@ test("typed steps on: tool-only runs give the same workflows and ids as with the
     ...many(20, () => wfTurn(["solo"])),
     ...noise(40, "n"),
   ];
-  assert.deepEqual(mineWorkflows(turns, typed), mineWorkflows(turns));
+  const result = mineWorkflows(turns);
+  assert.ok(result.workflows.length > 0);
+  for (const workflow of result.workflows) {
+    assert.ok(
+      workflow.coreTools.every((tool) => !tool.includes(":")),
+      `${workflow.id} holds tool ids only`,
+    );
+    assert.equal(workflow.id, workflowFingerprint(workflow.coreTools));
+  }
 });

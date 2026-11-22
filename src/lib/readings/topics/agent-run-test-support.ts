@@ -67,8 +67,6 @@ export interface AgentRun {
   errorType?: string;
   /** The root's status code; 2 is an error. */
   statusCode?: number;
-  /** False stores the run as ingest did before the flag: no `agent_run` row, so no turn. */
-  agentRunRow?: boolean;
 }
 
 /** A migrated database with one organization and project. */
@@ -90,7 +88,7 @@ export async function ingestRuns({ db }: AgentRunDb, runs: readonly AgentRun[]):
     const result = await persistDecodedSpans(
       runSpans(run, index, t0 + index * MINUTE),
       context,
-      ingestDeps(db, run.agentRunRow !== false),
+      ingestDeps(db),
     );
     if (!result.ok) throw new Error(`ingest failed for run ${index}`);
   }
@@ -183,7 +181,7 @@ function runSpans(run: AgentRun, index: number, startMs: number): DecodedSpan[] 
   return [chat, root];
 }
 
-function ingestDeps(db: Db, agentRunRow: boolean): PersistSpansDeps {
+function ingestDeps(db: Db): PersistSpansDeps {
   return {
     insertEventsWithMetrics: async (_projectId: string, rows: unknown[]) => rows.length,
     insertTraceEvents: (projectId: string, rows: Parameters<typeof insertTraceEvents>[1]) =>
@@ -193,7 +191,6 @@ function ingestDeps(db: Db, agentRunRow: boolean): PersistSpansDeps {
       enqueueBuild: async () => null,
       scheduleProjectDrain: () => {},
     },
-    agentRunsEnabled: async () => agentRunRow,
     agentSpanDedupe: null,
     logError: () => {},
     captureFailure: () => {},
@@ -204,7 +201,6 @@ function ingestDeps(db: Db, agentRunRow: boolean): PersistSpansDeps {
 function buildDeps(db: Db): Partial<BuildJobDeps> {
   return {
     now: () => new Date(Date.now() + 31 * MINUTE),
-    readsAgentRuns: async () => true,
     getCursor: (p) => getTraceTurnsCursor(p, db),
     listEvents: (p, since, _db, limit, types) => listTurnEventsPage(p, since, db, limit, types),
     listHits: (ids) => listTurnEventHits(ids, db),

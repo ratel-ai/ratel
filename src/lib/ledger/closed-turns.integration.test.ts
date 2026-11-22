@@ -5,7 +5,6 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import {
   countClosedTurns,
   hasLedger,
-  hasModelCallsSince,
   ledgerStartedAt,
   listClosedTurnsPage,
   type SignalsDb,
@@ -85,7 +84,6 @@ test("ledger presence and reach answer from any turn and the earliest closed one
   const db = await setup();
   assert.equal(await hasLedger(PROJECT_ID, db), false);
   assert.equal(await ledgerStartedAt(PROJECT_ID, db), null);
-  assert.equal(await hasModelCallsSince(PROJECT_ID, new Date(0), db), false);
 
   await seedTurns(db, 3);
 

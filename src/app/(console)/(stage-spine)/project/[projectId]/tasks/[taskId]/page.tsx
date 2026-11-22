@@ -57,8 +57,8 @@ export default async function TaskPage({
         .map((row) => row.turnId)
     : undefined;
   const now = new Date();
-  // cloud-typed-steps (FF_TYPED_STEPS): the `?steps=` preset; off, the page has no presets.
-  const stepsView = task.typedSteps ? parseStepsView(firstParam(query.steps)) : undefined;
+  // The `?steps=` preset.
+  const stepsView = parseStepsView(firstParam(query.steps));
   return (
     <TaskView
       projectId={project.id}

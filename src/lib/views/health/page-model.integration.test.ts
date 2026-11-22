@@ -195,27 +195,15 @@ test("evidence reads query text live: pruned events are expired, missing text is
   }
 });
 
-test("typed steps: the page carries the per-kind readings only with the flag on", async () => {
+test("the page carries the per-kind readings", async () => {
   const { client, db } = await setupDb();
   await seedLedger(client, db, problems());
-  await computeProjectTraceSignals(
-    PROJECT_ID,
-    { trigger: "manual" },
-    jobDeps(db, NOW, [], { workflowMining: async () => ({ typedSteps: true }) }),
-  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW, []));
 
-  const on = await loadHealthPageModel({ projectId: PROJECT_ID, windowDays: 7 }, "production", {
+  const page = await loadHealthPageModel({ projectId: PROJECT_ID, windowDays: 7 }, "production", {
     db,
     getLimits: async () => PLUS,
     now: () => NOW,
-    readsTypedSteps: async () => true,
   });
-  assert.equal(on.steps?.kinds.tool_call?.calls, 155 + 25);
-  const off = await loadHealthPageModel({ projectId: PROJECT_ID, windowDays: 7 }, "production", {
-    db,
-    getLimits: async () => PLUS,
-    now: () => NOW,
-    readsTypedSteps: async () => false,
-  });
-  assert.equal(off.steps, undefined);
+  assert.equal(page.steps?.kinds.tool_call?.calls, 155 + 25);
 });

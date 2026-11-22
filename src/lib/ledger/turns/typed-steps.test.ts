@@ -18,9 +18,7 @@ function events(model = true) {
   }));
   const rows = [
     ...deriveSteps(spans),
-    ...(model
-      ? deriveModelCalls([{ ...fixtures.bareChat[0], traceId: code.traceId }], { typedSteps: true })
-      : []),
+    ...(model ? deriveModelCalls([{ ...fixtures.bareChat[0], traceId: code.traceId }]) : []),
   ];
   return normalizeEvents(
     rows.map((row, i) => ({
@@ -30,7 +28,7 @@ function events(model = true) {
       failed: row.errorMessage !== null,
     })) as TurnEventRow[],
     new Map(),
-    { salt: "test", typedSteps: true },
+    { salt: "test" },
   );
 }
 
@@ -47,20 +45,19 @@ test("code steps require GenAI work and stop at twenty in event-time order", () 
   );
 });
 
-test("a model-only ingest schedules a build only with typed steps enabled", async () => {
-  for (const enabled of [false, true]) {
+test("a model-only or step-only ingest schedules a build", async () => {
+  for (const type of ["otlp_model_call", "otlp_step"]) {
     let scheduled = 0;
     await scheduleTraceTurnBuild(
       {
-        readsTypedSteps: async () => enabled,
         enqueueBuild: async () => {
           scheduled++;
           return { id: "build" };
         },
         scheduleProjectDrain: () => {},
       },
-      { projectId: "sample", organization: null, eventTypes: ["otlp_model_call"], accepted: 1 },
+      { projectId: "sample", organization: null, eventTypes: [type], accepted: 1 },
     );
-    assert.equal(scheduled, enabled ? 1 : 0);
+    assert.equal(scheduled, 1, type);
   }
 });

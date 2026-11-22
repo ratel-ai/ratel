@@ -49,11 +49,6 @@ export interface WorkflowConfig {
    * (`agent-tasks.ts`, RC-747). On only with `cloud-tool-run-insights`.
    */
   agentTasks: boolean;
-  /**
-   * Typed steps and skills are items too, as tokens (`units.ts`, RC-1072),
-   * so a run of model calls alone forms a task. On only with `cloud-typed-steps`.
-   */
-  typedSteps: boolean;
 }
 
 export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
@@ -71,7 +66,6 @@ export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
   coreShare: 0.7,
   optionalShare: 0.2,
   agentTasks: false,
-  typedSteps: false,
 });
 
 /** The step fields mining and health read; a full `StepDraft` satisfies it. */
@@ -140,8 +134,7 @@ export interface WorkflowModelHealth {
 
 /**
  * One turn as mining reads it: its distinct items and the order each was
- * first seen. Items are tool ids; with `cloud-typed-steps` also step tokens
- * (`units.ts`).
+ * first seen. Items are tool ids and step tokens (`units.ts`).
  */
 export interface TurnUnit {
   turnId: string;

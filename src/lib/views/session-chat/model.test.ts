@@ -349,7 +349,7 @@ test("typed steps: each segment says its public kind, code and handoffs read in 
     modelCalls: calls,
     selfCorrections: [],
   });
-  const model = buildSessionChat({ timeline, turns, texts: null, typedSteps: true });
+  const model = buildSessionChat({ timeline, turns, texts: null });
   assert.deepEqual(
     model.segments.filter((s) => s.kind !== "wait").map((s) => [s.kind, s.publicKind, s.label]),
     [
@@ -362,8 +362,6 @@ test("typed steps: each segment says its public kind, code and handoffs read in 
     ],
   );
   assert.equal(model.segments.find((s) => s.kind === "model_call")?.reasoningTokens, 320);
-  const legacy = buildSessionChat({ timeline, turns, texts: null });
-  assert.equal("publicKind" in legacy.segments[0]!, false, "flag off keeps today's segments");
 });
 
 test("task bands sit on the track from their first step to their last, across turns", () => {
@@ -385,7 +383,7 @@ test("task bands sit on the track from their first step to their last, across tu
     modelCalls: [],
     selfCorrections: [],
   });
-  const model = buildSessionChat({ timeline, turns, texts: null, typedSteps: true });
+  const model = buildSessionChat({ timeline, turns, texts: null });
   const bands = chatBands(
     model,
     timeline,

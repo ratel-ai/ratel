@@ -39,7 +39,7 @@ const LOOP_BASE = 26;
 const LOOP_STEP = 20;
 
 export interface FlowNode {
-  kind?: PublicStepKind;
+  kind: PublicStepKind;
   id: string;
   label: string;
   x: number;
@@ -200,10 +200,12 @@ const BUMP_RISE = 46;
 /** The label pill's size, for keeping labels off cards and each other. */
 const LABEL_W = 40;
 const LABEL_H = 18;
+/** Room in a node for its step kind's icon. */
+const KIND_ICON_W = 24;
 
 export function buildIntentFlow(
   { edges, tools, names }: FlowInput,
-  opts: { maxTools?: number; minP?: number; units?: number; typedSteps?: boolean } = {},
+  opts: { maxTools?: number; minP?: number; units?: number } = {},
 ): IntentFlowLayout {
   const maxTools = opts.maxTools ?? FLOW_MAX_TOOLS;
   const minP = opts.minP ?? SURE_HOP_P;
@@ -241,18 +243,15 @@ export function buildIntentFlow(
   const { column, dominant } = layerGraph(kept, drawn);
   const columns = kept.length === 0 ? 0 : Math.max(...kept.map((t) => column.get(t)!)) + 1;
 
-  // One node width for the whole diagram, from the longest name.
+  // One node width for the whole diagram, from the longest name, with room for the step kind's icon.
+  const nameMap = new Map(Object.entries(names));
   const labelOf = (id: string) => {
-    const label = opts.typedSteps
-      ? tokenStepLabel(id, new Map(Object.entries(names)))
-      : (names[id] ?? id);
+    const label = tokenStepLabel(id, nameMap);
     return label.length > NODE_MAX_CHARS ? `${label.slice(0, NODE_MAX_CHARS - 1)}…` : label;
   };
   const nodeW = Math.max(
     NODE_MIN_W,
-    ...kept.map((id) =>
-      Math.ceil(labelOf(id).length * CHAR_PX + NODE_PAD * 2 + (opts.typedSteps ? 24 : 0)),
-    ),
+    ...kept.map((id) => Math.ceil(labelOf(id).length * CHAR_PX + NODE_PAD * 2 + KIND_ICON_W)),
   );
   const byColumn: string[][] = Array.from({ length: columns }, () => []);
   for (const id of kept) byColumn[column.get(id)!]!.push(id);
@@ -360,7 +359,7 @@ export function buildIntentFlow(
     for (const id of col)
       nodes.push({
         id,
-        ...(opts.typedSteps ? { kind: tokenStepKind(id) } : {}),
+        kind: tokenStepKind(id),
         label: labelOf(id),
         x: MARGIN + c * (nodeW + COLUMN_GAP),
         y: MARGIN + (row.get(id)! - minRow),

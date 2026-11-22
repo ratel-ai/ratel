@@ -31,20 +31,18 @@ const logger = getLogger("session-chat");
 export interface SessionChatOptions {
   /** The project's content opt-in (`session_replay_settings.read_content`). */
   readContent: boolean;
-  /** `cloud-typed-steps`: typed steps, task bands and each turn's intent. */
-  typedSteps?: boolean;
 }
 
 const SENTIMENTS: ReadonlySet<string> = new Set(["positive", "neutral", "negative"]);
 
-/** The session as a chat, or null when the project has no closed turn in it. */
+/** The session as a chat, with its typed steps, task bands and each turn's intent; null when the project has no closed turn in it. */
 export async function loadSessionChat(
   projectId: string,
   sessionId: string,
-  { readContent, typedSteps = false }: SessionChatOptions,
+  { readContent }: SessionChatOptions,
   db: ReplayDb = getDb(),
 ): Promise<SessionChat | null> {
-  const replay = await loadSessionReplay(projectId, sessionId, db, { typedSteps });
+  const replay = await loadSessionReplay(projectId, sessionId, db);
   if (!replay) return null;
   const callIds = replay.timeline.steps.flatMap((step) =>
     step.kind === "model_call" ? [step.eventId] : [],
@@ -52,11 +50,9 @@ export async function loadSessionChat(
   // One after the other: the page reads on a single connection.
   const texts = readContent ? await loadChatTexts(projectId, callIds, db) : null;
   const lens = await loadSessionLens(projectId, replay.timeline, db);
-  const chat = buildSessionChat({ ...replay, texts, typedSteps });
-  if (typedSteps) {
-    chat.bands = await loadBands(projectId, sessionId, chat, replay.timeline, db);
-    chat.intents = await loadIntents(projectId, chat, db);
-  }
+  const chat = buildSessionChat({ ...replay, texts });
+  chat.bands = await loadBands(projectId, sessionId, chat, replay.timeline, db);
+  chat.intents = await loadIntents(projectId, chat, db);
   // The context split of each call: counts only, the same lens as the step-by-step view.
   chat.splits = Object.fromEntries(
     lens.calls.map((call) => [

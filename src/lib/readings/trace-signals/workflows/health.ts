@@ -9,7 +9,7 @@ import type {
   WorkflowStepShare,
   WorkflowTurn,
 } from "@/lib/readings/trace-signals/workflows/types";
-import { taskSteps, type UnitOptions } from "@/lib/readings/trace-signals/workflows/units";
+import { taskSteps } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * How a workflow's runs went, from the closed turns placed in it. Pure: times
@@ -22,9 +22,8 @@ import { taskSteps, type UnitOptions } from "@/lib/readings/trace-signals/workfl
  *   across member runs (calls without `tookMs` add nothing).
  * - A retry run called the same tool twice or more in a row among its tool
  *   calls (searches in between do not break the row).
- * Only tool calls count (skills excluded), as in mining; with `typedSteps`
- *   (`cloud-typed-steps`, RC-1072) every step token counts, a model call as
- *   `model:<token>` (`units.ts`).
+ * Every step token counts, as in mining, a model call as `model:<token>`
+ *   (`units.ts`, RC-1072).
  * - Runs linked to OpenTelemetry model calls also say what a run costs, how
  *   many model calls it makes and what share of its time is in the model.
  */
@@ -42,8 +41,8 @@ interface RunReading {
   took: readonly { toolId: string; ms: number }[];
 }
 
-function readRun(turn: WorkflowTurn, options: UnitOptions): RunReading {
-  const calls = taskSteps(turn, options);
+function readRun(turn: WorkflowTurn): RunReading {
+  const calls = taskSteps(turn);
   const last = calls[calls.length - 1];
   return {
     turn,
@@ -136,11 +135,10 @@ export function workflowHealth(
   workflow: Pick<Workflow, "id" | "memberTurnIds">,
   turnsById: ReadonlyMap<string, WorkflowTurn>,
   evidenceTurns: number = WORKFLOW_EVIDENCE_TURNS,
-  options: UnitOptions = {},
 ): WorkflowHealth {
   const runs = workflow.memberTurnIds.flatMap((id) => {
     const turn = turnsById.get(id);
-    return turn ? [readRun(turn, options)] : [];
+    return turn ? [readRun(turn)] : [];
   });
   const failures = runs.flatMap((run) => (run.failedAt ? [run.failedAt.toolId] : []));
   const durations = runs.map((run) => run.durationMs);

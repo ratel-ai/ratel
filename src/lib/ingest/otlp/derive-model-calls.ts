@@ -8,8 +8,8 @@ import { plausibleOccurredAt } from "./reconstruct";
 import { isModelRoundTrip, toolMenuOf } from "./span-facts";
 import type { DecodedSpan } from "./types";
 
-/** Model round trips for Agent health, with the captured ask and the system
- * mark. The typed-step path also stores message identities and signature tokens. */
+/** Model round trips for Agent health, with the captured ask, the system mark,
+ * message identities and signature tokens (RC-1067). */
 
 export const OTLP_MODEL_CALL = "otlp_model_call";
 
@@ -85,10 +85,7 @@ function nearest<T>(
 }
 
 /** Every model round trip in the export as an `otlp_model_call` row. */
-export function deriveModelCalls(
-  spans: readonly DecodedSpan[],
-  options: { typedSteps?: boolean } = {},
-): ParsedTraceEvent[] {
+export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
   const models = spans.filter((span) => span.spanId && span.traceId && isModelRoundTrip(span));
   const wrappers = wrappingModelSpans(models, byId);
@@ -103,9 +100,7 @@ export function deriveModelCalls(
     const menu = nearest(span, byId, toolMenuOf);
     const model = modelOf(span);
     const prompt = nearest(span, byId, (s) => promptOf(s.attributes));
-    const messages = options.typedSteps
-      ? nearest(span, byId, (s) => userMessageFactsOf(s.attributes))
-      : null;
+    const messages = nearest(span, byId, (s) => userMessageFactsOf(s.attributes));
     // Only an agent the export names: a model call does not take the span
     // name of an `invoke_agent` ancestor (a tool call does).
     const spanAgent = namedAgentOf(span, byId);
@@ -147,23 +142,19 @@ export function deriveModelCalls(
         type: OTLP_MODEL_CALL,
         derived_from: "otlp",
         ...(model ? { model } : {}),
-        ...(options.typedSteps
-          ? {
-              ...messages,
-              reasoning_tokens: tokenCount(span, [
-                "gen_ai.usage.reasoning_tokens",
-                "gen_ai.usage.output_tokens_details.reasoning_tokens",
-                "ai.usage.reasoningTokens",
-                "llm.token_count.reasoning",
-              ]),
-              signature_token: (
-                attrString(span.attributes, "ratel.step.name")?.trim() ||
-                agent ||
-                model ||
-                "model"
-              ).slice(0, MAX_ID),
-            }
-          : {}),
+        ...messages,
+        reasoning_tokens: tokenCount(span, [
+          "gen_ai.usage.reasoning_tokens",
+          "gen_ai.usage.output_tokens_details.reasoning_tokens",
+          "ai.usage.reasoningTokens",
+          "llm.token_count.reasoning",
+        ]),
+        signature_token: (
+          attrString(span.attributes, "ratel.step.name")?.trim() ||
+          agent ||
+          model ||
+          "model"
+        ).slice(0, MAX_ID),
         ...(menu ? { menu } : {}),
         ...(prompt ? { prompt } : {}),
         ...(prompt && isSystemPrompt(prompt) ? { started_by: "system" } : {}),

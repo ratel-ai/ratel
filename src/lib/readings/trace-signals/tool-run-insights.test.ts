@@ -110,18 +110,3 @@ test("without the switch, the flag is off (tests and local runs read as before)"
   assert.equal(await toolRunInsightsForProject("p-unset", {}), false);
   assert.equal(await toolRunInsightsForProject("p-on", { FF_TOOL_RUN_INSIGHTS: "true" }), true);
 });
-
-test("workflowMiningFor: FF_TYPED_STEPS on adds typed-step mining, beside or without the tool-run config", async () => {
-  const org = { id: "org-a" };
-  assert.deepEqual(await workflowMiningFor("p-typed", org, { FF_TYPED_STEPS: "1" }), {
-    typedSteps: true,
-  });
-  assert.deepEqual(
-    await workflowMiningFor("p-tools", org, { FF_TOOL_RUN_INSIGHTS: "1" }),
-    TOOL_RUN_MINING,
-  );
-  assert.deepEqual(
-    await workflowMiningFor("p-both", org, { FF_TOOL_RUN_INSIGHTS: "1", FF_TYPED_STEPS: "1" }),
-    { ...TOOL_RUN_MINING, typedSteps: true },
-  );
-});

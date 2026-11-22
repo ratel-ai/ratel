@@ -33,9 +33,9 @@ test("a run's calls in order: searches are no step, a skill keeps its prefix, na
     new Map([["find", "Find task"]]),
   );
   assert.deepEqual(steps, [
-    { toolId: "find", label: "Find task", failed: false },
-    { toolId: "skill:triage", label: "skill:triage", failed: true },
-    { toolId: "notify", label: "notify", failed: false },
+    { toolId: "find", label: "Find task", kind: "tool_call", failed: false },
+    { toolId: "skill:triage", label: "skill:triage", kind: "skill", failed: true },
+    { toolId: "notify", label: "notify", kind: "tool_call", failed: false },
   ]);
 });
 

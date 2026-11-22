@@ -41,7 +41,6 @@ const ROLE: Record<TurnEventType, EventRole> = {
 
 export interface NormalizeOptions {
   salt: string;
-  typedSteps?: boolean;
 }
 
 export function normalizeEvents(
@@ -64,7 +63,7 @@ export function normalizeEvent(
 ): NormalizedEvent | null {
   if (!TURN_TYPES.has(row.type) || !row.sessionId) return null;
   const typed = row.type === "otlp_model_call" || row.type === "otlp_step";
-  if (typed && (!opts.typedSteps || row.ingestSource !== "otlp")) return null;
+  if (typed && row.ingestSource !== "otlp") return null;
   const payload = row.payload ?? {};
   const stepKind =
     row.type === "otlp_model_call"

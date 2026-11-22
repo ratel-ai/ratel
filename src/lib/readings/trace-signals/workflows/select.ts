@@ -42,7 +42,7 @@ export interface SelectionContext {
   unitSets: readonly ReadonlySet<string>[];
   /** Tool id by index (index order is id order). */
   toolIds: readonly string[];
-  /** Items that may be a workflow alone: step tokens (RC-1072). Empty with `typedSteps` off. */
+  /** Items that may be a workflow alone: step tokens (RC-1072). */
   singleItems: ReadonlySet<number>;
   idf: Readonly<Record<string, number>>;
   /** Share of multi-tool turns each tool ran in, by index. */

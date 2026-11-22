@@ -20,8 +20,8 @@ import { envNumber } from "@/lib/platform/env-number";
  */
 
 /** The runtime event types a turn is made of. Mirrors the partial index on `trace_events`. */
-/** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types a build reads with `FF_TOOL_RUN_INSIGHTS` on. */
-/** The typed-step read list (RC-1067, `FF_TYPED_STEPS`). The disabled path retains its original types. */
+/** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types with agent runs. */
+/** The types a build reads (RC-1067): tool rows, agent runs, model calls and typed steps. */
 export {
   AGENT_RUN_EVENT_TYPE,
   TURN_EVENT_TYPES,

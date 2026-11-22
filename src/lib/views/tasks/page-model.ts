@@ -1,15 +1,12 @@
-import { eq } from "drizzle-orm";
 import {
   type BoundReadDb,
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
 import type { Organization } from "@/lib/platform/organizations";
-import { projects } from "@/lib/platform/projects/schema";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { listOpenSignals } from "@/lib/readings/trace-signals/signals/queries";
-import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import { loadWorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide-queries";
 import { loadWorkflowLabels } from "@/lib/readings/trace-signals/workflows/label-queries";
 import { loadFixes } from "@/lib/views/fixes/load";
@@ -21,7 +18,6 @@ import {
   type ExampleRun,
   issueSources,
   type LatestTasksRun,
-  loadExampleRuns,
   loadLatestTasksRun,
   loadSegmentExamples,
   loadTaskCorrections,
@@ -42,8 +38,6 @@ import { tasksSeams } from "@/lib/views/tasks/seams";
  */
 
 export interface TasksLoadDeps {
-  /** `FF_TYPED_STEPS` for the project (RC-1074): the pages read stored task segments. */
-  readsTypedSteps: (projectId: string, db: BoundReadDb) => Promise<boolean>;
   read: <T>(
     operation: string,
     read: (db: BoundReadDb) => Promise<T>,
@@ -53,14 +47,6 @@ export interface TasksLoadDeps {
 }
 
 const defaultDeps: TasksLoadDeps = {
-  readsTypedSteps: async (projectId, db) => {
-    const [project] = await db
-      .select({ organizationId: projects.organizationId })
-      .from(projects)
-      .where(eq(projects.id, projectId))
-      .limit(1);
-    return project ? typedStepsEnabled(projectId, project.organizationId) : false;
-  },
   read: (operation, read, supplementary = false) =>
     withStatementTimeout(read, {
       operation,
@@ -100,9 +86,6 @@ export async function loadTasksInputs(
     price: null,
   };
   if (!run) return empty;
-  const typedSteps = await fallback(projectId, "tasks_typed_steps", false, () =>
-    deps.read("tasks_typed_steps", (db) => deps.readsTypedSteps(projectId, db)),
-  );
   const since = run.windowStart;
   const read = <T>(operation: string, value: T, load: (db: BoundReadDb) => Promise<T>) =>
     fallback(projectId, operation, value, () => deps.read(operation, load, true));
@@ -123,13 +106,12 @@ export async function loadTasksInputs(
     read("tasks_topics", null as Awaited<ReturnType<typeof loadTaskTopics>>, (db) =>
       loadTaskTopics(projectId, since, db),
     ),
-    typedSteps
-      ? read(
-          "tasks_segments",
-          new Map() as Awaited<ReturnType<typeof loadTaskSegmentSummaries>>,
-          (db) => loadTaskSegmentSummaries(projectId, since, db),
-        )
-      : undefined,
+    // A failed read leaves the segments out: the tasks then read their runs from the stored reading.
+    read(
+      "tasks_segments",
+      undefined as Awaited<ReturnType<typeof loadTaskSegmentSummaries>> | undefined,
+      (db) => loadTaskSegmentSummaries(projectId, since, db),
+    ),
   ]);
   // The tool crafter's drafted changes, once it lands (`tasksSeams`); none until then.
   const drafts = tasksSeams.loadDrafts;
@@ -140,7 +122,7 @@ export async function loadTasksInputs(
     projectId,
     run: { windowDays: run.windowDays, finishedAt: run.finishedAt, turnsScanned: run.turnsScanned },
     stored: run.workflows,
-    ...(typedSteps ? { typedSteps, segments } : {}),
+    ...(segments ? { segments } : {}),
     labels,
     names,
     issues: issueSources(signalRows),
@@ -155,7 +137,7 @@ export async function loadTasksInputs(
 /** A task page's example runs, read when the page shows them; a failed read shows the runs without them. */
 export async function loadTaskExamples(
   projectId: string,
-  detail: Pick<TaskDetailModel, "examples" | "typedSteps">,
+  detail: Pick<TaskDetailModel, "examples">,
   overrides: Partial<TasksLoadDeps> = {},
   names: ReadonlyMap<string, string> = new Map(),
 ): Promise<Map<string, ExampleRun>> {
@@ -164,19 +146,12 @@ export async function loadTaskExamples(
     deps.read(
       "task_example_runs",
       (db) =>
-        detail.typedSteps
-          ? loadSegmentExamples(
-              projectId,
-              detail.examples.flatMap((example) => (example.segmentId ? [example.segmentId] : [])),
-              db,
-              names,
-            )
-          : loadExampleRuns(
-              projectId,
-              detail.examples.map((example) => example.turnId),
-              db,
-              names,
-            ),
+        loadSegmentExamples(
+          projectId,
+          detail.examples.flatMap((example) => (example.segmentId ? [example.segmentId] : [])),
+          db,
+          names,
+        ),
       true,
     ),
   );

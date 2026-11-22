@@ -551,7 +551,9 @@ test("an agent task reads its agent's name, made readable, without a model-writt
       [list.rows[1]!.id, "Label workflows", 3],
     ],
   );
-  assert.deepEqual(list.rows[0]!.steps, [{ toolId: "agent:draft_fix", label: "Draft fix" }]);
+  assert.deepEqual(list.rows[0]!.steps, [
+    { toolId: "agent:draft_fix", label: "Draft fix", kind: "tool_call" },
+  ]);
   const detail = buildTaskDetail(
     inputs({ stored: agentStored(), labels: new Map(), names: new Map(), issues: [], fixes: [] }),
     "wf-fix",
@@ -577,7 +579,7 @@ test("a model-written label still names an agent task", () => {
 });
 
 test("typed task details show model and code steps with segment run counts", () => {
-  const collector = createWorkflowCollector(undefined, undefined, undefined, { typedSteps: true });
+  const collector = createWorkflowCollector();
   for (const turn of many(10, () =>
     wfTurn(
       [
@@ -593,7 +595,6 @@ test("typed task details show model and code steps with segment run counts", () 
   const detail = buildTaskDetail(
     inputs({
       stored,
-      typedSteps: true,
       segments: new Map([
         [
           id,

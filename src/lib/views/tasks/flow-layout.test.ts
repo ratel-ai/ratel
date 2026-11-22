@@ -261,7 +261,7 @@ test("typed flow keeps model and code kinds, including a model-only node", () =>
     ],
     names: {},
   };
-  const flow = buildIntentFlow(input, { typedSteps: true });
+  const flow = buildIntentFlow(input);
   assert.deepEqual(
     flow.nodes.map((n) => [n.kind, n.label]),
     [
@@ -269,10 +269,11 @@ test("typed flow keeps model and code kinds, including a model-only node", () =>
       ["code", "Prepare response"],
     ],
   );
-  const single = buildIntentFlow(
-    { edges: [], tools: [{ toolId: "model:engine", n: 10 }], names: {} },
-    { typedSteps: true },
-  );
+  const single = buildIntentFlow({
+    edges: [],
+    tools: [{ toolId: "model:engine", n: 10 }],
+    names: {},
+  });
   assert.equal(single.nodes.length, 1);
   assert.equal(single.nodes[0]!.kind, "model_call");
 });

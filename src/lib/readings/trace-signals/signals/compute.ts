@@ -118,7 +118,7 @@ export interface ComputeDeps {
   floors: Floors;
   /** Workflow mining tunables over the defaults (RC-725, `cloud-tool-run-insights`); absent, the defaults. */
   workflowMining?: Partial<WorkflowConfig>;
-  /** Model-call facts for the per-kind readings, read only with `typedSteps` on (RC-1077). */
+  /** Model-call facts for the per-kind readings (RC-1077). */
   loadModelCalls: typeof loadModelCallFactsFn;
 }
 
@@ -162,9 +162,7 @@ export async function computeSignals(
     start: window.start,
     end: window.end,
   });
-  const context = deps.workflowMining?.typedSteps
-    ? { ...loaded, modelCalls: await modelCallsFor(projectId, window, deps) }
-    : loaded;
+  const context = { ...loaded, modelCalls: await modelCallsFor(projectId, window, deps) };
   const analysis = createAnalysis(context, {
     floors: deps.floors,
     scanStart: window.scanStart,

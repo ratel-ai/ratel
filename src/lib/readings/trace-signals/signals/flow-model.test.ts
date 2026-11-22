@@ -77,7 +77,7 @@ test("typed model-only turns store model, code and handoff nodes in call order",
     { ...template, ordinal: 1, kind: "code", targetType: null, targetId: "parse" },
     { ...template, ordinal: 2, kind: "handoff", targetType: null, targetId: "writer" },
   ];
-  const analysis = createAnalysis(contextFor(turns), { workflowMining: { typedSteps: true } });
+  const analysis = createAnalysis(contextFor(turns));
   for (const item of turns) analysis.feed(item);
   assert.equal(analysis.secondPass(), true);
   for (const item of turns) analysis.feedPairs(item);
@@ -105,16 +105,11 @@ test("mixed typed paths keep tool signals on tools and obey step presets", () =>
     { ...call, ordinal: 0, kind: "model_call", targetType: null, targetId: "chat" },
     ...turn.steps.map((step, index) => ({ ...step, ordinal: index + 1 })),
   ];
-  const run = (typedSteps: boolean) => {
-    const analysis = createAnalysis(contextFor(turns), { workflowMining: { typedSteps } });
-    for (const item of turns) analysis.feed(item);
-    for (const item of turns) analysis.feedPairs(item);
-    return analysis.finish().summary.flow;
-  };
-  const off = run(false);
-  const on = run(true);
-  assert.deepEqual(on.journey, off.journey);
-  const model = flowView(on, [], new Map([["execute_tool", "Execute tool"]]));
+  const analysis = createAnalysis(contextFor(turns));
+  for (const item of turns) analysis.feed(item);
+  for (const item of turns) analysis.feedPairs(item);
+  const flow = analysis.finish().summary.flow;
+  const model = flowView(flow, [], new Map([["execute_tool", "Execute tool"]]));
   const all = flowForSteps(model, "all");
   assert.deepEqual(all.journey?.paths[0].tools, ["model:chat", "execute_tool"]);
   assert.deepEqual(
@@ -124,23 +119,20 @@ test("mixed typed paths keep tool signals on tools and obey step presets", () =>
       ["model:chat", "model_call", "Model call"],
     ],
   );
-  assert.deepEqual(
-    flowForSteps(model, "tools").journey,
-    flowView(off, [], new Map([["execute_tool", "Execute tool"]])).journey,
-  );
+  // `tools` is the tool journey as stored, the step journey left out.
+  assert.deepEqual(flowForSteps(model, "tools").journey, model.journey);
   assert.deepEqual(flowForSteps(model, "models").journey?.paths[0].tools, ["model:chat"]);
   assert.equal(flowForSteps(model, "intents").journey, undefined);
 });
 
-test("tool-only stored flow is identical with typed steps on and off", () => {
+test("tool-only stored flow stores its tool journey and no step journey", () => {
   const turns = signalTurns([fresh().search(["a", "b"]).invoke("a").invoke("b")]);
-  const run = (typedSteps: boolean) => {
-    const analysis = createAnalysis(contextFor(turns), { workflowMining: { typedSteps } });
-    for (const turn of turns) analysis.feed(turn);
-    for (const turn of turns) analysis.feedPairs(turn);
-    return analysis.finish().summary.flow;
-  };
-  assert.deepEqual(run(true), run(false));
+  const analysis = createAnalysis(contextFor(turns));
+  for (const turn of turns) analysis.feed(turn);
+  for (const turn of turns) analysis.feedPairs(turn);
+  const flow = analysis.finish().summary.flow;
+  assert.ok(flow.journey);
+  assert.equal(flow.stepJourney, undefined);
 });
 
 test("dead, buried and switched tool signals do not mark model or code steps", () => {
@@ -161,7 +153,7 @@ test("dead, buried and switched tool signals do not mark model or code steps", (
     subjectKey: kind,
     subjectIds: [kind === "dead_tool" ? "unused" : "execute_tool"],
   }));
-  const analysis = createAnalysis(contextFor(turns), { workflowMining: { typedSteps: true } });
+  const analysis = createAnalysis(contextFor(turns));
   for (const turn of turns) analysis.feed(turn);
   for (const turn of turns) analysis.feedPairs(turn);
   const stats = statsOf(turns);
@@ -195,23 +187,20 @@ test("dead, buried and switched tool signals do not mark model or code steps", (
 test("the Stema span fixture stores its code-to-model flow without tool calls", () => {
   const now = new Date();
   const spans = typedStepFixtures(now.getTime() - 3_600_000).stema;
-  const rows = [...deriveSteps(spans), ...deriveModelCalls(spans, { typedSteps: true })].map(
-    (row) => ({
-      ...row,
-      id: randomUUID(),
-      receivedAt: row.occurredAt ?? now,
-      failed: row.errorMessage !== null,
-    }),
-  );
+  const rows = [...deriveSteps(spans), ...deriveModelCalls(spans)].map((row) => ({
+    ...row,
+    id: randomUUID(),
+    receivedAt: row.occurredAt ?? now,
+    failed: row.errorMessage !== null,
+  }));
   const events = normalizeEvents(rows as unknown as TurnEventRow[], new Map(), {
     salt: "fixture",
-    typedSteps: true,
   });
   const turns = buildTurns({ stored: [], events, now }).turns.map((turn) => ({
     ...turn,
     id: randomUUID(),
   }));
-  const analysis = createAnalysis(contextFor(turns), { workflowMining: { typedSteps: true } });
+  const analysis = createAnalysis(contextFor(turns));
   for (const turn of turns) analysis.feed(turn);
   assert.equal(analysis.secondPass(), true);
   for (const turn of turns) analysis.feedPairs(turn);

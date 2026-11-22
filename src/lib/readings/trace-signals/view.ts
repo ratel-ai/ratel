@@ -635,8 +635,8 @@ export interface HealthPageModel {
   /** How far the early reading has got: runs read of the runs there are. Set only with `earlyReading`. */
   earlyProgress?: EarlyProgress;
   /**
-   * Agent health per step kind (RC-1077, `summary.steps`). Set only with
-   * `cloud-typed-steps` on and a reading that stored it; never public.
+   * Agent health per step kind (RC-1077, `summary.steps`). Set only with a
+   * reading that stored it; never public.
    */
   steps?: StepReadings;
   /**

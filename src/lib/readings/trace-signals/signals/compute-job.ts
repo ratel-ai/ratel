@@ -138,7 +138,7 @@ export interface ComputeJobDeps {
   countUnbuilt: (projectId: string, since: Date | string) => Promise<number>;
   /** Write each run's task (`trace_turns.workflow_id`) for the window's runs. */
   writePlacement: typeof writeTaskPlacementFn;
-  /** The window's segments and run topics for the per-kind readings (RC-1077, `cloud-typed-steps`). */
+  /** The window's segments and run topics for the per-kind readings (RC-1077). */
   loadStepFinishInputs: typeof loadStepFinishInputsFn;
   /**
    * The window's self-corrections (`self-corrections/run.ts`): rewrites its
@@ -393,16 +393,8 @@ export async function computeProjectTraceSignals(
     );
     // Each run's task first: the self-corrections read it from the runs, and the jobs this
     // run queues (names, the tool reading) read every run's task.
-    const placement = await writePlacementFor(
-      projectId,
-      window,
-      result.placement,
-      deps,
-      result.segmentPlacement,
-    );
-    const steps = result.stepMetrics
-      ? result.stepMetrics.finish(await stepFinishInputsFor(projectId, window, deps))
-      : undefined;
+    const placement = await writePlacementFor(projectId, window, result.segmentPlacement, deps);
+    const steps = result.stepMetrics.finish(await stepFinishInputsFor(projectId, window, deps));
     const corrections = await selfCorrectionsFor(
       projectId,
       window,
@@ -434,7 +426,7 @@ export async function computeProjectTraceSignals(
         ...(partial ? { unbuiltAtStart } : {}),
         ...(earlyReading ? { earlyReading } : {}),
         ...(corrections ? { selfCorrections: corrections.stored } : {}),
-        ...(steps ? { steps } : {}),
+        steps,
       },
       turnsScanned: result.turnsScanned,
       turnSourceMix: result.turnSourceMix,
@@ -606,19 +598,17 @@ async function unbuiltFor(
 async function writePlacementFor(
   projectId: string,
   window: { start: Date; end: Date },
-  placement: ReadonlyMap<string, string | null>,
+  segments: SegmentPlacement,
   deps: Pick<ComputeJobDeps, "writePlacement">,
-  segments?: SegmentPlacement,
 ): Promise<PlacementWriteResult | null> {
   try {
     return await deps.writePlacement(projectId, {
       window: { start: window.start, end: window.end },
-      placement,
-      ...(segments ? { segments } : {}),
+      segments,
     });
   } catch (err) {
     logger.error(
-      { err, project_id: projectId, runs: placement.size },
+      { err, project_id: projectId, tasks: segments.tasks.length },
       "task placement write failed",
     );
     reportServerException(err, `project:${projectId}`, {

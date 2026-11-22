@@ -76,7 +76,7 @@ export default async function AgentHealthPage({
   const limits = getAgentHealthLimits(organization);
   const query = await searchParams;
   const windowDays = parseWindowDays(query.days, limits.agentHealthWindowDays);
-  // The per-kind tables' preset (RC-1078); the tables show only with `cloud-typed-steps` (FF_TYPED_STEPS) on.
+  // The per-kind tables' preset (RC-1078).
   const stepsView = parseStepsView(query.steps);
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.

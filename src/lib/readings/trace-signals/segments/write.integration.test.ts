@@ -54,22 +54,17 @@ test("segment placement splits a trace, merges three traces, and survives a repe
       );
     }
   }
-  assert.deepEqual((await loadTurnTools([id(1)], db, { typedSteps: true })).get(id(1)), [
+  assert.deepEqual((await loadTurnTools([id(1)], db)).get(id(1)), [
     "code:setup",
     "model:one",
     "model:two",
     "model:three",
   ]);
-  assert.equal((await loadTurnTools([id(1)], db)).size, 0);
   const tasks = ["one", "two", "three"].map((token) => ({
     id: token,
     coreTools: [`model:${token}`],
   }));
-  const input = {
-    window,
-    placement: new Map<string, string | null>(),
-    segments: { tasks, weights: {}, basis: "all" as const },
-  };
+  const input = { window, segments: { tasks, weights: {}, basis: "all" as const } };
   await writeTaskPlacement(PROJECT_ID, input, db);
   const read = async () =>
     (
@@ -110,30 +105,6 @@ test("segment placement splits a trace, merges three traces, and survives a repe
         `select count(*)::int as n from task_segments where session_id='cross'`,
       )
     ).rows[0]!.n,
-    0,
-  );
-  await client.close();
-});
-
-test("flag off writes the legacy turn pointer and no segments", async () => {
-  const { client, db } = await setupDb();
-  await client.query(
-    `insert into trace_turns (id,project_id,session_id,turn_key,turn_source,lane,status,started_at,ended_at,last_received_at)
-    values ($1,$2,'legacy','legacy','otlp','otlp','closed','2026-09-10','2026-09-10','2026-09-10')`,
-    [id(1), PROJECT_ID],
-  );
-  await writeTaskPlacement(
-    PROJECT_ID,
-    { window, placement: new Map([[id(1), "legacy-task"]]) },
-    db,
-  );
-  assert.equal(
-    (await client.query<{ workflow_id: string }>(`select workflow_id from trace_turns`)).rows[0]!
-      .workflow_id,
-    "legacy-task",
-  );
-  assert.equal(
-    (await client.query<{ n: number }>(`select count(*)::int as n from task_segments`)).rows[0]!.n,
     0,
   );
   await client.close();

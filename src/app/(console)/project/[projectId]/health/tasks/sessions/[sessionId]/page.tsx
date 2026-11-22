@@ -9,7 +9,6 @@ import {
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { listSessionTurns } from "@/lib/readings/tool-explorer/ledger";
 import { loadCatalogNames } from "@/lib/readings/trace-signals/signals/analysis-context";
-import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import { agentHealthHref, taskHref, tasksHref } from "@/lib/views/tasks/paths";
 import { parseMarkedTools } from "@/lib/views/tasks/session";
 import { loadSessionSegments, type NamedSegment } from "@/lib/views/tasks/session-segments";
@@ -21,7 +20,7 @@ const TASK_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /**
  * One conversation turn by turn, opened from a task's example run, with the task's steps marked.
- * Owned (ADR-0030): the project comes from the console scope; typed steps are FF_TYPED_STEPS.
+ * Owned (ADR-0030): the project comes from the console scope.
  */
 export default async function TaskSessionPage({
   params,
@@ -32,10 +31,9 @@ export default async function TaskSessionPage({
 }) {
   const [{ projectId, sessionId }, query] = await Promise.all([params, searchParams]);
   if (!isDbConfigured()) return <TasksNoDatabase />;
-  const { project, organization } = await requireProjectScope(projectId);
+  const { project } = await requireProjectScope(projectId);
   const distinctId = `project:${project.id}`;
-  // cloud-typed-steps (FF_TYPED_STEPS): steps read by kind, under one band per task segment.
-  const typedSteps = await typedStepsEnabled(project.id, organization.id);
+  // Steps read by kind, under one band per task segment.
   const [turns, names, segments] = await Promise.all([
     loadOrFallback({
       operation: "task_session_turns",
@@ -56,18 +54,16 @@ export default async function TaskSessionPage({
           timeoutMs: supplementaryReadTimeoutMs(),
         }),
     }),
-    typedSteps
-      ? loadOrFallback({
+    loadOrFallback({
+      operation: "task_session_segments",
+      distinctId,
+      fallback: [] as NamedSegment[],
+      load: () =>
+        withStatementTimeout((db) => loadSessionSegments(project.id, sessionId, db), {
           operation: "task_session_segments",
-          distinctId,
-          fallback: [] as NamedSegment[],
-          load: () =>
-            withStatementTimeout((db) => loadSessionSegments(project.id, sessionId, db), {
-              operation: "task_session_segments",
-              timeoutMs: supplementaryReadTimeoutMs(),
-            }),
-        })
-      : ([] as NamedSegment[]),
+          timeoutMs: supplementaryReadTimeoutMs(),
+        }),
+    }),
   ]);
   const task = typeof query.task === "string" && TASK_ID.test(query.task) ? query.task : null;
   const crumbs = [
@@ -81,12 +77,7 @@ export default async function TaskSessionPage({
       turns={turns}
       names={Object.fromEntries(names)}
       highlight={parseMarkedTools(query.tools)}
-      {...(typedSteps
-        ? {
-            typedSteps,
-            bands: segments.map((segment) => ({ ...segment, label: segment.label ?? "Task" })),
-          }
-        : {})}
+      bands={segments.map((segment) => ({ ...segment, label: segment.label ?? "Task" }))}
       crumbs={crumbs}
       backHref={task ? taskHref(project.id, task) : tasksHref(project.id)}
       backLabel={task ? "Back to the task" : "Back to Tasks"}

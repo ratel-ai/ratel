@@ -1,28 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { typedStepFixtures } from "./__fixtures__/typed-steps";
-import baseline from "./__fixtures__/typed-steps-main.json";
-import { agentHealthToolRows } from "./agent-health-bridge";
-import { deriveAgentRuns } from "./derive-agent-runs";
-import { deriveModelCalls } from "./derive-model-calls";
-import { deriveSteps } from "./derive-steps";
-import { deriveToolInvocations } from "./derive-tools";
-import type { DecodedSpan } from "./types";
-
-test("the disabled derivations preserve the main fixture output byte for byte", () => {
-  for (const [name, spans] of Object.entries(typedStepFixtures())) {
-    assert.equal(
-      JSON.stringify({
-        tools: deriveToolInvocations(spans),
-        models: deriveModelCalls(spans),
-        agents: deriveAgentRuns(spans),
-      }),
-      JSON.stringify(baseline[name as keyof typeof baseline]),
-      name,
-    );
-  }
-});
+import { typedStepFixtures } from "@/lib/ingest/otlp/__fixtures__/typed-steps";
+import { agentHealthToolRows } from "@/lib/ingest/otlp/agent-health-bridge";
+import { deriveAgentRuns } from "@/lib/ingest/otlp/derive-agent-runs";
+import { deriveModelCalls } from "@/lib/ingest/otlp/derive-model-calls";
+import { deriveSteps } from "@/lib/ingest/otlp/derive-steps";
+import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 
 test("production shapes produce code and nested agent handoffs", () => {
   const fixtures = typedStepFixtures();
@@ -62,9 +46,9 @@ test("infrastructure, SDK, client and short spans are not code steps", () => {
   for (const extra of extras) assert.deepEqual(deriveSteps([{ ...span, ...extra }]), []);
 });
 
-test("typed model rows store hashes, counts, reasoning and a stable signature without message text", () => {
+test("model rows store hashes, counts, reasoning and a stable signature", () => {
   const fixtures = typedStepFixtures();
-  const rows = deriveModelCalls(fixtures.docs, { typedSteps: true });
+  const rows = deriveModelCalls(fixtures.docs);
   assert.deepEqual(
     rows.map((row) => row.payload.user_message_count),
     [1, 2],
@@ -81,35 +65,35 @@ test("typed model rows store hashes, counts, reasoning and a stable signature wi
       "gen_ai.usage.reasoning_tokens": 12,
     },
   };
-  const [row] = deriveModelCalls([model], { typedSteps: true });
+  const [row] = deriveModelCalls([model]);
   assert.equal(row.payload.signature_token, "classify");
   assert.equal(row.payload.reasoning_tokens, 12);
-  assert.equal(
-    deriveModelCalls(fixtures.ratel, { typedSteps: true })[0].payload.signature_token,
-    "fixture-model-client",
-  );
-  assert.equal(
-    deriveModelCalls(fixtures.bareChat, { typedSteps: true })[0].payload.signature_token,
-    "claude-sonnet-5-5",
-  );
+  assert.equal(deriveModelCalls(fixtures.ratel)[0].payload.signature_token, "fixture-model-client");
+  assert.equal(deriveModelCalls(fixtures.bareChat)[0].payload.signature_token, "claude-sonnet-5-5");
 });
 
-test("the bridge gates new rows and workflow roots with one flag", async () => {
+test("the bridge adds typed step rows without message text and workflow roots with their ask", async () => {
   const spans = typedStepFixtures().docs;
-  for (const enabled of [false, true]) {
-    // Owned: the bridge here takes no organization, and the turn kick has no flag gate.
-    const rows = await agentHealthToolRows(spans, "project", {
-      traceTurns: {
-        enqueueBuild: async () => null,
-        scheduleProjectDrain: () => {},
-      },
-      agentRunsEnabled: async () => false,
-      typedStepsEnabled: async () => enabled,
-      logError: () => {},
-    });
-    assert.equal(rows.filter((row) => row.type === "otlp_step").length, enabled ? 3 : 0);
-    assert.equal(JSON.stringify(rows).includes("Summarize"), true);
-  }
+  // Owned: the bridge here takes no organization, and the turn kick has no flag gate.
+  const bridged = await agentHealthToolRows(spans, "project", {
+    traceTurns: {
+      enqueueBuild: async () => null,
+      scheduleProjectDrain: () => {},
+    },
+    logError: () => {},
+  });
+  assert.equal(bridged.filter((row) => row.type === "otlp_step").length, 3);
+  assert.equal(
+    bridged
+      .filter((row) => row.type === "otlp_step")
+      .some((row) => JSON.stringify(row).includes("Summarize")),
+    false,
+  );
+  assert.equal(
+    JSON.stringify(bridged).includes("Summarize"),
+    true,
+    "model rows keep the captured ask",
+  );
   const root = typedStepFixtures().ratel[0];
   const workflow = {
     ...root,
@@ -119,23 +103,23 @@ test("the bridge gates new rows and workflow roots with one flag", async () => {
       "ai.prompt.messages": JSON.stringify([{ role: "user", content: "private sample" }]),
     },
   };
-  assert.equal(deriveAgentRuns([workflow]).length, 0);
-  const rows = deriveAgentRuns([workflow], { typedSteps: true });
+  const rows = deriveAgentRuns([workflow]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].payload.prompt, "private sample");
 });
 
-test("typed model and agent rows keep the captured ask and the system mark as main writes them", () => {
+test("model and agent rows keep the captured ask and the system mark", () => {
   const docs = typedStepFixtures().docs;
   const asks = (rows: ReturnType<typeof deriveModelCalls>) =>
     rows.map(({ payload }) => ({ prompt: payload.prompt, started_by: payload.started_by }));
-  const on = asks(deriveModelCalls(docs, { typedSteps: true }));
-  assert.deepEqual(on, asks(deriveModelCalls(docs)));
   assert.equal(
-    on.every((row) => typeof row.prompt === "string"),
+    asks(deriveModelCalls(docs)).every((row) => typeof row.prompt === "string"),
     true,
   );
-  for (const text of ["Summarize the sample document.", "<task-notification> sample finished"]) {
+  for (const [text, startedBy] of [
+    ["Summarize the sample document.", undefined],
+    ["<task-notification> sample finished", "system"],
+  ] as const) {
     const root = {
       ...docs[0],
       attributes: {
@@ -144,9 +128,7 @@ test("typed model and agent rows keep the captured ask and the system mark as ma
         "ai.prompt.messages": JSON.stringify([{ role: "user", content: text }]),
       },
     };
-    const off = asks(deriveAgentRuns([root]));
-    assert.equal(off[0].prompt, text);
-    assert.deepEqual(asks(deriveAgentRuns([root], { typedSteps: true })), off);
+    assert.equal(deriveAgentRuns([root])[0].payload.prompt, text);
     const chat = {
       ...docs[2],
       attributes: {
@@ -154,19 +136,6 @@ test("typed model and agent rows keep the captured ask and the system mark as ma
         "ai.prompt.messages": JSON.stringify([{ role: "user", content: text }]),
       },
     };
-    assert.deepEqual(
-      asks(deriveModelCalls([chat], { typedSteps: true })),
-      asks(deriveModelCalls([chat])),
-    );
+    assert.deepEqual(asks(deriveModelCalls([chat])), [{ prompt: text, started_by: startedBy }]);
   }
-  const system = {
-    ...docs[2],
-    attributes: {
-      ...docs[2].attributes,
-      "ai.prompt.messages": JSON.stringify([
-        { role: "user", content: "<task-notification> sample finished" },
-      ]),
-    },
-  };
-  assert.equal(deriveModelCalls([system], { typedSteps: true })[0].payload.started_by, "system");
 });

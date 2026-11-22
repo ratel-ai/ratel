@@ -6,7 +6,7 @@ import type { SignalTurn } from "../signals/types";
 import { type PublicStepKind, stepKindOf } from "./kind";
 
 /**
- * Agent health per step kind (RC-1077, `cloud-typed-steps`): pure readings of
+ * Agent health per step kind (RC-1077): pure readings of
  * the window's runs, one table per public step kind. The signal run feeds the
  * same in-window runs it reads (same basis, same filters), and stores the
  * result as `summary.steps`. Counts, rates and names only; never content.

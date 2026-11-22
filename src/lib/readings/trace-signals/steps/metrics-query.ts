@@ -9,9 +9,8 @@ import { OTEL_FACTS_SLACK_MS } from "../signals/otel-facts-query";
 import type { ModelCallFact, RunTopicFact, SegmentFact, StepFinishInputs } from "./metrics";
 
 /**
- * The reads behind the per-kind readings (RC-1077), run only with
- * `cloud-typed-steps` on: model-call facts before the signal run, and the
- * window's task segments and run topics after it.
+ * The reads behind the per-kind readings (RC-1077): model-call facts before
+ * the signal run, and the window's task segments and run topics after it.
  *
  * Bounded: each read stops at {@link MAX_STEP_FACT_ROWS} rows. The model-call
  * read takes the cost and finish reason from the call's `events` row (same

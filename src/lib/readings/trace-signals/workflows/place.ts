@@ -17,12 +17,12 @@ import { formsTask, turnUnit } from "@/lib/readings/trace-signals/workflows/unit
  * task's numbers, its pages and `trace_turns.workflow_id` all count the same
  * runs.
  *
- * - A run needs two distinct tools (`formsTask`): one tool is a single
- *   step, never a task (the miner's own population). Placing single tools by
- *   weight alone puts every lone call of a rare tool in the task that holds
- *   it (on one customer's replay, 22 runs of a two-step task became 193). With
- *   `typedSteps` (`cloud-typed-steps`, RC-1072) a run is read as its step
- *   tokens, as the miner reads it (`units.ts`): one non-tool token is enough.
+ * - A run is read as its step tokens, as the miner reads it (`units.ts`,
+ *   RC-1072), and needs two distinct tools or one non-tool token
+ *   (`formsTask`): one tool is a single step, never a task (the miner's own
+ *   population). Placing single tools by weight alone puts every lone call of
+ *   a rare tool in the task that holds it (on one customer's replay, 22 runs
+ *   of a two-step task became 193).
  * - Runs the run basis does not read (`run-basis.ts`: guessed runs once exact
  *   ones carry the reading, every run when runs look mixed) belong to none.
  *
@@ -35,8 +35,6 @@ export interface PlacementOptions {
   /** Tool weights (the miner's IDF); a tool without one weighs 1. */
   weights: Readonly<Record<string, number>>;
   basis: WorkflowBasis;
-  /** `cloud-typed-steps`: read runs as step tokens, as the miner did. */
-  typedSteps?: boolean;
 }
 
 /** Each run's task id, or null; every run given has an entry, in input order. */
@@ -47,7 +45,7 @@ export function placeRuns(
 ): Map<string, string | null> {
   const out = new Map<string, string | null>();
   for (const run of runs) {
-    const unit = turnUnit(run, options);
+    const unit = turnUnit(run);
     const placed =
       formsTask(unit) && minesRun(options.basis, run.turnSource)
         ? assignTurn(unit.tools, tasks, { weights: options.weights })

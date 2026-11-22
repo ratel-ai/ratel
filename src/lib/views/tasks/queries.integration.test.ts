@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { PROJECT_ID, setupDb } from "@/lib/readings/trace-signals/signals/integration-support";
 import {
-  loadExampleRuns,
   loadLatestTasksRun,
   loadSegmentExamples,
   loadTaskCorrections,
@@ -80,71 +79,6 @@ test("self-corrections per task count through the run's task, by kind; none reco
     { "task-a": { retry_after_error: 2, phrase: 1 } },
     "the row's own task column is not trusted",
   );
-});
-
-test("example runs come with their calls in order, how they ended, their session and what was asked", async () => {
-  const { client, db } = await setupDb();
-  await turns(client, [
-    { n: 1, task: "task-a", key: "declared:turn-1" },
-    { n: 2, task: "task-a" },
-  ]);
-  await client.query(
-    `insert into trace_events (id, project_id, type, session_id, occurred_at, received_at, client_event_id, payload)
-     values ('aaaaaaaa-0000-4000-8000-000000000001', $1, 'turn_start', 'sess-1', '2026-09-10T10:00:00Z', '2026-09-10T10:00:00Z', 'c1', $2::jsonb)`,
-    [
-      PROJECT_ID,
-      JSON.stringify({ turn_id: "turn-1", user_message: "Ship release 4.2 and tell the team" }),
-    ],
-  );
-  // Stored out of order on purpose: the calls come back by their place in the run.
-  for (const [n, ordinal, kind, target, outcome] of [
-    [1, 4, "invoke", "notify", "ok"],
-    [1, 1, "search", null, null],
-    [1, 3, "invoke", "notify", "error"],
-    [1, 2, "invoke", "find", "ok"],
-  ] as const) {
-    await client.query(
-      `insert into trace_turn_steps (turn_id, project_id, ordinal, kind, event_type, trace_event_id, occurred_at, received_at, target_type, target_id, outcome)
-       values ($1, $2, $3, $4, $5, gen_random_uuid(), '2026-09-10T10:00:01Z', '2026-09-10T10:00:01Z', $6, $7, $8)`,
-      [
-        id(n),
-        PROJECT_ID,
-        ordinal,
-        kind,
-        kind === "search" ? "search" : "invoke_start",
-        target ? "tool" : null,
-        target,
-        outcome,
-      ],
-    );
-  }
-  const runs = await loadExampleRuns(
-    PROJECT_ID,
-    [id(1), id(2), id(9)],
-    db,
-    new Map([["notify", "Notify team"]]),
-  );
-  assert.deepEqual(runs.get(id(1)), {
-    turnId: id(1),
-    sessionId: "sess-1",
-    startedAt: new Date("2026-09-10T10:00:00Z"),
-    endedAt: new Date("2026-09-10T10:00:05Z"),
-    calls: 3,
-    failures: 1,
-    steps: [
-      { toolId: "find", label: "find", failed: false },
-      { toolId: "notify", label: "Notify team", failed: true },
-      { toolId: "notify", label: "Notify team", failed: false },
-    ],
-    status: "recovered",
-    ask: { text: "Ship release 4.2 and tell the team", source: "user_message" },
-  });
-  assert.deepEqual(
-    [runs.get(id(2))?.steps, runs.get(id(2))?.status],
-    [[], "failed"],
-    "its calls no longer kept: only that one failed",
-  );
-  assert.equal(runs.has(id(9)), false);
 });
 
 test("the latest completed run, read for its tasks and price only", async () => {

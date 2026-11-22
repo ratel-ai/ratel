@@ -1,8 +1,6 @@
 import type { ParsedTraceEvent } from "@/lib/ingest/trace-events/parse";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
 import type { LogError } from "@/lib/platform/logger";
-import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
-import { typedStepsOn } from "@/lib/platform/typed-steps-flag";
 import { deriveAgentRuns } from "./derive-agent-runs";
 import { deriveModelCalls } from "./derive-model-calls";
 import { deriveSteps } from "./derive-steps";
@@ -29,24 +27,16 @@ import type { DecodedSpan } from "./types";
  *
  * A tool row carries its MCP server and its skill (AOBS-5).
  *
- * With `FF_TOOL_RUN_INSIGHTS` on (RC-742, upstream's `cloud-tool-run-insights`),
- * each `invoke_agent` root span is also an `agent_run` row, so a run with no
- * tool call makes a turn.
- *
- * With `FF_TYPED_STEPS` on (RC-1067, upstream's `cloud-typed-steps`), an export
- * also adds code and handoff rows (`derive-steps.ts`), model-call rows carry the
- * user-message identity and a signature token, and an `invoke_workflow` root is
- * an agent run too, so a trace with model calls only makes a turn.
+ * Each `invoke_agent` or `invoke_workflow` root span is also an `agent_run`
+ * row (RC-742), so a run with no tool call makes a turn. Typed steps (code,
+ * handoffs) are rows too, and a model-call row carries its typed facts
+ * (RC-1067).
  */
 
 export interface AgentHealthBridgeDeps {
   traceTurns?: TraceTurnsIngestDeps;
   /** The project's SDK invokes near a batch's tool rows. Absent, nothing is dropped. */
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** `FF_TOOL_RUN_INSIGHTS` for the project. Absent, the switch is read for the project (off unless set). Never throws. */
-  agentRunsEnabled?: (projectId: string) => Promise<boolean>;
-  /** `FF_TYPED_STEPS` for the project. Absent, the switch is read for the project (off unless set). Never throws. */
-  typedStepsEnabled?: (projectId: string) => Promise<boolean>;
   logError: LogError;
 }
 
@@ -59,13 +49,11 @@ export async function agentHealthToolRows(
 ): Promise<ParsedTraceEvent[]> {
   if (!deps.traceTurns) return [];
   try {
-    const agentRuns = await (deps.agentRunsEnabled ?? readAgentRunsSwitch)(projectId);
-    const typedSteps = await (deps.typedStepsEnabled ?? readTypedStepsSwitch)(projectId);
     const rows = [
       ...deriveToolInvocations(spans, dimensions),
-      ...deriveModelCalls(spans, { typedSteps }),
-      ...(typedSteps ? deriveSteps(spans) : []),
-      ...(agentRuns || typedSteps ? deriveAgentRuns(spans, { typedSteps }) : []),
+      ...deriveModelCalls(spans),
+      ...deriveSteps(spans),
+      ...deriveAgentRuns(spans),
     ];
     if (rows.length === 0) return [];
     return await withoutSdkDuplicates(rows, projectId, deps);
@@ -94,12 +82,4 @@ async function withoutSdkDuplicates(
     deps.logError("agent health sdk duplicate check failed", err, { project_id: projectId });
     return rows;
   }
-}
-
-function readAgentRunsSwitch(projectId: string): Promise<boolean> {
-  return toolRunInsightsOn({ projectId });
-}
-
-function readTypedStepsSwitch(projectId: string): Promise<boolean> {
-  return typedStepsOn({ projectId });
 }

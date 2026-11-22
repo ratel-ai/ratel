@@ -257,7 +257,7 @@ test("usage counts SDK runs only, as the live read on Fixes does", () => {
   });
 });
 
-test("typed steps on: a task of model and code steps reads each token as a step", () => {
+test("a task of model and code steps reads each token as a step", () => {
   const typedRun = (error: boolean): WorkflowTurn => {
     const base = run(["search"]);
     const steps: WorkflowStep[] = [
@@ -287,9 +287,7 @@ test("typed steps on: a task of model and code steps reads each token as a step"
     helperTools: [],
   };
   const runs = [typedRun(false), typedRun(true)];
-  const off = readTask(task, runs);
-  assert.equal(step(off.steps, "model:plan").calls, 0, "flag off: only tool calls count");
-  const on = readTask(task, runs, { typedSteps: true });
+  const on = readTask(task, runs);
   assert.equal(on.calls, 6);
   assert.equal(on.finishedRuns, 2, "each run ends on a search that worked");
   assert.equal(on.errorRuns, 1);

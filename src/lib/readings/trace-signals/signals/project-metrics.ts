@@ -82,8 +82,8 @@ export interface DayBucket {
    */
   linked?: LinkedDay;
   /**
-   * The day's model and code steps, and how many failed (RC-1077). Set only
-   * with `cloud-typed-steps` on, so "Calls work" counts them; absent otherwise.
+   * The day's model and code steps, and how many failed (RC-1077), so "Calls
+   * work" counts them. Absent on days without one.
    */
   steps?: StepCallDay;
 }
@@ -91,11 +91,6 @@ export interface DayBucket {
 export interface StepCallDay {
   calls: number;
   failed: number;
-}
-
-export interface BucketOptions {
-  /** Count model and code steps (`cloud-typed-steps`). */
-  typedSteps?: boolean;
 }
 
 function emptyShapes(): ShapeCounts {
@@ -131,7 +126,6 @@ export function turnBucket(
   turn: SignalTurn,
   floors: Floors = DEFAULT_FLOORS,
   extras?: OtelTurnExtras,
-  options: BucketOptions = {},
 ): DayBucket {
   const bucket = emptyBucket(dayOf(turn.endedAt));
   const searches = turn.steps.filter((step) => step.kind === "search");
@@ -143,6 +137,7 @@ export function turnBucket(
   const otel = usesOtelShapes(turn);
   const shape = otel ? null : classifyTurnShape(turn);
   const junk = searches.map(junkOfSearch).filter((j) => j !== null);
+  const steps = stepCallDayOf(turn);
   const toolDetail =
     turn.lane === "runtime" &&
     turn.steps.some(
@@ -167,7 +162,7 @@ export function turnBucket(
     toolDetailTurns: toolDetail ? 1 : 0,
     ...(otel ? { otel: otelDayOf(turn, extras) } : {}),
     ...(turn.linked ? { linked: linkedDayOf(turn.linked) } : {}),
-    ...(options.typedSteps ? { steps: stepCallDayOf(turn) } : {}),
+    ...(steps.calls > 0 ? { steps } : {}),
   };
 }
 
@@ -232,10 +227,8 @@ export function addBuckets(left: DayBucket, right: DayBucket): DayBucket {
 export class DailyBuckets {
   private readonly days = new Map<string, DayBucket>();
 
-  constructor(private readonly options: BucketOptions = {}) {}
-
   add(turn: SignalTurn, floors: Floors = DEFAULT_FLOORS, extras?: OtelTurnExtras): void {
-    const bucket = turnBucket(turn, floors, extras, this.options);
+    const bucket = turnBucket(turn, floors, extras);
     const existing = this.days.get(bucket.day);
     this.days.set(bucket.day, existing ? addBuckets(existing, bucket) : bucket);
   }

@@ -1,4 +1,4 @@
-import { countClosedTurns, hasLedger, hasModelCallsSince } from "@/lib/ledger/closed-turns";
+import { countClosedTurns, hasLedger } from "@/lib/ledger/closed-turns";
 import { getDb } from "@/lib/platform/db/client";
 import { type AgentHealthLimits, getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { getLogger } from "@/lib/platform/logger";
@@ -31,7 +31,6 @@ import {
   unknownToolsToProbe,
   withToolStandings,
 } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
-import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import type { HealthPageModel, SignalKind, WindowDays } from "@/lib/readings/trace-signals/view";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
 import { loadWorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide-queries";
@@ -90,8 +89,6 @@ export interface PageModelDeps {
   db: EvidenceDb & Pick<ReturnType<typeof getDb>, "select">;
   getLimits: (projectId: string) => Promise<AgentHealthLimits>;
   now: () => Date;
-  /** `FF_TYPED_STEPS` for the project (RC-1067): typed model rows make their own turns. */
-  readsTypedSteps: (projectId: string) => Promise<boolean>;
   /** Model-written workflow names; the page falls back to tool-order names without them. */
   getLabels: (projectId: string) => Promise<WorkflowLabels>;
   getInsights: (projectId: string) => Promise<WorkflowInsights | null>;
@@ -229,7 +226,6 @@ export async function loadHealthPageModel(
     db,
     getLimits: limitsFor,
     now: () => new Date(),
-    readsTypedSteps: (id) => typedStepsEnabled(id),
     getLabels: (id) => workflowLabelsFor(id, db),
     getInsights: (id) => insightsFor(id, db),
     ...overrides,
@@ -244,19 +240,6 @@ export async function loadHealthPageModel(
       now,
       deps.db,
     );
-    const since = new Date(now.getTime() - windowDays * DAY_MS);
-    // The legacy path needs tool spans. Typed model rows can make their own turns.
-    if (
-      liveTurns === 0 &&
-      (await hasModelCallsSince(projectId, since, deps.db)) &&
-      !(await deps.readsTypedSteps(projectId))
-    ) {
-      const pending = buildHealthPageModel(
-        { windowDays, run: null, liveTurns, signals: [], evidence: new Map(), names: new Map() },
-        now,
-      );
-      return { ...pending, waitingOn: "tool_spans" };
-    }
     if (
       liveTurns === 0 &&
       nodeEnv === "development" &&
@@ -333,13 +316,12 @@ export async function loadHealthPageModel(
         deps.db,
       )
     : null;
-  // The per-kind readings (RC-1078) show only while `cloud-typed-steps` (FF_TYPED_STEPS) is on.
-  const steps = summary.steps && (await deps.readsTypedSteps(projectId)) ? summary.steps : null;
+  // The per-kind readings (RC-1078); absent on readings stored before them.
   return {
     ...model,
     dismissed: dismissedOf(muted, names),
     ...(progress ? { earlyProgress: progress } : {}),
-    ...(steps ? { steps } : {}),
+    ...(summary.steps ? { steps: summary.steps } : {}),
   };
 }
 

@@ -62,11 +62,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "FF_TOOL_RUN_INSIGHTS",
-    note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns",
-  },
-  {
-    key: "FF_TYPED_STEPS",
-    note: "typed steps: model calls, code steps, handoffs and user messages are turn steps, so a trace with model calls only makes a turn and reaches Agent health",
+    note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, one task per tool-less agent, Agent health from 10 turns",
   },
 ];
 

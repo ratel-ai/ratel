@@ -117,7 +117,7 @@ export interface SummaryViewProps {
    * from the shape of imported spans and no content came with them.
    */
   inferredTools?: boolean;
-  /** The `?steps=` preset of the per-kind tables (`cloud-typed-steps`); absent reads `all`. */
+  /** The `?steps=` preset of the per-kind tables; absent reads `all`. */
   stepsView?: StepsView;
   now?: Date;
 }

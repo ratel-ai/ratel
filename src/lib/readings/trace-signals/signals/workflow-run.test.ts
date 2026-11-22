@@ -32,7 +32,7 @@ function collect(turns: readonly SignalTurn[], maxTurns?: number) {
   return collector;
 }
 
-test("the compact copy keeps tool calls only, with only the fields mining and the task reading read", () => {
+test("the compact copy keeps every step with a token, with only the fields mining and the task reading read", () => {
   const turn = wfTurn(
     ["a", { tool: "skill_one", targetType: "skill" }, { tool: "b", outcome: "error", tookMs: 900 }],
     { durationMs: 3_000 },
@@ -48,7 +48,7 @@ test("the compact copy keeps tool calls only, with only the fields mining and th
   ]);
   assert.deepEqual(
     compact.steps.map((s) => s.targetId),
-    ["a", "b"],
+    ["a", "skill_one", "b"],
   );
   assert.deepEqual(Object.keys(compact.steps[0]!).sort(), [
     "handoffMs",
@@ -59,7 +59,7 @@ test("the compact copy keeps tool calls only, with only the fields mining and th
     "tookMs",
     "traceEventId",
   ]);
-  assert.deepEqual(compact.steps[1], {
+  assert.deepEqual(compact.steps[2], {
     kind: "invoke",
     targetType: "tool",
     targetId: "b",
@@ -81,9 +81,9 @@ test("the compact copy keeps tool calls only, with only the fields mining and th
     "a clean run carries none",
   );
   assert.equal(
-    compactTurn(wfTurn([{ tool: "s", targetType: "skill" }])),
+    compactTurn(wfTurn([{ tool: "", kind: "user_message" }])),
     null,
-    "a turn without a tool call is not kept",
+    "a turn without a step token is not kept",
   );
 });
 
@@ -227,7 +227,21 @@ test("with enough runs carrying turn ids, only those are mined", () => {
 });
 
 test("runs that only search store a blocked basis instead of nothing", () => {
-  const searchOnly = many(10, () => ({ ...wfTurn([]), invokeCount: 0 }));
+  const searchOnly = many(10, () => {
+    const turn = wfTurn(["lookup"]);
+    return {
+      ...turn,
+      invokeCount: 0,
+      searchCount: 1,
+      steps: turn.steps.map((step) => ({
+        ...step,
+        kind: "search" as const,
+        eventType: "search",
+        targetType: null,
+        targetId: null,
+      })),
+    };
+  });
   const { stored } = collect(searchOnly).finish([]);
   assert.equal(stored.turnsWithTools, 0);
   assert.equal(stored.basis?.blocked, "no_tool_calls");
@@ -360,10 +374,8 @@ const modelRun = (token: string, outcome: "ok" | "error" = "ok"): SignalTurn =>
     { turnSource: "otlp" },
   );
 
-test("typed steps on: model-only runs form a task on their signature and are placed in it", () => {
+test("model-only runs form a task on their signature and are placed in it", () => {
   const runs = many(12, (i) => modelRun("triage", i === 0 ? "error" : "ok"));
-  const off = collectWith(runs, {}).finish([]);
-  assert.deepEqual(off.stored.items, [], "flag off: a run of model calls is no task");
   const blocked = {
     basis: "none",
     blocked: "no_tool_calls",
@@ -371,7 +383,7 @@ test("typed steps on: model-only runs form a task on their signature and are pla
     since: null,
     mixed: false,
   } as const;
-  const collector = createWorkflowCollector(undefined, undefined, blocked, { typedSteps: true });
+  const collector = createWorkflowCollector(undefined, undefined, blocked);
   for (const run of runs) collector.collect(run);
   const { stored, placement } = collector.finish([]);
   assert.equal(stored.basis?.blocked, null, "model-only runs lift the 'no tool calls' block");
@@ -387,15 +399,6 @@ test("typed steps on: model-only runs form a task on their signature and are pla
   assert.equal([...placement.values()].filter((id) => id === task.id).length, 12);
 });
 
-test("typed steps on: tool-only runs give the same tasks and ids as with the flag off", () => {
-  const off = collect(failingWorld()).finish([]).stored;
-  const on = collectWith(failingWorld(), { typedSteps: true }).finish([]).stored;
-  assert.deepEqual(
-    on.items.map((item) => [item.id, item.runs]),
-    off.items.map((item) => [item.id, item.runs]),
-  );
-});
-
 test("typed user-message pieces mine separate tasks from one trace", () => {
   const runs = many(10, () =>
     wfTurn(
@@ -408,7 +411,7 @@ test("typed user-message pieces mine separate tasks from one trace", () => {
       { turnSource: "otlp" },
     ),
   );
-  const on = collectWith(runs, { typedSteps: true }).finish([]);
+  const on = collectWith(runs, {}).finish([]);
   assert.deepEqual(on.stored.items.map((item) => item.coreTools).sort(), [
     ["model:first"],
     ["model:second"],

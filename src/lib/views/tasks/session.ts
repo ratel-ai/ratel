@@ -36,16 +36,15 @@ const TYPED_KINDS: ReadonlySet<string> = new Set<TypedSessionStepKind>([
   "user_message",
 ]);
 
-/** One step of a turn as the timeline draws it. With typed steps, model calls, code, handoffs and user messages read by kind. */
+/** One step of a turn as the timeline draws it: model calls, code, handoffs and user messages read by kind. */
 export function sessionStep(
   step: Pick<
     TraceTurnStepRow,
     "ordinal" | "kind" | "targetId" | "targetType" | "outcome" | "tookMs" | "hitCount"
   >,
   names: Record<string, string>,
-  options: { typedSteps?: boolean } = {},
 ): SessionStep {
-  if (options.typedSteps && TYPED_KINDS.has(step.kind)) return typedStep(step);
+  if (TYPED_KINDS.has(step.kind)) return typedStep(step);
   const isCall = step.kind === "invoke" && step.targetId !== null;
   if (!isCall) {
     const listed =

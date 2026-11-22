@@ -5,7 +5,6 @@ import { type PersistSpansDeps, persistDecodedSpans } from "@/lib/ingest/otlp/in
 import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { DecodedSpan } from "@/lib/ingest/otlp/types";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
-import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { countClosedTurns } from "@/lib/ledger/closed-turns";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { type BuildJobDeps, buildProjectTraceTurns } from "@/lib/ledger/turns/build-job";
@@ -33,8 +32,8 @@ import { healthPageState } from "@/lib/views/health/page-state";
  * RC-742, end to end on a real schema: Ratel Cloud's own backend job exports
  * an `invoke_agent` root with its ask and `chat` children, no tool span. With
  * `cloud-tool-run-insights` on, ingest stores an `agent_run` row and the build
- * makes exactly one turn whose ask is the root's ask. Off, nothing changes:
- * no row, no turn, and the trace stays a model-only ask for Intents.
+ * makes exactly one turn whose ask is the root's ask. Its `chat` children are
+ * typed model-call steps of that turn (RC-1067).
  */
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -105,7 +104,7 @@ async function setup(): Promise<Db> {
 }
 
 /** `storeSpans` writes the span rows too and rolls the trace up, as the periodic sweep does (the Sessions list reads a run's error from the rollup). */
-function ingestDeps(db: Db, flag: boolean, storeSpans = false): PersistSpansDeps {
+function ingestDeps(db: Db, storeSpans = false): PersistSpansDeps {
   return {
     insertEventsWithMetrics: async (_projectId: string, rows: unknown[]) => rows.length,
     insertTraceEvents: (projectId: string, rows: Parameters<typeof insertTraceEvents>[1]) =>
@@ -122,7 +121,6 @@ function ingestDeps(db: Db, flag: boolean, storeSpans = false): PersistSpansDeps
       enqueueBuild: async () => null,
       scheduleProjectDrain: () => {},
     },
-    agentRunsEnabled: async () => flag,
     agentSpanDedupe: null,
     logError: () => {},
     captureFailure: () => {},
@@ -130,10 +128,9 @@ function ingestDeps(db: Db, flag: boolean, storeSpans = false): PersistSpansDeps
 }
 
 /** Builds run 31 minutes after ingest: a quiet turn closes as `idle` (rule 5), like every OTLP turn. */
-function buildDeps(db: Db, flag: boolean, afterMs = 31 * 60_000): Partial<BuildJobDeps> {
+function buildDeps(db: Db, afterMs = 31 * 60_000): Partial<BuildJobDeps> {
   return {
     now: () => new Date(Date.now() + afterMs),
-    readsAgentRuns: async () => flag,
     getCursor: (p) => getTraceTurnsCursor(p, db),
     listEvents: (p, since, _db, limit, types) => listTurnEventsPage(p, since, db, limit, types),
     listHits: (ids) => listTurnEventHits(ids, db),
@@ -150,13 +147,8 @@ function buildDeps(db: Db, flag: boolean, afterMs = 31 * 60_000): Partial<BuildJ
 }
 
 /** The children arrive first, the root (which ends last) in a later export. */
-async function ingestRun(
-  db: Db,
-  flag: boolean,
-  rootSpan: DecodedSpan = root,
-  storeSpans = false,
-): Promise<void> {
-  const deps = ingestDeps(db, flag, storeSpans);
+async function ingestRun(db: Db, rootSpan: DecodedSpan = root, storeSpans = false): Promise<void> {
+  const deps = ingestDeps(db, storeSpans);
   const context = { projectId: PROJECT_ID, organization: null, endpoint: "/v1/traces" };
   assert.ok((await persistDecodedSpans([chat(1), chat(2)], context, deps)).ok);
   assert.ok((await persistDecodedSpans([rootSpan], context, deps)).ok);
@@ -205,10 +197,10 @@ async function healthKind(db: Db): Promise<string> {
 
 const window = () => ({ from: new Date(T0 - 3_600_000), to: new Date(Date.now() + 3_600_000) });
 
-test("flag on: an invoke_agent run with chat children is exactly one closed turn, its ask the root's", async () => {
+test("an invoke_agent run with chat children is exactly one closed turn, its ask the root's", async () => {
   const db = await setup();
-  await ingestRun(db, true);
-  const result = await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, true));
+  await ingestRun(db);
+  const result = await buildProjectTraceTurns(PROJECT_ID, buildDeps(db));
   assert.equal(result.outcome, "built");
 
   const turns = await turnsOf(db);
@@ -220,16 +212,23 @@ test("flag on: an invoke_agent run with chat children is exactly one closed turn
   assert.equal(turn.invokeCount, 0);
   assert.equal(await countClosedTurns(PROJECT_ID, window().from, window().to, db), 1);
   // RC-747: the agent step names its agent, so Tasks can group runs by it.
-  const steps = await db.select().from(traceTurnSteps);
+  // Typed steps (RC-1067): each chat child is a model call after the user message it answers.
+  const steps = await db.select().from(traceTurnSteps).orderBy(traceTurnSteps.ordinal);
   assert.deepEqual(
     steps.map((step) => [step.kind, step.targetType, step.targetId]),
-    [["agent", null, "label_workflows"]],
+    [
+      ["agent", null, "label_workflows"],
+      ["user_message", null, null],
+      ["model_call", null, "claude-sonnet-5-5"],
+      ["user_message", null, null],
+      ["model_call", null, "claude-sonnet-5-5"],
+    ],
   );
-  // The decision step reads the agent as the run's one step, so a run placed in its agent's task is not "outside" it.
+  // The decision step reads the run's model call as its one step, both chats folded into it.
   const groups = await loadRecentAskGroups(PROJECT_ID, window().from, 10, db);
   assert.deepEqual(
     groups.map((group) => group.turns.map((t) => t.tools)),
-    [[["agent:label_workflows"]]],
+    [[["model:claude-sonnet-5-5"]]],
   );
 
   const asks = await loadAskSourcesByTurn(PROJECT_ID, [turn.id], db);
@@ -239,11 +238,11 @@ test("flag on: an invoke_agent run with chat children is exactly one closed turn
   assert.deepEqual(await loadModelOnlyTraces(PROJECT_ID, window(), new Date(), 10, db), []);
 });
 
-test("flag on: a finished run reads Completed with its real duration in the Sessions list and its summary, minutes after it ended (RC-812)", async () => {
+test("a finished run reads Completed with its real duration in the Sessions list and its summary, minutes after it ended (RC-812)", async () => {
   const db = await setup();
-  await ingestRun(db, true);
+  await ingestRun(db);
   // The build runs seconds after ingest, as the ingest-triggered job does.
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, true, 10_000));
+  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, 10_000));
 
   const turn = (await turnsOf(db))[0]!;
   assert.equal(turn.status, "closed");
@@ -262,57 +261,63 @@ test("flag on: a finished run reads Completed with its real duration in the Sess
   assert.equal(summary.p50DurationMs, 4_000);
 });
 
-test("flag on: a run whose root span ended in an error reads Failed, minutes after it ended (RC-812)", async () => {
+test("a run whose root span ended in an error reads Failed, minutes after it ended (RC-812)", async () => {
   const db = await setup();
   await ingestRun(
     db,
-    true,
     { ...root, statusCode: 2, attributes: { ...root.attributes, "error.type": "TimeoutError" } },
     true,
   );
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, true, 10_000));
+  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, 10_000));
   assert.deepEqual(await sessionRows(db), [
     { id: "job-1", status: "failed", turns: 1, durationMs: 4_000 },
   ]);
 });
 
-test("flag off: the run makes no turn and no session, as before (RC-812)", async () => {
+test("two runs with their own conversations stay two sessions, each turn in its own", async () => {
   const db = await setup();
-  await ingestRun(db, false);
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, false, 10_000));
-  assert.deepEqual(await sessionRows(db), []);
+  await ingestRun(db);
+  const other = "b".repeat(32);
+  const context = { projectId: PROJECT_ID, organization: null, endpoint: "/v1/traces" };
+  const otherRoot = {
+    ...root,
+    traceId: other,
+    spanId: "9".repeat(16),
+    attributes: { ...root.attributes, "gen_ai.conversation.id": "job-2" },
+  };
+  const otherChat = {
+    ...chat(1),
+    traceId: other,
+    spanId: "8".repeat(16),
+    parentSpanId: otherRoot.spanId,
+  };
+  assert.ok((await persistDecodedSpans([otherChat, otherRoot], context, ingestDeps(db))).ok);
+  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db));
+  const turns = await turnsOf(db);
+  assert.deepEqual(turns.map((turn) => [turn.turnKey, turn.sessionId]).sort(), [
+    [`otlp:${TRACE}`, "job-1"],
+    [`otlp:${other}`, "job-2"],
+  ]);
 });
 
-test("flag off: no agent_run row, no turn, and the trace stays a model-only ask", async () => {
-  const db = await setup();
-  await ingestRun(db, false);
-  const rows = await db.select({ type: traceEvents.type }).from(traceEvents);
-  assert.ok(rows.length > 0);
-  assert.ok(rows.every((row) => row.type !== "agent_run"));
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, false));
-  assert.equal((await turnsOf(db)).length, 0);
-  assert.equal(await healthKind(db), "nothing_yet");
-  const modelOnly = await loadModelOnlyTraces(PROJECT_ID, window(), new Date(), 10, db);
-  assert.deepEqual(
-    modelOnly.map((trace) => trace.traceId),
-    [TRACE],
-  );
-});
-
-test("rows stored with the flag on are not read by a build with the flag off", async () => {
-  const db = await setup();
-  await ingestRun(db, true);
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, false));
-  assert.equal((await turnsOf(db)).length, 0);
-});
-
-test("a bare chat span with no invoke_agent root makes no turn, flag on", async () => {
+test("a bare chat span with no invoke_agent root is one closed turn of its model call", async () => {
   const db = await setup();
   const context = { projectId: PROJECT_ID, organization: null, endpoint: "/v1/traces" };
-  assert.ok(
-    (await persistDecodedSpans([{ ...chat(1), parentSpanId: null }], context, ingestDeps(db, true)))
-      .ok,
+  const bare = { ...chat(1), parentSpanId: null };
+  assert.ok((await persistDecodedSpans([bare], context, ingestDeps(db))).ok);
+  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db));
+  // Typed steps (RC-1067): a model call is a step, so its trace is a turn with no agent step.
+  const turns = await turnsOf(db);
+  assert.deepEqual(
+    turns.map((turn) => [turn.turnKey, turn.status]),
+    [[`otlp:${bare.traceId}`, "closed"]],
   );
-  await buildProjectTraceTurns(PROJECT_ID, buildDeps(db, true));
-  assert.equal((await turnsOf(db)).length, 0);
+  const steps = await db.select().from(traceTurnSteps).orderBy(traceTurnSteps.ordinal);
+  assert.deepEqual(
+    steps.map((step) => [step.kind, step.targetId]),
+    [
+      ["user_message", null],
+      ["model_call", "claude-sonnet-5-5"],
+    ],
+  );
 });

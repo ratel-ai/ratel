@@ -71,6 +71,26 @@ async function seedRun(client: Awaited<ReturnType<typeof setupDb>>["client"]) {
   );
 }
 
+/** The window's segments: `runs` for each task, all inside one stored turn. */
+async function seedSegments(
+  client: Awaited<ReturnType<typeof setupDb>>["client"],
+  runs: Readonly<Record<string, number>>,
+) {
+  const turn = randomUUID();
+  await client.query(
+    `insert into trace_turns (id, project_id, session_id, turn_key, turn_source, lane, status, started_at, ended_at, last_received_at, invoke_count, error_count)
+     values ($1, $2, 'sess-1', 'declared:t1', 'declared', 'runtime', 'closed', '2026-09-10T10:00:00Z', '2026-09-10T10:00:05Z', '2026-09-10T10:00:05Z', 2, 0)`,
+    [turn, PROJECT_ID],
+  );
+  for (const [task, n] of Object.entries(runs)) {
+    await client.query(
+      `insert into task_segments (id, project_id, session_id, workflow_id, start_turn_id, start_ordinal, end_turn_id, end_ordinal, started_at, ended_at, turn_ids, piece_count)
+       select gen_random_uuid(), $1, 'sess-1', $2, $3, 1, $3, 2, '2026-09-10T10:00:00Z', '2026-09-10T10:00:05Z', array[$3::uuid], 1 from generate_series(1, $4::int)`,
+      [PROJECT_ID, task, turn, n],
+    );
+  }
+}
+
 test("no reading yet: nothing else is read", async () => {
   const { db } = await setupDb();
   const operations: string[] = [];
@@ -85,6 +105,8 @@ test("no reading yet: nothing else is read", async () => {
 test("a failed supplementary read leaves the tasks on the page, that part not measured", async () => {
   const { client, db } = await setupDb();
   await seedRun(client);
+  // A task's runs come from its segments; a run of no task is in the window too.
+  await seedSegments(client, { "task-a": 40, "task-gone": 10 });
   const inputs = await loadTasksInputs(PROJECT_ID, {
     read: (operation, read) => {
       if (operation === "tasks_topics" || operation === "tasks_open_issues")
@@ -106,6 +128,8 @@ test("a failed supplementary read leaves the tasks on the page, that part not me
 test("a pending drafted change is read onto the task it composes, with the run's price", async () => {
   const { client, db } = await setupDb();
   await seedRun(client);
+  // A task's runs come from its segments (typed steps, ratel-cloud #580).
+  await seedSegments(client, { "task-a": 40 });
   await client.query(
     `insert into tool_craft_runs (id, project_id, trigger, status, created_at) values ('55555555-5555-4555-8555-555555555555', $1, 'chained', 'crafted', '2026-10-01T00:00:00Z')`,
     [PROJECT_ID],
@@ -184,7 +208,7 @@ test("Fixes' open fixes, or null when Fixes could not be read: the task pages th
   );
 });
 
-test("typed task inputs read segment counts only when the flag is enabled", async () => {
+test("task inputs read the window's segment counts", async () => {
   const { client, db } = await setupDb();
   await seedRun(client);
   const operations: string[] = [];
@@ -192,14 +216,9 @@ test("typed task inputs read segment counts only when the flag is enabled", asyn
     operations.push(operation);
     return load(db as unknown as BoundReadDb);
   };
-  const on = await loadTasksInputs(PROJECT_ID, { read, readsTypedSteps: async () => true });
-  assert.equal(on.typedSteps, true);
-  assert.equal(on.segments?.size, 0);
+  const inputs = await loadTasksInputs(PROJECT_ID, { read });
+  assert.equal(inputs.segments?.size, 0);
   assert.ok(operations.includes("tasks_segments"));
-  operations.length = 0;
-  const off = await loadTasksInputs(PROJECT_ID, { read, readsTypedSteps: async () => false });
-  assert.equal(off.typedSteps, undefined);
-  assert.ok(!operations.includes("tasks_segments"));
   await client.close();
 });
 
@@ -221,12 +240,14 @@ test("ten stored Stema segments show ten runs with matching calls and examples",
       const spans = typedStepFixtures(Date.parse("2026-09-10T12:00:00Z") + n * 60_000).stema.map(
         (span) => ({ ...span, traceId: (100 + n).toString(16).padStart(32, "0") }),
       );
-      const rows = [...deriveSteps(spans), ...deriveModelCalls(spans, { typedSteps: true })].map(
-        (row) => ({ ...row, id: randomUUID(), receivedAt: row.occurredAt ?? now, failed: false }),
-      );
+      const rows = [...deriveSteps(spans), ...deriveModelCalls(spans)].map((row) => ({
+        ...row,
+        id: randomUUID(),
+        receivedAt: row.occurredAt ?? now,
+        failed: false,
+      }));
       const events = normalizeEvents(rows as unknown as TurnEventRow[], new Map(), {
         salt: "test",
-        typedSteps: true,
       });
       const { turns } = buildTurns({ stored: [], events, now });
       await writeTurnPage(
@@ -237,13 +258,12 @@ test("ten stored Stema segments show ten runs with matching calls and examples",
     const result = await computeProjectTraceSignals(
       PROJECT_ID,
       { trigger: "manual" },
-      jobDeps(db, now, [], { workflowMining: async () => ({ typedSteps: true }) }),
+      jobDeps(db, now, []),
     );
     assert.equal(result.outcome, "completed");
     const deps = {
       read: <T>(_operation: string, load: (db: BoundReadDb) => Promise<T>) =>
         load(db as unknown as BoundReadDb),
-      readsTypedSteps: async () => true,
     };
     const inputs = await loadTasksInputs(PROJECT_ID, deps);
     const list = buildTaskList(inputs);
@@ -262,9 +282,6 @@ test("ten stored Stema segments show ten runs with matching calls and examples",
       assert.equal(run.traceCount, 1);
       assert.deepEqual(run.steps.map((step) => step.kind).sort(), ["code", "model_call"]);
     }
-    const off = await loadTasksInputs(PROJECT_ID, { ...deps, readsTypedSteps: async () => false });
-    assert.equal(off.typedSteps, undefined);
-    assert.equal(off.segments, undefined);
   } finally {
     await client.close();
   }

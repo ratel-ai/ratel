@@ -9,7 +9,7 @@ import type {
   Workflow,
   WorkflowTurn,
 } from "@/lib/readings/trace-signals/workflows/types";
-import { taskSteps, type UnitOptions } from "@/lib/readings/trace-signals/workflows/units";
+import { taskSteps } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * One task read step by step, from the runs placed in it: what used to be
@@ -28,8 +28,8 @@ import { taskSteps, type UnitOptions } from "@/lib/readings/trace-signals/workfl
  *   came next (the next tool, or the end of the run), repeats collapsed so a
  *   retry is one visit to the step.
  * - Cost only from runs linked to priced model calls; null when none was.
- * - With `typedSteps` (`cloud-typed-steps`, RC-1072) a call is any step
- *   token (`units.ts`): a model call reads as `model:<token>`.
+ * - A call is any step token (`units.ts`, RC-1072): a model call reads as
+ *   `model:<token>`.
  */
 
 export const TASK_READING_VERSION = 1;
@@ -160,12 +160,8 @@ function collapse(ids: readonly string[]): string[] {
   return ids.filter((id, i) => i === 0 || ids[i - 1] !== id);
 }
 
-function countCalls(
-  steps: ReadonlyMap<string, StepCount>,
-  run: WorkflowTurn,
-  options: UnitOptions,
-): void {
-  const calls = taskSteps(run, options);
+function countCalls(steps: ReadonlyMap<string, StepCount>, run: WorkflowTurn): void {
+  const calls = taskSteps(run);
   for (const call of calls) {
     const step = steps.get(call.targetId);
     if (!step) continue;
@@ -260,8 +256,8 @@ interface RunOutcome {
   errored: boolean;
 }
 
-function outcomeOf(run: WorkflowTurn, options: UnitOptions): RunOutcome {
-  const calls = taskSteps(run, options);
+function outcomeOf(run: WorkflowTurn): RunOutcome {
+  const calls = taskSteps(run);
   const corrections = run.corrections ?? [];
   const last = calls[calls.length - 1];
   const gaveUp = corrections.some((event) => event.kind === "gave_up_after_error");
@@ -275,7 +271,6 @@ function outcomeOf(run: WorkflowTurn, options: UnitOptions): RunOutcome {
 export function readTask(
   task: Pick<Workflow, "typicalOrder" | "optionalTools" | "helperTools">,
   runs: readonly WorkflowTurn[],
-  options: UnitOptions = {},
 ): TaskReading {
   const steps = stepCounts(task);
   const byKind = emptyKinds();
@@ -286,14 +281,14 @@ export function readTask(
   let correctionRuns = 0;
   let events = 0;
   for (const run of runs) {
-    countCalls(steps, run, options);
+    countCalls(steps, run);
     const corrections = run.corrections ?? [];
     countCorrections(steps, corrections);
     for (const event of corrections) byKind[event.kind] += 1;
     events += corrections.length;
     if (corrections.length > 0) correctionRuns += 1;
-    calls += taskSteps(run, options).length;
-    const outcome = outcomeOf(run, options);
+    calls += taskSteps(run).length;
+    const outcome = outcomeOf(run);
     if (outcome.finished) finishedRuns += 1;
     if (outcome.errored) errorRuns += 1;
     if (outcome.errored && outcome.finished) recoveredRuns += 1;

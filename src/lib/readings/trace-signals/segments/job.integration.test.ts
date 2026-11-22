@@ -20,18 +20,13 @@ test("ten Stema fixtures form one model/code task and the job writes stable segm
       ...s,
       traceId: (100 + n).toString(16).padStart(32, "0"),
     }));
-    const rows = [...deriveSteps(spans), ...deriveModelCalls(spans, { typedSteps: true })].map(
-      (row) => ({
-        ...row,
-        id: randomUUID(),
-        receivedAt: row.occurredAt ?? now,
-        failed: row.errorMessage !== null,
-      }),
-    );
-    const events = normalizeEvents(rows as unknown as TurnEventRow[], new Map(), {
-      salt: "test",
-      typedSteps: true,
-    });
+    const rows = [...deriveSteps(spans), ...deriveModelCalls(spans)].map((row) => ({
+      ...row,
+      id: randomUUID(),
+      receivedAt: row.occurredAt ?? now,
+      failed: row.errorMessage !== null,
+    }));
+    const events = normalizeEvents(rows as unknown as TurnEventRow[], new Map(), { salt: "test" });
     const { turns } = buildTurns({ stored: [], events, now });
     await writeTurnPage(
       { projectId: PROJECT_ID, turns, orphanedTurnIds: [], through: now.toISOString(), now },
@@ -46,7 +41,7 @@ test("ten Stema fixtures form one model/code task and the job writes stable segm
     ).rows[0]!.n,
     10,
   );
-  const deps = jobDeps(db, now, [], { workflowMining: async () => ({ typedSteps: true }) });
+  const deps = jobDeps(db, now, []);
   const first = await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, deps);
   assert.equal(first.outcome, "completed");
   const read = async () =>

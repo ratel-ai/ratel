@@ -58,7 +58,7 @@ export function TaskView({
   listHref?: string;
   scoring?: ReactNode;
   testRuns?: readonly string[];
-  /** Typed steps only: the `?steps=` preset. Absent, the page shows every step and no preset control. */
+  /** The `?steps=` preset. Absent, the page shows every step and no preset control. */
   stepsView?: StepsView;
 }) {
   const names = Object.fromEntries(
@@ -67,12 +67,8 @@ export function TaskView({
   const shown = stepsView ? taskStepsView(task, stepsView) : task;
   const flow = buildIntentFlow(
     { edges: shown.flow.edges, tools: shown.flow.tools, names },
-    { minP: FLOW_MIN_P, typedSteps: task.typedSteps },
+    { minP: FLOW_MIN_P },
   );
-  // The drawing earns its place only when runs leave the straight line of steps.
-  const branches =
-    flow.nodes.length > shown.steps.length ||
-    flow.arrows.length > Math.max(0, shown.steps.length - 1);
   const noneShown =
     stepsView !== undefined && shown.steps.length === 0 && shown.sideSteps.length === 0;
   return (
@@ -118,9 +114,9 @@ export function TaskView({
               color={task.color}
             />
           )}
-          {!noneShown && (branches || task.typedSteps) ? (
+          {!noneShown ? (
             <Disclosure
-              defaultOpen={task.typedSteps}
+              defaultOpen
               title="How runs move between steps"
               hint={plural(flow.arrows.length, "hop", "hops")}
             >

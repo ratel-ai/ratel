@@ -121,12 +121,11 @@ export interface TurnEventPageRow extends TurnEventRow {
  * remainder of the last timestamp is appended, so the cursor always lands on a complete
  * boundary. A page is therefore at most `limit + one batch`.
  *
- * `types` defaults to {@link TURN_EVENT_TYPES}, the partial index's list. A
- * project with `FF_TOOL_RUN_INSIGHTS` on also reads agent runs
- * (`TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742); that wider list cannot use
- * the partial index. With `FF_TYPED_STEPS` on (`TURN_EVENT_TYPES_WITH_TYPED_STEPS`,
- * RC-1067) it also reads model calls and typed steps, and a trace's session is the
- * first real session id any of its rows carries.
+ * `types` defaults to {@link TURN_EVENT_TYPES}, the partial index's list. The
+ * build reads agent runs (RC-742), model calls and typed steps (RC-1067) too
+ * (`TURN_EVENT_TYPES_WITH_TYPED_STEPS`); that wider list cannot use the partial
+ * index, and with it a trace's session is the first real session id any of its
+ * rows carries.
  */
 export async function listTurnEventsPage(
   projectId: string,

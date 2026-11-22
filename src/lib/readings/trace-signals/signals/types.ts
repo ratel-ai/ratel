@@ -105,7 +105,7 @@ export interface AnalysisContext {
   runBasis?: RunBasis;
   /**
    * Model-call facts by `trace_events` id (tokens, cost, finish reason), read
-   * only with `cloud-typed-steps` on for the per-kind readings (RC-1077).
+   * for the per-kind readings (RC-1077).
    */
   modelCalls?: ReadonlyMap<string, ModelCallFact> | null;
 }

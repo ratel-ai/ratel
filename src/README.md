@@ -59,15 +59,15 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
 published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP Apps, the MCP
 server's interactive `ui://` views ([`lib/mcp/apps`](lib/mcp/apps/README.md)), and tool-run
-insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
-as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
-confidence), and typed steps (OTel model calls, code steps, handoffs and user messages as turn
-steps, so a trace with model calls only makes a turn). Cloud ignores it and reads `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_TOOL_RUN_INSIGHTS` and `FF_TYPED_STEPS`. The eval gate's pages live in the
+insights (tasks from small projects, a derived ask for a tool-only run, one task per tool-less
+agent, and an Agent health reading from 10 turns marked low confidence). Cloud ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`
+and `FF_TOOL_RUN_INSIGHTS`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,
-Traces Sessions, adaptive labelling, the Health score and the quick and import first readings. The
+Traces Sessions, adaptive labelling, the Health score, the quick and import first readings, and
+typed steps (OTel agent runs, model calls, code steps, handoffs and user messages make turns,
+tasks and Agent health). The
 session pages keep their route group `(session-replay)`, and `(stage-spine)` (Tasks and Ship) is on
 for everyone.
 

@@ -11,7 +11,6 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { parseStepsView } from "@/lib/readings/trace-signals/steps";
-import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import { firstParam } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath, sessionPageTitle } from "@/lib/synthesis/traces/v2/run-noun";
 import { loadFixes } from "@/lib/views/fixes/load";
@@ -144,12 +143,10 @@ export default async function SessionReplayPage({
       </Page>
     );
   }
-  // cloud-typed-steps (FF_TYPED_STEPS): every step kind, the task bands and each turn's intent.
-  const typedSteps = await typedStepsEnabled(project.id, organization.id);
   const loaded = await withStatementTimeout(
     async (db) => {
       const readContent = await contentOptIn(project.id, db);
-      const chat = await loadSessionChat(project.id, sessionId, { readContent, typedSteps }, db);
+      const chat = await loadSessionChat(project.id, sessionId, { readContent }, db);
       if (!chat) return null;
       return { chat, readContent, runs: await listWhatIfRuns(project.id, sessionId, db) };
     },
@@ -171,8 +168,8 @@ export default async function SessionReplayPage({
     ),
   };
   const toCheck = chat.problems.length;
-  // cloud-typed-steps (FF_TYPED_STEPS): the `?steps=` preset; off, the replay has no presets.
-  const stepsView = typedSteps ? parseStepsView(firstParam(query.steps)) : undefined;
+  // The `?steps=` preset.
+  const stepsView = parseStepsView(firstParam(query.steps));
   return (
     <Page>
       <PageHeader

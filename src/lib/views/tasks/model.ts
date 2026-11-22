@@ -11,7 +11,6 @@ import { taskFinish } from "@/lib/readings/trace-signals/workflows/finish";
 import { runsInFixedOrder } from "@/lib/readings/trace-signals/workflows/fixed-order";
 import { type WorkflowIconKey, workflowIcon } from "@/lib/readings/trace-signals/workflows/icons";
 import {
-  stepFallbackName,
   WORKFLOW_NAME_SEPARATOR,
   type WorkflowLabels,
   workflowDescription,
@@ -111,7 +110,11 @@ export interface TaskSegmentSummary {
 }
 
 export interface TasksInputs {
-  typedSteps?: boolean;
+  /**
+   * Each task's segments in the window (RC-1072), by task id: a task's runs,
+   * finish rate, time and examples come from them. Absent where a caller reads
+   * no segments (Home's tile), or the read failed: those then come from the stored reading.
+   */
   segments?: ReadonlyMap<string, TaskSegmentSummary>;
   projectId: string;
   run: TaskRunFacts | null;
@@ -172,10 +175,7 @@ function readingOf(item: StoredWorkflow): TaskReading | null {
   return reading as unknown as TaskReading;
 }
 
-const nameOf =
-  (names: ReadonlyMap<string, string>, typedSteps = false) =>
-  (id: string) =>
-    typedSteps ? tokenStepLabel(id, names) : (names.get(id) ?? stepFallbackName(id));
+const nameOf = (names: ReadonlyMap<string, string>) => (id: string) => tokenStepLabel(id, names);
 
 /** The route a finding's fix takes: the one the detector stored, else its kind's. */
 function fixRouteOf(record: SignalRecord): string {
@@ -277,16 +277,17 @@ function coreOf(
   colors: ReadonlyMap<string, TaskColorSlot>,
 ): TaskCore {
   const reading = readingOf(item);
-  const label = nameOf(inputs.names, inputs.typedSteps);
-  const segment = inputs.typedSteps ? inputs.segments?.get(item.id) : undefined;
-  const runs = inputs.typedSteps ? (segment?.runs ?? 0) : (reading?.runs ?? item.runs);
+  const label = nameOf(inputs.names);
+  const segments = inputs.segments;
+  const segment = segments?.get(item.id);
+  const runs = segments ? (segment?.runs ?? 0) : (reading?.runs ?? item.runs);
   const finish = taskFinish(
     { health: item.health, ...(reading ? { reading } : {}) },
     inputs.insights?.placed?.[item.id],
   );
-  const finishedRuns = inputs.typedSteps ? (segment?.finishedRuns ?? 0) : finish.finished;
-  const askedNoTool = inputs.typedSteps ? 0 : finish.askedNoTool;
-  const finishRate = inputs.typedSteps ? (runs > 0 ? finishedRuns / runs : null) : finish.rate;
+  const finishedRuns = segments ? (segment?.finishedRuns ?? 0) : finish.finished;
+  const askedNoTool = segments ? 0 : finish.askedNoTool;
+  const finishRate = segments ? (runs > 0 ? finishedRuns / runs : null) : finish.rate;
   const weakest = weakestStep(reading, label);
   const corrections = correctionsOf(item.id, reading, inputs.recorded);
   const correctionsPer100 = corrections && runs > 0 ? (corrections.events * 100) / runs : null;
@@ -309,7 +310,7 @@ function coreOf(
     id: item.id,
     name: workflowDisplayName(
       { id: item.id, typicalOrder: item.typicalOrder },
-      inputs.typedSteps ? new Map(item.typicalOrder.map((id) => [id, label(id)])) : inputs.names,
+      new Map(item.typicalOrder.map((id) => [id, label(id)])),
       inputs.labels,
     ),
     description: workflowDescription({ id: item.id }, inputs.labels),
@@ -453,13 +454,11 @@ export interface TaskFixesOption {
 
 export function buildTaskList(inputs: TasksInputs, options: TaskFixesOption = {}): TaskListModel {
   const { cores, stored } = coresOf(inputs);
-  const label = nameOf(inputs.names, inputs.typedSteps);
+  const label = nameOf(inputs.names);
   const basis = stored
     ? basisView(stored.basis)
     : { blocked: null, readingSince: null, excludedRuns: 0 };
-  const allRuns = inputs.typedSteps
-    ? [...(inputs.segments?.values() ?? [])].reduce((n, s) => n + s.runs, 0)
-    : (inputs.run?.turnsScanned ?? 0);
+  const allRuns = inputs.segments ? segmentRuns(inputs.segments) : (inputs.run?.turnsScanned ?? 0);
   const runsInTasks = cores.reduce((sum, core) => sum + core.runs, 0);
   const finished = cores.reduce((sum, core) => sum + core.finishedRuns, 0);
   const finishOf = cores.reduce((sum, core) => sum + core.runs + core.askedNoTool, 0);
@@ -482,7 +481,7 @@ export function buildTaskList(inputs: TasksInputs, options: TaskFixesOption = {}
       steps: core.item.typicalOrder.map((toolId) => ({
         toolId,
         label: label(toolId),
-        ...(inputs.typedSteps ? { kind: tokenStepKind(toolId) } : {}),
+        kind: tokenStepKind(toolId),
       })),
       status: core.status,
       runs: core.runs,
@@ -591,7 +590,6 @@ export interface FlowEdge {
 }
 
 export interface TaskDetailModel {
-  typedSteps?: boolean;
   id: string;
   name: string;
   description: string | null;
@@ -742,6 +740,13 @@ function correctionRows(
   });
 }
 
+/** Runs in every task's segments: the window's runs a task share is read against. */
+function segmentRuns(segments: ReadonlyMap<string, TaskSegmentSummary>): number {
+  let runs = 0;
+  for (const segment of segments.values()) runs += segment.runs;
+  return runs;
+}
+
 function flowOf(
   reading: TaskReading | null,
   segment?: TaskSegmentSummary,
@@ -775,7 +780,8 @@ export function buildTaskDetail(
   if (!core || !inputs.run) return null;
   const { item, reading } = core;
   const windowDays = inputs.run.windowDays;
-  const label = nameOf(inputs.names, inputs.typedSteps);
+  const label = nameOf(inputs.names);
+  const segments = inputs.segments;
   const failingIssue = core.issues.some(
     ({ record }) => record.subjectKind === "workflow" && record.kind === "workflow_failing",
   );
@@ -799,7 +805,7 @@ export function buildTaskDetail(
         .map((step) =>
           stepView(
             step,
-            inputs.typedSteps ? reading.runs : core.runs,
+            segments ? reading.runs : core.runs,
             label,
             marks,
             order.indexOf(step.toolId) + 1 || null,
@@ -809,24 +815,19 @@ export function buildTaskDetail(
   const sideSteps = reading
     ? reading.steps
         .filter((step) => step.role !== "core" && step.runs > 0)
-        .map((step) =>
-          stepView(step, inputs.typedSteps ? reading.runs : core.runs, label, marks, null),
-        )
+        .map((step) => stepView(step, segments ? reading.runs : core.runs, label, marks, null))
     : [
         ...item.optionalTools.map((id) => bareStep(id, "optional", label, null)),
         ...item.helperTools.map((id) => bareStep(id, "helper", label, null)),
       ];
-  if (inputs.typedSteps) {
-    const segment = inputs.segments?.get(item.id);
-    for (const step of [...steps, ...sideSteps]) {
-      step.kind = tokenStepKind(step.toolId);
-      step.runs = segment?.stepRuns?.get(step.toolId) ?? Math.min(core.runs, step.runs);
-      step.runShare = core.runs > 0 ? step.runs / core.runs : 0;
-    }
+  const segment = segments?.get(item.id);
+  for (const step of [...steps, ...sideSteps]) {
+    step.kind = tokenStepKind(step.toolId);
+    if (!segments) continue;
+    step.runs = segment?.stepRuns?.get(step.toolId) ?? Math.min(core.runs, step.runs);
+    step.runShare = core.runs > 0 ? step.runs / core.runs : 0;
   }
-  const allRuns = inputs.typedSteps
-    ? [...(inputs.segments?.values() ?? [])].reduce((n, s) => n + s.runs, 0)
-    : inputs.run.turnsScanned;
+  const allRuns = segments ? segmentRuns(segments) : inputs.run.turnsScanned;
   const corrections = core.corrections
     ? {
         source: core.corrections.source,
@@ -836,7 +837,6 @@ export function buildTaskDetail(
       }
     : null;
   return {
-    ...(inputs.typedSteps ? { typedSteps: true } : {}),
     id: core.id,
     name: core.name,
     description: core.description,
@@ -853,9 +853,7 @@ export function buildTaskDetail(
     finishedRuns: core.finishedRuns,
     askedNoTool: core.askedNoTool,
     recoveredRuns: reading?.recoveredRuns ?? null,
-    medianMs: inputs.typedSteps
-      ? (inputs.segments?.get(item.id)?.medianMs ?? null)
-      : item.health.medianMs,
+    medianMs: segments ? (segment?.medianMs ?? null) : item.health.medianMs,
     correctionsPer100: core.correctionsPer100,
     callsPerRun: reading && core.runs > 0 ? reading.calls / core.runs : null,
     cost: costOf(core, inputs.price),
@@ -872,13 +870,8 @@ export function buildTaskDetail(
     sideSteps,
     flow: flowOf(
       reading,
-      inputs.typedSteps
-        ? (inputs.segments?.get(item.id) ?? {
-            runs: 0,
-            finishedRuns: 0,
-            medianMs: null,
-            examples: [],
-          })
+      segments
+        ? (segment ?? { runs: 0, finishedRuns: 0, medianMs: null, examples: [] })
         : undefined,
     ),
     topics: inputs.topics ? [...(inputs.topics.get(core.id) ?? [])] : null,
@@ -909,9 +902,7 @@ export function buildTaskDetail(
       names: inputs.names,
     }),
     allFixesHref: fixesHref(inputs.projectId, { task: core.id }),
-    examples: inputs.typedSteps
-      ? (inputs.segments?.get(item.id)?.examples ?? [])
-      : workflowExamples(item, 6),
+    examples: segments ? (segment?.examples ?? []) : workflowExamples(item, 6),
     focusTools: [...order, ...item.optionalTools].slice(0, 8),
   };
 }

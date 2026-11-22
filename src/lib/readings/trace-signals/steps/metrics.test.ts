@@ -374,7 +374,7 @@ test("no segments read no tasks", () => {
   assert.deepEqual(stepReadingsOf([run([model()])]).tasks, []);
 });
 
-test("the signal run stores the per-kind readings and step calls only with typed steps on", () => {
+test("the signal run stores the per-kind readings and step calls", () => {
   const turns = [
     run([{ kind: "user_message" }, model("claude", { error: true }), model("claude")]),
     run([model("claude")]),
@@ -393,12 +393,7 @@ test("the signal run stores the per-kind readings and step calls only with typed
   ]);
   const context = contextFor(turns, { modelCalls: facts });
 
-  const off = analyzeTurns(turns, context);
-  assert.equal(off.summary.steps, undefined);
-  assert.equal(off.stepMetrics, undefined);
-  assert.ok(off.summary.daily.every((day) => day.steps === undefined));
-
-  const on = analyzeTurns(turns, context, { workflowMining: { typedSteps: true } });
+  const on = analyzeTurns(turns, context);
   assert.equal(on.summary.steps?.kinds.model_call?.calls, 3);
   assert.equal(on.summary.steps?.kinds.model_call?.inputTokens, 7);
   assert.deepEqual(

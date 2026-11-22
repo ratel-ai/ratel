@@ -38,13 +38,8 @@ const HAS_CONTENT = sql<boolean>`(
   or jsonb_path_exists(${events.payload}, '$.messages[*].content[*] ? (@.type == "text" && @.text != "")')
 )`;
 
-/** `typedSteps` (`cloud-typed-steps`): keep the typed steps of the ledger and each model call's thinking tokens. */
-export interface ReplayOptions {
-  typedSteps?: boolean;
-}
-
-const LEGACY_KINDS: ReadonlySet<string> = new Set(["search", "invoke"]);
-const TYPED_KINDS: ReadonlySet<string> = new Set([
+/** The ledger steps the replay keeps: searches, calls and the typed steps (RC-1067). */
+const KEPT_KINDS: ReadonlySet<string> = new Set([
   "search",
   "invoke",
   "model_call",
@@ -62,14 +57,12 @@ export async function loadSessionTimeline(
   return (await loadSessionReplay(projectId, sessionId, db))?.timeline ?? null;
 }
 
-/** {@link loadSessionTimeline} with the turns it was built from (the session chat reads their times). */
+/** {@link loadSessionTimeline} with the turns it was built from (the session chat reads their times). Each model call keeps its thinking tokens. */
 export async function loadSessionReplay(
   projectId: string,
   sessionId: string,
   db: ReplayDb = getDb(),
-  { typedSteps = false }: ReplayOptions = {},
 ): Promise<{ timeline: SessionTimeline; turns: TimelineTurn[] } | null> {
-  const kept = typedSteps ? TYPED_KINDS : LEGACY_KINDS;
   // Open turns too (AOBS-3): the Sessions tab lists a live session, so it opens.
   const ledger = await listSessionTurns(projectId, sessionId, db, { includeOpen: true });
   if (ledger.length === 0) return null;
@@ -86,7 +79,7 @@ export async function loadSessionReplay(
     detour: turn.detour,
     reSearchCount: turn.reSearchCount,
     steps: steps
-      .filter((step) => kept.has(step.kind))
+      .filter((step) => KEPT_KINDS.has(step.kind))
       .map((step) => ({
         ordinal: step.ordinal,
         kind: step.kind as TimelineLedgerStep["kind"],
@@ -115,7 +108,7 @@ export async function loadSessionReplay(
   );
   const turnIds = turns.map((turn) => turn.id);
   const [modelCalls, selfCorrections] = await Promise.all([
-    loadCalls(projectId, turns, traceIdsByTurn, db, typedSteps),
+    loadCalls(projectId, turns, traceIdsByTurn, db),
     db
       .select({
         turnId: traceSelfCorrections.turnId,
@@ -174,7 +167,6 @@ async function loadCalls(
   turns: readonly TimelineTurn[],
   traceIdsByTurn: ReadonlyMap<string, ReadonlySet<string>>,
   db: ReplayDb,
-  typedSteps: boolean,
 ): Promise<TimelineModelCall[]> {
   const byTrace = new Map<string, TimelineTurn[]>();
   for (const turn of turns)
@@ -228,7 +220,7 @@ async function loadCalls(
         costUsd: cost !== null && Number.isFinite(cost) ? cost : null,
         latencyMs: row.latencyMs,
         hasContent: row.hasContent === true,
-        ...(typedSteps ? { reasoningTokens: row.reasoningTokens } : {}),
+        reasoningTokens: row.reasoningTokens,
       });
     }
   }

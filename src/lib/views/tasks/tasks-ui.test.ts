@@ -350,11 +350,12 @@ test("a task's page: a header in its color, its numbers, its steps as a drawing"
   );
   assert.match(html, /role="meter" aria-label="Fails 40% of its calls"/);
   assert.match(html, /Same order in 100% of runs/);
-  assert.doesNotMatch(
+  assert.match(
     html,
     /How runs move between steps/,
-    "a straight line of steps needs no second drawing",
+    "the drawing shows even for a straight line of steps",
   );
+  assert.match(html, /data-task-flow=""/);
 });
 
 test("a task's page: self-corrections as one strip, issues, fixes and intents as compact rows", () => {
@@ -578,7 +579,7 @@ test("a conversation: its turns with the task's steps marked, each opening in Tr
   assert.match(empty, /No closed turns[^]*Back to Tasks/);
 });
 
-test("typed steps: a conversation reads by step kind and as its tasks, a task band running across turns", () => {
+test("a conversation reads by step kind and as its tasks, a task band running across turns", () => {
   const at = new Date("2026-09-01T10:00:00Z");
   const turn = (id: string) =>
     ({
@@ -605,7 +606,6 @@ test("typed steps: a conversation reads by step kind and as its tasks, a task ba
       projectId: PROJECT_ID,
       sessionId: "s1",
       names: {},
-      typedSteps: true,
       bands: [
         {
           id: "a",
@@ -689,7 +689,7 @@ test("run conversion controls require eval data and identify existing cases", ()
 });
 
 test("a model-only task renders its typed step, flow, and segment run count without an engine label", () => {
-  const collector = createWorkflowCollector(undefined, undefined, undefined, { typedSteps: true });
+  const collector = createWorkflowCollector();
   for (const turn of many(10, () =>
     wfTurn([{ tool: "claude-sonnet-5-5", kind: "model_call" }], { turnSource: "otlp" }),
   ))
@@ -699,7 +699,6 @@ test("a model-only task renders its typed step, flow, and segment run count with
   const detail = buildTaskDetail(
     inputs({
       stored,
-      typedSteps: true,
       segments: new Map([[id, { runs: 1, finishedRuns: 1, medianMs: 1500, examples: [] }]]),
     }),
     id,

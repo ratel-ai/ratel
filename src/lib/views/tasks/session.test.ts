@@ -110,7 +110,7 @@ test("typed steps read by kind: model call, code, handoff and user message keep 
     tookMs: 40,
     hitCount: null,
   };
-  assert.deepEqual(sessionStep(base, {}, { typedSteps: true }), {
+  assert.deepEqual(sessionStep(base, {}), {
     key: 1,
     kind: "model_call",
     toolId: null,
@@ -119,24 +119,16 @@ test("typed steps read by kind: model call, code, handoff and user message keep 
     failed: false,
   });
   assert.equal(
-    sessionStep({ ...base, kind: "code", targetId: "load_cart" }, {}, { typedSteps: true }).label,
+    sessionStep({ ...base, kind: "code", targetId: "load_cart" }, {}).label,
     "Load cart",
   );
   assert.equal(
-    sessionStep(
-      { ...base, kind: "handoff", targetId: "billing_agent", outcome: "error" },
-      {},
-      { typedSteps: true },
-    ).title,
+    sessionStep({ ...base, kind: "handoff", targetId: "billing_agent", outcome: "error" }, {})
+      .title,
     "Handoff to billing agent, 40 ms, failed",
   );
   assert.equal(
-    sessionStep({ ...base, kind: "user_message", tookMs: null }, {}, { typedSteps: true }).label,
+    sessionStep({ ...base, kind: "user_message", tookMs: null }, {}).label,
     "User message",
-  );
-  assert.equal(
-    sessionStep({ ...base, kind: "model_call" }, {}).kind,
-    "search",
-    "flag off keeps today's reading",
   );
 });

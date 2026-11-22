@@ -32,8 +32,6 @@ export interface SessionChatInput {
   turns: readonly Pick<TimelineTurn, "id" | "startedAt" | "endedAt" | "steps">[];
   /** Text by model call event id, or null when the project's content opt-in is off. */
   texts: ReadonlyMap<string, ChatCallText> | null;
-  /** `cloud-typed-steps`: each segment says its public step kind and a model call its thinking tokens. */
-  typedSteps?: boolean;
 }
 
 export type ProblemKind = StepMark | "failed";
@@ -194,12 +192,8 @@ const KIND_OF_STEP: Record<Exclude<TimelineStep["kind"], "step">, SegmentKind> =
   tool_call: "tool_call",
 };
 
-export function buildSessionChat({
-  timeline,
-  turns,
-  texts,
-  typedSteps = false,
-}: SessionChatInput): SessionChat {
+/** The session as a chat: each segment says its public step kind, and a model call its thinking tokens. */
+export function buildSessionChat({ timeline, turns, texts }: SessionChatInput): SessionChat {
   const turnById = new Map(turns.map((turn) => [turn.id, turn]));
   const searchTook = new Map(
     turns.flatMap((turn) => turn.steps.map((step) => [step.traceEventId, step.tookMs] as const)),
@@ -232,10 +226,8 @@ export function buildSessionChat({
         realMs,
         kinds.length > 0,
       );
-      if (typedSteps) {
-        segment.publicKind = publicKindOf(step);
-        if (step.kind === "model_call") segment.reasoningTokens = step.reasoningTokens ?? null;
-      }
+      segment.publicKind = publicKindOf(step);
+      if (step.kind === "model_call") segment.reasoningTokens = step.reasoningTokens ?? null;
       if (kinds.length > 0) {
         problemSteps += 1;
         problems.push({

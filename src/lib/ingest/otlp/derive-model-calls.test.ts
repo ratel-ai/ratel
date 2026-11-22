@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { deriveModelCalls, OTLP_MODEL_CALL } from "./derive-model-calls";
 import type { AttrMap, DecodedSpan } from "./types";
@@ -138,6 +139,10 @@ test("the menu and the ask fall back to the agent span around the call (Mastra)"
   const [row] = deriveModelCalls([agent, step, chat]);
   assert.deepEqual(row.payload.menu, ["get_task", "search_tasks"]);
   assert.equal(row.payload.prompt, "Find the Falcon bug");
+  assert.equal(
+    row.payload.user_message_hash,
+    createHash("sha256").update("Find the Falcon bug").digest("hex"),
+  );
 });
 
 test("a model call records the agent that made it and whether a system started its turn", () => {

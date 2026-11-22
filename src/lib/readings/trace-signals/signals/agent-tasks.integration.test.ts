@@ -28,8 +28,9 @@ import { loadLatestTasksRun } from "@/lib/views/tasks/queries";
  * Ratel Cloud's own backend jobs (three `label_workflows`, three
  * `assign_topics`, one `cluster_intents`), model calls only, no tool span.
  * Ingest, the turn build, the signal job and the Tasks model run as in
- * production, on a real schema. With `cloud-tool-run-insights` on, Tasks
- * reads one task per agent with three runs; off, it reads as before.
+ * production, on a real schema. Each model call is a typed step (RC-1067).
+ * With `cloud-tool-run-insights` on, Tasks reads the runs as one task over
+ * their model call; off, the default support floor finds no task.
  */
 
 const AGENTS = [
@@ -107,7 +108,6 @@ function ingestDeps(db: Db): PersistSpansDeps {
       enqueueBuild: async () => null,
       scheduleProjectDrain: () => {},
     },
-    agentRunsEnabled: async () => true,
     agentSpanDedupe: null,
     logError: () => {},
     captureFailure: () => {},
@@ -117,7 +117,6 @@ function ingestDeps(db: Db): PersistSpansDeps {
 function buildDeps(db: Db): Partial<BuildJobDeps> {
   return {
     now: () => LATER,
-    readsAgentRuns: async () => true,
     getCursor: (p) => getTraceTurnsCursor(p, db),
     listEvents: (p, since, _db, limit, types) => listTurnEventsPage(p, since, db, limit, types),
     listHits: (ids) => listTurnEventHits(ids, db),
@@ -169,20 +168,27 @@ async function tasksAfterReading(flag: boolean): Promise<TaskListModel> {
   });
 }
 
-test("flag on: a project of agent runs alone reads one task per agent with three runs", async () => {
+test("flag on: a project of agent runs alone reads its model calls as one task over every run", async () => {
   const list = await tasksAfterReading(true);
   assert.equal(list.state, "ready");
-  assert.deepEqual(list.rows.map((row) => [row.name, row.runs]).sort(), [
-    ["Assign topics", 3],
-    ["Label workflows", 3],
-  ]);
+  // Typed steps: each run's model call is a step, signed with its model, so the seven runs share one task.
+  assert.deepEqual(
+    list.rows.map((row) => [
+      row.name,
+      row.runs,
+      (row.steps ?? []).map((step) => [step.toolId, step.kind]),
+    ]),
+    [["Model call", 7, [["model:claude-sonnet-5-5", "model_call"]]]],
+  );
   assert.equal(list.stats.allRuns, 7);
-  assert.equal(list.stats.runsInTasks, 6);
+  assert.equal(list.stats.runsInTasks, 7);
 });
 
-test("flag off: the same project stores no task reading, as before", async () => {
+test("flag off: the same project reads its runs but finds no task under the default support floor", async () => {
   const list = await tasksAfterReading(false);
-  assert.equal(list.state, "blocked");
-  assert.equal(list.blocked, "no_tool_calls");
+  // The model calls are steps, so the reading is not blocked for want of tool calls.
+  assert.equal(list.state, "no_tasks");
+  assert.equal(list.blocked, null);
   assert.equal(list.rows.length, 0);
+  assert.equal(list.stats.allRuns, 7);
 });

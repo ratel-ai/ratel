@@ -20,11 +20,7 @@ import type { StepsView } from "@/lib/readings/trace-signals/steps/view";
 /** The fixture's spans through ingest and the turn build, as the signal run reads them. */
 function turnsOf(name: TypedStepFixtureName) {
   const spans = typedStepFixtures()[name];
-  const rows = [
-    ...deriveSteps(spans),
-    ...deriveModelCalls(spans, { typedSteps: true }),
-    ...deriveToolInvocations(spans),
-  ];
+  const rows = [...deriveSteps(spans), ...deriveModelCalls(spans), ...deriveToolInvocations(spans)];
   const events = normalizeEvents(
     rows.map((row, i) => ({
       ...row,
@@ -33,7 +29,7 @@ function turnsOf(name: TypedStepFixtureName) {
       failed: row.errorMessage !== null,
     })) as TurnEventRow[],
     new Map(),
-    { salt: "test", typedSteps: true },
+    { salt: "test" },
   );
   const now = new Date(Math.max(...spans.map((span) => span.endUnixMs)) + 24 * 60 * 60_000);
   return buildTurns({ stored: [], events, now }).turns.map((turn, i) => ({
