@@ -21,7 +21,12 @@ import { TracesEmpty } from "@/components/console/traces/TracesEmpty";
 import { TracesHeader } from "@/components/console/traces/TracesHeader";
 import { TracesListTable } from "@/components/console/traces/TracesListTable";
 import type { TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
-import { rollupFilterQuery, withoutFilters } from "@/lib/synthesis/traces/v2/filters";
+import {
+  type PivotFilterOption,
+  rollupFilterQuery,
+  type TraceFilterOptions,
+  withoutFilters,
+} from "@/lib/synthesis/traces/v2/filters";
 import { formatDuration, formatInteger, formatMoney } from "@/lib/synthesis/traces/v2/format";
 import type {
   SessionListPage,
@@ -51,13 +56,16 @@ export const SESSION_STATUS_LABEL: Readonly<Record<SessionStatus, string>> = {
 const SESSION_STATUS_TONE = { active: "info", failed: "danger", completed: "success" } as const;
 
 /** Reads the next page; the sessions route unless a test stubs it. */
-/** `entities`: `cloud-project-entities`, so the next page keeps the Agent and MCP server filters (RC-790). */
+/**
+ * `options`: the bar's filters, so the next page keeps the Agent and MCP
+ * server filters (RC-790) and the pivot filters (RC-885).
+ */
 export type LoadSessionListPage = (
   projectId: string,
   filter: SessionsFilter,
   cursor: string,
   search: string,
-  entities?: boolean,
+  options?: TraceFilterOptions,
 ) => Promise<SessionListPage>;
 /** Reads one session's chat for the Panel; the server action unless a test stubs it. */
 export type LoadSessionPanelChat = (
@@ -77,6 +85,8 @@ export interface SessionListViewProps {
   filterFacets?: TraceFilterFacets | null;
   /** `cloud-project-entities`: the bar has the Agent and MCP server filters (RC-790). */
   entities?: boolean;
+  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each (RC-885). */
+  pivots?: readonly PivotFilterOption[];
   loadPage?: LoadSessionListPage;
   loadChat?: LoadSessionPanelChat;
 }
@@ -109,6 +119,8 @@ export function SessionListView(props: SessionListViewProps) {
             <TraceFilterBar
               tab="rollup"
               entities={props.entities}
+              pivots={props.pivots}
+              surface="sessions"
               searchable={false}
               search={search}
               pending={pending}
@@ -143,7 +155,12 @@ export function SessionListView(props: SessionListViewProps) {
                   variant="secondary"
                   size="sm"
                   onClick={() =>
-                    go((current) => withoutFilters("rollup", current, { entities: props.entities }))
+                    go((current) =>
+                      withoutFilters("rollup", current, {
+                        entities: props.entities,
+                        pivots: props.pivots,
+                      }),
+                    )
                   }
                 >
                   Clear filters
@@ -225,6 +242,7 @@ function SessionList({
   pending,
   search,
   entities = false,
+  pivots,
   loadPage = fetchSessionListPage,
   loadChat = fetchSessionPanelChat,
 }: SessionListViewProps & { pending: boolean; search: string }) {
@@ -239,7 +257,7 @@ function SessionList({
     if (!cursor || loading.current) return;
     loading.current = true;
     setState("loading");
-    loadPage(projectId, filter, cursor, search, entities)
+    loadPage(projectId, filter, cursor, search, { entities, pivots })
       .then((page) => {
         const seen = new Set(rows.map((row) => row.id));
         setRows([...rows, ...page.items.filter((row) => !seen.has(row.id))]);
@@ -253,7 +271,7 @@ function SessionList({
       .finally(() => {
         loading.current = false;
       });
-  }, [cursor, entities, filter, loadPage, projectId, rows, search]);
+  }, [cursor, entities, filter, loadPage, pivots, projectId, rows, search]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -579,10 +597,10 @@ async function fetchSessionListPage(
   filter: SessionsFilter,
   cursor: string,
   search: string,
-  entities = false,
+  options: TraceFilterOptions = {},
 ): Promise<SessionListPage> {
   // The next page reads the same property filters the first one did.
-  const params = rollupFilterQuery(search, { entities });
+  const params = rollupFilterQuery(search, options);
   params.set(SESSIONS_FILTER_PARAM, filter);
   params.set("cursor", cursor);
   const response = await fetch(

@@ -2,7 +2,8 @@ import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { setRequestLogContext, withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
-import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
+import { loadPivotFilterOptions } from "@/lib/synthesis/pivots/filter-options";
+import { type PivotFilterOption, traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import { loadSessionListPage } from "@/lib/synthesis/traces/v2/sessions-list";
 import { tracesSessionsResponse } from "@/lib/synthesis/traces-sessions/route";
 import { parseSessionsFilter, SESSIONS_FILTER_PARAM } from "@/lib/synthesis/traces-sessions/view";
@@ -27,8 +28,14 @@ async function handleGet(
   const cursor = params.get("cursor");
   // RC-506: the next page keeps the property filters. RC-790: the Agent and MCP
   // server filters too, always on here: the core has no `cloud-project-entities` flag.
-  const traces = traceFilterFromSearch(params.toString(), { entities: true });
-  const load = (id: string) => loadSessionListPage(id, { filter, cursor, traces });
+  // RC-885: the pivot filters only with `FF_PIVOTS` on, and only configured pivot keys.
+  let pivots: readonly PivotFilterOption[] = [];
+  const load = (id: string) =>
+    loadSessionListPage(id, {
+      filter,
+      cursor,
+      traces: traceFilterFromSearch(params.toString(), { entities: true, pivots }),
+    });
   return tracesSessionsResponse(projectId, load, {
     dbConfigured: isDbConfigured,
     getSession: async () => {
@@ -38,6 +45,7 @@ async function handleGet(
     // One organization per session: the project must be one of its projects.
     findProject: async (id) => {
       const scope = await findProjectScope(id);
+      if (scope) pivots = await loadPivotFilterOptions(scope.project.id, scope.organization);
       return scope ? { projectId: scope.project.id, organizationId: scope.organization.id } : null;
     },
     setLogContext: (fields) => setRequestLogContext(request, fields),

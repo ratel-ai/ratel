@@ -7,6 +7,7 @@ import {
   filterFields,
   groupedSpanOptions,
   hasFilters,
+  pivotFilterSearch,
   rollupFilterQuery,
   searchText,
   tabSearch,
@@ -364,6 +365,179 @@ test("with the entity filters off, facetAgent and facetServer are ignored and no
       "?range=7d&facetAgent=researcher&facetAgent=supervisor&facetServer=docs-mcp&cursor=abc",
     );
   }
+});
+
+// — RC-885: the "pivot is" filters, behind cloud-pivots —
+
+const PIVOTS = {
+  pivots: [
+    { key: "client", label: "Client company" },
+    { key: "tenant.id", label: "Tenant" },
+  ],
+};
+const PIVOT_FACETS = {
+  ...EMPTY_TRACE_FACETS,
+  pivots: {
+    client: [
+      { value: "acme", count: 2 },
+      { value: "globex", count: 1 },
+    ],
+    "tenant.id": [],
+  },
+};
+
+test("only configured pivot keys are read from the URL", () => {
+  const search = "?pivot.client=acme&pivot.client=globex&pivot.tenant.id=t1&pivot.secret=x";
+  assert.deepEqual(traceFilterFromSearch(search, PIVOTS), {
+    pivots: { client: ["acme", "globex"], "tenant.id": ["t1"] },
+  });
+  assert.deepEqual(traceFilterFromSearch(search), {});
+  assert.deepEqual(traceFilterFromSearch(search, { pivots: [] }), {});
+  assert.deepEqual(traceFilterFromSearch("?pivot.client=%20", PIVOTS), {});
+});
+
+test("a pivot filter shows as a chip with the pivot label and the raw value", () => {
+  const chips = filterChips("rollup", "?pivot.client=acme&pivot.secret=x", PIVOTS);
+  assert.deepEqual(chips, [
+    { key: "pivot.client", field: "Client company is", value: "acme", params: ["pivot.client"] },
+  ]);
+  assert.deepEqual(filterChips("rollup", "?pivot.client=acme"), []);
+});
+
+test("the bar offers one field per configured pivot with its values, only with pivots", () => {
+  const fields = filterFields("rollup", "?pivot.tenant.id=t9", PIVOT_FACETS, PIVOTS);
+  const client = fields.find((field) => field.id === "pivot:client");
+  assert.deepEqual(client, {
+    id: "pivot:client",
+    label: "Client company",
+    options: [
+      { value: "acme", label: "acme", count: 2, selected: false },
+      { value: "globex", label: "globex", count: 1, selected: false },
+    ],
+  });
+  // A picked value with no facet row stays pickable.
+  assert.deepEqual(fields.find((field) => field.id === "pivot:tenant.id")?.options, [
+    { value: "t9", label: "t9", selected: true },
+  ]);
+  assert.ok(
+    !filterFields("rollup", "", PIVOT_FACETS).some((field) => field.id.startsWith("pivot:")),
+  );
+});
+
+test("toggling a pivot value adds and removes it in the URL, and clear removes it", () => {
+  const once = withFilterToggled("rollup", "?cursor=c1", "pivot:client", "acme");
+  assert.equal(once, "?pivot.client=acme");
+  const twice = withFilterToggled("rollup", once, "pivot:client", "globex");
+  assert.equal(twice, "?pivot.client=acme&pivot.client=globex");
+  assert.equal(withFilterToggled("rollup", twice, "pivot:client", "acme"), "?pivot.client=globex");
+  assert.ok(hasFilters("rollup", once, PIVOTS));
+  assert.ok(!hasFilters("rollup", once));
+  assert.equal(withoutFilters("rollup", `${twice}&range=7d`, PIVOTS), "?range=7d");
+  assert.equal(
+    rollupFilterQuery(`${twice}&range=7d`, PIVOTS).toString(),
+    "pivot.client=acme&pivot.client=globex",
+  );
+  assert.equal(withoutRollupFilters(`${twice}&range=7d`, PIVOTS), "?range=7d");
+});
+
+test("a pivot link filters Sessions or Turns by one value", () => {
+  assert.equal(pivotFilterSearch("tenant.id", "a&b"), "?pivot.tenant.id=a%26b");
+  assert.deepEqual(traceFilterFromSearch(pivotFilterSearch("tenant.id", "a&b"), PIVOTS), {
+    pivots: { "tenant.id": ["a&b"] },
+  });
+});
+
+// — RC-1001: one pivot control has at most 50 options, selected values included —
+
+const FIFTY = Array.from({ length: 50 }, (_, index) => ({
+  value: `c-${String(index).padStart(2, "0")}`,
+  count: 100 - index,
+}));
+
+function pivotOptions(search: string, values: readonly { value: string; count: number }[]) {
+  const fields = filterFields(
+    "rollup",
+    search,
+    { ...EMPTY_TRACE_FACETS, pivots: { client: values } },
+    PIVOTS,
+  );
+  return fields.find((field) => field.id === "pivot:client")?.options ?? [];
+}
+
+test("50 facet values and one selected value outside them give 50 options, the selected one first", () => {
+  const options = pivotOptions("?pivot.client=outside-top-50", FIFTY);
+  assert.equal(options.length, 50);
+  assert.deepEqual(options[0], {
+    value: "outside-top-50",
+    label: "outside-top-50",
+    selected: true,
+  });
+  assert.equal(options.filter((option) => option.selected).length, 1);
+  // The least frequent facet value makes room.
+  assert.ok(!options.some((option) => option.value === "c-49"));
+});
+
+test("a selected value inside the facets moves first and is not offered twice", () => {
+  const options = pivotOptions("?pivot.client=c-10", FIFTY);
+  assert.equal(options.length, 50);
+  assert.deepEqual(options[0], { value: "c-10", label: "c-10", count: 90, selected: true });
+  assert.equal(options.filter((option) => option.value === "c-10").length, 1);
+});
+
+test("more than 50 URL values for one pivot: the first 50 filter, and the control has 50 options", () => {
+  const many = Array.from({ length: 60 }, (_, index) => `u-${index}`);
+  const search = `?${many.map((value) => `pivot.client=${value}`).join("&")}`;
+  const filter = traceFilterFromSearch(search, PIVOTS);
+  assert.deepEqual(filter.pivots?.client, many.slice(0, 50));
+  const options = pivotOptions(search, FIFTY);
+  assert.equal(options.length, 50);
+  assert.deepEqual(
+    options.map((option) => option.value),
+    many.slice(0, 50),
+  );
+  assert.ok(options.every((option) => option.selected));
+  assert.deepEqual(filterChips("rollup", search, PIVOTS)[0].value, many.slice(0, 50).join(", "));
+});
+
+test("with fewer than 50 facet values and no outside selection the pivot options are as before", () => {
+  const few = FIFTY.slice(0, 3);
+  assert.deepEqual(
+    pivotOptions("", few),
+    few.map((item) => ({
+      value: item.value,
+      label: item.value,
+      count: item.count,
+      selected: false,
+    })),
+  );
+  assert.deepEqual(
+    pivotOptions("?pivot.client=c-01", few).map((option) => [option.value, option.selected]),
+    [
+      ["c-01", true],
+      ["c-00", false],
+      ["c-02", false],
+    ],
+  );
+});
+
+test("the non-pivot controls keep their options: no cap, a selected outside value on top", () => {
+  const models = Array.from({ length: 50 }, (_, index) => ({
+    value: `m-${index}`,
+    count: 50 - index,
+  }));
+  const fields = filterFields(
+    "rollup",
+    "?facetModel=outside",
+    { ...EMPTY_TRACE_FACETS, model: models },
+    PIVOTS,
+  );
+  const model = fields.find((field) => field.id === "model")!;
+  assert.equal(model.options.length, 51);
+  assert.deepEqual(model.options[0], { value: "outside", label: "outside", selected: true });
+  assert.deepEqual(
+    model.options.slice(1).map((option) => option.value),
+    models.map((item) => item.value),
+  );
 });
 
 test("the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3)", () => {

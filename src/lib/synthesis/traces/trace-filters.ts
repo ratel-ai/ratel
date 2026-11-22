@@ -1,7 +1,11 @@
 import { type SQL, sql } from "drizzle-orm";
+import { isPivotKey } from "@/lib/ingest/pivots/model";
 import { getDb } from "@/lib/platform/db/client";
 import type { TraceFacetValue } from "@/lib/synthesis/traces/queries";
 import { resolveTraceRange } from "@/lib/synthesis/traces/view";
+import { TRACE_FILTER_FACET_LIMIT } from "./facet-limit";
+
+export { TRACE_FILTER_FACET_LIMIT };
 
 /**
  * Property filters on the Sessions and Turns lists (RC-505). Every filter and every facet value reads the
@@ -23,6 +27,11 @@ export interface TraceFilter {
   harnesses?: readonly string[];
   /** Countries of those callers (`geo_country`), behind `cloud-project-entities` (RC-778). */
   countries?: readonly string[];
+  /**
+   * Pivot values by pivot key, behind `cloud-pivots` (RC-885): matched on the
+   * rollup's `dims`. Values of one pivot are alternatives; pivots combine (AND).
+   */
+  pivots?: Readonly<Record<string, readonly string[]>>;
   /** "failed": any span reported an error; "ok": none did. */
   status?: "failed" | "ok";
   minCostUsd?: number;
@@ -32,13 +41,20 @@ export interface TraceFilter {
 export type TraceFilterFacetKey = "model" | "tool" | "service" | "environment";
 /** The facets `cloud-project-entities` adds (RC-790). */
 export type TraceEntityFacetKey = "agent" | "server" | "harness" | "country";
-/** `agent` and `server` are present only when the entity filters are on. */
+/**
+ * `agent` and `server` are present only when the entity filters are on.
+ * `pivots` (by pivot key) only when pivot keys were asked for.
+ */
 export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]> &
-  Partial<Record<TraceEntityFacetKey, TraceFacetValue[]>>;
+  Partial<Record<TraceEntityFacetKey, TraceFacetValue[]>> & {
+    pivots?: Record<string, TraceFacetValue[]>;
+  };
 
 export interface TraceFilterFacetOptions {
   /** `cloud-project-entities`: also read the agent and MCP server values. Off, the query is as before. */
   entities?: boolean;
+  /** `cloud-pivots` (RC-885): the configured pivot keys whose values to read. None, the query is as before. */
+  pivots?: readonly string[];
 }
 
 export interface TraceFilterWindow {
@@ -46,8 +62,6 @@ export interface TraceFilterWindow {
   until?: Date;
 }
 
-/** Values offered per property: the most frequent in the window. */
-export const TRACE_FILTER_FACET_LIMIT = 50;
 export const EMPTY_TRACE_FILTER_FACETS: TraceFilterFacets = {
   model: [],
   tool: [],
@@ -56,6 +70,8 @@ export const EMPTY_TRACE_FILTER_FACETS: TraceFilterFacets = {
 };
 const FACET_KEYS: readonly TraceFilterFacetKey[] = ["model", "tool", "service", "environment"];
 const ENTITY_FACET_KEYS: readonly TraceEntityFacetKey[] = ["agent", "server", "harness", "country"];
+/** The facet name of a pivot's values in the facet query: `pivot:<key>`. */
+const PIVOT_FACET_PREFIX = "pivot:";
 
 /**
  * The rollup condition for a filter on the summary row aliased `s`, or null
@@ -74,6 +90,7 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
     anyOf(sql`s.mcp_servers`, filter.mcpServers),
     anyOf(sql`s.harnesses`, filter.harnesses),
     anyOf(sql`s.countries`, filter.countries),
+    ...pivotConditions(filter.pivots),
     filter.status === "failed"
       ? sql`s.has_error`
       : filter.status === "ok"
@@ -113,15 +130,23 @@ export async function getTraceFilterFacets(
   const result = await db.execute(traceFacetsQuery(projectId, window, limit, options));
   const rows = ((result as unknown as { rows?: unknown[] }).rows ??
     (result as unknown as unknown[])) as Array<{
-    facet: TraceFilterFacetKey | TraceEntityFacetKey;
+    facet: string;
     value: string;
     count: number | string;
   }>;
   const keys = options.entities ? [...FACET_KEYS, ...ENTITY_FACET_KEYS] : FACET_KEYS;
   const facets = Object.fromEntries(
     keys.map((key) => [key, [] as TraceFacetValue[]]),
-  ) as TraceFilterFacets;
-  for (const row of rows) facets[row.facet]?.push({ value: row.value, count: Number(row.count) });
+  ) as unknown as TraceFilterFacets;
+  const pivotKeys = facetPivotKeys(options.pivots);
+  if (pivotKeys.length > 0)
+    facets.pivots = Object.fromEntries(pivotKeys.map((key) => [key, [] as TraceFacetValue[]]));
+  for (const row of rows) {
+    const value = { value: row.value, count: Number(row.count) };
+    if (row.facet.startsWith(PIVOT_FACET_PREFIX))
+      facets.pivots?.[row.facet.slice(PIVOT_FACET_PREFIX.length)]?.push(value);
+    else facets[row.facet as TraceFilterFacetKey | TraceEntityFacetKey]?.push(value);
+  }
   return facets;
 }
 
@@ -141,11 +166,13 @@ export function traceFacetsQuery(
   projectId: string,
   window: TraceFilterWindow,
   limit: number,
-  { entities = false }: TraceFilterFacetOptions = {},
+  { entities = false, pivots }: TraceFilterFacetOptions = {},
 ): SQL {
+  const pivotKeys = facetPivotKeys(pivots);
+  const withPivots = pivotKeys.length > 0;
   return sql`
     with w as (
-      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers, s.harnesses, s.countries` : sql``}
+      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers, s.harnesses, s.countries` : sql``}${withPivots ? sql`, s.dims` : sql``}
       from otel_trace_summaries s
       where s.project_id = ${projectId}
         ${window.since ? sql`and s.started_at >= ${window.since.toISOString()}::timestamptz` : sql``}
@@ -170,6 +197,13 @@ export function traceFacetsQuery(
       union all
       select 'country', v, count(*)::int from w, unnest(w.countries) v group by v`
           : sql``
+      }${
+        withPivots
+          ? sql`
+      union all
+      select 'pivot:' || k, v, count(*)::int from w, jsonb_each_text(w.dims) d(k, v)
+      where k = any(${textArray(pivotKeys)}) group by k, v`
+          : sql``
       }
     ),
     ranked as (
@@ -177,6 +211,26 @@ export function traceFacetsQuery(
       from counted
     )
     select facet, value, count from ranked where rank <= ${limit} order by facet, rank`;
+}
+
+/** One condition per pivot: `dims @> {"key": value}` per value, OR'd. Keys no pivot can have are ignored. */
+function pivotConditions(pivots: TraceFilter["pivots"]): SQL[] {
+  if (!pivots) return [];
+  const conditions: SQL[] = [];
+  for (const [key, values] of Object.entries(pivots)) {
+    if (!isPivotKey(key)) continue;
+    const list = cleanValues(values);
+    if (list.length === 0) continue;
+    const alternatives = list.map(
+      (value) => sql`s.dims @> ${JSON.stringify({ [key]: value })}::jsonb`,
+    );
+    conditions.push(sql`(${sql.join(alternatives, sql` or `)})`);
+  }
+  return conditions;
+}
+
+function facetPivotKeys(keys: readonly string[] | undefined): string[] {
+  return [...new Set((keys ?? []).filter(isPivotKey))];
 }
 
 function anyOf(column: SQL, values: readonly string[] | undefined): SQL | null {

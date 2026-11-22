@@ -11,6 +11,7 @@
 
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import { AGENT_DIMENSION_LABEL, AGENT_DIMENSIONS } from "@/lib/synthesis/traces/agent-dimensions";
+import { TRACE_FILTER_FACET_LIMIT } from "@/lib/synthesis/traces/facet-limit";
 import type {
   ListOperationsOptions,
   TraceFacetOptions,
@@ -41,7 +42,17 @@ export type FilterFieldId =
   | "stepName"
   | "unlinked"
   | "cost"
-  | "tokens";
+  | "tokens"
+  | PivotFieldId;
+
+/** A pivot's field (RC-885): `pivot:<key>`. */
+export type PivotFieldId = `pivot:${string}`;
+
+/** A configured pivot, as the filter bar shows it. */
+export interface PivotFilterOption {
+  key: string;
+  label: string;
+}
 
 export interface FilterChipModel {
   /** Stable key, the first parameter it reads. */
@@ -76,12 +87,24 @@ export interface FilterField {
 export interface TraceFilterOptions {
   /** `cloud-project-entities`: the Agent and MCP server filters exist. */
   entities?: boolean;
+  /**
+   * `cloud-pivots` (RC-885): the project's configured pivots, each a filter
+   * read from `pivot.<key>`. Absent or empty, no `pivot.*` parameter is a
+   * filter, and a key that is not configured never is.
+   */
+  pivots?: readonly PivotFilterOption[];
 }
 
 /** The rollup facets: `agent` and `server` come only with the entity filters on. */
 export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
-  Partial<Record<"agent" | "server" | "harness" | "country", readonly TraceFacetValue[]>>;
+  Partial<Record<"agent" | "server" | "harness" | "country", readonly TraceFacetValue[]>> & {
+    /** Values per pivot key (RC-885), present with `cloud-pivots` on. */
+    pivots?: Readonly<Record<string, readonly TraceFacetValue[]>>;
+  };
+
+const PIVOT_PARAM_PREFIX = "pivot.";
+const PIVOT_FIELD_PREFIX = "pivot:";
 
 /** Never survive a filter change: the page and the open row belong to the old list. */
 const VOLATILE = ["cursor", "peek"] as const;
@@ -166,10 +189,28 @@ function filterParams(tab: TraceTab, options: TraceFilterOptions = {}): readonly
   return tab === "rollup" ? ["name", ...rollupParams(options)] : FILTER_PARAMS[tab];
 }
 
-function rollupParams({ entities = false }: TraceFilterOptions): readonly string[] {
-  return entities
+function rollupParams({ entities = false, pivots = [] }: TraceFilterOptions): readonly string[] {
+  const base = entities
     ? [...ROLLUP_FILTER_PARAMS_LIST, ...ENTITY_FILTER_PARAMS]
     : ROLLUP_FILTER_PARAMS_LIST;
+  return pivots.length > 0
+    ? [...base, ...pivots.map((pivot) => pivotFilterParam(pivot.key))]
+    : base;
+}
+
+/** The query parameter of a pivot's filter: `pivot.<key>` (RC-885). */
+export function pivotFilterParam(key: string): string {
+  return `${PIVOT_PARAM_PREFIX}${key}`;
+}
+
+/** A query string that filters by one pivot value, for links into Sessions or Turns (RC-886). */
+export function pivotFilterSearch(key: string, value: string): string {
+  return `?${new URLSearchParams([[pivotFilterParam(key), value]]).toString()}`;
+}
+
+/** The pivot key of a pivot field, or null for another field. */
+export function pivotKeyOfField(fieldId: FilterFieldId): string | null {
+  return fieldId.startsWith(PIVOT_FIELD_PREFIX) ? fieldId.slice(PIVOT_FIELD_PREFIX.length) : null;
 }
 
 /** The chips for what the URL filters by. Every narrowing parameter shows up, so none hides. */
@@ -204,6 +245,17 @@ export function filterChips(
       options.entities ? multi(params, "facetServer", "MCP server is") : null,
       options.entities ? multi(params, "facetHarness", "Client is") : null,
       options.entities ? multi(params, "facetCountry", "Country is") : null,
+      ...(options.pivots ?? []).map((pivot) => {
+        const values = pivotSelected(params, pivot.key);
+        return values.length > 0
+          ? {
+              key: pivotFilterParam(pivot.key),
+              field: `${pivot.label} is`,
+              value: values.join(", "),
+              params: [pivotFilterParam(pivot.key)],
+            }
+          : null;
+      }),
       measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
       measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
     ]);
@@ -355,6 +407,9 @@ export function filterFields(
             true,
           )
         : null,
+      ...(options.pivots ?? []).map((pivot) =>
+        pivotField(pivot, facets.pivots?.[pivot.key] ?? [], pivotSelected(params, pivot.key)),
+      ),
       {
         id: "cost",
         label: "Cost",
@@ -510,6 +565,7 @@ export function traceFilterFromSearch(
     mcpServers: options.entities ? values("facetServer") : undefined,
     harnesses: options.entities ? values("facetHarness") : undefined,
     countries: options.entities ? values("facetCountry") : undefined,
+    pivots: pivotValues(options.pivots, (key) => pivotSelected(params, key)),
     status,
     minCostUsd: minCostUsd ?? undefined,
     minTokens: minTokens ?? undefined,
@@ -519,6 +575,17 @@ export function traceFilterFromSearch(
       ([, value]) => value !== undefined && !(Array.isArray(value) && value.length === 0),
     ),
   ) as TraceFilter;
+}
+
+/** The configured pivots' values in the URL, or undefined when none is set. */
+function pivotValues(
+  pivots: readonly PivotFilterOption[] | undefined,
+  values: (key: string) => string[],
+): Record<string, string[]> | undefined {
+  const entries = (pivots ?? [])
+    .map((pivot) => [pivot.key, values(pivot.key)] as const)
+    .filter(([, list]) => list.length > 0);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 /** Only the rollup bar's parameters of a query string, for a request that pages the same list. */
@@ -754,6 +821,58 @@ function field(
   return { id, label, options };
 }
 
+/**
+ * A pivot's selected values in the URL: the first 50 distinct ones, in URL
+ * order (decision `pivot-option-cap`, RC-1001). Later values filter nothing
+ * and show in no control.
+ */
+function pivotSelected(params: URLSearchParams, key: string): string[] {
+  const values = [
+    ...new Set(
+      params
+        .getAll(pivotFilterParam(key))
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
+  return values.slice(0, TRACE_FILTER_FACET_LIMIT);
+}
+
+/**
+ * One pivot's control: the selected values first, then the window's values by
+ * frequency, never more than 50 options in all, so a selected value is always
+ * there to remove (RC-1001). The other fields keep `field`.
+ */
+function pivotField(
+  pivot: PivotFilterOption,
+  values: readonly TraceFacetValue[],
+  selected: readonly string[],
+): FilterField {
+  const counts = new Map(values.map((item) => [item.value, item.count]));
+  const picked = new Set(selected);
+  const options: FilterOption[] = [
+    ...selected.map((value) => ({
+      value,
+      label: value,
+      ...(counts.has(value) ? { count: counts.get(value) } : {}),
+      selected: true,
+    })),
+    ...values
+      .filter((item) => !picked.has(item.value))
+      .map((item) => ({
+        value: item.value,
+        label: item.value,
+        count: item.count,
+        selected: false,
+      })),
+  ];
+  return {
+    id: `${PIVOT_FIELD_PREFIX}${pivot.key}`,
+    label: pivot.label,
+    options: options.slice(0, TRACE_FILTER_FACET_LIMIT),
+  };
+}
+
 function compact<T>(items: readonly (T | null)[]): T[] {
   return items.filter((item): item is T => item !== null);
 }
@@ -775,6 +894,8 @@ const ROLLUP_MULTI: Partial<Record<FilterFieldId, string>> = {
 };
 
 function toggleRollup(params: URLSearchParams, fieldId: FilterFieldId, value: string): void {
+  const pivotKey = pivotKeyOfField(fieldId);
+  if (pivotKey !== null) return toggleMulti(params, pivotFilterParam(pivotKey), value);
   const multiParam = ROLLUP_MULTI[fieldId];
   if (multiParam) return toggleMulti(params, multiParam, value);
   if (fieldId === "cost") return toggleSingle(params, "minCostUsd", value);

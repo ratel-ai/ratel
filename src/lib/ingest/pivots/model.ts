@@ -122,6 +122,11 @@ export function validateCustomKey(value: unknown): Checked {
   return { ok: true, value: key };
 }
 
+/** Whether a stored pivot can have this key: a preset id or a custom key. The filter ignores any other (RC-885). */
+export function isPivotKey(key: string): boolean {
+  return key.length > 0 && key.length <= MAX_KEY_LENGTH && KEY_PATTERN.test(key);
+}
+
 /** A label: 1 to 40 characters after a trim. */
 export function validateLabel(value: unknown): Checked {
   if (typeof value !== "string") return { ok: false, error: "invalid_label" };

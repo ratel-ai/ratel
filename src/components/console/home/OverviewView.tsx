@@ -33,6 +33,7 @@ export function OverviewView({
   actions,
   setup,
   contextPanel,
+  pivotBreakdown,
 }: {
   data: OverviewData;
   now: Date;
@@ -42,6 +43,8 @@ export function OverviewView({
   setup: ReactNode;
   /** The `?peek=context` panel, rendered by the page. */
   contextPanel?: ReactNode;
+  /** The pivot group-by (RC-886), only with `cloud-pivots` on and a pivot configured. */
+  pivotBreakdown?: ReactNode;
 }) {
   const { project, root, hasTelemetry } = data;
   return (
@@ -85,6 +88,7 @@ export function OverviewView({
               </Callout>
             )}
             <ProductGlance glance={data.glance} />
+            {pivotBreakdown}
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <AttentionSection attention={data.attention} healthHref={data.health?.href ?? null} />
               <RecentRunsSection data={data} now={now} />

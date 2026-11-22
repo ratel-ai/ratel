@@ -1033,6 +1033,7 @@
         "!src/lib/synthesis/traces/view.test.ts",
         "!src/lib/synthesis/traces/waterfall.test.ts",
         "!src/lib/synthesis/traces/v2/views-ui.test.ts",
+        "!src/lib/synthesis/traces/trace-filters.test.ts",
         "src/components/console/traces/**",
         "!src/components/console/traces/SpanInspector.tsx",
         "src/components/console/stale-build-callout.tsx",
@@ -1448,7 +1449,13 @@
         "src/lib/synthesis/pivots/refill.ts",
         "src/lib/synthesis/pivots/dims.integration.test.ts",
         "src/app/(console)/project/\\[projectId\\]/settings/pivots/page.tsx",
-        "src/components/console/settings/PivotsSettings.tsx"
+        "src/components/console/settings/PivotsSettings.tsx",
+        "src/lib/synthesis/pivots/group-by.ts",
+        "src/lib/synthesis/pivots/group-by.integration.test.ts",
+        "src/lib/synthesis/pivots/group-by-view.ts",
+        "src/lib/synthesis/pivots/group-by-view.test.ts",
+        "src/lib/synthesis/pivots/group-by-ui.test.ts",
+        "src/lib/synthesis/pivots/filter-options.test.ts"
       ],
       "linter": {
         "rules": {

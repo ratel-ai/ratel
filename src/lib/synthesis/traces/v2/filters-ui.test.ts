@@ -107,3 +107,37 @@ test("with cloud-project-entities off, facetAgent and facetServer in the URL sho
     assert.doesNotMatch(html, />researcher<|>docs-mcp</);
   }
 });
+
+// — RC-885: the "pivot is" filters, behind cloud-pivots —
+
+function renderPivots(pivots: readonly { key: string; label: string }[] | undefined): string {
+  const view = createElement(SessionListView, {
+    projectId: PROJECT,
+    filter: "all",
+    rows: [],
+    nextCursor: null,
+    now: "2026-11-10T09:00:00.000Z",
+    empty: "filtered",
+    filterFacets: {
+      ...EMPTY_TRACE_FILTER_FACETS,
+      pivots: { client: [{ value: "acme", count: 2 }] },
+    },
+    pivots,
+  });
+  return renderToStaticMarkup(inRouter("?pivot.client=acme&pivot.secret=x", view));
+}
+
+test("with cloud-pivots on, the bar shows a configured pivot's chip with its label and raw value", () => {
+  const html = renderPivots([{ key: "client", label: "Client company" }]);
+  assert.match(html, /Client company is<\/span><span class="font-medium text-fg">acme</);
+  // A key that is not configured is no filter: one chip only.
+  assert.equal(html.match(/aria-label="Remove /g)?.length, 1);
+});
+
+test("with cloud-pivots off, pivot parameters in the URL show no chip", () => {
+  for (const pivots of [undefined, []]) {
+    const html = renderPivots(pivots);
+    assert.doesNotMatch(html, /Client company is/);
+    assert.doesNotMatch(html, /aria-label="Remove /);
+  }
+});

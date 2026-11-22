@@ -6,11 +6,14 @@ import { FilterBar, FilterChip, SearchInput } from "@ratel/design-system/filter-
 import { Popover, PopoverContent, PopoverTrigger } from "@ratel/design-system/popover";
 import { Check, ChevronLeft, ChevronRight, ListFilter } from "lucide-react";
 import { type ReactNode, useEffect, useEffectEvent, useMemo, useReducer, useState } from "react";
+import { track } from "@/lib/platform/track-client";
 import {
   type FilterField,
   filterChips,
   filterFields,
   hasFilters,
+  type PivotFilterOption,
+  pivotKeyOfField,
   searchText,
   type TraceFilterBarFacets,
   type TraceTab,
@@ -55,6 +58,8 @@ export function TraceFilterBar({
   end,
   searchable = true,
   entities = false,
+  pivots,
+  surface = "turns",
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
@@ -69,8 +74,12 @@ export function TraceFilterBar({
   searchable?: boolean;
   /** `cloud-project-entities`: the rollup bar has the Agent and MCP server filters (RC-790). Off, their parameters are not filters. */
   entities?: boolean;
+  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
+  pivots?: readonly PivotFilterOption[];
+  /** The list the bar narrows, for the `pivot_filter_applied` event. */
+  surface?: "sessions" | "turns";
 }) {
-  const options = useMemo(() => ({ entities }), [entities]);
+  const options = useMemo(() => ({ entities, pivots }), [entities, pivots]);
   const chips = useMemo(() => filterChips(tab, search, options), [tab, search, options]);
   const fields = useMemo(
     () => filterFields(tab, search, facets, options),
@@ -135,9 +144,10 @@ export function TraceFilterBar({
         <>
           <AddFilter
             fields={fields}
-            onToggle={(field, value) =>
-              onSearchChange((current) => withFilterToggled(tab, current, field, value))
-            }
+            onToggle={(field, value) => {
+              trackPivotApplied(fields, field, value, surface);
+              onSearchChange((current) => withFilterToggled(tab, current, field, value));
+            }}
           />
           {filtered ? (
             <Button
@@ -156,6 +166,25 @@ export function TraceFilterBar({
       end={end}
     />
   );
+}
+
+/**
+ * `pivot_filter_applied` (RC-885) when a pivot value is picked, not when it is
+ * removed. The value itself is never sent: it can name an end user.
+ */
+function trackPivotApplied(
+  fields: readonly FilterField[],
+  fieldId: FilterField["id"],
+  value: string,
+  surface: "sessions" | "turns",
+): void {
+  const pivotKey = pivotKeyOfField(fieldId);
+  if (pivotKey === null) return;
+  const option = fields
+    .find((item) => item.id === fieldId)
+    ?.options.find((item) => item.value === value);
+  if (option?.selected) return;
+  track("pivot_filter_applied", { pivot_key: pivotKey, surface });
 }
 
 /** Typing narrows the list once it rests; Enter applies at once. */

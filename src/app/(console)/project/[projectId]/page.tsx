@@ -46,11 +46,13 @@ export default async function ProjectHomePage({
     cookie: () => cookieStore.get(TOUR_STATUS_COOKIE)?.value,
   });
   const inSupportSession = await isRestrictedBySupportSession();
+  const query = await searchParams;
   return (
     <OverviewPage
       project={project}
       organization={organization}
-      range={(await searchParams).range}
+      range={query.range}
+      pivot={query.pivot}
       offerTour={!inSupportSession && shouldOfferTour(tourStatus)}
       inSupportSession={inSupportSession}
     />

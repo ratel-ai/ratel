@@ -10,6 +10,7 @@ import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { RANGE_PRESETS } from "@/lib/synthesis/dashboard";
 import { createExperimentService } from "@/lib/synthesis/experiments/service";
 import type { ExperimentMode, ExperimentSummary } from "@/lib/synthesis/experiments/types";
+import { loadPivotFilterOptions } from "@/lib/synthesis/pivots/filter-options";
 import { calibrationDetailPath } from "@/lib/synthesis/traces/calibration-view";
 import { createExperimentQueries } from "@/lib/synthesis/traces/experiment-queries";
 import { selectExperimentBanner } from "@/lib/synthesis/traces/experiment-view";
@@ -70,7 +71,10 @@ export async function RunsPageV2({
   // the span-scan options.
   // RC-790: the Agent and MCP server filters. Always on here: the core has no
   // `cloud-project-entities` flag.
-  const filterOptions = { entities: true };
+  // RC-885: the "pivot is" filters exist only with `FF_PIVOTS` on and a pivot configured.
+  const pivots = await loadPivotFilterOptions(project.id, null);
+  const filterOptions = { entities: true, pivots };
+  const facetOptions = { entities: true, pivots: pivots.map((pivot) => pivot.key) };
   const view = resolveTraceListView(paramsOf(withoutRollupFilters(search, filterOptions)), now);
   view.queryOptions = {
     ...view.queryOptions,
@@ -97,7 +101,7 @@ export async function RunsPageV2({
               { since: view.range.since, until: view.range.until },
               db,
               undefined,
-              filterOptions,
+              facetOptions,
             )),
           }),
           { operation: "trace_facets", timeoutMs },
@@ -227,6 +231,7 @@ export async function RunsPageV2({
       facets={facets}
       filterTab="rollup"
       entities={filterOptions.entities}
+      pivots={pivots}
       sort={{ id: view.filters.sort, direction: view.filters.direction }}
       nextCursor={
         page.hasMore && page.nextCursor ? serializeTraceCursor(page.nextCursor, view.filters) : null

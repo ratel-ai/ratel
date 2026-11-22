@@ -14,6 +14,7 @@ import { SummaryFigure, SummaryNumbers } from "@/components/console/traces-sessi
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import type { TraceFacets } from "@/lib/synthesis/traces/queries";
 import {
+  type PivotFilterOption,
   withCursor,
   withoutCursor,
   withoutFilters,
@@ -69,6 +70,8 @@ export interface RunsViewProps {
   filterTab?: "runs" | "rollup";
   /** `cloud-project-entities`: the rollup bar offers the Agent and MCP server filters (RC-790). */
   entities?: boolean;
+  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
+  pivots?: readonly PivotFilterOption[];
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */
   nextCursor: string | null;
@@ -137,6 +140,7 @@ export function RunsView(props: RunsViewProps) {
           <TraceFilterBar
             tab={props.filterTab ?? "runs"}
             entities={props.entities}
+            pivots={props.pivots}
             search={search}
             pending={pending}
             facets={facets}
@@ -185,8 +189,11 @@ export function RunsView(props: RunsViewProps) {
               onClearFilters={() =>
                 go((current) => {
                   const cleared = withoutFilters("runs", current);
-                  return props.entities
-                    ? withoutFilters("rollup", cleared, { entities: true })
+                  return props.entities || props.pivots?.length
+                    ? withoutFilters("rollup", cleared, {
+                        entities: props.entities,
+                        pivots: props.pivots,
+                      })
                     : cleared;
                 })
               }

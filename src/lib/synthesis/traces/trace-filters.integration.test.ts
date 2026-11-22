@@ -531,3 +531,78 @@ test("the sweep fills harnesses and countries; Turns filter by them and the face
     await client.close();
   }
 });
+// — RC-885: pivots ———————————————————————————————————————————————————————
+
+/** The seeded traces with pivot values in `dims`: traces 1 and 2 of client acme, trace 3 of globex, end users apart. */
+async function seededWithPivots() {
+  const { client, db } = await seeded();
+  await client.exec(`
+    update otel_trace_summaries set dims = '{"client":"acme","end_user":"u-1"}' where trace_id = '${traceId(1)}';
+    update otel_trace_summaries set dims = '{"client":"acme","end_user":"u-2"}' where trace_id = '${traceId(2)}';
+    update otel_trace_summaries set dims = '{"client":"globex"}' where trace_id = '${traceId(3)}';
+  `);
+  return { client, db };
+}
+
+test("a pivot filter keeps only the matching traces on Turns and Sessions", async () => {
+  const { client, db } = await seededWithPivots();
+  try {
+    const turns = async (traces: ListTracesOptions["traces"]) =>
+      (await listTraces(PROJECT_ID, { ...WINDOW, traces }, db)).items
+        .map((item) => item.traceId)
+        .sort();
+    assert.deepEqual(await turns({ pivots: { client: ["acme"] } }), [traceId(1), traceId(2)]);
+    assert.deepEqual(await turns({ pivots: { client: ["acme", "globex"] } }), [
+      traceId(1),
+      traceId(2),
+      traceId(3),
+    ]);
+    assert.deepEqual(await turns({ pivots: { client: ["acme"], end_user: ["u-2"] } }), [
+      traceId(2),
+    ]);
+    assert.deepEqual(await turns({ pivots: { client: ["globex"] }, status: "failed" }), []);
+    assert.deepEqual(await turns({ pivots: { client: ["nobody"] } }), []);
+    const totals = await getTraceAggregates(
+      PROJECT_ID,
+      { ...WINDOW, traces: { pivots: { client: ["acme"] } } },
+      db,
+    );
+    assert.equal(totals.count, 2);
+
+    const sessions = async (traces: ListSessionListOptions["traces"]) =>
+      (await listSessionList(PROJECT_ID, { filter: "all", now: NOW, traces }, db)).items
+        .map((row) => row.id)
+        .sort();
+    assert.deepEqual(await sessions({ pivots: { client: ["globex"] } }), ["session-b"]);
+    assert.deepEqual(await sessions({ pivots: { end_user: ["u-1"] } }), ["session-a"]);
+    assert.deepEqual(await sessions({ pivots: { client: ["acme"], end_user: ["u-3"] } }), []);
+  } finally {
+    await client.close();
+  }
+});
+
+test("pivot facet values are the top values of each asked pivot, read only when asked", async () => {
+  const { client, db } = await seededWithPivots();
+  try {
+    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50, {
+      pivots: ["client", "end_user", "environment"],
+    });
+    assert.deepEqual(on.pivots, {
+      client: [
+        { value: "acme", count: 2 },
+        { value: "globex", count: 1 },
+      ],
+      end_user: [
+        { value: "u-1", count: 1 },
+        { value: "u-2", count: 1 },
+      ],
+      environment: [],
+    });
+    const top = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 1, { pivots: ["client"] });
+    assert.deepEqual(top.pivots, { client: [{ value: "acme", count: 2 }] });
+    const off = await getTraceFilterFacets(PROJECT_ID, WINDOW, db);
+    assert.equal(off.pivots, undefined);
+  } finally {
+    await client.close();
+  }
+});
