@@ -51,7 +51,7 @@ main() {
   parse_args "$@"
   STATE="$RATEL_DEPLOY_HOME/$NAME"
   TF_ROOT="$STATE/tf"
-  say "Ratel cloud deploy"
+  say "Ratel deploy"
   case "$COMMAND" in
     up) if deployed; then upgrade; else create; fi ;;
     status) status ;;

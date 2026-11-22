@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
 
 const OSS = "Ratel OSS";
-const CLOUD = "Ratel Cloud";
+const CLOUD = "Ratel";
 
 test("an experimental feature is off with nothing set", () => {
   assert.equal(experimentalFeatureEnabled("FF_EVAL_GATE", {}, OSS), false);

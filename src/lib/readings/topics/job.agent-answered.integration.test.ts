@@ -12,7 +12,7 @@ import { loadTopicReading } from "@/lib/readings/topics/queries";
  * RC-813, flag `cloud-tool-run-insights`: an agent run (an OTel `invoke_agent`
  * root, RC-742) has one `agent` step and no tool call. "Answered" was read
  * from the tool calls alone, so every finished run counted as an unanswered
- * ask: "Ratel Cloud - prod" showed one intent of 10 completed runs with
+ * ask: Ratel's own prod project showed one intent of 10 completed runs with
  * `answered: 0` and `mostlyUnanswered: true`. With the flag on, a run whose
  * root ended without an error is answered, and one whose root failed is not.
  * With the flag off, the reading is as before.

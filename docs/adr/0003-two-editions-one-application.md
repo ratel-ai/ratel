@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Ratel OSS and Ratel Cloud run the same application. Cloud adds identity, organizations,
+Ratel OSS and Ratel, the managed edition, run the same application. The managed edition adds identity, organizations,
 billing, the admin console, hosted APIs and infrastructure. Two copies of the application
 would drift from the first day. The Cloud code must stay private, and an outside contributor
 must clone, install, test and open a pull request here with no extra step.

@@ -11,7 +11,7 @@ import {
 import { contentAttributes } from "@/lib/platform/model-call-content";
 
 /**
- * One backend job as one agent run in Ratel Cloud's own project (RC-722): an
+ * One backend job as one agent run in Ratel's own project (RC-722): an
  * `invoke_agent <name>` root span with the job's ask, and every Ratel-paid
  * model call the job makes (`trackModelCall`, `recordTracedModelCall`) as its
  * child. Runs and Tasks then see one run per job, not one per model call.

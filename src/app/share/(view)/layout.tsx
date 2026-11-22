@@ -17,9 +17,7 @@ export default function ShareLayout({ children }: { children: ReactNode }) {
             aria-label="Ratel"
           >
             <BadgerMark className="h-5 w-auto" />
-            <span className="text-sm font-semibold tracking-tight">
-              Ratel <span className="text-warm-muted">Cloud</span>
-            </span>
+            <span className="text-sm font-semibold tracking-tight">Ratel</span>
           </a>
           <span className="rounded-full border border-forest-300 px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-warm-muted">
             Read-only view

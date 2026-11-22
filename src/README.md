@@ -7,7 +7,7 @@ intelligence that reads them. One Next.js app, two editions
 
 - **Ratel OSS** (`RATEL_COMPOSITION=oss`, the default): what this repository builds on its own.
   Needs a Postgres `DATABASE_URL` and nothing else; model keys are optional.
-- **Ratel Cloud** (`RATEL_COMPOSITION=cloud`): the same tree plus the private modules checked out at
+- **Ratel, Cloud edition** (`RATEL_COMPOSITION=cloud`): the same tree plus the private modules checked out at
   `ee/src`. Not built here.
 
 > The application code is arriving from `ratel-cloud` slice by slice through

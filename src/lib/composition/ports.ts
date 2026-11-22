@@ -133,7 +133,7 @@ export function createComposition(
       );
     }
     base = ee;
-    edition = "Ratel Cloud";
+    edition = "Ratel";
     // The admin console is reached from the account menu, for allowlisted admins only.
     nav = [];
     organizationNav = [

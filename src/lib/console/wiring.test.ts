@@ -9,7 +9,7 @@ import { sectionJobKinds } from "@/lib/views/freshness/sections";
 
 /**
  * What a page renders or a route calls, where the platform split audit (2026-11-09, against
- * Ratel Cloud at 2848c52c) found this edition not doing what upstream does and no unit test can
+ * Ratel at 2848c52c) found this edition not doing what upstream does and no unit test can
  * run the page: it needs a database and a session. One fact per place, read off the source.
  *
  * A source check, so it is a net, not a proof: it fails when the wiring is taken out, not when

@@ -8,7 +8,7 @@ import { type EvalDb, traceIdsOf } from "@/lib/views/eval-gate/runs";
 
 /**
  * RC-853: a run that works on a project of another organization cannot become
- * an eval. Ratel Cloud's own backend jobs are runs in our own project, and
+ * an eval. Ratel's own backend jobs are runs in our own project, and
  * their asks named the customer project they worked on (`cluster_intents for
  * project <uuid>`). An eval recorded from such a run copied the customer's
  * asks into an eval row, and eval rows do not expire (raw telemetry does).

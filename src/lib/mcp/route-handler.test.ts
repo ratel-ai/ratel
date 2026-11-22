@@ -73,7 +73,7 @@ test("initialize negotiates and advertises the tools capability", async () => {
 });
 
 test("an edition's product name introduces the server, names it and its 401 realm", async (t) => {
-  composition.productName = { full: "Ratel Cloud", short: "Cloud" };
+  composition.productName = { full: "Acme Edition", short: "Acme" };
   t.after(() => {
     composition.productName = undefined;
   });
@@ -82,8 +82,8 @@ test("an edition's product name introduces the server, names it and its 401 real
     capabilities: {},
     clientInfo: { name: "test-client", version: "1.0.0" },
   });
-  assert.equal(body.result.serverInfo.name, "ratel-cloud");
-  assert.match(body.result.instructions, /^Ratel Cloud: agent context-usage analytics\./);
+  assert.equal(body.result.serverInfo.name, "acme-edition");
+  assert.match(body.result.instructions, /^Acme Edition: agent context-usage analytics\./);
 
   const handler = createMcpRouteHandler(
     deps({
@@ -93,7 +93,7 @@ test("an edition's product name introduces the server, names it and its 401 real
     }),
   );
   const response = await handler(rpc("tools/list"));
-  assert.match(response.headers.get("www-authenticate") ?? "", /^Bearer realm="ratel-cloud", /);
+  assert.match(response.headers.get("www-authenticate") ?? "", /^Bearer realm="acme-edition", /);
 });
 
 test("without an edition's name the 401 realm stays ratel", async () => {

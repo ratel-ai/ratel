@@ -33,4 +33,4 @@ That decision belongs to [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-
 - Self-hosters, contributors and forks get MIT terms.
 - The platform depends on the MIT SDK and the Apache-2.0 engine. Both are compatible with an
   MIT application, and nothing in the tree is more restrictive for a consumer.
-- Anyone may host the open-source server. Ratel Cloud's private modules are not part of it.
+- Anyone may host the open-source server. The managed edition's private modules are not part of it.

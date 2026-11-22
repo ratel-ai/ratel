@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: repository root.
 #   docker build -f src/Dockerfile --target oss -t ratel-oss:spike .
-#   docker build -f src/Dockerfile --target cloud -t ratel-cloud:spike .
+#   docker build -f src/Dockerfile --target cloud -t ratel:cloud .
 
 # Debian 13 (trixie, glibc 2.41): the @ratel-ai/sdk linux prebuild needs glibc 2.39+, which
 # bookworm (2.36) does not have.

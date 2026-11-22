@@ -6,12 +6,12 @@ import { composition } from "@/lib/composition/ports";
  * short name, which copy shared with the browser uses, is `serviceName` in `app-config.ts`.
  */
 
-/** The full name ("Ratel Cloud"); "Ratel" without an edition's. */
+/** The full name (the edition's, e.g. "Ratel"); "Ratel" without one. */
 export function productName(): string {
   return composition.productName?.full ?? "Ratel";
 }
 
-/** The full name as a slug, for the MCP server's name and its 401 realm (`ratel-cloud`). */
+/** The full name as a slug, for the MCP server's name and its 401 realm (`ratel`). */
 export function productSlug(): string {
   return productName()
     .toLowerCase()
