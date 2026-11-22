@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { FrozenOverrides } from "./overrides";
 import type { RedactionCounts } from "./redaction";
 import { type BuildSettings, buildSettings, DEDUP_RULES, type DropCounts } from "./rows";
 import type { UseCaseSelector } from "./use-case";
@@ -35,11 +36,14 @@ export const DATASET_FAILURE_MESSAGES: Record<DatasetFailure, string> = {
 };
 
 /**
- * The settings a version records: the build settings and the frozen turn
- * window. Versions built before RC-1144 also hold `splitBy`; it is ignored.
+ * The settings a version records: the build settings, the frozen turn window
+ * and (RC-1130) the use case's pins and exclusions when the build started.
+ * Versions built before RC-1130 have no `overrides`; before RC-1144 they also
+ * hold `splitBy`, which is ignored.
  */
 export type DatasetSettings = BuildSettings & {
   window: { since: string; until: string };
+  overrides?: FrozenOverrides;
   splitBy?: string;
 };
 
@@ -56,6 +60,11 @@ export interface DatasetCounts {
   train: number;
   eval: number;
   dropped: DropCounts;
+  /**
+   * Rows of each side the JSONL export cannot express (RC-1131): the export
+   * skips them. Versions built before RC-1131 do not have it.
+   */
+  exportSkipped?: { train: number; eval: number };
 }
 
 export interface Dataset {
@@ -88,15 +97,17 @@ export const BuildInputSchema = z
 
 export type BuildInput = z.input<typeof BuildInputSchema>;
 
-/** The settings of a new version: the parsed input, the use case's selector and the window. */
+/** The settings of a new version: the parsed input, the use case's selector, the window and its overrides. */
 export function datasetSettings(
   selector: UseCaseSelector,
   input: z.output<typeof BuildInputSchema>,
   window: { since: Date; until: Date },
+  overrides: FrozenOverrides = { pinned: [], excluded: [] },
 ): DatasetSettings {
   return {
     ...buildSettings(selector, input),
     window: { since: window.since.toISOString(), until: window.until.toISOString() },
+    overrides,
   };
 }
 
@@ -117,6 +128,7 @@ export function viewOfDataset(dataset: Dataset) {
           train: dataset.counts.train,
           eval: dataset.counts.eval,
           dropped: dataset.counts.dropped,
+          exportSkipped: dataset.counts.exportSkipped ?? null,
         }
       : null,
     redactionReport: dataset.redactionReport,

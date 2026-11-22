@@ -10,6 +10,8 @@ import {
   type DatasetFailure,
   datasetSettings,
 } from "./domain/dataset";
+import { toChatExample } from "./domain/jsonl";
+import { frozenOverrides } from "./domain/overrides";
 import { emptyCounts } from "./domain/redaction";
 import {
   type CallEntry,
@@ -29,6 +31,7 @@ import type {
   MatchedTurn,
   ModelCallSource,
   TurnFacts,
+  UseCaseOverrideStore,
   UseCaseStore,
 } from "./ports/store";
 
@@ -65,6 +68,8 @@ export interface DatasetBuildDeps {
   datasets: DatasetStore;
   useCases: Pick<UseCaseStore, "getUseCase">;
   consents: Pick<ConsentStore, "getActiveConsent">;
+  /** The use case's pins and exclusions (RC-1130): a start freezes them into the version's settings. */
+  overrides: Pick<UseCaseOverrideStore, "listOverrides">;
   calls: Pick<ModelCallSource, "findClosedTurns" | "turnTraceIds" | "spanNames">;
   facts: BuildFactSource;
   /** `FF_FINE_TUNING` for the project's organization. */
@@ -128,10 +133,12 @@ export async function startDatasetBuild(
     };
   }
   const now = deps.now?.() ?? new Date();
+  const overrides = frozenOverrides(await deps.overrides.listOverrides(projectId, useCase.id));
   const settings = datasetSettings(
     useCase.selector,
     parsed.data,
     selectorWindow(useCase.selector, now),
+    overrides,
   );
   const dataset = await deps.datasets.createBuilding(projectId, {
     useCaseId: useCase.id,
@@ -170,9 +177,9 @@ export async function runDatasetBuild(
   const plan = await planBuild(projectId, settings, deps);
   const builder = new DatasetRowBuilder(settings, {
     scorersByTask: plan.scorersByTask,
-    // The use case's pins and exclusions come with the review step; none yet.
-    pinned: new Set(),
-    excluded: new Set(),
+    // Frozen at the start: a pin or an exclusion set later applies to the next version.
+    pinned: new Set(settings.overrides?.pinned ?? []),
+    excluded: new Set(settings.overrides?.excluded ?? []),
     groups: plan.groups,
     forcedEval: forcedEvalGroups(plan.groups, plan.evalCases),
   });
@@ -200,6 +207,7 @@ export async function runDatasetBuild(
     ? plan.calls.filter((call) => compareCalls(call, cursor) > 0)
     : plan.calls;
   let { train, eval: evalRows, calls: callsDone } = counts;
+  const exportSkipped = { ...(counts.exportSkipped ?? { train: 0, eval: 0 }) };
   let last = counts.cursor;
   const cap = deps.rowCap ?? datasetRowCap();
   const pageSize = deps.pageCalls ?? PAGE_CALLS;
@@ -212,6 +220,7 @@ export async function runDatasetBuild(
     for (const row of rows) {
       if (row.side === "train") train += 1;
       else evalRows += 1;
+      if (!toChatExample(row.content).ok) exportSkipped[row.side] += 1;
       hashes.push(row.rowHash);
     }
     if (train + evalRows > cap) return fail(projectId, dataset, "too_large", deps);
@@ -227,6 +236,7 @@ export async function runDatasetBuild(
         train,
         eval: evalRows,
         dropped: progress.dropped,
+        exportSkipped,
       },
       redaction: progress.redaction,
     });
@@ -264,6 +274,7 @@ export async function runDatasetBuild(
       train,
       eval: evalRows,
       dropped: final.dropped,
+      exportSkipped,
     },
     redaction: final.redaction,
   });

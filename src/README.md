@@ -69,7 +69,7 @@ the run API and `ratel sandbox dev` runners through the gateway in `packages/gat
 Repository links a GitHub repo through the deployment's own GitHub App), and variant experiments
 (`ratel.variant.*` tags kept at ingest, per-project attribute mappings in Settings > General, the
 Variants pages and their MCP tools), and fine-tuning (the Fine-tuning page: a project's training
-opt-in, use cases over its model calls, redacted dataset versions, and their MCP tools). Cloud
+opt-in, use cases over its model calls, redacted dataset versions to review, export as JSONL and delete, and their MCP tools). Cloud
 ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
 `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`,
 `FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF`, `FF_VARIANT_EXPERIMENTS` and `FF_FINE_TUNING`. The eval gate's pages live in the

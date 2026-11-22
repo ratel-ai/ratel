@@ -3,6 +3,7 @@ import type { ModelCall, TurnWindow } from "@/lib/views/eval-gate/calls";
 import type { Scorer, ScorerRun } from "@/lib/views/task-scorers/types";
 import type { TrainingConsent } from "../domain/consent";
 import type { Dataset, DatasetCounts, DatasetFailure, DatasetSettings } from "../domain/dataset";
+import type { OverrideInput, RowPageQuery, UseCaseOverride } from "../domain/overrides";
 import type { RedactionCounts } from "../domain/redaction";
 import type { DatasetRow, StoredRow } from "../domain/rows";
 import type { TurnTotals } from "../domain/stats";
@@ -57,6 +58,8 @@ export interface DatasetStore {
   ): Promise<boolean>;
   /** The stored rows, by ordinal: what a resumed build replays. */
   storedRows(projectId: string, id: string): Promise<StoredRow[]>;
+  /** One page of rows in ordinal order, after `query.after`, of one side or both (RC-1130). */
+  listRows(projectId: string, id: string, query: RowPageQuery): Promise<ListedRow[]>;
   /** `building` → `ready`. False when the version is not `building`. */
   markReady(
     projectId: string,
@@ -65,10 +68,33 @@ export interface DatasetStore {
   ): Promise<boolean>;
   /** `building` → `failed`, and its rows are deleted. False when the version is not `building`. */
   markFailed(projectId: string, id: string, reason: DatasetFailure): Promise<boolean>;
-  /** Deletes one version and its rows. */
+  /** Deletes one version, its rows and its lineage link. False when the project has no such version. */
   delete(projectId: string, id: string): Promise<boolean>;
-  /** Deletes every version of the project, with their rows, and returns how many. A consent withdrawal calls it. */
+  /** Deletes every version of the project, with their rows and lineage links, and returns how many. A consent withdrawal calls it. */
   deleteDatasets(projectId: string): Promise<number>;
+}
+
+/** A stored row as the review step reads it. */
+export type ListedRow = Omit<DatasetRow, "rowHash">;
+
+export type OverrideWrite =
+  | { ok: true; override: UseCaseOverride }
+  | { ok: false; reason: "use_case_not_found" | "turn_not_found" };
+
+/**
+ * The runs a use case pins or excludes (RC-1130). Scoped to one project
+ * through the use case: an archived use case or one of another project is
+ * not found, and a turn of another project is refused.
+ */
+export interface UseCaseOverrideStore {
+  listOverrides(projectId: string, useCaseId: string): Promise<UseCaseOverride[]>;
+  /** Upserts one run's override. An exclusion keeps its first time until it is cleared. */
+  setOverride(
+    projectId: string,
+    useCaseId: string,
+    input: OverrideInput,
+    actor: string,
+  ): Promise<OverrideWrite>;
 }
 
 /** What a build reads besides the use case's turns and calls (RC-1128). */

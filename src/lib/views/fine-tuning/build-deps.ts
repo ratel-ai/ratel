@@ -11,6 +11,7 @@ import type { LineageRef } from "@/lib/views/lineage/types";
 import {
   createDrizzleBuildFactSource,
   createDrizzleDatasetStore,
+  createDrizzleOverrideStore,
 } from "./adapters/drizzle-dataset-store";
 import {
   createDrizzleConsentStore,
@@ -46,6 +47,7 @@ export function datasetBuildDeps(db: Db = getDb()): DatasetBuildDeps {
     datasets: createDrizzleDatasetStore(db),
     useCases: createDrizzleUseCaseStore(db),
     consents: createDrizzleConsentStore(db),
+    overrides: createDrizzleOverrideStore(db),
     calls: createDrizzleModelCallSource(db),
     facts: createDrizzleBuildFactSource(db),
     flagOn: (projectId) => fineTuningEnabledForProject(projectId, db),

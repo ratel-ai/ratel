@@ -181,6 +181,11 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["create_use_case", true],
   ["build_dataset", true],
   ["get_dataset", false],
+  ["list_dataset_rows", false],
+  ["set_use_case_override", true],
+  // Export parity (RC-1131): the console's export button has no tool. list_dataset_rows
+  // reads the rows, and get_dataset returns the export's console URLs.
+  ["delete_dataset", true],
   // Writes the console offers: hide a slow signal, ask for a reading, review a
   // description rewrite, start a metered quality analysis.
   ["set_health_signal_hidden", true],

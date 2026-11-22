@@ -13,9 +13,16 @@ import type {
   DatasetSettings,
   DatasetStatus,
 } from "../domain/dataset";
+import type { UseCaseOverride } from "../domain/overrides";
 import type { RedactionCounts } from "../domain/redaction";
-import type { RowContent, StoredRow } from "../domain/rows";
-import type { BuildFactSource, DatasetStore, TurnFacts } from "../ports/store";
+import type { DatasetSide, RowContent, StoredRow } from "../domain/rows";
+import type {
+  BuildFactSource,
+  DatasetStore,
+  ListedRow,
+  TurnFacts,
+  UseCaseOverrideStore,
+} from "../ports/store";
 
 /**
  * Dataset versions over Postgres (RC-1128). Every query filters `project_id`
@@ -126,6 +133,32 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
         }),
       );
     },
+    async listRows(projectId, id, query) {
+      if (!isUuid(id)) return [];
+      // The primary key (dataset_id, ordinal) serves the page; the side filter reads at most `limit` matches past it.
+      return rowsOf<ListedDbRow>(
+        await db.execute(sql`
+        select r.ordinal, r.side, r.content, r.trace_id, r.span_id, r.turn_id, r.captured_at
+        from fine_tuning_dataset_rows r
+        join fine_tuning_datasets d on d.id = r.dataset_id
+        where d.project_id = ${projectId} and r.dataset_id = ${id}::uuid
+          ${query.after === null ? sql`` : sql`and r.ordinal > ${query.after}`}
+          ${query.side === null ? sql`` : sql`and r.side = ${query.side}`}
+        order by r.ordinal
+        limit ${query.limit}
+      `),
+      ).map(
+        (row): ListedRow => ({
+          ordinal: Number(row.ordinal),
+          side: row.side,
+          content: parsed(row.content),
+          traceId: row.trace_id,
+          spanId: row.span_id,
+          turnId: row.turn_id,
+          capturedAt: new Date(row.captured_at),
+        }),
+      );
+    },
     async markReady(projectId, id, result) {
       const rows = rowsOf<{ id: string }>(
         await db.execute(sql`
@@ -155,18 +188,28 @@ export function createDrizzleDatasetStore(db: Db): DatasetStore {
     },
     async delete(projectId, id) {
       if (!isUuid(id)) return false;
+      // Rows go with their dataset (on delete cascade); the lineage link names the dataset by id, so it goes here.
       const rows = rowsOf<{ id: string }>(
         await db.execute(sql`
-        delete from fine_tuning_datasets where project_id = ${projectId} and id = ${id}::uuid returning id
+        with gone as (
+          delete from fine_tuning_datasets where project_id = ${projectId} and id = ${id}::uuid returning id
+        ), links as (
+          delete from lineage_links where project_id = ${projectId} and kind = 'dataset' and object_id in (select id::text from gone)
+        )
+        select id from gone
       `),
       );
       return rows.length > 0;
     },
     async deleteDatasets(projectId) {
-      // Rows go with their dataset (on delete cascade).
       const rows = rowsOf<{ id: string }>(
         await db.execute(sql`
-        delete from fine_tuning_datasets where project_id = ${projectId} returning id
+        with gone as (
+          delete from fine_tuning_datasets where project_id = ${projectId} returning id
+        ), links as (
+          delete from lineage_links where project_id = ${projectId} and kind = 'dataset' and object_id in (select id::text from gone)
+        )
+        select id from gone
       `),
       );
       return rows.length;
@@ -254,6 +297,86 @@ export function createDrizzleBuildFactSource(db: Db): BuildFactSource {
       }
       return out;
     },
+  };
+}
+
+/** A use case's pins and exclusions over Postgres (RC-1130), scoped to the project through the use case. */
+export function createDrizzleOverrideStore(db: Db): UseCaseOverrideStore {
+  return {
+    async listOverrides(projectId, useCaseId) {
+      if (!isUuid(useCaseId)) return [];
+      return rowsOf<OverrideDbRow>(
+        await db.execute(sql`
+        select o.turn_id, o.pinned, o.excluded_at, o.set_by, o.updated_at
+        from fine_tuning_use_case_overrides o
+        join fine_tuning_use_cases u on u.id = o.use_case_id
+        where u.project_id = ${projectId} and o.use_case_id = ${useCaseId}::uuid
+        order by o.turn_id
+      `),
+      ).map(toOverride);
+    },
+    async setOverride(projectId, useCaseId, input, actor) {
+      if (!isUuid(useCaseId)) return { ok: false, reason: "use_case_not_found" };
+      const [useCase] = rowsOf<{ id: string }>(
+        await db.execute(sql`
+        select id from fine_tuning_use_cases where project_id = ${projectId} and id = ${useCaseId}::uuid and archived_at is null
+      `),
+      );
+      if (!useCase) return { ok: false, reason: "use_case_not_found" };
+      const [turn] = rowsOf<{ id: string }>(
+        await db.execute(sql`
+        select id from trace_turns where project_id = ${projectId} and id = ${input.turnId}::uuid
+      `),
+      );
+      if (!turn) return { ok: false, reason: "turn_not_found" };
+      // A field left out keeps its stored value; an exclusion keeps its first time until it is cleared.
+      const pinned = input.pinned === undefined ? sql`o.pinned` : sql`${input.pinned}`;
+      const excludedAt =
+        input.excluded === undefined
+          ? sql`o.excluded_at`
+          : input.excluded
+            ? sql`coalesce(o.excluded_at, now())`
+            : sql`null::timestamptz`;
+      const [row] = rowsOf<OverrideDbRow>(
+        await db.execute(sql`
+        insert into fine_tuning_use_case_overrides as o (use_case_id, turn_id, pinned, excluded_at, set_by)
+        values (${useCaseId}::uuid, ${input.turnId}::uuid, ${input.pinned ?? false}, ${input.excluded ? sql`now()` : sql`null`}, ${actor})
+        on conflict (use_case_id, turn_id) do update
+          set pinned = ${pinned}, excluded_at = ${excludedAt}, set_by = excluded.set_by, updated_at = now()
+        returning o.turn_id, o.pinned, o.excluded_at, o.set_by, o.updated_at
+      `),
+      );
+      if (!row) throw new Error("override upsert returned no row");
+      return { ok: true, override: toOverride(row) };
+    },
+  };
+}
+
+interface ListedDbRow {
+  ordinal: number;
+  side: DatasetSide;
+  content: RowContent | string;
+  trace_id: string;
+  span_id: string;
+  turn_id: string;
+  captured_at: Date | string;
+}
+
+interface OverrideDbRow {
+  turn_id: string;
+  pinned: boolean;
+  excluded_at: Date | string | null;
+  set_by: string;
+  updated_at: Date | string;
+}
+
+function toOverride(row: OverrideDbRow): UseCaseOverride {
+  return {
+    turnId: row.turn_id,
+    pinned: row.pinned,
+    excluded: row.excluded_at !== null,
+    setBy: row.set_by,
+    updatedAt: new Date(row.updated_at),
   };
 }
 

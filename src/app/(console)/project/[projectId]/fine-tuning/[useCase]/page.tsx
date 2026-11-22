@@ -1,5 +1,6 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { notFound } from "next/navigation";
+import { DatasetActions, DatasetRows } from "@/components/console/fine-tuning/DatasetRows";
 import {
   DatasetBuildForm,
   DatasetSummary,
@@ -18,7 +19,12 @@ import { resolveFineTuningPageEntry } from "../context";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Fine-tuning use case" };
 
-/** One use case (RC-1129): build a dataset version, watch it build, read its summary. Behind `FF_FINE_TUNING`. */
+/**
+ * One use case (RC-1129): build a dataset version, watch it build, read its
+ * summary; and (RC-1130) read a ready version's rows and pin or exclude runs
+ * for the next version; and (RC-1131) export it as JSONL or delete it.
+ * Behind `FF_FINE_TUNING`.
+ */
 export default async function FineTuningUseCasePage({
   params,
   searchParams,
@@ -47,7 +53,8 @@ export default async function FineTuningUseCasePage({
   const asked = typeof query.dataset === "string" ? query.dataset : null;
   const selected = views.find((dataset) => dataset.id === asked) ?? views[0] ?? null;
   const pageRoot = `/project/${encodeURIComponent(project.id)}/fine-tuning`;
-  const apiHref = `/api/projects/${encodeURIComponent(project.id)}/fine-tuning/use-cases/${encodeURIComponent(useCase.id)}/datasets`;
+  const apiRoot = `/api/projects/${encodeURIComponent(project.id)}/fine-tuning`;
+  const apiHref = `${apiRoot}/use-cases/${encodeURIComponent(useCase.id)}/datasets`;
 
   return (
     <Page>
@@ -64,6 +71,20 @@ export default async function FineTuningUseCasePage({
         />
         <DatasetVersions datasets={views} selectedId={selected?.id ?? null} />
         {selected ? <DatasetSummary dataset={selected} /> : null}
+        {selected?.status === "ready" ? (
+          <DatasetActions
+            dataset={selected}
+            datasetHref={`${apiRoot}/datasets/${encodeURIComponent(selected.id)}`}
+          />
+        ) : null}
+        {selected?.status === "ready" ? (
+          <DatasetRows
+            key={selected.id}
+            rowsHref={`${apiRoot}/datasets/${encodeURIComponent(selected.id)}/rows`}
+            overridesHref={`${apiRoot}/use-cases/${encodeURIComponent(useCase.id)}/overrides`}
+            traceRoot={`/project/${encodeURIComponent(project.id)}/traces`}
+          />
+        ) : null}
       </PageBody>
     </Page>
   );

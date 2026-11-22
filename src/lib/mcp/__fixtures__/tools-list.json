@@ -4488,7 +4488,7 @@
   {
     "name": "get_dataset",
     "title": "Get a fine-tuning dataset",
-    "description": "One dataset version from build_dataset: its status (building, ready or failed), train and eval row counts, dropped counts per reason, the redaction report (count per kind) and its build settings. No row text. Redaction is pattern-based: it does not find names or addresses.",
+    "description": "One dataset version from build_dataset: status (building, ready or failed), train and eval row counts, dropped counts per reason, the redaction report and build settings. No row text: list_dataset_rows reads rows. consoleUrl and exportUrls open the page and the JSONL download for a signed-in member.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4513,6 +4513,153 @@
     "annotations": {
       "title": "Get a fine-tuning dataset",
       "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_dataset_rows",
+    "title": "List the rows of a fine-tuning dataset",
+    "description": "The rows of one dataset version in order: side (train or eval), source run (turnId, traceId), whether the use case pins or excludes that run, and the redacted input and output. Filter by side; page with cursor. Row text needs content access.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "datasetId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The dataset id, as build_dataset returns it."
+        },
+        "side": {
+          "description": "Only the rows of this side of the split.",
+          "type": "string",
+          "enum": [
+            "train",
+            "eval"
+          ]
+        },
+        "limit": {
+          "description": "Rows per page, 1 to 100; default 25.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "description": "nextCursor from the previous call. Keep every other parameter the same; it carries the window.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "datasetId"
+      ]
+    },
+    "annotations": {
+      "title": "List the rows of a fine-tuning dataset",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "set_use_case_override",
+    "title": "Pin or exclude a run of a fine-tuning use case",
+    "description": "Changes data: pins a run (turnId) of a use case so its calls skip the quality filter, or excludes it so no later build selects it. Give pinned or excluded (false clears it). Built versions do not change: it applies to the next build_dataset.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "useCaseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The use case id, as list_use_cases returns it."
+        },
+        "turnId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The run id, as list_dataset_rows returns it in turnId."
+        },
+        "pinned": {
+          "description": "true pins the run, false unpins it.",
+          "type": "boolean"
+        },
+        "excluded": {
+          "description": "true excludes the run from the next builds, false clears the exclusion.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "useCaseId",
+        "turnId"
+      ]
+    },
+    "annotations": {
+      "title": "Pin or exclude a run of a fine-tuning use case",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "delete_dataset",
+    "title": "Delete a fine-tuning dataset",
+    "description": "Changes data, permanently: deletes one dataset version, all its rows and its lineage link. It cannot be undone. The use case and its other versions stay.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "datasetId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The dataset id, as build_dataset returns it."
+        }
+      },
+      "required": [
+        "datasetId"
+      ]
+    },
+    "annotations": {
+      "title": "Delete a fine-tuning dataset",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
     },
     "execution": {
       "taskSupport": "forbidden"

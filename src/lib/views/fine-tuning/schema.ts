@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -149,3 +150,27 @@ export const fineTuningDatasetRows = pgTable(
 );
 
 export type FineTuningDatasetRowRow = typeof fineTuningDatasetRows.$inferSelect;
+
+/**
+ * The runs (turns) a use case pins or excludes for its next builds (RC-1130).
+ * Same meaning as `pinned` and `excluded_at` of `task_eval_cases`: a pinned
+ * run skips the quality filter, an excluded run never enters. A built version
+ * never changes: a build freezes these into its settings when it starts.
+ */
+export const fineTuningUseCaseOverrides = pgTable(
+  "fine_tuning_use_case_overrides",
+  {
+    useCaseId: uuid("use_case_id")
+      .notNull()
+      .references(() => fineTuningUseCases.id, { onDelete: "cascade" }),
+    turnId: uuid("turn_id").notNull(),
+    pinned: boolean("pinned").notNull().default(false),
+    excludedAt: timestamp("excluded_at", { withTimezone: true }),
+    // The identity-provider id (or `project:<id>` for an API key) of who set it last.
+    setBy: text("set_by").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.useCaseId, t.turnId] })],
+);
+
+export type FineTuningUseCaseOverrideRow = typeof fineTuningUseCaseOverrides.$inferSelect;

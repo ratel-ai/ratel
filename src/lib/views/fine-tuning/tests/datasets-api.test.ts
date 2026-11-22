@@ -26,15 +26,28 @@ function harness(options: { consent?: boolean; flag?: boolean; restricted?: bool
   const created: Dataset[] = [];
   const queued: string[] = [];
   const build = {
+    // Every fake answers for project p1 only, as the real stores do.
     useCases: {
-      getUseCase: async (_p: string, id: string) => (id === USE_CASE_ID ? USE_CASE : null),
+      getUseCase: async (projectId: string, id: string) =>
+        projectId === USE_CASE.projectId && id === USE_CASE_ID ? USE_CASE : null,
+    },
+    overrides: {
+      listOverrides: async (projectId: string, useCaseId: string) => {
+        assert.deepEqual(
+          [projectId, useCaseId],
+          [USE_CASE.projectId, USE_CASE_ID],
+          "a build reads the overrides of its own use case",
+        );
+        return [];
+      },
     },
     consents: {
       getActiveConsent: async () => (options.consent === false ? null : ({ id: "c1" } as never)),
     },
     flagOn: async () => true,
     datasets: {
-      listDatasets: async () => created,
+      listDatasets: async (projectId: string, useCaseId: string) =>
+        created.filter((d) => d.projectId === projectId && d.useCaseId === useCaseId),
       createBuilding: async (
         projectId: string,
         input: { useCaseId: string; settings: DatasetSettings; createdBy: string },
@@ -57,8 +70,9 @@ function harness(options: { consent?: boolean; flag?: boolean; restricted?: bool
         return dataset;
       },
     },
-    enqueue: async (_projectId: string, payload: { datasetId: string }) => {
-      queued.push(payload.datasetId);
+    enqueue: async (projectId: string, payload: { datasetId: string }) => {
+      if (created.some((d) => d.id === payload.datasetId && d.projectId === projectId))
+        queued.push(payload.datasetId);
     },
     track: async () => {},
     now: () => new Date("2026-11-20T00:00:00Z"),

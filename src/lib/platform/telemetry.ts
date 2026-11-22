@@ -146,6 +146,11 @@ export const SERVER_EVENT_NAMES = [
   "dataset_build_started",
   "dataset_built",
   "dataset_build_failed",
+  // Review, export and delete (RC-1130, RC-1131): lib/views/fine-tuning/review-api.ts, export-api.ts.
+  "dataset_row_excluded",
+  "dataset_row_pinned",
+  "dataset_exported",
+  "dataset_deleted",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

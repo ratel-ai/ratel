@@ -126,6 +126,9 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   create_use_case: "improve",
   build_dataset: "improve",
   get_dataset: "improve",
+  list_dataset_rows: "improve",
+  set_use_case_override: "improve",
+  delete_dataset: "improve",
 
   // Ship: changes that go live, and the record that they did.
   set_catalog_override: "ship",

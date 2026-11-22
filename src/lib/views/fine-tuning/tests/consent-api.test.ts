@@ -42,8 +42,8 @@ function harness(
         };
         return { consent: active, created: true };
       },
-      withdrawConsent: async (_projectId, actor) => {
-        if (!active) return null;
+      withdrawConsent: async (projectId, actor) => {
+        if (!active || active.projectId !== projectId) return null;
         const withdrawn = {
           ...active,
           withdrawnBy: actor,

@@ -21,8 +21,11 @@ function harness(overrides: Partial<UseCaseApiDeps> = {}) {
   const rows = new Map<string, UseCase>();
   const tracked: UseCaseEvent[] = [];
   const store: UseCaseStore = {
-    listUseCases: async () => [...rows.values()],
-    getUseCase: async (_projectId, id) => rows.get(id) ?? null,
+    // Every read and write answers for its own project only, as the real store does.
+    listUseCases: async (projectId) =>
+      [...rows.values()].filter((row) => row.projectId === projectId),
+    getUseCase: async (projectId, id) =>
+      rows.get(id)?.projectId === projectId ? rows.get(id)! : null,
     createUseCase: async (projectId, input, actor) => {
       if ([...rows.values()].some((row) => row.name === input.name))
         return { ok: false, reason: "name_taken" };
@@ -37,9 +40,9 @@ function harness(overrides: Partial<UseCaseApiDeps> = {}) {
       rows.set(ID, useCase);
       return { ok: true, useCase };
     },
-    updateUseCase: async (_projectId, id, patch) => {
+    updateUseCase: async (projectId, id, patch) => {
       const row = rows.get(id);
-      if (!row) return { ok: false, reason: "not_found" };
+      if (!row || row.projectId !== projectId) return { ok: false, reason: "not_found" };
       const useCase = {
         ...row,
         ...(patch.name ? { name: patch.name } : {}),
@@ -48,9 +51,9 @@ function harness(overrides: Partial<UseCaseApiDeps> = {}) {
       rows.set(id, useCase);
       return { ok: true, useCase };
     },
-    archiveUseCase: async (_projectId, id) => {
+    archiveUseCase: async (projectId, id) => {
       const row = rows.get(id);
-      if (!row) return { ok: false, reason: "not_found" };
+      if (!row || row.projectId !== projectId) return { ok: false, reason: "not_found" };
       rows.delete(id);
       return { ok: true, useCase: { ...row, archivedAt: new Date() } };
     },

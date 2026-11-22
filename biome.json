@@ -1156,6 +1156,7 @@
         "!src/lib/mcp/operations/dashboards.test.ts",
         "!src/lib/mcp/operations/variants.ts",
         "!src/lib/mcp/operations/fine-tuning.ts",
+        "!src/lib/mcp/operations/fine-tuning-isolation.integration.test.ts",
         "src/mcp-apps/**",
         "!src/mcp-apps/README.md",
         "!src/mcp-apps/build.test.ts",
