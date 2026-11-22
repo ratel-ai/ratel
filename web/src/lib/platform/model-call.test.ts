@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
+import { resetConfigForTests } from "@/config";
 import { composition } from "@/lib/composition";
 import type { ModelCallLogContext, ModelCallRecord } from "@/lib/contracts/telemetry";
 import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
@@ -84,6 +85,7 @@ test("a sink gets one model_call line per call, with tokens, duration and outcom
 test("on Bedrock, a Claude line says backend bedrock and keeps provider anthropic; other providers say api", async () => {
   const saved = process.env.ANTHROPIC_BACKEND;
   process.env.ANTHROPIC_BACKEND = "bedrock";
+  resetConfigForTests();
   const { lines, restore } = capture();
   try {
     await trackModelCall(META, async () => 1);
@@ -107,6 +109,7 @@ test("on Bedrock, a Claude line says backend bedrock and keeps provider anthropi
     restore();
     if (saved === undefined) delete process.env.ANTHROPIC_BACKEND;
     else process.env.ANTHROPIC_BACKEND = saved;
+    resetConfigForTests();
   }
 });
 
@@ -216,11 +219,13 @@ function notEnabled(model = "claude-sonnet-4-6"): ModelNotEnabledError {
 async function onBedrock(run: () => Promise<void>): Promise<void> {
   const saved = process.env.ANTHROPIC_BACKEND;
   process.env.ANTHROPIC_BACKEND = "bedrock";
+  resetConfigForTests();
   try {
     await run();
   } finally {
     if (saved === undefined) delete process.env.ANTHROPIC_BACKEND;
     else process.env.ANTHROPIC_BACKEND = saved;
+    resetConfigForTests();
   }
 }
 
