@@ -87,6 +87,16 @@ describe("registry of reads", () => {
     ]);
   });
 
+  it("carries the catalog file value on the read, for a sandbox baseline", () => {
+    writeCatalog({ prompts: { system: "From the catalog." } });
+    ratel.prompt("system", "a");
+    ratel.model("answer", "anthropic/x");
+    expect(experimentalCatalogReads()).toEqual<CatalogRead[]>([
+      { kind: "prompt", id: "system", default: "a", catalog: "From the catalog." },
+      { kind: "model", id: "answer", default: "anthropic/x" },
+    ]);
+  });
+
   it("reports each read to the active host", () => {
     const record = vi.fn();
     hostSlot[CATALOG_HOST_KEY] = { resolve: () => undefined, record };

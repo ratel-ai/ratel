@@ -124,6 +124,11 @@ export interface Sandbox<P extends ParamMap = ParamMap, I = unknown, O = unknown
   readonly params: P;
   /** The params that came from the SDK, not from the sandbox file, by param name. */
   readonly sdkParams?: Readonly<Record<string, SdkParamSource>>;
+  /**
+   * Every param whose value the code reads through the SDK, by param name: the sdk
+   * params and the declared params that won a name clash with an SDK read.
+   */
+  readonly sdkBindings?: Readonly<Record<string, SdkParamSource>>;
   /** Checked against run() in `sandbox()`. Untyped here, so a copy can change run(). */
   readonly output?: SandboxOutput<unknown>;
 }

@@ -9,37 +9,69 @@ export const SDK_TOOLS_PARAM = "tools";
 /**
  * Adds the params that come from the SDK to a sandbox: each prompt and model the code
  * read through the catalog (named by its catalog id) and the tools registered on a
- * `ratel()` core (one `tools` param). A param the sandbox already has wins on a name
- * clash: a declared param, or an sdk param added before. Returns the same sandbox when
- * the capture adds nothing, so a runner can tell when its manifest changed.
+ * `ratel()` core (one `tools` param). The default of a prompt or model param is its
+ * baseline: the local catalog file's value when it has one, else the code's default.
  *
- * A catalog id that is not a valid param name, or a default that is not a valid value
+ * A declared param wins a name clash and keeps `source: "declared"`, but stays bound to
+ * the SDK read: a declared prompt or model with the same kind and id, and a declared
+ * tools param that lists SDK tools, are what the code reads through the SDK. SDK tools
+ * that no declared tools param lists go to the `tools` param when that name is free.
+ * Returns the same sandbox when the capture adds nothing, so a runner can tell when its
+ * manifest changed.
+ *
+ * A catalog id that is not a valid param name, or a baseline that is not a valid value
  * (a model id without `provider/`), is skipped. Skills are not params yet.
  */
 export function withSdkParams<S extends Sandbox>(sandbox: S, capture: SetupCapture): S {
   const added: Record<string, Param> = {};
   const sources: Record<string, SdkParamSource> = {};
-  const taken = (name: string) => Object.hasOwn(sandbox.params, name) || Object.hasOwn(added, name);
+  const bindings: Record<string, SdkParamSource> = { ...bindingsOf(sandbox) };
+  const known = Object.keys(bindings).length;
+  const paramOf = (name: string): Param | undefined =>
+    Object.hasOwn(sandbox.params, name) ? sandbox.params[name] : added[name];
   for (const read of capture.reads) {
+    if (!PARAM_NAME.test(read.id)) continue;
+    const existing = paramOf(read.id);
+    if (existing) {
+      if (existing.kind === read.kind && !bindings[read.id])
+        bindings[read.id] = { kind: read.kind, id: read.id };
+      continue;
+    }
     const param = catalogParam(read);
-    if (!param || !PARAM_NAME.test(read.id) || taken(read.id)) continue;
+    if (!param) continue;
     added[read.id] = param;
-    sources[read.id] = { kind: read.kind, id: read.id };
+    sources[read.id] = bindings[read.id] = { kind: read.kind, id: read.id };
   }
-  if (capture.tools.length > 0 && !taken(SDK_TOOLS_PARAM)) {
-    added[SDK_TOOLS_PARAM] = toolsParam(capture.tools);
-    sources[SDK_TOOLS_PARAM] = { kind: "tools" };
+  const covered = new Set<string>();
+  for (const [name, param] of Object.entries(sandbox.params)) {
+    if (param.kind !== "tools") continue;
+    const listed = param.default.filter((t) => capture.tools.some((r) => r.id === t.name));
+    if (listed.length === 0) continue;
+    for (const t of listed) covered.add(t.name);
+    if (!bindings[name]) bindings[name] = { kind: "tools" };
   }
-  if (Object.keys(added).length === 0) return sandbox;
+  const uncovered = capture.tools.filter((t) => !covered.has(t.id));
+  if (uncovered.length > 0 && !paramOf(SDK_TOOLS_PARAM)) {
+    added[SDK_TOOLS_PARAM] = toolsParam(uncovered);
+    sources[SDK_TOOLS_PARAM] = bindings[SDK_TOOLS_PARAM] = { kind: "tools" };
+  }
+  if (Object.keys(added).length === 0 && Object.keys(bindings).length === known) return sandbox;
   return Object.freeze({
     ...sandbox,
     params: { ...sandbox.params, ...added } as ParamMap,
     sdkParams: { ...sandbox.sdkParams, ...sources },
+    sdkBindings: bindings,
   });
 }
 
+/** Every param bound to an SDK read: the sdk params, and the declared params that won a clash. */
+export function bindingsOf(sandbox: Sandbox): Readonly<Record<string, SdkParamSource>> {
+  return sandbox.sdkBindings ?? sandbox.sdkParams ?? {};
+}
+
 function catalogParam(read: CatalogRead): Param | null {
-  const param = read.kind === "prompt" ? prompt(read.default) : model(read.default);
+  const baseline = read.catalog ?? read.default;
+  const param = read.kind === "prompt" ? prompt(baseline) : model(baseline);
   return checkParamValue(param, param.default) ? null : param;
 }
 

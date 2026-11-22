@@ -1,3 +1,4 @@
+import { bindingsOf } from "./auto-params.js";
 import { type CatalogOverrides, type CatalogRead, withCatalogRun } from "./catalog.js";
 import { SandboxInputError } from "./errors.js";
 import type { ParamMap, ParamValues } from "./params.js";
@@ -84,7 +85,7 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
         : {}),
     });
   }
-  const sdk = sdkRunValues(sandbox, resolved.raw, params, options.catalogOverrides);
+  const sdk = sdkRunValues(sandbox, resolved, params, options.catalogOverrides);
   const { result: output, reads } = await withCatalogRun(
     sdk.overrides,
     () =>
@@ -113,38 +114,49 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
 }
 
 /**
- * What the catalog host serves a run of a sandbox with sdk params: the value of each
- * sdk prompt and model param (by catalog id; a default value too, so the catalog file
- * cannot change a run that Ratel hashed), and the run's version of the SDK tools.
+ * What the catalog host serves a run: the value of each prompt and model bound to an SDK
+ * read, and the run's version of the bound tools. An sdk prompt or model is served only
+ * when the run changes it: its default is the catalog baseline, which the code reads by
+ * itself. A declared one that won a clash is always served: its value is the sandbox's.
  */
 function sdkRunValues(
   sandbox: Sandbox<ParamMap, unknown, unknown, unknown>,
-  raw: Readonly<Record<string, unknown>>,
+  resolved: {
+    readonly raw: Readonly<Record<string, unknown>>;
+    readonly overrides: readonly string[];
+  },
   params: Readonly<Record<string, unknown>>,
   extra: CatalogOverrides | undefined,
 ): { overrides: CatalogOverrides; toolset?: <T>(tools: T) => T } {
   const prompts: Record<string, string> = { ...extra?.prompts };
   const models: Record<string, string> = { ...extra?.models };
-  let runTools: Readonly<Record<string, unknown>> | undefined;
-  let sdkToolNames: ReadonlySet<string> = new Set();
-  for (const [name, source] of Object.entries(sandbox.sdkParams ?? {})) {
-    if (source.kind === "prompt") prompts[source.id] = raw[name] as string;
-    else if (source.kind === "model") models[source.id] = raw[name] as string;
-    else {
-      runTools = params[name] as Readonly<Record<string, unknown>>;
+  const served = new Map<string, unknown>();
+  const bound = new Set<string>();
+  for (const [name, source] of Object.entries(bindingsOf(sandbox))) {
+    if (source.kind === "tools") {
       const param = sandbox.params[name];
-      sdkToolNames = new Set(param?.kind === "tools" ? param.default.map((t) => t.name) : []);
+      if (param?.kind !== "tools") continue;
+      const runTools = params[name] as Readonly<Record<string, unknown>>;
+      for (const { name: tool } of param.default) {
+        bound.add(tool);
+        if (Object.hasOwn(runTools, tool)) served.set(tool, runTools[tool]);
+      }
+      continue;
     }
+    const sdk = sandbox.sdkParams && Object.hasOwn(sandbox.sdkParams, name);
+    if (sdk && !resolved.overrides.includes(name)) continue;
+    const value = resolved.raw[name] as string;
+    if (source.kind === "prompt") prompts[source.id] = value;
+    else models[source.id] = value;
   }
   const overrides = { prompts, models };
-  if (!runTools) return { overrides };
-  const served = runTools;
-  // The code's toolset, with each SDK tool swapped for its run version; a disabled one is left out.
+  if (bound.size === 0) return { overrides };
+  // The code's toolset, with each bound tool swapped for its run version; a disabled one is left out.
   const toolset = <T>(tools: T): T => {
     const out: Record<string, unknown> = {};
     for (const [name, tool] of Object.entries(tools as Record<string, unknown>)) {
-      if (!sdkToolNames.has(name)) out[name] = tool;
-      else if (Object.hasOwn(served, name)) out[name] = served[name];
+      if (!bound.has(name)) out[name] = tool;
+      else if (served.has(name)) out[name] = served.get(name);
     }
     return out as T;
   };

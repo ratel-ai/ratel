@@ -15,6 +15,8 @@ export interface CatalogRead {
   readonly kind: CatalogKind;
   readonly id: string;
   readonly default: string;
+  /** The local catalog file's value for this id, when it has one. */
+  readonly catalog?: string;
 }
 
 /** The contract of the SDK's `globalThis[CATALOG_HOST_KEY]` slot. */

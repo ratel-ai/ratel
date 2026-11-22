@@ -39,6 +39,8 @@ export interface CatalogRead {
   readonly id: string;
   /** The default the code passed. */
   readonly default: string;
+  /** The value of the local catalog file for this id, when it has one: the baseline over `default`. */
+  readonly catalog?: string;
 }
 
 /**
@@ -110,17 +112,20 @@ function resolve(kind: CatalogKind, id: string, fallback: string): string {
   if (typeof fallback !== "string") {
     throw new TypeError(`ratel.${kind}("${id}", default): default must be a string`);
   }
-  const read: CatalogRead = { kind, id, default: fallback };
+  const file = catalogFile();
+  const fromFile = kind === "prompt" ? file?.prompts[id] : file?.models[id];
+  const read: CatalogRead = {
+    kind,
+    id,
+    default: fallback,
+    ...(fromFile !== undefined ? { catalog: fromFile } : {}),
+  };
   const key = `${kind}:${id}`;
   if (!reads.has(key)) reads.set(key, read);
   recordRead(read);
   const host = activeHost();
   host?.record(read);
-  const override = host?.resolve(kind, id);
-  if (override !== undefined) return override;
-  const file = catalogFile();
-  const fromFile = kind === "prompt" ? file?.prompts[id] : file?.models[id];
-  return fromFile ?? fallback;
+  return host?.resolve(kind, id) ?? fromFile ?? fallback;
 }
 
 function activeHost(): CatalogHost | undefined {

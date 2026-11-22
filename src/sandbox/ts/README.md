@@ -91,7 +91,11 @@ When the agent code uses `@ratel-ai/sdk`, the sandbox finds its params by itself
 
 The runner imports the sandbox file and collects what that import registered and read
 (`captureSetup`), then adds those params with `source: "sdk"` in the manifest (`withSdkParams`).
-A declared param wins on a name clash and has `source: "declared"`. A prompt or model that the
+The default of an sdk prompt or model is its baseline: the `ratel.catalog.json` value when the
+file has one, else the code's default. A run serves a value to the SDK only when it changes the
+param, so the order is: run override, then catalog, then the code's default. A declared param wins
+a name clash and keeps `source: "declared"`, but stays bound to the SDK read: a declared prompt or
+model with the same id, or a declared tools param that lists SDK tools, is what the code reads. A prompt or model that the
 code reads only inside `run()` cannot be found on load: the first run that reads it adds it, and
 `ratel sandbox dev` sends a `manifest.update`. `ratel sandbox verify` checks sdk params like
 declared ones; with `--dry` an sdk model string goes to the stand-in model. Skills registered on

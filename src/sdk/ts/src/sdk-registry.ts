@@ -23,6 +23,8 @@ export interface RegisteredRead {
   readonly kind: "prompt" | "model";
   readonly id: string;
   readonly default: string;
+  /** The local catalog file's value for this id at the first read, when it has one. */
+  readonly catalog?: string;
 }
 
 /** The shape of `globalThis[REGISTRY_KEY]`. Entries keep first-registration order. */
