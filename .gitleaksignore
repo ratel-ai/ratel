@@ -21,3 +21,15 @@
 803a912858e8048121c24e8f87801955033bedae:docs/tmp-fake-secret.md:github-pat:1
 # Fake DB password in the sandbox serve e2e test (branch beluga/sandbox-auto-params): it proves user code never sees the value. workflow_dispatch scans --all, so it fails every dispatched run.
 315d793235e97cb8d345cf14a55d5ff860edd0c0:src/sandbox/ts/src/dev/serve-e2e.test.ts:generic-api-key:21
+# Test-generated API key prefixes logged by api-key unit tests in a proof log (branch proof/ports, rp-122/logs/tests-changed-1.log, RP-148): keys made on a throwaway PGlite per run. workflow_dispatch scans --all, so they fail every dispatched run.
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:575
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:582
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:583
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:584
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:585
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:586
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:587
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:588
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:589
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:590
+495bc9d239d37432f1d0167c6659ec2d6dd2403a:rp-122/logs/tests-changed-1.log:generic-api-key:591
