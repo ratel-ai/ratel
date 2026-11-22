@@ -6,7 +6,7 @@ import { loadFixes } from "@/lib/views/fixes/load";
 import type { Fix } from "@/lib/views/fixes/types";
 import { readIssueExamples, turnsPerIssue } from "@/lib/views/health/issue-examples";
 import { getRepoLink, listCodePointers } from "../store";
-import { handoffBrief, type BriefEvalSet, type CodePointer } from "./brief";
+import { type BriefEvalSet, type CodePointer, handoffBrief } from "./brief";
 
 /**
  * The handoff brief's inputs for one fix id (RC-916): the fix as Fixes builds
@@ -19,11 +19,18 @@ import { handoffBrief, type BriefEvalSet, type CodePointer } from "./brief";
  */
 
 export interface LoadBriefDeps {
-  loadFixes: (input: { projectId: string; organization: Organization }) => Promise<{ open: Fix[]; applied: Fix[] }>;
+  loadFixes: (input: {
+    projectId: string;
+    organization: Organization;
+  }) => Promise<{ open: Fix[]; applied: Fix[] }>;
   /** The linked repo's pointers; empty without a link. */
   codePointers: (projectId: string) => Promise<CodePointer[]>;
   /** Trace ids of example turns of these issues, within the plan's limits. */
-  exampleTraceIds: (projectId: string, organization: Organization, issueIds: readonly string[]) => Promise<string[]>;
+  exampleTraceIds: (
+    projectId: string,
+    organization: Organization,
+    issueIds: readonly string[],
+  ) => Promise<string[]>;
   evalSet: (projectId: string, fixId: string) => Promise<BriefEvalSet | null>;
   consoleBaseUrl: () => string;
 }
@@ -40,16 +47,30 @@ export const defaultLoadBriefDeps: LoadBriefDeps = {
   codePointers: async (projectId) => {
     const link = await getRepoLink(projectId);
     if (!link) return [];
-    return (await listCodePointers(link.id)).map(({ kind, symbol, path, line }) => ({ kind, symbol, path, line }));
+    return (await listCodePointers(link.id)).map(({ kind, symbol, path, line }) => ({
+      kind,
+      symbol,
+      path,
+      line,
+    }));
   },
   exampleTraceIds: async (projectId, organization, issueIds) => {
     const limits = getAgentHealthLimits(organization);
     const perIssue = turnsPerIssue(limits.agentHealthEvidenceTurns);
     if (perIssue <= 0 || issueIds.length === 0) return [];
-    const examples = await withStatementTimeout((db) => readIssueExamples(db, projectId, issueIds, { perIssue, shown: limits.agentHealthSignalsShown }), {
-      operation: "handoff_brief_issue_examples",
-    });
-    return examples.flatMap((example) => example.turns.flatMap((turn) => (turn.traceId ? [turn.traceId] : [])));
+    const examples = await withStatementTimeout(
+      (db) =>
+        readIssueExamples(db, projectId, issueIds, {
+          perIssue,
+          shown: limits.agentHealthSignalsShown,
+        }),
+      {
+        operation: "handoff_brief_issue_examples",
+      },
+    );
+    return examples.flatMap((example) =>
+      example.turns.flatMap((turn) => (turn.traceId ? [turn.traceId] : [])),
+    );
   },
   // No Evals area here: no eval-set simulation to name.
   evalSet: async () => null,
@@ -63,7 +84,9 @@ export async function loadHandoffBrief(
 ): Promise<LoadedBrief | null> {
   const { projectId, organization, fixId } = input;
   const model = await deps.loadFixes({ projectId, organization });
-  const fix = [...model.open, ...model.applied].find((candidate) => candidate.id === fixId || candidate.aliases.includes(fixId));
+  const fix = [...model.open, ...model.applied].find(
+    (candidate) => candidate.id === fixId || candidate.aliases.includes(fixId),
+  );
   if (!fix) return null;
   const issueIds = fix.issues.map((issue) => issue.id).filter((id) => UUID.test(id));
   const [pointers, traceIds, evalSet] = await Promise.all([

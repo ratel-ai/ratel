@@ -10,6 +10,8 @@ import { codeHandoffEnabledFor } from "../gate";
  * throws (a failed decision is off), in place of upstream's organization flag read with its
  * catch-and-log.
  */
-export function showDeployVersionGuidance(organization: Pick<Organization, "id">): Promise<boolean> {
+export function showDeployVersionGuidance(
+  organization: Pick<Organization, "id">,
+): Promise<boolean> {
   return codeHandoffEnabledFor(organization);
 }
