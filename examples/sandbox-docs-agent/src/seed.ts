@@ -13,7 +13,10 @@ export const SESSIONS: readonly (readonly string[])[] = [
   ["How do I run Ratel on my laptop?", "Port 3000 is taken on my machine. What do I change?"],
   ["Where do I create an API key?", "I lost the key right after I created it. Can I see it again?"],
   ["What is the traces endpoint on Ratel Cloud?"],
-  ["My exporter gets a 401 from /v1/traces.", "The key starts with rtl_ and I copied it twice. Please open a ticket, my email is dev@example.com."],
+  [
+    "My exporter gets a 401 from /v1/traces.",
+    "The key starts with rtl_ and I copied it twice. Please open a ticket, my email is dev@example.com.",
+  ],
   ["Does Ratel need message content in traces?", "What do I lose without it?"],
   ["How do I group the turns of one conversation?"],
   ["How do I install the TypeScript SDK?", "And the Vercel AI SDK adapter?"],
@@ -25,11 +28,19 @@ export const SESSIONS: readonly (readonly string[])[] = [
   ["What is an agent sandbox?", "What happens to a tool that sends emails when I run the sandbox?"],
   ["How do I run a sandbox on my machine?", "And how do I connect it to the playground?"],
   ["Does a key of one project see another project?"],
-  ["I get a 404 for a project I own when I use the API.", "Yes I used the key of the other project. Thanks!"],
+  [
+    "I get a 404 for a project I own when I use the API.",
+    "Yes I used the key of the other project. Thanks!",
+  ],
   ["What does Ratel need to run?", "Is there a separate worker to deploy?"],
   ["Can I send logs as well as traces?"],
-  ["The docs do not say how to export to two backends at once. Open a ticket asking for that page."],
-  ["What does fake mode do for a tool?", "Can a side-effect tool ever run for real in the playground?"],
+  [
+    "The docs do not say how to export to two backends at once. Open a ticket asking for that page.",
+  ],
+  [
+    "What does fake mode do for a tool?",
+    "Can a side-effect tool ever run for real in the playground?",
+  ],
 ];
 
 async function main(): Promise<void> {

@@ -12,6 +12,7 @@
     "seed": "pnpm build:sandbox && tsx src/seed.ts",
     "ratel": "ratel",
     "typecheck": "tsc",
+    "lint": "biome check src test docs-agent.sandbox.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
     "@opentelemetry/sdk-trace-base": "^2.9.0",
     "@types/node": "^24.0.0",
     "tsx": "^4.20.0",

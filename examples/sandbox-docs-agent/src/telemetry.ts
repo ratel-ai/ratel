@@ -54,8 +54,8 @@ export function setupTelemetry(env: NodeJS.ProcessEnv = process.env): Telemetry 
       ...(apiKey
         ? [
             new BatchSpanProcessor(
-            new OTLPTraceExporter({
-              url: env.RATEL_OTLP_ENDPOINT ?? DEFAULT_ENDPOINT,
+              new OTLPTraceExporter({
+                url: env.RATEL_OTLP_ENDPOINT ?? DEFAULT_ENDPOINT,
                 headers: { Authorization: `Bearer ${apiKey}` },
               }),
             ),

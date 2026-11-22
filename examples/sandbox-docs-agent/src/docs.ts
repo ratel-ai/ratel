@@ -46,6 +46,9 @@ export function readDoc(slug: string): DocPage | undefined {
 }
 
 function snippetOf(body: string): string {
-  const text = body.replace(/^# .+$/m, "").replace(/\s+/g, " ").trim();
+  const text = body
+    .replace(/^# .+$/m, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return text.length > 160 ? `${text.slice(0, 157)}...` : text;
 }

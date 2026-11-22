@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { trace } from "@opentelemetry/api";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
@@ -12,7 +13,6 @@ import {
   type ToolChannel,
 } from "@ratel-ai/sandbox";
 import type { LanguageModel, ModelMessage } from "ai";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import docsSandbox from "../docs-agent.sandbox.js";
 import { docsDefaults, reply } from "../src/agent.js";
@@ -56,7 +56,14 @@ function scriptedModel(steps: Step[]) {
               { type: "text-end", id: "t" },
               { type: "finish", finishReason: "stop", usage: USAGE },
             ];
-      return { stream: new ReadableStream({ start: (c) => (parts.forEach((p) => c.enqueue(p)), c.close()) }) };
+      return {
+        stream: new ReadableStream({
+          start: (c) => {
+            for (const p of parts) c.enqueue(p);
+            c.close();
+          },
+        }),
+      };
     },
   };
   return { model: model as unknown as LanguageModel, prompts };
@@ -93,7 +100,7 @@ describe("production reply()", () => {
     const turn = await reply(CONVERSATION, { ...docsDefaults, model });
     expect(turn.text).toBe("I opened a ticket for you.");
     expect(prompts).toHaveLength(4);
-    expect((await listTickets(db))).toMatchObject([{ id: 1, title: "401 from /v1/traces" }]);
+    expect(await listTickets(db)).toMatchObject([{ id: 1, title: "401 from /v1/traces" }]);
     const toolResults = turn.messages
       .filter((m) => m.role === "tool")
       .flatMap((m) => (m.role === "tool" ? m.content : []))
@@ -123,7 +130,10 @@ describe("production reply()", () => {
       spanProcessors: [new ConversationIdProcessor(), new SimpleSpanProcessor(memory)],
     });
     provider.register();
-    const { model } = scriptedModel([{ tool: "searchDocs", input: { query: "mcp" } }, { text: "Hi." }]);
+    const { model } = scriptedModel([
+      { tool: "searchDocs", input: { query: "mcp" } },
+      { text: "Hi." },
+    ]);
     await inAgentTurn("sess_test", () =>
       reply([{ role: "user", content: "mcp?" }], { ...docsDefaults, model }),
     );
@@ -140,30 +150,40 @@ describe("production reply()", () => {
 describe("the docs-agent sandbox", () => {
   it("runs the real reply with a faked createTicket by default, and the SQLite file does not change", async () => {
     const { model } = scriptedModel(TICKET_SCRIPT);
-    const before = (await listTickets(db));
+    const before = await listTickets(db);
     const fakes: string[] = [];
     const channel: ToolChannel = {
       fake: async (request) => {
         fakes.push(request.tool);
-        return { result: { ticketId: "T-FAKE", status: "open" }, isError: false, source: "generated" };
+        return {
+          result: { ticketId: "T-FAKE", status: "open" },
+          isError: false,
+          source: "generated",
+        };
       },
       confirm: async () => ({ decision: "reject" }),
     };
     const deltas: string[] = [];
     const run = await runSandbox(
-      { ...docsSandbox, resolve: Object.assign(() => model, { modelKind: "language-model" as const }) },
+      {
+        ...docsSandbox,
+        resolve: Object.assign(() => model, { modelKind: "language-model" as const }),
+      },
       { input: { messages: CONVERSATION }, toolChannel: channel, onText: (t) => deltas.push(t) },
     );
     expect(run.toolModes).toEqual({ searchDocs: "real", readDoc: "real", createTicket: "fake" });
     expect(fakes).toEqual(["createTicket"]);
     expect(run.output).toBe("I opened a ticket for you.");
     expect(deltas.join("")).toBe("I opened a ticket for you.");
-    expect((await listTickets(db))).toEqual(before);
+    expect(await listTickets(db)).toEqual(before);
   });
 
   it("refuses to run createTicket real: it has no allowReal", async () => {
     await expect(
-      runSandbox(docsSandbox, { input: { messages: CONVERSATION }, toolModes: { createTicket: "real" } }),
+      runSandbox(docsSandbox, {
+        input: { messages: CONVERSATION },
+        toolModes: { createTicket: "real" },
+      }),
     ).rejects.toThrow("createTicket: real needs allowReal: true in the sandbox file");
   });
 });
@@ -175,7 +195,13 @@ describe("the runner's real model resolver", () => {
     const previous = process.env.AI_GATEWAY_API_KEY;
     process.env.AI_GATEWAY_API_KEY = "gw_test_not_a_key";
     // The gateway's HTTP call is the first thing after the model checks: answer it locally.
-    const fetchMock = vi.fn(async (_url: unknown, _init?: unknown) => new Response(JSON.stringify({ error: { message: "stubbed", type: "stub" } }), { status: 400, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async (_url: unknown, _init?: unknown) =>
+        new Response(JSON.stringify({ error: { message: "stubbed", type: "stub" } }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     try {
       const run = runSandbox(docsSandbox, {
@@ -205,7 +231,9 @@ describe("the runner's real model resolver", () => {
     // ai@6 speaks the v3 model spec. Resolved from where @ratel-ai/sandbox lives (its dev
     // ai@7), the same call hands back a v4 model, which ai@6's streamText refuses.
     expect(model.specificationVersion).toBe("v3");
-    const sandboxPackage = fileURLToPath(new URL("../../../src/sandbox/ts/package.json", import.meta.url));
+    const sandboxPackage = fileURLToPath(
+      new URL("../../../src/sandbox/ts/package.json", import.meta.url),
+    );
     const fromSandboxPackage = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(
       docsDefaults.model,
       { from: sandboxPackage },

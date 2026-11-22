@@ -16,7 +16,8 @@ export function routeModelIdsToBedrock(env: NodeJS.ProcessEnv = process.env): bo
     credentialProvider: fromNodeProviderChain(),
   });
   (globalThis as { AI_SDK_DEFAULT_PROVIDER?: unknown }).AI_SDK_DEFAULT_PROVIDER = {
-    languageModel: (id: string) => bedrock(id.slice(id.startsWith(BEDROCK_PREFIX) ? BEDROCK_PREFIX.length : 0)),
+    languageModel: (id: string) =>
+      bedrock(id.slice(id.startsWith(BEDROCK_PREFIX) ? BEDROCK_PREFIX.length : 0)),
   };
   return true;
 }

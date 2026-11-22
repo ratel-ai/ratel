@@ -17,6 +17,7 @@
       "src/sandbox/**/*.ts",
       "src/sandbox/**/*.js",
       "protocol/sandbox/**/*.mjs",
+      "examples/sandbox-docs-agent/**/*.ts",
       "benchmark/agent/src/**/*.ts",
       "benchmark/agent/src/**/*.tsx",
       "ee/**/*.ts",

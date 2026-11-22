@@ -17,7 +17,9 @@ const history: ModelMessage[] = [];
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 console.log(`Ratel docs agent (session ${sessionId}). Tickets go to ${ticketsPath()}.`);
-console.log(telemetry.exporting ? "Traces go to Ratel." : "Set RATEL_API_KEY to send traces to Ratel.");
+console.log(
+  telemetry.exporting ? "Traces go to Ratel." : "Set RATEL_API_KEY to send traces to Ratel.",
+);
 console.log("Ask a question, or press Ctrl+D to quit.\n");
 
 rl.on("close", () => {
