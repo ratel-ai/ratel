@@ -3,6 +3,7 @@ import {
   type CatalogOverrides,
   type CatalogRead,
   type RunServe,
+  type RunSkillView,
   type SkillView,
   withCatalogRun,
 } from "./catalog.js";
@@ -91,7 +92,7 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
         : {}),
     });
   }
-  const sdk = sdkRunValues(sandbox, resolved, params, options.catalogOverrides);
+  const sdk = sdkRunValues(sandbox, resolved, params, toolModes, options.catalogOverrides);
   const { result: output, reads } = await withCatalogRun(
     sdk.overrides,
     () =>
@@ -132,6 +133,7 @@ function sdkRunValues(
     readonly overrides: readonly string[];
   },
   params: Readonly<Record<string, unknown>>,
+  toolModes: Readonly<Record<string, ToolMode>>,
   extra: CatalogOverrides | undefined,
 ): { overrides: CatalogOverrides; serve: RunServe } {
   const prompts: Record<string, string> = { ...extra?.prompts };
@@ -165,22 +167,30 @@ function sdkRunValues(
     };
   }
   if (skills.size > 0) {
-    // The code's skills, with the run's description and a load through the skill's mode.
+    // The run's view of each bound skill: absent when disabled, the run's description, a
+    // load through the skill's mode. The SDK's SkillCatalog reads it (`skill`), and so
+    // does the experimental `ratel.skills()` accessor (`skills`).
+    const view = (id: string): RunSkillView | null | undefined => {
+      if (!skills.has(id)) return undefined;
+      const run = skills.served.get(id) as RunSkill | undefined;
+      if (!run) return null;
+      return {
+        ...(typeof run.description === "string" ? { description: run.description } : {}),
+        mode: toolModes[id] ?? "confirm",
+        load: (readBody) => loadSkill(run, readBody),
+      };
+    };
+    serve.skill = view;
     serve.skills = (list) =>
       list.flatMap((skill): SkillView[] => {
-        if (!skills.has(skill.id)) return [skill];
-        const run = skills.served.get(skill.id) as RunSkill | undefined;
-        if (!run) return [];
-        const description =
-          typeof run.description === "string" ? run.description : skill.description;
-        const execute = run.execute;
+        const run = view(skill.id);
+        if (run === undefined) return [skill];
+        if (run === null) return [];
         return [
           {
             id: skill.id,
-            description,
-            load: execute
-              ? async () => String(await execute({}, { messages: [], ratelLoad: skill.load }))
-              : skill.load,
+            description: run.description ?? skill.description,
+            load: () => loadSkill(skills.served.get(skill.id) as RunSkill, skill.load),
           },
         ];
       });
@@ -191,6 +201,19 @@ function sdkRunValues(
 interface RunSkill {
   readonly description?: unknown;
   readonly execute?: (args: unknown, options: Record<string, unknown>) => unknown;
+}
+
+/**
+ * Loads a skill through the run's wrapped row: `real` calls `readBody`, `fake` returns
+ * the fake value, `confirm` waits for the reviewer. A reject throws the reviewer's error.
+ */
+async function loadSkill(run: RunSkill, readBody: () => string | Promise<string>): Promise<string> {
+  if (!run.execute) return readBody();
+  const result = await run.execute({}, { messages: [], ratelLoad: async () => readBody() });
+  if (typeof result === "string") return result;
+  const error = (result as { error?: unknown } | null)?.error;
+  if (typeof error === "string") throw new Error(error);
+  return JSON.stringify(result);
 }
 
 /** The names a run binds to tools params, and the run's version of each enabled one. */

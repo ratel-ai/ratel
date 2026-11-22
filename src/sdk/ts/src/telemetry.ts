@@ -1013,6 +1013,37 @@ export function traceSkillLoad<T>(
 }
 
 /**
+ * The async counterpart of {@link traceSkillLoad}: the span ends when `run` settles.
+ * `attributes` are set on the span first (a sandbox run's `ratel.tool.mode`).
+ */
+export function traceSkillLoadAsync<T>(
+  skillId: string,
+  run: (projection: RuntimeEventProjection) => Promise<T>,
+  turnId?: string,
+  attributes: Readonly<Record<string, string>> = {},
+): Promise<T> {
+  return getTracer().startActiveSpan(
+    RATEL_SKILL_LOAD,
+    { kind: SpanKind.INTERNAL },
+    async (span) => {
+      const projection = eventProjection(span, undefined, turnId);
+      span.setAttribute(RATEL_SKILL_ID, skillId);
+      for (const [key, value] of Object.entries(attributes)) span.setAttribute(key, value);
+      try {
+        const body = await run(projection);
+        span.setStatus({ code: SpanStatusCode.OK });
+        return body;
+      } catch (err) {
+        fail(span, err);
+        throw err;
+      } finally {
+        span.end();
+      }
+    },
+  );
+}
+
+/**
  * Wrap an upstream-MCP registration in a `ratel.upstream.register` span. `run`
  * receives a `reportToolCount` callback to set `ratel.upstream.tool_count` once
  * the tool list is known.

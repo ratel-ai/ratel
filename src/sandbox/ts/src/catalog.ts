@@ -25,6 +25,7 @@ export interface CatalogHost {
   record(read: CatalogRead): void;
   toolset?<T>(tools: T): T;
   skills?(skills: readonly SkillView[]): readonly SkillView[];
+  skill?(skillId: string): RunSkillView | null | undefined;
 }
 
 /** A skill as the code offers it to the model (the SDK's `SkillView`). */
@@ -38,6 +39,14 @@ export interface SkillView {
 export interface RunServe {
   readonly toolset?: <T>(tools: T) => T;
   readonly skills?: (skills: readonly SkillView[]) => readonly SkillView[];
+  readonly skill?: (skillId: string) => RunSkillView | null | undefined;
+}
+
+/** The run's view of one registered skill (the SDK's `RunSkill`). */
+export interface RunSkillView {
+  readonly description?: string;
+  readonly mode: "real" | "fake" | "confirm";
+  load(readBody: () => string): Promise<string>;
 }
 
 /** One tool registered on a `ratel()` core. `tool` is the object the app registered. */
@@ -104,6 +113,9 @@ const host: CatalogHost = {
   },
   skills(skills) {
     return scope.getStore()?.serve.skills?.(skills) ?? skills;
+  },
+  skill(skillId) {
+    return scope.getStore()?.serve.skill?.(skillId);
   },
 };
 

@@ -1,7 +1,8 @@
 // The stand-in model of `ratel sandbox verify --dry` (AI SDK sandboxes only). It makes
 // no network call. Its first step calls each tool it was given once, with
-// arguments built from the tool's JSON Schema; after a tool result it answers
-// with a short text. Specification v3: ai@6 and ai@7 accept it. The AI SDK
+// arguments built from the tool's JSON Schema, and a skill loader once per skill that
+// a recall result in the prompt surfaced; after its tool results it answers with a
+// short text. Specification v3: ai@6 and ai@7 accept it. The AI SDK
 // stamps `gen_ai.request.model` from its modelId, so the model check works.
 
 /** The text the stand-in answers with after the tool results. */
@@ -95,14 +96,34 @@ export function exampleOf(schema: unknown): unknown {
 
 function scriptedContent(options: DryCallOptions): Content[] {
   const tools = (options.tools ?? []).filter((t) => (t.type ?? "function") === "function");
-  const answered = (options.prompt ?? []).some((m) => m.role === "tool");
+  const prompt = JSON.stringify(options.prompt ?? []);
+  // Answered: a result of the stand-in's own calls. A recall pair's tool result is not one.
+  const answered = /\\?"toolCallId\\?":\s*\\?"dry_/.test(prompt);
   if (tools.length === 0 || answered) return [{ type: "text", text: dryReply(options) }];
-  return tools.map((t, i) => ({
+  const skills = surfacedSkills(prompt);
+  const calls = tools.flatMap((t) => {
+    // A skill loader (Ratel's get_skill_content) loads each skill a recall surfaced.
+    if (takesSkillId(t.inputSchema) && skills.length > 0)
+      return skills.map((skillId) => ({ name: t.name, input: { skillId } }));
+    return [{ name: t.name, input: exampleOf(t.inputSchema) ?? {} }];
+  });
+  return calls.map((call, i) => ({
     type: "tool-call",
     toolCallId: `dry_${i + 1}`,
-    toolName: t.name,
-    input: JSON.stringify(exampleOf(t.inputSchema) ?? {}),
+    toolName: call.name,
+    input: JSON.stringify(call.input),
   }));
+}
+
+/** The skill ids a capability search result in the prompt names, in order. */
+function surfacedSkills(prompt: string): string[] {
+  const ids = [...prompt.matchAll(/\\?"skillId\\?":\s*\\?"([^"\\]+)/g)].map((m) => m[1] as string);
+  return [...new Set(ids)];
+}
+
+function takesSkillId(schema: unknown): boolean {
+  const properties = (schema as { properties?: Record<string, unknown> } | null)?.properties;
+  return typeof properties === "object" && properties !== null && "skillId" in properties;
 }
 
 /** DRY_REPLY, then the start of the system prompt the stand-in got: a dry run shows what the code sent. */

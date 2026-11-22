@@ -549,6 +549,13 @@ returns the skills to offer the model, each with `load()`: in a sandbox run, the
 disabled skill left out, an edited description, a load through the skill's mode), else every
 skill, with `load()` returning its body.
 
+Inside a sandbox run, the standard skill boundaries read the run's skill view too:
+`SkillCatalog.search`, `searchAsync`, `has`, `get` and the `search_capabilities` and
+`get_skill_content` tools (which loads through the new `SkillCatalog.invokeAsync`). A disabled
+skill is absent and unknown, the edited description is returned, and a load follows the run's
+mode, with `ratel.tool.mode` on the `ratel.skill.load` span. The sync `invoke` refuses a skill in
+`fake` or `confirm` mode with a pointer to `invokeAsync`. Outside a sandbox run, nothing changes.
+
 Every core also records the tools and skills registered on it, and every catalog read, in one
 process registry (`globalThis[Symbol.for("ratel.registry.v1")]`): a sandbox lists those tools as
 params. The sandbox runner serves a run's values through `globalThis[Symbol.for("ratel.catalog.host.v1")]`.

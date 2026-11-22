@@ -26,10 +26,11 @@ import {
   type ExperimentalEmbeddingArtifact,
   resolveEmbeddingArtifact,
 } from "./embedding-artifact.js";
+import { activeRunSkill, type RunSkill, runSkillViewActive } from "./prompt-model-catalog.js";
 import { type IntentGraph, SkillRegistry } from "./registry.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
 import { recordSkill } from "./sdk-registry.js";
-import { traceSearch, traceSearchAsync, traceSkillLoad } from "./telemetry.js";
+import { traceSearch, traceSearchAsync, traceSkillLoad, traceSkillLoadAsync } from "./telemetry.js";
 
 export type { ReplaceOutcome, Skill, SkillHit };
 
@@ -335,13 +336,24 @@ export class SkillCatalog {
   ): SkillHit[] {
     if ((method ?? this.method) === "custom") throw new Error(CUSTOM_NEEDS_ASYNC);
     if (this.ranking.reranker || this.ranking.rerankerFn) throw new Error(RERANKER_NEEDS_ASYNC);
+    const disabled = this.runDisabled();
     return traceSearch(
       SearchTarget.Skill,
       query,
       topK,
       origin,
       (projection) =>
-        this.registry.searchWithMethod(query, topK, origin, method ?? this.method, projection),
+        withoutDisabled(
+          this.registry.searchWithMethod(
+            query,
+            topK + disabled.size,
+            origin,
+            method ?? this.method,
+            projection,
+          ),
+          disabled,
+          topK,
+        ),
       turnId,
     );
   }
@@ -376,13 +388,24 @@ export class SkillCatalog {
     } catch (error) {
       return Promise.reject(error);
     }
+    const disabled = this.runDisabled();
     return traceSearchAsync(
       SearchTarget.Skill,
       query,
       topK,
       args.origin,
-      (projection) =>
-        this.registry.rankAsync(query, topK, args, this.ranking.retrieveFn, projection),
+      async (projection) =>
+        withoutDisabled(
+          await this.registry.rankAsync(
+            query,
+            topK + disabled.size,
+            args,
+            this.ranking.retrieveFn,
+            projection,
+          ),
+          disabled,
+          topK,
+        ),
       args.turnId,
     );
   }
@@ -394,7 +417,7 @@ export class SkillCatalog {
    * @returns `true` if {@link SkillCatalog.invoke} would find it.
    */
   has(skillId: string): boolean {
-    return this.skills.has(skillId);
+    return this.skills.has(skillId) && activeRunSkill(skillId) !== null;
   }
 
   /**
@@ -405,7 +428,12 @@ export class SkillCatalog {
    *   unknown id.
    */
   get(skillId: string): Skill | undefined {
-    return this.skills.get(skillId);
+    const skill = this.skills.get(skillId);
+    if (!skill) return undefined;
+    const run = activeRunSkill(skillId);
+    if (run === null) return undefined;
+    // A copy: the run's description never reaches the shared catalog.
+    return run?.description !== undefined ? { ...skill, description: run.description } : skill;
   }
 
   /** Complete, deterministic public skill definition set. */
@@ -534,8 +562,14 @@ export class SkillCatalog {
    */
   invoke(skillId: string, turnId?: string): string {
     const skill = this.skills.get(skillId);
-    if (!skill) {
+    const run = skill ? activeRunSkill(skillId) : undefined;
+    if (!skill || run === null) {
       throw new Error(`unknown skillId: ${skillId}`);
+    }
+    if (run && run.mode !== "real") {
+      throw new Error(
+        `skill ${skillId} runs in ${run.mode} mode in this sandbox run: load it with invokeAsync (get_skill_content does)`,
+      );
     }
     return traceSkillLoad(
       skillId,
@@ -555,4 +589,62 @@ export class SkillCatalog {
       turnId,
     );
   }
+
+  /**
+   * Load a skill's body, waiting when a sandbox run needs to: the async form of
+   * {@link SkillCatalog.invoke}, which `get_skill_content` uses. Outside a sandbox run
+   * it returns what `invoke` returns. Inside one, the run's skill view decides: a
+   * disabled skill is unknown, `fake` returns the fake value without reading the body,
+   * `confirm` waits for the reviewer, and the `ratel.skill.load` span carries
+   * `ratel.tool.mode`.
+   *
+   * @param skillId - Id of a registered skill.
+   * @param turnId - As for {@link SkillCatalog.invoke}.
+   * @returns The body (or the run's fake value).
+   */
+  async invokeAsync(skillId: string, turnId?: string): Promise<string> {
+    const skill = this.skills.get(skillId);
+    const run = skill ? activeRunSkill(skillId) : undefined;
+    if (!skill || run === null) throw new Error(`unknown skillId: ${skillId}`);
+    if (!run) return this.invoke(skillId, turnId);
+    return this.loadInRun(skill, run, turnId);
+  }
+
+  private loadInRun(skill: Skill, run: RunSkill, turnId?: string): Promise<string> {
+    return traceSkillLoadAsync(
+      skill.id,
+      async (projection) => {
+        const started = Date.now();
+        const body = await run.load(() => skill.body ?? "");
+        this.registry.recordEvent(
+          { type: "skill_invoke", skill_id: skill.id, took_ms: Date.now() - started },
+          projection,
+        );
+        return body;
+      },
+      turnId,
+      { [RATEL_TOOL_MODE]: run.mode },
+    );
+  }
+
+  /** The ids the active sandbox run disables. Empty outside a run. */
+  private runDisabled(): ReadonlySet<string> {
+    const disabled = new Set<string>();
+    if (!runSkillViewActive()) return disabled;
+    for (const id of this.skills.keys()) if (activeRunSkill(id) === null) disabled.add(id);
+    return disabled;
+  }
+}
+
+/** The attribute that names a sandbox run's mode on a skill load span. */
+const RATEL_TOOL_MODE = "ratel.tool.mode";
+
+/** Hits without the run's disabled skills, cut back to `topK`. The same array outside a run. */
+function withoutDisabled(
+  hits: SkillHit[],
+  disabled: ReadonlySet<string>,
+  topK: number,
+): SkillHit[] {
+  if (disabled.size === 0) return hits;
+  return hits.filter((h) => !disabled.has(h.skillId)).slice(0, topK);
 }

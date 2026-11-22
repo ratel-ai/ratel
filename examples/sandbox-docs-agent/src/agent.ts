@@ -68,31 +68,26 @@ export const tools = {
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
 export const MAX_STEPS = 5;
 
-// A skill: instructions the model loads when it needs them. Registered on the Ratel core
-// like the tools; read-only, so a sandbox run loads it for real by default.
+// A skill: instructions the model loads when it needs them. Read-only, so a sandbox run
+// loads it for real by default.
 export const skills = [
   {
     id: "summarizeDoc",
     name: "summarizeDoc",
-    description: "Instructions to summarize one Ratel docs page for the user.",
+    description: "Summarize the docs page that fixes a 401 or other error, before a ticket.",
     body: "Read the page with readDoc. Answer with at most three bullets and quote commands exactly.",
     annotations: { readOnlyHint: true },
   },
 ];
 
-/** One tool per skill the run offers: calling it loads the skill's instructions. */
-function skillTools(): ToolSet {
-  return Object.fromEntries(
-    catalog.skills(skills).map((skill) => [
-      skill.id,
-      tool({
-        description: skill.description,
-        inputSchema: z.object({}),
-        execute: async () => ({ instructions: await skill.load() }),
-      }),
-    ]),
-  );
-}
+// The skills use the standard Ratel path: each turn recalls the matching skills into the
+// messages, and the model loads one with get_skill_content (from modelTools). They sit on
+// their own core, so the recall lists skills only; the tools stay direct tools above.
+// Ratel lists both, and a sandbox makes them params.
+const core = ratel().adaptTo(aiSdk());
+await core.tools.register(tools);
+const skillCore = ratel().adaptTo(aiSdk());
+await skillCore.skills.register(skills);
 
 /** The default model: DOCS_AGENT_MODEL when set (e.g. `amazon-bedrock/eu.anthropic.claude-haiku-5-5`). */
 export function docsModelId(env: NodeJS.ProcessEnv = process.env): string {
@@ -110,14 +105,10 @@ export function docsConfig(): DocsConfig {
     model: catalog.model("model", docsModelId()),
     system: catalog.prompt("system", SYSTEM),
     maxSteps: MAX_STEPS,
-    tools: { ...catalog.toolset(tools), ...skillTools() },
+    tools: { ...catalog.toolset(tools), ...skillCore.modelTools() },
   };
 }
 
-// Registered once, on load: Ratel lists the tools and skills, and a sandbox makes them params.
-const core = ratel().adaptTo(aiSdk());
-await core.tools.register(tools);
-await core.skills.register(skills);
 routeModelIds();
 // The config on load: a sandbox finds the model and the prompt without a run.
 export const docsDefaults = docsConfig();
@@ -153,7 +144,9 @@ export async function reply(
   const result = streamText({
     model: cfg.model,
     system: cfg.system,
-    messages,
+    // The skills that match this turn, as a synthetic search_capabilities result.
+    // appendRecall appends to the array it gets: a copy keeps the caller's history clean.
+    messages: await skillCore.appendRecall([...messages]),
     tools: cfg.tools,
     stopWhen: stepCountIs(cfg.maxSteps),
     abortSignal: options.abortSignal,

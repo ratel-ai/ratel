@@ -10,7 +10,7 @@ agent with a changed model, prompt or tools, one user turn per run.
 | `searchDocs` | Searches the pages in `src/docs/` by keyword | `readOnlyHint` | `real` |
 | `readDoc` | Reads one page by slug | `readOnlyHint` | `real` |
 | `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite`, or to Postgres when `DATABASE_URL` is set | `destructiveHint` | `fake` |
-| `summarizeDoc` (skill) | Loads the instructions to summarize one docs page | `readOnlyHint` | `real` |
+| `summarizeDoc` (skill) | Instructions to summarize the docs page that fixes the user's error; recalled each turn, loaded with `get_skill_content` | `readOnlyHint` | `real` |
 
 `createTicket` never runs real in a sandbox run: a `destructiveHint` tool is faked by default and
 has no `allowReal`, so the runner refuses a run that asks for it.
@@ -34,13 +34,15 @@ export function docsConfig(): DocsConfig {
     model: catalog.model("model", docsModelId()),   // "provider/model"
     system: catalog.prompt("system", SYSTEM),        // the template
     maxSteps: MAX_STEPS,
-    tools: { ...catalog.toolset(tools), ...skillTools() }, // the run's tools, one tool per skill
+    tools: { ...catalog.toolset(tools), ...skillCore.modelTools() }, // + get_skill_content
   };
 }
 const core = ratel().adaptTo(aiSdk());
 await core.tools.register(tools);
-await core.skills.register(skills);                  // summarizeDoc, offered via catalog.skills()
+const skillCore = ratel().adaptTo(aiSdk());          // skills only: recall lists skills
+await skillCore.skills.register(skills);
 export const docsDefaults = docsConfig();            // read on load: the sandbox finds them
+// in reply(): messages: await skillCore.appendRecall([...messages])
 ```
 
 In production each call returns `ratel.catalog.json` values when that file exists, else the

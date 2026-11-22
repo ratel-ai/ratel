@@ -101,11 +101,15 @@ code reads only inside `run()` cannot be found on load: the first run that reads
 declared ones; with `--dry` an sdk model string goes to the stand-in model.
 
 Skills registered on a `ratel()` core go into one `skills` param, in the tools shape: one row per
-skill with enabled, description and mode (hints from `annotations`, as for tools). The code offers
-them through `ratel.skills(skills)` from `@ratel-ai/sdk/experimental/catalog`. In a run, that call
-leaves a disabled skill out, returns the edited description, and each `load()` goes through the
-skill's mode: `real` returns the body, `fake` and `confirm` use the `tool.fake` and `tool.confirm`
-messages. The load runs in an `execute_tool <skill id>` span with `ratel.tool.mode`.
+skill with enabled, description and mode (hints from `annotations`, as for tools). The run's
+overrides apply at the standard SDK boundaries: `SkillCatalog` search, `has`, `get`, recall and the
+`search_capabilities` and `get_skill_content` model tools. A disabled skill is absent from search
+and unknown by id, the edited description is what search shows, and a load follows the skill's
+mode: `real` returns the body, `fake` and `confirm` use the `tool.fake` and `tool.confirm`
+messages (a reject gives the model the reviewer's error). The `ratel.skill.load` span carries
+`ratel.tool.mode`. The view is per run, so concurrent runs do not see each other's overrides,
+and the shared catalog does not change. The experimental `ratel.skills(skills)` accessor reads
+the same view.
 
 ## Tools and tool modes
 

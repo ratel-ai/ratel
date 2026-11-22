@@ -67,8 +67,12 @@ export function getSkillContentTool(catalog: SkillCatalog): ExecutableTool {
           isError: true,
         };
       }
-      const body = catalog.invoke(skillId, turnId);
-      return { body };
+      try {
+        return { body: await catalog.invokeAsync(skillId, turnId) };
+      } catch (err) {
+        // A sandbox reviewer rejected the load: the model gets the reason, like an unknown id.
+        return { error: err instanceof Error ? err.message : String(err), isError: true };
+      }
     },
   };
 }

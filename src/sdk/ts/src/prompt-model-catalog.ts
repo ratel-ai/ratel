@@ -57,6 +57,32 @@ export interface CatalogHost {
   toolset?<T>(tools: T): T;
   /** The skills this run offers in place of `skills`: disabled ones left out, edits and modes applied. */
   skills?(skills: readonly SkillView[]): readonly SkillView[];
+  /**
+   * The run's view of one registered skill, read by the standard `SkillCatalog`
+   * boundaries (search, has, get, invoke, get_skill_content): `undefined` when the run
+   * does not bind it (the catalog as registered), `null` when the run disables it.
+   */
+  skill?(skillId: string): RunSkill | null | undefined;
+}
+
+/** A skill as one sandbox run sees it. */
+export interface RunSkill {
+  /** The run's description, when it edits it. */
+  readonly description?: string;
+  /** How a load runs: `real` returns the body, `fake` and `confirm` go through the sandbox. */
+  readonly mode: "real" | "fake" | "confirm";
+  /** Loads the skill in its mode. `readBody` returns the stored body; a fake never calls it. Throws on a reviewer's reject. */
+  load(readBody: () => string): Promise<string>;
+}
+
+/** Whether a sandbox run with a skill view is active. */
+export function runSkillViewActive(): boolean {
+  return typeof activeHost()?.skill === "function";
+}
+
+/** The active run's view of a skill: see {@link CatalogHost.skill}. */
+export function activeRunSkill(skillId: string): RunSkill | null | undefined {
+  return activeHost()?.skill?.(skillId);
 }
 
 /** A skill as the code offers it to the model: what {@link ratel}.skills returns. */
