@@ -26,7 +26,12 @@ export function standinOr<R extends object>(real: R, env: NodeJS.ProcessEnv = pr
   const resolve = (modelId: string) => new StandinModel(modelId) as unknown as LanguageModel;
   return Object.assign(resolve, {
     modelKind: "language-model" as const,
-    callableProviders: () => [{ provider: "standin", keys: [] }],
+    // The runner checks the model's provider prefix against this list: the stand-in takes any of them.
+    callableProviders: () =>
+      ["standin", "anthropic", "openai", "google", "amazon-bedrock"].map((provider) => ({
+        provider,
+        keys: [],
+      })),
   }) as unknown as R;
 }
 
