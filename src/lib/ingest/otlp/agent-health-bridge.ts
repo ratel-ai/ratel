@@ -36,7 +36,7 @@ export interface AgentHealthBridgeDeps {
   traceTurns?: TraceTurnsIngestDeps;
   /** The project's SDK invokes near a batch's tool rows. Absent, nothing is dropped. */
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** `FF_TOOL_RUN_INSIGHTS` for the project. Absent, the switch is read (off unless set). Never throws. */
+  /** `FF_TOOL_RUN_INSIGHTS` for the project. Absent, the switch is read for the project (off unless set). Never throws. */
   agentRunsEnabled?: (projectId: string) => Promise<boolean>;
   logError: LogError;
 }
@@ -85,6 +85,6 @@ async function withoutSdkDuplicates(
   }
 }
 
-async function readAgentRunsSwitch(): Promise<boolean> {
-  return toolRunInsightsOn();
+function readAgentRunsSwitch(projectId: string): Promise<boolean> {
+  return toolRunInsightsOn({ projectId });
 }

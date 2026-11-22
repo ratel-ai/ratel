@@ -13,6 +13,7 @@ export const CORE_FLAGS = [
   "FF_RANKING_CATALOG_DRIFT",
   "FF_MCP_APPS",
   "FF_AGENTS_PAGES",
+  "FF_TOOL_RUN_INSIGHTS",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

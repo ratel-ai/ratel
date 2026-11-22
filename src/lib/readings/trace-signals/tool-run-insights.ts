@@ -22,10 +22,10 @@ import type { WorkflowConfig } from "./workflows/types";
  *   agent ("draft_fix" reads "Draft fix") until the labeller names it from
  *   its asks.
  *
- * Owned (ADR-0030): the switch is the deployment's `FF_TOOL_RUN_INSIGHTS`
- * (`lib/platform/tool-run-insights-flag.ts`, or `RATEL_EXPERIMENTAL_FEATURES`
- * in the open-source edition), read from the environment and off by default.
- * Upstream decides it per project and organization through its flag service.
+ * Owned (ADR-0030): the switch is the core's `FF_TOOL_RUN_INSIGHTS`
+ * (`lib/platform/tool-run-insights-flag.ts`), off by default: the environment
+ * without the edition's flags port, else the edition decides it for the
+ * project and organization, after any `FF_*` value the operator set.
  * The functions keep upstream's names and arguments, so every caller stays
  * upstream's; the last argument is the environment instead of the flag deps.
  */
@@ -41,13 +41,14 @@ export const TOOL_RUN_MINING: Readonly<Partial<WorkflowConfig>> = Object.freeze(
   agentTasks: true,
 });
 
-/** Whether the flag is on for the project. Never throws: the environment is read, not a service. */
+/** Whether the flag is on for the project (and its organization, when known). Never throws: a failed decision is off. */
 export async function toolRunInsightsEnabled(
-  _projectId: string,
-  _organization?: unknown,
+  projectId: string,
+  organization?: unknown,
   env: Env = process.env,
 ): Promise<boolean> {
-  return toolRunInsightsOn(env);
+  const organizationId = organizationIdOf(organization);
+  return toolRunInsightsOn(organizationId ? { projectId, organizationId } : { projectId }, { env });
 }
 
 /** The flag for a project. Never throws. */
@@ -74,4 +75,12 @@ export async function workflowMiningFor(
     },
     { attributes: { "project.id": projectId } },
   );
+}
+
+/** The organization's id when the caller passed one (upstream passes its organization record). */
+function organizationIdOf(organization: unknown): string | undefined {
+  if (typeof organization !== "object" || organization === null || !("id" in organization)) {
+    return undefined;
+  }
+  return typeof organization.id === "string" ? organization.id : undefined;
 }
