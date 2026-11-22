@@ -5,6 +5,8 @@ import type { PairStats } from "@/lib/readings/trace-signals/signals/pairs";
 import { siblingKey } from "@/lib/readings/trace-signals/signals/pairs";
 import type { StoredPrerequisites } from "@/lib/readings/trace-signals/signals/prerequisites";
 import { type DetectedSignal, signalKey } from "@/lib/readings/trace-signals/signals/types";
+import { tokenStepKind, tokenStepLabel } from "@/lib/readings/trace-signals/steps/token-label";
+import { kindsOf, type StepsView } from "@/lib/readings/trace-signals/steps/view";
 import type {
   FlowEdge,
   FlowJourney,
@@ -63,6 +65,7 @@ export interface StoredFlow {
   totalTools: number;
   /** Turns call by call (`journey.ts`). Additive: absent on runs stored before it. */
   journey?: StoredJourney;
+  stepJourney?: StoredJourney;
   /** What each tool needs first, across a session (`prerequisites.ts`). Additive: absent on runs stored before it. */
   prerequisites?: StoredPrerequisites;
 }
@@ -363,7 +366,56 @@ export function flowView(
   const journey = stored.journey
     ? journeyView(stored.journey, nodes, kindsById, names, stored.prerequisites)
     : undefined;
-  return { nodes, edges, totalTools: stored.totalTools, ...(journey ? { journey } : {}) };
+  const stepJourney = stored.stepJourney
+    ? journeyView(stored.stepJourney, nodes, kindsById, names, stored.prerequisites, true)
+    : undefined;
+  return {
+    nodes,
+    edges,
+    totalTools: stored.totalTools,
+    ...(journey ? { journey } : {}),
+    ...(stepJourney ? { stepJourney } : {}),
+  };
+}
+
+/** Select a typed journey only for callers that have enabled typed steps. */
+export function flowForSteps(flow: FlowModel, view: StepsView): FlowModel {
+  if (view === "tools") return flow;
+  const journey = flow.stepJourney ?? flow.journey;
+  if (!journey) return flow;
+  const kinds = kindsOf(view);
+  const tools = journey.tools.filter((tool) =>
+    tool.kind === "other"
+      ? view === "all" || view === "flow"
+      : kinds.includes(tool.kind === "tool" ? "tool_call" : tool.kind),
+  );
+  const kept = new Set(tools.map((tool) => tool.id));
+  const paths = journey.paths
+    .map((path) => ({ ...path, tools: path.tools.filter((id) => kept.has(id)) }))
+    .filter((path) => path.tools.length > 0);
+  return {
+    ...flow,
+    ...(paths.length === 0 ? { nodes: [], edges: [] } : {}),
+    journey:
+      paths.length === 0
+        ? undefined
+        : {
+            ...journey,
+            paths,
+            tools,
+            turns: paths.reduce((sum, path) => sum + path.turns, 0),
+            ...(journey.prerequisites
+              ? {
+                  prerequisites: {
+                    ...journey.prerequisites,
+                    pairs: journey.prerequisites.pairs.filter(
+                      (pair) => kept.has(pair.first) && kept.has(pair.tool),
+                    ),
+                  },
+                }
+              : {}),
+          },
+  };
 }
 
 /** The open problems a journey node shows as an icon: failing calls and slow calls. */
@@ -413,6 +465,7 @@ function journeyView(
   kindsById: ReadonlyMap<string, readonly SignalKind[]>,
   names: ReadonlyMap<string, string>,
   storedPrerequisites?: StoredPrerequisites,
+  typedSteps = false,
 ): FlowJourney | undefined {
   if (!isStoredJourney(stored)) return undefined;
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -444,16 +497,25 @@ function journeyView(
     if (id === FLOW_JOURNEY_OTHER) {
       return { id, kind: "other", label: "Other tools", tint: "none", signalIds: [], flags: [] };
     }
-    const node = byId.get(id);
+    const kind = typedSteps ? tokenStepKind(id) : null;
+    const toolLike = kind === null || kind === "tool_call";
+    const node = toolLike ? byId.get(id) : undefined;
     const skill = id.startsWith("skill:");
     const entryId = skill ? id.slice("skill:".length) : id;
     return {
       id,
-      kind: skill ? "skill" : "tool",
-      label: node?.label ?? names.get(entryId) ?? entryId,
+      kind:
+        kind === "model_call" || kind === "code" || kind === "handoff"
+          ? kind
+          : skill
+            ? "skill"
+            : "tool",
+      label: typedSteps
+        ? tokenStepLabel(id, names)
+        : (node?.label ?? names.get(entryId) ?? entryId),
       tint: node && node.tint !== "dead" ? node.tint : "none",
       signalIds: node?.signalIds ?? [],
-      flags: flagsOf(kindsById.get(id) ?? []),
+      flags: toolLike ? flagsOf(kindsById.get(id) ?? []) : [],
     };
   });
   return {

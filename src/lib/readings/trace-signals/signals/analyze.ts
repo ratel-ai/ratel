@@ -206,6 +206,8 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
   const journey = createJourneyStats();
   const prerequisites = createPrerequisiteStats(options.prereqWindowMs);
   const typedSteps = options.workflowMining?.typedSteps === true;
+  const stepJourney = typedSteps ? createJourneyStats() : null;
+  let hasTypedCalls = false;
   const daily = new DailyBuckets({ typedSteps });
   const stepMetrics = typedSteps
     ? createStepMetrics({ modelCalls: context.modelCalls ?? undefined })
@@ -244,6 +246,12 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       if (!inWindow(turn)) return;
       accumulateTurn(stats, turn, floors);
       countJourneyPositions(journey, turn);
+      if (stepJourney) {
+        countJourneyPositions(stepJourney, turn, true);
+        hasTypedCalls ||= turn.steps.some(
+          (step) => step.kind === "model_call" || step.kind === "code" || step.kind === "handoff",
+        );
+      }
       countPrerequisites(prerequisites, turn);
       if (otel && otelFacts) accumulateOtelTurn(otel, turn, otelFacts);
       workflows.collect(turn);
@@ -258,7 +266,8 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       return (
         pairStats().eligible.size >= MIN_PAIR_TOOLS ||
         journey.positions[0].size > 0 ||
-        stats.turnsWithSearch > 0
+        stats.turnsWithSearch > 0 ||
+        !!stepJourney?.positions[0].size
       );
     },
     feedPairs(turn) {
@@ -268,6 +277,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       if (!inWindow(turn)) return;
       if (pairsOn) accumulatePairs(pairStats(), turn);
       countJourneyPath(journey, turn);
+      if (stepJourney) countJourneyPath(stepJourney, turn, true);
     },
     finish() {
       const finalPairs = pairStats();
@@ -295,6 +305,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       const scanStart = options.scanStart ?? context.windowStart;
       const flow = buildFlow(stats, finalPairs, signals, catalogTools);
       const stored = finishJourney(journey);
+      const typedJourney = stepJourney && hasTypedCalls ? finishJourney(stepJourney) : undefined;
       const needs = finishPrerequisites(prerequisites);
       return {
         signals,
@@ -307,6 +318,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
           flow: {
             ...flow,
             ...(stored ? { journey: stored } : {}),
+            ...(typedJourney ? { stepJourney: typedJourney } : {}),
             ...(needs ? { prerequisites: needs } : {}),
           },
           queriesTruncated: stats.queriesEvicted > 0,

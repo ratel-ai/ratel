@@ -1,5 +1,6 @@
 import { isInvoke } from "@/lib/readings/trace-signals/signals/turn-facts";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import { stepToken } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * The flow map's journey: how turns unfold call by call. Every turn becomes
@@ -102,15 +103,20 @@ function nodeIdOf(targetType: string, targetId: string): string {
  */
 export function turnJourney(
   turn: Pick<SignalTurn, "steps"> & Partial<Pick<SignalTurn, "lane">>,
+  typedSteps = false,
 ): TurnJourney | null {
-  const first = turn.steps.findIndex(isInvoke);
-  const calls = turn.steps.filter(isInvoke);
+  const calls = typedSteps
+    ? turn.steps.filter((step) => stepToken(step) !== null)
+    : turn.steps.filter(isInvoke);
+  const first = calls.length > 0 ? turn.steps.indexOf(calls[0]) : -1;
   const before = first === -1 ? turn.steps : turn.steps.slice(0, first);
   const searched = before.some((step) => step.kind === "search");
   if (calls.length === 0 && !searched) return null;
   return {
     start: searched ? "search" : turn.lane === "otlp" ? "agent" : "none",
-    ids: calls.slice(0, JOURNEY_STEPS).map((call) => nodeIdOf(call.targetType, call.targetId)),
+    ids: calls
+      .slice(0, JOURNEY_STEPS)
+      .map((call) => (typedSteps ? stepToken(call)! : nodeIdOf(call.targetType!, call.targetId!))),
     more: calls.length > JOURNEY_STEPS,
   };
 }
@@ -119,8 +125,9 @@ export function turnJourney(
 export function countJourneyPositions(
   stats: JourneyStats,
   turn: Pick<SignalTurn, "steps"> & Partial<Pick<SignalTurn, "lane">>,
+  typedSteps = false,
 ): void {
-  const journey = turnJourney(turn);
+  const journey = turnJourney(turn, typedSteps);
   if (journey) countJourneyPositionsOf(stats, journey);
 }
 
@@ -156,8 +163,9 @@ function parseKey(key: string, n: number): StoredJourneyPath {
 export function countJourneyPath(
   stats: JourneyStats,
   turn: Pick<SignalTurn, "steps"> & Partial<Pick<SignalTurn, "lane">>,
+  typedSteps = false,
 ): void {
-  const journey = turnJourney(turn);
+  const journey = turnJourney(turn, typedSteps);
   if (journey) countJourneyPathOf(stats, journey);
 }
 

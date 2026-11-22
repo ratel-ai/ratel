@@ -15,12 +15,16 @@ import {
   readPrerequisites,
   readStoredPrerequisites,
 } from "@/lib/readings/trace-signals/flow-journey-insights";
+import { flowForSteps } from "@/lib/readings/trace-signals/signals/flow-model";
+import type { StepsView } from "@/lib/readings/trace-signals/steps";
 import type { FlowJourney, FlowModel, TurnSourceMix } from "@/lib/readings/trace-signals/view";
 import { layoutJourney } from "@/lib/views/health/flow-journey-layout";
 import { layoutFlow } from "@/lib/views/health/flow-layout";
 
 export interface ToolFlowMapProps {
   flow: FlowModel;
+  /** Set a preset only when typed steps is enabled. */
+  stepsView?: StepsView;
   /** The span the map was computed over when it differs from the selected window, e.g. "last 22 days". */
   windowLabel?: string | null;
   /** How the window's turns were split, so an empty prerequisites view can say timing split them. */
@@ -45,11 +49,13 @@ export interface ToolFlowMapProps {
  * drawing is fixed before it reaches the browser; only focus runs on the client.
  */
 export function ToolFlowMap({
-  flow,
+  flow: sourceFlow,
+  stepsView,
   windowLabel = null,
   turnSourceMix = null,
   showAll = false,
 }: ToolFlowMapProps) {
+  const flow = stepsView ? flowForSteps(sourceFlow, stepsView) : sourceFlow;
   const journey = layoutJourney(flow.journey, { showAll: true });
   if (journey && flow.journey) {
     // The run's own pairs (counted across a session) when it stored them; the paths' pairs for older runs.

@@ -84,7 +84,10 @@ export function CallOrder({
 }: CallOrderProps) {
   const [stored, setStored] = useStoredFlag(SHOW_ALL_KEY, false);
   const [chain, setChain] = useState<JourneyChain | null>(null);
-  const hasPairs = reading.relations.length > 0;
+  const typed = journey.tools.some(
+    (tool) => tool.kind === "model_call" || tool.kind === "code" || tool.kind === "handoff",
+  );
+  const hasPairs = !typed && reading.relations.length > 0;
   const view: CallOrderView = stored || !hasPairs ? "all" : "needs";
   // The pre-paint mark follows what is stored, before paint (see `ToolJourneyView`).
   useLayoutEffect(() => {
@@ -134,7 +137,7 @@ export function CallOrder({
                 <span>{NEEDS_FIRST_ADVICE}</span>
               </p>
             ) : null
-          ) : (
+          ) : typed ? null : (
             <p className="mb-3 max-w-3xl text-ui text-fg-muted" data-prereq-line="empty">
               {NEEDS_FIRST_EMPTY}
               {emptyReason ? ` ${emptyReason}` : ""}
@@ -149,7 +152,11 @@ export function CallOrder({
             prerequisites={reading.relations}
             chain={view === "all" ? chain : null}
           />
-          {view === "all" ? <Legend lane={lane} /> : crossTurn ? <CrossTurnKey /> : null}
+          {view === "all" ? (
+            <Legend lane={lane} typed={typed} />
+          ) : crossTurn ? (
+            <CrossTurnKey />
+          ) : null}
         </div>
       </Section>
       {chains.length > 0 ? (
@@ -202,7 +209,7 @@ const STATES: readonly { Icon: LucideIcon; className: string; text: string; sear
 ];
 
 /** A small key: the map reads without it, this only confirms what a reader guessed. Search marks only where searches arrive. */
-function Legend({ lane }: { lane: SourceMode }) {
+function Legend({ lane, typed = false }: { lane: SourceMode; typed?: boolean }) {
   const states = lane === "otel" ? STATES.filter((state) => !state.searches) : STATES;
   return (
     <ul
@@ -230,7 +237,7 @@ function Legend({ lane }: { lane: SourceMode }) {
             />
           ))}
         </svg>
-        Color follows the first tool
+        Color follows the first {typed ? "step" : "tool"}
       </li>
       <li className="inline-flex items-center gap-1">
         <Flag aria-hidden className="size-3" />
