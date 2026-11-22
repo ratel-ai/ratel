@@ -38,7 +38,7 @@ rather than left implicit.
 
 The adoption gradient is **in-process SDK → local distribution → self-hosted platform → managed
 cloud**. The self-hosted rung is the open-source edition of the platform application at
-`apps/web` ([ADR-0029](0029-platform-cloud-modules-private-repository.md),
+`src` ([ADR-0029](0029-platform-cloud-modules-private-repository.md),
 [ADR-0030](0030-platform-oss-layered-core-and-cloud-sync.md)); it serves the published
 `protocol/` contract ([ADR-0003](0003-catalog-source-interface.md)).
 

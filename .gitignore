@@ -1,7 +1,3 @@
-# Rust
-target/
-**/*.rs.bk
-
 # Environment
 .env
 .env.local
@@ -20,48 +16,25 @@ Thumbs.db
 # Node
 node_modules/
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.egg
+# Build output (src/mcp-apps/dist, package builds)
 dist/
-build/
-.venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.whl
 
 # TypeScript
 *.tsbuildinfo
-src/sdk/ts/dist/
-src/telemetry/ts/dist/
-src/rankers/ts/dist/
 
 # Commercial source: the private repository is checked out at ee/src, and
-# scripts/link-ee.mjs copies its route stubs to apps/web/app/(ee)
+# scripts/link-ee.mjs copies its route stubs to src/app/(ee)
 ee/src
-apps/web/app/(ee)
-# ...and places its public/ files under apps/web/public, listed in .ee-public.json
-apps/web/public/email/
-apps/web/.ee-public.json
+src/app/(ee)
+# ...and places its public/ files under src/public, listed in .ee-public.json
+src/public/email/
+src/.ee-public.json
 
-apps/web/proxy.ts
+src/proxy.ts
 # Next.js
 .next/
 out/
 next-env.d.ts
-
-# NAPI native binding outputs
-src/sdk/ts/native/index.cjs
-src/sdk/ts/native/index.d.cts
-src/sdk/ts/native/*.node
-src/sdk/ts/npm/*/*.node
-src/rankers/ts/native/index.cjs
-src/rankers/ts/native/index.d.cts
-src/rankers/ts/native/*.node
-src/rankers/ts/npm/*/*.node
 
 # Logs
 *.log
@@ -70,16 +43,6 @@ src/rankers/ts/npm/*/*.node
 plan.md
 progress.md
 CLAUDE.local.md
-embedding_demo.py
-embedding_demo.ts
-embedding_usage_demo.py
-embedding_usage_demo.ts
-adaptive_demo.py
-adaptive_demo.ts
-adaptive_demo_graph.json
-# ...but the committed example demos are tracked (scratch copies elsewhere stay ignored)
-!examples/adaptive-ranking-python/adaptive_demo.py
-!examples/adaptive-ranking-ts/src/adaptive_demo.ts
 
 # Claude Code — personal/runtime; commit .claude/skills and .claude/settings.json
 .claude/settings.local.json
@@ -87,3 +50,10 @@ adaptive_demo_graph.json
 
 # Ratel local-scope MCP config (per-user, never committed)
 .ratel/config.local.json
+
+# install.sh --access public writes it (it holds the login hash)
+/Caddyfile
+
+# deploy/terraform/check.sh
+deploy/terraform/**/.terraform/
+deploy/terraform/**/.terraform.lock.hcl

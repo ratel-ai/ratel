@@ -13,8 +13,8 @@ proprietary code enters this repository.
 
 ## Context
 
-The Cloud application (`ratel-cloud/apps/web`: about 2,170 TypeScript files, 67 tables, 10
-background job kinds) is to become the open-source Ratel Platform at `apps/web`, with the Cloud
+The Cloud application (`ratel-cloud/src`: about 2,170 TypeScript files, 67 tables, 10
+background job kinds) is to become the open-source Ratel Platform at `src`, with the Cloud
 edition composed from the private checkout at `ee/src` as ADR-0029 decided. Three things make a
 plain copy unworkable:
 
@@ -30,7 +30,7 @@ plain copy unworkable:
 
 ## Decision
 
-**Five ports, in `apps/web/lib/contracts`.** `session` (the user, the active organization, the
+**Five ports, in `src/lib/contracts`.** `session` (the user, the active organization, the
 role and the memberships; organizations by id for paths with no session; the member count;
 `actingAs`), `entitlements` (limits, quotas, metered features, `planId`),
 `telemetry` (events, exceptions), `embedding-provider`, and `registry` (job handlers and
@@ -55,7 +55,7 @@ ports: the open-source edition has none, and a missing slot is the open-source b
 icons (Cloud: Members and Billing; empty in open source). The slots are read only above L7, in
 `app/**` and `components/**`.
 
-**A layered core under `apps/web/lib`**, imports pointing downward only:
+**A layered core under `src/lib`**, imports pointing downward only:
 
 | Level | Folders | Holds |
 |---|---|---|
@@ -90,7 +90,7 @@ moves where in three modes: `copy` (mirrored on every sync, import specifiers re
 layer paths and to `@ratel/design-system`), `owned` (bootstrapped once, then maintained here; the
 sync prints the upstream diff for a human to port), `excluded` (never lands). `private-strings.txt`
 names the Cloud-only vendors and the private decision engines as patterns scoped to
-`apps/web`, and carries the customer whose data appears in Cloud fixtures only as a salted hash
+`src`, and carries the customer whose data appears in Cloud fixtures only as a salted hash
 checked against the whole tree, so the name is never written in this repository; a landed file matching any pattern fails the sync before a byte is written,
 and CI runs the same guard over the repository (`pnpm check:private`). `source.json` records the commit
 synced. Owned files keep the upstream export names (`getSessionContext`, `trackServerEvent`,

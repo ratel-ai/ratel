@@ -36,7 +36,62 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 
 **You need** Docker with Compose 2.24 or later, network access to pull images and packages, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). The first build takes about 5 minutes.
 
+### One command
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
+```
+
+The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps the values in your `.env` and stops if the checkout has local changes.
+
+Options, after `sh -s --`: `--ref <branch|tag|sha>` (default `main`), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
+```
+
+On a server with a public IP, `--access public` puts [Caddy](https://caddyserver.com) in front of the console, on ports 80 and 443, with a Let's Encrypt certificate and a login (basic auth, user `ratel`). The password is new and printed once. `--domain <name>` sets the site name (default `<public-ip>.sslip.io`), `--tls internal` uses Caddy's own CA in place of Let's Encrypt, and `--auth-hash <bcrypt>` sets the password's hash. The routes that SDKs and MCP clients call with project API keys (`/v1`, `/v2`, `/api/v1`, `/api/v2`, `/api/mcp`) and `/api/health` pass without the login. A rerun keeps the mode, and `--access private` turns Caddy off. The installer writes `Caddyfile` and adds `docker-compose.caddy.yml` to `COMPOSE_FILE` in `.env`, so every `docker compose` command in the directory includes Caddy. The containers restart after a reboot.
+
+### Deploy to your cloud
+
+From your laptop, one command creates a VM in your cloud and installs Ratel on it:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh
+```
+
+`deploy.sh` finds the cloud you are logged in to: AWS (`aws sts get-caller-identity`), Google Cloud (the account and project of `gcloud`), Azure (`az account show`), DigitalOcean (`DIGITALOCEAN_TOKEN` or `doctl`) or Hetzner (`HCLOUD_TOKEN` or `hcloud`). With several, it asks, or takes `--cloud`. It uses [OpenTofu](https://opentofu.org) (`tofu`), or Terraform when OpenTofu is not installed. It creates one Ubuntu 24.04 LTS VM with 2 vCPU or more, 8 GB of RAM and 30 GB of disk or more, a firewall, a static IP and a dedicated SSH key. It shows the plan and a rough monthly cost per size, and asks before it creates anything. Then it follows the install and prints how to open the console. The modules are in [deploy/terraform/](deploy/terraform/).
+
+There are two access modes:
+
+- **`--access public`** (default): Caddy with TLS and a login, as above. Ports 80 and 443 are open to all, or only to the `--allow-cidr` ranges (for example a VPN), and then Caddy uses its own CA because Let's Encrypt cannot reach port 80. SSH is open only to your current IP. The certificate is for `--domain`, or for `<ip>.sslip.io` with no domain. The login password is printed once, and stays only on your laptop, in `~/.ratel/deploy/<name>/login`.
+- **`--access private`**: no web port. SSH is open to your current IP and the `--allow-cidr` ranges, and you reach the console through a tunnel: `ssh -i ~/.ratel/deploy/ratel/id_ed25519 -N -L 3000:127.0.0.1:3000 ratel@<ip>`.
+
+Other options, after `sh -s --`: `--region`, `--size`, `--name` (default `ratel`, for more than one deploy), `--ref` (passed to `install.sh`), `--iac terraform|tofu` and `--yes`. The state, the SSH key and the password stay on your laptop in `~/.ratel/deploy/<name>/` (owner-only), so the other commands need no flags:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- status
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- up --ref <tag>   # upgrade
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- destroy
+```
+
+`up` on an existing deploy upgrades it: it reruns `install.sh` on the VM over SSH with the new `--ref`. If your IP changed, it first opens SSH to the new one. `destroy` deletes the VM, its disk with all Ratel data and its IP, then the local state. Back up first (see [On a server](#on-a-server)).
+
+### One-click deploy
+
+Each button opens your cloud's console with Ratel's template, in your account. Nothing is created until you confirm there. The VM runs `install.sh`, as `deploy.sh` does, in the public mode (Caddy with TLS and a login for user `ratel`, with the password that you type) or in the private mode (no web port, an SSH tunnel). The install takes 5 to 10 minutes after the VM starts.
+
+| Cloud | Button | What it opens |
+|---|---|---|
+| AWS | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home#/stacks/quickcreate?templateURL=https%3A%2F%2Fratel-public-templates.s3.amazonaws.com%2Fcloudformation%2Fratel.yaml&stackName=ratel) | CloudFormation quick-create, with [deploy/cloudformation/ratel.yaml](deploy/cloudformation/ratel.yaml) (default VPC, `t3.large`, Elastic IP) |
+| Azure | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fratel-ai%2Fratel%2Fmain%2Fdeploy%2Fazure%2Fazuredeploy.json) | A custom deployment, with [deploy/azure/azuredeploy.json](deploy/azure/azuredeploy.json) (its own network, `Standard_B2ms`, static IP) |
+| Google Cloud | [![Open in Cloud Shell](https://gstatic.com/cloudssh/images/open-btn.svg)](https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=https%3A%2F%2Fgithub.com%2Fratel-ai%2Fratel&cloudshell_git_branch=main&cloudshell_tutorial=deploy%2Fcloudshell%2Ftutorial.md&show=terminal) | Cloud Shell, with a [tutorial](deploy/cloudshell/tutorial.md) that runs `./deploy.sh up --cloud gcp` |
+
+The password is in the user data of the VM (AWS) or in its custom data (Azure), base64-encoded. Anyone who can read the VM's configuration in your account can read it. Use `deploy.sh` when that matters: it gives the VM only the hash.
+
 ### On your machine
+
+The manual steps:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
@@ -54,7 +109,7 @@ If `docker compose up --wait` fails, read `docker compose logs db web worker`. A
 
 1. In the console, open **Settings > API keys** and create a key. It is shown once.
 2. Send a first trace. The same page shows a TypeScript and a curl snippet with your endpoint; the curl one posts a single span to the traces endpoint and answers `202`. Set `RATEL_API_KEY` to the key.
-3. To let an agent query Ratel, connect it over MCP: `POST <BASE_URL>/api/mcp` with `Authorization: Bearer <project key>`. The console's **Integrations** page has copy-paste setup for Claude Code, Claude Desktop, Cursor and VS Code, for example `claude mcp add --transport http ratel <BASE_URL>/api/mcp --header "Authorization: Bearer $RATEL_API_KEY"`. Details are in [apps/web/lib/mcp/README.md](apps/web/lib/mcp/README.md).
+3. To let an agent query Ratel, connect it over MCP: `POST <BASE_URL>/api/mcp` with `Authorization: Bearer <project key>`. The console's **Integrations** page has copy-paste setup for Claude Code, Claude Desktop, Cursor and VS Code, for example `claude mcp add --transport http ratel <BASE_URL>/api/mcp --header "Authorization: Bearer $RATEL_API_KEY"`. Details are in [src/lib/mcp/README.md](src/lib/mcp/README.md).
 
 ### Experimental features
 
@@ -71,6 +126,8 @@ A fresh install seeds this sample project, Site Copilot, by itself the first tim
 ### On a server
 
 > **The console has no login.** Anyone who reaches it is an admin. Ratel binds to `127.0.0.1` only: keep it behind your own proxy with authentication and TLS.
+
+The [one-command installer](#one-command) does the steps below for you, with random secrets. With `--access public` it also sets up the proxy (Caddy). Then set `RATEL_ORG_NAME` and `BASE_URL` in `.env` and run it again. By hand:
 
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
@@ -131,21 +188,20 @@ An organization holds projects, and each project is one agent's view:
 ## Repo layout
 
 ```
-apps/
-└── web/                       # @ratel/platform: the console and APIs
+src/                           # @ratel/platform: the console and APIs
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
-├── design-system/             # @ratel/design-system: semantic tokens and UI primitives
-└── sdk/                       # Ratel SDK documentation; the SDK code will move here later
-src/                           # Ratel SDK: core (Rust), sdk, adapters, rankers, telemetry
-scripts/                       # Repository checks and release tooling
+└── design-system/             # @ratel/design-system: semantic tokens and UI primitives
+scripts/                       # Repository checks
 docs/
 ├── adr/                       # Architecture decision records
 └── assets/                    # Images and other static assets
 ee/                            # Manifest for the Enterprise modules
 ```
 
-The application's own layout and commands are in [apps/web/README.md](apps/web/README.md), and the layers of its core in [apps/web/lib/README.md](apps/web/lib/README.md).
+The SDKs (the Rust core, the TypeScript and Python SDKs, adapters, rankers, telemetry and the catalog protocol) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).
+
+The application's own layout and commands are in [src/README.md](src/README.md), and the layers of its core in [src/lib/README.md](src/lib/README.md).
 
 ## Development
 
@@ -153,13 +209,11 @@ The application's own layout and commands are in [apps/web/README.md](apps/web/R
 
 Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres. 
 
-- [apps/web/README.md](apps/web/README.md)
+- [src/README.md](src/README.md)
 
 ### Ratel SDK
 
-Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (pinned via `rust-toolchain.toml`). The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
-
-- [packages/sdk/README.md](packages/sdk/README.md)
+The SDKs are developed in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). The platform uses the published `@ratel-ai/sdk` and `@ratel-ai/telemetry` packages from npm.
 
 ## Contributing
 
@@ -169,4 +223,4 @@ Prerequisites: The Rust workspace and the SDKs' native addons need Rust stable (
 
 ## License
 
-The `ratel-ai-core` engine is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine, now in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.

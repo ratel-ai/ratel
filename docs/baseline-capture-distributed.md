@@ -2,7 +2,7 @@
 
 How to collect the evidence for [adaptive usage ranking](adr/0014-adaptive-usage-ranking.md) when your agent runs as a **process-per-request server across many instances** — the shape where the search and the invocation that follows are different requests, on possibly different machines.
 
-The single-process path is the demo: [`examples/configurable-adaptive-ranking-ts`](../examples/configurable-adaptive-ranking-ts/README.md). Read that first — it explains *why* to seed before you rank. This page covers only what changes when one process cannot see a whole turn.
+The single-process path is the demo: [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository. Read that first — it explains *why* to seed before you rank. This page covers only what changes when one process cannot see a whole turn.
 
 ## The setup
 
