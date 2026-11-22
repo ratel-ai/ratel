@@ -141,7 +141,7 @@ export const ledgerSeams: Pick<
 
 function defaultDeps(): BuildJobDeps {
   return {
-    readsAgentRuns: async () => toolRunInsightsOn(),
+    readsAgentRuns: (projectId) => toolRunInsightsOn({ projectId }),
     getCursor: getTraceTurnsCursorFn,
     listEvents: listTurnEventsPageFn,
     listHits: listTurnEventHitsFn,
