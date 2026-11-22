@@ -191,7 +191,7 @@ test("a Jev judge call outside any run is its own span; an error call is an erro
   );
   const [judge] = spans();
   assert.equal(judge!.status.code, SpanStatusCode.ERROR);
-  assert.equal(judge!.attributes["error.type"], "TypeError");
+  assert.equal(judge!.attributes["error.type"], "unknown", "a stable type, never the class name");
 });
 
 function spanStart(span: ReadableSpan): number {

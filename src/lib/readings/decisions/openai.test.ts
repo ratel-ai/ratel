@@ -504,6 +504,6 @@ test("a rejected key is one error call, under the default feature", async () => 
   );
   assert.deepEqual(
     lines.map((line) => [line.feature, line.outcome, line.error_type]),
-    [["decision", "error", "DecisionCallError"]],
+    [["decision", "error", "unauthorized"]],
   );
 });
