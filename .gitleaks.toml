@@ -17,6 +17,8 @@ paths = [
   '''^apps/web/lib/console/settings/api-key-access-ui\.test\.ts$''',
   '''^apps/web/lib/console/settings/support-session-ui\.test\.ts$''',
   '''^apps/web/lib/platform/otel/config\.test\.ts$''',
+  # A fake DB password that the instance-mode test passes as a plain env var, to prove it is never logged.
+  '''^src/sandbox/ts/src/dev/serve-e2e\.test\.ts$''',
 ]
 
 [[allowlists]]
