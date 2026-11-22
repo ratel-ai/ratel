@@ -1,0 +1,80 @@
+{
+  "sdk": {
+    "language": "typescript",
+    "name": "@ratel-ai/sandbox",
+    "version": "0.1.0"
+  },
+  "build": {
+    "id": "3f9a1c2e5b7d9f1a3c5e7b9d1f3a5c7e9b1d3f5a",
+    "dirty": false
+  },
+  "providers": [
+    {
+      "provider": "anthropic",
+      "keys": [
+        "ANTHROPIC_API_KEY"
+      ]
+    }
+  ],
+  "sandboxes": [
+    {
+      "id": "workflow-label",
+      "file": "apps/web/lib/trace-signals/workflows/label.sandbox.ts",
+      "modelResolver": "builtin",
+      "input": {
+        "kind": "structured",
+        "schema": {
+          "type": "object",
+          "required": [
+            "workflowId",
+            "toolOrder"
+          ],
+          "properties": {
+            "workflowId": {
+              "type": "string"
+            },
+            "toolOrder": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "asks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 5
+            }
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "model",
+          "kind": "model",
+          "default": "anthropic/claude-sonnet-5-5",
+          "options": [
+            "anthropic/claude-sonnet-5-5",
+            "anthropic/claude-haiku-5-5"
+          ]
+        },
+        {
+          "name": "system",
+          "kind": "prompt",
+          "default": "You name agent workflows. Answer with JSON: name, description, icon."
+        },
+        {
+          "name": "maxTokens",
+          "kind": "scalar",
+          "type": "int",
+          "default": 400,
+          "min": 50,
+          "max": 2000
+        }
+      ],
+      "context": [],
+      "state": "forever"
+    }
+  ]
+}

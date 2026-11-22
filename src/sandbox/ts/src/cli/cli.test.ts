@@ -173,3 +173,53 @@ describe("ratel sandbox run", () => {
     30_000,
   );
 });
+
+describe("a sandbox that makes no model call", () => {
+  const SUM = fileURLToPath(new URL("../test-support/sum-project/", import.meta.url));
+  const inSum = (...args: string[]) =>
+    new Promise<CliResult>((resolve) => {
+      const child = spawn(process.execPath, ["--import", TSX, MAIN, ...args], {
+        cwd: SUM,
+        env: { ...process.env, NO_COLOR: "1" },
+      });
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => (stdout += d));
+      child.stderr.on("data", (d) => (stderr += d));
+      child.on("close", (code) => resolve({ code, stdout, stderr, pid: child.pid as number }));
+    });
+
+  it("lists it with its image, output and state in the manifest", async () => {
+    const r = await inSum("sandbox", "list", "--json");
+    expect(r.code).toBe(0);
+    const [sum] = JSON.parse(r.stdout).sandboxes;
+    expect(sum).toMatchObject({
+      id: "sum-numbers",
+      state: "run",
+      output: { kind: "structured" },
+      image: { base: "node:22-slim", sidecars: [{ kind: "postgres" }, { kind: "redis" }] },
+    });
+  }, 30_000);
+
+  it("runs it with a --set scale", async () => {
+    const r = await inSum(
+      "sandbox",
+      "run",
+      "sum-numbers",
+      "--input",
+      "in.json",
+      "--set",
+      "scale=2",
+    );
+    expect(ownLines(r.stderr)).toEqual([]);
+    expect(r.code).toBe(0);
+    expect(outputIn(r.stdout)).toEqual({ total: 13 });
+  }, 30_000);
+
+  it("verifies it: the params are skipped with the reason, not failed", async () => {
+    const r = await inSum("sandbox", "verify", "sum-numbers");
+    expect(r.stdout).toMatch(/scale\s+number\s+skipped\s+no model call/);
+    expect(r.stdout).toMatch(/config hash\s+hash\s+wired/);
+    expect(r.code).toBe(0);
+  }, 60_000);
+});

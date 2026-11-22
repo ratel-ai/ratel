@@ -51,6 +51,7 @@ describe("buildManifest", () => {
         kind: "structured",
         schema: (labelSandbox.input as StructuredInput<unknown>).schema,
       },
+      state: "run",
       params: [
         { name: "model", kind: "model", default: "anthropic/claude-sonnet-5-5" },
         { name: "system", kind: "prompt", default: "You name agent workflows." },

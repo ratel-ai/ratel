@@ -9,10 +9,15 @@ agent with a changed model, prompt, max steps or tools, one user turn per run.
 |---|---|---|---|
 | `searchDocs` | Searches the pages in `src/docs/` by keyword | `readOnly` | `real` |
 | `readDoc` | Reads one page by slug | `readOnly` | `real` |
-| `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite` | `sideEffect` | `fake` |
+| `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite`, or to Postgres when `DATABASE_URL` is set | `sideEffect` | `fake` |
 
 `createTicket` never runs real in a sandbox run: the sandbox file does not set `allowReal: true`, so
 the runner refuses a run that asks for it.
+
+The sandbox file also declares the image of a hosted instance: a `node:22-slim` base, `pnpm
+install`, and a Postgres sidecar seeded from `db/seed.sql` with the tickets table. The sidecar
+sets `DATABASE_URL`, so a hosted `createTicket` writes to Postgres. Locally there is no
+`DATABASE_URL`, so tickets stay in the SQLite file.
 
 ## The DI change
 

@@ -89,6 +89,9 @@ export const ALTERNATE_MODELS: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+const NO_MODEL_CALL =
+  "no model call: the sandbox has no model, prompt or tools param and its run made no model call, so there is no model request to check";
+
 const NO_MODEL_SPAN =
   "no model-call span (with gen_ai.request.model) in the run: turn on the telemetry of the model call";
 
@@ -117,6 +120,12 @@ export async function verifySandbox(
     throw new Error(`${sandbox.id}: the run with no overrides failed: ${baseline.error}`);
 
   const rows: VerifyRow[] = [];
+  if (makesNoModelCall(sandbox, baseline)) {
+    for (const [name, param] of Object.entries(sandbox.params))
+      if (param.kind === "scalar") rows.push(await checkWithoutModel(name, param, run));
+    rows.push(checkConfigHash(sandbox, baseline, records));
+    return report(sandbox, rows, records);
+  }
   for (const [name, param] of Object.entries(sandbox.params)) {
     switch (param.kind) {
       case "prompt":
@@ -135,6 +144,10 @@ export async function verifySandbox(
     }
   }
   rows.push(checkConfigHash(sandbox, baseline, records));
+  return report(sandbox, rows, records);
+}
+
+function report(sandbox: Sandbox, rows: VerifyRow[], records: readonly RunRecord[]): VerifyReport {
   return {
     sandboxId: sandbox.id,
     rows,
@@ -203,6 +216,36 @@ async function runOnce(
     ...(done.configHash ? { configHash: done.configHash } : {}),
     ...(done.error ? { error: done.error } : {}),
   };
+}
+
+/**
+ * A sandbox with only scalar params whose run made no model call: plain code,
+ * such as a function that sums numbers. Its params cannot reach a model call.
+ * A prompt or tools param means an LLM, so a missing model call there stays not wired.
+ */
+function makesNoModelCall(sandbox: Sandbox, baseline: RunRecord): boolean {
+  const scalarsOnly = Object.values(sandbox.params).every((param) => param.kind === "scalar");
+  return scalarsOnly && modelSpans(baseline.spans).length === 0;
+}
+
+/**
+ * The row of a param in a sandbox that makes no model call: skipped, with the
+ * reason. A number param still runs once with a changed value, so the config
+ * hash check sees it change and a run that fails with it is not wired.
+ */
+async function checkWithoutModel(name: string, param: ScalarParam, run: Run): Promise<VerifyRow> {
+  const row = (status: VerifyStatus, detail: string) => ({
+    param: name,
+    kind: param.type,
+    status,
+    detail,
+  });
+  const value = changedNumber(param);
+  if (value !== undefined) {
+    const record = await run(name, { [name]: value });
+    if (record.error) return row("not_wired", `the run failed: ${record.error}`);
+  }
+  return row("skipped", NO_MODEL_CALL);
 }
 
 async function checkPrompt(

@@ -495,6 +495,9 @@ importers:
       ai:
         specifier: ^6.0.0
         version: 6.0.172(zod@4.4.3)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -508,6 +511,9 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.2
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
       tsx:
         specifier: ^4.20.0
         version: 4.21.0

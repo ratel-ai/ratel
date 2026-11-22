@@ -101,6 +101,34 @@ Tool modes are not in the config hash. A run that asks `real` for a `sideEffect`
 `allowReal: true` is refused by the runner, whatever the server sends. Each `execute_tool` span
 gets `ratel.tool.mode`, `ratel.tool.fake.source` and `ratel.tool.confirm.decision`.
 
+## Hosted sandboxes: image, output and state
+
+A sandbox file can also say what a hosted instance needs. The shape is provider-neutral: no
+provider type is in this package. run() can be any async function, also one with no model.
+
+```ts
+export default sandbox("docs-agent", {
+  params: { /* ... */ },
+  input: aiSdkChat(),
+  output: sandbox.text(), // or sandbox.output<{ total: number }>({ type: "object", ... })
+  state: "run", // "run" (default): one instance per run. "session": one per session.
+  image: sandbox.image({
+    base: "node:22-slim",
+    install: ["corepack enable", "pnpm install --frozen-lockfile"],
+    copy: ["."], // relative to the project root, never outside it
+    sidecars: [sandbox.postgres({ version: "16", seed: "db/seed.sql" })], // sets DATABASE_URL
+    env: ["AI_GATEWAY_API_KEY"], // names only: the values come from the project secrets
+  }),
+  run: async ({ input, params, ctx }) => reply(input.messages, params, ctx),
+});
+```
+
+`sandbox.redis()` adds a Redis sidecar (`REDIS_URL`). An `env` entry with a value (`NAME=value`)
+and a `copy` or `seed` path that is absolute or leaves the project root throw at load time. All
+three fields go into the manifest. The config hash stays the hash of the resolved param values.
+`ratel sandbox verify` on a sandbox with only scalar params and no model call reports each param as
+skipped with the reason, not as failed.
+
 ## Local runs: the `ratel` CLI
 
 ```bash

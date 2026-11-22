@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Sandbox } from "./sandbox.js";
+import sumSandbox from "./test-support/sum-project/sum.sandbox.js";
 import { supportSandbox } from "./test-support/support.sandbox.js";
 import ignoredSandbox from "./test-support/verify-project/agents/ignored.sandbox.js";
 import labelSandbox, { EXAMPLE } from "./test-support/verify-project/agents/label.sandbox.js";
@@ -110,5 +111,19 @@ describe("verifySandbox on a sandbox without a model call", () => {
     });
     // No hint: verify fakes it instead of waiting for a reviewer.
     expect(rowOf(report.rows, "tools.askExpert").kind).toBe("tool (fake)");
+  });
+});
+
+describe("verifySandbox on a sandbox that makes no model call", () => {
+  it("skips its params with the reason and still checks the config hash", async () => {
+    const report = await verify(sumSandbox, { input: { numbers: [1, 2, 3.5] } });
+    expect(report.ok).toBe(true);
+    expect(report.rows.map((r) => [r.param, r.kind, r.status])).toEqual([
+      ["scale", "number", "skipped"],
+      ["config hash", "hash", "wired"],
+    ]);
+    expect(rowOf(report.rows, "scale").detail).toMatch(/^no model call: /);
+    // No overrides, then one run with a changed scale for the hash check.
+    expect(report.runs).toBe(2);
   });
 });

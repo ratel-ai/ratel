@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { ImageSpec, SandboxState } from "./image.js";
 import type { Param } from "./params.js";
 import { type CallableProvider, callableProviders } from "./providers.js";
 import type { Sandbox } from "./sandbox.js";
@@ -33,6 +34,13 @@ export interface ManifestSandbox {
   readonly input:
     | { readonly kind: "structured"; readonly schema: Readonly<Record<string, unknown>> }
     | { readonly kind: "chat" };
+  readonly output?:
+    | { readonly kind: "structured"; readonly schema: Readonly<Record<string, unknown>> }
+    | { readonly kind: "text" };
+  /** run: one instance per run. session: one instance per session. */
+  readonly state: SandboxState;
+  /** The image of a hosted instance. Env holds names only. */
+  readonly image?: ImageSpec;
   readonly params: readonly ManifestParam[];
   readonly context: readonly { readonly name: string; readonly default?: unknown }[];
 }
@@ -69,11 +77,32 @@ export function manifestSandbox(sandbox: Sandbox, file?: string): ManifestSandbo
       sandbox.input.kind === "chat"
         ? { kind: "chat" }
         : { kind: "structured", schema: sandbox.input.schema },
+    ...(sandbox.output
+      ? {
+          output:
+            sandbox.output.kind === "text"
+              ? { kind: "text" }
+              : { kind: "structured", schema: sandbox.output.schema },
+        }
+      : {}),
+    state: sandbox.state ?? "run",
+    ...(sandbox.image ? { image: manifestImage(sandbox.image) } : {}),
     params: Object.entries(sandbox.params).map(([name, param]) => ({ name, ...param })),
     context: Object.entries(sandbox.context ?? {}).map(([name, value]) => ({
       name,
       default: value,
     })),
+  };
+}
+
+/** Plain data: a copy with no frozen arrays and no absent optional fields. */
+function manifestImage(image: ImageSpec): ImageSpec {
+  return {
+    base: image.base,
+    install: [...image.install],
+    copy: [...image.copy],
+    sidecars: image.sidecars.map((sidecar) => ({ ...sidecar })),
+    env: [...image.env],
   };
 }
 

@@ -5,7 +5,7 @@ import type { ModelMessage } from "ai";
 import { reply } from "./agent.js";
 import { routeModelIdsToBedrock } from "./bedrock.js";
 import { inAgentTurn, setupTelemetry } from "./telemetry.js";
-import { ticketsPath } from "./tickets.js";
+import { describeStore } from "./tickets.js";
 
 // Chat with the docs agent in the terminal. Each user turn is one
 // `invoke_agent docs-agent` trace; the session is its gen_ai.conversation.id.
@@ -16,7 +16,7 @@ const sessionId = `sess_${randomUUID()}`;
 const history: ModelMessage[] = [];
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-console.log(`Ratel docs agent (session ${sessionId}). Tickets go to ${ticketsPath()}.`);
+console.log(`Ratel docs agent (session ${sessionId}). Tickets go to ${describeStore()}.`);
 console.log(
   telemetry.exporting ? "Traces go to Ratel." : "Set RATEL_API_KEY to send traces to Ratel.",
 );

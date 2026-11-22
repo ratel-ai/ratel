@@ -68,8 +68,18 @@ never values) and the sandboxes. A sandbox has an `id`, its input (`structured` 
 - `scalar` — `type` `int`, `number`, `bool`, `enum` (with `values`) or `string`, with `min`,
   `max` or `maxLength`.
 
+A sandbox can also declare, all optional so phase-1 manifests stay valid:
+
+- `output` — `structured` with a JSON Schema of what run() returns, or `text`.
+- `state` — `run` (the default when absent: one instance per run) or `session` (one instance per
+  session, kept across its turns).
+- `image` — what a hosted instance needs, in a provider-neutral shape: `base` (a container image),
+  `install` (build commands), `copy` (paths relative to the project root, never outside it),
+  `sidecars` (`postgres` with optional `version` and `seed` SQL file, `redis` with optional
+  `version`) and `env` (**names only** of the project secrets the instance gets).
+
 The **config hash** is the lowercase hex SHA-256 of the canonical JSON of all resolved param
-values. Tool modes are not in it.
+values. Tool modes, `output`, `state` and `image` are not in it.
 
 ## Compatibility
 

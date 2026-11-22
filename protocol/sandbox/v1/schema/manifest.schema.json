@@ -66,6 +66,12 @@
           "enum": ["language-model"]
         },
         "input": { "$ref": "#/$defs/input" },
+        "output": { "$ref": "#/$defs/output" },
+        "state": {
+          "description": "Optional. run (the default when absent): one instance per run. session: one instance per session, kept across its turns.",
+          "enum": ["run", "session"]
+        },
+        "image": { "$ref": "#/$defs/image" },
         "params": {
           "description": "The params Ratel can change per run, in declaration order. Names are unique.",
           "type": "array",
@@ -94,6 +100,84 @@
           "properties": { "kind": { "const": "chat" } }
         }
       ]
+    },
+    "output": {
+      "description": "Optional. What run() returns: one JSON value described by a JSON Schema, or free text.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "schema"],
+          "properties": {
+            "kind": { "const": "structured" },
+            "schema": { "description": "A JSON Schema of the output.", "type": "object" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": { "kind": { "const": "text" } }
+        }
+      ]
+    },
+    "image": {
+      "description": "Optional. What a hosted instance needs besides the code, in a provider-neutral shape. A provider maps it to its own image and sidecars.",
+      "type": "object",
+      "required": ["base"],
+      "additionalProperties": false,
+      "properties": {
+        "base": { "description": "The base container image, e.g. node:22-slim.", "type": "string", "minLength": 1 },
+        "install": {
+          "description": "Shell commands run in order at build time.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "copy": {
+          "description": "Paths copied into the image, relative to the project root. They never leave it.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/projectPath" }
+        },
+        "sidecars": {
+          "description": "Services next to the sandbox. One of each kind at most.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/sidecar" }
+        },
+        "env": {
+          "description": "The names of the env vars the instance gets from the project secrets. Names only, never values.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+        }
+      }
+    },
+    "sidecar": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "postgres" },
+            "version": { "$ref": "#/$defs/sidecarVersion" },
+            "seed": { "description": "A SQL file run once when the database starts.", "$ref": "#/$defs/projectPath" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "redis" },
+            "version": { "$ref": "#/$defs/sidecarVersion" }
+          }
+        }
+      ]
+    },
+    "sidecarVersion": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,2}$" },
+    "projectPath": {
+      "description": "A relative path inside the project root: not absolute, no .. segment that leaves it.",
+      "type": "string",
+      "minLength": 1,
+      "not": { "pattern": "^(/|[A-Za-z]:|\\\\)|(^|/)\\.\\.(/|$)" }
     },
     "contextField": {
       "type": "object",

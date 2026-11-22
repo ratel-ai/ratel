@@ -1,3 +1,10 @@
+import {
+  type ImageSpec,
+  imageProblem,
+  SANDBOX_STATES,
+  type SandboxOutput,
+  type SandboxState,
+} from "./image.js";
 import { checkParamValue, type ParamMap, type ParamValues } from "./params.js";
 import type { CallableProvider } from "./providers.js";
 import type { FakeAnswer, FakeRequest } from "./tools.js";
@@ -79,6 +86,12 @@ export type TwinEventPayload = { readonly kind: string } & Readonly<Record<strin
 export interface SandboxDefinition<P extends ParamMap, I, O, M> {
   readonly params: P;
   readonly input: SandboxInput<I>;
+  /** What run() returns: `sandbox.output(schema)` or `sandbox.text()`. Absent: not declared. */
+  readonly output?: SandboxOutput<NoInfer<O>>;
+  /** run (default): one instance per run. session: one instance kept across the turns of a session. */
+  readonly state?: SandboxState;
+  /** The image of a hosted instance: `sandbox.image({ base, install, copy, sidecars, env })`. */
+  readonly image?: ImageSpec;
   /** Fixed inputs that are not under test, by name: see `sandbox.context()`. */
   readonly context?: Readonly<Record<string, unknown>>;
   /** Maps a `provider/model` value to what run() gets. Default: the bare model ID. */
@@ -100,9 +113,11 @@ export interface SandboxDefinition<P extends ParamMap, I, O, M> {
 }
 
 export interface Sandbox<P extends ParamMap = ParamMap, I = unknown, O = unknown, M = unknown>
-  extends SandboxDefinition<P, I, O, M> {
+  extends Omit<SandboxDefinition<P, I, O, M>, "output"> {
   readonly kind: "ratel.sandbox";
   readonly id: string;
+  /** Checked against run() in `sandbox()`. Untyped here, so a copy can change run(). */
+  readonly output?: SandboxOutput<unknown>;
 }
 
 const SANDBOX_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
@@ -125,6 +140,13 @@ export function defineSandbox<P extends ParamMap, I, O, M = string>(
   for (const name of Object.keys(definition.context ?? {})) {
     if (!PARAM_NAME.test(name)) throw new TypeError(`${id}: "${name}" is not a valid context name`);
   }
+  if (definition.state !== undefined && !SANDBOX_STATES.includes(definition.state))
+    throw new TypeError(`${id}: state must be "run" or "session", not "${definition.state}"`);
+  const imageIssue = definition.image ? imageProblem(definition.image) : null;
+  if (imageIssue) throw new TypeError(`${id}: image: ${imageIssue}`);
+  const output = definition.output;
+  if (output && output.kind !== "text" && output.kind !== "structured")
+    throw new TypeError(`${id}: output must come from sandbox.output() or sandbox.text()`);
   return Object.freeze({ kind: "ratel.sandbox", id, ...definition });
 }
 

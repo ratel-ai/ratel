@@ -6,7 +6,8 @@
     "declarationMap": false
   },
   "include": [
-    "src/ai-sdk.type-test.ts"
+    "src/ai-sdk.type-test.ts",
+    "src/image.type-test.ts"
   ],
   "exclude": []
 }

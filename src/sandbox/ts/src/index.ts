@@ -3,6 +3,7 @@
  * can run the real code with a changed model, prompt or scalar. This entry is
  * the production import path: it opens no socket and does no network I/O.
  */
+import { image, output, postgres, redis, text } from "./image.js";
 import { bool, enumParam, int, model, number, prompt, string } from "./params.js";
 import { chat, context, defineSandbox, structured } from "./sandbox.js";
 import { tools } from "./tools.js";
@@ -14,6 +15,17 @@ export {
   SandboxParamError,
 } from "./errors.js";
 export { canonicalJson, configHash } from "./hash.js";
+export type {
+  ImageOptions,
+  ImageSpec,
+  PostgresSidecar,
+  RedisSidecar,
+  SandboxOutput,
+  SandboxState,
+  Sidecar,
+  StructuredOutput,
+  TextOutput,
+} from "./image.js";
 export {
   buildManifest,
   type Manifest,
@@ -85,7 +97,10 @@ export {
   type ToolsParam,
 } from "./tools.js";
 
-/** `sandbox(id, { params, input, context, run })` plus the param (incl. `tools`), input and context builders. */
+/**
+ * `sandbox(id, { params, input, output, state, image, context, run })` plus the
+ * param (incl. `tools`), input, output, image and context builders.
+ */
 export const sandbox = Object.assign(defineSandbox, {
   model,
   prompt,
@@ -98,4 +113,9 @@ export const sandbox = Object.assign(defineSandbox, {
   chat,
   context,
   tools,
+  output,
+  text,
+  image,
+  postgres,
+  redis,
 });

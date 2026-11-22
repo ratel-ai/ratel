@@ -18,6 +18,17 @@ export default sandbox("docs-agent", {
     }),
   },
   input: aiSdkChat(),
+  output: sandbox.text(),
+  state: "run",
+  // The image of a hosted instance. Its Postgres sidecar sets DATABASE_URL, so
+  // createTicket writes there; locally, with no DATABASE_URL, it writes to SQLite.
+  image: sandbox.image({
+    base: "node:22-slim",
+    install: ["corepack enable", "pnpm install --frozen-lockfile"],
+    copy: ["."],
+    sidecars: [sandbox.postgres({ version: "16", seed: "db/seed.sql" })],
+    env: ["AI_GATEWAY_API_KEY", "AWS_REGION"],
+  }),
   resolve: aiSdkModels(),
   // What production passes to resolveLocal, and the input of `ratel sandbox verify`.
   defaults: docsDefaults,
