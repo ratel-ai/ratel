@@ -2,6 +2,7 @@ import {
   AGENT_RUN_EVENT_TYPE,
   TURN_EVENT_TYPES,
   TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+  TURN_EVENT_TYPES_WITH_TYPED_STEPS,
 } from "@/lib/ingest/trace-events/turns-schedule";
 import { envNumber } from "@/lib/platform/env-number";
 
@@ -11,7 +12,8 @@ import { envNumber } from "@/lib/platform/env-number";
  * {@link TurnConfig} argument defaulting to these, so tests pin their own values.
  *
  * Owned (ADR-0030): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
- * `TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742) has one source, the ingest kick in
+ * `TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742, and `TURN_EVENT_TYPES_WITH_TYPED_STEPS`, RC-1067)
+ * has one source, the ingest kick in
  * `lib/ingest/trace-events/turns-schedule.ts`, re-exported here so the ledger reads the
  * same list that triggers it. The imported source ids are upstream's exact set less the one
  * that names a vendor this repository cannot write; an importer adds its own (see below).
@@ -19,7 +21,13 @@ import { envNumber } from "@/lib/platform/env-number";
 
 /** The runtime event types a turn is made of. Mirrors the partial index on `trace_events`. */
 /** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types a build reads with `FF_TOOL_RUN_INSIGHTS` on. */
-export { AGENT_RUN_EVENT_TYPE, TURN_EVENT_TYPES, TURN_EVENT_TYPES_WITH_AGENT_RUNS };
+/** The typed-step read list (RC-1067, `FF_TYPED_STEPS`). The disabled path retains its original types. */
+export {
+  AGENT_RUN_EVENT_TYPE,
+  TURN_EVENT_TYPES,
+  TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+  TURN_EVENT_TYPES_WITH_TYPED_STEPS,
+};
 
 /** A silence longer than this between two events of a session starts a new inferred turn. */
 export const INFERRED_TURN_GAP_MS = envNumber("TRACE_TURNS_INFERRED_GAP_MS", 90_000);

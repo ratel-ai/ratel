@@ -15,13 +15,24 @@ import type { AGENT_RUN_EVENT_TYPE, TURN_EVENT_TYPES } from "@/lib/ledger/consta
  */
 
 /** A search, an invocation event, or (OTLP lane, RC-742) one agent run. */
-export type TurnEventType = (typeof TURN_EVENT_TYPES)[number] | typeof AGENT_RUN_EVENT_TYPE;
+export type TurnEventType =
+  | (typeof TURN_EVENT_TYPES)[number]
+  | typeof AGENT_RUN_EVENT_TYPE
+  | "otlp_model_call"
+  | "otlp_step";
 export type TurnLane = "runtime" | "otlp";
 export type TurnSource = "declared" | "inferred" | "otlp";
 export type TurnStatus = "open" | "closed";
 export type TurnEndedBy = "next_turn" | "gap" | "cap" | "idle";
 /** `agent`: an agent run itself (RC-742), neither a search nor a tool call. */
-export type StepKind = "search" | "invoke" | "agent";
+export type StepKind =
+  | "search"
+  | "invoke"
+  | "agent"
+  | "user_message"
+  | "model_call"
+  | "code"
+  | "handoff";
 export type SearchType = "search" | "skill_search" | "gateway_search";
 export type TargetType = "tool" | "skill";
 export type InvokeOutcome = "ok" | "error" | "unknown";
@@ -63,6 +74,7 @@ export interface TurnEventRow {
    * or null on every other row.
    */
   agent?: string | null;
+  payload?: Record<string, unknown>;
 }
 
 /** One `trace_event_hits` row; `rank` is 0-based as stored. */
@@ -79,7 +91,7 @@ export interface TurnEventHit {
  * (`skill_invoke`, `gateway_invoke`, `gateway_error`), or a whole agent run
  * (`agent_run`).
  */
-export type EventRole = "search" | "start" | "end" | "single" | "run";
+export type EventRole = "search" | "start" | "end" | "single" | "run" | "step";
 
 export interface NormalizedEvent {
   id: string;
@@ -112,6 +124,7 @@ export interface NormalizedEvent {
   outcome: Exclude<InvokeOutcome, "unknown"> | null;
   /** See {@link TurnEventRow.rootTool}. */
   rootTool?: boolean;
+  stepKind?: "model_call" | "code" | "handoff";
 }
 
 /** How an invocation start found its end. */

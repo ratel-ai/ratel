@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { parsedValue } from "./attr-resolve";
 import type { AttrMap } from "./types";
 
@@ -98,4 +99,25 @@ const SYSTEM_PROMPT =
 /** Whether a turn's opening message came from a system rather than a person. */
 export function isSystemPrompt(text: string): boolean {
   return SYSTEM_PROMPT.test(text);
+}
+
+/** Captured user-message identity without captured text. */
+export function userMessageFactsOf(
+  attributes: AttrMap,
+): { user_message_hash: string; user_message_count: number } | null {
+  const lists = [
+    ...MESSAGE_LIST_KEYS.map((key) => messageList(attributes[key])),
+    indexedMessages(attributes, /^llm\.input_messages\.(\d+)\.message\.(role|content)$/),
+    indexedMessages(attributes, /^gen_ai\.prompt\.(\d+)\.(role|content)$/),
+  ];
+  for (const list of lists) {
+    const users = list?.filter((message) => message.role === "user") ?? [];
+    const text = users.length ? textOfMessage(users[users.length - 1]).trim() : "";
+    if (text)
+      return {
+        user_message_hash: createHash("sha256").update(text).digest("hex"),
+        user_message_count: users.length,
+      };
+  }
+  return null;
 }

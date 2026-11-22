@@ -32,6 +32,7 @@ export type BackgroundEventName = Extract<
   | "topic_run_completed"
   | "topic_run_failed"
   | "trace_turns_built"
+  | "typed_steps_turn_built"
   | "trace_turns_backlog_lost"
   | "trace_signal_runs_enqueued"
   | "trace_signal_run_completed"

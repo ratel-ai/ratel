@@ -31,6 +31,7 @@ import {
   unknownToolsToProbe,
   withToolStandings,
 } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
+import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import type { HealthPageModel, SignalKind, WindowDays } from "@/lib/readings/trace-signals/view";
 import type { WorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide";
 import { loadWorkflowInsights } from "@/lib/readings/trace-signals/workflows/decide-queries";
@@ -89,6 +90,8 @@ export interface PageModelDeps {
   db: EvidenceDb & Pick<ReturnType<typeof getDb>, "select">;
   getLimits: (projectId: string) => Promise<AgentHealthLimits>;
   now: () => Date;
+  /** `FF_TYPED_STEPS` for the project (RC-1067): typed model rows make their own turns. */
+  readsTypedSteps: (projectId: string) => Promise<boolean>;
   /** Model-written workflow names; the page falls back to tool-order names without them. */
   getLabels: (projectId: string) => Promise<WorkflowLabels>;
   getInsights: (projectId: string) => Promise<WorkflowInsights | null>;
@@ -226,6 +229,7 @@ export async function loadHealthPageModel(
     db,
     getLimits: limitsFor,
     now: () => new Date(),
+    readsTypedSteps: (id) => typedStepsEnabled(id),
     getLabels: (id) => workflowLabelsFor(id, db),
     getInsights: (id) => insightsFor(id, db),
     ...overrides,
@@ -241,8 +245,12 @@ export async function loadHealthPageModel(
       deps.db,
     );
     const since = new Date(now.getTime() - windowDays * DAY_MS);
-    // Model calls without tool spans never make a run: say so instead of waiting forever.
-    if (liveTurns === 0 && (await hasModelCallsSince(projectId, since, deps.db))) {
+    // The legacy path needs tool spans. Typed model rows can make their own turns.
+    if (
+      liveTurns === 0 &&
+      (await hasModelCallsSince(projectId, since, deps.db)) &&
+      !(await deps.readsTypedSteps(projectId))
+    ) {
       const pending = buildHealthPageModel(
         { windowDays, run: null, liveTurns, signals: [], evidence: new Map(), names: new Map() },
         now,

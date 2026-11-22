@@ -124,7 +124,9 @@ export interface TurnEventPageRow extends TurnEventRow {
  * `types` defaults to {@link TURN_EVENT_TYPES}, the partial index's list. A
  * project with `FF_TOOL_RUN_INSIGHTS` on also reads agent runs
  * (`TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742); that wider list cannot use
- * the partial index.
+ * the partial index. With `FF_TYPED_STEPS` on (`TURN_EVENT_TYPES_WITH_TYPED_STEPS`,
+ * RC-1067) it also reads model calls and typed steps, and a trace's session is the
+ * first real session id any of its rows carries.
  */
 export async function listTurnEventsPage(
   projectId: string,
@@ -135,9 +137,20 @@ export async function listTurnEventsPage(
 ): Promise<TurnEventPageRow[]> {
   const after = cursorValue(since);
   const columns = {
+    payload: traceEvents.payload,
     id: traceEvents.id,
     type: traceEvents.type,
-    sessionId: traceEvents.sessionId,
+    // The outer row's columns are written qualified: Drizzle renders a
+    // single-table select's columns bare, and a bare `trace_id` here would
+    // bind to `sibling` and give every row the project's first session.
+    sessionId: types.includes("otlp_model_call")
+      ? sql<string | null>`coalesce((
+      select sibling.session_id from trace_events sibling
+      where sibling.project_id = "trace_events"."project_id" and sibling.trace_id = "trace_events"."trace_id"
+        and sibling.session_id is not null and sibling.session_id <> sibling.trace_id
+      order by sibling.received_at, sibling.id limit 1
+    ), ${traceEvents.sessionId})`
+      : traceEvents.sessionId,
     sourceId: traceEvents.sourceId,
     ingestSource: traceEvents.ingestSource,
     occurredAt: traceEvents.occurredAt,
@@ -157,7 +170,7 @@ export async function listTurnEventsPage(
     // Set by OTLP ingest on a tool call that is its trace's root span.
     rootTool: sql<boolean>`coalesce((${traceEvents.payload} ->> 'root_tool') = 'true', false)`,
     // An agent run that failed (RC-742).
-    failed: sql<boolean>`(${traceEvents.type} = ${AGENT_RUN_EVENT_TYPE} and ${traceEvents.errorMessage} is not null)`,
+    failed: sql<boolean>`(${traceEvents.type} in (${AGENT_RUN_EVENT_TYPE}, 'otlp_model_call', 'otlp_step') and ${traceEvents.errorMessage} is not null)`,
     // An agent run's agent name (RC-747): its step's target id.
     agent: sql<
       string | null

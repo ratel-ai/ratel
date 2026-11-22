@@ -64,7 +64,9 @@ export function segmentEvents(
 ): SegmentedTurn[] {
   const out: SegmentedTurn[] = [];
   for (const session of groupSessions(events).values()) {
-    const ordered = orderTimeline(session);
+    const ordered = session.some((event) => event.role === "step")
+      ? [...session].sort((a, b) => a.occurredAt - b.occurredAt || compareTimeline(a, b))
+      : orderTimeline(session);
     const kept =
       ordered[0]?.lane === "runtime"
         ? dedupeGateway(ordered, config.gatewayDedupeMs).kept
@@ -93,6 +95,8 @@ export function groupSessions(events: readonly NormalizedEvent[]): Map<string, N
  * neither would pair. Seen on a design partner's traces: 45% of calls.
  */
 const LIFECYCLE_RANK: Record<TurnEventType, number> = {
+  otlp_model_call: 1,
+  otlp_step: 1,
   search: 0,
   skill_search: 0,
   gateway_search: 0,

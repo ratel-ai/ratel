@@ -62,11 +62,45 @@ export function attributeTurn(turn: SegmentedTurn): StepDraft[] {
 
   const steps: StepDraft[] = [];
   let searchOrdinal = 0;
+  let lastMessage: string | null = null;
+  let codeCount = 0;
+  const hasGenAi = turn.events.some(
+    (event) =>
+      event.stepKind === "model_call" ||
+      event.stepKind === "handoff" ||
+      event.role === "run" ||
+      event.role === "start" ||
+      event.role === "end" ||
+      event.role === "single",
+  );
   for (const event of turn.events) {
     if (event.role === "end" && paired.has(event.id)) continue;
+    if (event.stepKind === "code" && (!hasGenAi || codeCount++ >= 20)) continue;
+    if (event.stepKind === "model_call" && event.queryHash && event.queryHash !== lastMessage) {
+      const previous = steps[steps.length - 1];
+      steps.push({
+        ...emptyStep(
+          event,
+          steps.length + 1,
+          previous ? Math.max(0, event.occurredAt - previous.occurredAt.getTime()) : null,
+        ),
+        kind: "user_message",
+        queryHash: event.queryHash,
+      });
+      lastMessage = event.queryHash;
+    }
     const previous = steps[steps.length - 1];
     const gapMs = previous ? Math.max(0, event.occurredAt - previous.occurredAt.getTime()) : null;
-    if (event.role === "search") {
+    if (event.role === "step" && event.stepKind) {
+      steps.push({
+        ...emptyStep(event, steps.length + 1, gapMs),
+        kind: event.stepKind,
+        targetId: event.targetId,
+        queryHash: event.queryHash,
+        outcome: event.outcome,
+        tookMs: event.tookMs,
+      });
+    } else if (event.role === "search") {
       searchOrdinal += 1;
       steps.push(searchStep(event, steps.length + 1, searchOrdinal, gapMs));
     } else if (event.role === "run") {

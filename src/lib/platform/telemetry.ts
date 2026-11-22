@@ -68,6 +68,7 @@ export const SERVER_EVENT_NAMES = [
   "health_signal_dismissed",
   "health_signal_restored",
   "trace_turns_built",
+  "typed_steps_turn_built",
   "trace_turns_backlog_lost",
   "trace_signal_runs_enqueued",
   "trace_signal_run_requested",
