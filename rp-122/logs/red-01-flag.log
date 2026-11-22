@@ -1,0 +1,8 @@
+ℹ todo 0
+ℹ duration_ms 653.626458
+
+✖ failing tests:
+
+test at lib/platform/sandboxes-flag.test.ts:1:1
+✖ lib/platform/sandboxes-flag.test.ts (648.012666ms)
+  'test failed'

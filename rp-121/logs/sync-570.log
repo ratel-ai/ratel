@@ -1,0 +1,44 @@
+
+copied (5)
+  src/lib/ingest/otlp/__fixtures__/typed-steps-main.json
+  src/lib/ingest/otlp/__fixtures__/typed-steps.test.ts
+  src/lib/ingest/otlp/__fixtures__/typed-steps.ts
+  src/lib/ingest/otlp/derive-steps.test.ts
+  src/lib/ingest/otlp/derive-steps.ts
+
+updated (14)
+  src/lib/ingest/trace-events/queries.integration.test.ts
+  src/lib/ingest/otlp/__fixtures__/real/README.md
+  src/lib/ingest/otlp/derive-model-calls.ts
+  src/lib/ingest/otlp/prompt-text.ts
+  src/lib/catalog/wire.ts
+  src/lib/catalog/wire.test.ts
+  src/lib/ledger/types.ts
+  src/lib/ledger/turns/attribute.ts
+  src/lib/ledger/turns/build-turn.ts
+  src/lib/ledger/turns/normalize.ts
+  src/components/console/badgers/honeybadger-assets.ts
+  src/lib/mcp/apps/load.ts
+  src/lib/console/badgers.test.ts
+  src/postcss.config.mjs
+
+deleted (2)
+  src/lib/platform/otel/server-traces.test.ts
+  src/lib/platform/otel/server-traces.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/lib/analytics/track-server.ts        |  1 +
+ apps/web/lib/jobs/observability.ts            |  1 +
+ apps/web/lib/mcp/route-handler.test.ts        |  1 +
+ apps/web/lib/otlp/agent-health-bridge.ts      |  9 +++++++--
+ apps/web/lib/otlp/derive-agent-runs.ts        | 27 ++++++---------------------
+ apps/web/lib/otlp/ingest-spans.ts             |  2 ++
+ apps/web/lib/trace-signals/constants.ts       |  3 +++
+ apps/web/lib/trace-signals/page-model.ts      |  8 ++++++--
+ apps/web/lib/trace-signals/turns/build-job.ts | 17 +++++++++++++++--
+ apps/web/lib/trace-signals/turns/queries.ts   | 13 +++++++++++--
+ apps/web/lib/trace-signals/turns/schedule.ts  |  7 ++++++-
+ apps/web/lib/trace-signals/turns/segment.ts   |  6 +++++-
+ 12 files changed, 64 insertions(+), 31 deletions(-)
+
+applied 21 change(s) from 35e68e7d

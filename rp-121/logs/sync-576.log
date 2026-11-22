@@ -1,0 +1,87 @@
+
+updated (40)
+  src/lib/ingest/trace-events/queries.integration.test.ts
+  src/lib/ingest/otlp/__fixtures__/real/README.md
+  src/lib/catalog/wire.ts
+  src/lib/catalog/wire.test.ts
+  src/lib/readings/trace-signals/signals/analyze.ts
+  src/lib/readings/trace-signals/signals/workflow-run.ts
+  src/lib/readings/trace-signals/signals/workflow-run.test.ts
+  src/lib/readings/trace-signals/workflows/decide-queries.ts
+  src/lib/readings/trace-signals/workflows/health.ts
+  src/lib/readings/trace-signals/workflows/health.test.ts
+  src/lib/readings/trace-signals/workflows/mine.ts
+  src/lib/readings/trace-signals/workflows/mine.test.ts
+  src/lib/readings/trace-signals/workflows/agent-tasks.ts
+  src/lib/readings/trace-signals/workflows/place-queries.ts
+  src/lib/readings/trace-signals/workflows/place.test.ts
+  src/lib/readings/trace-signals/workflows/reading.ts
+  src/lib/readings/trace-signals/workflows/reading.test.ts
+  src/lib/readings/trace-signals/workflows/select.ts
+  src/lib/readings/trace-signals/workflows/test-fixtures.ts
+  src/lib/readings/trace-signals/workflows/types.ts
+  src/lib/readings/trace-signals/workflows/units.ts
+  src/lib/views/tasks/model.ts
+  src/lib/views/tasks/model.test.ts
+  src/lib/views/tasks/examples.ts
+  src/lib/views/tasks/flow-layout.ts
+  src/lib/views/tasks/queries.integration.test.ts
+  src/components/console/tasks/StepPins.tsx
+  src/components/console/tasks/TaskFlowDiagram.tsx
+  src/components/console/tasks/TaskPanels.tsx
+  src/components/console/tasks/TaskSections.tsx
+  src/components/console/tasks/TaskSteps.tsx
+  src/components/console/tasks/TaskView.tsx
+  src/components/console/tasks/TasksTable.tsx
+  src/components/console/tasks/kind-icons.tsx
+  src/lib/views/tasks/flow-layout.test.ts
+  src/lib/views/tasks/tasks-ui.test.ts
+  src/components/console/badgers/honeybadger-assets.ts
+  src/lib/mcp/apps/load.ts
+  src/lib/console/badgers.test.ts
+  src/postcss.config.mjs
+
+deleted (2)
+  src/lib/platform/otel/server-traces.test.ts
+  src/lib/platform/otel/server-traces.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (8)
+  {"path":"src/lib/readings/trace-signals/signals/analyze.ts","specifier":"@/lib/trace-signals/segments/write"}
+  {"path":"src/lib/readings/trace-signals/signals/workflow-run.ts","specifier":"@/lib/trace-signals/segments/pieces"}
+  {"path":"src/lib/readings/trace-signals/signals/workflow-run.ts","specifier":"@/lib/trace-signals/segments/write"}
+  {"path":"src/lib/readings/trace-signals/workflows/place-queries.ts","specifier":"@/lib/trace-signals/segments/write"}
+  {"path":"src/lib/views/tasks/model.ts","specifier":"@/lib/tasks/step-kind"}
+  {"path":"src/lib/views/tasks/examples.ts","specifier":"@/lib/tasks/step-kind"}
+  {"path":"src/lib/views/tasks/flow-layout.ts","specifier":"@/lib/tasks/step-kind"}
+  {"path":"src/components/console/tasks/TaskPanels.tsx","specifier":"@/lib/tasks/token-kind"}
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/lib/analytics/track-server.ts             |  1 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  7 ++
+ apps/web/lib/db/schema.ts                          | 20 +++++
+ apps/web/lib/jobs/observability.ts                 |  1 +
+ apps/web/lib/mcp/route-handler.test.ts             |  1 +
+ apps/web/lib/otlp/agent-health-bridge.ts           |  9 ++-
+ apps/web/lib/otlp/derive-agent-runs.ts             | 27 ++-----
+ apps/web/lib/otlp/derive-steps.test.ts             | 90 ++++++++++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  2 +
+ apps/web/lib/tasks/page-model.integration.test.ts  | 80 ++++++++++++++++++-
+ apps/web/lib/tasks/page-model.ts                   | 19 ++++-
+ apps/web/lib/tasks/queries.ts                      | 58 +++++++++++++-
+ apps/web/lib/trace-signals/constants.ts            |  3 +
+ apps/web/lib/trace-signals/page-model.ts           |  8 +-
+ apps/web/lib/trace-signals/signals/compute-job.ts  |  6 +-
+ .../lib/trace-signals/tool-run-insights.test.ts    | 14 +++-
+ apps/web/lib/trace-signals/tool-run-insights.ts    | 14 +++-
+ apps/web/lib/trace-signals/turns/build-job.ts      | 17 +++-
+ apps/web/lib/trace-signals/turns/queries.ts        | 13 +++-
+ apps/web/lib/trace-signals/turns/schedule.ts       |  7 +-
+ apps/web/lib/trace-signals/turns/segment.ts        |  6 +-
+ .../turns/typed-steps.integration.test.ts          | 80 +++++++++++++++++++
+ .../lib/trace-signals/turns/typed-steps.test.ts    | 37 +++++++++
+ apps/web/lib/trace-signals/typed-steps.test.ts     | 35 +++++++++
+ apps/web/lib/trace-signals/typed-steps.ts          | 28 +++++++
+ apps/web/lib/trace-signals/workflows/place.ts      | 18 ++---
+ 26 files changed, 549 insertions(+), 52 deletions(-)
+
+applied 42 change(s) from a08d30d6

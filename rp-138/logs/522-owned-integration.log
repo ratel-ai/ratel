@@ -1,0 +1,38 @@
+✔ the summary sweep fills each trace's models, tools, service and environment (1715.303542ms)
+✔ filter by model and by tool narrows the Turns list (309.453041ms)
+✔ a trace that starts before the window but has an in-window root is in the filtered list as in the unfiltered one (236.363917ms)
+✔ the Turns totals follow the same filter (229.016625ms)
+{"level":30,"time":1795324542031,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by model and by tool narrows Sessions: a session matches when any of its turns matches (246.657416ms)
+{"level":30,"time":1795324542041,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795324542053,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795324542061,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795324542063,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795324542071,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"failed","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ facet values for a project and window come from one rollup query (196.73525ms)
+✔ the Sessions facet window is the Turns default range: it ignores rows outside it (185.416833ms)
+✔ the Sessions filter finds the matching sessions once per page, not once per walked head (0.406417ms)
+✔ without a filter the list queries are unchanged (0.480666ms)
+✔ the summary sweep fills each trace's agents and MCP servers from its spans (227.647083ms)
+{"level":30,"time":1795324542943,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by agent and by MCP server narrows the Turns list and Sessions (274.687709ms)
+{"level":30,"time":1795324542953,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795324542956,"pid":37809,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ the agent and MCP server facet values are read only when the entity filters are on (211.743333ms)
+✔ the sweep fills harnesses and countries; Turns filter by them and the facets offer them with the entity filters on (213.89175ms)
+✔ the list has one row per server and role, with calls, errors, p95, sessions and first and last seen (1757.568042ms)
+✔ the environment filter narrows the stats, and the environments stay all of them (231.203167ms)
+✔ the detail has per-tool stats and the calling agents, and no protocol or transport when no span names one (231.710125ms)
+✔ the detail lists the protocol versions and transports ingest derived (RC-773) (200.449334ms)
+✔ a consumed server's tools lose the server prefix, and its agents are the agents that call it (198.985292ms)
+✔ the detail picks the server's busiest role when none is asked, and is null for a server with no calls (198.012792ms)
+✔ hasMcpSpans is true only for a project with an MCP span in the recent window (178.072542ms)
+✔ read budget: every query reads otel_spans through the MCP server index, bounded by project and window (1170.846083ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5369.120417

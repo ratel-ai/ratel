@@ -1,0 +1,13 @@
+Auto-merging apps/web/.flags.local.example.json
+CONFLICT (content): Merge conflict in apps/web/.flags.local.example.json
+Auto-merging apps/web/lib/flags-retired.test.ts
+CONFLICT (content): Merge conflict in apps/web/lib/flags-retired.test.ts
+Auto-merging apps/web/lib/flags.test.ts
+CONFLICT (content): Merge conflict in apps/web/lib/flags.test.ts
+Auto-merging apps/web/lib/flags.ts
+Auto-merging apps/web/lib/mcp/route-handler.test.ts
+CONFLICT (content): Merge conflict in apps/web/lib/mcp/route-handler.test.ts
+Auto-merging infra/module/posthog.tf
+Auto-merging infra/module/tests/ratel_cloud.tftest.hcl
+CONFLICT (content): Merge conflict in infra/module/tests/ratel_cloud.tftest.hcl
+Automatic merge failed; fix conflicts and then commit the result.

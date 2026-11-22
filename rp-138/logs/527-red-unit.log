@@ -1,0 +1,70 @@
+✔ list_agents lists the agents with their stats, the handoffs, the environments and each page link (40.901875ms)
+✔ get_agent returns the tools, the MCP servers, the handoffs and the filtered Traces link (2.291208ms)
+✔ get_agent of an agent with no run in the window is not found (1.377875ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (2.156375ms)
+✔ list_clients returns the harnesses, versions, countries and splits, with the unknown-client hint (46.727459ms)
+✔ list_clients is refused as forbidden when the flag is off (2.248375ms)
+✔ list_mcp_servers lists the servers with their stats, the environments and each page link (44.702042ms)
+✔ get_mcp_server returns the tools, the calling agents and no protocol or transport when none is kept (2.663167ms)
+✔ get_mcp_server of a server with no call in the window is not found (1.503916ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (2.77675ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/views/entities/detection' imported from ~/ratel-wt-rp-138/src/lib/views/entities/detection.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534586:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534586:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534586:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/views/entities/detection'
+}
+
+Node.js v24.12.0
+✖ lib/views/entities/detection.test.ts (952.440042ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/views/mcp-servers/setup-guide' imported from ~/ratel-wt-rp-138/src/lib/views/mcp-servers/setup-guide.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534642:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534642:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325534642:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/views/mcp-servers/setup-guide'
+}
+
+Node.js v24.12.0
+✖ lib/views/mcp-servers/setup-guide.test.ts (566.268875ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 10
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5440.721875
+
+✖ failing tests:
+
+test at lib/views/entities/detection.test.ts:1:1
+✖ lib/views/entities/detection.test.ts (952.440042ms)
+  'test failed'
+
+test at lib/views/mcp-servers/setup-guide.test.ts:1:1
+✖ lib/views/mcp-servers/setup-guide.test.ts (566.268875ms)
+  'test failed'

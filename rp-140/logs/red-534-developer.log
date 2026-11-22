@@ -1,0 +1,6 @@
+✖ get_sdk_setup with FF_CODE_HANDOFF on tells the reader to set service.version to the commit sha (1.623792ms)
+ℹ tests 18
+ℹ pass 17
+ℹ fail 1
+✖ failing tests:
+✖ get_sdk_setup with FF_CODE_HANDOFF on tells the reader to set service.version to the commit sha (1.623792ms)

@@ -1,0 +1,225 @@
+✔ maps span identity, hierarchy, timing, and status (1.792291ms)
+✔ normalizes an all-zero parent span id to a root (0.43125ms)
+✔ classifies LLM calls, tools, Ratel searches, and other spans (0.315958ms)
+✔ promotes service and GenAI fields and computes model cost (0.251583ms)
+✔ prices cache writes and long-context Haiku 5.5 calls (0.110166ms)
+✔ leaves cost absent when a priced model reports no usage (0.116333ms)
+✔ leaves cost absent when a priced model reports only cached usage (0.143ms)
+✔ promotes Ratel search fields (0.099ms)
+✔ promotes runtime event correlation and defaults source to service.name (0.075959ms)
+✔ promotes experiment identity and preserves namespaced attributes (0.114292ms)
+✖ variants on: a tagged span keeps its experiment, its name and its descriptors (1.488708ms)
+✖ variants on: an untagged child of a tagged root gets no variant values (0.262292ms)
+✔ variants off: a tagged span writes no variant column (0.084167ms)
+✖ variants on: descriptors are bounded and set the truncated marker (0.31725ms)
+✖ variants on: an oversized name is cut and sets the truncated marker (0.135417ms)
+✖ variants on: a mapped key is the variant name of the mapped experiment, and the raw key is not kept (0.1475ms)
+✖ variants on: an explicit ratel.variant.name wins over a mapping (0.175833ms)
+✖ variants on: an unmapped customer key is dropped as before (0.127459ms)
+✔ variants off: a mapping changes nothing (0.068834ms)
+✔ strips content-bearing fields from retained attributes (0.100209ms)
+✔ retains only namespaced and explicitly safe attributes (0.081333ms)
+✔ bounds persisted scalar and experiment metadata by UTF-8 bytes (0.262166ms)
+✔ caps retained attributes to 16 KiB by UTF-8 bytes (0.106792ms)
+✔ drops spans with invalid OTel ids without dropping valid neighbors (0.085667ms)
+✔ drops spans with invalid timestamps without dropping valid neighbors (0.061792ms)
+✔ normalizes database-unsafe integer values (0.094542ms)
+✔ flag on: a LangGraph agent root is not an llm_call and stores no tokens or cost (0.299291ms)
+✔ flag off: a LangGraph agent root is an llm_call with its summed tokens (0.128375ms)
+✔ flag on: a Claude Agent SDK agent root is not an llm_call and stores no tokens or cost (0.145791ms)
+✔ flag off: a Claude Agent SDK agent root is an llm_call with its summed tokens (0.112166ms)
+✔ an agent span with no model call in its trace keeps class, tokens and cost (0.0995ms)
+✔ a root alone in its batch drops its tokens when storage has the model calls (0.108542ms)
+✔ the resource environment and service version are stored (0.057625ms)
+✔ a span attribute of the same key wins over the resource (0.051792ms)
+✔ the legacy deployment.environment is kept when .name is absent (0.043ms)
+✔ a span pays the project's own price (RC-482) (0.058875ms)
+✔ a span row carries its entity dimensions; with no agent and a service, the service is the agent (RC-772) (0.731917ms)
+✔ a call with no book price stores the cost the emitter sent (AOBS-3) (0.229708ms)
+✔ a Claude alias call stores its alias price (0.065375ms)
+✔ the book price wins over the emitter's cost (0.048541ms)
+✔ an emitter cost that is not a plausible amount is ignored (0.138291ms)
+✔ an emitter cost on a span with no token usage is not stored, so a run total on the root never counts twice (0.041667ms)
+✔ a batch whose prices are unknown stores no cost, emitter cost included (0.0485ms)
+✔ a mapped key with no ratel.variant.* tag gives the mapped experiment and the value as the name (0.928208ms)
+✔ an explicit ratel.variant.name wins over the mapping (0.269334ms)
+✔ a mapping fills the name of a span tagged with descriptors only, and keeps them (0.188125ms)
+✔ an unmapped key, or a blank mapped value, gives no variant (0.111542ms)
+✔ the first mapping with a value wins (0.066084ms)
+✔ parseVariantMapping trims both fields and refuses blanks, long values and ratel keys (0.14625ms)
+✔ reads the experiment, the name and the descriptors without their prefix (1.0475ms)
+✔ a span with no ratel.variant.* key has no tags (0.089917ms)
+✔ a numeric name reads as text, and a blank or non-scalar one is absent (0.063667ms)
+✔ descriptors only: the experiment and the name are null (0.051042ms)
+✔ the bare prefix is not a descriptor (0.040875ms)
+ℹ tests 54
+ℹ suites 0
+ℹ pass 47
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 636.871417
+
+✖ failing tests:
+
+test at lib/ingest/otlp/span-rows.test.ts:1:5308
+✖ variants on: a tagged span keeps its experiment, its name and its descriptors (1.488708ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 'checkout-model'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:226:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'checkout-model',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:5684
+✖ variants on: an untagged child of a tagged root gets no variant values (0.262292ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - null
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:243:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:6324
+✖ variants on: descriptors are bounded and set the truncated marker (0.31725ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + undefined
+  - {
+  -   small: 'kept'
+  - }
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:272:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { small: 'kept' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:6672
+✖ variants on: an oversized name is cut and sets the truncated marker (0.135417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 1024
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:284:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 1024,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:7031
+✖ variants on: a mapped key is the variant name of the mapped experiment, and the raw key is not kept (0.1475ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - 'checkout-model'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:301:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'checkout-model',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:7411
+✖ variants on: an explicit ratel.variant.name wins over a mapping (0.175833ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  undefined !== 'b'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:317:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'b',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/span-rows.test.ts:1:7667
+✖ variants on: an unmapped customer key is dropped as before (0.127459ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + undefined
+  - null
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123/src/lib/ingest/otlp/span-rows.test.ts:331:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,40 @@
+{"level":30,"time":1795328215206,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"client","outcome":"pivot_created","msg":"pivots changed"}
+✔ add a preset and a custom key: listed in order and tracked as pivot_created (1342.431333ms)
+{"level":30,"time":1795328215208,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"customer.tier","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215356,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+✔ rename and move: pivot_updated with the change; positions stay 0..n-1 (152.740459ms)
+{"level":30,"time":1795328215357,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215358,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215359,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_updated","msg":"pivots changed"}
+{"level":30,"time":1795328215362,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_updated","msg":"pivots changed"}
+{"level":30,"time":1795328215503,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"end_user","outcome":"pivot_created","msg":"pivots changed"}
+✔ remove: the others close the gap, tracked as pivot_deleted (146.312ms)
+{"level":30,"time":1795328215504,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215505,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215508,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"end_user","outcome":"pivot_deleted","msg":"pivots changed"}
+{"level":30,"time":1795328215509,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}
+{"level":30,"time":1795328215664,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+✔ the sixth pivot and a duplicate are refused, and nothing is written (163.303041ms)
+{"level":30,"time":1795328215665,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215667,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215668,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"d","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215669,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"e","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328215669,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"limit","msg":"pivots change refused"}
+{"level":30,"time":1795328215671,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"e","outcome":"pivot_deleted","msg":"pivots changed"}
+{"level":30,"time":1795328215672,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"duplicate","msg":"pivots change refused"}
+✔ the store keeps the limit when two adds race past the domain check (148.400042ms)
+{"level":30,"time":1795328215960,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+✔ scoped to the person's project: another project, a non-member, the flag off and a support session are refused (141.395ms)
+{"level":30,"time":1795328215960,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795328215960,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795328215960,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795328215961,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795328215961,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795328215961,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"restricted","msg":"pivots change refused"}
+{"level":30,"time":1795328216106,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_key","msg":"pivots change refused"}
+✔ invalid input is refused with its message (146.892833ms)
+{"level":30,"time":1795328216107,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"unknown_preset","msg":"pivots change refused"}
+{"level":30,"time":1795328216108,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795328216108,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_label","msg":"pivots change refused"}
+{"level":30,"time":1795328216109,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}
+{"level":30,"time":1795328216109,"pid":67984,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}

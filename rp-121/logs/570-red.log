@@ -1,0 +1,53 @@
+✔ typed step fixtures survive OTLP JSON decoding with their span relationships (2.4ms)
+✔ the disabled derivations preserve the main fixture output byte for byte (3.774583ms)
+✔ production shapes produce code and nested agent handoffs (1.061542ms)
+✔ infrastructure, SDK, client and short spans are not code steps (0.23925ms)
+✔ typed model rows store hashes, counts, reasoning and a stable signature without message text (0.480292ms)
+✖ the bridge gates new rows and workflow roots with one flag (0.3465ms)
+✔ typed model and agent rows keep the captured ask and the system mark as main writes them (0.449208ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@/lib' imported from ~/ratel-wt-rp-121/src/lib/platform/typed-steps-flag.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795318047117:2:3744)
+    at resolveDirectory (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795318047117:2:4243)
+    at resolveTsPaths (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795318047117:2:4984)
+    at async resolve (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795318047117:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/platform/typed-steps-flag.test.ts (994.002916ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 6
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1223.820666
+
+✖ failing tests:
+
+test at lib/ingest/otlp/derive-steps.test.ts:1:2850
+✖ the bridge gates new rows and workflow roots with one flag (0.3465ms)
+  TypeError: Cannot read properties of null (reading 'traceTurns')
+      at agentHealthToolRows (~/ratel-wt-rp-121/src/lib/ingest/otlp/agent-health-bridge.ts:51:13)
+      at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/ingest/otlp/derive-steps.test.ts:99:24)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+
+test at lib/platform/typed-steps-flag.test.ts:1:1
+✖ lib/platform/typed-steps-flag.test.ts (994.002916ms)
+  'test failed'

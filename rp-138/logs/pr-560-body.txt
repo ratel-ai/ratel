@@ -1,0 +1,53 @@
+title:	RC-1058 World map of caller countries on the Clients tab
+state:	DRAFT
+author:	rstagi (Roberto Stagi)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	560
+url:	https://github.com/ratel-ai/ratel-cloud/pull/560
+additions:	5955
+deletions:	69
+auto-merge:	disabled
+--
+Builds on #522 and #527. Review after them; the diff includes their commits until they merge. Only the last two commits (RC-1058, RC-1060) are this change.
+
+## What
+
+The MCP page's Clients tab (behind `cloud-project-entities`, off by default) shows a world map of caller countries above the existing country table.
+
+- `components/clients/CountryMap.tsx`: a d3-geo Equal Earth map from world-atlas `countries-110m`. It loads through `next/dynamic` from the Clients tab only, so the geometry ships in its own chunk.
+- The countries are colored by calls on one sequential blue (`chart-1`, DESIGN.md) in four log-scale buckets, with a legend. Countries with no calls stay neutral. The Unknown row and the DB-IP attribution stay below the map.
+- Hover shows the ds tooltip with the country name, calls and sessions. Each colored country is a focusable link with an `aria-label`. A click opens the Traces sessions list with `facetCountry`, and keeps the window, the environment and the server filter.
+- `lib/clients/country-codes.ts`: ISO alpha-2 to numeric (all 249 codes; withdrawn codes such as `UK` read as their successor; Kosovo matched by name).
+- `lib/clients/country-map-model.ts`: the color buckets and the row join.
+- `mcpCountryTracesHref` in `lib/mcp-servers/paths.ts`, and the client event `client_country_clicked`.
+- No backend change. With the flag off, the Clients tab stays not found, and Traces and the MCP page do not change.
+
+## Proof
+
+Local dev server with the flag on, screenshots taken with BrowserOS neo. The project was seeded through the real OTLP ingest route with MCP server spans from 6 countries plus 10 calls with no client address. The countries come from the DB-IP Lite file. The IPs are public test addresses (8.8.8.8, 81.2.69.142, 151.38.39.114, 133.242.0.3, 200.160.2.3, 41.203.64.130), not real user data.
+
+Map above the country table, with the legend and the Unknown row:
+
+![Clients tab world map](https://github.com/ratel-ai/ratel-cloud/blob/proof/clients-world-map/01-clients-map.png?raw=true)
+
+Hover on the United Kingdom:
+
+![Hover tooltip](https://github.com/ratel-ai/ratel-cloud/blob/proof/clients-world-map/02-map-hover.png?raw=true)
+
+Click on Italy: Traces sessions filtered by `Country is IT` (4 sessions). The Sessions KPI above the list shows the unfiltered count: that is old behavior, tracked as a follow-up.
+
+![Traces filtered by country](https://github.com/ratel-ai/ratel-cloud/blob/proof/clients-world-map/03-traces-filtered.png?raw=true)
+
+## Tests
+
+- `lib/clients/country-codes.test.ts`: every code `countryLabel` names maps to a numeric code; every world-atlas country resolves.
+- `lib/clients/country-map-model.test.ts`: buckets and the row join.
+- `lib/mcp-servers/paths.test.ts`: the Traces country link.
+- `lib/analytics/track-client.test.ts`: the click event.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

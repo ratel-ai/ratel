@@ -1,0 +1,12 @@
+M	apps/web/app/(app)/project/[projectId]/mcp/page.tsx	owned:src/app/(console)/project/[projectId]/mcp/page.tsx
+M	apps/web/components/clients/ClientsView.tsx	copy:src/components/console/clients
+A	apps/web/components/clients/CountryMap.tsx	copy:src/components/console/clients
+M	apps/web/lib/analytics/track-client.test.ts	excluded
+M	apps/web/lib/analytics/track-client.ts	owned:src/lib/platform/track-client.ts
+A	apps/web/lib/clients/country-codes.test.ts	copy:src/lib/views/clients
+A	apps/web/lib/clients/country-codes.ts	copy:src/lib/views/clients
+A	apps/web/lib/clients/country-map-model.test.ts	copy:src/lib/views/clients
+A	apps/web/lib/clients/country-map-model.ts	copy:src/lib/views/clients
+M	apps/web/lib/mcp-servers/paths.test.ts	copy:src/lib/views/mcp-servers
+M	apps/web/lib/mcp-servers/paths.ts	copy:src/lib/views/mcp-servers
+M	apps/web/package.json	owned:src/package.json

@@ -1,0 +1,147 @@
+✔ project settings tabs are URLs, with General matching its path exactly (1.271917ms)
+✔ project settings show Pivots after API keys only with cloud-pivots on (RC-881) (0.203208ms)
+✔ the Repository tab shows only when code handoff is on (0.144708ms)
+✔ organization settings show Danger zone only to the admins who can use it (0.164792ms)
+✔ a moved page keeps every query value, repeated keys included (1.004583ms)
+✔ the demo project does not count toward the project limit, as in the console (17.373958ms)
+✔ Enterprise limits say unlimited rather than serializing as null (2.384833ms)
+✔ plan and subscription state come from the same helpers as the Billing page (11.586083ms)
+✔ match quality not on the plan says so (1.547208ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.27175ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (0.645542ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.60275ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.429375ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (1.463375ms)
+{"level":50,"time":1795331745182,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (18.369125ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (8.709208ms)
+✔ without an edition's name the 401 realm stays ratel (0.567208ms)
+✔ an older protocol version still negotiates (7.710959ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (21.301709ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (12.321083ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.40325ms)
+✔ every tool definition is exactly what the fixture pins (20.196125ms)
+✔ each staged tool publishes its stage, and only that, as _meta (12.807417ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (13.138541ms)
+✔ each tool carries the annotations the Claude directory reviews (21.930042ms)
+✔ no tool description tells the model what to do first (10.814417ms)
+✔ calling a tool runs its operation and reports failures in-band (25.123042ms)
+✔ an unregistered tool name is refused by the transport (7.1995ms)
+✔ a notification is accepted with no body (9.66775ms)
+✔ a missing credential is rejected before any protocol work (0.279875ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (36.924958ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (7.295417ms)
+✔ an exhausted rate limit returns 429 with Retry-After (12.651208ms)
+✔ malformed JSON gets the reserved parse-error code (0.553917ms)
+✔ an oversized batch is refused rather than amplified (0.655792ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.296833ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.708791ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.331625ms)
+✔ repeated bad credentials stop reaching the authenticator at all (0.357875ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.236292ms)
+✔ successful calls are never charged to the failure budget (65.966334ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (16.465792ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.52125ms)
+{"level":50,"time":1795331745183,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795331745226,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795331745324,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-140/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-140/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-140/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-140/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-140/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-140/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-140/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795331745329,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":16,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795331745347,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795331745391,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":2,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795331745404,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795331745405,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795331745406,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:416:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:420:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:432:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:436:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795331745407,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795331745490,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795331745490,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795331745490,"pid":62611,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ reads the six values (1.459084ms)
+✔ a missing client id or client secret is not configured, not an error (0.218917ms)
+✔ is not configured when any value is missing or blank (0.3825ms)
+✔ the install link carries the state (0.304958ms)
+✔ the authorize link carries the client id and the state (0.418125ms)
+✔ FF_CODE_HANDOFF is a core switch, so an edition's flags port can decide it (0.866042ms)
+✔ OSS: off with nothing set; FF_CODE_HANDOFF or RATEL_EXPERIMENTAL_FEATURES turns it on (0.382708ms)
+✔ Cloud: the port decides in the project's organization, for the person or a caller with no session (0.865041ms)
+✔ Cloud: an operator's FF_CODE_HANDOFF comes first; a failed decision is off (0.195875ms)
+✔ signAppJwt is an RS256 JWT for the App, valid under ten minutes (7.214958ms)
+✔ signAppJwt accepts a PEM with escaped newlines (2.855042ms)
+✔ the installation token is fetched once and reused until near expiry (30.141167ms)
+✔ each installation has its own token, and concurrent asks share one request (3.328667ms)
+✔ forget drops the cached token (4.2355ms)
+✔ a failed token request throws without the response body, and is not cached (7.503709ms)
+✔ listInstallationRepos follows pages until the total (29.479083ms)
+✔ getRepo and readFile read a 404 as null (0.883459ms)
+✔ a 401 drops the token and retries once with a fresh one (0.581167ms)
+✔ createIssue posts the issue and an error names the status, not the body or the token (0.874042ms)
+✔ exchangeUserCode posts the code with the App's OAuth client and returns the token, or null (2.787792ms)
+✔ listUserInstallations reads every page with the user token (1.218ms)
+✔ accepts the correct HMAC (0.855416ms)
+✔ accepts a Uint8Array body (0.343375ms)
+✔ rejects a signature made with another secret (0.212125ms)
+✔ rejects a signature of another body (0.141375ms)
+✔ rejects a missing, empty, unprefixed or truncated signature (0.21525ms)
+✔ rejects everything when no secret is configured (0.1285ms)
+✔ regression: a valid state with a fresh foreign installation id is refused before any repo is listed or written (2614.204917ms)
+✔ a grant is issued only for installations in the person's GET /user/installations (226.460334ms)
+✔ without installation_id (an App already installed) the grant holds all of the person's installations (251.939666ms)
+✔ a code GitHub refuses, a missing code, or a person with no installation gets no grant (227.797541ms)
+✔ the user token is not stored, returned or logged (280.78675ms)
+✔ install, pick, link, unlink: a row exists then goes; a repeated link of the same repo emits no second repo_linked (272.476459ms)
+✔ setup with a forged, expired, missing or someone else's state writes nothing and asks GitHub nothing (258.703ms)
+✔ login CSRF: setup refuses a URL state that is missing or differs from the install cookie, before asking GitHub (185.919584ms)
+✔ a user without access to the project cannot install, set up or link (187.210792ms)
+✔ a grant works only for its project and person, and expires (189.895083ms)
+✔ a support session cannot install, link or unlink: the link outlives the session (188.3635ms)
+✔ with the flag off, or the App (client id or secret included) not configured, nothing is written (166.368542ms)
+✔ fixMarker writes the marker line (6.212125ms)
+✔ parseFixMarkers finds every marker, in order, once each (2.745166ms)
+✔ parseFixMarkers reads the marker back from what fixMarker writes, for every source (0.112292ms)
+✔ parseFixMarkers ignores malformed ids (0.057167ms)
+✔ parseFixMarkers lowercases an uppercase uuid (0.058709ms)
+✔ a good setup lands on the Repository tab with the grant (1.203958ms)
+✔ a forged or expired state redirects home with the error (0.18325ms)
+✔ a later refusal redirects to the project's tab with the error (0.152375ms)
+✔ the Install link goes through our route, which sets the state cookie (0.18675ms)
+✔ without the App's settings the tab says not configured (1.858666ms)
+✔ not connected: an Install link with a state, and the setup error in words (0.409458ms)
+✔ with a grant: the installation's repos to pick from (0.624125ms)
+✔ linked: the repo, and the setup hint names the App's bot (0.157792ms)
+✔ a state round-trips within its lifetime (1.964208ms)
+✔ an expired state is refused (0.366916ms)
+✔ a missing, malformed or forged state is refused (0.758584ms)
+✔ a grant round-trips and expires (0.234875ms)
+✔ a state never passes as a grant, nor a grant as a state (0.114209ms)
+✔ repo_links: link, replace, read, unlink; one link per project (2748.930708ms)
+✔ repo_links: listed by installation, deleted by id (255.671375ms)
+✔ repo_commits: recorded once per sha, first line capped, deploy marked, gone with the link (263.231458ms)
+✔ repo_code_pointers: replaced as a whole; an unknown kind is refused (228.69425ms)
+✔ fix_handoffs: once per project, fix and target (316.404ms)
+{"level":40,"time":1795331739168,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","delivery":"d-1","msg":"rejected github webhook with a bad signature"}
+✔ a bad or missing signature gets 401 and writes nothing (22.28875ms)
+✔ signed installation deleted removes the installation's links where the flag is on (1.230084ms)
+✔ signed installation_repositories removed removes only those repos' links (0.53025ms)
+✔ an unknown event, or another action, answers 200 and writes nothing (0.6995ms)
+✔ with the flag off the handler writes nothing (0.635959ms)
+✔ without a configured secret the webhook answers 503 and writes nothing (0.74875ms)
+✔ with the real deps and no App settings (absent or REPLACE_ME) the webhook answers 503 before any read (0.56025ms)
+{"level":40,"time":1795331739170,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","delivery":"d-1","msg":"rejected github webhook with a bad signature"}
+{"level":30,"time":1795331739172,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation","action":"deleted","removed":1,"msg":"handled github webhook"}
+{"level":30,"time":1795331739173,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation_repositories","action":"removed","removed":1,"msg":"handled github webhook"}
+{"level":30,"time":1795331739174,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation","action":"created","removed":0,"msg":"handled github webhook"}
+{"level":30,"time":1795331739174,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation","action":"deleted","removed":0,"msg":"handled github webhook"}
+{"level":30,"time":1795331739174,"pid":62628,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation_repositories","action":"removed","removed":0,"msg":"handled github webhook"}
+ℹ tests 112
+ℹ suites 0
+ℹ pass 112
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8835.5665

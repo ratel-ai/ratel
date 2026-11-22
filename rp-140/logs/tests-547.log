@@ -1,0 +1,316 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (0.815583ms)
+  ✔ assembles the Cloud edition from the seam (0.19225ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.120125ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.118416ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.07ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.300333ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.049041ms)
+  ✔ throws when cloud is requested but the seam is null (0.059458ms)
+  ✔ reports zero ee boundary violations on the real tree (473.466375ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.186208ms)
+✔ createComposition (475.984667ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.223ms)
+  ✔ the core modules landed so far register their jobs and steps in layer order (0.158333ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (0.587417ms)
+  ✔ refuses a job kind or drain step registered twice (0.129042ms)
+✔ registry root (1.182166ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.141ms)
+✔ every language is labelled and buildable (1.034084ms)
+✔ no snippet inlines a key — each reads it from the environment (0.395584ms)
+✔ every snippet targets the endpoint it was built for (0.220042ms)
+✔ TypeScript wires the cloud SDK's span processor onto a host provider (0.525584ms)
+✔ only the languages the cloud SDK actually ships get an SDK tab (0.805167ms)
+✔ curl needs no install and posts a decodable OTLP body (0.279792ms)
+✔ a service name that carries a quote cannot break out of the literal (0.230375ms)
+✔ buildQuickstartSet returns one entry per language (0.299708ms)
+✔ content capture is off by default and leaves every snippet unchanged (0.372917ms)
+✔ content capture is emitted only when asked, before the SDK starts (1.643458ms)
+✔ curl has no instrumentation to switch, so capture leaves it alone (0.322834ms)
+✔ buildQuickstartSet passes the capture choice through (0.081417ms)
+✔ deployVersion off leaves every snippet byte-identical; on adds the service.version lines to TypeScript only (0.345709ms)
+✔ project settings tabs are URLs, with General matching its path exactly (1.537916ms)
+✔ project settings show Pivots after API keys only with cloud-pivots on (RC-881) (0.313333ms)
+✔ organization settings show Danger zone only to the admins who can use it (0.214042ms)
+✔ a moved page keeps every query value, repeated keys included (0.231125ms)
+✔ the demo project does not count toward the project limit, as in the console (21.30175ms)
+✔ Enterprise limits say unlimited rather than serializing as null (3.159167ms)
+✔ plan and subscription state come from the same helpers as the Billing page (12.478041ms)
+✔ match quality not on the plan says so (1.755208ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.175042ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.261709ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.363375ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.822167ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (1.953292ms)
+✔ handoff_fix opens one issue, then returns it again without opening another (15.640541ms)
+✔ without a linked repo handoff_fix answers invalid_params (10.728167ms)
+✔ on a public repo handoff_fix answers invalid_params and opens no issue (0.30525ms)
+✔ an unknown fix or project is not found (6.068084ms)
+✔ handoff_fix says it changes something (0.171542ms)
+✔ list_sdk_events: the summary, facets and newest events for the window (63.579625ms)
+✔ list_sdk_events over-fetches by one so a full page says there is more (1.549459ms)
+✔ view rejects lists what Ratel refused, with reason and size (1.809042ms)
+✔ view drops lists what the SDK shed before sending (4.301583ms)
+✔ a failed count costs that number, not the answer (8.317584ms)
+✔ a timed-out list is reported as a timeout (4.833084ms)
+✔ get_sdk_event returns the payload, cut at the cap (2.820875ms)
+✔ get_sdk_event: a small payload comes whole (3.072625ms)
+✔ get_sdk_event: an unknown event is not found (3.2005ms)
+✔ list_api_keys lists keys as the page does, never the hash or the key (3.171292ms)
+✔ get_sdk_setup hands out the page's snippets with the key read from the environment (1.693ms)
+✔ get_sdk_setup adds the MCP server guide with FF_AGENTS_PAGES on (RC-780) (1.606791ms)
+✔ get_sdk_setup with captureContent adds the capture lines (1.556458ms)
+✔ developer: captured text for an API key with the content opt-in off is withheld (4.136584ms)
+✔ developer: captured text for an API key with the content opt-in on is returned (2.725375ms)
+✔ developer: captured text for a signed-in member, whatever the opt-in is returned (2.648292ms)
+✔ get_sdk_setup tells the reader to set service.version to the commit sha (0.835041ms)
+{"level":50,"time":1795332782515,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (127.267625ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (31.873125ms)
+✔ without an edition's name the 401 realm stays ratel (0.894417ms)
+✔ an older protocol version still negotiates (60.268208ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (65.836375ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (28.678208ms)
+✔ a signed-in person without app access is refused at the door with 403 (1.527417ms)
+✔ every tool definition is exactly what the fixture pins (28.855958ms)
+✔ each staged tool publishes its stage, and only that, as _meta (37.094625ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (22.296916ms)
+✔ each tool carries the annotations the Claude directory reviews (20.484542ms)
+✔ no tool description tells the model what to do first (42.887875ms)
+✔ calling a tool runs its operation and reports failures in-band (51.937166ms)
+✔ an unregistered tool name is refused by the transport (19.063167ms)
+✔ a notification is accepted with no body (18.06725ms)
+✔ a missing credential is rejected before any protocol work (0.549333ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (53.423417ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (33.4545ms)
+✔ an exhausted rate limit returns 429 with Retry-After (14.2695ms)
+✔ malformed JSON gets the reserved parse-error code (0.242875ms)
+✔ an oversized batch is refused rather than amplified (0.193416ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.096334ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.269792ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.190208ms)
+✔ repeated bad credentials stop reaching the authenticator at all (0.288166ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.161334ms)
+✔ successful calls are never charged to the failure budget (86.883083ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (20.122542ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.514083ms)
+{"level":50,"time":1795332782520,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795332782677,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795332782876,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-140/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-140/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-140/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-140/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-140/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-140/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-140/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-140/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795332782881,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":20,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795332782919,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795332783005,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":3,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795332783020,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795332783021,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795332783021,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:415:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:419:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795332783021,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:431:15)\n    at handleMcpRequest (~/ratel-wt-rp-140/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/mcp/route-handler.test.ts:435:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795332783022,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795332783129,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795332783129,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795332783129,"pid":36443,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ reads the six values (1.395208ms)
+✔ a missing client id or client secret is not configured, not an error (0.184667ms)
+✔ is not configured when any value is missing or blank (0.159125ms)
+✔ the install link carries the state (0.104292ms)
+✔ the authorize link carries the client id and the state (0.098375ms)
+✔ nextCommitSeq starts at 1 and continues past the highest seq of the link (3202.336625ms)
+{"level":30,"time":1795332780528,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":2,"msg":"handled github webhook"}
+✔ push, then spans with the sha, then the drain step: one fix_shipments row with version = sha (3565.305334ms)
+{"level":30,"time":1795332780611,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"7b492608-e037-4b6b-becc-7acaee284097","projectId":"11111111-1111-4111-8111-111111111111","sha":"0123456789abcdef0123456789abcdef01234567","source":"service_version","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":30,"time":1795332781203,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":2,"msg":"handled github webhook"}
+✔ the pending sha is found in one step among 60 other distinct versions (819.43775ms)
+{"level":30,"time":1795332781436,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"ed56947e-950a-465e-bad9-40f374f35ab8","projectId":"11111111-1111-4111-8111-111111111111","sha":"0123456789abcdef0123456789abcdef01234567","source":"service_version","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":30,"time":1795332781840,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":2,"msg":"handled github webhook"}
+✔ a span that started more than ten minutes ago, after the push, is found (432.590375ms)
+{"level":30,"time":1795332781875,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"08bc762e-13e3-463f-822a-badc112b7bd0","projectId":"11111111-1111-4111-8111-111111111111","sha":"0123456789abcdef0123456789abcdef01234567","source":"service_version","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":30,"time":1795332782302,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":2,"msg":"handled github webhook"}
+✔ a span that started before the push is not a deploy of it (454.662666ms)
+{"level":30,"time":1795332782745,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":2,"msg":"handled github webhook"}
+✔ one-shipment-per-fix on pglite: after an insert whose write-back failed, the drain step reuses the stored shipment (447.410333ms)
+{"level":30,"time":1795332782773,"pid":36452,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"65b364df-3adc-4f7f-a549-a55e6f9fdc27","projectId":"11111111-1111-4111-8111-111111111111","sha":"0123456789abcdef0123456789abcdef01234567","source":"service_version","shipped":0,"commits":1,"msg":"recorded a deploy"}
+{"level":30,"time":1795332774590,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"cccccccccccccccccccccccccccccccccccccccc","source":"deployment_status","shipped":2,"commits":2,"msg":"recorded a deploy"}
+✔ ships every undeployed tagged commit at or before the sha, and none after it (2.9535ms)
+✔ a second recordDeploy of the same sha records nothing (0.542541ms)
+✔ a 7-character prefix matches its commit (0.325167ms)
+✔ an ambiguous prefix, a short one or a non-sha matches nothing (0.702708ms)
+✔ an unknown sha records nothing (0.228083ms)
+✔ a fix that is gone ships nothing, and its commit is handled (0.870958ms)
+✔ one-shipment-per-fix: one fix named by two commits of one deploy ships once (0.195042ms)
+✔ a failed shipment releases the commit, so the next signal tries again (3.066292ms)
+✔ the write-back fails after the insert: a replay stores no second shipment and the commit ends with its id (0.50725ms)
+✔ a commit with two fixes fails on the second: it keeps the first, and a replay stores only the missing one (0.517125ms)
+✔ one-shipment-per-fix: deployment_status fails after its inserts, service_version replays, one shipment per fix (0.661375ms)
+✔ one-shipment-per-fix: service_version fails after its inserts, deployment_status replays, one shipment per fix (0.432458ms)
+{"level":30,"time":1795332774593,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","source":"deployment_status","shipped":2,"commits":2,"msg":"recorded a deploy"}
+{"level":30,"time":1795332774594,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"abcdef1000000000000000000000000000000000","source":"service_version","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":40,"time":1795332774594,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","prefix":"abcdef1","source":"service_version","msg":"ignored an ambiguous deployed sha prefix"}
+{"level":40,"time":1795332774595,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","fixId":"issue:2b6c3a8e-1f2d-4c5b-9a7e-3d2c1b0a9f8e","msg":"skipped a deployed fix that no longer exists"}
+{"level":30,"time":1795332774595,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":30,"time":1795332774596,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","source":"deployment_status","shipped":1,"commits":2,"msg":"recorded a deploy"}
+{"level":50,"time":1795332774596,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","err":{"type":"Error","message":"db down","stack":"Error: db down\n    at Object.recordFixShipment (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:88:40)\n    at shipCommit (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:155:34)\n    at async recordDeploy (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:90:25)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:213:3)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","msg":"failed to record a deploy shipment"}
+{"level":50,"time":1795332774599,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","err":{"type":"Error","message":"write-back failed","stack":"Error: write-back failed\n    at Object.setCommitShipments (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:81:15)\n    at shipCommit (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:171:16)\n    at async recordDeploy (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:90:25)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:223:3)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","msg":"failed to record a deploy shipment"}
+{"level":30,"time":1795332774599,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","shipped":0,"commits":1,"msg":"recorded a deploy"}
+{"level":50,"time":1795332774600,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","err":{"type":"Error","message":"insert failed","stack":"Error: insert failed\n    at Object.recordFixShipment (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:91:15)\n    at shipCommit (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:155:34)\n    at async recordDeploy (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:90:25)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:243:3)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","msg":"failed to record a deploy shipment"}
+{"level":30,"time":1795332774600,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","shipped":1,"commits":1,"msg":"recorded a deploy"}
+{"level":50,"time":1795332774600,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","err":{"type":"Error","message":"write-back failed","stack":"Error: write-back failed\n    at Object.setCommitShipments (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:81:15)\n    at shipCommit (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:171:16)\n    at async recordDeploy (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:90:25)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:266:5)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"deployment_status","msg":"failed to record a deploy shipment"}
+{"level":30,"time":1795332774601,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","source":"service_version","shipped":1,"commits":2,"msg":"recorded a deploy"}
+{"level":50,"time":1795332774601,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","err":{"type":"Error","message":"write-back failed","stack":"Error: write-back failed\n    at Object.setCommitShipments (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:81:15)\n    at shipCommit (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:171:16)\n    at async recordDeploy (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.ts:90:25)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/deploy/deployed.test.ts:266:5)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","source":"service_version","msg":"failed to record a deploy shipment"}
+{"level":30,"time":1795332774601,"pid":36453,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","source":"deployment_status","shipped":1,"commits":2,"msg":"recorded a deploy"}
+{"level":30,"time":1795332776843,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":3,"msg":"handled github webhook"}
+✔ push to the default branch stores every commit, in order, with the fixes its message names (22.199834ms)
+✔ push to another branch stores nothing (0.461459ms)
+✔ a redelivered push changes nothing (2.304833ms)
+✔ a later push continues the sequence (0.5175ms)
+✔ a push from another installation or an unlinked repo stores nothing (0.32925ms)
+✔ a forced push stores the commits that are present (0.284292ms)
+✔ malformed commits are skipped (0.252084ms)
+{"level":30,"time":1795332776846,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332776847,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":3,"msg":"handled github webhook"}
+{"level":30,"time":1795332776848,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332776849,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":3,"msg":"handled github webhook"}
+{"level":30,"time":1795332776849,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":1,"msg":"handled github webhook"}
+{"level":30,"time":1795332776849,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332776849,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":0,"msg":"handled github webhook"}
+{"level":40,"time":1795332776849,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/deploy/push","repoLinkId":"link-1","projectId":"11111111-1111-4111-8111-111111111111","forced":true,"truncated":false,"commits":3,"msg":"stored an incomplete push"}
+{"level":30,"time":1795332776850,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":3,"msg":"handled github webhook"}
+{"level":30,"time":1795332776850,"pid":36454,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"push","removed":0,"stored":1,"msg":"handled github webhook"}
+✔ Settings › API keys: deployVersion renders the service.version = commit sha guidance (152.342333ms)
+✔ Settings › API keys: deployVersion false renders exactly as without the prop (36.57175ms)
+✔ Overview setup guide: deployVersion renders the service.version = commit sha guidance (12.813958ms)
+✔ Overview setup guide: deployVersion false renders exactly as without the prop (34.636958ms)
+✔ dashboard quickstart: deployVersion renders the service.version = commit sha guidance (7.037958ms)
+✔ dashboard quickstart: deployVersion false renders exactly as without the prop (11.434292ms)
+✔ a GitHub shipment shows its commits, newest first, each linked to github.com, the carrier marked (26.190292ms)
+✔ a manual shipment (no commit carried it) renders nothing extra (0.116ms)
+✔ the view keeps each commit once and only marks the carriers (0.376042ms)
+✔ loadShipmentCommits reads the carrier and the recent commits up to it; none for a shipment no commit carried (4021.105042ms)
+{"level":30,"time":1795332781168,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":1,"msg":"handled github webhook"}
+✔ deployment_status success records the deploy of its sha (31.6245ms)
+✔ deployment_status with another state records nothing (1.417083ms)
+✔ deployment_status from another installation records nothing (0.227375ms)
+✔ the version step does no span read when no link waits for a deploy (0.161333ms)
+✔ the version step asks the spans only about the pending shas, since the oldest pending commit (0.18925ms)
+✔ the version step reads at most VERSION_LOOKBACK_MAX_MS back, however old the pending commit (2.804125ms)
+✔ shaCandidates lowercases and keeps each prefix once (3.185ms)
+{"level":30,"time":1795332781170,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332781170,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332781170,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332781170,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332781171,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+{"level":30,"time":1795332781171,"pid":36468,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"deployment_status","action":"created","removed":0,"shipped":0,"msg":"handled github webhook"}
+✔ a brief for the rewrite kind has every section and ends with the marker (1.145583ms)
+✔ a brief for the retire kind has every section and ends with the marker (0.180417ms)
+✔ a brief for the merge kind has every section and ends with the marker (0.080791ms)
+✔ a brief for the combine kind has every section and ends with the marker (0.079125ms)
+✔ a brief for the build kind has every section and ends with the marker (0.086167ms)
+✔ a brief for the skill kind has every section and ends with the marker (0.073709ms)
+✔ a brief for the fail-clearly kind has every section and ends with the marker (0.066917ms)
+✔ a brief for the schema kind has every section and ends with the marker (0.0745ms)
+✔ a brief for the fold kind has every section and ends with the marker (0.063792ms)
+✔ a brief for the parallel kind has every section and ends with the marker (0.111375ms)
+✔ a brief for the enrich kind has every section and ends with the marker (0.055084ms)
+✔ a brief for the preload kind has every section and ends with the marker (0.068625ms)
+✔ a brief for the split kind has every section and ends with the marker (0.0965ms)
+✔ a brief for the prerequisite kind has every section and ends with the marker (0.065334ms)
+✔ a brief for the tell-apart kind has every section and ends with the marker (0.056459ms)
+✔ a brief for the fewer-results kind has every section and ends with the marker (0.048625ms)
+✔ every kind has its own brief copy (0.806042ms)
+✔ pointers read as path:line symbol, and a brief without any says so (0.100542ms)
+✔ example traces are ids with console links only (0.067459ms)
+✔ the eval set section is left out when the fix has none (0.052375ms)
+✔ the instructions ask for a PR with the marker in its body and in each commit (0.1265ms)
+✔ a craft fix embeds the drafted change's prompt as its problem, suggestion and effect (0.1445ms)
+✔ trace text with backticks, headings or an instruction stays inside a capped data block (0.209625ms)
+✔ data blocks share a total cap (0.141584ms)
+✔ the same input gives the same text (0.438083ms)
+✔ a run stores the path and line of a tool name and a model id (6.102166ms)
+✔ rows and log lines hold no file content (2.453292ms)
+✔ a run stops at its budget and the next run continues with the rest (0.718ms)
+✔ a rate-limit answer stores what was found and queues the rest (0.593083ms)
+✔ a 429 while reading a file is a rate limit too (0.183ms)
+✔ another GitHub failure fails the job (0.300042ms)
+✔ a re-index replaces the pointers of a symbol and drops symbols that are gone (0.224792ms)
+✔ a run for a project without a link does nothing (0.102125ms)
+✔ a queued run for an older link starts over (1.115667ms)
+✔ firstLineOf finds the first matching line, 1-based (0.331833ms)
+✔ promptSlice takes a short distinctive line without quotes (0.37275ms)
+✔ orderSymbols puts the tools of open fixes first, then tools, models and prompts, once each (0.28075ms)
+✔ enqueue queues one run, and skips when one is in flight (0.25425ms)
+✔ enqueue at handoff skips a fresh index and a project without a link (0.591417ms)
+{"level":40,"time":1795332783309,"pid":36474,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/handoff","project_id":"p1","err":{"type":"Error","message":"queue down","stack":"Error: queue down\n    at Object.requestIndex (~/ratel-wt-rp-140/src/lib/views/code-handoff/handoff/handoff-fix.test.ts:180:13)\n    at handoffFix (~/ratel-wt-rp-140/src/lib/views/code-handoff/handoff/handoff-fix.ts:73:6)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-140/src/lib/views/code-handoff/handoff/handoff-fix.test.ts:183:14)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"msg":"code index request failed"}
+✔ a handoff opens one issue that mentions @claude and carries the marker (22.572ms)
+✔ a second handoff of the same fix returns the first issue and opens nothing (1.248292ms)
+✔ fix_handed_off is emitted once per new handoff, with its target and surface (1.46025ms)
+✔ without a linked repo the handoff refuses with no_repo_linked (0.736542ms)
+✔ a public repo is refused with public_repo and no issue is opened (0.587875ms)
+✔ a repo the installation can no longer read is refused with public_repo (0.492583ms)
+✔ an unknown fix is not found (0.713125ms)
+✔ a failing index request never fails the handoff (5.399041ms)
+✔ the issue title is one line, capped, with no mention or backtick (0.371792ms)
+✔ loads the brief of a drafted fix with its prompt, its own pointers and example traces (16.863417ms)
+✔ finds a fix by one of its aliases (2.001125ms)
+✔ an unknown fix id reads as null (0.280667ms)
+✔ the eval set is named when the fix has one (0.314625ms)
+✔ without a linked repo: the button links to Settings › Repository (0.635667ms)
+✔ with a repo: the button, then the issue once handed off (0.101209ms)
+✔ regression: a valid state with a fresh foreign installation id is refused before any repo is listed or written (1749.194375ms)
+✔ a grant is issued only for installations in the person's GET /user/installations (202.587166ms)
+✔ without installation_id (an App already installed) the grant holds all of the person's installations (168.035792ms)
+✔ a code GitHub refuses, a missing code, or a person with no installation gets no grant (173.9655ms)
+✔ the user token is not stored, returned or logged (165.787ms)
+✔ install, pick, link, unlink: a row exists then goes; a repeated link of the same repo emits no second repo_linked (161.1815ms)
+✔ setup with a forged, expired, missing or someone else's state writes nothing and asks GitHub nothing (163.233875ms)
+✔ login CSRF: setup refuses a URL state that is missing or differs from the install cookie, before asking GitHub (168.444875ms)
+✔ a user without access to the project cannot install, set up or link (168.178625ms)
+✔ a grant works only for its project and person, and expires (177.159333ms)
+✔ a support session cannot install, link or unlink: the link outlives the session (137.374791ms)
+✔ with the App (client id or secret included) not configured, nothing is written (131.87975ms)
+✔ fixMarker writes the marker line (0.822291ms)
+✔ parseFixMarkers finds every marker, in order, once each (1.1035ms)
+✔ parseFixMarkers reads the marker back from what fixMarker writes, for every source (0.151958ms)
+✔ parseFixMarkers ignores malformed ids (0.08975ms)
+✔ parseFixMarkers lowercases an uppercase uuid (0.110542ms)
+✔ a good setup lands on the Repository tab with the grant (0.730625ms)
+✔ a forged or expired state redirects home with the error (0.262792ms)
+✔ a later refusal redirects to the project's tab with the error (0.088666ms)
+✔ the Install link goes through our route, which sets the state cookie (0.097125ms)
+✔ without the App's settings the tab says not configured (2.990875ms)
+✔ not connected: an Install link with a state, and the setup error in words (0.24275ms)
+✔ with a grant: the installation's repos to pick from (1.075541ms)
+✔ linked: the repo, and the setup hint names the App's bot (0.12675ms)
+✔ a state round-trips within its lifetime (1.792958ms)
+✔ an expired state is refused (0.386291ms)
+✔ a missing, malformed or forged state is refused (0.372917ms)
+✔ a grant round-trips and expires (0.567375ms)
+✔ a state never passes as a grant, nor a grant as a state (0.289ms)
+✔ repo_links: link, replace, read, unlink; one link per project (1594.921666ms)
+✔ repo_links: listed by installation, deleted by id (155.889042ms)
+✔ repo_commits: recorded once per sha, first line capped, deploy marked, gone with the link (168.640417ms)
+✔ repo_code_pointers: replaced as a whole; an unknown kind is refused (173.666834ms)
+✔ repo_code_pointers: a symbol's pointers are replaced, never duplicated; gone symbols are pruned (174.01325ms)
+✔ fix_handoffs: once per project, fix and target (204.3315ms)
+{"level":40,"time":1795332784422,"pid":36492,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","delivery":"d-1","msg":"rejected github webhook with a bad signature"}
+✔ a bad or missing signature gets 401 and writes nothing (17.938333ms)
+✔ signed installation deleted removes the installation's links (0.726625ms)
+✔ signed installation_repositories removed removes only those repos' links (0.403291ms)
+✔ an unknown event, or another action, answers 200 and writes nothing (0.597708ms)
+✔ without a configured secret the webhook answers 503 and writes nothing (0.173916ms)
+✔ with the real deps and no App settings (absent or REPLACE_ME) the webhook answers 503 before any read (0.945917ms)
+{"level":40,"time":1795332784423,"pid":36492,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","delivery":"d-1","msg":"rejected github webhook with a bad signature"}
+{"level":30,"time":1795332784424,"pid":36492,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation","action":"deleted","removed":2,"msg":"handled github webhook"}
+{"level":30,"time":1795332784424,"pid":36492,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation_repositories","action":"removed","removed":1,"msg":"handled github webhook"}
+{"level":30,"time":1795332784425,"pid":36492,"hostname":"rstagis-MacBook-Pro-3.local","module":"code-handoff/webhook","event":"installation","action":"created","removed":0,"msg":"handled github webhook"}
+ℹ tests 235
+ℹ suites 2
+ℹ pass 235
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13269.198041

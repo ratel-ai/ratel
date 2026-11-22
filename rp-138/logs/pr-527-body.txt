@@ -1,0 +1,95 @@
+title:	RC-779 + RC-780: detection source marker and MCP server setup guide (standard OTel)
+state:	DRAFT
+author:	rstagi (Roberto Stagi)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	527
+url:	https://github.com/ratel-ai/ratel-cloud/pull/527
+additions:	754
+deletions:	22
+auto-merge:	disabled
+--
+Builds on #522. Review after it.
+
+The flag removal for `cloud-project-entities` is stacked on top: #529.
+
+## What
+
+- **RC-779: detection source marker.** Each agent, MCP server and client shows how Ratel detected it. A guess (heuristic source) shows a **Guessed** badge on the Agents list and detail, the MCP servers list and detail, and the Clients tab. Its tooltip names the rule that matched (from service.name, from the agent span name, from the tool name prefix, from the User-Agent header) and the attribute that makes it explicit. SDK and OpenTelemetry detections show no warning: detail pages show a neutral "Ratel SDK" or "OpenTelemetry" badge. An entity with mixed sources shows its weakest source (SQL `min` over a rank). One component: `components/ds/detection-marker.tsx`. Rules and fix text: `lib/entities/detection.ts`.
+- **RC-780: MCP server setup guide, standard OpenTelemetry, no SDK.** A guide on the MCP servers and Clients tabs (open on an empty list), and in `get_sdk_setup` as `mcpServer` when `cloud-project-entities` is on. Python (`mcp` 2.x native spans + ASGI HTTP span) and TypeScript (`@modelcontextprotocol/sdk` 1.x with one semconv span per request + HTTP instrumentation). The fact table is built from the ingest key constants in `lib/otlp/dimensions/`, so it cannot drift. It states the stdio and stateless HTTP limits and how to send no client IP (ASGI wrapper, or a Collector attributes processor).
+
+All new surfaces stay behind `cloud-project-entities` (off by default).
+
+## Notes
+
+- The TypeScript snippet wraps requests by hand: the MCP TS SDK's native OpenTelemetry is merged upstream but not in an npm release yet.
+- Known ingest quirk, not changed here: the HTTP server span of an MCP server gets its `service.name` as an agent key, so the server also lists as a guessed agent.
+- `list_agents`, `list_mcp_servers` and `list_clients` do not return the detection source yet.
+
+## CI on the combined stack
+
+The stack was rebased on main (b3a4d6b) with `gh stack sync`. `ci.yml` (with `test.yml`) runs only on pull requests into main, so it ran on a CI-only draft PR from the stack head (#537, closed, not merged) at `53312058` (#522 + #527 + #529):
+
+- ci: https://github.com/ratel-ai/ratel-cloud/actions/runs/44307479272 (lint, typecheck, test 1 to 6, test-gate, test-pass) and https://github.com/ratel-ai/ratel-cloud/actions/runs/44307492021 (ci-gate): success
+- terraform plan (PR): https://github.com/ratel-ai/ratel-cloud/actions/runs/44307491973: success (the prod plan first lost a state-lock race with a duplicate run; it passed on re-run)
+
+#522 is green at `7e73e5fe` in its own checks.
+
+## Proof
+
+### RC-779: Guessed marker and tooltip
+
+| Agents list (from service.name) | Agent detail (from the agent span name) |
+| --- | --- |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/01-agents-list-guessed-tooltip.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/03-agent-detail-guessed-span-name.png?raw=true) |
+| **MCP servers list** | **MCP detail (from the tool name prefix)** |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/06-mcp-list-guessed-tooltip.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/07-mcp-detail-guessed-prefix.png?raw=true) |
+| **Clients tab (from the User-Agent header)** | **Agent detail (from service.name)** |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/10-clients-guessed-tooltip.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/02-agent-detail-guessed-service.png?raw=true) |
+
+### RC-779: explicit sources, no warning
+
+| Agent: Ratel SDK | Agent: OpenTelemetry |
+| --- | --- |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/04-agent-detail-sdk.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/05-agent-detail-semconv.png?raw=true) |
+| **MCP server: Ratel SDK** | **MCP server: OpenTelemetry** |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/08-mcp-detail-sdk.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-779/09-mcp-detail-semconv.png?raw=true) |
+
+### RC-780: setup guide
+
+| Servers tab (guide closed) | Guide open: snippet, fact table, limits |
+| --- | --- |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-780/01-servers-guide-closed.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-780/03-guide-detail-crop.png?raw=true) |
+
+Full page: ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-780/02-clients-guide-expanded.png?raw=true)
+
+The guide's own snippets, rendered from `buildMcpServerGuide` and run unchanged against a local `/v1/traces` with its env lines. The rows ingest wrote (`otel_spans`; loopback test clients):
+
+```console
+$ psql -c "select name, harness, harness_version, client_ip, mcp_transport, mcp_protocol_version, mcp_session_id is not null from otel_spans where service_name='guide-mcp' and mcp_server is not null"
+-- Python (mcp 2.3.0 + opentelemetry-instrumentation-asgi 0.66b2), test client claude-code
+initialize|claude-code|2.1.3|127.0.0.1|http|2025-11-25|f
+notifications/initialized|claude-code|2.1.3|127.0.0.1|http|2025-11-25|f
+tools/call search_notes|claude-code|2.1.3|127.0.0.1|http|2025-11-25|f
+tools/list|claude-code|2.1.3|127.0.0.1|http|2025-11-25|f
+-- TypeScript (@modelcontextprotocol/sdk 1.32.2 + @opentelemetry/sdk-node 0.301.2), test client cursor
+initialize|cursor|1.7.0|::ffff:127.0.0.1|http|2025-11-25|t
+notifications/initialized|cursor|1.7.0|::ffff:127.0.0.1|http|2025-11-25|t
+tools/call get_forecast|cursor|1.7.0|::ffff:127.0.0.1|http|2025-11-25|t
+```
+
+The no-client-IP ASGI wrapper run: harness kept, `client_ip` and `geo_country` null.
+
+### End-to-end check
+
+The repo has no e2e suite. The combined stack (#522 + this branch) ran locally (`next dev`, `DEV_AUTH_BYPASS=1`, `cloud-project-entities` on), seeded through `/v1/traces` with the RC-773 real client fixtures, the agent and MCP detection fixtures and the guide runs. Checked by hand in the browser: Agents list and detail, MCP servers list and detail, Clients tab.
+
+| Agents list | MCP server detail | Clients tab |
+| --- | --- | --- |
+| ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-986/e2e-01-agents-list.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-986/e2e-02-mcp-detail-weather.png?raw=true) | ![](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-779/rc-986/e2e-03-clients-tab.png?raw=true) |
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

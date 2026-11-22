@@ -1,0 +1,82 @@
+title:	RC-773/RC-774/RC-778 Client facts, geo and the Clients tab (flag cloud-project-entities; IP redaction unflagged)
+state:	DRAFT
+author:	rstagi (Roberto Stagi)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	522
+url:	https://github.com/ratel-ai/ratel-cloud/pull/522
+additions:	4704
+deletions:	60
+auto-merge:	disabled
+--
+Milestone 4 of RC-771 (agents, MCP servers and clients as derived entities): **client facts, geo and the Clients tab**. A server author sees which harnesses call their MCP server, with versions, transport, protocol version and country. Only organization admins see the raw IP.
+
+Builds on #500, #510 and #515 (Agents page), which are all merged into `main`. This branch is rebased onto `main`.
+
+Flag: `cloud-project-entities` (off by default) gates the Clients tab, `list_clients` and the new Traces filters. Ingest fills the new columns with the flag off.
+
+**No flag: security fix.** A member who is not an organization admin never receives a caller's IP:
+- The trace span loader selects `client_ip` only for `role = admin`.
+- The raw trace route (`/api/projects/[id]/traces/[traceId]/raw`, both the view and the OTLP download) drops `client.address`, `net.peer.ip`, `network.peer.address`, forwarded-for and similar keys for non-admins, even with content reading on.
+- No MCP tool returns the IP.
+
+## What ships
+- **RC-773, client facts at ingest.** Columns on `otel_spans` of MCP server spans:
+  - `harness` (claude-code, codex, opencode, cursor, vscode, other), `harness_raw`, `harness_version`.
+  - `harness_source`: `sdk` (the span's own `mcp.client.name`) wins over `semconv` (the session's `initialize`), which wins over `heuristic` (the User-Agent of the HTTP server span of the same request).
+  - `client_ip`, `mcp_transport` (stdio or http) and `mcp_protocol_version`.
+  - The facts of an `initialize` span apply to every span of its `mcp.session.id`, also across requests: a lookup for later requests, and a back-fill when the `initialize` arrives last.
+  - `trace_events.harness` is filled for OTLP tool rows.
+  - Fixtures are real exports of the TS MCP SDK v2 (HTTP) and the Python `mcp` 2.3.0 SDK (stdio). Neither SDK records clientInfo, so stdio calls with no SDK show as an unknown client.
+- **RC-774, geo.** `geo_country` comes from a local DB-IP IP-to-Country Lite mmdb (CC BY 4.0, no key). No IP leaves the service.
+  - Private, loopback, reserved and invalid addresses give null.
+  - A missing or unreadable file logs one time and stores null.
+  - The image downloads the file in a `geo` stage keyed by the `GEO_DB_MONTH` build arg. CI passes the current month.
+  - `infra/README.md` documents the update process and the attribution.
+- **RC-778, Clients tab.** The tab is at `/project/<id>/mcp?tab=clients`:
+  - Calls, sessions, error rate, first and last seen per harness and per harness version.
+  - Calls per country, with the "IP Geolocation by DB-IP" line.
+  - The transport and protocol version splits.
+  - "Unknown client" with a stdio hint.
+  - Filters: server, environment and time range.
+- **RC-778, also:**
+  - The MCP operation `list_clients`; the tools fixture is regenerated.
+  - Traces filters `facetHarness` and `facetCountry`.
+  - A Client block in the span detail. The admin-only IP shows there.
+  - The MCP server detail reads protocol and transport from the new columns.
+
+## Migrations
+- `0109_client_facts`: the client columns on `otel_spans` and a partial `(project_id, mcp_session_id)` index.
+- `0110_client_geo`: `otel_spans.geo_country`, and `otel_trace_summaries.countries` with a GIN index.
+- `0111_trace_summary_harnesses`: `otel_trace_summaries.harnesses` with a GIN index.
+
+Each file has the out-of-band `CONCURRENTLY` statements for large environments. Older summaries keep `'{}'` until `traces:backfill-filters` runs.
+
+## Proof
+The screenshots come from a local run with the flag on. The traces are the real TS and Python SDK fixtures plus HTTP calls from four harnesses. The IPs are MaxMind and DB-IP test-network addresses (81.2.69.160, 216.160.83.56, 89.160.20.112, 2001:218::1), not real users.
+
+![Clients tab: harnesses, versions, countries with the DB-IP line, transport and protocol](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-773-clients/rc773/01-clients-tab.png?raw=true)
+
+![Clients tab filtered to the Python stdio server: unknown client and the hint](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-773-clients/rc773/02-clients-stdio-unknown.png?raw=true)
+
+![Traces filtered by Client is cursor and Country is US](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-773-clients/rc773/03-traces-client-country-filter.png?raw=true)
+
+![Span detail as an organization admin: client facts and the raw IP](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-773-clients/rc773/04-span-detail-admin-ip.png?raw=true)
+
+![The same span as a member: geo shows, the IP does not](https://github.com/ratel-ai/ratel-cloud/blob/proof/rc-773-clients/rc773/05-span-detail-member-no-ip.png?raw=true)
+
+The geo lookup also runs in the production image (`docker build -f apps/web/Dockerfile .`, then an OTLP POST to the built image):
+
+```console
+tools/call get_forecast | claude-code | 2.1.3 | heuristic | http | 2025-11-25 | 81.2.69.160 | GB
+--- with GEO_COUNTRY_MMDB_PATH=/nope/missing.mmdb, two POSTs:
+geo log lines: 1
+ missing_file_run | client_ip   | geo_country
+ t                | 81.2.69.160 |
+```
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

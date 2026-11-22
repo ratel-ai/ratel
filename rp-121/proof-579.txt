@@ -1,0 +1,15 @@
+$ npx tsx proof-579.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+job=completed summary.steps stored=false
+page: turns=0 waitingOn=- steps on page=false
+
+$ FF_TYPED_STEPS=1 npx tsx proof-579.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+job=completed summary.steps stored=true
+page: turns=11 waitingOn=- steps on page=true
+  Model calls  count=11 perRun=1 failed=0%
+  Code steps   count=11 perRun=1 failed=0%
+  model table: Input tokens=0; Output tokens=0; Reasoning tokens=0; Cost=Not priced; Typical time=1.5 s; Time, 95% under=1.5 s; Stopped at the token limit=Not sent; Blocked by the content filter=Not sent
+  tasks: 11 runs, finished 100%
+
+Note: this run writes the built turns, not the raw trace_events rows, so the model-call token facts (read from trace_events) are 0 here. metrics-query.integration.test.ts covers them.

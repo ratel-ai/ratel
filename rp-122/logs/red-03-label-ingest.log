@@ -1,0 +1,228 @@
+✖ flag on: a playground run is stored for Traces, with no cost row and no Agent health row (18.419791ms)
+✔ flag off: a playground run is ingested as on main (1.8945ms)
+✔ flag on: a production run keeps its cost and Agent health rows, and the flag is not read (1.958417ms)
+✖ a span attribute environment wins over the resource's (2.410375ms)
+✔ sandbox and replay keys survive the attribute size bound (2.710125ms)
+~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-sandbox.test.ts:16
+  setModelCallLabelLookup,
+  ^
+SyntaxError: The requested module '@/lib/platform/model-call' does not provide an export named 'setModelCallLabelLookup'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/workflows/label-sandbox.test.ts (2219.554209ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 3
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2228.448
+
+✖ failing tests:
+
+test at lib/ingest/otlp/ingest-spans.playground.test.ts:1:345
+✖ flag on: a playground run is stored for Traces, with no cost row and no Agent health row (18.419791ms)
+  AssertionError [ERR_ASSERTION]: no events / event_metrics row
+  + actual - expected
+  
+  + [
+  +   {
+  +     event: {
+  +       cachedTokens: null,
+  +       categorizerVersion: 4,
+  +       costUsd: '0.00007',
+  +       dedupeHash: '8d7329c83bc6acb953a584d0c816c38df01743ce1f8ce642dcc2ec72f4247eda',
+  +       finishReason: null,
+  +       inputTokens: 10,
+  +       latencyMs: 800,
+  +       model: 'claude-sonnet-5-5',
+  +       occurredAt: 2023-11-14T22:13:20.100Z,
+  +       outputTokens: 5,
+  +       payload: {
+  +         input_message_count: 0,
+  +         latency_ms: 800,
+  +         messages: [
+  +           {
+  +             content: [
+  +               {
+  +                 arguments: {},
+  +                 id: '',
+  +                 name: 'search',
+  +                 type: 'tool_call'
+  +               }
+  +             ],
+  +             role: 'assistant'
+  +           }
+  +         ],
+  +         model: 'claude-sonnet-5-5',
+  +         provider: 'anthropic',
+  +         tools: [
+  +           {
+  +             name: 'search',
+  +             parameters: {}
+  +           }
+  +         ],
+  +         ts: '2023-11-14T22:13:20.100Z',
+  +         usage: {
+  +           input_tokens: 10,
+  +           output_tokens: 5
+  +         }
+  +       },
+  +       projectId: 'p-1',
+  +       provider: 'anthropic',
+  +       reasoningTokens: null,
+  +       spanId: '2222222222222222',
+  +       stream: null,
+  +       traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  +     },
+  +     metric: {
+  +       categorizerVersion: 4,
+  +       costUsd: '0.00007',
+  +       eventTime: 2023-11-14T22:13:20.100Z,
+  +       inputTokens: 10,
+  +       latencyMs: 800,
+  +       outputTokens: 5,
+  +       splits: {
+  +         history_cached: 0,
+  +         history_uncached: 5,
+  +         tools_unused: 0,
+  +         tools_used: 5
+  +       },
+  +       tokensByCategory: {
+  +         history: 5,
+  +         memory: 0,
+  +         skills: 0,
+  +         tools: 5,
+  +         user_input: 0
+  +       },
+  +       toolsByName: {
+  +         search: {
+  +           calls: 1,
+  +           tokens: 5
+  +         }
+  +       },
+  +       toolsTotalCount: 1,
+  +       toolsUsedCount: 1
+  +     }
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.playground.test.ts:36:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ { event: [Object], metric: [Object] } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/ingest-spans.playground.test.ts:1:1693
+✖ a span attribute environment wins over the resource's (2.410375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + [
+  +   {
+  +     event: {
+  +       cachedTokens: null,
+  +       categorizerVersion: 4,
+  +       costUsd: '0.00007',
+  +       dedupeHash: '8d7329c83bc6acb953a584d0c816c38df01743ce1f8ce642dcc2ec72f4247eda',
+  +       finishReason: null,
+  +       inputTokens: 10,
+  +       latencyMs: 800,
+  +       model: 'claude-sonnet-5-5',
+  +       occurredAt: 2023-11-14T22:13:20.100Z,
+  +       outputTokens: 5,
+  +       payload: {
+  +         input_message_count: 0,
+  +         latency_ms: 800,
+  +         messages: [
+  +           {
+  +             content: [
+  +               {
+  +                 arguments: {},
+  +                 id: '',
+  +                 name: 'search',
+  +                 type: 'tool_call'
+  +               }
+  +             ],
+  +             role: 'assistant'
+  +           }
+  +         ],
+  +         model: 'claude-sonnet-5-5',
+  +         provider: 'anthropic',
+  +         tools: [
+  +           {
+  +             name: 'search',
+  +             parameters: {}
+  +           }
+  +         ],
+  +         ts: '2023-11-14T22:13:20.100Z',
+  +         usage: {
+  +           input_tokens: 10,
+  +           output_tokens: 5
+  +         }
+  +       },
+  +       projectId: 'p-1',
+  +       provider: 'anthropic',
+  +       reasoningTokens: null,
+  +       spanId: '2222222222222222',
+  +       stream: null,
+  +       traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  +     },
+  +     metric: {
+  +       categorizerVersion: 4,
+  +       costUsd: '0.00007',
+  +       eventTime: 2023-11-14T22:13:20.100Z,
+  +       inputTokens: 10,
+  +       latencyMs: 800,
+  +       outputTokens: 5,
+  +       splits: {
+  +         history_cached: 0,
+  +         history_uncached: 5,
+  +         tools_unused: 0,
+  +         tools_used: 5
+  +       },
+  +       tokensByCategory: {
+  +         history: 5,
+  +         memory: 0,
+  +         skills: 0,
+  +         tools: 5,
+  +         user_input: 0
+  +       },
+  +       toolsByName: {
+  +         search: {
+  +           calls: 1,
+  +           tokens: 5
+  +         }
+  +       },
+  +       toolsTotalCount: 1,
+  +       toolsUsedCount: 1
+  +     }
+  +   }
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.playground.test.ts:70:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { event: [Object], metric: [Object] } ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/label-sandbox.test.ts:1:1
+✖ lib/readings/trace-signals/workflows/label-sandbox.test.ts (2219.554209ms)
+  'test failed'

@@ -1,0 +1,12 @@
+$ npx tsx proof-578.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+task_segments=0; docs session 0000c8 has 0 segment(s)
+session replay (docs): no session (no turn)
+
+$ FF_TYPED_STEPS=1 npx tsx proof-578.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+task_segments=30; docs session 0000c8 has 2 segment(s)
+session replay (docs): steps=["ask","code","code","user_message","code","user_message"] bands=2
+  task 3a2760abb8 typedSteps=true ?steps= -> {"all":"code,code,model_call,code","tools":"","models":"model_call","intents":"","flow":"code,code,model_call,code"}
+  task eddc2af246 typedSteps=true ?steps= -> {"all":"model_call","tools":"","models":"model_call","intents":"","flow":"model_call"}
+  task fec1be2aae typedSteps=true ?steps= -> {"all":"code,model_call","tools":"","models":"model_call","intents":"","flow":"code,model_call"}

@@ -1,0 +1,68 @@
+
+copied (6)
+  src/lib/readings/trace-signals/steps/metrics-query.integration.test.ts
+  src/lib/readings/trace-signals/steps/metrics-query.ts
+  src/lib/readings/trace-signals/steps/metrics.test.ts
+  src/lib/readings/trace-signals/steps/metrics.ts
+  src/lib/readings/trace-signals/steps/tables.test.ts
+  src/lib/readings/trace-signals/steps/tables.ts
+
+updated (17)
+  src/lib/ingest/trace-events/queries.integration.test.ts
+  src/lib/ingest/otlp/__fixtures__/real/README.md
+  src/lib/catalog/wire.ts
+  src/lib/catalog/wire.test.ts
+  src/lib/readings/trace-signals/health-outcomes.ts
+  src/lib/readings/trace-signals/health-outcomes.test.ts
+  src/lib/readings/trace-signals/signals/analyze.ts
+  src/lib/readings/trace-signals/signals/compute.ts
+  src/lib/readings/trace-signals/signals/project-metrics.ts
+  src/lib/readings/trace-signals/signals/project-metrics.test.ts
+  src/lib/readings/trace-signals/signals/types.ts
+  src/lib/views/health/page-model.integration.test.ts
+  src/lib/views/health/public-model.ts
+  src/components/console/badgers/honeybadger-assets.ts
+  src/lib/mcp/apps/load.ts
+  src/lib/console/badgers.test.ts
+  src/postcss.config.mjs
+
+deleted (2)
+  src/lib/platform/otel/server-traces.test.ts
+  src/lib/platform/otel/server-traces.ts
+
+owned files changed upstream since the last sync; port by hand:
+.../app/(app)/project/[projectId]/health/page.tsx  |  7 +-
+ apps/web/components/ds/step-kind.tsx               | 26 +++++++
+ apps/web/components/health/v2/SummaryView.tsx      | 14 +++-
+ apps/web/lib/analytics/track-server.ts             |  1 +
+ apps/web/lib/db/migrations/0111_task_segments.sql  | 27 +++++++
+ apps/web/lib/db/migrations/meta/_journal.json      |  7 ++
+ apps/web/lib/db/schema.ts                          | 20 +++++
+ apps/web/lib/jobs/observability.ts                 |  1 +
+ apps/web/lib/mcp/route-handler.test.ts             |  1 +
+ apps/web/lib/otlp/agent-health-bridge.ts           |  9 ++-
+ apps/web/lib/otlp/derive-agent-runs.ts             | 27 ++-----
+ apps/web/lib/otlp/derive-steps.test.ts             | 90 ++++++++++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  2 +
+ apps/web/lib/tasks/page-model.integration.test.ts  | 80 ++++++++++++++++++-
+ apps/web/lib/tasks/page-model.ts                   | 19 ++++-
+ apps/web/lib/tasks/queries.ts                      | 58 +++++++++++++-
+ apps/web/lib/trace-signals/constants.ts            |  3 +
+ apps/web/lib/trace-signals/page-model.ts           | 12 ++-
+ apps/web/lib/trace-signals/signals/compute-job.ts  | 28 ++++++-
+ .../trace-signals/signals/integration-support.ts   |  3 +
+ .../lib/trace-signals/tool-run-insights.test.ts    | 14 +++-
+ apps/web/lib/trace-signals/tool-run-insights.ts    | 14 +++-
+ apps/web/lib/trace-signals/turns/build-job.ts      | 17 +++-
+ apps/web/lib/trace-signals/turns/queries.ts        | 13 +++-
+ apps/web/lib/trace-signals/turns/schedule.ts       |  7 +-
+ apps/web/lib/trace-signals/turns/segment.ts        |  6 +-
+ .../turns/typed-steps.integration.test.ts          | 80 +++++++++++++++++++
+ .../lib/trace-signals/turns/typed-steps.test.ts    | 37 +++++++++
+ apps/web/lib/trace-signals/typed-steps.test.ts     | 35 +++++++++
+ apps/web/lib/trace-signals/typed-steps.ts          | 28 +++++++
+ apps/web/lib/trace-signals/view.ts                 |  6 ++
+ apps/web/lib/trace-signals/workflows/place.ts      | 18 ++---
+ 32 files changed, 655 insertions(+), 55 deletions(-)
+
+applied 25 change(s) from 29b97479

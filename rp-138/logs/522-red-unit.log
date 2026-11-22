@@ -1,0 +1,231 @@
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/components/console/clients/labels' imported from ~/ratel-wt-rp-138/src/components/console/clients/labels.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075041:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075041:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075041:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/components/console/clients/labels'
+}
+
+Node.js v24.12.0
+✖ components/console/clients/labels.test.ts (888.41875ms)
+✔ credential headers, keys and the command line are redacted (1.023ms)
+✔ credential query params and URL passwords are redacted, other params kept (0.250041ms)
+✔ read_content off drops content keys and keeps the rest (0.1325ms)
+✔ OTLP key-values are redacted the same way, nested lists too (0.160084ms)
+✔ read_content off keeps only keys that carry no content, whatever vocabulary sent them (0.071959ms)
+✔ credential shapes: paths with a query, empty users, passwords with @, token-named keys (0.079416ms)
+✔ plain text with a question mark is left as sent (0.056583ms)
+✔ free text redacts a URL credential (0.068542ms)
+✖ the caller's IP keys are left out unless the viewer is an admin, whatever readContent says (RC-778) (1.168333ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/client' imported from ~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/client.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/client'
+}
+
+Node.js v24.12.0
+✖ lib/ingest/otlp/dimensions/client.test.ts (938.730709ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/geo' imported from ~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/geo.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075107:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075107:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075107:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/geo'
+}
+
+Node.js v24.12.0
+✖ lib/ingest/otlp/dimensions/geo.test.ts (900.576834ms)
+~/ratel-wt-rp-138/src/lib/ingest/otlp/dimensions/index.test.ts:5
+  NO_CLIENT_FACTS,
+  ^
+SyntaxError: The requested module '@/lib/ingest/otlp/dimensions' does not provide an export named 'NO_CLIENT_FACTS'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/ingest/otlp/dimensions/index.test.ts (942.769708ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/mcp/operations/clients' imported from ~/ratel-wt-rp-138/src/lib/mcp/operations/clients.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795324075109:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/mcp/operations/clients'
+}
+
+Node.js v24.12.0
+✖ lib/mcp/operations/clients.test.ts (1332.282625ms)
+✔ every narrowing parameter becomes a chip, so no filter hides (0.785667ms)
+✔ exact experiment links read as exact, and removing the last tag drops exactTags (0.132459ms)
+✔ removing a chip drops the page cursor and the open row, and keeps the rest (0.064209ms)
+✔ measures read as ranges in plain units (8.254167ms)
+✔ logs only show the filters that narrow logs (0.114417ms)
+✔ clear filters keeps the window, sort, view options and the compare selection (0.178042ms)
+✔ the search box writes the name filter and Logs retire the old event-name param (0.0805ms)
+✔ the add-filter popover offers the values seen in the window, with counts only in the span unit (0.226ms)
+✔ toggling a value adds or removes it; single-value fields replace (0.195667ms)
+✔ a preset window replaces custom days; switching tabs leaves the page and open row behind (0.089792ms)
+✔ grouped Spans apply the variant and top-level filters their chips show (1.195542ms)
+✔ traceFilterFromSearch reads the rollup filters from the URL (RC-505) (0.174916ms)
+✔ rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip (0.188916ms)
+✔ rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds (0.168625ms)
+✔ with the entity filters on, facetAgent and facetServer are read, shown as chips and offered as fields (0.243166ms)
+✔ with the entity filters off, facetAgent and facetServer are ignored and no facet shows (0.280333ms)
+✔ the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3) (0.06075ms)
+✖ facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778) (1.473958ms)
+✔ the list keeps the window and the environment (0.464416ms)
+✔ the detail encodes the server key in the path, and the role in the query (0.14475ms)
+✔ only the two roles parse (0.078916ms)
+✔ Traces opens Turns filtered by the server, in the same window and environment (0.084708ms)
+✖ Clients and Catalog are filtered by the server (1.805042ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 29
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1414.849375
+
+✖ failing tests:
+
+test at components/console/clients/labels.test.ts:1:1
+✖ components/console/clients/labels.test.ts (888.41875ms)
+  'test failed'
+
+test at lib/ingest/otlp-raw/redact.test.ts:1:4489
+✖ the caller's IP keys are left out unless the viewer is an admin, whatever readContent says (RC-778) (1.168333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/ingest/otlp-raw/redact.test.ts:197:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ingest/otlp/dimensions/client.test.ts:1:1
+✖ lib/ingest/otlp/dimensions/client.test.ts (938.730709ms)
+  'test failed'
+
+test at lib/ingest/otlp/dimensions/geo.test.ts:1:1
+✖ lib/ingest/otlp/dimensions/geo.test.ts (900.576834ms)
+  'test failed'
+
+test at lib/ingest/otlp/dimensions/index.test.ts:1:1
+✖ lib/ingest/otlp/dimensions/index.test.ts (942.769708ms)
+  'test failed'
+
+test at lib/mcp/operations/clients.test.ts:1:1
+✖ lib/mcp/operations/clients.test.ts (1332.282625ms)
+  'test failed'
+
+test at lib/synthesis/traces/v2/filters.test.ts:1:12922
+✖ facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778) (1.473958ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + {}
+  - {
+  -   countries: [
+  -     'GB'
+  -   ],
+  -   harnesses: [
+  -     'cursor'
+  -   ]
+  - }
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/synthesis/traces/v2/filters.test.ts:385:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: {},
+    expected: { harnesses: [ 'cursor' ], countries: [ 'GB' ] },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/views/mcp-servers/paths.test.ts:1:1653
+✖ Clients and Catalog are filtered by the server (1.805042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + '/project/11111111-1111-4111-8111-111111111111/clients?server=acme%2Ftools'
+  - '/project/11111111-1111-4111-8111-111111111111/mcp?tab=clients&server=acme%2Ftools'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/views/mcp-servers/paths.test.ts:54:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '/project/11111111-1111-4111-8111-111111111111/clients?server=acme%2Ftools',
+    expected: '/project/11111111-1111-4111-8111-111111111111/mcp?tab=clients&server=acme%2Ftools',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,7 @@
+FF_FINE_TUNING=(unset)
+switch in the organization: false; with no database: false
+rail, Improvements: ["Fixes","Quality","Adaptive ranking"]
+job registered: build_fine_tuning_dataset (build_fine_tuning_dataset)
+seeded: 5 closed runs of task "triage", one model call each (test PII in the asks)
+POST consent: 404 {"ok":false,"error":"not_found","message":"No project you belong to has that ID."}
+MCP list_use_cases: {"ok":false,"error":"forbidden","message":"Fine-tuning is not available for this project.","reason":"fine_tuning_off"}

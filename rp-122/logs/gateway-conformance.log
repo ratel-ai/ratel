@@ -1,0 +1,12 @@
+✔ every valid message fixture passes and fits in a frame (7.075875ms)
+✔ every valid manifest fixture passes (0.401958ms)
+✔ every invalid message fixture fails, by schema or by frame size (1.169875ms)
+✔ every invalid manifest fixture fails (0.793417ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 557.93

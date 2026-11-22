@@ -1,0 +1,8 @@
+✖ lib/synthesis/pivots/filter-options.test.ts (498.661375ms)
+✖ without pivots the facet query is the same SQL as on main (2.39425ms)
+ℹ tests 39
+ℹ pass 37
+ℹ fail 2
+✖ failing tests:
+✖ lib/synthesis/pivots/filter-options.test.ts (498.661375ms)
+✖ without pivots the facet query is the same SQL as on main (2.39425ms)

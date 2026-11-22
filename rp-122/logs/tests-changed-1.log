@@ -1,0 +1,957 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (2.799625ms)
+  ✔ assembles the Cloud edition from the seam (0.519083ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.174292ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.487042ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.247833ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.995917ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.235542ms)
+  ✔ throws when cloud is requested but the seam is null (0.438792ms)
+  ✔ reports zero ee boundary violations on the real tree (570.680458ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.179666ms)
+✔ createComposition (579.306542ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.215541ms)
+  ✖ the core modules landed so far register their jobs and steps in layer order (3.089ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (1.2895ms)
+  ✔ refuses a job kind or drain step registered twice (0.320708ms)
+✖ registry root (5.155292ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.332666ms)
+✔ project URLs are rooted at /project/<id>, encoded (1.350875ms)
+✔ the project id is read back from the path (0.352667ms)
+✔ with a project, the rail links every core destination to that project (1.655917ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.147334ms)
+✔ outside a project, the organization rail lists its projects page (0.999125ms)
+✔ composition additions follow the core destinations with stable ids (0.334667ms)
+✔ the OSS composition adds no destination (0.243708ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.696167ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (1.973916ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.877875ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.19625ms)
+✔ the active item matches exact index pages and nested paths (0.162333ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.136291ms)
+✔ switching project keeps the section the reader is on (0.047542ms)
+✔ a project outside the organization's list is not found (0.04425ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.035542ms)
+✔ the command menu lists the project's pages, the organization's, then every project (0.169583ms)
+✔ outside a project the command menu lists the organization's pages only (0.052833ms)
+✔ the command menu finds a page by its keywords, not only its name (0.377041ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.246791ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.126334ms)
+✔ visibleOrganizationNav hides only the paths given (0.080708ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.247375ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.212875ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.18725ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.120667ms)
+✔ shouldLift once the dashboard has its content (0.78875ms)
+✔ shouldLift holds while the route has not changed yet (0.172417ms)
+✔ shouldLift holds over the shell skeleton and the page skeleton (0.199083ms)
+✔ shouldLift gives up waiting, so the veil never stays up (0.160917ms)
+✔ the panel lists the three ways Ratel reads telemetry, in order (14.20425ms)
+✔ the relay row lists every privacy level, least to most (1.906666ms)
+✔ the panel makes the first-reading promise and says partial is fine (1.084834ms)
+✔ the content-capture switch is labelled, reachable, and starts off (5.558666ms)
+✔ the copy stays in plain language: no engine names (1.844209ms)
+✔ the snippet carries the capture switch only when the customer opts in (22.0465ms)
+✔ a name becomes a project of the organization it is handed, with its key and its snippets (17.4305ms)
+✔ a refusal comes back as it is, and nothing is created (1.872458ms)
+✔ the sample project is asked for with the organization and the person, and answers nothing (4.0565ms)
+✔ a key the edition keeps comes back marked revealable, for the welcome page's copy (0.2415ms)
+✖ the first project lands with a Default key, revealed once (6.957709ms)
+✔ slugs stay unique within the organization and fall back to agent (0.64025ms)
+✔ the name must be between 2 and 60 characters (2.626917ms)
+✔ without a database the name is still checked first, as upstream does (3.482084ms)
+✔ a support session cannot mint a project or a key (0.4725ms)
+✔ the plan's project cap refuses and is counted without the demo project (0.370375ms)
+✔ no session, or another organization's id, creates nothing (0.505833ms)
+✔ a non-active organization the reader belongs to gets the project, as upstream's sessionForOrganization (0.632625ms)
+✔ with an edition that keeps keys, the new key is handed over and reads as revealable later (0.431708ms)
+✔ a key the edition could not keep still lands, shown once (0.4455ms)
+✔ a key the edition kept can be revealed later, in upstream's words (1.669042ms)
+✔ without an edition that keeps keys, the key is not shown again (0.261ms)
+{"level":30,"time":1795322916562,"pid":12336,"hostname":"rstagis-MacBook-Pro-3.local","module":"onboarding/provision-sample","orgId":"22222222-2222-4222-8222-222222222222","projectId":"11111111-1111-4111-8111-111111111111","skills":3,"traces":40,"durationMs":0,"msg":"sample project seeded"}
+✔ an empty, never-seeded organization gets the sample once, recorded, drained and tracked (2.500417ms)
+✔ an organization with projects is left alone before the mark is even read (0.343ms)
+✔ nothing is seeded in a support session, where the organization is a customer's (0.266291ms)
+✔ a lost claim seeds nothing: a deleted sample does not come back (0.187333ms)
+✔ a failing seed is reported and swallowed, and the claim stays (2.615917ms)
+{"level":50,"time":1795322916566,"pid":12336,"hostname":"rstagis-MacBook-Pro-3.local","module":"onboarding/provision-sample","err":{"type":"Error","message":"ingest returned 500","stack":"Error: ingest returned 500\n    at Object.seed (~/ratel-wt-rp-122/src/lib/console/onboarding/provision-sample.test.ts:95:13)\n    at ensureSampleProject (~/ratel-wt-rp-122/src/lib/console/onboarding/provision-sample.ts:112:31)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/console/onboarding/provision-sample.test.ts:98:16)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"orgId":"22222222-2222-4222-8222-222222222222","claimed":true,"msg":"sample project seeding failed"}
+✔ the sample seed is claimed once per organization, and the project recorded on it (3398.671375ms)
+✔ every language is labelled and buildable (1.541209ms)
+✔ no snippet inlines a key — each reads it from the environment (0.344417ms)
+✔ every snippet targets the endpoint it was built for (0.158709ms)
+✔ TypeScript wires the cloud SDK's span processor onto a host provider (0.354958ms)
+✔ only the languages the cloud SDK actually ships get an SDK tab (0.927291ms)
+✔ curl needs no install and posts a decodable OTLP body (0.306875ms)
+✔ a service name that carries a quote cannot break out of the literal (0.129583ms)
+✔ buildQuickstartSet returns one entry per language (0.180291ms)
+✔ content capture is off by default and leaves every snippet unchanged (0.178458ms)
+✔ content capture is emitted only when asked, before the SDK starts (0.8745ms)
+✔ curl has no instrumentation to switch, so capture leaves it alone (0.150875ms)
+✔ buildQuickstartSet passes the capture choice through (0.108459ms)
+✔ the tour status cookie is durable, site-wide and not readable by scripts (0.802083ms)
+✔ finishing or skipping is remembered: the stored value stops the offer (0.114459ms)
+✔ a value the browser made up is neither stored nor trusted (0.063208ms)
+✔ the spotlight grows the target by an even margin (0.707666ms)
+✔ the spotlight never leaves the viewport (0.067167ms)
+✔ the card sits on the requested side when it fits (0.1045ms)
+✔ the card flips to the opposite side rather than overflow (0.14875ms)
+✔ a bottom-placed card flips up when it would run off the fold (0.086666ms)
+✔ the card stays fully on screen even when no side fits (0.061084ms)
+✔ only the two declared statuses are recognized (0.410334ms)
+✔ parsing narrows a stored value or reports it as unfinished (0.075666ms)
+✔ an unrecognized stored status offers the tour again (0.079375ms)
+✔ with the edition's store the status is the account's, and the cookie is neither read nor written (1.237666ms)
+✔ an account that never finished the tour reads as nothing, whatever the browser holds (0.108417ms)
+✔ without an edition the status stays a per-browser cookie, as before (0.156167ms)
+✔ every declared step names a distinct id and a target (0.586833ms)
+✔ steps whose target is missing are dropped, in order (0.382667ms)
+✔ the tour walks the rail in its own order (0.063459ms)
+✔ every navigation step names an item of the project rail (0.384458ms)
+✔ the sidebar renders an anchor for every step that is not about the demo project (49.906666ms)
+✔ a page with no tour targets resolves to no steps (0.230458ms)
+✔ the demo step is the only one gated on the demo project (0.110791ms)
+✔ the Agent health step runs only when its anchor is on the page (0.100834ms)
+✔ the Agent health step targets its own anchor and is not demo-only (0.078459ms)
+✔ a target needs a box and must not sit in a folded subtree (0.198417ms)
+{"level":30,"time":1795322919979,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ two nested agents and an MCP server span get their dimensions in otel_spans (4398.219875ms)
+{"level":30,"time":1795322919981,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795322919987,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322919987,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795322920354,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the dimensions are the same when the server's export comes first (374.116291ms)
+{"level":30,"time":1795322920354,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795322920362,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322920362,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795322920735,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the MCP tool row names its server in trace_events.server; the other derived rows keep it null (390.646875ms)
+{"level":30,"time":1795322920735,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795322920747,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322920747,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":30,"time":1795322921275,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ an MCP server that exports alone stores its call with its own name as the server (574.2725ms)
+{"level":30,"time":1795322921275,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+✔ trace_events has no entity dimension column: the dimensions live on otel_spans (471.276083ms)
+{"level":50,"time":1795322922283,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"derivation failed","stack":"Error: derivation failed\n    at deriveSpanDimensions (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:210:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:178:48)\n    at handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:27)\n    at async ingest (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:82:17)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:207:22)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","msg":"exception"}
+{"level":30,"time":1795322922306,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.163,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ a derivation that throws is logged, and the batch is still stored: null dimensions, the payload agent of main (RC-811) (518.231917ms)
+{"level":30,"time":1795322922306,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.163,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+{"level":30,"time":1795322922311,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.761,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322922311,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":440,"size_kb":0.761,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["mcp.server"],"msg":"trace_ingested"}
+{"level":50,"time":1795322922307,"pid":12358,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"derivation failed","stack":"Error: derivation failed\n    at deriveSpanDimensions (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:210:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:178:48)\n    at handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:27)\n    at async ingest (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:82:17)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/dimensions/ingest.integration.test.ts:207:22)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","msg":"exception"}
+✔ the invoke_agent root keeps its ask; the chat span stays content-free (9.670875ms)
+✔ an invoke_agent span that is not the root keeps no content (1.084292ms)
+✔ a batch with no organization still keeps the ask (0.952833ms)
+✔ a full LangGraph batch stores 2 calls and no storage lookup (12.099584ms)
+✔ every ingest lane must choose the dedupe: it has no default (0.343458ms)
+✔ with the dedupe off (the health importer), the LangGraph root is a third call (3.451625ms)
+✔ a root exported after its stored model calls is not counted (0.902083ms)
+✔ a root with no model call in batch or storage still counts (1.482125ms)
+✔ a failed lookup drops the root rather than risk double counting (0.769458ms)
+✔ an agent span with no usage or model needs no lookup (0.697291ms)
+✔ a batch's spans and events pay the project's own price, read once (11.684667ms)
+✔ with no price of its own a batch pays the current built-in price (2.423583ms)
+✔ a failed price read: no cost is stored and the error is logged, for backfill:costs to price (1.264ms)
+✔ without the model pricing deps a batch pays the current built-in prices (0.8655ms)
+✔ an unpriced call stores the cost its emitter sent (AOBS-3) (0.763416ms)
+✔ flag on: a playground run is stored for Traces, with no cost row and no Agent health row (6.9355ms)
+✔ flag off: a playground run is ingested as on main (4.982916ms)
+✔ flag on: a production run keeps its cost and Agent health rows, and the flag is not read (0.73275ms)
+✔ a span attribute environment wins over the resource's (0.408917ms)
+✔ sandbox and replay keys survive the attribute size bound (0.808125ms)
+✔ the row keeps the span's events and links (5.718625ms)
+✔ a span with no event and no link stores neither (0.751792ms)
+✔ the tool span keeps mcp.session.id, its arguments and its result (3.723875ms)
+✔ a model-call span keeps no tool content (4.717875ms)
+✔ a result over the size bound is dropped before the arguments and the content-free keys (0.270541ms)
+✔ a batch with no organization still keeps the tool content (0.408584ms)
+{"level":30,"time":1795322915903,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":1,"accepted":0,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":50,"time":1795322915988,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"db down","stack":"Error: db down\n    at Object.insertOtelLogs (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.test.ts:535:21)\n    at handleLogsRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.ts:270:34)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.test.ts:547:22)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+✔ missing Authorization returns 401 (40.418834ms)
+✔ stamps project and org onto the request log context (17.27375ms)
+✔ unsupported Content-Type returns 415 (0.5775ms)
+✔ oversized declared body returns 413 (0.351125ms)
+✔ unconfigured database returns 503 (0.281791ms)
+✔ invalid or revoked API key returns 401 (0.213292ms)
+✔ does not gate log ingest on the monthly event quota (1.363042ms)
+✔ oversized buffered body returns 413 (5.463625ms)
+✔ chunked over-cap body with no content-length returns 413 without full buffering (1.024417ms)
+✔ malformed OTLP payload returns 400 (0.39125ms)
+✔ more than the maximum log records returns 413 (15.547834ms)
+✔ seven lifecycle events persist while a host log is counted as dropped (5.37375ms)
+✔ a protobuf log export returns an empty protobuf success with count headers (22.85ms)
+✔ an OTLP/JSON log export keeps its envelope and gains count headers (1.069084ms)
+✔ insert failure returns 500 and reports the exception through the telemetry shim (1.005917ms)
+✔ telemetry capture failure does not replace the insert-failure response (0.495958ms)
+✔ touchApiKey failure does not downgrade successful ingest (1.651083ms)
+✔ invalid log API keys emit a rejection with timing (0.593959ms)
+✔ log rejections classify every response path (25.164875ms)
+✔ accepted log events follow the injected success sampler (0.540375ms)
+✔ raw capture on: one stored export whose body decodes back to the same records (1.775708ms)
+✔ a throwing raw store still returns the same log response (1.576625ms)
+✔ a gzip body is inflated and accepted like an identity body (1.195541ms)
+✔ a corrupt gzip body returns 400 and an unknown encoding 415 (2.091208ms)
+✔ raw capture of a gzip export keeps the inflated body and the sent gzip (17.592708ms)
+✔ with FF_INGEST_STRIP_CLIENT_ADDRESS on, raw capture of a log export keeps no client IP address (1.513541ms)
+✔ with the strip off (the default), a log export is captured as sent (0.377667ms)
+✔ gen_ai details records are stored with ids and content (0.477708ms)
+✔ an ingest-only key sends logs; a key without ingest:logs gets 403 (1.316875ms)
+✔ an ingest-only key over its shared-key budget gets 429 with Retry-After (0.542125ms)
+✔ an ingest-only key's catalog definitions are stored as logs but never rewrite the runtime catalog (1.96975ms)
+✔ an ingest-only key's gen_ai logs never restate a stored model call (0.521291ms)
+✔ a stored log export logs its record counts by project and org (0.291833ms)
+{"level":30,"time":1795322915907,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-log-quota-free","records":1,"accepted":1,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915934,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":8,"accepted":7,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915958,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":1,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915959,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":1,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915962,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":1,"accepted":1,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915989,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":1,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915989,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":1,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915990,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915992,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915992,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915993,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322915993,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916013,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916015,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916015,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916016,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":1,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916017,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":1,"accepted":0,"dropped":1,"msg":"otlp_logs_ingested"}
+{"level":40,"time":1795322916017,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-1","projectId":"proj-1","keyPrefix":"rtl_abc","scope":"ingest:logs","msg":"refused api key without scope"}
+{"level":30,"time":1795322916019,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916020,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916020,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":30,"time":1795322916020,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","records":2,"accepted":2,"dropped":0,"msg":"otlp_logs_ingested"}
+{"level":50,"time":1795322915992,"pid":12385,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"raw store down","stack":"Error: raw store down\n    at Object.store (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.test.ts:648:11)\n    at captureOtlpRawExport (~/ratel-wt-rp-122/src/lib/ingest/otlp-raw/capture.ts:34:37)\n    at handleLogsRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.ts:302:9)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/logs-route-handler.test.ts:650:20)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+{"level":30,"time":1795322915806,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ with turn-ledger deps, tool spans become ledger invocations and a build is enqueued (74.008958ms)
+✔ a tool call the SDK already recorded in the same session is dropped; the rest stay (9.605542ms)
+✔ a second, OTel-only agent in the project keeps its runs (3.277125ms)
+✔ model calls are kept even when every tool call is a duplicate (2.504292ms)
+✔ a failing duplicate check keeps every row (5.717917ms)
+✔ an export derives the rows the graph learns from and enqueues a paced fold (6.379334ms)
+✔ the importer stores the same rows but leaves the fold to the cron safety net (2.831666ms)
+✔ without turn-ledger deps nothing is derived and no fold is enqueued (2.761084ms)
+{"level":30,"time":1795322915806,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915817,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915817,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915821,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915821,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915823,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915823,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915826,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915829,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915833,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915833,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322915841,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":1,"turns":1,"spans":3,"model_calls":1,"tool_calls":2,"mcp_traces":0,"cost_usd":null,"size_kb":1.309,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322915841,"pid":12386,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":3,"model_calls":1,"tool_calls":2,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":["claude-sonnet-5"],"input_tokens":0,"output_tokens":0,"duration_ms":300,"size_kb":1.309,"size_bucket":"1-10 KB","mcp":false,"has_session":true,"session_hash":"c0fd2ba4d34acb96","sdk_language":null,"scopes":["x"],"msg":"trace_ingested"}
+{"level":30,"time":1795322922641,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":3,"sessions":1,"turns":3,"spans":33,"model_calls":11,"tool_calls":8,"mcp_traces":0,"cost_usd":0.000559,"size_kb":64.033,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ Vercel AI SDK: three runs with their tools, model calls and tokens, the agent span not counted (4211.928166ms)
+{"level":30,"time":1795322922642,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":12,"model_calls":4,"tool_calls":3,"error_spans":0,"cost_usd":0.000206,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":1040,"output_tokens":80,"duration_ms":6,"size_kb":21.716,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322922642,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":9,"model_calls":3,"tool_calls":2,"error_spans":0,"cost_usd":0.000135,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":660,"output_tokens":60,"duration_ms":6,"size_kb":16.594,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322922642,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":12,"model_calls":4,"tool_calls":3,"error_spans":1,"cost_usd":0.000218,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":1120,"output_tokens":80,"duration_ms":3,"size_kb":25.723,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322922675,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":3,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":30,"msg":"trace turns build completed"}
+{"level":30,"time":1795322923294,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":3,"sessions":1,"turns":3,"spans":33,"model_calls":11,"tool_calls":8,"mcp_traces":0,"cost_usd":0.000559,"size_kb":64.033,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ Vercel AI SDK: every stored model call keeps its trace and span id, and joins its run by trace (646.585334ms)
+{"level":30,"time":1795322923294,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":12,"model_calls":4,"tool_calls":3,"error_spans":0,"cost_usd":0.000206,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":1040,"output_tokens":80,"duration_ms":6,"size_kb":21.716,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923295,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":9,"model_calls":3,"tool_calls":2,"error_spans":0,"cost_usd":0.000135,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":660,"output_tokens":60,"duration_ms":6,"size_kb":16.594,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923295,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":12,"model_calls":4,"tool_calls":3,"error_spans":1,"cost_usd":0.000218,"cost_bucket":"<$0.001","models":["gpt-4o-mini-2024-07-18"],"input_tokens":1120,"output_tokens":80,"duration_ms":3,"size_kb":25.723,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"24b24569915fc57a","sdk_language":null,"scopes":["gen_ai"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923332,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":3,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":36,"msg":"trace turns build completed"}
+{"level":30,"time":1795322923966,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":3,"sessions":1,"turns":3,"spans":50,"model_calls":11,"tool_calls":8,"mcp_traces":0,"cost_usd":0.000559,"size_kb":219.311,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ OpenAI Agents with the OpenAI client instrumented too: each call stored once (653.313709ms)
+{"level":30,"time":1795322923966,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":18,"model_calls":4,"tool_calls":3,"error_spans":0,"cost_usd":0.000206,"cost_bucket":"<$0.001","models":["gpt-4o-mini"],"input_tokens":1040,"output_tokens":80,"duration_ms":55,"size_kb":59.575,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"accf91663aabacc9","sdk_language":"python","scopes":["openinference.instrumentation.openai","openinference.instrumentation.openai_agents"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923966,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":14,"model_calls":3,"tool_calls":2,"error_spans":0,"cost_usd":0.000135,"cost_bucket":"<$0.001","models":["gpt-4o-mini"],"input_tokens":660,"output_tokens":60,"duration_ms":17,"size_kb":59.656,"size_bucket":"10-100 KB","mcp":false,"has_session":true,"session_hash":"accf91663aabacc9","sdk_language":"python","scopes":["openinference.instrumentation.openai","openinference.instrumentation.openai_agents"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923966,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":18,"model_calls":4,"tool_calls":3,"error_spans":1,"cost_usd":0.000218,"cost_bucket":"<$0.001","models":["gpt-4o-mini"],"input_tokens":1120,"output_tokens":80,"duration_ms":29,"size_kb":100.08,"size_bucket":"100 KB-1 MB","mcp":false,"has_session":true,"session_hash":"accf91663aabacc9","sdk_language":"python","scopes":["openinference.instrumentation.openai","openinference.instrumentation.openai_agents"],"msg":"trace_ingested"}
+{"level":30,"time":1795322923987,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":3,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":20,"msg":"trace turns build completed"}
+{"level":30,"time":1795322924484,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":4,"sessions":1,"turns":3,"spans":21,"model_calls":0,"tool_calls":16,"mcp_traces":4,"cost_usd":null,"size_kb":12.569,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ FastMCP client and server both exporting (sent): every call stored once, runs per request (549.496542ms)
+{"level":30,"time":1795322924484,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":4,"size_kb":0.539,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924484,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":8,"model_calls":0,"tool_calls":6,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":113,"size_kb":4.789,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924484,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":0,"tool_calls":4,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":6,"size_kb":3.003,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924484,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":7,"model_calls":0,"tool_calls":6,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":48,"size_kb":4.238,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924510,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":4,"sessions":1,"turns":3,"spans":10,"model_calls":0,"tool_calls":8,"mcp_traces":4,"cost_usd":null,"size_kb":13.599,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322924510,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.607,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924510,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":4,"model_calls":0,"tool_calls":3,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":108,"size_kb":3.172,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924510,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":2,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":4,"size_kb":1.628,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924510,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":3,"model_calls":0,"tool_calls":3,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":44,"size_kb":8.192,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924540,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":3,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":29,"msg":"trace turns build completed"}
+{"level":30,"time":1795322924902,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":4,"sessions":1,"turns":3,"spans":10,"model_calls":0,"tool_calls":8,"mcp_traces":4,"cost_usd":null,"size_kb":13.599,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ FastMCP client and server both exporting (reversed): every call stored once, runs per request (431.181833ms)
+{"level":30,"time":1795322924902,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.607,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924902,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":4,"model_calls":0,"tool_calls":3,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":108,"size_kb":3.172,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924902,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":2,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":4,"size_kb":1.628,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924902,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":3,"model_calls":0,"tool_calls":3,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":44,"size_kb":8.192,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fbeb6be69fe446ce","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924935,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":4,"sessions":1,"turns":3,"spans":21,"model_calls":0,"tool_calls":16,"mcp_traces":4,"cost_usd":null,"size_kb":12.569,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322924935,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":4,"size_kb":0.539,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924935,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":8,"model_calls":0,"tool_calls":6,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":113,"size_kb":4.789,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924935,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":0,"tool_calls":4,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":6,"size_kb":3.003,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924935,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":7,"model_calls":0,"tool_calls":6,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":48,"size_kb":4.238,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"fd36ba98bbb93656","sdk_language":"python","scopes":["fastmcp","mcp-python-sdk","pm-agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322924966,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":3,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":29,"msg":"trace turns build completed"}
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":10,"sessions":1,"turns":9,"spans":10,"model_calls":0,"tool_calls":8,"mcp_traces":10,"cost_usd":null,"size_kb":13.459,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ an MCP server without trace context: calls of the MCP session grouped into a run (586.372291ms)
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.593,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":68,"size_kb":0.809,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.704,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.797,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925538,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.806,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925539,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":2,"size_kb":0.797,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925539,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.803,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925539,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.803,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925539,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":41,"size_kb":6.556,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925539,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.791,"size_bucket":"<1 KB","mcp":true,"has_session":true,"session_hash":"e49374f24dfa8326","sdk_language":"python","scopes":["fastmcp"],"msg":"trace_ingested"}
+{"level":30,"time":1795322925556,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":1,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":17,"msg":"trace turns build completed"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":11,"sessions":0,"turns":0,"spans":11,"model_calls":0,"tool_calls":8,"mcp_traces":11,"cost_usd":null,"size_kb":6.91,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ an MCP server without trace context or session: one run per call (509.21125ms)
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.566,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.571,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.652,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.566,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.644,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.65,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.644,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":1,"size_kb":0.648,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":2,"size_kb":0.648,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":1,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":10,"size_kb":0.68,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926039,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":1,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.641,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":"python","scopes":["mcp-python-sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322926065,"pid":12390,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":8,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":25,"msg":"trace turns build completed"}
+{"level":30,"time":1795322917523,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":50,"time":1795322917589,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"database hiccup","stack":"Error: database hiccup\n    at Object.insertTraceEvents (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:506:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:263:33)\n    at async handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:21)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:534:15)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+✔ missing Authorization → 401 (29.135041ms)
+✔ malformed Authorization (no Bearer) → 401 (0.677333ms)
+✔ unsupported Content-Type → 415 (3.171792ms)
+✔ oversized body (declared content-length) → 413 (2.068625ms)
+✔ chunked over-cap body with no content-length → 413 without full buffering (22.549917ms)
+✔ db not configured → 503 (2.06325ms)
+✔ invalid / revoked key → 401 (0.7765ms)
+✔ malformed JSON body → 400 (3.014ms)
+✔ too many spans (> MAX_SPANS) → 413 (49.562ms)
+✔ happy path → 202, inserts mapped rows, returns envelope (14.576375ms)
+✔ stamps project and org onto the request log context (1.983875ms)
+✔ a protobuf export returns an empty protobuf success with count headers (43.167833ms)
+✔ an OTLP/JSON export keeps its envelope and gains count headers (2.072041ms)
+✔ the raw-span tap stores every decoded span under the API-key project (1.862166ms)
+✔ export with no LLM spans → 202 with accepted 0 (no insert) (1.987667ms)
+✔ anchor-less ratel.search span with a captured query → derived trace event, accepted 0 (2.240625ms)
+✔ derived inserts leave the facts-era supersede at its default (1.772333ms)
+✔ a search captured in BOTH message content and a ratel.search span derives one row, not two (7.396167ms)
+✔ derived-insert failure on an anchor-less batch → 500 (exporter must retry) (2.1735ms)
+✔ derived-insert failure stays best-effort when events rows were stored (1.51075ms)
+✔ raw-span insert failure stays best-effort and preserves existing writes (1.768417ms)
+✔ insert failure → 500 (0.626875ms)
+✔ touchApiKey failure never downgrades a successful insert (0.394791ms)
+✔ invalid trace API keys emit a rejection with timing (0.1995ms)
+✔ trace rejections classify every response path (48.444166ms)
+✔ accepted trace events follow the injected success sampler (3.454542ms)
+✔ the default success sampler reads OBS_INGEST_SUCCESS_SAMPLE_RATE (3.918042ms)
+✔ the first successful trace for an untouched API key emits first_trace_received (1.408416ms)
+✔ trace processing reports exceptions through the telemetry shim (12.754125ms)
+✔ gzip and deflate bodies are read as the OpenTelemetry Collector sends them (14.328917ms)
+✔ a compressed body is capped once inflated, and unknown or broken encodings are refused (101.356084ms)
+✔ agent span dedupe: the agent root is not a call of its own, with no flag configured (1.255708ms)
+✔ a successful write counts the accepted events against the organization, once (1.2635ms)
+✔ the usage increment is best-effort: a failure never downgrades the 202 (1.4705ms)
+✔ nothing is counted without a quota gate, or when nothing was stored (2.087209ms)
+✔ agent span dedupe: the route cannot be wired without it (0.165875ms)
+✔ raw capture on: one stored export whose body decodes back to the same spans (5.141083ms)
+✔ with FF_INGEST_STRIP_CLIENT_ADDRESS on, raw capture keeps no client IP address and not the sent gzip (6.082625ms)
+✔ with the strip off (the default), raw capture keeps the body and the gzip as sent (3.841083ms)
+✔ raw capture is not attempted for a rejected export (1.184833ms)
+✔ a throwing raw store still returns the same 202 and logs sizes, not the body (4.062834ms)
+✔ an ingest-only key sends traces (10.269459ms)
+✔ a key without ingest:traces gets 403 with the missing scope, and nothing is stored (0.593ms)
+✔ an ingest-only key over its shared-key budget gets 429 with Retry-After; a secret key never meets that budget (0.734792ms)
+✔ a stored export logs its batch line and one line per trace, by project and org (0.517625ms)
+✔ a rejected export logs no ingest lines (0.178542ms)
+{"level":30,"time":1795322917524,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917524,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917526,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917527,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917570,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917570,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917570,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917571,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917572,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917572,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917574,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-trace-span-identity","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917574,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-trace-span-identity","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917574,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-trace-span-identity","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917575,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":0,"tool_calls":0,"mcp_traces":0,"cost_usd":null,"size_kb":0.305,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917576,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":0,"size_kb":0.305,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917578,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":0,"tool_calls":0,"mcp_traces":0,"cost_usd":null,"size_kb":0.442,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917578,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":12,"size_kb":0.442,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["@ratel-ai/sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917580,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":0,"tool_calls":0,"mcp_traces":0,"cost_usd":null,"size_kb":0.381,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917580,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":0,"tool_calls":0,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":12,"size_kb":0.381,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["@ratel-ai/sdk"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917587,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.0005,"size_kb":0.935,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917587,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":2,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.0005,"cost_bucket":"<$0.001","models":["gpt-5.5"],"input_tokens":100,"output_tokens":0,"duration_ms":200,"size_kb":0.935,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917591,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.0005,"size_kb":0.913,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917591,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":2,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.0005,"cost_bucket":"<$0.001","models":["gpt-5.5"],"input_tokens":100,"output_tokens":0,"duration_ms":200,"size_kb":0.913,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917593,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.0005,"size_kb":0.913,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917593,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":2,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.0005,"cost_bucket":"<$0.001","models":["gpt-5.5"],"input_tokens":100,"output_tokens":0,"duration_ms":200,"size_kb":0.913,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917594,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917594,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917644,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917644,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917644,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917646,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917646,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917646,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917648,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917648,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917650,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917650,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917652,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917652,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917654,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.0005,"size_kb":0.913,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917654,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":2,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.0005,"cost_bucket":"<$0.001","models":["gpt-5.5"],"input_tokens":100,"output_tokens":0,"duration_ms":200,"size_kb":0.913,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917656,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917656,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917664,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917664,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917669,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917669,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917669,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917675,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":3,"sessions":0,"turns":0,"spans":3,"model_calls":3,"tool_calls":0,"mcp_traces":0,"cost_usd":0.033,"size_kb":1.314,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917675,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917675,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917675,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917677,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917677,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917782,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.826,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917782,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":2,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.826,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["agent"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917783,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":3,"sessions":0,"turns":0,"spans":3,"model_calls":3,"tool_calls":0,"mcp_traces":0,"cost_usd":0.033,"size_kb":1.314,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917783,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917783,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917783,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917784,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917784,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917784,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917786,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":2,"sessions":0,"turns":0,"spans":2,"model_calls":2,"tool_calls":0,"mcp_traces":0,"cost_usd":0.022,"size_kb":0.876,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917786,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917786,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917787,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":0,"sessions":0,"turns":0,"spans":0,"model_calls":0,"tool_calls":0,"mcp_traces":0,"cost_usd":null,"size_kb":0,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917791,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":3,"sessions":0,"turns":0,"spans":3,"model_calls":3,"tool_calls":0,"mcp_traces":0,"cost_usd":0.033,"size_kb":1.314,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917791,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917791,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917791,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917798,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917798,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917802,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.46,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917802,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.46,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917806,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917806,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":30,"time":1795322917813,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917813,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":40,"time":1795322917818,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-1","projectId":"proj-1","keyPrefix":"rtl_abc","scope":"ingest:traces","msg":"refused api key without scope"}
+{"level":30,"time":1795322917819,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","traces":1,"sessions":0,"turns":0,"spans":1,"model_calls":1,"tool_calls":0,"mcp_traces":0,"cost_usd":0.011,"size_kb":0.438,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+{"level":30,"time":1795322917819,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"proj-1","spans":1,"model_calls":1,"tool_calls":0,"error_spans":0,"cost_usd":0.011,"cost_bucket":"$0.01-0.1","models":["gpt-5.5"],"input_tokens":1000,"output_tokens":200,"duration_ms":200,"size_kb":0.438,"size_bucket":"<1 KB","mcp":false,"has_session":false,"sdk_language":null,"scopes":["ratel"],"msg":"trace_ingested"}
+{"level":50,"time":1795322917591,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"database hiccup","stack":"Error: database hiccup\n    at Object.insertTraceEvents (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:541:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:263:33)\n    at async handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:21)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:544:15)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+{"level":50,"time":1795322917593,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"span storage down","stack":"Error: span storage down\n    at Object.insertOtelSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:554:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:315:20)\n    at async handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:21)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:558:15)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+{"level":50,"time":1795322917594,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"db down","stack":"Error: db down\n    at Object.insertEventsWithMetrics (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:570:13)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:213:29)\n    at async handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:21)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:573:15)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+{"level":50,"time":1795322917643,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"db down","stack":"Error: db down\n    at Object.insertEventsWithMetrics (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:715:21)\n    at persistDecodedSpans (~/ratel-wt-rp-122/src/lib/ingest/otlp/ingest-spans.ts:213:29)\n    at async handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:341:21)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:727:22)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+{"level":50,"time":1795322917806,"pid":12392,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"raw store down","stack":"Error: raw store down\n    at Object.store (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:1160:11)\n    at captureOtlpRawExport (~/ratel-wt-rp-122/src/lib/ingest/otlp-raw/capture.ts:34:37)\n    at handleTracesRequest (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.ts:371:9)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/ingest/otlp/route-handler.test.ts:1167:15)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:proj-1","project_id":"proj-1","msg":"exception"}
+✔ the environment facet returns the resource's deployment.environment.name (3877.615291ms)
+✔ maps span identity, hierarchy, timing, and status (11.836666ms)
+✔ normalizes an all-zero parent span id to a root (2.207042ms)
+✔ classifies LLM calls, tools, Ratel searches, and other spans (0.747833ms)
+✔ promotes service and GenAI fields and computes model cost (3.707333ms)
+✔ prices cache writes and long-context Haiku 5.5 calls (0.532917ms)
+✔ leaves cost absent when a priced model reports no usage (1.1365ms)
+✔ leaves cost absent when a priced model reports only cached usage (0.523792ms)
+✔ promotes Ratel search fields (1.07825ms)
+✔ promotes runtime event correlation and defaults source to service.name (1.707ms)
+✔ promotes experiment identity and preserves namespaced attributes (2.538375ms)
+✔ strips content-bearing fields from retained attributes (1.513458ms)
+✔ retains only namespaced and explicitly safe attributes (0.494958ms)
+✔ bounds persisted scalar and experiment metadata by UTF-8 bytes (1.004625ms)
+✔ caps retained attributes to 16 KiB by UTF-8 bytes (0.207ms)
+✔ drops spans with invalid OTel ids without dropping valid neighbors (1.199833ms)
+✔ drops spans with invalid timestamps without dropping valid neighbors (1.308292ms)
+✔ normalizes database-unsafe integer values (0.380584ms)
+✔ flag on: a LangGraph agent root is not an llm_call and stores no tokens or cost (0.90975ms)
+✔ flag off: a LangGraph agent root is an llm_call with its summed tokens (0.568333ms)
+✔ flag on: a Claude Agent SDK agent root is not an llm_call and stores no tokens or cost (0.486375ms)
+✔ flag off: a Claude Agent SDK agent root is an llm_call with its summed tokens (0.598083ms)
+✔ an agent span with no model call in its trace keeps class, tokens and cost (0.29825ms)
+✔ a root alone in its batch drops its tokens when storage has the model calls (0.186292ms)
+✔ the resource environment and service version are stored (0.122417ms)
+✔ a span attribute of the same key wins over the resource (0.101916ms)
+✔ the legacy deployment.environment is kept when .name is absent (0.087542ms)
+✔ a span pays the project's own price (RC-482) (0.132166ms)
+✔ a span row carries its entity dimensions; with no agent and a service, the service is the agent (RC-772) (1.432ms)
+✔ a call with no book price stores the cost the emitter sent (AOBS-3) (0.668958ms)
+✔ a Claude alias call stores its alias price (0.169916ms)
+✔ the book price wins over the emitter's cost (0.13875ms)
+✔ an emitter cost that is not a plausible amount is ignored (0.474917ms)
+✔ an emitter cost on a span with no token usage is not stored, so a run total on the root never counts twice (0.218625ms)
+✔ a batch whose prices are unknown stores no cost, emitter cost included (0.16125ms)
+✔ the demo project does not count toward the project limit, as in the console (41.815334ms)
+✔ Enterprise limits say unlimited rather than serializing as null (2.623334ms)
+✔ plan and subscription state come from the same helpers as the Billing page (19.265333ms)
+✔ match quality not on the plan says so (3.751083ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (3.107041ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.759708ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.839875ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.652375ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (2.893917ms)
+{"level":50,"time":1795322924637,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-122/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (42.925084ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (12.360833ms)
+✔ without an edition's name the 401 realm stays ratel (0.540834ms)
+✔ an older protocol version still negotiates (15.632041ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (65.345792ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (63.180042ms)
+✔ a signed-in person without app access is refused at the door with 403 (1.905042ms)
+✔ every tool definition is exactly what the fixture pins (38.234625ms)
+✔ each staged tool publishes its stage, and only that, as _meta (32.615625ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (29.954042ms)
+✔ each tool carries the annotations the Claude directory reviews (36.038375ms)
+✔ no tool description tells the model what to do first (23.849042ms)
+✔ calling a tool runs its operation and reports failures in-band (89.418584ms)
+✔ an unregistered tool name is refused by the transport (10.717041ms)
+✔ a notification is accepted with no body (8.671584ms)
+✔ a missing credential is rejected before any protocol work (0.299166ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (106.342875ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (24.461833ms)
+✔ an exhausted rate limit returns 429 with Retry-After (132.373ms)
+✔ malformed JSON gets the reserved parse-error code (0.645417ms)
+✔ an oversized batch is refused rather than amplified (0.90925ms)
+✔ GET and DELETE explain that this endpoint is stateless (3.5315ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.922875ms)
+✔ the 401 from a failed verification still advertises where to authenticate (2.238625ms)
+✔ repeated bad credentials stop reaching the authenticator at all (2.166417ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (1.163833ms)
+✔ successful calls are never charged to the failure budget (164.3725ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (16.928458ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.599875ms)
+{"level":50,"time":1795322924639,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-122/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795322924785,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795322925010,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-122/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-122/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-122/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-122/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-122/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-122/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-122/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-122/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-122/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795322925036,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":56,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795322925056,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795322925184,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":9,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795322925319,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795322925321,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795322925325,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:413:15)\n    at handleMcpRequest (~/ratel-wt-rp-122/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:417:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795322925327,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:429:15)\n    at handleMcpRequest (~/ratel-wt-rp-122/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/mcp/route-handler.test.ts:433:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795322925329,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795322925329,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795322925330,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795322925331,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795322925331,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795322925331,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795322925512,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795322925513,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795322925513,"pid":12429,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ one job is one trace, an invoke_agent root with the ask and its chat calls as children (5.897458ms)
+✔ the run's root is a new trace even inside an outer request span, and stays out of the active context (4.714666ms)
+✔ a run that makes no model call exports nothing (0.304292ms)
+✔ a run that throws ends its root as an error with the class name, and rethrows (1.542625ms)
+✔ the run returns what its work returned (0.50875ms)
+✔ a call logged after the fact (the Jev judge) is a span from its start, a child of the run (0.569416ms)
+✖ a Jev judge call outside any run is its own span; an error call is an error span (1.779042ms)
+✔ a project from another organization is not reachable (1.310292ms)
+✔ no key is created or revoked in any support session, editable included (0.134375ms)
+✔ creating a key leaves the project's existing keys untouched (2.192958ms)
+✔ the plaintext is returned once and never appears in the summary (0.558ms)
+✔ the chosen lifetime is resolved server-side into a stored instant (0.327417ms)
+✔ omitting the lifetime issues a key that never expires (0.339833ms)
+✔ a lifetime outside the offered set is rejected before a key is issued (0.293ms)
+✔ an over-long name is rejected before a key is issued (0.170583ms)
+✔ a project cannot grow past the key cap (0.178292ms)
+✔ creating emits a typed event and a structured log (0.553ms)
+✔ revoking takes down exactly the key asked for (0.284291ms)
+✔ a key belonging to another project is not revocable (0.158125ms)
+✔ revoking an already-revoked key succeeds without a second write (0.153542ms)
+✔ revoking emits a typed event and a structured log (0.168375ms)
+✔ a summary carries the display fields the key list needs (0.119792ms)
+✔ a key made without choosing access is Full, a secret rtl_ key, as before (0.370833ms)
+✔ an ingest-only key is stored with the three ingest scopes and carries rtl_pub_ (0.146625ms)
+✔ a custom list that is ingest-only is publishable too; one that reads is secret (0.164542ms)
+✔ an unknown scope or an empty custom list is refused, never widened to Full (0.423625ms)
+✔ the created event says which access was picked (0.111208ms)
+✔ a new key is handed to the edition to keep, by its id, after its row exists (0.238542ms)
+✔ the plaintext is never in the structured log, kept or not (0.315458ms)
+{"level":40,"time":1795322925089,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"catalog:read","msg":"refused api key without scope"}
+✔ the resolver refuses an ingest-only key on every non-ingest route, and admits it on ingest (7.575667ms)
+✔ a refused key is not stamped as used (0.422291ms)
+✔ catalog pull (v1 and v2) refuses it (0.56825ms)
+✔ catalog sync, runtime overrides and the intent graph refuse it (1.718917ms)
+✔ MCP refuses it at the door with 403, and nothing runs (1.435334ms)
+✔ captured content is withheld from it even with content reading on (0.363833ms)
+{"level":40,"time":1795322925091,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"catalog:write","msg":"refused api key without scope"}
+{"level":40,"time":1795322925092,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"skills:read","msg":"refused api key without scope"}
+{"level":40,"time":1795322925092,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"skills:write","msg":"refused api key without scope"}
+{"level":40,"time":1795322925093,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"runtime_catalog:read","msg":"refused api key without scope"}
+{"level":40,"time":1795322925093,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"jobs:read","msg":"refused api key without scope"}
+{"level":40,"time":1795322925093,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"intent_graph:read","msg":"refused api key without scope"}
+{"level":40,"time":1795322925094,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"intent_graph:write","msg":"refused api key without scope"}
+{"level":40,"time":1795322925094,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"embeddings","msg":"refused api key without scope"}
+{"level":40,"time":1795322925094,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"tool_picker","msg":"refused api key without scope"}
+{"level":40,"time":1795322925098,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"api-keys/authenticate","apiKeyId":"key-ingest","projectId":"11111111-1111-4111-8111-111111111111","keyPrefix":"rtl_pub_M5ycYhfB","scope":"mcp:read","msg":"refused api key without scope"}
+{"level":40,"time":1795322925098,"pid":12436,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+✔ Full allows everything and is a secret key with no ingest restrictions (3.574167ms)
+✔ Ingest only allows the three ingest scopes and nothing else, and everything that follows from shipping it (0.294ms)
+✔ Read-only allows reads only, and is a secret key (0.219708ms)
+✔ a key with no scopes, or a row missing them, allows nothing (0.462917ms)
+✔ allowsAny passes when one of the scopes is held (0.198875ms)
+✔ no module outside the policy reads a key's scopes directly (133.807667ms)
+✔ the scan sees the handlers that authenticate keys (so the guard is not vacuous) (0.832041ms)
+✔ every route that authenticates with an API key declares a scope for every method it exports (2.010292ms)
+✔ every declared route exists, exports its method, and names only its own entry (0.4445ms)
+✔ only the shared resolver looks a key up, so no route can authenticate around it (2.058ms)
+✔ MCP: the route exists and every tool needs a declared MCP scope (18.053ms)
+✔ every declared scope is a known scope (0.187458ms)
+✔ a Full key ('*') holds every scope, including ones added later (0.796917ms)
+✔ a narrow key holds only what it lists, and unknown stored values grant nothing (0.162208ms)
+✔ the ingest preset is the three ingest scopes and nothing that reads or changes anything (0.663542ms)
+✔ read-only reads but never writes, spends credit, or reads captured content (0.291667ms)
+✔ only a key whose every scope is an ingest scope is publishable (0.155ms)
+✔ a stored list reads back as its preset, in any order, or as custom (0.196792ms)
+✔ the create form's choice resolves to what is stored, and anything odd is refused (0.215916ms)
+✔ every scope has a label, and the 403 reason names the scope (0.07975ms)
+✔ a publishable key carries its own prefix, a secret key does not (1.129958ms)
+✔ an Anthropic request and answer map to gen_ai parts (1.659416ms)
+✔ a string system prompt is one text part, and no answer means no output (0.203334ms)
+✔ each content attribute is capped, keeping the most recent messages and marking cuts (0.449916ms)
+✔ a Ratel-paid call becomes one gen_ai chat span with its tokens and the feature as the agent (5.808083ms)
+✔ the span carries no customer ids, prompt or answer (1.310292ms)
+✔ a failed call ends its span as an error with its stable type only, and still throws (1.23925ms)
+✔ a call the customer pays for makes no span (0.298584ms)
+✔ the core's own calls are chat operations (4.510334ms)
+✔ calls made while analysing the self-telemetry project itself are not traced, so they cannot loop (5.692667ms)
+✔ a call that offers its content carries its prompt and answer, whatever its organization (2.273375ms)
+✔ a failed call keeps its prompt and has no answer (0.413416ms)
+✔ a call the customer pays for makes no span, even with content (6.118958ms)
+✔ a span stays out of the active context, so the provider's HTTP span keeps its parent (1.099333ms)
+✔ with no sink a tracked call only runs: its answer and its error pass through (0.998625ms)
+✔ a sink gets one model_call line per call, with tokens, duration and outcome (0.476084ms)
+✔ on Bedrock, a Claude line says backend bedrock and keeps provider anthropic; other providers say api (0.133375ms)
+✔ a failed call is a line with a stable error type, never the class, and no tokens; a refusal carries its count (0.174667ms)
+✔ withProjectLogContext names the project and its organization for the work inside (0.149708ms)
+✔ withProjectLogContext still runs the work when the organization can't be found (0.079875ms)
+✔ a sink that throws never breaks the call it describes (0.080959ms)
+✔ Anthropic usage counts cache reads and writes into the input (0.053291ms)
+✔ a model not enabled on Bedrock logs error_type model_not_enabled with the model, never a class name (20.140791ms)
+✔ a model not enabled on Bedrock is reported once as an exception with feature, model, profile and backend (2.395625ms)
+✔ an exception reporter failure never breaks the call (0.273416ms)
+✔ an edition's recorder gets the raw record and the log context of every call, made or not (0.752166ms)
+✔ with an edition's recorder the sink is not written: the edition owns the line (0.077459ms)
+✔ a recorder that throws never breaks the call it describes (0.072291ms)
+✔ FF_SANDBOXES is a core switch, so an edition's flags port can decide it (0.426959ms)
+✔ OSS: off with nothing set (0.122417ms)
+✔ OSS: FF_SANDBOXES turns sandboxes on, and only a true value does (0.067708ms)
+✔ OSS: RATEL_EXPERIMENTAL_FEATURES turns sandboxes on; another switch does not (0.055458ms)
+✔ Cloud: the flags port decides it for the project, on and off (0.751709ms)
+✔ Cloud: an FF_SANDBOXES value set by the operator comes first (0.277584ms)
+✔ Cloud: a failed decision is off (0.222334ms)
+✔ upstream's names: the organization is the subject's when the caller holds it (0.475083ms)
+✔ upstream's names: off with nothing set, on with FF_SANDBOXES (0.304416ms)
+{"level":30,"time":1795322921593,"pid":12461,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"job_completed","distinctId":"project:p1","projectId":"p1","duration_ms":12,"msg":"event"}
+✔ contexts resolve to one distinct id: user, project or explicit (0.597125ms)
+✔ event names stay unique and carry no Ratel-only event (0.225958ms)
+✔ tracking and reporting never throw into the caller (1.219ms)
+✔ trackProductEvent hands the typed properties to the tracker unchanged (0.110125ms)
+{"level":30,"time":1795322921593,"pid":12461,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"project_created","distinctId":"u1","orgId":"o1","project_slug":"agent","msg":"event"}
+{"level":50,"time":1795322921593,"pid":12461,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"x","stack":"Error: x\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/platform/telemetry.test.ts:50:51)\n    at getActual (node:assert:611:5)\n    at strict.doesNotThrow (node:assert:779:32)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/platform/telemetry.test.ts:50:10)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"system:test","op":"t","msg":"exception"}
+{"level":30,"time":1795322923954,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":100,"usd":0,"msg":"openai judging finished"}
+✔ judges with the tuned framing over tool identity, never operator overrides (22.708833ms)
+✔ abstains below 0.8 and keeps the leaning as the runner-up (1.065375ms)
+✔ a refused ask is an abstention, not a failure (1.010458ms)
+✔ a custom framing replaces the tuned one (workflows, topics) (0.760542ms)
+✔ a rejected key fails the run (1.342791ms)
+✔ stops asking once the token budget is spent (1.952583ms)
+✔ capacity is positive and shrinks with the budget (0.651042ms)
+✔ a run OpenAI never answers fails, counted in searches (4.146417ms)
+{"level":30,"time":1795322923956,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":0,"abstained":1,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":100,"usd":0,"msg":"openai judging finished"}
+{"level":30,"time":1795322923957,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":0,"abstained":1,"refused":1,"unanswered":0,"not_asked":0,"input_tokens":92,"usd":0,"msg":"openai judging finished"}
+{"level":30,"time":1795322923958,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":100,"usd":0,"msg":"openai judging finished"}
+{"level":30,"time":1795322923961,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":3,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":2,"input_tokens":500,"usd":0.0001,"msg":"openai judging finished"}
+{"level":40,"time":1795322923961,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","reason":"budget","input_tokens":500,"not_asked":2,"msg":"openai judging stopped early"}
+{"level":40,"time":1795322923963,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","err":{"type":"DecisionCallError","message":"[redacted]","stack":"DecisionCallError: [redacted]\n    at askOnce (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:294:23)\n    at async trackModelCall (~/ratel-wt-rp-122/src/lib/platform/model-call.ts:152:14)\n    at async Object.decideChoice (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:353:21)\n    at async judgeOne (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:143:26)\n    at async worker (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:181:13)\n    at async Promise.all (index 0)\n    at async Object.judge (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:188:7)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.test.ts:122:3)\n    at fetchImpl (~/ratel-wt-rp-122/src/lib/readings/decisions/test-helpers.ts:15:22)\n    at askOnce (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:287:26)\n    at async trackModelCall (~/ratel-wt-rp-122/src/lib/platform/model-call.ts:152:14)\n    at async Object.decideChoice (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:353:21)\n    at async judgeOne (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:143:26)\n    at async worker (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:181:13)\n    at async Promise.all (index 0)\n    at async Object.judge (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:188:7)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)"},"msg":"openai judging request failed"}
+{"level":40,"time":1795322923966,"pid":12464,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","err":{"type":"DecisionCallError","message":"[redacted]","stack":"DecisionCallError: [redacted]\n    at askOnce (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:294:23)\n    at async trackModelCall (~/ratel-wt-rp-122/src/lib/platform/model-call.ts:152:14)\n    at async Object.decideChoice (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:353:21)\n    at async judgeOne (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:143:26)\n    at async worker (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:181:13)\n    at async Promise.all (index 0)\n    at async Object.judge (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:188:7)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.test.ts:122:3)\n    at fetchImpl (~/ratel-wt-rp-122/src/lib/readings/decisions/test-helpers.ts:15:22)\n    at askOnce (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:287:26)\n    at async trackModelCall (~/ratel-wt-rp-122/src/lib/platform/model-call.ts:152:14)\n    at async Object.decideChoice (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.ts:353:21)\n    at async judgeOne (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:143:26)\n    at async worker (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:181:13)\n    at async Promise.all (index 0)\n    at async Object.judge (~/ratel-wt-rp-122/src/lib/readings/decisions/openai-judge.ts:188:7)\n    at async waitForActual (node:assert:646:5)\n    at async strict.rejects (node:assert:769:25)"},"msg":"openai judging request failed"}
+✔ the keyword tail is dropped from the searchable text (1.153541ms)
+✔ an option reads what it does, and when to use it only when that adds something (0.246458ms)
+✔ the request is one choice question with every option in the order given (0.821125ms)
+✔ redaction replaces a full name after a person lead-in and keeps the rest of the query (1.422542ms)
+✔ redaction leaves tool, product, status and project names alone (0.360292ms)
+✔ redaction needs a lead-in and a two-word capitalised name, so these stay as written (0.280667ms)
+✔ a capitalised phrase the catalog itself uses is a product or field, never a person (0.238458ms)
+✔ the chain checks names against the options it is deciding between (0.313125ms)
+✔ the refusal chain tries the query as written, then with context, then the same two redacted (0.181708ms)
+✔ a query with no name has two wordings, both carrying it verbatim (0.245416ms)
+✔ a small option set is decided in one call (20.427875ms)
+✔ a large option set is re-read over its top options, which decide the order (1.940291ms)
+✔ a refused query is first retried as written with context, and the tokens of every call are counted (1.366333ms)
+✔ the name is only redacted once the context wording is refused too (1.372916ms)
+✔ a named query refused under all four wordings is null, with every call's tokens counted (1.21575ms)
+✔ a query naming a tool is never reworded into a different query (0.541125ms)
+✔ a product named in the catalog survives redaction end to end (0.625625ms)
+✔ the re-read uses the wording that got through, not the one that was refused (0.757583ms)
+✔ when every wording is refused the answer is null, not an error (0.42475ms)
+✔ no re-read when the first answer carries no probabilities (0.569666ms)
+✔ a refused re-read keeps the first answer (0.926667ms)
+✔ a rejected key fails at once, without retries (0.950167ms)
+✔ a 429 throws unless the caller waits rate limits out (1.091958ms)
+✔ a 5xx or dropped connection is retried; a 4xx is not (1.383417ms)
+✔ a choice that was not offered is unreadable (0.351875ms)
+✔ mergeRerank: re-read options keep their scores, the rest rank strictly below (0.204083ms)
+✔ a lone surrogate in a query or an option never reaches the provider (8.330583ms)
+✔ each decision question is one model call with its feature and payer, refusals included (1.1735ms)
+✖ a rejected key is one error call, under the default feature (11.15175ms)
+✔ intent names without a model: one skipped_no_key line, none with nothing to name (2.143083ms)
+✔ workflow labels without a model: one skipped_no_key line, none with no workflow (1.609542ms)
+✔ the readings agree on the default naming model (2.320209ms)
+{"level":30,"time":1795322938344,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"intent-graph/fold-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"folded","pages":1,"events_folded":8,"events_runtime":8,"events_otlp":0,"events_skipped":0,"events_repeated":0,"events_held":0,"rev_delta":4,"rev":4,"cluster_count":3,"clusters_before_compaction":3,"clusters_merged":0,"clusters_dropped":0,"edges_pruned":0,"clusters_pruned":0,"continued":false,"waiting_events":0,"duration_ms":126,"msg":"intent graph fold completed"}
+✔ the graph fold and the engine run on a seeded database with no key and no network (8171.9955ms)
+{"level":30,"time":1795322938441,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"intent-engine/job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"clustered","pages":1,"seeded":true,"asks":4,"assignments":4,"clusters_created":3,"asks_split":0,"asks_contained":0,"clusters_merged":0,"cluster_count":3,"intent_count":3,"levels":2,"capped":false,"busy":false,"frames":true,"keys":false,"named":0,"continued":false,"waiting_events":0,"duration_ms":92,"msg":"intent engine run completed"}
+{"level":30,"time":1795322939028,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":4,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":0,"msg":"trace turns build completed"}
+✔ the signal run, the explorer and the label job complete on the built ledger with no key and no network (1095.758625ms)
+{"level":30,"time":1795322939183,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"76a06559-a223-420e-a9d0-71398e804044","trigger":"manual","window_days":7,"turns_scanned":4,"runs_placed":0,"placement_written":0,"unbuilt_at_start":0,"early_reading":true,"signals_open":0,"signals_new":0,"signals_resolved":0,"pair_tools":0,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+{"level":30,"time":1795322939295,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"tool-explorer/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"055cd371-274b-49b6-805b-97c837cc3cc6","trigger":"chained","window_days":90,"pages":1,"turns_scanned":4,"sessions_scanned":1,"edges":6,"sets":0,"turns_with_intents":0,"intent_tool_rows":0,"sessions_truncated":false,"duration_ms":0,"msg":"tool explorer run completed"}
+{"level":30,"time":1795322939476,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"tool-crafter/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"a75d441e-3f92-4ee8-90d7-f950e13c0be6","trigger":"chained","proposals":0,"proposals_dismissed_before":0,"candidates":0,"declined_reason":"no pair is always together, no intent's two tools always run together, no lookup only feeds one tool, no ask whose read always follows another tool, no ask that always opens with the same read, no tool used two ways, no ask without a path, no fixed chain, no order-free pair, no tool retried into success, no tool failing without a predecessor, no tool missed often enough, and nothing declared went unused","duration_ms":0,"msg":"tool craft run completed"}
+{"level":30,"time":1795322939539,"pid":12484,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":4,"model_only":0,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322936497,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":8,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":123,"msg":"trace turns build completed"}
+✔ flag on: a finished agent run is an answered ask, a failed one is not (8129.287541ms)
+{"level":30,"time":1795322936601,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322936611,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":8,"model_only":0,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":113,"msg":"topic reading completed"}
+{"level":30,"time":1795322937675,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":8,"turns_written":8,"steps_written":8,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":54,"msg":"trace turns build completed"}
+✔ flag off: the same runs read as before, none answered (1158.649792ms)
+{"level":30,"time":1795322937741,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322937773,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":8,"model_only":0,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":98,"msg":"topic reading completed"}
+{"level":30,"time":1795322938528,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"11111111-1111-4111-8111-111111111111","outcome":"built","pages":1,"events":2,"turns_written":2,"steps_written":2,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":58,"msg":"trace turns build completed"}
+✔ flag on: an unplaced finished run is answered too (864.319083ms)
+{"level":30,"time":1795322938611,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322938626,"pid":12485,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":2,"model_only":0,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":97,"msg":"topic reading completed"}
+{"level":30,"time":1795322938375,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: the runs of one job kind are one ask and make one intent, with no project id (7551.989125ms)
+{"level":30,"time":1795322938385,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":14,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322938980,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: a job's old machine asks and its asks in words (RC-834) are one ask and make one intent (597.697417ms)
+{"level":30,"time":1795322938986,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":6,"model_only":6,"refused":0,"capped":false,"topics":1,"created":1,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939483,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag off: the job asks are read as they are, all unplaced, as before (499.721208ms)
+{"level":30,"time":1795322939487,"pid":12491,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":14,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939360,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ a first reading without a model makes topics from the asks' own words and places every turn (7162.581ms)
+{"level":30,"time":1795322939374,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939872,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ the next reading keeps the topic ids, and a model renames the ones named from words (549.145083ms)
+{"level":30,"time":1795322939880,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939899,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322939906,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":2,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"model","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939926,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322939931,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+✔ the reading job is queued once while one waits, and reads as in flight (292.594125ms)
+✔ task runs come from the latest completed signal run (204.410209ms)
+{"level":50,"time":1795322940634,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"model outage","stack":"Error: model outage\n    at failingNamer (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:347:11)\n    at Object.name (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:956:27)\n    at evolveTopics (~/ratel-wt-rp-122/src/lib/readings/topics/evolve.ts:201:25)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:792:25)\n    at async assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:20)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:349:17)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","groups":2,"msg":"topic naming failed"}
+{"level":50,"time":1795322940637,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"model outage","stack":"Error: model outage\n    at failingNamer (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:347:11)\n    at Object.name (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:956:27)\n    at evolveTopics (~/ratel-wt-rp-122/src/lib/readings/topics/evolve.ts:201:25)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:792:25)\n    at async assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:20)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:349:17)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","operation":"topic_naming","msg":"exception"}
+✔ the decision engine places the asks once; later readings read its cached verdicts (236.746875ms)
+{"level":30,"time":1795322940642,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","operation":"topic_placement","asked":7,"carried":0,"audited":0,"audit_agreed":0,"audit":"unknown","msg":"carried decisions checked"}
+{"level":30,"time":1795322940646,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322940650,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":7,"sentiment_judged":7,"patterns":0,"naming":"words","placement":"judged","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322940663,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322940665,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"judged","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941005,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","operation":"topic_placement","asked":7,"carried":0,"audited":0,"audit_agreed":0,"audit":"unknown","msg":"carried decisions checked"}
+✔ a new topic does not re-ask every ask: placements whose topic is unchanged are carried after an audit (405.12425ms)
+{"level":30,"time":1795322941008,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322941018,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":7,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"judged","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941041,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","operation":"topic_placement","asked":7,"carried":0,"audited":6,"audit_agreed":6,"audit":"unknown","msg":"carried decisions checked"}
+{"level":30,"time":1795322941042,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322941047,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":0,"retired":0,"judged":7,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"judged","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941066,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+{"level":30,"time":1795322941071,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":14,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"judged","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941339,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ a trace of model calls alone is an ask too: read from its prompt, counted unanswered, never written as a turn (273.21625ms)
+{"level":30,"time":1795322941343,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":15,"model_only":1,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941529,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ a turn that looked something up but whose reply says the agent could not do it is unanswered (186.438333ms)
+{"level":30,"time":1795322941530,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":2,"model_only":0,"refused":1,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322941757,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":20,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":2,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+✔ each intent's tool pattern is stored with the reading, the signal run's helper set aside (226.594625ms)
+{"level":50,"time":1795322941954,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"statement timeout","stack":"Error: statement timeout\n    at Object.loadHelperTools (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:656:15)\n    at readPatterns (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:930:26)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:870:26)\n    at async assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:20)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:652:18)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"topic helper tools read failed"}
+{"level":50,"time":1795322941954,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"statement timeout","stack":"Error: statement timeout\n    at Object.loadHelperTools (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:656:15)\n    at readPatterns (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:930:26)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:870:26)\n    at async assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:20)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/job.integration.test.ts:652:18)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","operation":"topic_helper_tools","msg":"exception"}
+✔ a helper read that fails costs the patterns, never the reading (201.749291ms)
+{"level":30,"time":1795322941958,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":20,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322942152,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ a signal run stored before the helper set was kept reads no patterns; an empty set is a known answer (208.036875ms)
+{"level":30,"time":1795322942155,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":20,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322942165,"pid":13091,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":20,"model_only":0,"refused":0,"capped":false,"topics":2,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":2,"naming":"none","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939541,"pid":13344,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag on: tool-only runs read a derived ask (task name, else tool path) and make intents (7041.811416ms)
+{"level":30,"time":1795322939554,"pid":13344,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":13,"model_only":0,"refused":0,"capped":false,"topics":2,"created":2,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"words","placement":"words","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322939991,"pid":13344,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","msg":"topic patterns skipped until the helper tools are known"}
+✔ flag off: tool-only runs stay without an ask, as before (437.401875ms)
+{"level":30,"time":1795322939996,"pid":13344,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","project_id":"11111111-1111-4111-8111-111111111111","turns":13,"model_only":0,"refused":0,"capped":false,"topics":0,"created":0,"renamed":0,"retired":0,"judged":0,"sentiment_judged":0,"patterns":0,"naming":"none","placement":"none","duration_ms":0,"msg":"topic reading completed"}
+{"level":30,"time":1795322932051,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+✔ the sandbox's baseline hash is the production hash on the OpenAI engine (18.006ms)
+✔ the model param resolves through the decision engine only (1.874292ms)
+✔ sandbox run: the engine picks a topic, and --set minConfidence=0.99 reaches its config (54.345542ms)
+✔ sandbox run: none of these is no topic (5.093625ms)
+✔ sandbox run without the engine's key says which key (0.753042ms)
+✔ flag on: the assign_topics root carries the sandbox id and the config hash (12.330792ms)
+✔ flag on: each placement call's span carries its sandbox input, capped (17.157083ms)
+✔ flag off or absent: no sandbox attribute on any span (26.1195ms)
+{"level":30,"time":1795322932054,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":0,"abstained":1,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":30,"time":1795322932068,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322932071,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:193:29)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:193:5)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":1,"msg":"topic reading failed"}
+{"level":30,"time":1795322932098,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":2,"answered":2,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":20,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322932100,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:31)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:7)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":0,"msg":"topic reading failed"}
+{"level":30,"time":1795322932110,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322932121,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:31)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:7)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":0,"msg":"topic reading failed"}
+{"level":30,"time":1795322932124,"pid":13345,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+✔ each turn's sentiment says whether the model read it or the keyword list did; an agent's search is never read (30.529209ms)
+✔ the options are every topic and none of these; the hash is namespaced and follows them (1.833917ms)
+✔ a case per distinct ask, keyed by its hash (0.436666ms)
+✔ a verdict counts only when it names a known option (0.153292ms)
+✔ by wording, an ask goes to the topic whose asks share the most words, above the bar (0.527292ms)
+✔ known placements come first, then the rest by wording against them (0.442708ms)
+✔ asks come from the first search of an SDK turn and the model call of an OTel run (7002.99ms)
+✔ a turn scope's user message wins over the search that stood in for it (428.240666ms)
+✔ labels upsert by workflow; verdicts cache by ask and option set; insights round trip (307.844375ms)
+✔ the label job is queued once while one waits (223.948625ms)
+{"level":30,"time":1795322937185,"pid":16155,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":1,"labelled":1,"failed":0,"msg":"workflow labels written"}
+✔ flag off: the cache key is the pre-sandbox key, byte for byte (3.069166ms)
+✔ flag on: the cache key follows the config hash (1.63925ms)
+✔ the sandbox's baseline hash is the production hash (10.987958ms)
+✔ flag on: the invoke_agent root carries the sandbox id and config hash, the item span its input (130.456542ms)
+✔ flag off or absent: no sandbox attribute on any span (36.635125ms)
+✔ no production source imports a sandbox file (373.027208ms)
+✔ sandbox run: --set overrides reach the request sent to the model (67.513917ms)
+{"level":30,"time":1795322937211,"pid":16155,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":1,"labelled":1,"failed":0,"msg":"workflow labels written"}
+{"level":30,"time":1795322937239,"pid":16155,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":1,"labelled":1,"failed":0,"msg":"workflow labels written"}
+{"level":30,"time":1795322938712,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":2,"labelled":2,"failed":0,"msg":"workflow labels written"}
+{"level":50,"time":1795322938718,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"overloaded","stack":"Error: overloaded\n    at Object.complete (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label.test.ts:208:43)\n    at labelOne (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:179:18)\n    at writeLabels (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:248:15)\n    at async labelProjectWorkflows (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:208:17)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label.test.ts:212:18)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:p1","operation":"label_workflows","msg":"exception"}
+✔ the prompt lists tools in order with descriptions and quotes asks as data (2.109541ms)
+✔ an agent task's one step shows as an agent run in words, not as a tool with no doc (0.460583ms)
+✔ a catalog tool whose id starts with agent: stays a tool line (0.253ms)
+✔ the input hash changes with what the name is written from, not with tool order in the list (11.580833ms)
+✔ a task keeps its name while new runs bring new requests, and is named again once requests first arrive (0.270875ms)
+✔ parseLabel tidies the model's output and rejects junk (0.744292ms)
+✔ the job names every new workflow and passes captured asks (1.02525ms)
+✔ unchanged workflows are not paid for again; no model means no calls (2.203958ms)
+✔ a failed call is counted and skipped, never fatal (4.189083ms)
+✔ stored items parse defensively and names prefer a label (0.349333ms)
+✔ an ask cut at the cap never leaves half an emoji in the prompt (0.09725ms)
+{"level":30,"time":1795322938713,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":2,"labelled":2,"failed":0,"msg":"workflow labels written"}
+{"level":30,"time":1795322938713,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":2,"labelled":2,"failed":0,"msg":"workflow labels written"}
+{"level":30,"time":1795322938713,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":2,"labelled":0,"failed":0,"msg":"workflow labels written"}
+{"level":50,"time":1795322938715,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","err":{"type":"Error","message":"overloaded","stack":"Error: overloaded\n    at Object.complete (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label.test.ts:208:43)\n    at labelOne (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:179:18)\n    at writeLabels (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:248:15)\n    at async labelProjectWorkflows (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label-job.ts:208:17)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/trace-signals/workflows/label.test.ts:212:18)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","workflow_id":"wf-1","msg":"workflow label failed"}
+{"level":30,"time":1795322938718,"pid":17609,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/label-workflows","project_id":"p1","workflows":2,"labelled":1,"failed":1,"msg":"workflow labels written"}
+{"level":50,"time":1795322933326,"pid":17611,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/navigation","err":{"type":"Error","message":"flag service down","stack":"Error: flag service down\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/views/sandboxes/tests/navigation.test.ts:32:35)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/views/sandboxes/navigation.ts:29:31)\n    at Array.map (<anonymous>)\n    at sandboxesProjectIds (~/ratel-wt-rp-122/src/lib/views/sandboxes/navigation.ts:26:14)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/views/sandboxes/tests/navigation.test.ts:31:21)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)"},"project_id":"p1","msg":"sandboxes navigation flag failed"}
+✔ only the projects with the switch on show Sandboxes, each decided with its organization (1.697041ms)
+✔ a flag read that throws hides Sandboxes for that project only (2.876833ms)
+✔ FF_SANDBOXES off: no project shows Sandboxes; on: every project with a known organization does (6.827583ms)
+ℹ tests 505
+ℹ suites 2
+ℹ pass 501
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32261.473833
+
+✖ failing tests:
+
+test at lib/composition/composition.test.ts:1:7837
+✖ the core modules landed so far register their jobs and steps in layer order (3.089ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      'before:trace_turns_build_enqueue',
+      'before:query_categorizations_enqueue',
+      'before:intent_graph_fold_enqueue',
+      'before:intent_engine_enqueue',
+  ...
+      'after:what_if_prune',
+  +   'after:sandbox_run_events_prune'
+    ]
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/composition/composition.test.ts:283:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1518:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'before:trace_turns_build_enqueue', 'before:query_categorizations_enqueue', 'before:intent_graph_fold_enqueue', 'before:intent_engine_enqueue', 'before:task_scores_enqueue', 'after:runtime_events_prune:retention', 'after:runtime_event_rejects_prune:retention', 'after:intent_graph_revisions_prune:retention', 'after:intent_engine_expire:retention', 'after:trace_signal_sweep', 'after:otlp_raw_prune', 'after:otel_spans_prune:retention', 'after:otel_logs_prune:retention', 'after:trace_summary_refresh', 'after:trace_summary_prune:retention', 'after:quality_snapshot_refresh', 'after:match_quality_sweep', 'after:what_if_prune', 'after:sandbox_run_events_prune' ],
+    expected: [ 'before:trace_turns_build_enqueue', 'before:query_categorizations_enqueue', 'before:intent_graph_fold_enqueue', 'before:intent_engine_enqueue', 'before:task_scores_enqueue', 'after:runtime_events_prune:retention', 'after:runtime_event_rejects_prune:retention', 'after:intent_graph_revisions_prune:retention', 'after:intent_engine_expire:retention', 'after:trace_signal_sweep', 'after:otlp_raw_prune', 'after:otel_spans_prune:retention', 'after:otel_logs_prune:retention', 'after:trace_summary_refresh', 'after:trace_summary_prune:retention', 'after:quality_snapshot_refresh', 'after:match_quality_sweep', 'after:what_if_prune' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/console/onboarding/create-first-project.test.ts:1:1529
+✖ the first project lands with a Default key, revealed once (6.957709ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      {
+  +     createdBy: 'user_1',
+        keyHash: 'h',
+        keyPrefix: 'rtl_secret-v',
+        name: 'Default',
+        projectId: '44444444-4444-4444-8444-444444444444'
+      }
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/console/onboarding/create-first-project.test.ts:79:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { projectId: '44444444-4444-4444-8444-444444444444', name: 'Default', keyHash: 'h', keyPrefix: 'rtl_secret-v', createdBy: 'user_1' } ],
+    expected: [ { projectId: '44444444-4444-4444-8444-444444444444', name: 'Default', keyHash: 'h', keyPrefix: 'rtl_secret-v' } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/platform/agent-run.test.ts:1:5307
+✖ a Jev judge call outside any run is its own span; an error call is an error span (1.779042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'unknown'
+  - 'TypeError'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/platform/agent-run.test.ts:194:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'unknown',
+    expected: 'TypeError',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/decisions/openai.test.ts:1:15213
+✖ a rejected key is one error call, under the default feature (11.15175ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      [
+        'decision',
+        'error',
+  +     'unauthorized'
+  -     'DecisionCallError'
+      ]
+    ]
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/decisions/openai.test.ts:505:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'decision', 'error', 'unauthorized' ] ],
+    expected: [ [ 'decision', 'error', 'DecisionCallError' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

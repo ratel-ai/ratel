@@ -1,0 +1,17 @@
+FF_FINE_TUNING=1
+switch in the organization: true; with no database: true
+rail, Improvements: ["Fixes","Quality","Adaptive ranking","Fine-tuning"]
+job registered: build_fine_tuning_dataset (build_fine_tuning_dataset)
+seeded: 5 closed runs of task "triage", one model call each (test PII in the asks)
+POST consent: 200 {"ok":true,"consent":{"active":true,"givenBy":"user_ada","givenAt":"2026-11-22T08:43:25.917Z","textVersion":"2026-11-20"}}
+MCP list_use_cases: {"useCases":[]}
+MCP create_use_case: ok=true
+MCP get_use_case stats: {"turns":5,"calls":5,"firstEndedAt":"2026-11-10T09:10:30.000Z","lastEndedAt":"2026-11-10T09:50:30.000Z","currentModel":"claude-haiku","costPerRunUsd":0.002,"pricedRuns":5,"unpricedCalls":0,"sampled":false}
+MCP build_dataset: status=building
+job build_fine_tuning_dataset: {"built":true,"datasetId":"cdf2841c-1fb0-4501-b540-5c0435c02580","rows":4,"contentHash":"bb6ebfb3c95d9b66195140f80e027ce07fb5e4251c811e83d1e18b88682d4293"}
+MCP get_dataset: status=ready scorers=off counts={"turns":5,"calls":5,"train":2,"eval":2,"dropped":{"error":0,"excluded":0,"no_output":0,"no_content":0,"scorer_failed":0,"duplicate_near":0,"duplicate_exact":1,"self_correction":0,"user_scorer_failed":0},"scorerDrops":{"runs":0,"calls":0,"byKind":{}},"exportSkipped":{"eval":0,"train":0},"exportSkipReasons":{"eval":{"no_input":0,"no_reply":0,"empty_reply":0,"undefined_tool":0,"unsupported_content":
+  redaction report: {"iban":0,"email":1,"phone":1,"secret":0,"national_id":0,"payment_card":1}
+MCP list_dataset_rows: 4 rows, contentWithheld=true (an API key reads no captured text)
+export train: 200 x-ratel-skipped-rows=0 lines=2
+  first line: {"messages":[{"role":"user","content":"call me on [PHONE_1]"},{"role":"assistant","content":"On it."}]}
+stored rows hold a fixture PII value: false

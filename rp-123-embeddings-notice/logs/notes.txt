@@ -1,0 +1,6 @@
+RP-123 #507 + #447
+ratel beluga/rp-123-ship-monitor 673056fb (507), base beluga/rp-141-fine-tuning 755a6aaf
+ratel beluga/rp-123-embeddings-notice c025fc74 (447 core slot), base rp-123-ship-monitor. Worktree ~/Dev/ratel-ai/ratel-wt-rp-123-507 (now on the embeddings branch).
+platform b5c575f (cloud-ship-monitor -> FF_SHIP_MONITOR), d81e3f3 (447, no flag, notice always on).
+Helpers: bin/port-sync.sh, own-merge.sh, render.mjs, mapadd.py, regen-biome.mjs, undecided-at.mjs, plat-test.sh (platform UI tests from a real copy: the symlinked ee/src misses ee/tsconfig's JSX transform and the node_modules link resolves rp-120's design system).
+Proofs: ../../rp-123/ship-monitor-proof-{off,on}.txt, embeddings-notice-proof-{core,platform}.txt

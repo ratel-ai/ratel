@@ -1,0 +1,18 @@
+$ cd src && node --experimental-test-module-mocks --import tsx proof-region-core.mts   # OSS edition, core branch beluga/rp-123-embeddings-notice
+edition: Ratel OSS; EditionUi present: false; page passes embeddingsRegionNotice=false
+
+MatchSettings, embeddingsRegionNotice=false: mode hints
+  - Matches words, the way your agent searches. A tool that shares no word with the ask can&#x27;t be found.
+  - Matches meaning, so different words for the same thing still match.
+  - Both at once, mixed by the slider below.
+
+MatchSettings, embeddingsRegionNotice=true: mode hints
+  - Matches words, the way your agent searches. A tool that shares no word with the ask can&#x27;t be found.
+  - Matches meaning, so different words for the same thing still match. Runs on a US provider for now.
+  - Both at once, mixed by the slider below. Runs on a US provider for now.
+
+The workbench's Callout (semantic or hybrid mode, notice on):
+  Hosted embeddings run in the US for now A US provider embeds the text you send, so that text leaves the EU.
+  role=note: true
+(node:61972) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

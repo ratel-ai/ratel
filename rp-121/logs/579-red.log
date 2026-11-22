@@ -1,0 +1,192 @@
+✔ an SDK project: runs end well, the right tool in the top 5 (not the first pick); no calls rate (the SDK counts no calls) (2.801084ms)
+✔ an OpenTelemetry project: completed runs and calls that worked; no top-5 rate without a search (0.203708ms)
+✔ a mixed project adds both kinds of run into one rate (0.106125ms)
+✔ only the reading's own window counts: the comparison days before it are left out (0.079708ms)
+✔ a rate below the evidence floor is left out (0.095625ms)
+✔ self-corrections: a recovered one costs half; an older reading without the counts treats every one as unrecovered (0.1075ms)
+✔ tasks: failed runs over task runs, weighted by runs; none when runs were mixed together (0.103667ms)
+✔ the measured half: weights shared out among the rates there are, and its missing points add up (0.123791ms)
+✔ a reading stored before the top-5 count has no top-5 rate, rather than a different one (0.075875ms)
+✖ typed steps: failed model and code steps count in calls work; top 5 stays tool-only and drops out with no searches (1.854834ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'pino' imported from /private/tmp/rp121-red/src/lib/platform/logger.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/signals/project-metrics.test.ts (381.148208ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'drizzle-orm' imported from /private/tmp/rp121-red/src/lib/readings/trace-signals/steps/metrics-query.integration.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/steps/metrics-query.integration.test.ts (180.27275ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'pino' imported from /private/tmp/rp121-red/src/lib/platform/logger.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/steps/metrics.test.ts (381.450083ms)
+node:internal/modules/esm/resolve:274
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/rp121-red/src/lib/readings/trace-signals/steps/tables' imported from /private/tmp/rp121-red/src/lib/readings/trace-signals/steps/tables.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605)
+    at resolve (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:16832) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/rp121-red/src/lib/readings/trace-signals/steps/tables'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/steps/tables.test.ts (178.961334ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'pino' imported from /private/tmp/rp121-red/src/lib/adapters/oss/telemetry.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/health/page-model.integration.test.ts (214.861541ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/rp121-red/src/lib/views/health/step-kinds-ui.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/health/step-kinds-ui.test.ts (177.095667ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 9
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 389.791958
+
+✖ failing tests:
+
+test at lib/readings/trace-signals/health-outcomes.test.ts:189:1
+✖ typed steps: failed model and code steps count in calls work; top 5 stays tool-only and drops out with no searches (1.854834ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + undefined
+  - {
+  -   good: 0.9,
+  -   n: 60,
+  -   pillar: 'calls'
+  - }
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/health-outcomes.test.ts:192:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { pillar: 'calls', good: 0.9, n: 60 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/signals/project-metrics.test.ts:1:1
+✖ lib/readings/trace-signals/signals/project-metrics.test.ts (381.148208ms)
+  'test failed'
+
+test at lib/readings/trace-signals/steps/metrics-query.integration.test.ts:1:1
+✖ lib/readings/trace-signals/steps/metrics-query.integration.test.ts (180.27275ms)
+  'test failed'
+
+test at lib/readings/trace-signals/steps/metrics.test.ts:1:1
+✖ lib/readings/trace-signals/steps/metrics.test.ts (381.450083ms)
+  'test failed'
+
+test at lib/readings/trace-signals/steps/tables.test.ts:1:1
+✖ lib/readings/trace-signals/steps/tables.test.ts (178.961334ms)
+  'test failed'
+
+test at lib/views/health/page-model.integration.test.ts:1:1
+✖ lib/views/health/page-model.integration.test.ts (214.861541ms)
+  'test failed'
+
+test at lib/views/health/step-kinds-ui.test.ts:1:1
+✖ lib/views/health/step-kinds-ui.test.ts (177.095667ms)
+  'test failed'

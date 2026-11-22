@@ -1,0 +1,6 @@
+✖ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (0.6425ms)
+✖ with no project displayed, the project flags fall back to the active organization (0.179709ms)
+ℹ tests 20
+ℹ pass 18
+ℹ fail 2
+✖ failing tests:

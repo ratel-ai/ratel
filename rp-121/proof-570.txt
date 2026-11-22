@@ -1,0 +1,19 @@
+$ npx tsx proof-570.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+ratel     rows= 1 [otlp_model_call] build_kicked=0 turns=0 steps=[]
+bareChat  rows= 1 [otlp_model_call] build_kicked=0 turns=0 steps=[]
+stema     rows= 1 [otlp_model_call] build_kicked=0 turns=0 steps=[]
+vibiz     rows= 3 [otlp_model_call] build_kicked=0 turns=0 steps=[]
+cato      rows= 3 [invoke_end,otlp_model_call] build_kicked=1 turns=1 steps=["invoke"]
+docs      rows= 2 [otlp_model_call] build_kicked=0 turns=0 steps=[]
+
+$ FF_TYPED_STEPS=1 npx tsx proof-570.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+ratel     rows= 2 [otlp_model_call,agent_run] build_kicked=1 turns=1 steps=["agent>model_call"]
+bareChat  rows= 1 [otlp_model_call] build_kicked=1 turns=1 steps=["model_call"]
+stema     rows= 2 [otlp_model_call,otlp_step] build_kicked=1 turns=1 steps=["code>model_call"]
+vibiz     rows= 9 [otlp_model_call,otlp_step,agent_run] build_kicked=1 turns=2 steps=["agent>code>code>model_call>handoff>model_call>code","agent>model_call"]
+cato      rows= 4 [invoke_end,otlp_model_call,agent_run] build_kicked=1 turns=2 steps=["model_call>invoke>model_call","agent"]
+docs      rows= 5 [otlp_model_call,otlp_step] build_kicked=1 turns=1 steps=["code>code>user_message>model_call>code>user_message>model_call"]
+
+Note: this run skips the database. cato shows 2 turns here because its agent_run row has no conversation id. The real build (listTurnEventsPage) gives each trace the first real session id of its rows, so the database path makes 1 cato turn (typed-steps.integration.test.ts asserts that).

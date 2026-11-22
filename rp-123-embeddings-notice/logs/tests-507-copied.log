@@ -1,0 +1,29 @@
+✔ enrich: the first tool returns more, the second is no longer called (1.1385ms)
+✔ fold: the lookup folds into the main tool, so the main tool changes and the lookup goes (0.246875ms)
+✔ merge and combine keep the first tool and replace the others (0.167333ms)
+✔ retire and preload take every tool out of the agent's calls (0.088792ms)
+✔ kinds that change a tool in place change every tool they name and remove none (0.136417ms)
+✔ every fix kind has a mapping, and a fix with no tools watches nothing (0.328875ms)
+✔ a tool named twice is watched once (0.138958ms)
+✔ a shipped enrich fix: its tools before and after the ship, its runs, and its newest traces (1753.712833ms)
+✔ a removed tool called after the ship flags the shipment and its trace (205.877458ms)
+✔ a shipment whose fix names no tool it can read has no watch; an unknown id has none either (202.808583ms)
+✔ a member with the watch on gets the watches, never cached (19.421208ms)
+✔ no session is 401; another project or the watch turned off is 404 (0.760542ms)
+✔ a failed read is logged, reported and answered with 503 (0.744791ms)
+✔ an enrich fix watches its first tool and expects no call of the second (2.720584ms)
+✔ runs before and after: tool calls and tokens per run (0.172584ms)
+✔ fewer than 10 runs since the ship: watching (0.310416ms)
+✔ enough runs, no removed call, errors and latency in line: healthy (0.177042ms)
+✔ a removed tool still called after the ship is a regression, even while watching (0.205458ms)
+✔ a changed tool failing clearly more than before is a regression (0.258667ms)
+✔ a changed tool clearly slower than before is a regression; a little slower is not (0.228208ms)
+✔ traces link to their trace page and say when they called a removed tool (0.459708ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4964.046959

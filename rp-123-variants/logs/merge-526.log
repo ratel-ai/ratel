@@ -1,0 +1,28 @@
+Auto-merging apps/web/lib/db/migrations/meta/_journal.json
+CONFLICT (content): Merge conflict in apps/web/lib/db/migrations/meta/_journal.json
+Auto-merging apps/web/lib/db/schema.ts
+Auto-merging apps/web/lib/flags-retired.test.ts
+CONFLICT (content): Merge conflict in apps/web/lib/flags-retired.test.ts
+Auto-merging apps/web/lib/flags.test.ts
+Auto-merging apps/web/lib/flags.ts
+CONFLICT (content): Merge conflict in apps/web/lib/flags.ts
+Auto-merging apps/web/lib/mcp/__fixtures__/tools-list.json
+Auto-merging apps/web/lib/mcp/route-handler.test.ts
+CONFLICT (content): Merge conflict in apps/web/lib/mcp/route-handler.test.ts
+Auto-merging apps/web/lib/otlp/span-rows.test.ts
+Auto-merging apps/web/lib/otlp/span-rows.ts
+CONFLICT (content): Merge conflict in apps/web/lib/otlp/span-rows.ts
+Auto-merging apps/web/lib/runtime-events/components.test.ts
+Auto-merging apps/web/lib/session-chat/trace-view-ui.test.ts
+Auto-merging apps/web/lib/traces/compare.test.ts
+Auto-merging apps/web/lib/traces/comparison.test.ts
+Auto-merging apps/web/lib/traces/summary-refresh.ts
+CONFLICT (content): Merge conflict in apps/web/lib/traces/summary-refresh.ts
+Auto-merging apps/web/lib/traces/tree.test.ts
+Auto-merging apps/web/lib/traces/v2/views-ui.test.ts
+Auto-merging apps/web/lib/traces/view.test.ts
+Auto-merging apps/web/lib/traces/waterfall.test.ts
+Auto-merging infra/module/posthog.tf
+CONFLICT (content): Merge conflict in infra/module/posthog.tf
+Auto-merging infra/module/tests/ratel_cloud.tftest.hcl
+Automatic merge failed; fix conflicts and then commit the result.

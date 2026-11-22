@@ -1,0 +1,28 @@
+$ migrated with the core's migrations, 0045_sandboxes included
+  sandbox tables: sandbox_commands, sandbox_fake_pins, sandbox_fake_usage, sandbox_run_events, sandbox_runners, sandbox_runs, sandbox_sessions
+  project 36703eb5-3407-4309-8757-0936ef754535, a key with a creator and a key without one
+
+$ FF_SANDBOXES unset: POST /api/v1/runner/connect
+{"level":30,"time":1795323178119,"pid":82134,"hostname":"rstagis-MacBook-Pro-3.local","module":"request-log","requestId":"717dc977-22cf-4607-9ca5-579066b8e2a6","project_id":"36703eb5-3407-4309-8757-0936ef754535","org_id":"00000000-0000-4000-8000-000000000001","distinctId":"project:36703eb5-3407-4309-8757-0936ef754535","method":"POST","path":"/api/v1/runner/connect","status":404,"duration_ms":12,"org_slug":"local","project_path":"local/proof","msg":"api_request"}
+  404 {"error":"not_found"}
+
+$ FF_SANDBOXES=1: POST /api/v1/runner/connect (key without a creator)
+{"level":30,"time":1795323178121,"pid":82134,"hostname":"rstagis-MacBook-Pro-3.local","module":"request-log","requestId":"c87c0896-2eb3-428b-a31b-fd75d7d7d391","project_id":"36703eb5-3407-4309-8757-0936ef754535","org_id":"00000000-0000-4000-8000-000000000001","distinctId":"project:36703eb5-3407-4309-8757-0936ef754535","method":"POST","path":"/api/v1/runner/connect","status":403,"duration_ms":1,"org_slug":"local","project_path":"local/proof","msg":"api_request"}
+  403 {"error":"forbidden","reason":"key_without_owner","message":"Create a new project key: this key does not record who created it."}
+$ FF_SANDBOXES=1: POST /api/v1/runner/connect (key with a creator)
+{"level":30,"time":1795323178123,"pid":82134,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"sandbox_runner_connected","distinctId":"project:36703eb5-3407-4309-8757-0936ef754535","orgId":"00000000-0000-4000-8000-000000000001","projectId":"36703eb5-3407-4309-8757-0936ef754535","api_key_id":"ae66d53d-28f2-4232-90d8-7e8dd413b1eb","msg":"event"}
+{"level":30,"time":1795323178123,"pid":82134,"hostname":"rstagis-MacBook-Pro-3.local","module":"request-log","requestId":"42205594-70f7-4f32-bc35-32eed4567982","project_id":"36703eb5-3407-4309-8757-0936ef754535","org_id":"00000000-0000-4000-8000-000000000001","distinctId":"project:36703eb5-3407-4309-8757-0936ef754535","method":"POST","path":"/api/v1/runner/connect","status":200,"duration_ms":2,"org_slug":"local","project_path":"local/proof","msg":"api_request"}
+  200 {"gatewayUrl":"ws://localhost:8799","token":"eyJ2IjoxLCJw…(redacted)","expiresAt":"2026-11-22T05:07:58.000Z","projectId":"36703eb5-3407-4309-8757-0936ef754535"}
+
+$ start the gateway (packages/gateway/src/main.ts) on :8799
+  gateway: started gateway (port 8799)
+$ a sandbox/v1 worker connects with the token and registers: got registered
+
+$ the run store starts run 18d28d0e-090a-458b-a22f-b77d9b8a628d (sandbox_commands + NOTIFY sandbox_gw_gw_proof)
+  worker got run.start: {"sandboxId":"workflow-label","params":{"maxTokens":300}}
+  worker sent run.ack, one text.delta and run.end; gateway answered events.ack seq 2
+  sandbox_runs: {"status":"ok","output":{"name":"Refunds"},"acked_seq":2}  sandbox_run_events: [{"seq":1,"kind":"text.delta"},{"seq":2,"kind":"run.end"}]
+
+$ SIGTERM the gateway
+  worker got drain {"reason":"gateway shutdown","deadlineMs":20000}
+  gateway: draining gateway -> stopped gateway

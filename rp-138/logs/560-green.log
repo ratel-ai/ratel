@@ -1,0 +1,27 @@
+✔ harnessLabel names every harness id and the unknown client (0.419459ms)
+✔ harnessWithVersion adds the version only when there is one (0.070375ms)
+✔ countryLabel shows the country name with its code (13.432458ms)
+✔ transport and protocol version say Not reported for null (0.105458ms)
+✔ every assigned ISO code has a distinct three-digit numeric code (1.479083ms)
+✔ every country countryLabel names maps to a numeric code (13.367917ms)
+✔ alpha2ToNumeric reads any case and refuses unassigned codes (0.078792ms)
+✔ canonicalAlpha2 is the join key: upper case, withdrawn codes as their successor (0.047583ms)
+✔ featureAlpha2 names every country world-atlas draws (4.150542ms)
+✔ no calls is bucket 0, the neutral fill (0.710084ms)
+✔ buckets grow on a log scale: one call is the lightest, the busiest country the darkest (0.164667ms)
+✔ a single busy country and a single call each take the darkest bucket (0.083875ms)
+✔ countryCalls joins rows by canonical code, skips the unknown row and sums aliases (1.255375ms)
+✔ the list keeps the window and the environment (0.4685ms)
+✔ the detail encodes the server key in the path, and the role in the query (0.095209ms)
+✔ only the two roles parse (0.058958ms)
+✔ Traces opens Turns filtered by the server, in the same window and environment (0.199209ms)
+✔ Clients and Catalog are filtered by the server (0.118125ms)
+✔ a caller country opens the Traces sessions list filtered to it, with the window, environment and server (RC-1058) (0.32875ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 702.252875

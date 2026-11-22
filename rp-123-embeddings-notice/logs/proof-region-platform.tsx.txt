@@ -1,0 +1,32 @@
+// Proof for RP-123 #447, platform half (not committed): the real Embeddings view rendered as the
+// page renders it (regionNotice always on) and without the notice, plus the Cloud EditionUi slot
+// the core's Test a search reads. Run from ee/ in a real copy: npx tsx src/src/proof-region-platform.tsx
+import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { EmbeddingsView } from "@ee/apis/ui/EmbeddingsView";
+
+const text = (html: string) => html.replace(/&#x27;/g, "'").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+const props = {
+  endpoint: "https://api.example/v1/embeddings",
+  model: "ratel-embed-v1",
+  apiKey: { plaintext: null, prefix: "rtl_" },
+  keysHref: "/project/p1/settings/api-keys",
+  billingHref: null,
+  now: new Date("2026-11-22T12:00:00.000Z"),
+  usage: { requests: 0, tokens: 0, credits: 0, daily: [], lastUsedAt: null } as never,
+};
+const page = readFileSync(new URL("./apis/ui/EmbeddingsPage.tsx", import.meta.url), "utf8");
+const ui = readFileSync(new URL("./identity/ui.tsx", import.meta.url), "utf8");
+console.log(`EmbeddingsPage passes regionNotice: ${/\n\s+regionNotice\n\s+\/>/.test(page)}`);
+console.log(`Cloud EditionUi sets embeddingsRegionNotice: ${/embeddingsRegionNotice: true/.test(ui)}`);
+for (const regionNotice of [false, true]) {
+  const html = renderToStaticMarkup(createElement(EmbeddingsView, { ...props, regionNotice }));
+  const note = html.match(/<div[^>]*role="note"[\s\S]*?<\/div>\s*<\/div>/)?.[0];
+  const quick = text(html).match(/Point your SDK's embedding source at this endpoint\.[^.]*\.?[^.]*\./)?.[0];
+  console.log(`\n--- EmbeddingsView regionNotice=${regionNotice} (${html.length} bytes of HTML)`);
+  console.log(`Callout: ${note ? text(note) : "(none)"}`);
+  if (note) console.log(`Callout HTML: ${note.slice(0, 400)}`);
+  console.log(`Quickstart line: ${quick}`);
+  console.log(`names the provider (DeepInfra): ${/deepinfra/i.test(html)}`);
+}

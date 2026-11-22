@@ -1,0 +1,60 @@
+
+copied (10)
+  src/lib/ingest/otlp/span-rows.pivots.test.ts
+  src/lib/ingest/pivots/candidates-query.integration.test.ts
+  src/lib/ingest/pivots/candidates-query.ts
+  src/lib/ingest/pivots/candidates.test.ts
+  src/lib/ingest/pivots/candidates.ts
+  src/lib/ingest/pivots/store.ts
+  src/lib/synthesis/pivots/refill.ts
+  src/lib/synthesis/pivots/dims.integration.test.ts
+  src/app/(console)/project/[projectId]/settings/pivots/page.tsx
+  src/components/console/settings/PivotsSettings.tsx
+
+updated (5)
+  src/lib/jobs/policy.ts
+  src/lib/jobs/kinds.ts
+  src/lib/console/settings/tabs.ts
+  src/lib/console/settings/tabs.test.ts
+  src/app/(console)/project/[projectId]/settings/layout.tsx
+
+owned, bootstrapped from upstream (now yours to maintain) (5)
+  src/lib/ingest/pivots/ingest.ts
+  src/lib/synthesis/pivots/settings.ts
+  src/lib/synthesis/pivots/settings.integration.test.ts
+  src/lib/console/pivots/reader.ts
+  src/lib/console/pivots/actions.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (4)
+  {"path":"src/lib/ingest/pivots/ingest.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/lib/synthesis/pivots/settings.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/lib/console/pivots/reader.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/lib/console/pivots/actions.ts","specifier":"@/lib/flags-ingest"}
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/app/api/v1/traces/route.ts                |   3 +
+ apps/web/lib/analytics/track-server.ts             |   3 +
+ apps/web/lib/db/migrations/0109_project_pivots.sql |  15 ++
+ .../lib/db/migrations/0110_trace_summary_dims.sql  |  17 ++
+ apps/web/lib/db/migrations/meta/_journal.json      |  14 ++
+ apps/web/lib/db/schema.ts                          |  34 ++++
+ apps/web/lib/jobs/handlers.ts                      |   3 +
+ apps/web/lib/jobs/runner.ts                        |   3 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/otlp/ingest-spans.pivots.test.ts      | 122 ++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  31 +++-
+ apps/web/lib/otlp/route-handler.ts                 |   2 +
+ apps/web/lib/otlp/span-rows.ts                     |  35 +++-
+ apps/web/lib/pivots/actions.ts                     |  56 +++++++
+ apps/web/lib/pivots/flag.test.ts                   |  65 ++++++++
+ apps/web/lib/pivots/flag.ts                        |  88 ++++++++++
+ apps/web/lib/pivots/ingest.ts                      |  48 ++++++
+ apps/web/lib/pivots/model.test.ts                  | 113 +++++++++++++
+ apps/web/lib/pivots/model.ts                       | 123 ++++++++++++++
+ apps/web/lib/pivots/reader.ts                      |  19 +++
+ apps/web/lib/pivots/settings.integration.test.ts   | 174 ++++++++++++++++++++
+ apps/web/lib/pivots/settings.ts                    | 177 +++++++++++++++++++++
+ apps/web/lib/traces/summary-refresh.ts             | 106 +++++++++++-
+ 23 files changed, 1242 insertions(+), 10 deletions(-)
+
+applied 20 change(s) from 92d079ca

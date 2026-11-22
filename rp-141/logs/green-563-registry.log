@@ -1,0 +1,27 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (1.593416ms)
+  ✔ assembles the Cloud edition from the seam (0.500583ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.343959ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.340791ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.223583ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.778583ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.174166ms)
+  ✔ throws when cloud is requested but the seam is null (0.208167ms)
+  ✔ reports zero ee boundary violations on the real tree (963.87675ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.407667ms)
+✔ createComposition (969.797417ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.444167ms)
+  ✔ the core modules landed so far register their jobs and steps in layer order (0.251917ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (0.698125ms)
+  ✔ refuses a job kind or drain step registered twice (0.202375ms)
+✔ registry root (1.777375ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.254542ms)
+ℹ tests 15
+ℹ suites 2
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5361.533708

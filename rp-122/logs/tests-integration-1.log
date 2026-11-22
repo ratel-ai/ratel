@@ -1,0 +1,75 @@
+✔ run context carries the project, its organization, the session, the input and the replay source (3855.043166ms)
+✔ a pin is per session, tool and normalized arguments, and a new pin replaces the old one (441.064334ms)
+✔ recorded calls: real and approved session calls match regardless of key order; fakes and rejects never (502.867166ms)
+✔ recorded calls from the replay source: its trace or its conversation, never a fake span (435.769792ms)
+✔ production examples leave out fake spans (also the framework span of a fake call), playground spans, old spans and spans with no result (336.330167ms)
+✔ the ledger is one object per session, and the daily count goes up per project and day (262.919042ms)
+✔ a session with content yields its user messages in order and its recorded tool calls (3946.417375ms)
+✔ a session without message content is not replayable, with the reason (420.515542ms)
+✔ with the project's content opt-in off, the session is not replayable and no text is read (496.264416ms)
+✔ an unknown session, or one with only open turns, is not replayable (335.460458ms)
+✔ the sandbox of a stored session: by ratel.sandbox.id first, then by agent name (325.295834ms)
+✔ startRun inserts the run and its run.start command, then wakes the gateway (3828.741833ms)
+✔ startRun refuses a runner that is not the owner's, and an offline one (441.059166ms)
+✔ startRun keeps a session only for its owner and sandbox (480.497917ms)
+✔ appendEvents stores a resent seq once and acks the highest seq with no gap (443.323125ms)
+✔ readEventsAfter resumes after the reader's last seq in seq order (367.263ms)
+✔ a run.end event ends the run with its status, output and trace id (268.9495ms)
+✔ cancelRun sends run.cancel to the gateway of a live run, and only for its owner (256.141084ms)
+✔ markLost ends live runs with no lease for 60 s and leaves leased ones (192.018834ms)
+✔ pruneExpiredEvents deletes event rows of runs that ended over 7 days ago (170.662166ms)
+✔ readEventsAfter returns only the contiguous prefix; repaired rows follow once, in order (161.403958ms)
+✔ run.end past a gap does not end the run until the gap is repaired (161.525667ms)
+✔ a gap that is never repaired ends the run as lost (208.689167ms)
+✔ listRuns returns the owner's runs of one sandbox, newest first, with their end fields (279.784125ms)
+✔ listRuns caps the list at the limit (234.75325ms)
+✔ the newest production root of the sandbox gives the hash (3849.44525ms)
+✔ a production environment other than playground counts (402.841458ms)
+✔ no stamped root in the last 30 days gives null (588.545834ms)
+✔ recorded items are the sandbox's production item calls of the last 30 days, newest first, with input and reply (4050.068625ms)
+✔ recorded items can be read by span id, and an unknown or playground span is left out (422.8615ms)
+✔ an input that is not JSON stays as its text (392.803375ms)
+✔ trace metrics add the trace's tokens and cost, and take the latency of its root (348.998875ms)
+{"level":30,"time":1795322886582,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"94e6d50c-7988-4c7c-916d-003a7a3a0106","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ POST runs starts a run on the caller's runner and returns its id; another user's runner is refused (4069.982708ms)
+✔ an invalid override is refused with the param name, and a bad input with its path (408.613042ms)
+✔ the runners list marks only the caller's online runner startable, with its concurrency (334.113667ms)
+{"level":30,"time":1795322887593,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"f3b2f926-02ec-4b1f-9019-60b1c183149a","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ a replay run's run.start command carries its source trace and arm; a bad replay is a 400 (266.303458ms)
+✔ GET items lists the sandbox's recorded items with input and recorded output (230.281833ms)
+{"level":30,"time":1795322887977,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","sandbox_id":"workflow-label","n_items":2,"msg":"resolved sandbox compare items"}
+✔ POST compare resolves the picked items and refuses more than 50 (151.231416ms)
+{"level":30,"time":1795322888150,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"96612495-b8c1-4fdf-8505-56ef0e4a21e5","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ GET run metrics sums the run's trace once its spans are in; another user's run is not found (190.164209ms)
+✔ with cloud-sandboxes off every route answers 404 (153.21225ms)
+{"level":30,"time":1795322888524,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"953afe33-f4b0-46e3-9584-c0be6f72affb","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ GET runs lists only the caller's runs of the sandbox, newest first (206.057375ms)
+✔ GET runs without a sandbox id is a 400 (284.767833ms)
+{"level":30,"time":1795322889055,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4d6a59cb-e225-48aa-a50d-67158ad89405","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ cancel queues run.cancel for the caller's run (247.777167ms)
+{"level":30,"time":1795322889246,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"05e7959d-712f-4725-8c82-b8f17941397d","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ the SSE stream replays after Last-Event-ID, then delivers new events in order until the run ends (401.557375ms)
+{"level":30,"time":1795322889622,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4b8c21b2-64bc-49ca-b5e7-6a4d8bb9d8e0","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ the SSE stream never skips a seq that lands after a later one (582.089708ms)
+{"level":30,"time":1795322890237,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"f402bffd-aeeb-4b72-96b5-fc9451c60aa0","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ the stream stays open when run.end lands before an earlier seq, then delivers the rest in order (604.432834ms)
+{"level":30,"time":1795322890801,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"a91f4cb3-a108-4166-a60b-75ce230775d1","sandbox_id":"workflow-label","msg":"started sandbox run"}
+✔ a gap that is never repaired ends the stream as lost, without the rows past it (360.786167ms)
+{"level":30,"time":1795322891153,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"60e5bbec-455b-467c-92a6-34c38147f9ed","sandbox_id":"docs-agent","msg":"started sandbox run"}
+✔ a sideEffect tool cannot run real unless the manifest allows it (143.955ms)
+{"level":30,"time":1795322891303,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"46d50586-1b3e-4150-9aae-765a9b11ef4c","sandbox_id":"docs-agent","msg":"started sandbox run"}
+✔ confirm queues tool.confirm.decision for a pending confirm call only, once (160.729ms)
+{"level":30,"time":1795322891514,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"6bc728f8-3efd-40f8-895c-46a90c58807f","sandbox_id":"docs-agent","msg":"started sandbox run"}
+✔ pin stores a fake value under the normalized arguments, only in the caller's own session (208.407917ms)
+{"level":30,"time":1795322891756,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"0e40aeed-f5e2-4228-b920-a385f3127050","sandbox_id":"docs-agent","msg":"started sandbox run"}
+✔ pins of a replay session answer its runs only: not another session, not another project (250.857084ms)
+{"level":30,"time":1795322891759,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"8aa6464a-5eb5-4307-9c80-587d91093789","sandbox_id":"docs-agent","msg":"started sandbox run"}
+{"level":30,"time":1795322891763,"pid":7814,"hostname":"rstagis-MacBook-Pro-3.local","module":"sandboxes/run-api","project_id":"11111111-1111-4111-8111-111111111111","run_id":"612a3271-8be9-45df-8b8c-1970efffc5a8","sandbox_id":"docs-agent","msg":"started sandbox run"}
+ℹ tests 51
+ℹ suites 0
+ℹ pass 51
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11663.312458

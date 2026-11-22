@@ -1,0 +1,13 @@
+✔ FF_SHIP_MONITOR is a core switch, so an edition's flags port can decide it (0.531417ms)
+✔ OSS: off with nothing set, for the page and for an MCP caller (0.178625ms)
+✔ OSS: FF_SHIP_MONITOR turns the watch on, and only a true value does (0.090958ms)
+✔ Cloud: the flags port decides it for the organization, or for the caller and the project (0.539833ms)
+✔ Cloud: an FF_SHIP_MONITOR value in the environment comes first; a failed decision is off (0.117833ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 538.886

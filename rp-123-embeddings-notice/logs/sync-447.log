@@ -1,0 +1,14 @@
+
+copied (1)
+  src/components/console/embeddings/RegionNotice.tsx
+
+updated (3)
+  src/components/console/playground/MatchSettings.tsx
+  src/components/console/playground/PlaygroundWorkbench.tsx
+  src/components/console/playground/SearchForm.tsx
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/app/(app)/project/[projectId]/playground/page.tsx | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+applied 4 change(s) from a7dd7943

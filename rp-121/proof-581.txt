@@ -1,0 +1,40 @@
+$ FIXTURE=stema npx tsx proof-581.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+fixture=stema
+job=completed steps readings on page=false
+  tool journey: none
+  step journey: none
+  page draws ?steps=all: none
+  page draws ?steps=tools: none
+  page draws ?steps=models: none
+
+$ FIXTURE=stema FF_TYPED_STEPS=1 npx tsx proof-581.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+fixture=stema
+job=completed steps readings on page=true
+  tool journey: none
+  step journey: 11 turns; paths=[["code:Prepare response","model_call:Model call"]]
+  page draws ?steps=all: 11 turns; paths=[["code:Prepare response","model_call:Model call"]]
+  page draws ?steps=tools: none
+  page draws ?steps=models: 11 turns; paths=[["model_call:Model call"]]
+
+$ FIXTURE=cato npx tsx proof-581.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+fixture=cato
+job=completed steps readings on page=false
+  tool journey: 11 turns; paths=[["tool:lookup_sample"]]
+  step journey: none
+  page draws ?steps=all: 11 turns; paths=[["tool:lookup_sample"]]
+  page draws ?steps=tools: 11 turns; paths=[["tool:lookup_sample"]]
+  page draws ?steps=models: 11 turns; paths=[["tool:lookup_sample"]]
+
+$ FIXTURE=cato FF_TYPED_STEPS=1 npx tsx proof-581.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+fixture=cato
+job=completed steps readings on page=true
+  tool journey: 11 turns; paths=[["tool:lookup_sample"]]
+  step journey: 11 turns; paths=[["model_call:Model call","tool:lookup_sample","model_call:Model call"]]
+  page draws ?steps=all: 11 turns; paths=[["model_call:Model call","tool:lookup_sample","model_call:Model call"]]
+  page draws ?steps=tools: 11 turns; paths=[["tool:lookup_sample"]]
+  page draws ?steps=models: 11 turns; paths=[["model_call:Model call","model_call:Model call"]]
+

@@ -1,0 +1,21 @@
+$ npx tsx proof-580.mts   # no switch set
+CORE_FLAGS=["FF_EVAL_GATE","FF_RANKING_CATALOG_DRIFT","FF_MCP_APPS","FF_AGENTS_PAGES","FF_TOOL_RUN_INSIGHTS"]
+FF_TYPED_STEPS env=(unset) (no reader left)
+ratel     rows= 2 turns=1 steps=["agent>model_call"]
+bareChat  rows= 1 turns=1 steps=["model_call"]
+stema     rows= 2 turns=1 steps=["code>model_call"]
+vibiz     rows= 9 turns=2 steps=["agent>code>code>model_call>handoff>model_call>code","agent>model_call"]
+cato      rows= 4 turns=2 steps=["model_call>invoke>model_call","agent"]
+docs      rows= 5 turns=1 steps=["code>code>user_message>model_call>code>user_message>model_call"]
+stema x10 job=completed task_segments=10 summary.steps=true stepJourney=true
+
+$ FF_TYPED_STEPS=0 npx tsx proof-580.mts   # the old switch has no effect
+CORE_FLAGS=["FF_EVAL_GATE","FF_RANKING_CATALOG_DRIFT","FF_MCP_APPS","FF_AGENTS_PAGES","FF_TOOL_RUN_INSIGHTS"]
+FF_TYPED_STEPS env=0 (no reader left)
+ratel     rows= 2 turns=1 steps=["agent>model_call"]
+bareChat  rows= 1 turns=1 steps=["model_call"]
+stema     rows= 2 turns=1 steps=["code>model_call"]
+vibiz     rows= 9 turns=2 steps=["agent>code>code>model_call>handoff>model_call>code","agent>model_call"]
+cato      rows= 4 turns=2 steps=["model_call>invoke>model_call","agent"]
+docs      rows= 5 turns=1 steps=["code>code>user_message>model_call>code>user_message>model_call"]
+stema x10 job=completed task_segments=10 summary.steps=true stepJourney=true

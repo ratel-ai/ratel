@@ -1,0 +1,9 @@
+ℹ todo 0
+ℹ duration_ms 499.404125
+
+✖ failing tests:
+
+test at lib/views/code-handoff/gate.test.ts:1:1
+✖ lib/views/code-handoff/gate.test.ts (494.946375ms)
+  'test failed'
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@/lib' imported from ~/ratel-wt-rp-140/src/lib/views/code-handoff/gate.test.ts

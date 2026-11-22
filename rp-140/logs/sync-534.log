@@ -1,0 +1,59 @@
+
+copied (14)
+  src/lib/views/code-handoff/deploy/commits.ts
+  src/lib/views/code-handoff/deploy/deployed.test.ts
+  src/lib/views/code-handoff/deploy/deployed.ts
+  src/lib/views/code-handoff/deploy/detect-by-version.ts
+  src/lib/views/code-handoff/deploy/on-deployment-status.ts
+  src/lib/views/code-handoff/deploy/on-push.test.ts
+  src/lib/views/code-handoff/deploy/on-push.ts
+  src/lib/views/code-handoff/deploy/sdk-setup-ui.test.ts
+  src/lib/views/code-handoff/deploy/shipment-commits-ui.test.ts
+  src/lib/views/code-handoff/deploy/shipment-commits.ts
+  src/lib/views/code-handoff/deploy/signals.test.ts
+  src/lib/views/code-handoff/deploy/wiring.ts
+  src/components/console/code-handoff/deploy/ShipmentCommits.tsx
+  src/components/console/code-handoff/deploy/opened-shipment-commits.tsx
+
+updated (6)
+  src/lib/views/fixes/record-shipment.ts
+  src/components/console/home/SetupGuide.tsx
+  src/lib/console/onboarding/quickstart.ts
+  src/lib/console/onboarding/quickstart.test.ts
+  src/components/console/lineage/ShipmentsTable.tsx
+  src/lib/views/code-handoff/webhook-handler.test.ts
+
+owned, bootstrapped from upstream (now yours to maintain) (3)
+  src/lib/views/code-handoff/deploy/commits.integration.test.ts
+  src/lib/views/code-handoff/deploy/shipment-commits.integration.test.ts
+  src/lib/views/code-handoff/deploy/deploy-watch.integration.test.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |  13 +
+ .../(app)/project/[projectId]/settings/layout.tsx  |  14 +-
+ .../[projectId]/settings/repository/page.tsx       |  38 +++
+ .../app/(app)/project/[projectId]/ship/page.tsx    |   2 +
+ apps/web/components/dashboard/SdkQuickstart.tsx    |   7 +-
+ apps/web/components/home/v2/OverviewPage.tsx       |   8 +-
+ .../web/components/settings/v2/ApiKeysSettings.tsx |   3 +-
+ apps/web/components/settings/v2/SdkQuickstart.tsx  |   5 +-
+ apps/web/lib/analytics/track-server.ts             |   2 +
+ .../deploy/commits.integration.test.ts             |  31 +++
+ .../deploy/deploy-watch.integration.test.ts        | 207 ++++++++++++++
+ apps/web/lib/code-handoff/deploy/sdk-setup.ts      |  21 ++
+ .../deploy/shipment-commits.integration.test.ts    |  49 ++++
+ apps/web/lib/code-handoff/gate.ts                  |  59 ++++
+ .../code-handoff/link-service.integration.test.ts  | 307 +++++++++++++++++++++
+ .../web/lib/code-handoff/store.integration.test.ts | 146 ++++++++++
+ apps/web/lib/code-handoff/webhook-handler.ts       | 121 ++++++++
+ apps/web/lib/code-handoff/wiring.ts                |  67 +++++
+ apps/web/lib/cron/drain.ts                         |  17 ++
+ apps/web/lib/db/migrations/0109_code_handoff.sql   |  53 ++++
+ apps/web/lib/db/schema.ts                          | 102 +++++++
+ apps/web/lib/mcp/operations/account.test.ts        |   6 +-
+ apps/web/lib/mcp/operations/developer.test.ts      |  25 ++
+ apps/web/lib/mcp/operations/developer.ts           |  16 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   9 +-
+ 25 files changed, 1307 insertions(+), 21 deletions(-)
+
+applied 23 change(s) from 9536a15e

@@ -1,0 +1,10 @@
+✖ flag on, tenant.id configured: the resource value is kept, a span-level value wins (5.841833ms)
+✖ a failed pivot read stores the rows as before and logs the error (0.866833ms)
+✖ lib/ingest/otlp/span-rows.pivots.test.ts (490.0815ms)
+ℹ tests 5
+ℹ pass 2
+ℹ fail 3
+✖ failing tests:
+✖ flag on, tenant.id configured: the resource value is kept, a span-level value wins (5.841833ms)
+✖ a failed pivot read stores the rows as before and logs the error (0.866833ms)
+✖ lib/ingest/otlp/span-rows.pivots.test.ts (490.0815ms)

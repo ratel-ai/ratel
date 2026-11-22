@@ -1,0 +1,78 @@
+
+copied (20)
+  src/lib/ingest/otlp/__fixtures__/client-facts/README.md
+  src/lib/ingest/otlp/__fixtures__/client-facts/py-stdio-codex-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/py-stdio-codex-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-claude-code-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-claude-code-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-cursor-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-cursor-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/geo/GeoIP2-Country-Test.mmdb
+  src/lib/ingest/otlp/__fixtures__/geo/README.md
+  src/lib/ingest/otlp/client-session-store.ts
+  src/lib/ingest/otlp/dimensions/client-facts-support.ts
+  src/lib/ingest/otlp/dimensions/client-facts.integration.test.ts
+  src/lib/ingest/otlp/dimensions/client.test.ts
+  src/lib/ingest/otlp/dimensions/client.ts
+  src/lib/ingest/otlp/dimensions/geo.test.ts
+  src/lib/ingest/otlp/dimensions/geo.ts
+  src/lib/synthesis/traces/client-facts-gate.integration.test.ts
+  src/lib/synthesis/traces/client-facts-gate.ts
+  src/lib/mcp/operations/clients.test.ts
+  src/lib/mcp/operations/clients.ts
+
+updated (25)
+  src/lib/ingest/otlp/derive-tools.ts
+  src/lib/ingest/otlp/dimensions/index.test.ts
+  src/lib/ingest/otlp/dimensions/index.ts
+  src/lib/ingest/otlp/span-rows.ts
+  src/lib/ingest/otlp-raw/redact.test.ts
+  src/lib/ingest/otlp-raw/redact.ts
+  src/lib/ingest/otlp-raw/trace-raw-route.test.ts
+  src/lib/ingest/otlp-raw/trace-raw-route.ts
+  src/lib/synthesis/traces/compare.test.ts
+  src/lib/synthesis/traces/comparison.test.ts
+  src/lib/synthesis/traces/queries.ts
+  src/lib/synthesis/traces/trace-filters.ts
+  src/lib/synthesis/traces/tree.test.ts
+  src/lib/synthesis/traces/v2/filters.test.ts
+  src/lib/synthesis/traces/v2/filters.ts
+  src/lib/synthesis/traces/v2/views-ui.test.ts
+  src/lib/synthesis/traces/view.test.ts
+  src/lib/synthesis/traces/waterfall.test.ts
+  src/components/console/traces/SpanInspector.tsx
+  src/lib/mcp/telemetry/session.ts
+  src/lib/views/traces/trace-view-props.ts
+  src/lib/views/session-chat/trace-view-ui.test.ts
+  src/lib/views/mcp-servers/paths.test.ts
+  src/lib/views/mcp-servers/paths.ts
+  src/lib/views/mcp-servers/queries.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (2)
+  {"path":"src/lib/mcp/operations/clients.test.ts","specifier":"@/lib/clients/queries"}
+  {"path":"src/lib/mcp/operations/clients.ts","specifier":"@/lib/clients/queries"}
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |   4 +
+ apps/web/Dockerfile                                |  16 +++-
+ .../project/[projectId]/mcp/[server]/page.tsx      |   2 +-
+ .../web/app/(app)/project/[projectId]/mcp/page.tsx | 100 +++++++++++++++++++--
+ .../[projectId]/traces/[traceId]/trace-v2.tsx      |   4 +
+ .../[projectId]/traces/[traceId]/raw/route.ts      |   2 +-
+ apps/web/app/api/v1/traces/route.ts                |   4 +
+ apps/web/lib/analytics/track-server.ts             |   1 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 +++++
+ apps/web/lib/db/schema.ts                          |  27 ++++++
+ .../lib/mcp-servers/queries.integration.test.ts    |  10 +--
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  51 +++++++++++
+ apps/web/lib/mcp/operations/contract.test.ts       |   1 +
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/stages.ts                         |   1 +
+ apps/web/lib/otlp/ingest-spans.ts                  |  67 +++++++++++++-
+ apps/web/lib/otlp/route-handler.ts                 |   4 +
+ apps/web/lib/traces/summary-refresh.ts             |  20 ++++-
+ .../lib/traces/trace-filters.integration.test.ts   |  46 +++++++++-
+ apps/web/package.json                              |   1 +
+ 20 files changed, 363 insertions(+), 21 deletions(-)
+
+applied 45 change(s) from 945f7343

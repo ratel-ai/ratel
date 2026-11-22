@@ -1,0 +1,12 @@
+layers clean: 0 violations
+layers exit=0
+ee boundary clean: 0 violations
+ee exit=0
+no private strings under .
+private exit=0
+3418 upstream files at 1ce9942f
+  copy 1778, owned 551, excluded 1086
+  skipped as confidential 3 (paths not printed)
+
+every file has a decision
+undecided exit=0

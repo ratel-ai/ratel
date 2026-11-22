@@ -1,0 +1,216 @@
+✔ project settings tabs are URLs, with General matching its path exactly (1.384916ms)
+✔ organization settings show Danger zone only to the admins who can use it (0.269459ms)
+✔ a moved page keeps every query value, repeated keys included (0.261542ms)
+✔ tenant.id configured: the resource value is kept, a span-level value wins (10.797416ms)
+✔ no pivots configured, or no pivot deps: the rows equal the rows without pivots (3.602167ms)
+✔ a failed pivot read stores the rows as before and logs the error (2.54125ms)
+✔ the lookup reads once per project per minute, shares a read in flight, and forgets a failure (0.7245ms)
+✔ a configured key only on the resource is kept in attributes (2.709625ms)
+✔ the span's value wins over the resource's (0.589041ms)
+✔ only scalar, non-empty values; a long string is cut; unconfigured keys stay dropped (1.570542ms)
+✔ no pivot keys, or an empty set, store the same rows as before (1.8995ms)
+✔ seeded root spans give ranked candidates; child spans, old spans and other projects are not read (5774.571125ms)
+✔ the sample keeps the most recent rows up to its limit (544.613875ms)
+✔ ranks by coverage, then by distinct values (1.946583ms)
+✔ excludes a key whose value is different on each trace (0.152625ms)
+✔ excludes a key with one value only (0.098583ms)
+✔ excludes keys Ratel owns: gen_ai content, ratel.*, trace and span ids, long values, nested values, keys that cannot be added (0.126834ms)
+✔ marks keys that match a preset, including a gen_ai preset key (13.4815ms)
+✔ counts a trace once, reads numbers and booleans, skips empty strings, and drops configured keys (0.84225ms)
+✔ keeps at most the limit, and an empty sample gives nothing (0.909333ms)
+✔ presets: end user, session, environment and client company, each with ordered keys (1.508458ms)
+✔ pivotKeys: a preset reads its preset's keys, a custom pivot its one key (0.283ms)
+✔ validateCustomKey: trims, accepts attribute keys, refuses empty, long, odd characters and preset ids (0.317833ms)
+✔ validateLabel: trims and refuses empty or over 40 characters (0.171875ms)
+✔ planPivot: a preset gets its id as key, its name as default label, the next position (0.315291ms)
+✔ planPivot: a custom key gets its key as default label, or the label given (0.277792ms)
+✔ planPivot: refuses an unknown preset, a bad key, a bad label and a duplicate (0.113375ms)
+✔ planPivot: refuses a sixth pivot (0.089042ms)
+✔ planPivot: the next position follows the highest, even with gaps (0.0555ms)
+✔ sortPivots: by position, then key; the input is not changed (15.336875ms)
+✔ movePivot: up and down swap with the neighbour and renumber from 0 (0.382625ms)
+✔ movePivot: an edge move keeps the order, an unknown key is null (0.13ms)
+▶ createImportedRuns
+  ✔ hands the pivot keys to ingest (RC-883) (6.42675ms)
+  ✔ stores spans as an import: no allowance spent, no fold kick, the build queued without a drain (1.748125ms)
+  ✔ asks for a manual reading, and drains only where this process runs jobs (0.201625ms)
+  ✔ queues a job and schedules the project's drain (0.681958ms)
+  ✔ registers the importer's source ids with the ledger (0.236625ms)
+✔ createImportedRuns (33.87725ms)
+✔ the demo project does not count toward the project limit, as in the console (23.071834ms)
+✔ Enterprise limits say unlimited rather than serializing as null (2.755083ms)
+✔ plan and subscription state come from the same helpers as the Billing page (20.008041ms)
+✔ match quality not on the plan says so (3.841666ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (8.76225ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.99625ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (3.688417ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (15.104916ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (12.257125ms)
+{"level":50,"time":1795330106362,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (105.4645ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (32.846542ms)
+✔ without an edition's name the 401 realm stays ratel (0.532583ms)
+✔ an older protocol version still negotiates (24.784375ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (54.398208ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (45.072041ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.435208ms)
+✔ every tool definition is exactly what the fixture pins (50.789375ms)
+✔ each staged tool publishes its stage, and only that, as _meta (23.099625ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (29.990417ms)
+✔ each tool carries the annotations the Claude directory reviews (19.623625ms)
+✔ no tool description tells the model what to do first (33.764459ms)
+✔ calling a tool runs its operation and reports failures in-band (54.571792ms)
+✔ an unregistered tool name is refused by the transport (12.282209ms)
+✔ a notification is accepted with no body (14.610625ms)
+✔ a missing credential is rejected before any protocol work (0.911125ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (61.678834ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (9.131083ms)
+✔ an exhausted rate limit returns 429 with Retry-After (18.218208ms)
+✔ malformed JSON gets the reserved parse-error code (0.783584ms)
+✔ an oversized batch is refused rather than amplified (1.210375ms)
+✔ GET and DELETE explain that this endpoint is stateless (2.396334ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.906583ms)
+✔ the 401 from a failed verification still advertises where to authenticate (1.926208ms)
+✔ repeated bad credentials stop reaching the authenticator at all (1.865833ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.820583ms)
+✔ successful calls are never charged to the failure budget (128.626167ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (15.493167ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.365542ms)
+{"level":50,"time":1795330106370,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795330106495,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795330106687,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-139/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-139/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-139/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-139/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-139/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-139/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-139/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795330106707,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":33,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795330106735,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795330106806,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795330106824,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795330106826,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795330106829,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:414:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:418:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795330106831,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:430:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:434:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795330106833,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330106833,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330106833,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795330106836,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330106836,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795330106836,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795330106981,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795330106981,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330106981,"pid":84552,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ the sweep fills dims: root span first, the preset's key order, then the earliest span, values capped (5466.510041ms)
+✔ a project with no pivots gets {} and every summary column the no-pivot path writes (762.209667ms)
+{"level":30,"time":1795330106944,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"client","outcome":"pivot_created","msg":"pivots changed"}
+✔ a pivot change queues one refill; the refill fills dims in the retention window, idempotent (381.693625ms)
+{"level":30,"time":1795330106948,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"customer.tier","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330106962,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"customer.tier","outcome":"pivot_deleted","msg":"pivots changed"}
+{"level":30,"time":1795330106978,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/refill","project_id":"11111111-1111-4111-8111-111111111111","traces":2,"batches":1,"walks":1,"resumed":false,"msg":"pivot dims refilled"}
+{"level":30,"time":1795330106991,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/refill","project_id":"11111111-1111-4111-8111-111111111111","traces":2,"batches":1,"walks":1,"resumed":false,"msg":"pivot dims refilled"}
+{"level":30,"time":1795330107287,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/refill","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"batches":1,"walks":1,"resumed":true,"msg":"pivot dims refilled"}
+✔ the refill resumes where a dead job stopped, and walks again when pivots change during it (344.448583ms)
+{"level":30,"time":1795330107336,"pid":85546,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/refill","project_id":"11111111-1111-4111-8111-111111111111","traces":6,"batches":6,"walks":2,"resumed":false,"msg":"pivot dims refilled"}
+✔ the bar filters by the configured pivots, keys and labels only (1.512125ms)
+✔ a project with no pivot has no pivot filter (0.117167ms)
+✔ the table has a row per value, Other and (none), and a value links to filtered Sessions (97.032666ms)
+✔ with more than one pivot the table offers the picker (11.321125ms)
+✔ the picked pivot is the configured one the URL names, else the first, else none (1.261041ms)
+✔ a value row links to Sessions filtered by it; Other and (none) link nowhere (2.932ms)
+✔ picking another pivot keeps the window (0.209375ms)
+✔ per value: runs, error rate, p50 and cost, most runs first, then the (none) row (4763.881708ms)
+✔ past the top values the rest fold into Other, its p50 over its own runs (406.368042ms)
+✔ an empty window has no rows (331.471959ms)
+{"level":30,"time":1795330106892,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"client","outcome":"pivot_created","msg":"pivots changed"}
+✔ add a preset and a custom key: listed in order and tracked as pivot_created (4715.593958ms)
+{"level":30,"time":1795330106896,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"customer.tier","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107139,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+✔ rename and move: pivot_updated with the change; positions stay 0..n-1 (260.591ms)
+{"level":30,"time":1795330107144,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107148,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107151,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_updated","msg":"pivots changed"}
+{"level":30,"time":1795330107160,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_updated","msg":"pivots changed"}
+{"level":30,"time":1795330107395,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"end_user","outcome":"pivot_created","msg":"pivots changed"}
+✔ remove: the others close the gap, tracked as pivot_deleted (245.298167ms)
+{"level":30,"time":1795330107397,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107399,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107405,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"end_user","outcome":"pivot_deleted","msg":"pivots changed"}
+{"level":30,"time":1795330107406,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}
+{"level":30,"time":1795330107591,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+✔ the sixth pivot and a duplicate are refused, and nothing is written (195.157709ms)
+{"level":30,"time":1795330107592,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"b","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107593,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"c","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107596,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"d","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107597,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"e","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330107597,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"limit","msg":"pivots change refused"}
+{"level":30,"time":1795330107600,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"e","outcome":"pivot_deleted","msg":"pivots changed"}
+{"level":30,"time":1795330107600,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"duplicate","msg":"pivots change refused"}
+✔ the store keeps the limit when two adds race past the domain check (161.479209ms)
+{"level":30,"time":1795330107938,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+✔ scoped to the person's project: another project, a non-member and a support session are refused (179.656625ms)
+{"level":30,"time":1795330107938,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795330107938,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795330107938,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"pivots change refused"}
+{"level":30,"time":1795330107938,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"restricted","msg":"pivots change refused"}
+{"level":30,"time":1795330108143,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_key","msg":"pivots change refused"}
+✔ invalid input is refused with its message (208.489667ms)
+{"level":30,"time":1795330108145,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"unknown_preset","msg":"pivots change refused"}
+{"level":30,"time":1795330108147,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","pivot_key":"a","outcome":"pivot_created","msg":"pivots changed"}
+{"level":30,"time":1795330108148,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_label","msg":"pivots change refused"}
+{"level":30,"time":1795330108150,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}
+{"level":30,"time":1795330108151,"pid":86806,"hostname":"rstagis-MacBook-Pro-3.local","module":"pivots/settings","project_id":"11111111-1111-4111-8111-111111111111","outcome":"missing","msg":"pivots change refused"}
+✔ refresh summarizes each trace from its canonical whole-trace representative (4390.446041ms)
+✔ refresh recomputes a trace in full when later spans arrive (263.477209ms)
+✔ refresh is idempotent — a replayed cursor recomputes rather than accumulates (234.980291ms)
+✔ refresh advances the cursor to the last span it folded in (175.26925ms)
+✔ refresh honors its batch and time budget, then resumes from the cursor (211.970292ms)
+✔ refresh skips spans newer than the visibility lag until they settle (217.577041ms)
+✔ refresh releases its advisory lock and yields to a contending tick (216.873291ms)
+✔ an empty filter has no condition, as before pivots (1.350084ms)
+✔ a pivot value is a containment on dims, so the GIN index serves it (1.666167ms)
+✔ values of one pivot are alternatives, pivots combine with AND (0.395792ms)
+✔ a key that no pivot can have is ignored (0.336417ms)
+✔ the pivot condition joins the other properties (0.5735ms)
+✔ without pivots the facet query is the same SQL as on main (2.190833ms)
+✔ with pivots the facet query also counts each pivot's values from dims (0.140958ms)
+✔ with the flag off, Sessions shows no filter bar (12.112875ms)
+✔ with the flag on, Sessions shows the bar with the URL's chips and no name search (16.054292ms)
+✔ with cloud-project-entities on, the bar shows the agent and MCP server chips from the URL (3.957ms)
+✔ with cloud-project-entities off, facetAgent and facetServer in the URL show no chip (6.517375ms)
+✔ the bar shows a configured pivot's chip with its label and raw value (3.53175ms)
+✔ with no pivot configured, pivot parameters in the URL show no chip (5.165875ms)
+✔ every narrowing parameter becomes a chip, so no filter hides (2.201708ms)
+✔ exact experiment links read as exact, and removing the last tag drops exactTags (0.520291ms)
+✔ removing a chip drops the page cursor and the open row, and keeps the rest (0.1865ms)
+✔ measures read as ranges in plain units (13.007167ms)
+✔ logs only show the filters that narrow logs (0.139875ms)
+✔ clear filters keeps the window, sort, view options and the compare selection (0.2175ms)
+✔ the search box writes the name filter and Logs retire the old event-name param (0.207ms)
+✔ the add-filter popover offers the values seen in the window, with counts only in the span unit (0.645375ms)
+✔ toggling a value adds or removes it; single-value fields replace (0.397916ms)
+✔ a preset window replaces custom days; switching tabs leaves the page and open row behind (0.304125ms)
+✔ grouped Spans apply the variant and top-level filters their chips show (1.76275ms)
+✔ traceFilterFromSearch reads the rollup filters from the URL (RC-505) (0.259166ms)
+✔ rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip (0.3095ms)
+✔ rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds (0.221625ms)
+✔ with the entity filters on, facetAgent and facetServer are read, shown as chips and offered as fields (0.338375ms)
+✔ with the entity filters off, facetAgent and facetServer are ignored and no facet shows (0.733167ms)
+✔ only configured pivot keys are read from the URL (0.194833ms)
+✔ a pivot filter shows as a chip with the pivot label and the raw value (0.0815ms)
+✔ the bar offers one field per configured pivot with its values, only with pivots (0.695417ms)
+✔ toggling a pivot value adds and removes it in the URL, and clear removes it (0.130458ms)
+✔ a pivot link filters Sessions or Turns by one value (0.092708ms)
+✔ 50 facet values and one selected value outside them give 50 options, the selected one first (0.223334ms)
+✔ a selected value inside the facets moves first and is not offered twice (0.170833ms)
+✔ more than 50 URL values for one pivot: the first 50 filter, and the control has 50 options (0.324291ms)
+✔ with fewer than 50 facet values and no outside selection the pivot options are as before (0.21625ms)
+✔ the non-pivot controls keep their options: no cap, a selected outside value on top (0.525375ms)
+✔ the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3) (0.076042ms)
+✔ facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778) (0.301ms)
+✔ FF_CUSTOM_DASHBOARDS is a core switch, so an edition's flags port can decide it (0.392375ms)
+✔ OSS: off with nothing set; FF_CUSTOM_DASHBOARDS or RATEL_EXPERIMENTAL_FEATURES turns it on (0.134459ms)
+✔ Cloud: the port decides for the person, and for an MCP caller with the project (0.422209ms)
+✔ Cloud: an operator's FF_CUSTOM_DASHBOARDS comes first; a failed decision is off (0.091208ms)
+ℹ tests 148
+ℹ suites 1
+ℹ pass 148
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12327.83525

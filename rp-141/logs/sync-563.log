@@ -1,0 +1,64 @@
+
+copied (15)
+  src/lib/views/fine-tuning/adapters/drizzle-dataset-store.ts
+  src/lib/views/fine-tuning/build-deps.ts
+  src/lib/views/fine-tuning/build-route-deps.ts
+  src/lib/views/fine-tuning/build.ts
+  src/lib/views/fine-tuning/datasets-api.ts
+  src/lib/views/fine-tuning/domain/dataset.ts
+  src/lib/views/fine-tuning/domain/redaction.ts
+  src/lib/views/fine-tuning/domain/rows.ts
+  src/lib/views/fine-tuning/tests/build.integration.test.ts
+  src/lib/views/fine-tuning/tests/datasets-api.test.ts
+  src/lib/views/fine-tuning/tests/redaction.test.ts
+  src/lib/views/fine-tuning/tests/rows.test.ts
+  src/components/console/fine-tuning/DatasetsPanel.tsx
+  src/app/(console)/project/[projectId]/fine-tuning/[useCase]/page.tsx
+  src/app/api/projects/[projectId]/fine-tuning/use-cases/[useCaseId]/datasets/route.ts
+
+updated (12)
+  src/lib/jobs/policy.ts
+  src/lib/mcp/operations/fine-tuning.test.ts
+  src/lib/views/lineage/refs.ts
+  src/lib/views/lineage/types.test.ts
+  src/lib/views/lineage/types.ts
+  src/lib/views/eval-gate/calls.ts
+  src/lib/views/fine-tuning/adapters/drizzle-store.ts
+  src/lib/views/fine-tuning/consent-api.ts
+  src/lib/views/fine-tuning/ports/store.ts
+  src/components/console/fine-tuning/UseCasesPanel.tsx
+  src/app/(console)/project/[projectId]/fine-tuning/page.tsx
+  src/app/api/projects/[projectId]/fine-tuning/consent/route.ts
+
+owned, bootstrapped from upstream (now yours to maintain) (2)
+  src/lib/platform/db/migrations/0053_fine_tuning_datasets.sql
+  src/lib/platform/db/migrations/meta/0053_snapshot.json
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/components/shell/AppFrame.tsx             |   9 +-
+ apps/web/components/shell/nav-icons.ts             |   2 +
+ apps/web/components/shell/types.ts                 |   2 +
+ apps/web/lib/analytics/track-server.ts             |   8 +
+ .../db/migrations/0111_fine_tuning_consents.sql    |  17 ++
+ .../db/migrations/0112_fine_tuning_use_cases.sql   |  18 ++
+ .../db/migrations/0113_fine_tuning_datasets.sql    |  49 ++++
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 ++
+ apps/web/lib/db/schema.ts                          | 131 +++++++++
+ apps/web/lib/fine-tuning/flag.ts                   |  71 +++++
+ .../tests/drizzle-store.integration.test.ts        |  87 ++++++
+ apps/web/lib/fine-tuning/tests/flag.test.ts        |  47 ++++
+ .../fine-tuning/tests/resolve.integration.test.ts  | 249 +++++++++++++++++
+ apps/web/lib/jobs/handlers.ts                      |   2 +
+ apps/web/lib/jobs/runner.ts                        |   3 +-
+ apps/web/lib/mcp/__fixtures__/tools-list.json      | 294 +++++++++++++++++++++
+ apps/web/lib/mcp/operations/account.test.ts        |   1 +
+ apps/web/lib/mcp/operations/contract.test.ts       |   6 +
+ apps/web/lib/mcp/operations/fine-tuning.ts         | 195 ++++++++++++++
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/mcp/stages.ts                         |   6 +
+ apps/web/lib/navigation/v2.test.ts                 |  18 ++
+ apps/web/lib/navigation/v2.ts                      |  29 +-
+ 24 files changed, 1251 insertions(+), 17 deletions(-)
+
+applied 29 change(s) from 0432eb27

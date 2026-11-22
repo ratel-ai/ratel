@@ -1,0 +1,55 @@
+
+copied (6)
+  src/lib/ingest/variants/domain/tags.ts
+  src/lib/ingest/variants/domain/tags.test.ts
+  src/lib/ingest/variants/domain/mappings.ts
+  src/lib/ingest/variants/domain/mappings.test.ts
+  src/lib/ingest/variants/mappings-store.ts
+  src/components/console/settings/VariantMappingsForm.tsx
+
+updated (1)
+  src/lib/ingest/otlp/span-rows.test.ts
+
+owned, bootstrapped from upstream (now yours to maintain) (7)
+  src/lib/ingest/variants/ingest.integration.test.ts
+  src/lib/console/variants/mapping-actions.ts
+  src/lib/console/variants/mappings.integration.test.ts
+  src/app/(console)/project/[projectId]/settings/variant-actions.ts
+  src/components/console/settings/VariantMappingsSection.tsx
+  src/lib/platform/db/migrations/0050_variant_experiments.sql
+  src/lib/platform/db/migrations/meta/0050_snapshot.json
+
+unmapped @/lib specifiers (add a map or rewrite rule) (3)
+  {"path":"src/lib/console/variants/mapping-actions.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/app/(console)/project/[projectId]/settings/variant-actions.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/components/console/settings/VariantMappingsSection.tsx","specifier":"@/lib/flags-ingest"}
+
+owned files changed upstream since the last sync; port by hand:
+.../[projectId]/settings/variant-actions.ts        |  63 ++++++++++
+ .../settings/variant-mappings-section.test.ts      |  11 ++
+ .../web/components/settings/v2/GeneralSettings.tsx |   4 +-
+ .../settings/v2/VariantMappingsSection.tsx         |  50 ++++++++
+ apps/web/lib/analytics/track-server.ts             |   2 +
+ apps/web/lib/db/migrations/0110_variant_tags.sql   |  22 ++++
+ .../migrations/0111_variant_attribute_mappings.sql |  12 ++
+ apps/web/lib/db/migrations/meta/_journal.json      |  14 +++
+ apps/web/lib/db/schema.ts                          |  43 +++++++
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/otlp/ingest-spans.ts                  |  29 ++++-
+ apps/web/lib/otlp/span-rows.ts                     |  45 ++++++-
+ apps/web/lib/session-chat/trace-view-ui.test.ts    |   3 +
+ apps/web/lib/traces/compare.test.ts                |   3 +
+ apps/web/lib/traces/comparison.test.ts             |   3 +
+ .../lib/traces/summary-refresh.integration.test.ts |  55 +++++++++
+ apps/web/lib/traces/summary-refresh.ts             |  33 ++++-
+ apps/web/lib/traces/tree.test.ts                   |   3 +
+ apps/web/lib/traces/v2/views-ui.test.ts            |   3 +
+ apps/web/lib/traces/view.test.ts                   |   3 +
+ apps/web/lib/traces/waterfall.test.ts              |   3 +
+ apps/web/lib/variants/flag.ts                      |  38 ++++++
+ apps/web/lib/variants/ingest.integration.test.ts   | 136 +++++++++++++++++++++
+ apps/web/lib/variants/mapping-actions.ts           |  98 +++++++++++++++
+ apps/web/lib/variants/mappings.integration.test.ts | 108 ++++++++++++++++
+ 25 files changed, 779 insertions(+), 6 deletions(-)
+
+applied 14 change(s) from 5d22f2fc

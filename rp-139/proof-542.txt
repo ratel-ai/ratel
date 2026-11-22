@@ -1,0 +1,11 @@
+(commit e609b823)
+$ npx tsx scripts/.proof-542.mts
+FF_CUSTOM_DASHBOARDS=(unset)
+createDashboard: {"ok":false,"code":"not_found","error":"That dashboard does not exist, or it is not shared with you."}
+MCP list_dashboards: {"ok":false,"error":"forbidden","message":"Custom dashboards are not available for this project.","reason":"custom_dashboards_off"}
+
+$ FF_CUSTOM_DASHBOARDS=1 npx tsx scripts/.proof-542.mts
+FF_CUSTOM_DASHBOARDS=1
+createDashboard: {"ok":true,"dashboard":{"id":"08eb2588-07cb-4b10-a39d-f35618f14dc4","projectId":"11111111-1111-4111-8111-111111111111","name":"Cost by client","createdBy":"user_alice","sharing":"private","createdAt":"2026-11-22T06:41:56.811Z","updatedAt":"2026-11-22T06:41:56.811Z"}}
+widget cost by client: {"kind":"groups","groupBy":"pivot:client","groups":[{"key":"acme","value":0.75,"runs":2},{"key":"globex","value":1,"runs":1}],"other":null}
+MCP list_dashboards: {"dashboards":[{"id":"08eb2588-07cb-4b10-a39d-f35618f14dc4","name":"Cost by client","sharing":"project","createdAt":"2026-11-22T06:41:56.811Z","updatedAt":"2026-11-22T06:41:56.823Z","href":"/project/11111111-1111-4111-8111-111111111111/dashboards/08eb2588-07cb-4b10-a39d-f35618f14dc4"}]}

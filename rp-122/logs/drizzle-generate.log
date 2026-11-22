@@ -1,0 +1,15 @@
+sandbox_fake_usage 3 columns 0 indexes 1 fks
+sandbox_run_events 5 columns 0 indexes 1 fks
+sandbox_runners 13 columns 2 indexes 1 fks
+sandbox_runs 22 columns 4 indexes 3 fks
+sandbox_sessions 8 columns 1 indexes 2 fks
+session_replay_runs 24 columns 3 indexes 1 fks
+session_replay_settings 3 columns 0 indexes 1 fks
+task_eval_cases 13 columns 0 indexes 2 fks
+task_eval_runs 25 columns 3 indexes 2 fks
+task_eval_sets 5 columns 0 indexes 1 fks
+task_test_drafts 6 columns 1 indexes 1 fks
+task_scorers 9 columns 0 indexes 1 fks
+task_scores_daily 8 columns 0 indexes 1 fks
+
+[✓] Your SQL migration file ➜ lib/platform/db/migrations/0045_sandboxes.sql 🚀

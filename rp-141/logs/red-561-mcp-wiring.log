@@ -1,0 +1,24 @@
+✔ the demo project does not count toward the project limit, as in the console (21.57225ms)
+✔ Enterprise limits say unlimited rather than serializing as null (3.647167ms)
+✔ plan and subscription state come from the same helpers as the Billing page (15.017416ms)
+✔ match quality not on the plan says so (1.490709ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.657625ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (0.840292ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.14075ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.165208ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (1.711792ms)
+✔ ids are unique, snake_case, and stable-looking (1.028708ms)
+✔ every operation is discoverable: title, description, known domain (0.370417ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.392875ms)
+✔ every params schema converts to JSON Schema for discovery (11.543041ms)
+✔ write operations are exactly those declaring mutates (0.731334ms)
+✔ read-only assembly drops every mutating operation (8.810834ms)
+✔ the operation contract matches the reviewed snapshot (9.397583ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7667.162459

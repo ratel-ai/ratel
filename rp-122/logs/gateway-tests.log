@@ -1,0 +1,24 @@
+
+> @ratel/gateway@0.1.0 test ~/ratel-wt-rp-122/packages/gateway
+> NODE_ENV=test tsx --tsconfig tsconfig.json --test --test-force-exit --test-concurrency=1 test/*.test.ts
+
+✔ every valid message fixture passes and fits in a frame (7.689167ms)
+✔ every valid manifest fixture passes (0.498833ms)
+✔ every invalid message fixture fails, by schema or by frame size (1.164375ms)
+✔ every invalid manifest fixture fails (0.827625ms)
+✔ a run started by the store reaches the worker as run.start, and its events are stored once and acked (372.282584ms)
+✔ a worker that resends after a reconnect gets every event stored once and acked with the highest seq (46.840875ms)
+✔ a gateway restart re-reads unacked commands and loses none (58.650041ms)
+✔ a run with no lease within the lease timeout is marked lost (554.231708ms)
+✔ a frame about another owner's run closes the socket (39.765334ms)
+✔ SIGTERM sends drain to every runner before the process exits (871.557875ms)
+✔ a gateway restart mid-run with a live reader: the reader sees every seq once, in order (59.525667ms)
+✔ a fake request is answered on the socket; over the daily cap the run fails with the generic run_failed and the worker gets run.cancel (86.073833ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3029.013167

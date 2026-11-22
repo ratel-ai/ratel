@@ -1,0 +1,14 @@
+✔ FF_FINE_TUNING is a core switch, so an edition's flags port can decide it (0.841208ms)
+✔ OSS: off with nothing set; FF_FINE_TUNING or RATEL_EXPERIMENTAL_FEATURES turns it on (0.458416ms)
+✔ Cloud: the port decides in the project's organization, for the person or a caller with no session (0.649917ms)
+✔ Cloud: an operator's FF_FINE_TUNING comes first; a failed decision is off (0.174583ms)
+✔ a decision that throws: off, one error logged with err, one exception reported (0.221583ms)
+✔ a switch that is on lists the organization and logs nothing (0.340375ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 862.997292

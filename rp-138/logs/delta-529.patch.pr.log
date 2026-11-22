@@ -1,0 +1,90 @@
+
+copied (2)
+  src/lib/ingest/otlp/agent-payload.integration.test.ts
+  src/lib/synthesis/traces/span-client-facts.integration.test.ts
+
+updated (13)
+  src/lib/synthesis/traces/trace-filters.ts
+  src/lib/synthesis/traces/v2/filters-ui.test.ts
+  src/lib/synthesis/traces/v2/filters.test.ts
+  src/lib/synthesis/traces/v2/filters.ts
+  src/components/console/traces/RunsView.tsx
+  src/components/console/traces/TraceFilterBar.tsx
+  src/components/console/traces-sessions/SessionListView.tsx
+  src/lib/mcp/operations/agents.test.ts
+  src/lib/mcp/operations/clients.test.ts
+  src/lib/mcp/operations/mcp-servers.test.ts
+  src/lib/views/agents/overrides-api.ts
+  src/lib/views/agents/tests/overrides-api.test.ts
+  src/app/api/projects/[projectId]/agents/overrides/route.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |   4 +
+ apps/web/Dockerfile                                |  16 +-
+ apps/web/README.md                                 |   2 +-
+ .../project/[projectId]/agents/context.test.ts     |  16 +-
+ .../(app)/project/[projectId]/agents/context.ts    |  11 +-
+ .../app/(app)/project/[projectId]/agents/page.tsx  |   2 +-
+ .../project/[projectId]/mcp/[server]/page.tsx      |   2 +-
+ .../app/(app)/project/[projectId]/mcp/context.ts   |   6 +-
+ .../web/app/(app)/project/[projectId]/mcp/page.tsx | 109 +++++++-
+ .../project/[projectId]/traces/(tabs)/runs-v2.tsx  |  13 +-
+ .../[projectId]/traces/[traceId]/trace-v2.tsx      |   1 +
+ .../[projectId]/traces/[traceId]/raw/route.ts      |   2 +-
+ .../projects/[projectId]/traces/sessions/route.ts  |   9 +-
+ apps/web/app/api/v1/traces/route.ts                |   4 +
+ apps/web/components/clients/ClientsFilters.tsx     |  43 ++++
+ apps/web/components/ds/detection-marker.tsx        |  42 +++
+ .../components/traces-sessions/SessionListPage.tsx |  11 +-
+ apps/web/components/traces/v2/SpanInspector.tsx    |  32 +++
+ .../agents/tests/drizzle-store.integration.test.ts |  29 +++
+ apps/web/lib/analytics/track-server.ts             |   1 +
+ .../clients/client-ip-access.integration.test.ts   | 211 +++++++++++++++
+ apps/web/lib/clients/queries.integration.test.ts   | 146 +++++++++++
+ apps/web/lib/db/migrations/0111_client_facts.sql   |  18 ++
+ apps/web/lib/db/migrations/0112_client_geo.sql     |  12 +
+ .../db/migrations/0113_trace_summary_harnesses.sql |   8 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 ++
+ apps/web/lib/db/schema.ts                          |  27 ++
+ .../lib/mcp-servers/queries.integration.test.ts    |  12 +-
+ apps/web/lib/mcp-servers/setup-guide.ts            | 272 ++++++++++++++++++++
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  53 +++-
+ apps/web/lib/mcp/operations/account.test.ts        |   6 +-
+ apps/web/lib/mcp/operations/agents.ts              |  19 +-
+ apps/web/lib/mcp/operations/clients.ts             |  90 +++++++
+ apps/web/lib/mcp/operations/contract.test.ts       |   1 +
+ apps/web/lib/mcp/operations/developer.test.ts      |   9 +
+ apps/web/lib/mcp/operations/developer.ts           |   5 +-
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/operations/mcp-servers.ts         |  19 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   9 +-
+ apps/web/lib/mcp/stages.ts                         |   1 +
+ apps/web/lib/navigation/v2.ts                      |   4 +-
+ apps/web/lib/otlp-raw/trace-raw-route.test.ts      |  28 +-
+ apps/web/lib/otlp-raw/trace-raw-route.ts           |   9 +-
+ apps/web/lib/otlp/client-session-store.ts          | 111 ++++++++
+ .../lib/otlp/dimensions/client-facts-support.ts    | 116 +++++++++
+ .../dimensions/client-facts.integration.test.ts    | 285 +++++++++++++++++++++
+ apps/web/lib/otlp/dimensions/client.ts             | 257 +++++++++++++++++++
+ apps/web/lib/otlp/dimensions/geo.test.ts           |  98 +++++++
+ apps/web/lib/otlp/dimensions/index.ts              |  25 +-
+ apps/web/lib/otlp/ingest-spans.ts                  |  67 ++++-
+ apps/web/lib/otlp/route-handler.ts                 |   4 +
+ apps/web/lib/otlp/span-rows.ts                     |  39 ++-
+ apps/web/lib/project-entities/flag.ts              |  15 --
+ apps/web/lib/session-chat/trace-view-ui.test.ts    |   8 +
+ apps/web/lib/traces/compare.test.ts                |   8 +
+ apps/web/lib/traces/comparison.test.ts             |   8 +
+ apps/web/lib/traces/queries.ts                     |  19 +-
+ apps/web/lib/traces/summary-refresh.ts             |  20 +-
+ .../lib/traces/trace-filters.integration.test.ts   |  58 ++++-
+ apps/web/lib/traces/tree.test.ts                   |   8 +
+ apps/web/lib/traces/v2/trace-view-props.ts         |  22 +-
+ apps/web/lib/traces/v2/views-ui.test.ts            |   8 +
+ apps/web/lib/traces/view.test.ts                   |   8 +
+ apps/web/lib/traces/waterfall.test.ts              |   8 +
+ apps/web/package.json                              |   1 +
+ apps/web/scripts/fetch-geo-db.mjs                  |  51 ++++
+ 66 files changed, 2425 insertions(+), 156 deletions(-)
+
+applied 15 change(s) from 91c63323

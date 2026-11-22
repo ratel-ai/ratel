@@ -1,0 +1,57 @@
+✔ list_use_cases returns the use cases; get_use_case adds turns, calls, dates, model and cost per run (17.201083ms)
+✔ create_use_case creates as the key's project and emits one event; an empty selector or a taken name is refused (2.981042ms)
+✔ every tool refuses as forbidden with FF_FINE_TUNING off, and reads or writes nothing (1.307333ms)
+{"level":30,"time":1795335802466,"pid":19650,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"given","msg":"training consent given"}
+✔ an admin gives the opt-in: the row holds the Clerk id, the time and the text version, and one event (29.799791ms)
+✔ giving it again changes nothing and emits no event (0.945708ms)
+✔ an admin withdraws it: the datasets are deleted and one event is emitted (1.120417ms)
+✔ withdrawing with no opt-in is refused, but the datasets are still deleted (0.576041ms)
+✔ a member reads the opt-in and the text, but cannot give or withdraw it (2.101334ms)
+✔ signed out, not a member, flag off, a support session, a stale text or a bad body change nothing (4.222208ms)
+✔ a store failure is not swallowed (6.395875ms)
+{"level":30,"time":1795335802472,"pid":19650,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"already_given","msg":"training consent given"}
+{"level":30,"time":1795335802473,"pid":19650,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"withdrawn","msg":"training consent withdrawn"}
+{"level":30,"time":1795335802474,"pid":19650,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"not_given","msg":"training consent withdrawal refused"}
+✔ a grant holds the Clerk id, the time and the text version, and a second grant returns the first (2240.159917ms)
+✔ project B cannot read or withdraw the grant of project A (268.747666ms)
+✔ a withdrawal stamps who and when, keeps the row, and a new grant is a new row (231.453167ms)
+✔ FF_FINE_TUNING is a core switch, so an edition's flags port can decide it (2.010958ms)
+✔ OSS: off with nothing set; FF_FINE_TUNING or RATEL_EXPERIMENTAL_FEATURES turns it on (0.450917ms)
+✔ Cloud: the port decides in the project's organization, for the person or a caller with no session (0.992875ms)
+✔ Cloud: an operator's FF_FINE_TUNING comes first; a failed decision is off (0.803958ms)
+✔ a decision that throws: off, one error logged with err, one exception reported (0.636833ms)
+✔ a switch that is on lists the organization and logs nothing (0.206916ms)
+✔ one task resolves to its closed turns and their calls, never another task's or another project's (2379.747083ms)
+✔ the call filter by model or by span name removes the other calls of the same turn (267.367291ms)
+✔ an intent resolves to the turn its prompt landed in; the date range bounds the turns (225.2505ms)
+✔ the stats of one task: its closed turns, its calls, its model and the stored cost per run (222.144292ms)
+✔ the task picker lists the project's tasks with closed turns, busiest first (216.331833ms)
+✔ use cases are scoped to their project, names are unique among live ones, and archiving frees the name (219.449917ms)
+✔ cost per run averages the runs whose calls are all priced, by hand: (0.03 + 0.05) / 2 = 0.04 (4.93525ms)
+✔ with no priced run the cost per run is Unpriced (null), not zero (0.412208ms)
+✔ the current model is the most used one; a tie goes to the one used last (0.241542ms)
+✔ no turn: zero volume, no model, no cost; more turns than read: sampled (0.218083ms)
+✔ a selector with one task parses and drops duplicates and empty filters (8.497666ms)
+✔ an unknown key, at the top or in the call filter, is refused as unknown_key (4.80475ms)
+✔ a selector with no task and no intent is refused as empty_selector (6.778125ms)
+✔ a bad value is refused as invalid_selector (2.281875ms)
+✔ the window is the date range, else the last 30 days (0.25ms)
+✔ the call filter keeps a call only when its model and its span name are listed (0.220333ms)
+{"level":30,"time":1795335802773,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+✔ a member creates a use case for one task, lists it, renames it and archives it, with one event each (27.668958ms)
+✔ an unknown key or an empty selector is refused with its typed error, and nothing is written (4.029875ms)
+✔ a taken name is 409; an unknown use case is 404 (1.408ms)
+✔ signed out, not a member, flag off or a support session write nothing (0.753292ms)
+{"level":30,"time":1795335802779,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_updated","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335802780,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_archived","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335802786,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335802786,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_created","reason":"name_taken","outcome":"rejected","msg":"use case write refused"}
+{"level":30,"time":1795335802786,"pid":19656,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_archived","reason":"not_found","outcome":"rejected","msg":"use case write refused"}
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6287.547042

@@ -1,0 +1,4 @@
+$ git log --oneline -1
+5c76c6d6 RP-148 ci: gitleaksignore the fake DB password of the sandbox serve e2e test (other branch, seen by dispatch --all)
+$ cd src && npx tsc --noEmit   # OSS edition, ee/src absent
+exit 0

@@ -1,0 +1,47 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (1.486375ms)
+  ✔ assembles the Cloud edition from the seam (0.273583ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.175709ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.207458ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.117875ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.627291ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.09775ms)
+  ✔ throws when cloud is requested but the seam is null (0.103417ms)
+  ✔ reports zero ee boundary violations on the real tree (534.378042ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.300875ms)
+✔ createComposition (538.86675ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.383875ms)
+  ✔ the core modules landed so far register their jobs and steps in layer order (0.243584ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (0.876625ms)
+  ✔ refuses a job kind or drain step registered twice (0.205417ms)
+✔ registry root (1.871584ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.211791ms)
+✔ a simulate_task_eval job asks in words, with only its allowed ids and settings (1.147375ms)
+✔ a label_workflows job asks in words, with only its allowed ids and settings (0.220666ms)
+✔ a assign_topics job asks in words, with only its allowed ids and settings (0.065292ms)
+✔ a match_quality_run job asks in words, with only its allowed ids and settings (0.188458ms)
+✔ a cluster_intents job asks in words, with only its allowed ids and settings (0.105041ms)
+✔ a draft_fix job asks in words, with only its allowed ids and settings (0.081667ms)
+✔ a what_if_step job asks in words, with only its allowed ids and settings (0.071625ms)
+✔ a payload key not on the kind's allowlist never reaches the ask (0.183916ms)
+✔ an allowed key whose value is free text, an object or too long is left out (0.137083ms)
+✔ a list of more than ten ids shows the first ten and how many more (0.162417ms)
+✔ a job whose payload is not an object asks by its words alone (0.094917ms)
+✔ a table entry is checked against its kind's payload: every key needs a decision (0.077959ms)
+✔ every kind's ask, with or without ids, reads back as its job kind (0.643958ms)
+✔ a stored run's old machine ask still reads as its job kind (0.093584ms)
+✔ an ask that is not a job's reads as no job kind (0.082625ms)
+✔ every kind has a tier and a budget, and an unknown kind waits with the sweeps (0.981375ms)
+✔ zombie reaping emits a system-scoped count and continues to the drain (1.379917ms)
+✔ a reaper failure logs and captures without blocking the drain (0.465125ms)
+✔ the drain reads the queue clock and the registered handlers (0.237833ms)
+✔ the reaper spares the running jobs a registration vouches for (0.190333ms)
+ℹ tests 35
+ℹ suites 2
+ℹ pass 35
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6736.120375

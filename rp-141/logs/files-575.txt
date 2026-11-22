@@ -1,0 +1,17 @@
+ apps/web/app/api/projects/[projectId]/fine-tuning/datasets/[datasetId]/route.ts |  20 ++++++++++---
+ apps/web/components/fine-tuning/DatasetRows.tsx                                 |  21 +++++++++++++-
+ apps/web/components/fine-tuning/DatasetsPanel.tsx                               |  51 +++++++++++++++++++++++++-------
+ apps/web/lib/fine-tuning/adapters/drizzle-dataset-store.ts                      |   6 ++--
+ apps/web/lib/fine-tuning/build.ts                                               |  50 ++++++++++++++++++++++++++------
+ apps/web/lib/fine-tuning/domain/dataset.ts                                      |  35 ++++++++++++++++++++--
+ apps/web/lib/fine-tuning/domain/jsonl.ts                                        |   9 ++++--
+ apps/web/lib/fine-tuning/domain/rows.ts                                         | 178 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----------------
+ apps/web/lib/fine-tuning/export-api.ts                                          |  38 +++++++++++++++++-------
+ apps/web/lib/fine-tuning/tests/build.integration.test.ts                        | 139 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ apps/web/lib/fine-tuning/tests/jsonl.test.ts                                    |  17 ++++++++++-
+ apps/web/lib/fine-tuning/tests/rows.test.ts                                     | 127 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+ apps/web/lib/mcp/__fixtures__/tools-list.json                                   |  12 ++++++--
+ apps/web/lib/mcp/operations/fine-tuning-isolation.integration.test.ts           |   2 +-
+ apps/web/lib/mcp/operations/fine-tuning.test.ts                                 |  17 +++++++++--
+ apps/web/lib/mcp/operations/fine-tuning.ts                                      |   4 +--
+ 16 files changed, 648 insertions(+), 78 deletions(-)

@@ -1,0 +1,34 @@
+RP-122 proof: sandboxes in the core (ratel branch beluga/rp-122-sandboxes), FF_SANDBOXES off then on.
+Real code, not a test runner: the runner connect route and the run API route handlers, the gateway process (packages/gateway/src/main.ts),
+the run store, against a local Postgres 16 migrated with the core's migrations. Scripts: agents/a54SccKACE/proof-run.ts, proof-run-api.ts (not committed).
+Date: 2026-11-22T04:53:35Z. Tokens redacted. No real user data.
+
+$ migrated with the core's migrations, 0045_sandboxes included
+  sandbox tables: sandbox_commands, sandbox_fake_pins, sandbox_fake_usage, sandbox_run_events, sandbox_runners, sandbox_runs, sandbox_sessions
+  project 36703eb5-3407-4309-8757-0936ef754535, a key with a creator and a key without one
+
+$ FF_SANDBOXES unset: POST /api/v1/runner/connect
+  404 {"error":"not_found"}
+
+$ FF_SANDBOXES=1: POST /api/v1/runner/connect (key without a creator)
+  403 {"error":"forbidden","reason":"key_without_owner","message":"Create a new project key: this key does not record who created it."}
+$ FF_SANDBOXES=1: POST /api/v1/runner/connect (key with a creator)
+  200 {"gatewayUrl":"ws://localhost:8799","token":"eyJ2IjoxLCJw…(redacted)","expiresAt":"2026-11-22T05:07:58.000Z","projectId":"36703eb5-3407-4309-8757-0936ef754535"}
+
+$ start the gateway (packages/gateway/src/main.ts) on :8799
+  gateway: started gateway (port 8799)
+$ a sandbox/v1 worker connects with the token and registers: got registered
+
+$ the run store starts run 18d28d0e-090a-458b-a22f-b77d9b8a628d (sandbox_commands + NOTIFY sandbox_gw_gw_proof)
+  worker got run.start: {"sandboxId":"workflow-label","params":{"maxTokens":300}}
+  worker sent run.ack, one text.delta and run.end; gateway answered events.ack seq 2
+  sandbox_runs: {"status":"ok","output":{"name":"Refunds"},"acked_seq":2}  sandbox_run_events: [{"seq":1,"kind":"text.delta"},{"seq":2,"kind":"run.end"}]
+
+$ SIGTERM the gateway
+  worker got drain {"reason":"gateway shutdown","deadlineMs":20000}
+  gateway: draining gateway -> stopped gateway
+
+$ FF_SANDBOXES unset: GET /api/projects/<id>/sandboxes/runners
+  404 {"error":"not_found"}
+$ FF_SANDBOXES=1: GET /api/projects/<id>/sandboxes/runners (as the open-source edition's local operator)
+  200 {"runners":[{"id":"95a8d452-4658-4b6c-b28d-b4c0d8dcb1a9","instanceId":"rnr_proof","mine":true,"online":true,"startable":true,"manifest":"{…}","maxConcurrency":2,"connectedAt":"2026-11-22T04:52:59.400Z","lastSeenAt":"2026-11-22T04:52:59.400Z"}]}

@@ -1,0 +1,22 @@
+$ git -C ratel log --oneline -1   # before: ratel 266bae33 (RP-130), without RP-120
+266bae33 RP-130 test: route-handler get_flag_status lists FF_TOOL_RUN_INSIGHTS
+$ cd src && npx tsx rp120-demo.mts
+== ratel-cloud #559: OTLP ingest, client IP strip ==
+sent keys:                 service.name, host.ip, gen_ai.request.model, client.address, http.request.header.x-forwarded-for
+no strip in ingest: raw capture stores every key above, IPs included
+
+== ratel-cloud #480: model_call line for a Bedrock 503 whose class the bundle renamed to h ==
+model_call outcome=error provider=anthropic error_type="h"
+
+$ git -C ratel log --oneline -1   # after: ratel be2c8954 (RP-120)
+be2c8954 RP-120 port ratel-cloud #559 + #480: ingest client-IP strip (FF_INGEST_STRIP_CLIENT_ADDRESS, off), stable error
+$ cd src && npx tsx rp120-demo.mts
+== ratel-cloud #559: OTLP ingest, client IP strip ==
+sent keys:                 service.name, host.ip, gen_ai.request.model, client.address, http.request.header.x-forwarded-for
+FF_INGEST_STRIP_CLIENT_ADDRESS=(unset) stripped=false
+  kept keys:               service.name, host.ip, gen_ai.request.model, client.address, http.request.header.x-forwarded-for
+FF_INGEST_STRIP_CLIENT_ADDRESS=1 stripped=true
+  kept keys:               service.name, gen_ai.request.model
+
+== ratel-cloud #480: model_call line for a Bedrock 503 whose class the bundle renamed to h ==
+model_call outcome=error provider=anthropic error_type="server_error"

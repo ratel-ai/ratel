@@ -1,0 +1,92 @@
+{"level":30,"time":1795318950656,"pid":43826,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"67e5d3ea-d7a5-42a5-bc2f-43d7bdecfd0a","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":20,"msg":"trace turns build completed"}
+✖ traces without a session id each get their own session (1967.235ms)
+{"level":30,"time":1795318950870,"pid":43826,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"44d09695-7bbe-431d-9269-804195d57ee4","outcome":"built","pages":1,"events":2,"turns_written":2,"steps_written":2,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":11,"msg":"trace turns build completed"}
+✔ child-span conversation ids give each trace its own session (210.778125ms)
+{"level":30,"time":1795318950966,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"f8628387-0bec-4322-b041-fea1895ddd82","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":8,"msg":"trace turns build completed"}
+✖ real-shape OTLP ingest builds typed turns only with the flag on (2143.518917ms)
+{"level":30,"time":1795318950989,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"f8628387-0bec-4322-b041-fea1895ddd82","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318950996,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"b6530a00-3395-4cbb-a68d-e438ec0f08ca","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951002,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"b6530a00-3395-4cbb-a68d-e438ec0f08ca","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":3,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951010,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"b4c9e9ed-2607-4bd3-be14-b24783342aac","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951015,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"b4c9e9ed-2607-4bd3-be14-b24783342aac","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":1,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951025,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"c1d7a274-f495-4264-a5bb-bae351abf7f3","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951030,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"c1d7a274-f495-4264-a5bb-bae351abf7f3","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951045,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"26e28a15-7172-4d82-a628-3e1efbc278da","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":8,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951056,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"26e28a15-7172-4d82-a628-3e1efbc278da","outcome":"built","pages":1,"events":1,"turns_written":1,"steps_written":1,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":7,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951064,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"c0d71234-4f5f-4bad-b0d2-f88e699e3254","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951068,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"c0d71234-4f5f-4bad-b0d2-f88e699e3254","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":2,"msg":"trace turns build completed"}
+{"level":30,"time":1795318951073,"pid":43827,"hostname":"rstagis-MacBook-Pro-3.local","module":"ledger/build-job","project_id":"dff81c54-abe2-410b-8d18-297a82c7ec4e","outcome":"caught_up","pages":0,"events":0,"turns_written":0,"steps_written":0,"idle_closed":0,"first_build":true,"backlog_lost":false,"continued":false,"reading_queued":false,"duration_ms":1,"msg":"trace turns build completed"}
+✖ code steps require GenAI work and stop at twenty in event-time order (3.557166ms)
+✖ a model-only ingest schedules a build only with typed steps enabled (1.783709ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3629.006666
+
+✖ failing tests:
+
+test at lib/ledger/turns/trace-session.integration.test.ts:1:1033
+✖ traces without a session id each get their own session (1967.235ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  1 !== 3
+  
+      at <anonymous> (~/ratel-wt-rp-121/src/lib/ledger/turns/trace-session.integration.test.ts:40:12)
+      at async withProject (~/ratel-wt-rp-121/src/lib/ledger/turns/trace-session.integration.test.ts:102:5)
+      at async TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/ledger/turns/trace-session.integration.test.ts:30:3)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ledger/turns/typed-steps.integration.test.ts:1:1111
+✖ real-shape OTLP ingest builds typed turns only with the flag on (2143.518917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/ledger/turns/typed-steps.integration.test.ts:83:16)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/ledger/turns/typed-steps.test.ts:1:1115
+✖ code steps require GenAI work and stop at twenty in event-time order (3.557166ms)
+  TypeError: Cannot read properties of undefined (reading 'steps')
+      at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/ledger/turns/typed-steps.test.ts:40:21)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.start (node:internal/test_runner/test:1003:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17)
+
+test at lib/ledger/turns/typed-steps.test.ts:1:1673
+✖ a model-only ingest schedules a build only with typed steps enabled (1.783709ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/ledger/turns/typed-steps.test.ts:64:12)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

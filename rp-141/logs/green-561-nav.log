@@ -1,0 +1,41 @@
+✔ project URLs are rooted at /project/<id>, encoded (0.736583ms)
+✔ the project id is read back from the path (0.172667ms)
+✔ with a project, the rail links every core destination to that project (1.247042ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.082375ms)
+✔ outside a project, the organization rail lists its projects page (0.489167ms)
+✔ composition additions follow the core destinations with stable ids (0.191417ms)
+✔ the OSS composition adds no destination (0.19475ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.468541ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (0.80225ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.379917ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.129625ms)
+✔ the active item matches exact index pages and nested paths (0.216959ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.173542ms)
+✔ switching project keeps the section the reader is on (0.0585ms)
+✔ a project outside the organization's list is not found (0.053666ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.05125ms)
+✔ the command menu lists the project's pages, the organization's, then every project (0.197875ms)
+✔ outside a project the command menu lists the organization's pages only (0.063042ms)
+✔ the command menu finds a page by its keywords, not only its name (0.439834ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.3155ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.134292ms)
+✔ visibleOrganizationNav hides only the paths given (0.067167ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.253959ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.112709ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.188958ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.132709ms)
+✔ Fine-tuning is not in the rail or ⌘K unless the switch is on (0.179667ms)
+✔ Fine-tuning sits under Improvements after Sandboxes, keeps the top level, and selects itself on its pages (0.155666ms)
+✔ with FF_CUSTOM_DASHBOARDS off, Dashboards stays out and its path selects Overview (0.102709ms)
+✔ with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects itself on a dashboard (0.169375ms)
+✔ Variants is not in the rail or ⌘K unless the project has tagged traces and the switch is on (0.101208ms)
+✔ Variants sits under Traces last, selects itself on an experiment's page, and keeps the rail in budget (0.160167ms)
+✔ Variants without the entity pages: Traces holds All traces and Variants only (0.052541ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 468.482375

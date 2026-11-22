@@ -1,0 +1,160 @@
+✔ project URLs are rooted at /project/<id>, encoded (1.157625ms)
+✔ the project id is read back from the path (0.403291ms)
+✔ with a project, the rail links every core destination to that project (5.098792ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.168917ms)
+✔ outside a project, the organization rail lists its projects page (0.978042ms)
+✔ composition additions follow the core destinations with stable ids (0.440459ms)
+✔ the OSS composition adds no destination (0.539042ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.885458ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (1.964834ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (1.753834ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (1.067666ms)
+✔ the active item matches exact index pages and nested paths (0.842708ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.475667ms)
+✔ switching project keeps the section the reader is on (0.222167ms)
+✔ a project outside the organization's list is not found (0.116833ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.080958ms)
+✔ the command menu lists the project's pages, the organization's, then every project (1.063958ms)
+✔ outside a project the command menu lists the organization's pages only (0.307584ms)
+✔ the command menu finds a page by its keywords, not only its name (1.6055ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.800959ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.306917ms)
+✔ visibleOrganizationNav hides only the paths given (0.129084ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.586208ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.310375ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.385083ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.375708ms)
+✔ Fine-tuning is not in the rail or ⌘K unless the switch is on (0.363459ms)
+✔ Fine-tuning sits under Improvements after Sandboxes, keeps the top level, and selects itself on its pages (0.363958ms)
+✔ with FF_CUSTOM_DASHBOARDS off, Dashboards stays out and its path selects Overview (0.224625ms)
+✔ with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects itself on a dashboard (0.390792ms)
+✔ Variants is not in the rail or ⌘K unless the project has tagged traces and the switch is on (0.237208ms)
+✔ Variants sits under Traces last, selects itself on an experiment's page, and keeps the rail in budget (0.294084ms)
+✔ Variants without the entity pages: Traces holds All traces and Variants only (0.138208ms)
+✔ the demo project does not count toward the project limit, as in the console (50.393875ms)
+✔ Enterprise limits say unlimited rather than serializing as null (7.026208ms)
+✔ plan and subscription state come from the same helpers as the Billing page (18.957417ms)
+✔ match quality not on the plan says so (2.09625ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (3.242542ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.646209ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (2.352417ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (4.005917ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (3.130833ms)
+✔ ids are unique, snake_case, and stable-looking (3.299708ms)
+✔ every operation is discoverable: title, description, known domain (0.491958ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.964083ms)
+✔ every params schema converts to JSON Schema for discovery (25.375792ms)
+✔ write operations are exactly those declaring mutates (0.898458ms)
+✔ read-only assembly drops every mutating operation (22.998167ms)
+✔ the operation contract matches the reviewed snapshot (17.678ms)
+✔ list_use_cases returns the use cases; get_use_case adds turns, calls, dates, model and cost per run (43.692042ms)
+✔ create_use_case creates as the key's project and emits one event; an empty selector or a taken name is refused (8.520667ms)
+✔ every tool refuses as forbidden with FF_FINE_TUNING off, and reads or writes nothing (6.21725ms)
+{"level":50,"time":1795335929547,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (65.145333ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (22.951917ms)
+✔ without an edition's name the 401 realm stays ratel (1.127333ms)
+✔ an older protocol version still negotiates (26.148375ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (105.553416ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (47.332041ms)
+✔ a signed-in person without app access is refused at the door with 403 (1.624458ms)
+✔ every tool definition is exactly what the fixture pins (55.13725ms)
+✔ each staged tool publishes its stage, and only that, as _meta (75.95475ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (50.772834ms)
+✔ each tool carries the annotations the Claude directory reviews (45.946625ms)
+✔ no tool description tells the model what to do first (46.428125ms)
+✔ calling a tool runs its operation and reports failures in-band (70.060917ms)
+✔ an unregistered tool name is refused by the transport (15.583875ms)
+✔ a notification is accepted with no body (19.152875ms)
+✔ a missing credential is rejected before any protocol work (0.499875ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (60.866834ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (10.3195ms)
+✔ an exhausted rate limit returns 429 with Retry-After (16.267083ms)
+✔ malformed JSON gets the reserved parse-error code (0.423375ms)
+✔ an oversized batch is refused rather than amplified (0.697041ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.458042ms)
+✔ an exception while verifying a credential is a 401, never a 500 (1.096166ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.702083ms)
+✔ repeated bad credentials stop reaching the authenticator at all (0.660625ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.56325ms)
+✔ successful calls are never charged to the failure budget (137.533667ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (21.044833ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.754459ms)
+{"level":50,"time":1795335929549,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795335929731,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795335930061,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-141/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-141/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-141/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-141/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-141/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-141/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-141/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795335930070,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":32,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795335930115,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795335930186,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795335930202,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795335930203,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795335930205,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:418:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:422:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795335930206,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:434:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:438:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795335930206,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795335930206,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795335930207,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795335930207,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795335930207,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795335930207,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795335930366,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795335930366,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795335930366,"pid":35811,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ every published tool has a stage entry, so a new tool cannot skip the decision (1.023917ms)
+✔ the stage map names no tool that does not exist (0.2775ms)
+✔ every stage is one of the four, and each stage has tools (1.042875ms)
+✔ the loop walks Monitor → Insights → Improve → Ship with these tools (0.317917ms)
+✔ the stage is published as tool metadata, and absent outside the loop (0.589ms)
+{"level":30,"time":1795335915125,"pid":35813,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"given","msg":"training consent given"}
+✔ an admin gives the opt-in: the row holds the Clerk id, the time and the text version, and one event (97.611417ms)
+✔ giving it again changes nothing and emits no event (1.317458ms)
+✔ an admin withdraws it: the datasets are deleted and one event is emitted (2.50225ms)
+✔ withdrawing with no opt-in is refused, but the datasets are still deleted (0.838667ms)
+✔ a member reads the opt-in and the text, but cannot give or withdraw it (2.333041ms)
+✔ signed out, not a member, flag off, a support session, a stale text or a bad body change nothing (8.513541ms)
+✔ a store failure is not swallowed (1.161417ms)
+{"level":30,"time":1795335915134,"pid":35813,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"already_given","msg":"training consent given"}
+{"level":30,"time":1795335915137,"pid":35813,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"withdrawn","msg":"training consent withdrawn"}
+{"level":30,"time":1795335915138,"pid":35813,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"not_given","msg":"training consent withdrawal refused"}
+✔ a grant holds the Clerk id, the time and the text version, and a second grant returns the first (8617.396ms)
+✔ project B cannot read or withdraw the grant of project A (751.644ms)
+✔ a withdrawal stamps who and when, keeps the row, and a new grant is a new row (839.494792ms)
+✔ FF_FINE_TUNING is a core switch, so an edition's flags port can decide it (1.280042ms)
+✔ OSS: off with nothing set; FF_FINE_TUNING or RATEL_EXPERIMENTAL_FEATURES turns it on (0.451292ms)
+✔ Cloud: the port decides in the project's organization, for the person or a caller with no session (0.850709ms)
+✔ Cloud: an operator's FF_FINE_TUNING comes first; a failed decision is off (0.21475ms)
+✔ a decision that throws: off, one error logged with err, one exception reported (0.319084ms)
+✔ a switch that is on lists the organization and logs nothing (0.227167ms)
+✔ one task resolves to its closed turns and their calls, never another task's or another project's (8662.938167ms)
+✔ the call filter by model or by span name removes the other calls of the same turn (647.404375ms)
+✔ an intent resolves to the turn its prompt landed in; the date range bounds the turns (475.634667ms)
+✔ the stats of one task: its closed turns, its calls, its model and the stored cost per run (303.849292ms)
+✔ the task picker lists the project's tasks with closed turns, busiest first (616.906041ms)
+✔ use cases are scoped to their project, names are unique among live ones, and archiving frees the name (574.120208ms)
+✔ cost per run averages the runs whose calls are all priced, by hand: (0.03 + 0.05) / 2 = 0.04 (12.082584ms)
+✔ with no priced run the cost per run is Unpriced (null), not zero (0.441542ms)
+✔ the current model is the most used one; a tie goes to the one used last (0.22725ms)
+✔ no turn: zero volume, no model, no cost; more turns than read: sampled (0.152708ms)
+✔ a selector with one task parses and drops duplicates and empty filters (6.94325ms)
+✔ an unknown key, at the top or in the call filter, is refused as unknown_key (2.444084ms)
+✔ a selector with no task and no intent is refused as empty_selector (1.318542ms)
+✔ a bad value is refused as invalid_selector (7.115416ms)
+✔ the window is the date range, else the last 30 days (0.997375ms)
+✔ the call filter keeps a call only when its model and its span name are listed (0.454542ms)
+{"level":30,"time":1795335917756,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+✔ a member creates a use case for one task, lists it, renames it and archives it, with one event each (32.793917ms)
+✔ an unknown key or an empty selector is refused with its typed error, and nothing is written (6.019166ms)
+✔ a taken name is 409; an unknown use case is 404 (1.964291ms)
+✔ signed out, not a member, flag off or a support session write nothing (1.371459ms)
+{"level":30,"time":1795335917762,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_updated","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335917763,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_archived","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335917771,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795335917772,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_created","reason":"name_taken","outcome":"rejected","msg":"use case write refused"}
+{"level":30,"time":1795335917773,"pid":35834,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_archived","reason":"not_found","outcome":"rejected","msg":"use case write refused"}
+ℹ tests 122
+ℹ suites 0
+ℹ pass 122
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16967.452292

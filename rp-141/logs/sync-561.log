@@ -1,0 +1,67 @@
+
+copied (26)
+  src/lib/mcp/operations/fine-tuning.test.ts
+  src/lib/mcp/operations/fine-tuning.ts
+  src/lib/views/fine-tuning/adapters/drizzle-store.ts
+  src/lib/views/fine-tuning/consent-api.ts
+  src/lib/views/fine-tuning/domain/consent.ts
+  src/lib/views/fine-tuning/domain/stats.ts
+  src/lib/views/fine-tuning/domain/use-case.ts
+  src/lib/views/fine-tuning/ports/store.ts
+  src/lib/views/fine-tuning/resolve.ts
+  src/lib/views/fine-tuning/tests/consent-api.test.ts
+  src/lib/views/fine-tuning/tests/drizzle-store.integration.test.ts
+  src/lib/views/fine-tuning/tests/resolve.integration.test.ts
+  src/lib/views/fine-tuning/tests/stats.test.ts
+  src/lib/views/fine-tuning/tests/use-case.test.ts
+  src/lib/views/fine-tuning/tests/use-cases-api.test.ts
+  src/lib/views/fine-tuning/use-case-route-deps.ts
+  src/lib/views/fine-tuning/use-cases-api.ts
+  src/lib/console/onboarding/training-consent.ts
+  src/components/console/fine-tuning/TrainingConsentPanel.tsx
+  src/components/console/fine-tuning/UseCasesPanel.tsx
+  src/app/(console)/project/[projectId]/fine-tuning/context.test.ts
+  src/app/(console)/project/[projectId]/fine-tuning/context.ts
+  src/app/(console)/project/[projectId]/fine-tuning/page.tsx
+  src/app/api/projects/[projectId]/fine-tuning/consent/route.ts
+  src/app/api/projects/[projectId]/fine-tuning/use-cases/[useCaseId]/route.ts
+  src/app/api/projects/[projectId]/fine-tuning/use-cases/route.ts
+
+updated (1)
+  src/lib/views/eval-gate/calls.ts
+
+owned, bootstrapped from upstream (now yours to maintain) (4)
+  src/lib/views/fine-tuning/flag.ts
+  src/lib/views/fine-tuning/tests/flag.test.ts
+  src/lib/platform/db/migrations/0052_fine_tuning.sql
+  src/lib/platform/db/migrations/meta/0052_snapshot.json
+
+unmapped @/lib specifiers (add a map or rewrite rule) (5)
+  {"path":"src/lib/views/fine-tuning/flag.ts","specifier":"@/lib/flags"}
+  {"path":"src/lib/views/fine-tuning/flag.ts","specifier":"@/lib/flags-org"}
+  {"path":"src/lib/views/fine-tuning/flag.ts","specifier":"@/lib/flags-overrides"}
+  {"path":"src/lib/views/fine-tuning/flag.ts","specifier":"@/lib/flags-snapshot"}
+  {"path":"src/lib/views/fine-tuning/tests/flag.test.ts","specifier":"@/lib/flags-org"}
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/components/shell/AppFrame.tsx             |   9 +-
+ apps/web/components/shell/nav-icons.ts             |   2 +
+ apps/web/components/shell/types.ts                 |   2 +
+ apps/web/lib/analytics/track-server.ts             |   5 +
+ .../db/migrations/0111_fine_tuning_consents.sql    |  17 ++
+ .../db/migrations/0112_fine_tuning_use_cases.sql   |  18 +++
+ apps/web/lib/db/migrations/meta/_journal.json      |  14 ++
+ apps/web/lib/db/schema.ts                          |  65 ++++++++
+ apps/web/lib/fine-tuning/flag.ts                   |  71 +++++++++
+ apps/web/lib/fine-tuning/tests/flag.test.ts        |  47 ++++++
+ apps/web/lib/mcp/__fixtures__/tools-list.json      | 173 +++++++++++++++++++++
+ apps/web/lib/mcp/operations/account.test.ts        |   1 +
+ apps/web/lib/mcp/operations/contract.test.ts       |   4 +
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/mcp/stages.ts                         |   4 +
+ apps/web/lib/navigation/v2.test.ts                 |  18 +++
+ apps/web/lib/navigation/v2.ts                      |  29 ++--
+ 18 files changed, 466 insertions(+), 16 deletions(-)
+
+applied 31 change(s) from 3bdae716

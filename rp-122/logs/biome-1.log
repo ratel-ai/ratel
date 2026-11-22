@@ -1,0 +1,482 @@
+packages/gateway/src/gateway.ts:319:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    318 │   async function onFakeRequest(connection: Connection, message: Envelope): Promise<void> {
+  > 319 │     const runId = message.runId!;
+        │                   ^^^^^^^^^^^^^^
+    320 │     const payload = message.payload as Omit<FakeRequest, "runId">;
+    321 │     const reply = (result: unknown, isError: boolean, source: string) =>
+  
+
+packages/gateway/src/gateway.ts:362:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    361 │   function enqueueEvent(connection: Connection, message: Envelope): void {
+  > 362 │     const runId = message.runId!;
+        │                   ^^^^^^^^^^^^^^
+    363 │     const queue = eventQueues.get(runId) ?? { events: [], connection, flushing: false };
+    364 │     queue.events.push(message);
+  
+
+packages/gateway/src/gateway.ts:381:18 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    379 │           runId,
+    380 │           batch.map((m) => ({
+  > 381 │             seq: m.seq!,
+        │                  ^^^^^^
+    382 │             kind: m.type === "run.end" ? "run.end" : String(m.payload.kind),
+    383 │             payload: m.payload,
+  
+
+packages/gateway/test/gateway.integration.test.ts:92:10 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    90 │     [instanceId],
+    91 │   );
+  > 92 │   return rows[0]!.id;
+       │          ^^^^^^^^
+    93 │ }
+    94 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     90  90 │       [instanceId],
+     91  91 │     );
+     92     │ - ··return·rows[0]!.id;
+         92 │ + ··return·rows[0]?.id;
+     93  93 │   }
+     94  94 │   
+  
+
+packages/gateway/test/gateway.integration.test.ts:129:10 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    127 │     [runId],
+    128 │   );
+  > 129 │   return rows[0]!.status;
+        │          ^^^^^^^^
+    130 │ }
+    131 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    127 127 │       [runId],
+    128 128 │     );
+    129     │ - ··return·rows[0]!.status;
+        129 │ + ··return·rows[0]?.status;
+    130 130 │   }
+    131 131 │   
+  
+
+packages/gateway/test/support.ts:40:25 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    39 │ export async function createTestDatabase(): Promise<TestDatabase> {
+  > 40 │   const admin = new URL(TEST_DATABASE_URL!);
+       │                         ^^^^^^^^^^^^^^^^^^
+    41 │   const name = `gw_test_${randomBytes(4).toString("hex")}`;
+    42 │   await withClient(admin.href, (c) => c.query(`create database ${name}`));
+  
+
+packages/gateway/test/support.ts:128:70 lint/complexity/noCommaOperator ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! The comma operator is disallowed.
+  
+    126 │     return new Promise((resolve, reject) => {
+    127 │       const timer = setTimeout(() => reject(new Error(`no matching frame in ${timeoutMs} ms`)), timeoutMs);
+  > 128 │       this.waiters.push({ match, resolve: (f) => (clearTimeout(timer), resolve(f)) });
+        │                                                                      ^
+    129 │     });
+    130 │   }
+  
+  i Its use is often confusing and obscures side effects.
+  
+
+packages/gateway/test/support.ts:136:59 lint/complexity/noCommaOperator ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! The comma operator is disallowed.
+  
+    134 │     return new Promise((resolve, reject) => {
+    135 │       const timer = setTimeout(() => reject(new Error("socket did not close")), timeoutMs);
+  > 136 │       this.ws.once("close", (code) => (clearTimeout(timer), resolve(code)));
+        │                                                           ^
+    137 │     });
+    138 │   }
+  
+  i Its use is often confusing and obscures side effects.
+  
+
+src/app/(console)/project/[projectId]/sandboxes/page.tsx:42:10 lint/complexity/useOptionalChain  FIXABLE  ━━━━━━━━━━
+
+  ! Change to an optional chain.
+  
+    40 │       />
+    41 │       <PageBody>
+  > 42 │         {model.runner && model.runner.online ? (
+       │          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    43 │           <SandboxesList projectId={project.id} sandboxes={model.sandboxes} paused={false} />
+    44 │         ) : (
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    40 40 │         />
+    41 41 │         <PageBody>
+    42    │ - ········{model.runner·&&·model.runner.online·?·(
+       42 │ + ········{model.runner?.online·?·(
+    43 43 │             <SandboxesList projectId={project.id} sandboxes={model.sandboxes} paused={false} />
+    44 44 │           ) : (
+  
+
+src/lib/views/sandboxes/tests/tools-state.test.ts:47:37 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    45 │ test("a sideEffect tool offers real only when the manifest allows it", () => {
+    46 │   const [search, ticket, deploy] = manifestTools(SANDBOX);
+  > 47 │   assert.deepEqual(allowedToolModes(search!), ["real", "fake", "confirm"]);
+       │                                     ^^^^^^^
+    48 │   assert.deepEqual(allowedToolModes(ticket!), ["fake", "confirm"]);
+    49 │   assert.deepEqual(allowedToolModes(deploy!), ["real", "fake", "confirm"]);
+  
+
+src/lib/views/sandboxes/tests/tools-state.test.ts:48:37 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    46 │   const [search, ticket, deploy] = manifestTools(SANDBOX);
+    47 │   assert.deepEqual(allowedToolModes(search!), ["real", "fake", "confirm"]);
+  > 48 │   assert.deepEqual(allowedToolModes(ticket!), ["fake", "confirm"]);
+       │                                     ^^^^^^^
+    49 │   assert.deepEqual(allowedToolModes(deploy!), ["real", "fake", "confirm"]);
+    50 │ });
+  
+
+src/lib/views/sandboxes/tests/tools-state.test.ts:49:37 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    47 │   assert.deepEqual(allowedToolModes(search!), ["real", "fake", "confirm"]);
+    48 │   assert.deepEqual(allowedToolModes(ticket!), ["fake", "confirm"]);
+  > 49 │   assert.deepEqual(allowedToolModes(deploy!), ["real", "fake", "confirm"]);
+       │                                     ^^^^^^^
+    50 │ });
+    51 │ 
+  
+
+packages/gateway/src/gateway.ts:338:9 lint/suspicious/noImplicitAnyLet ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × This variable implicitly has the any type.
+  
+    336 │       return reply(GENERATION_FAILED_RESULT, true, "generated");
+    337 │     }
+  > 338 │     let outcome;
+        │         ^^^^^^^
+    339 │     try {
+    340 │       outcome = await options.fakes.answer({ ...payload, runId });
+  
+  i Variable declarations without type annotation and initialization implicitly have the any type. Declare a type or initialize the variable with some value.
+  
+
+packages/gateway/src/main.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import { randomBytes } from "node:crypto";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { drizzle } from "drizzle-orm/node-postgres";
+    3 │ import pg from "pg";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+      2   2 │   import { drizzle } from "drizzle-orm/node-postgres";
+      3   3 │   import pg from "pg";
+      4     │ - import·{·anthropicClient·}·from·"@/lib/readings/anthropic/client";
+      5     │ - import·*·as·tables·from·"@/lib/platform/db/tables";
+      6     │ - import·{·type·ServerEventName,·trackServerEvent·}·from·"@/lib/platform/telemetry";
+      7     │ - import·{·anthropicFakeModel,·DEFAULT_FAKE_MODEL·}·from·"@/lib/views/sandboxes/fakes/adapters/anthropic-fake-model";
+      8     │ - import·{·createFakeAlerts,·type·CaptureEvent·}·from·"@/lib/views/sandboxes/fakes/adapters/fake-alerts";
+      9     │ - import·{·createPgFakeStore·}·from·"@/lib/views/sandboxes/fakes/adapters/pg-fake-store";
+     10     │ - import·{·dailyCap·}·from·"@/lib/views/sandboxes/fakes/domain/fake";
+     11     │ - import·{·createFakeService,·type·FakeService·}·from·"@/lib/views/sandboxes/fakes/service";
+     12     │ - import·{·createPgSandboxGatewayStore·}·from·"@/lib/views/sandboxes/adapters/pg-gateway-store";
+     13     │ - import·type·{·SandboxDb·}·from·"@/lib/views/sandboxes/adapters/pg-store";
+     14     │ - import·{·gatewayChannel,·GATEWAY_ID_PATTERN·}·from·"@/lib/views/sandboxes/domain/channels";
+     15     │ - import·{·MIN_TOKEN_SECRET_LENGTH·}·from·"@/lib/views/sandboxes/domain/token";
+          4 │ + import·*·as·tables·from·"@/lib/platform/db/tables";
+          5 │ + import·{·type·ServerEventName,·trackServerEvent·}·from·"@/lib/platform/telemetry";
+          6 │ + import·{·anthropicClient·}·from·"@/lib/readings/anthropic/client";
+          7 │ + import·{·createPgSandboxGatewayStore·}·from·"@/lib/views/sandboxes/adapters/pg-gateway-store";
+          8 │ + import·type·{·SandboxDb·}·from·"@/lib/views/sandboxes/adapters/pg-store";
+          9 │ + import·{·GATEWAY_ID_PATTERN,·gatewayChannel·}·from·"@/lib/views/sandboxes/domain/channels";
+         10 │ + import·{·MIN_TOKEN_SECRET_LENGTH·}·from·"@/lib/views/sandboxes/domain/token";
+         11 │ + import·{·anthropicFakeModel,·DEFAULT_FAKE_MODEL·}·from·"@/lib/views/sandboxes/fakes/adapters/anthropic-fake-model";
+         12 │ + import·{·type·CaptureEvent,·createFakeAlerts·}·from·"@/lib/views/sandboxes/fakes/adapters/fake-alerts";
+         13 │ + import·{·createPgFakeStore·}·from·"@/lib/views/sandboxes/fakes/adapters/pg-fake-store";
+         14 │ + import·{·dailyCap·}·from·"@/lib/views/sandboxes/fakes/domain/fake";
+         15 │ + import·{·createFakeService,·type·FakeService·}·from·"@/lib/views/sandboxes/fakes/service";
+     16  16 │   import * as sandboxTables from "@/lib/views/sandboxes/schema";
+     17  17 │   import { createGateway } from "./gateway";
+  
+
+packages/gateway/src/main.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+      5   5 │   import * as tables from "@/lib/platform/db/tables";
+      6   6 │   import { type ServerEventName, trackServerEvent } from "@/lib/platform/telemetry";
+      7     │ - import·{·anthropicFakeModel,·DEFAULT_FAKE_MODEL·}·from·"@/lib/views/sandboxes/fakes/adapters/anthropic-fake-model";
+      8     │ - import·{·createFakeAlerts,·type·CaptureEvent·}·from·"@/lib/views/sandboxes/fakes/adapters/fake-alerts";
+          7 │ + import·{
+          8 │ + ··anthropicFakeModel,
+          9 │ + ··DEFAULT_FAKE_MODEL,
+         10 │ + }·from·"@/lib/views/sandboxes/fakes/adapters/anthropic-fake-model";
+         11 │ + import·{
+         12 │ + ··createFakeAlerts,
+         13 │ + ··type·CaptureEvent,
+         14 │ + }·from·"@/lib/views/sandboxes/fakes/adapters/fake-alerts";
+      9  15 │   import { createPgFakeStore } from "@/lib/views/sandboxes/fakes/adapters/pg-fake-store";
+     10  16 │   import { dailyCap } from "@/lib/views/sandboxes/fakes/domain/fake";
+    ······· │ 
+     45  51 │     const databaseUrl = required(env.DATABASE_URL, "DATABASE_URL");
+     46  52 │     const tokenSecret = required(env.SANDBOX_GATEWAY_TOKEN_SECRET, "SANDBOX_GATEWAY_TOKEN_SECRET");
+     47     │ - ··if·(tokenSecret.length·<·MIN_TOKEN_SECRET_LENGTH)·throw·new·Error("SANDBOX_GATEWAY_TOKEN_SECRET·is·too·short");
+         53 │ + ··if·(tokenSecret.length·<·MIN_TOKEN_SECRET_LENGTH)
+         54 │ + ····throw·new·Error("SANDBOX_GATEWAY_TOKEN_SECRET·is·too·short");
+     48  55 │     const gatewayId = env.GATEWAY_ID ?? `gw_${randomBytes(6).toString("hex")}`;
+     49  56 │     if (!GATEWAY_ID_PATTERN.test(gatewayId)) throw new Error("GATEWAY_ID must match [a-z0-9_]{1,40}");
+    ······· │ 
+     54  61 │     const db = drizzle(pool, { schema }) as unknown as SandboxDb;
+     55  62 │     const store = createPgSandboxGatewayStore(db);
+     56     │ - ··const·gateway·=·createGateway({·gatewayId,·store,·validator:·loadValidator(),·tokenSecret,·logger,·fakes:·fakeService(db,·env)·});
+         63 │ + ··const·gateway·=·createGateway({
+         64 │ + ····gatewayId,
+         65 │ + ····store,
+         66 │ + ····validator:·loadValidator(),
+         67 │ + ····tokenSecret,
+         68 │ + ····logger,
+         69 │ + ····fakes:·fakeService(db,·env),
+         70 │ + ··});
+     57  71 │     const listener = createCommandListener({
+     58  72 │       connectionString: env.SANDBOX_GATEWAY_LISTEN_URL ?? databaseUrl,
+    ······· │ 
+     87 101 │     const client = anthropicClient({ maxRetries: 1 });
+     88 102 │     const fakeLogger = getLogger("gateway/fakes");
+     89     │ - ··if·(!client)·fakeLogger.warn({},·"started·without·a·claude·backend:·generated·fakes·answer·a·tool·error");
+        103 │ + ··if·(!client)
+        104 │ + ····fakeLogger.warn({},·"started·without·a·claude·backend:·generated·fakes·answer·a·tool·error");
+     90 105 │     const capture: CaptureEvent = (distinctId, event, properties) =>
+     91 106 │       void trackServerEvent(event as ServerEventName, { distinctId }, properties);
+    ······· │ 
+     98 113 │       dailyCap: dailyCap(env.SANDBOX_FAKE_DAILY_CAP),
+     99 114 │       onGenerationError: (err, request) =>
+    100     │ - ······fakeLogger.error({·err:·{·message:·(err·as·Error).message,·name:·(err·as·Error).name·},·run_id:·request.runId,·tool:·request.tool·},·"fake·generation·failed"),
+        115 │ + ······fakeLogger.error(
+        116 │ + ········{
+        117 │ + ··········err:·{·message:·(err·as·Error).message,·name:·(err·as·Error).name·},
+        118 │ + ··········run_id:·request.runId,
+        119 │ + ··········tool:·request.tool,
+        120 │ + ········},
+        121 │ + ········"fake·generation·failed",
+        122 │ + ······),
+    101 123 │     });
+    102 124 │   }
+  
+
+packages/gateway/test/support.ts:1:1 assist/source/organizeImports  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━
+
+  × The imports and exports are not sorted.
+  
+  > 1 │ import { randomBytes } from "node:crypto";
+      │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    2 │ import { join } from "node:path";
+    3 │ import { drizzle } from "drizzle-orm/node-postgres";
+  
+  i Safe fix: Organize Imports (Biome)
+  
+      9   9 │   import { signSandboxToken } from "@/lib/views/sandboxes/domain/token";
+     10  10 │   import * as sandboxTables from "@/lib/views/sandboxes/schema";
+     11     │ - import·{·loadValidator,·type·Envelope·}·from·"../src/protocol";
+         11 │ + import·{·type·Envelope,·loadValidator·}·from·"../src/protocol";
+     12  12 │   
+     13  13 │   /**
+  
+
+packages/gateway/test/support.ts format ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Formatter would have printed the following content:
+  
+     45  45 │     const pool = new pg.Pool({ connectionString: url.href, max: 5 });
+     46  46 │     const db = drizzle(pool, { schema });
+     47     │ - ··await·migrate(db,·{·migrationsFolder:·join(process.cwd(),·"../../src/lib/platform/db/migrations")·});
+         47 │ + ··await·migrate(db,·{
+         48 │ + ····migrationsFolder:·join(process.cwd(),·"../../src/lib/platform/db/migrations"),
+         49 │ + ··});
+     48  50 │     await pool.query(`
+     49  51 │       insert into organizations (id, name, slug) values ('${ORG}', 'Acme', 'acme');
+    ······· │ 
+     63  65 │   export function tokenFor(claims: Partial<{ projectId: string; ownerUserId: string }> = {}): string {
+     64  66 │     return signSandboxToken(
+     65     │ - ····{·projectId:·claims.projectId·??·PROJECT,·organizationId:·ORG,·ownerUserId:·claims.ownerUserId·??·OWNER,·apiKeyId:·"k1"·},
+         67 │ + ····{
+         68 │ + ······projectId:·claims.projectId·??·PROJECT,
+         69 │ + ······organizationId:·ORG,
+         70 │ + ······ownerUserId:·claims.ownerUserId·??·OWNER,
+         71 │ + ······apiKeyId:·"k1",
+         72 │ + ····},
+     66  73 │       SECRET,
+     67  74 │       new Date(),
+    ······· │ 
+     76  83 │     private readonly ws: WebSocket;
+     77  84 │     private readonly opened: Promise<void>;
+     78     │ - ··private·readonly·waiters:·{·match:·(f:·Envelope)·=>·boolean;·resolve:·(f:·Envelope)·=>·void·}[]·=·[];
+         85 │ + ··private·readonly·waiters:·{·match:·(f:·Envelope)·=>·boolean;·resolve:·(f:·Envelope)·=>·void·}[]·=
+         86 │ + ····[];
+     79  87 │     private sent = 0;
+     80  88 │   
+    ······· │ 
+     99 107 │     }
+    100 108 │   
+    101     │ - ··static·async·connect(port:·number,·token·=·tokenFor(),·instanceId·=·"rnr_test"):·Promise<TestWorker>·{
+        109 │ + ··static·async·connect(
+        110 │ + ····port:·number,
+        111 │ + ····token·=·tokenFor(),
+        112 │ + ····instanceId·=·"rnr_test",
+        113 │ + ··):·Promise<TestWorker>·{
+    102 114 │       const worker = new TestWorker(port, token);
+    103 115 │       await worker.opened;
+    ······· │ 
+    113 125 │   
+    114 126 │     send(type: string, payload: Record<string, unknown>, runId?: string, seq?: number): void {
+    115     │ - ····const·frame·=·{·v:·1,·type,·id:·`w_${++this.sent}`,·ts:·new·Date().toISOString(),·...(runId·?·{·runId·}·:·{}),·...(seq·?·{·seq·}·:·{}),·payload·};
+        127 │ + ····const·frame·=·{
+        128 │ + ······v:·1,
+        129 │ + ······type,
+        130 │ + ······id:·`w_${++this.sent}`,
+        131 │ + ······ts:·new·Date().toISOString(),
+        132 │ + ······...(runId·?·{·runId·}·:·{}),
+        133 │ + ······...(seq·?·{·seq·}·:·{}),
+        134 │ + ······payload,
+        135 │ + ····};
+    116 136 │       this.ws.send(JSON.stringify(frame));
+    117 137 │     }
+    ······· │ 
+    125 145 │       if (seen) return Promise.resolve(seen);
+    126 146 │       return new Promise((resolve, reject) => {
+    127     │ - ······const·timer·=·setTimeout(()·=>·reject(new·Error(`no·matching·frame·in·${timeoutMs}·ms`)),·timeoutMs);
+        147 │ + ······const·timer·=·setTimeout(
+        148 │ + ········()·=>·reject(new·Error(`no·matching·frame·in·${timeoutMs}·ms`)),
+        149 │ + ········timeoutMs,
+        150 │ + ······);
+    128 151 │         this.waiters.push({ match, resolve: (f) => (clearTimeout(timer), resolve(f)) });
+    129 152 │       });
+    ······· │ 
+    153 176 │         modelResolver: "builtin",
+    154 177 │         input: { kind: "structured", schema: { type: "object" } },
+    155     │ - ······params:·[{·name:·"maxTokens",·kind:·"scalar",·type:·"int",·default:·400,·min:·50,·max:·2000·}],
+        178 │ + ······params:·[
+        179 │ + ········{·name:·"maxTokens",·kind:·"scalar",·type:·"int",·default:·400,·min:·50,·max:·2000·},
+        180 │ + ······],
+    156 181 │         context: [],
+    157 182 │       },
+  
+
+src/components/console/sandboxes/ChatThread.tsx:69:3 lint/correctness/useExhaustiveDependencies  FIXABLE  ━━━━━━━━━━
+
+  × This hook specifies more dependencies than necessary: turns.length, lastText, lastTools.
+  
+    67 │   const lastText = pending?.view.text.length ?? 0;
+    68 │   const lastTools = pending?.view.tools.length ?? 0;
+  > 69 │   useEffect(() => {
+       │   ^^^^^^^^^
+    70 │     end.current?.scrollIntoView({ block: "nearest" });
+    71 │   }, [turns.length, lastText, lastTools]);
+  
+  i This dependency can be removed from the list.
+  
+    69 │   useEffect(() => {
+    70 │     end.current?.scrollIntoView({ block: "nearest" });
+  > 71 │   }, [turns.length, lastText, lastTools]);
+       │       ^^^^^^^^^^^^
+    72 │ 
+    73 │   function send() {
+  
+  i This dependency can be removed from the list.
+  
+    69 │   useEffect(() => {
+    70 │     end.current?.scrollIntoView({ block: "nearest" });
+  > 71 │   }, [turns.length, lastText, lastTools]);
+       │                     ^^^^^^^^
+    72 │ 
+    73 │   function send() {
+  
+  i This dependency can be removed from the list.
+  
+    69 │   useEffect(() => {
+    70 │     end.current?.scrollIntoView({ block: "nearest" });
+  > 71 │   }, [turns.length, lastText, lastTools]);
+       │                               ^^^^^^^^^
+    72 │ 
+    73 │   function send() {
+  
+  i React relies on hook dependencies to determine when to re-compute Effects.
+    Specifying more dependencies than required can lead to unnecessary re-rendering
+    and degraded performance.
+  
+  i Unsafe fix: Remove the extra dependencies from the list.
+  
+    71 │ ··},·[turns.length,·lastText,·lastTools]);
+       │       ---------------------------------   
+
+src/components/console/sandboxes/ParamsPanel.tsx:47:9 lint/suspicious/noShadowRestrictedNames ━━━━━━━━━━
+
+  × Do not shadow the global "valueOf" property.
+  
+    45 │   const prompts = sandbox.params.filter((p): p is ParamOf<"prompt"> => p.kind === "prompt");
+    46 │   const scalars = sandbox.params.filter((p): p is ParamOf<"scalar"> => p.kind === "scalar");
+  > 47 │   const valueOf = (param: PlaygroundParam) =>
+       │         ^^^^^^^
+    48 │     param.name in values ? values[param.name] : param.default;
+    49 │   const reset = (param: PlaygroundParam) =>
+  
+  i Consider renaming this variable. It's easy to confuse the origin of variables when they're named after a known global.
+  
+
+src/components/console/sandboxes/RecordedOutput.tsx:47:11 lint/a11y/noNoninteractiveTabindex  FIXABLE  ━━━━━━━━━━
+
+  × The HTML element pre is non-interactive. Do not use tabIndex.
+  
+    45 │       ) : (
+    46 │         <pre
+  > 47 │           tabIndex={0}
+       │           ^^^^^^^^^^^^
+    48 │           className="max-h-96 overflow-auto rounded-lg border border-line bg-rail p-3 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-fg outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    49 │         >
+  
+  i Adding non-interactive elements to the keyboard navigation flow can confuse users.
+  
+  i Unsafe fix: Remove the tabIndex attribute.
+  
+    45 45 │         ) : (
+    46 46 │           <pre
+    47    │ - ··········tabIndex={0}
+    48 47 │             className="max-h-96 overflow-auto rounded-lg border border-line bg-rail p-3 font-mono text-xs leading-5 break-words whitespace-pre-wrap text-fg outline-none focus-visible:ring-2 focus-visible:ring-focus"
+    49 48 │           >
+  
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 123.
+Checked 153 files in 969ms. No fixes applied.
+Found 34 errors.
+Found 109 warnings.
+check ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  × Some errors were emitted while running checks.
+  
+

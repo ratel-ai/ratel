@@ -1,0 +1,68 @@
+✔ flag off: every registered tool runs without forView and answers exactly as on main (168.002875ms)
+✔ the Integrations page's tool count is the flag-off tools/list, as main's (49.596ms)
+✔ ids are unique, snake_case, and stable-looking (1.18275ms)
+✔ every operation is discoverable: title, description, known domain (0.311334ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.406292ms)
+✔ every params schema converts to JSON Schema for discovery (19.194ms)
+✔ write operations are exactly those declaring mutates (1.7005ms)
+✔ read-only assembly drops every mutating operation (11.534625ms)
+✔ the operation contract matches the reviewed snapshot (14.336667ms)
+✔ with FF_AGENTS_PAGES off, every Agents and MCP servers tool refuses as forbidden (34.950584ms)
+✔ with FF_AGENTS_PAGES on, the tools read (10.176333ms)
+{"level":50,"time":1795325702485,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (60.086333ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (11.251291ms)
+✔ without an edition's name the 401 realm stays ratel (0.500292ms)
+✔ an older protocol version still negotiates (8.792833ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (28.447917ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (27.915041ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.6415ms)
+✔ every tool definition is exactly what the fixture pins (24.916291ms)
+✔ each staged tool publishes its stage, and only that, as _meta (18.669583ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (20.027333ms)
+✔ each tool carries the annotations the Claude directory reviews (32.6495ms)
+✔ no tool description tells the model what to do first (24.3535ms)
+✔ calling a tool runs its operation and reports failures in-band (36.265209ms)
+✔ an unregistered tool name is refused by the transport (7.726625ms)
+✔ a notification is accepted with no body (10.210917ms)
+✔ a missing credential is rejected before any protocol work (0.560083ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (41.647208ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (13.63725ms)
+✔ an exhausted rate limit returns 429 with Retry-After (20.653916ms)
+✔ malformed JSON gets the reserved parse-error code (0.943791ms)
+✔ an oversized batch is refused rather than amplified (0.724458ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.374333ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.8315ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.347709ms)
+✔ repeated bad credentials stop reaching the authenticator at all (1.106375ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.359041ms)
+✔ successful calls are never charged to the failure budget (75.363542ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (20.880916ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.396708ms)
+{"level":50,"time":1795325702487,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795325702553,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795325702702,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-138/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-138/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-138/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-138/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-138/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-138/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-138/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795325702709,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":20,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795325702728,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795325702783,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795325702804,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795325702806,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795325702808,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:413:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:417:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795325702808,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:429:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:433:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795325702809,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795325702809,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795325702809,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795325702810,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795325702810,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795325702810,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795325702906,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795325702906,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795325702906,"pid":70816,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+ℹ tests 40
+ℹ suites 0
+ℹ pass 40
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4805.493416

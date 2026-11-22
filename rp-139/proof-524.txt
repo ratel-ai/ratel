@@ -1,0 +1,13 @@
+$ git rev-parse --short HEAD -> e507e7c6
+$ npx tsx scripts/.proof-524.mts
+FF_PIVOTS=(unset)
+addPivot(client): refused: No project you belong to has that ID.
+  (pivot row inserted directly, to show ingest and the sweep ignore it with the switch off)
+span rows: 1; the row keeps tenant.id: null
+otel_trace_summaries.dims for t1: {}
+
+$ FF_PIVOTS=1 npx tsx scripts/.proof-524.mts
+FF_PIVOTS=1
+addPivot(client): ok, pivots=client
+span rows: 1; the row keeps tenant.id: "acme"
+otel_trace_summaries.dims for t1: {"client":"acme"}

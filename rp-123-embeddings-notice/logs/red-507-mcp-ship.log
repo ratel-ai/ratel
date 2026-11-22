@@ -1,0 +1,86 @@
+{"level":50,"time":1795338439371,"pid":12654,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp/ship","err":{"type":"Error","message":"statement timeout","stack":"Error: statement timeout\n    at Object.loadSessionChat (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:507:49)\n    at Object.execute (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.ts:535:16)\n    at async traceMcpToolCall (~/ratel-wt-rp-123-507/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (~/ratel-wt-rp-123-507/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:510:20)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"session chat for the view failed; the call answers without it"}
+✔ list_shipments walks trails for the newest few only (40.19025ms)
+✔ list_shipments with a shipmentId returns that one, or not found (5.763ms)
+✔ Ship and lineage work for an OAuth user with no stage flag, deciding only the eval step for them (4.810667ms)
+✔ get_lineage resolves one step back, with the plan deciding whether an insight names its run (2.899875ms)
+✔ get_lineage with chain returns the chain oldest first; an unknown kind is invalid (4.684875ms)
+✔ get_analysis_freshness reports the project and one section (25.900333ms)
+✔ get_analysis_freshness rejects an unknown section (2.498416ms)
+✔ get_session returns the timeline without text unless asked (5.223834ms)
+✔ get_session shows message text only with the content opt-in, cut short (6.886958ms)
+✔ get_session pages through a long session (3.451833ms)
+✔ an unknown session is not found (2.642709ms)
+✔ get_session asks for text of the returned window only (2.290834ms)
+✔ textCallsInWindow reads only the window's model calls that kept their text (0.36275ms)
+✔ get_session answers the agent when the view's own read fails, without the view (11.747958ms)
+✔ get_session adds the console's SessionChat for its view only, and never to the agent's data (8.398333ms)
+✔ get_session_step_content reads the inspector's text, and says when the opt-in is off or the key may not read it (9.434375ms)
+✔ get_session withholds message text from an API key without the content scope, even with the opt-in on (RC-585) (4.291ms)
+✖ get_shipment_watch: each watched shipment's verdict, changed and removed tools, runs and newest traces (2.362792ms)
+✖ get_shipment_watch with a shipmentId reads that one, or not found (2.01325ms)
+✖ get_shipment_watch refuses when the ship watch is off for the caller (2.656625ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 17
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5527.390042
+
+✖ failing tests:
+
+test at lib/mcp/operations/ship.test.ts:1:14725
+✖ get_shipment_watch: each watched shipment's verdict, changed and removed tools, runs and newest traces (2.362792ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":"unknown_operation","message":"No operation named \"get_shipment_watch\". Call tools/list to see the available tools."}
+  
+  false !== true
+  
+      at data (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:310:10)
+      at TestContext.<anonymous> (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:599:15)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/mcp/operations/ship.test.ts:1:15457
+✖ get_shipment_watch with a shipmentId reads that one, or not found (2.01325ms)
+  AssertionError [ERR_ASSERTION]: {"ok":false,"error":"unknown_operation","message":"No operation named \"get_shipment_watch\". Call tools/list to see the available tools."}
+  
+  false !== true
+  
+      at data (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:310:10)
+      at TestContext.<anonymous> (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:629:15)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/mcp/operations/ship.test.ts:1:15894
+✖ get_shipment_watch refuses when the ship watch is off for the caller (2.656625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'unknown_operation'
+  - 'forbidden'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:644:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'unknown_operation',
+    expected: 'forbidden',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -1,0 +1,180 @@
+M NONE     .dockerignore 
+M NONE     .github/workflows/ci.yml 
+M NONE     .github/workflows/deploy.yml 
+M NONE     .gitignore 
+M NONE     Makefile 
+M owned    apps/web/.env.example -> src/.env.example
+M excluded apps/web/.flags.local.example.json 
+M owned    apps/web/Dockerfile -> src/Dockerfile
+A NONE     apps/web/app/(app)/project/[projectId]/sandboxes/[sandboxId]/page.tsx 
+A NONE     apps/web/app/(app)/project/[projectId]/sandboxes/page.tsx 
+M owned    apps/web/app/(app)/project/[projectId]/sessions/[sessionId]/page.tsx -> src/app/(console)/(session-replay)/project/[projectId]/sessions/[sessionId]/page.tsx
+M owned    apps/web/app/(app)/project/[projectId]/traces/[traceId]/trace-v2.tsx -> src/app/(console)/project/[projectId]/traces/[traceId]/trace-v2.tsx
+M excluded apps/web/app/(app)/settings/actions.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/compare/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/items/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/pins/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runners/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runs/[runId]/cancel/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runs/[runId]/confirm/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runs/[runId]/events/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runs/[runId]/metrics/route.ts 
+A NONE     apps/web/app/api/projects/[projectId]/sandboxes/runs/route.ts 
+A NONE     apps/web/app/api/v1/runner/connect/route.ts 
+M owned    apps/web/app/onboarding/actions.ts -> src/app/onboarding/actions.ts
+A NONE     apps/web/components/sandboxes/ChatThread.tsx 
+A NONE     apps/web/components/sandboxes/CompareView.tsx 
+A NONE     apps/web/components/sandboxes/ConfigPill.tsx 
+A NONE     apps/web/components/sandboxes/ConnectRunner.tsx 
+A NONE     apps/web/components/sandboxes/ParamsPanel.tsx 
+A NONE     apps/web/components/sandboxes/PromptEditor.tsx 
+A NONE     apps/web/components/sandboxes/RecordedItems.tsx 
+A NONE     apps/web/components/sandboxes/RecordedOutput.tsx 
+A NONE     apps/web/components/sandboxes/ReplayInSandbox.tsx 
+A NONE     apps/web/components/sandboxes/RunList.tsx 
+A NONE     apps/web/components/sandboxes/RunOutput.tsx 
+A NONE     apps/web/components/sandboxes/RunnerStatus.tsx 
+A NONE     apps/web/components/sandboxes/SandboxPlayground.tsx 
+A NONE     apps/web/components/sandboxes/SandboxesList.tsx 
+A NONE     apps/web/components/sandboxes/SessionReplayView.tsx 
+A NONE     apps/web/components/sandboxes/ToolCard.tsx 
+A NONE     apps/web/components/sandboxes/ToolsPanel.tsx 
+A NONE     apps/web/components/sandboxes/types.ts 
+A NONE     apps/web/components/sandboxes/useCompare.ts 
+A NONE     apps/web/components/sandboxes/useReplayPins.ts 
+A NONE     apps/web/components/sandboxes/useSessionReplay.ts 
+M owned    apps/web/components/shell/AppFrame.tsx -> src/components/console/shell/AppFrame.tsx
+M excluded apps/web/components/shell/ShellV2.tsx 
+M owned    apps/web/components/shell/nav-icons.ts -> src/components/console/shell/nav-icons.ts
+M owned    apps/web/components/shell/types.ts -> src/components/console/shell/types.ts
+M copy     apps/web/components/traces/v2/SpanInspector.tsx -> src/components/console/traces/SpanInspector.tsx
+M copy     apps/web/components/traces/v2/TraceView.tsx -> src/components/console/traces/TraceView.tsx
+M owned    apps/web/lib/analytics/track-server.ts -> src/lib/platform/telemetry.ts
+M owned    apps/web/lib/api-keys/action-handlers.ts -> src/lib/platform/api-key-actions.ts
+M copy     apps/web/lib/api-keys/authenticate.ts -> src/lib/platform/api-keys/authenticate.ts
+M copy     apps/web/lib/api-keys/bearer.ts -> src/lib/platform/api-key-bearer.ts
+M copy     apps/web/lib/api-keys/routes.ts -> src/lib/platform/api-keys/routes.ts
+M copy     apps/web/lib/context.ts -> src/lib/ingest/context.ts
+M owned    apps/web/lib/cron/drain.ts -> src/lib/jobs/drain.ts
+M copy     apps/web/lib/dashboard.ts -> src/lib/synthesis/dashboard.ts
+M owned    apps/web/lib/db/index.ts -> src/lib/platform/db/client.ts
+A excluded apps/web/lib/db/migrations/0111_sandbox_runs.sql 
+A excluded apps/web/lib/db/migrations/0112_api_key_created_by.sql 
+A excluded apps/web/lib/db/migrations/0113_sandbox_fakes.sql 
+M owned    apps/web/lib/db/migrations/meta/_journal.json -> src/lib/platform/db/migrations/meta/_journal.json
+M excluded apps/web/lib/db/otel-logs.integration.test.ts 
+M excluded apps/web/lib/db/runtime-catalog-override.integration.test.ts 
+M owned    apps/web/lib/db/schema.ts -> src/lib/platform/projects/schema.ts
+M owned    apps/web/lib/decisions/openai.ts -> src/lib/readings/decisions/openai.ts
+M excluded apps/web/lib/flags-retired.test.ts 
+M excluded apps/web/lib/flags.test.ts 
+M excluded apps/web/lib/flags.ts 
+M excluded apps/web/lib/jobs/handlers.ts 
+M excluded apps/web/lib/match-quality/judges/jev.ts 
+M owned    apps/web/lib/match-quality/judges/openai.ts -> src/lib/readings/decisions/openai-judge.ts
+M owned    apps/web/lib/mcp/route-handler.test.ts -> src/lib/mcp/route-handler.test.ts
+M owned    apps/web/lib/navigation/v2.test.ts -> src/lib/console/navigation.test.ts
+M owned    apps/web/lib/navigation/v2.ts -> src/lib/console/navigation.ts
+M owned    apps/web/lib/observability/agent-run.ts -> src/lib/platform/agent-run.ts
+M owned    apps/web/lib/observability/model-call.ts -> src/lib/platform/model-call.ts
+M owned    apps/web/lib/otlp/dimensions/ingest.integration.test.ts -> src/lib/ingest/otlp/dimensions/ingest.integration.test.ts
+A copy     apps/web/lib/otlp/ingest-spans.playground.test.ts -> src/lib/ingest/otlp/ingest-spans.playground.test.ts
+M owned    apps/web/lib/otlp/ingest-spans.ts -> src/lib/ingest/otlp/ingest-spans.ts
+M owned    apps/web/lib/otlp/logs-route-handler.test.ts -> src/lib/ingest/otlp/logs-route-handler.test.ts
+M owned    apps/web/lib/otlp/route-handler.agent-health.test.ts -> src/lib/ingest/otlp/route-handler.agent-health.test.ts
+M owned    apps/web/lib/otlp/route-handler.real-fixtures.integration.test.ts -> src/lib/ingest/otlp/route-handler.real-fixtures.integration.test.ts
+M owned    apps/web/lib/otlp/route-handler.test.ts -> src/lib/ingest/otlp/route-handler.test.ts
+M copy     apps/web/lib/otlp/span-rows.ts -> src/lib/ingest/otlp/span-rows.ts
+A NONE     apps/web/lib/sandboxes/adapters/pg-gateway-store.ts 
+A NONE     apps/web/lib/sandboxes/adapters/pg-store.ts 
+A NONE     apps/web/lib/sandboxes/adapters/production-config.ts 
+A NONE     apps/web/lib/sandboxes/adapters/recorded-items.ts 
+A NONE     apps/web/lib/sandboxes/adapters/run-notifications.ts 
+A NONE     apps/web/lib/sandboxes/connect.ts 
+A NONE     apps/web/lib/sandboxes/domain/channels.ts 
+A NONE     apps/web/lib/sandboxes/domain/command.ts 
+A NONE     apps/web/lib/sandboxes/domain/run.ts 
+A NONE     apps/web/lib/sandboxes/domain/token.ts 
+A NONE     apps/web/lib/sandboxes/fakes/adapters/anthropic-fake-model.ts 
+A NONE     apps/web/lib/sandboxes/fakes/adapters/fake-alerts.ts 
+A NONE     apps/web/lib/sandboxes/fakes/adapters/pg-fake-store.ts 
+A NONE     apps/web/lib/sandboxes/fakes/domain/fake.ts 
+A NONE     apps/web/lib/sandboxes/fakes/domain/generation.ts 
+A NONE     apps/web/lib/sandboxes/fakes/ports/fake-alerts.ts 
+A NONE     apps/web/lib/sandboxes/fakes/ports/fake-model.ts 
+A NONE     apps/web/lib/sandboxes/fakes/ports/fake-store.ts 
+A NONE     apps/web/lib/sandboxes/fakes/service.ts 
+A NONE     apps/web/lib/sandboxes/fakes/tests/adapters.test.ts 
+A NONE     apps/web/lib/sandboxes/fakes/tests/pg-fake-store.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/fakes/tests/service.test.ts 
+A NONE     apps/web/lib/sandboxes/flag.ts 
+A NONE     apps/web/lib/sandboxes/navigation.ts 
+A NONE     apps/web/lib/sandboxes/page-deps.ts 
+A NONE     apps/web/lib/sandboxes/page.ts 
+A NONE     apps/web/lib/sandboxes/playground-state.ts 
+A NONE     apps/web/lib/sandboxes/playground.ts 
+A NONE     apps/web/lib/sandboxes/ports/gateway-store.ts 
+A NONE     apps/web/lib/sandboxes/ports/store.ts 
+A NONE     apps/web/lib/sandboxes/recorded-reply.ts 
+A NONE     apps/web/lib/sandboxes/replay.ts 
+A NONE     apps/web/lib/sandboxes/replay/pg-session-source.ts 
+A NONE     apps/web/lib/sandboxes/replay/replay-run.ts 
+A NONE     apps/web/lib/sandboxes/replay/session-page.ts 
+A NONE     apps/web/lib/sandboxes/replay/session-source.ts 
+A NONE     apps/web/lib/sandboxes/replay/tests/replay-run.test.ts 
+A NONE     apps/web/lib/sandboxes/replay/tests/session-page.test.ts 
+A NONE     apps/web/lib/sandboxes/replay/tests/session-source.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/replay/tests/session-source.test.ts 
+A NONE     apps/web/lib/sandboxes/replay/tests/turn-compare.test.ts 
+A NONE     apps/web/lib/sandboxes/replay/turn-compare.ts 
+A NONE     apps/web/lib/sandboxes/run-api-deps.ts 
+A NONE     apps/web/lib/sandboxes/run-api.ts 
+A NONE     apps/web/lib/sandboxes/run-request.ts 
+A NONE     apps/web/lib/sandboxes/stamps.ts 
+A NONE     apps/web/lib/sandboxes/tests/chat-state.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/connect.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/domain.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/navigation.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/page.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/pg-store.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/playground-state.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/production-config.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/recorded-items.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/replay.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/run-api.integration.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/token.test.ts 
+A NONE     apps/web/lib/sandboxes/tests/tools-state.test.ts 
+A NONE     apps/web/lib/sandboxes/tools-state.ts 
+M excluded apps/web/lib/seed/health-demo.test.ts 
+M excluded apps/web/lib/seed/meridian/catalog.ts 
+M excluded apps/web/lib/seed/meridian/turns.ts 
+M copy     apps/web/lib/tool-crafter/schema-check.test.ts -> src/lib/synthesis/tool-crafter/schema-check.test.ts
+M owned    apps/web/lib/topics/job.ts -> src/lib/readings/topics/job.ts
+A NONE     apps/web/lib/topics/place-sandbox.test.ts 
+A NONE     apps/web/lib/topics/place.sandbox.input.json 
+A NONE     apps/web/lib/topics/place.sandbox.ts 
+M copy     apps/web/lib/topics/place.ts -> src/lib/readings/topics/place.ts
+M excluded apps/web/lib/trace-signals/replay.ts 
+M copy     apps/web/lib/trace-signals/turns/segment.test.ts -> src/lib/ledger/turns/segment.test.ts
+M owned    apps/web/lib/trace-signals/turns/segment.ts -> src/lib/ledger/turns/segment.ts
+M owned    apps/web/lib/trace-signals/workflows/label-job.ts -> src/lib/readings/trace-signals/workflows/label-job.ts
+A NONE     apps/web/lib/trace-signals/workflows/label-sandbox.test.ts 
+A NONE     apps/web/lib/trace-signals/workflows/label.sandbox.input.json 
+A NONE     apps/web/lib/trace-signals/workflows/label.sandbox.ts 
+M copy     apps/web/lib/trace-signals/workflows/label.ts -> src/lib/readings/trace-signals/workflows/label.ts
+M owned    apps/web/package.json -> src/package.json
+M excluded deploy/README.md 
+M excluded deploy/templates/ecs-task-def.yaml 
+A excluded deploy/values-gateway.yaml 
+M excluded deploy/values-prod.yaml 
+M excluded deploy/values-staging.yaml 
+M NONE     docker-compose.yml 
+M excluded infra/README.md 
+M excluded infra/module/datadog_monitors.tf 
+A excluded infra/module/gateway.tf 
+M excluded infra/module/posthog.tf 
+M excluded infra/module/secrets.tf 
+M excluded infra/module/tests/ratel_cloud.tftest.hcl 
+M excluded infra/module/variables.tf 
+M NONE     pnpm-lock.yaml 
+A NONE     vendor/ratel-ai-sandbox-0.1.0.tgz 

@@ -1,0 +1,39 @@
+title:	chore: remove flag cloud-project-entities
+state:	DRAFT
+author:	rstagi (Roberto Stagi)
+labels:	
+assignees:	
+reviewers:	
+projects:	
+milestone:	
+number:	529
+url:	https://github.com/ratel-ai/ratel-cloud/pull/529
+additions:	219
+deletions:	529
+auto-merge:	disabled
+--
+Do not merge before the flag is on for all users.
+
+Builds on #527 (detection marker and setup guide), which builds on #522. Review after them.
+
+## What
+
+Retires `cloud-project-entities`: the agents, MCP servers and clients surfaces become the default.
+
+- **Gates removed**: the Agents and MCP servers page contexts (no 404 when off), the agent overrides API, the rail checks for Agents and MCP servers, the Traces entity filters (`facetAgent`, `facetServer`, `facetHarness`, `facetCountry` and their facets are always on, so the `entities` option is gone from the filter helpers, the facet query, the bars and the Sessions next-page fetch), the `forbidden` refusals of `list_agents`, `get_agent`, `list_mcp_servers`, `get_mcp_server` and `list_clients`, and the `get_sdk_setup` guide gate.
+- **Data rules kept**: the Agents item still shows only for a project with multi-agent data, MCP servers only for a project with MCP spans.
+- **Declarations removed**: `FLAGS` in `lib/flags.ts`, `local.managed_flags` in `infra/module/posthog.tf`, `infra/module/tests/ratel_cloud.tftest.hcl`, `.flags.local.example.json`, and the comments that list the live rollout flags. `lib/project-entities/flag.ts` is deleted. `git grep cloud-project-entities -- apps/web infra` finds nothing.
+- **Tests**: the flag-off tests are removed; the flag-on tests stay as plain tests. The tools fixture is regenerated (the `get_sdk_setup` description no longer names the page flag).
+- **agent_failing stays on `payload.agent`** (decision agent-failing-stays-payload): this PR does not change `lib/trace-signals`. `lib/otlp/agent-payload.integration.test.ts` pins what the signal reads today for a tool call under an `invoke_agent` span with no agent attribute (`invoke_agent researcher`, while `agent_key` is `researcher`). Moving the signal to the `agent_key` column, with a subject-key migration, is a separate follow-up: RC-1016.
+
+## Rollout
+
+1. Turn `cloud-project-entities` on for all users in PostHog.
+2. Merge this PR. Terraform then deletes the flag declaration.
+
+## Proof
+
+A flag removal has no new screen. The surfaces it ungates are the ones in #527's Proof section. Checks: typecheck, eslint on the changed files, `terraform fmt -check`, and the targeted tests of the changed files pass locally. CI runs the full suite.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+

@@ -1,0 +1,1 @@
+First run of 531 tests: 147 tests, 1 failed (load-brief: the drafted change's prompt is embedded; core fixture copy is not the crafter prompt). Fixed by owning load-brief.test with a fixture copy.

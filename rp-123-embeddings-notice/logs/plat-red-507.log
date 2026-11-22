@@ -1,0 +1,223 @@
+[PostHog] `isFeatureEnabled` is deprecated and will be removed in a future major version. Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — this consolidates flag evaluation into a single `/flags` request per incoming request.
+✔ FF_EVAL_GATE=1 turns the eval gate on, PostHog unasked (0.625125ms)
+✔ FF_EVAL_GATE=0 turns the eval gate off whatever PostHog says (0.088917ms)
+✔ FF_CLOUD_EVAL_GATE alone does not turn the eval gate on: the core never reads it (0.070667ms)
+✔ the diagnostics menu says the eval gate is on with FF_EVAL_GATE=1 and no FF_CLOUD_EVAL_GATE (0.425708ms)
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1023:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:29)
+    at async RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:16)
+    at async RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:9)
+    at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+    at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13)
+}
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1023:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:29)
+    at async RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:16)
+    at async RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:9)
+    at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+    at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13)
+}
+✔ integration: a PostHog value turns the eval gate on for one organization only (28.205042ms)
+✔ the diagnostics menu shows the PostHog value for the reader's organization (0.478833ms)
+✖ each core switch is its own PostHog flag (0.341666ms)
+✔ PostHog decides for the actor, else the signed-in person, else the organization (0.619791ms)
+✔ without PostHog, or without an answer, a switch reads its default: off (0.239459ms)
+✔ a failed decision is off and reported (0.166417ms)
+✔ the menu shows the eval gate of the displayed project's organization, not the active one (0.29725ms)
+✖ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (1.355583ms)
+✖ with no project displayed, the project flags fall back to the active organization (0.341333ms)
+✔ the menu's project flags are refreshed only for a project the reader belongs to (3.638125ms)
+✔ off a project page, the menu's flags are the active organization's (RP-65) (0.846333ms)
+✖ FLAGS is the complete flat registry (64.359917ms)
+✔ code declarations are derived from FLAGS: the launch allowlist, the eval gate, catalog drift and MCP Apps (0.907958ms)
+✖ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (1.528167ms)
+✔ isPostHogConfigured reflects POSTHOG_KEY (0.661666ms)
+✔ importing the registry without PostHog env does not throw (0.71875ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 15
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1156.962625
+
+✖ failing tests:
+
+test at ../../../../.beluga/workspaces/ratel-platform-3fa8/rp-120-port-approved-ratel-cloud/src/access/feature-flags.test.ts:2:6934
+✖ each core switch is its own PostHog flag (0.341666ms)
+  TypeError: Cannot read properties of undefined (reading 'default')
+      at Object.enabled (<ratel-platform>/src/access/feature-flags.ts:54:44)
+      at TestContext.<anonymous> (<ratel-platform>/src/access/feature-flags.test.ts:225:29)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+
+test at ../../../../.beluga/workspaces/ratel-platform-3fa8/rp-120-port-approved-ratel-cloud/src/access/feature-flags.test.ts:2:10761
+✖ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (1.355583ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    {
+      FF_AGENTS_PAGES: {
+        actor: 'user_ada',
+        projectId: 'p-b'
+      },
+  ...
+      },
+  -   FF_SHIP_MONITOR: {
+  -     actor: 'user_ada',
+  -     projectId: 'p-b'
+  -   },
+      FF_TOOL_RUN_INSIGHTS: {
+        actor: 'user_ada',
+        projectId: 'p-b'
+      },
+      FF_TYPED_STEPS: {
+  
+      at TestContext.<anonymous> (<ratel-platform>/src/access/feature-flags.test.ts:332:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { FF_EVAL_GATE: { projectId: 'p-b', actor: 'user_ada' }, FF_RANKING_CATALOG_DRIFT: { projectId: 'p-b', actor: 'user_ada' }, FF_MCP_APPS: { actor: 'user_ada' }, FF_AGENTS_PAGES: { projectId: 'p-b', actor: 'user_ada' }, FF_TOOL_RUN_INSIGHTS: { projectId: 'p-b', actor: 'user_ada' }, FF_TYPED_STEPS: { projectId: 'p-b', actor: 'user_ada' }, FF_SANDBOXES: { projectId: 'p-b', actor: 'user_ada' }, FF_PIVOTS: { projectId: 'p-b', actor: 'user_ada' }, FF_CUSTOM_DASHBOARDS: { actor: 'user_ada' }, FF_CODE_HANDOFF: { projectId: 'p-b', actor: 'user_ada' }, FF_VARIANT_EXPERIMENTS: { projectId: 'p-b', actor: 'user_ada' }, FF_FINE_TUNING: { projectId: 'p-b', actor: 'user_ada' } },
+    expected: { FF_EVAL_GATE: { projectId: 'p-b', actor: 'user_ada' }, FF_RANKING_CATALOG_DRIFT: { projectId: 'p-b', actor: 'user_ada' }, FF_MCP_APPS: { actor: 'user_ada' }, FF_AGENTS_PAGES: { projectId: 'p-b', actor: 'user_ada' }, FF_TOOL_RUN_INSIGHTS: { projectId: 'p-b', actor: 'user_ada' }, FF_TYPED_STEPS: { projectId: 'p-b', actor: 'user_ada' }, FF_SANDBOXES: { projectId: 'p-b', actor: 'user_ada' }, FF_PIVOTS: { projectId: 'p-b', actor: 'user_ada' }, FF_CUSTOM_DASHBOARDS: { actor: 'user_ada' }, FF_CODE_HANDOFF: { projectId: 'p-b', actor: 'user_ada' }, FF_VARIANT_EXPERIMENTS: { projectId: 'p-b', actor: 'user_ada' }, FF_FINE_TUNING: { projectId: 'p-b', actor: 'user_ada' }, FF_SHIP_MONITOR: { projectId: 'p-b', actor: 'user_ada' } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at ../../../../.beluga/workspaces/ratel-platform-3fa8/rp-120-port-approved-ratel-cloud/src/access/feature-flags.test.ts:2:12186
+✖ with no project displayed, the project flags fall back to the active organization (0.341333ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + undefined
+  - {
+  -   actor: 'user_ada',
+  -   organizationId: 'org-a'
+  - }
+  
+      at TestContext.<anonymous> (<ratel-platform>/src/access/feature-flags.test.ts:377:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: { organizationId: 'org-a', actor: 'user_ada' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at ../../../../.beluga/workspaces/ratel-platform-3fa8/rp-120-port-approved-ratel-cloud/src/access/flags-registry.test.ts:2:2375
+✖ FLAGS is the complete flat registry (64.359917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      'cloud-code-handoff',
+      'cloud-custom-dashboards',
+      'cloud-eval-gate',
+      'cloud-fine-tuning',
+  ...
+      'cloud-sandboxes',
+  -   'cloud-ship-monitor',
+      'cloud-tool-run-insights',
+      'cloud-typed-steps',
+      'cloud-variant-experiments'
+    ]
+  
+      at TestContext.<anonymous> (<ratel-platform>/src/access/flags-registry.test.ts:74:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'cloud-code-handoff', 'cloud-custom-dashboards', 'cloud-eval-gate', 'cloud-fine-tuning', 'cloud-launch-access', 'cloud-mcp-apps', 'cloud-pivots', 'cloud-project-entities', 'cloud-ranking-catalog-drift', 'cloud-sandboxes', 'cloud-tool-run-insights', 'cloud-typed-steps', 'cloud-variant-experiments' ],
+    expected: [ 'cloud-code-handoff', 'cloud-custom-dashboards', 'cloud-eval-gate', 'cloud-fine-tuning', 'cloud-launch-access', 'cloud-mcp-apps', 'cloud-pivots', 'cloud-project-entities', 'cloud-ranking-catalog-drift', 'cloud-sandboxes', 'cloud-ship-monitor', 'cloud-tool-run-insights', 'cloud-typed-steps', 'cloud-variant-experiments' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at ../../../../.beluga/workspaces/ratel-platform-3fa8/rp-120-port-approved-ratel-cloud/src/access/flags-registry.test.ts:2:4060
+✖ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (1.528167ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      {
+        default: false,
+        enabled: true,
+        key: 'cloud-launch-access',
+  ...
+      },
+  -   {
+  -     default: false,
+  -     enabled: true,
+  -     key: 'cloud-ship-monitor',
+  -     note: "Ship watch: each shipped fix's changed tools since the ship beside the 7 days before, calls of the tools it removed, runs before and after, a verdict and the newest traces, refreshed live on the Ship page (watch cards and the shipment Panel) and the ship/watch API; MCP get_shipment_watch (ratel-cloud #507) · per organization (pages), per project (MCP) · FF_SHIP_MONITOR",
+  -     scope: 'session'
+  -   }
+    ]
+  
+      at TestContext.<anonymous> (<ratel-platform>/src/access/flags-registry.test.ts:116:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ { key: 'cloud-launch-access', default: false, note: 'hasLaunchAccess() only · the access allowlist · decided by the database · platform admins bypass', scope: 'launch', enabled: true }, { key: 'cloud-eval-gate', default: false, note: 'Fixes › eval gate: simulated before/after on historical runs, editable eval sets (RC-46)', scope: 'session', enabled: true }, { key: 'cloud-ranking-catalog-drift', default: false, note: 'Adaptive ranking › catalog drift: gone-tool rule, short warning with the list on demand, closable warnings, gone tools pruned from Cloud graphs on rebuild (RC-721) · FF_RANKING_CATALOG_DRIFT', scope: 'session', enabled: true }, { key: 'cloud-mcp-apps', default: false, note: "MCP server › ui://ratel/<view> resources and tools' _meta.ui.resourceUri (MCP Apps) · mcpAppsEnabled() · project:<id> or the Clerk id · FF_MCP_APPS", scope: 'session', enabled: true }, { key: 'cloud-project-entities', default: false, note: 'Traces › Agents and MCP servers pages, agent overrides, and list_agents/get_agent/list_mcp_servers/get_mcp_server (RC-775, RC-776, #510) · FF_AGENTS_PAGES', scope: 'session', enabled: true }, { key: 'cloud-tool-run-insights', default: false, note: 'Tool-run insights: Tasks from 3 runs, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns (RC-725, RC-742, RC-743, RC-747, RC-828) · per project · FF_TOOL_RUN_INSIGHTS', scope: 'session', enabled: true }, { key: 'cloud-typed-steps', default: false, note: 'Typed steps: model calls, code steps, handoffs and user messages make turns; tasks from step signatures and task segments; view presets; Agent health per step kind and a flow map of every step kind (RC-1067, RC-1072..RC-1078, RC-1182) · per project · FF_TYPED_STEPS', scope: 'session', enabled: true }, { key: 'cloud-sandboxes', default: false, note: 'Agent sandboxes: label_workflows and assign_topics stamp ratel.sandbox.*; the Sandboxes pages, the run API and POST /api/v1/runner/connect answer; playground runs skip cost and Agent health (RC-1090..RC-1110, RC-1188) · per project · FF_SANDBOXES', scope: 'session', enabled: true }, { key: 'cloud-pivots', default: false, note: 'Pivots: Settings > Pivots, configured pivot keys kept at ingest and in imports, dims on trace summaries; the pivot filter on Sessions and Turns and the Overview group-by (RC-881..RC-886, RC-968, RC-1001) · per project · FF_PIVOTS', scope: 'session', enabled: true }, { key: 'cloud-custom-dashboards', default: false, note: 'Custom dashboards: Dashboards under Overview, widgets over trace summaries, shared with the project by link, MCP list_dashboards and get_dashboard (RC-887..RC-889, RC-1021) · per person · FF_CUSTOM_DASHBOARDS', scope: 'session', enabled: true }, { key: 'cloud-code-handoff', default: false, note: "Code handoff: Settings > Repository links a GitHub repo through the GitHub App; handoff_fix opens an @claude issue with the fix's brief; push and deployment_status webhooks and service.version record a fix-tagged commit's deploy as a shipment (RC-913..RC-924, RC-958, RC-993..RC-995) · per project · FF_CODE_HANDOFF", scope: 'session', enabled: true }, { key: 'cloud-variant-experiments', default: false, note: "Variant experiments: ingest keeps each span's ratel.variant.* tags and a per-trace rollup, Settings > General maps a project's own attribute to a variant; the Variants pages under Traces and MCP list_variant_experiments and get_variant_experiment compare the variants (RC-861, RC-868..RC-871, RC-977) · per project · FF_VARIANT_EXPERIMENTS", scope: 'session', enabled: true }, { key: 'cloud-fine-tuning', default: false, note: "Fine-tuning: the Fine-tuning page under Improvements (the training opt-in, use cases over a project's model calls and their stats, immutable redacted dataset versions to review, export as JSONL and delete), its API routes, the build_fine_tuning_dataset job and MCP list_use_cases, get_use_case, create_use_case, build_dataset, get_dataset, list_dataset_rows, set_use_case_override and delete_dataset (RC-1123..RC-1131, RC-1144, RC-1145, RC-1156, RC-1176..RC-1178) · per organization (pages), per project (MCP, the build job) · FF_FINE_TUNING", scope: 'session', enabled: true } ],
+    expected: [ { key: 'cloud-launch-access', default: false, scope: 'launch', enabled: true, note: 'hasLaunchAccess() only · the access allowlist · decided by the database · platform admins bypass' }, { key: 'cloud-eval-gate', default: false, scope: 'session', enabled: true, note: 'Fixes › eval gate: simulated before/after on historical runs, editable eval sets (RC-46)' }, { key: 'cloud-ranking-catalog-drift', default: false, scope: 'session', enabled: true, note: 'Adaptive ranking › catalog drift: gone-tool rule, short warning with the list on demand, closable warnings, gone tools pruned from Cloud graphs on rebuild (RC-721) · FF_RANKING_CATALOG_DRIFT' }, { key: 'cloud-mcp-apps', default: false, scope: 'session', enabled: true, note: "MCP server › ui://ratel/<view> resources and tools' _meta.ui.resourceUri (MCP Apps) · mcpAppsEnabled() · project:<id> or the Clerk id · FF_MCP_APPS" }, { key: 'cloud-project-entities', default: false, scope: 'session', enabled: true, note: 'Traces › Agents and MCP servers pages, agent overrides, and list_agents/get_agent/list_mcp_servers/get_mcp_server (RC-775, RC-776, #510) · FF_AGENTS_PAGES' }, { key: 'cloud-tool-run-insights', default: false, scope: 'session', enabled: true, note: 'Tool-run insights: Tasks from 3 runs, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns (RC-725, RC-742, RC-743, RC-747, RC-828) · per project · FF_TOOL_RUN_INSIGHTS' }, { key: 'cloud-typed-steps', default: false, scope: 'session', enabled: true, note: 'Typed steps: model calls, code steps, handoffs and user messages make turns; tasks from step signatures and task segments; view presets; Agent health per step kind and a flow map of every step kind (RC-1067, RC-1072..RC-1078, RC-1182) · per project · FF_TYPED_STEPS' }, { key: 'cloud-sandboxes', default: false, scope: 'session', enabled: true, note: 'Agent sandboxes: label_workflows and assign_topics stamp ratel.sandbox.*; the Sandboxes pages, the run API and POST /api/v1/runner/connect answer; playground runs skip cost and Agent health (RC-1090..RC-1110, RC-1188) · per project · FF_SANDBOXES' }, { key: 'cloud-pivots', default: false, scope: 'session', enabled: true, note: 'Pivots: Settings > Pivots, configured pivot keys kept at ingest and in imports, dims on trace summaries; the pivot filter on Sessions and Turns and the Overview group-by (RC-881..RC-886, RC-968, RC-1001) · per project · FF_PIVOTS' }, { key: 'cloud-custom-dashboards', default: false, scope: 'session', enabled: true, note: 'Custom dashboards: Dashboards under Overview, widgets over trace summaries, shared with the project by link, MCP list_dashboards and get_dashboard (RC-887..RC-889, RC-1021) · per person · FF_CUSTOM_DASHBOARDS' }, { key: 'cloud-code-handoff', default: false, scope: 'session', enabled: true, note: "Code handoff: Settings > Repository links a GitHub repo through the GitHub App; handoff_fix opens an @claude issue with the fix's brief; push and deployment_status webhooks and service.version record a fix-tagged commit's deploy as a shipment (RC-913..RC-924, RC-958, RC-993..RC-995) · per project · FF_CODE_HANDOFF" }, { key: 'cloud-variant-experiments', default: false, scope: 'session', enabled: true, note: "Variant experiments: ingest keeps each span's ratel.variant.* tags and a per-trace rollup, Settings > General maps a project's own attribute to a variant; the Variants pages under Traces and MCP list_variant_experiments and get_variant_experiment compare the variants (RC-861, RC-868..RC-871, RC-977) · per project · FF_VARIANT_EXPERIMENTS" }, { key: 'cloud-fine-tuning', default: false, scope: 'session', enabled: true, note: "Fine-tuning: the Fine-tuning page under Improvements (the training opt-in, use cases over a project's model calls and their stats, immutable redacted dataset versions to review, export as JSONL and delete), its API routes, the build_fine_tuning_dataset job and MCP list_use_cases, get_use_case, create_use_case, build_dataset, get_dataset, list_dataset_rows, set_use_case_override and delete_dataset (RC-1123..RC-1131, RC-1144, RC-1145, RC-1156, RC-1176..RC-1178) · per organization (pages), per project (MCP, the build job) · FF_FINE_TUNING" }, { key: 'cloud-ship-monitor', default: false, scope: 'session', enabled: true, note: "Ship watch: each shipped fix's changed tools since the ship beside the 7 days before, calls of the tools it removed, runs before and after, a verdict and the newest traces, refreshed live on the Ship page (watch cards and the shipment Panel) and the ship/watch API; MCP get_shipment_watch (ratel-cloud #507) · per organization (pages), per project (MCP) · FF_SHIP_MONITOR" } ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

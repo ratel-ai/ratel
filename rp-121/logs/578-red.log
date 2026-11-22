@@ -1,0 +1,199 @@
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'drizzle-orm' imported from /private/tmp/rp121-red/src/lib/views/session-chat/load.integration.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/session-chat/load.integration.test.ts (167.940041ms)
+/private/tmp/rp121-red/src/lib/views/session-chat/model.test.ts:13
+  chatBands,
+  ^
+SyntaxError: The requested module './model' does not provide an export named 'chatBands'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/views/session-chat/model.test.ts (175.890334ms)
+✔ orders user turn → model call → searches and tool calls → next turn, numbering steps from 1 (2.843083ms)
+✔ a model call at the same instant as a tool call comes first: it decided the call (0.208666ms)
+✔ marks a retry: the same target again right after it failed (0.151625ms)
+✔ marks a loop: the same target a third time in a turn, and a search after a tool call (0.12825ms)
+✔ the same target in two turns is no loop: each turn counts alone (0.131708ms)
+✔ self-corrections the detectors found add their marks to the step they name (0.102292ms)
+✔ marks an abandoned turn on its turn step (0.073666ms)
+✔ coverage: content when the model call carried text, tokens only when not, expired once the source event is pruned (0.132375ms)
+✔ a ledger step with its event but no model call before it has tokens only (0.067291ms)
+✔ an empty session has no steps (0.094166ms)
+✖ typed steps: user messages, code and handoffs are steps; a stored model call gives its ordinal to the joined call (1.591125ms)
+✔ legacy ledgers keep their steps and joined calls without ordinals (0.083875ms)
+/private/tmp/rp121-red/src/lib/views/tasks/session.test.ts:3
+import { parseMarkedTools, segmentBands, sessionStep } from "@/lib/views/tasks/session";
+                           ^
+SyntaxError: The requested module '@/lib/views/tasks/session' does not provide an export named 'segmentBands'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/views/tasks/session.test.ts (184.972292ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@/lib' imported from /private/tmp/rp121-red/src/lib/views/tasks/steps-view.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/tasks/steps-view.test.ts (173.313458ms)
+node:internal/modules/package_json_reader:316
+  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+        ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from /private/tmp/rp121-red/src/lib/views/tasks/tasks-ui.test.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:718:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:735:38)
+    at nextStep (node:internal/modules/customization_hooks:189:26)
+    at resolveBaseSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:11092)
+    at resolveDirectorySync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:12398)
+    at resolveTsPathsSync (file://~/.npm/_npx/fd45a72a545557e9/node_modules/tsx/dist/register-nyXW-TH3.mjs:2:13605) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/tasks/tasks-ui.test.ts (164.661167ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 11
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 192.425042
+
+✖ failing tests:
+
+test at lib/views/session-chat/load.integration.test.ts:1:1
+✖ lib/views/session-chat/load.integration.test.ts (167.940041ms)
+  'test failed'
+
+test at lib/views/session-chat/model.test.ts:1:1
+✖ lib/views/session-chat/model.test.ts (175.890334ms)
+  'test failed'
+
+test at lib/views/session-replay/timeline.test.ts:281:1
+✖ typed steps: user messages, code and handoffs are steps; a stored model call gives its ordinal to the joined call (1.591125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    [
+      [
+        'turn',
+        null,
+        null
+      ],
+      [
+  +     'model_call',
+  +     null,
+  +     null
+  +   ],
+  +   [
+  +     'tool_call',
+  -     'step',
+        1,
+  +     null
+  -     'user_message'
+      ],
+      [
+  +     'tool_call',
+  -     'model_call',
+        2,
+        null
+      ],
+      [
+        'tool_call',
+  ...
+      [
+  +     'tool_call',
+  -     'step',
+        4,
+  +     null
+  -     'code'
+      ],
+      [
+  +     'tool_call',
+  -     'step',
+        5,
+  +     null
+  -     'handoff'
+      ],
+      [
+  +     'tool_call',
+  -     'model_call',
+        6,
+        null
+      ],
+  +   [
+  +     'model_call',
+  +     null,
+  +     null
+  +   ]
+    ]
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/views/session-replay/timeline.test.ts:297:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ [ 'turn', null, null ], [ 'model_call', null, null ], [ 'tool_call', 1, null ], [ 'tool_call', 2, null ], [ 'tool_call', 3, null ], [ 'tool_call', 4, null ], [ 'tool_call', 5, null ], [ 'tool_call', 6, null ], [ 'model_call', null, null ] ],
+    expected: [ [ 'turn', null, null ], [ 'step', 1, 'user_message' ], [ 'model_call', 2, null ], [ 'tool_call', 3, null ], [ 'step', 4, 'code' ], [ 'step', 5, 'handoff' ], [ 'model_call', 6, null ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/views/tasks/session.test.ts:1:1
+✖ lib/views/tasks/session.test.ts (184.972292ms)
+  'test failed'
+
+test at lib/views/tasks/steps-view.test.ts:1:1
+✖ lib/views/tasks/steps-view.test.ts (173.313458ms)
+  'test failed'
+
+test at lib/views/tasks/tasks-ui.test.ts:1:1
+✖ lib/views/tasks/tasks-ui.test.ts (164.661167ms)
+  'test failed'

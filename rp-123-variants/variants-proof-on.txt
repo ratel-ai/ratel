@@ -1,0 +1,13 @@
+$ cd src && FF_VARIANT_EXPERIMENTS=1 npx tsx proof-variants.mts   # ratel beluga/rp-123-variants 5b5c73fe
+FF_VARIANT_EXPERIMENTS=1
+switch for the project: true
+save mapping app.variant -> checkout-model: {"ok":true}; stored 1
+ingest: ok=true
+otel_spans with a variant: 24 of 48
+trace summaries by variant: {"checkout-model/control":12,"checkout-model/haiku":12}
+rail shows Variants for: ["11111111-1111-4111-8111-111111111111"]
+MCP list_variant_experiments: {"experiments":[{"experiment":"checkout-model","runs":24,"lastSeenAt":"2026-11-22T07:08:13.890Z","variants":[{"name":"control","runs":12},{"name":"haiku","runs":12}]}]}
+MCP get_variant_experiment:
+  control: runs=12 errorRate={"value":0.1667,"low":0.047,"high":0.448,"n":12} p50={"value":3325,"low":3175,"high":3475} costPerSuccess={"value":0.0048,"low":0.004,"high":0.006857}
+  haiku: runs=12 errorRate={"value":0.1667,"low":0.047,"high":0.448,"n":12} p50={"value":1490,"low":1100,"high":1550} costPerSuccess={"value":0.00024,"low":0.0002,"high":0.000343}
+  baseline={"name":"control","reason":"named"} suggestions=[]

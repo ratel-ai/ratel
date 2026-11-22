@@ -1,0 +1,7 @@
+$ cd src && npx tsx proof-ship-monitor.mts   # FF_SHIP_MONITOR unset
+FF_SHIP_MONITOR=(unset)
+switch for the Ship page (organization): false; for an MCP API key (project): false
+Ship page: no watch section, the list only
+seeded: a shipped enrich fix (find_booking returns what lookup_reservation fetched), 12 runs in the hour before the ship, 12 since
+GET /api/projects/:id/ship/watch -> 404 Not found.
+MCP get_shipment_watch -> refused: "forbidden"

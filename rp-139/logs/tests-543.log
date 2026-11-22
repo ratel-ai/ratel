@@ -1,0 +1,229 @@
+✔ project URLs are rooted at /project/<id>, encoded (1.2785ms)
+✔ the project id is read back from the path (0.354084ms)
+✔ with a project, the rail links every core destination to that project (1.47775ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.153375ms)
+✔ outside a project, the organization rail lists its projects page (0.872917ms)
+✔ composition additions follow the core destinations with stable ids (0.366709ms)
+✔ the OSS composition adds no destination (0.228459ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.543292ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (1.110375ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.492417ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.294ms)
+✔ the active item matches exact index pages and nested paths (0.336166ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.324917ms)
+✔ switching project keeps the section the reader is on (0.111042ms)
+✔ a project outside the organization's list is not found (0.088084ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.066542ms)
+✔ the command menu lists the project's pages, the organization's, then every project (0.59325ms)
+✔ outside a project the command menu lists the organization's pages only (0.309458ms)
+✔ the command menu finds a page by its keywords, not only its name (0.882542ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.619292ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.25375ms)
+✔ visibleOrganizationNav hides only the paths given (0.13125ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.512625ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.206791ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.414916ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.2745ms)
+✔ Dashboards sits under Overview and selects itself on a dashboard (0.233167ms)
+✔ pages folded into one product answer with their new home (1.465208ms)
+✔ what needs the database, or never moved, is left to the page (0.25825ms)
+✔ the Tasks page's freshness waits on the task scores, a job this edition runs (0.947125ms)
+✔ the sidebar renders the analysis freshness line inside a project (0.940416ms)
+✔ project home decides whether to offer the guided tour (0.742583ms)
+✔ Settings › API keys renders the quickstart under the key list (0.775708ms)
+✔ a turn page offers "run to test" behind the eval gate (0.413042ms)
+✔ the trace span inspector is given the SDK events page to link to (0.483209ms)
+✔ Settings › Developer builds each SDK event's trace link (0.344625ms)
+✔ a project page asks for the last-project cookie when it names another project (1.267125ms)
+✔ the project layout returns its page when no database is configured (0.220667ms)
+✔ project home and onboarding build the ingest address with the same function (1.928042ms)
+✔ the capture nudge's unchanged lines are lines of the quickstart it is a diff against (0.422541ms)
+✔ the playground rank route and the traces routes resolve the project through findProjectScope (1.701125ms)
+✔ the Sessions list page checks the project scope itself, as its two routes do (0.564166ms)
+✔ root metadata sets a title template on the product name, a description and an icon (0.788875ms)
+✔ every job that works on one project runs in the project log context (66.394917ms)
+✔ startup lends the edition the onboarding service with the other core services (0.56225ms)
+✔ the playground page is headed "Test a search", under Catalog (0.691791ms)
+✔ the shell hands the edition's overlays and palette actions to the frame, which mounts the overlays after the shortcuts dialog (0.790042ms)
+✔ the shell decides FF_AGENTS_PAGES per organization and the rail reads it (RP-28) (0.201416ms)
+✔ flag off: every registered tool runs without forView and answers exactly as on main (785.751792ms)
+✔ the Integrations page's tool count is the flag-off tools/list, as main's (171.241375ms)
+✔ the demo project does not count toward the project limit, as in the console (39.433166ms)
+✔ Enterprise limits say unlimited rather than serializing as null (4.560916ms)
+✔ plan and subscription state come from the same helpers as the Billing page (104.41425ms)
+✔ match quality not on the plan says so (44.266083ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (3.068333ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (2.084541ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (2.048125ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (2.316541ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (3.248292ms)
+✔ ids are unique, snake_case, and stable-looking (0.676167ms)
+✔ every operation is discoverable: title, description, known domain (0.17775ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.2915ms)
+✔ every params schema converts to JSON Schema for discovery (146.945833ms)
+✔ write operations are exactly those declaring mutates (1.685166ms)
+✔ read-only assembly drops every mutating operation (78.524917ms)
+✔ the operation contract matches the reviewed snapshot (16.894208ms)
+✔ get_dashboard returns the dashboard, its widgets, their specs and their rows (13579.844042ms)
+✔ a project API key never reads a private dashboard, in the list or by id (1032.898958ms)
+✔ a person over OAuth reads their own private dashboard too (1111.939625ms)
+{"level":50,"time":1795330494238,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (183.323083ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (43.693625ms)
+✔ without an edition's name the 401 realm stays ratel (0.441416ms)
+✔ an older protocol version still negotiates (50.808083ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (72.980959ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (189.607334ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.93175ms)
+✔ every tool definition is exactly what the fixture pins (75.580209ms)
+✔ each staged tool publishes its stage, and only that, as _meta (142.2565ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (20.798208ms)
+✔ each tool carries the annotations the Claude directory reviews (161.565208ms)
+✔ no tool description tells the model what to do first (117.802541ms)
+✔ calling a tool runs its operation and reports failures in-band (142.576125ms)
+✔ an unregistered tool name is refused by the transport (10.924667ms)
+✔ a notification is accepted with no body (93.33875ms)
+✔ a missing credential is rejected before any protocol work (0.854083ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (249.846458ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (73.317458ms)
+✔ an exhausted rate limit returns 429 with Retry-After (21.097542ms)
+✔ malformed JSON gets the reserved parse-error code (0.548875ms)
+✔ an oversized batch is refused rather than amplified (64.836125ms)
+✔ GET and DELETE explain that this endpoint is stateless (2.7105ms)
+✔ an exception while verifying a credential is a 401, never a 500 (2.585334ms)
+✔ the 401 from a failed verification still advertises where to authenticate (6.314959ms)
+✔ repeated bad credentials stop reaching the authenticator at all (1.245792ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (1.950292ms)
+✔ successful calls are never charged to the failure budget (301.337292ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (89.928542ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.634083ms)
+{"level":50,"time":1795330494239,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795330494553,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795330495207,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-139/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-139/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-139/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-139/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-139/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-139/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-139/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-139/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795330495214,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":40,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795330495320,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795330495642,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":3,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795330495664,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795330495665,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795330495733,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:413:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:417:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795330495741,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:429:15)\n    at handleMcpRequest (~/ratel-wt-rp-139/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/mcp/route-handler.test.ts:433:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795330495743,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795330496136,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795330496136,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795330496137,"pid":97343,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ the creator opens and edits a private dashboard; another member does neither (0.598709ms)
+✔ every member opens and edits a project dashboard (0.080792ms)
+✔ only the creator changes who sees a dashboard, private or shared (0.075792ms)
+✔ a caller with no person (a project API key) opens only project dashboards and edits none (0.051708ms)
+✔ a dashboard takes widgets up to the limit of 20 (0.056625ms)
+✔ a name is 1 to 80 characters once trimmed (0.78275ms)
+✔ a widget moves one place up or down, not past either end (0.251084ms)
+✔ groups order by value, highest first, with no value last and ties by runs (1.412333ms)
+✔ each metric gives its value over the project's window (13455.518167ms)
+✔ a 30-day range reaches the older trace; another project's rows never count (1078.307083ms)
+✔ each group-by groups the window's traces (1116.070542ms)
+✔ the TraceFilter narrows the traces (897.770542ms)
+✔ a group-by keeps the top N and merges the rest into Other (926.13475ms)
+✔ a day grouping is a time series: every day of the range, in day order, no Other, even with a top N (866.939792ms)
+✔ session and user metrics without their pivot, and a removed group-by pivot, read pivot missing (1152.440459ms)
+✔ a spec outside the whitelist is refused before any query (2.243459ms)
+✔ a 30-day day grouping keeps all 31 dates the window touches, today included (1144.784583ms)
+{"level":30,"time":1795330493238,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"c54c3706-4450-4882-84e1-abab2f5a9145","msg":"dashboards changed"}
+✔ a member creates, renames and deletes a dashboard, and the events are sent (13347.410917ms)
+{"level":30,"time":1795330493305,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_name","msg":"dashboards request refused"}
+{"level":30,"time":1795330493310,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_deleted","dashboard_id":"c54c3706-4450-4882-84e1-abab2f5a9145","msg":"dashboards changed"}
+{"level":30,"time":1795330493311,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330494294,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"6b28f8f1-01be-4688-898e-6ae0094d377c","msg":"dashboards changed"}
+✔ a member adds, edits, moves and removes widgets of each chart type (1157.799333ms)
+{"level":30,"time":1795330494339,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"6b28f8f1-01be-4688-898e-6ae0094d377c","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330494358,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"6b28f8f1-01be-4688-898e-6ae0094d377c","metric":"runs","group_by":"day","chart":"line","msg":"dashboards changed"}
+{"level":30,"time":1795330494409,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"6b28f8f1-01be-4688-898e-6ae0094d377c","metric":"cost","group_by":"pivot","chart":"bar","msg":"dashboards changed"}
+{"level":30,"time":1795330494428,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"6b28f8f1-01be-4688-898e-6ae0094d377c","metric":"cost","group_by":"model","chart":"table","msg":"dashboards changed"}
+{"level":30,"time":1795330495450,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"d3944363-0f50-466c-a11f-bbf6cffdca2f","msg":"dashboards changed"}
+✔ a widget outside the whitelist or with an unconfigured pivot is refused (990.770917ms)
+{"level":30,"time":1795330495456,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"unknown_metric","msg":"dashboards request refused"}
+{"level":30,"time":1795330495459,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"unconfigured_pivot","msg":"dashboards request refused"}
+{"level":30,"time":1795330495462,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"range_over_retention","msg":"dashboards request refused"}
+{"level":30,"time":1795330496365,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","msg":"dashboards changed"}
+✔ a dashboard takes at most 20 widgets (1330.976ms)
+{"level":30,"time":1795330496450,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496465,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496470,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496484,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496514,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496519,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496526,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496529,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496565,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496568,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496570,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496573,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496628,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496644,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496656,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496684,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496691,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496720,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496738,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496756,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"cecaa334-89ac-4765-8447-a325487f64aa","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330496762,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"limit","msg":"dashboards request refused"}
+{"level":30,"time":1795330497676,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"68e653bc-cb99-4d24-bf98-55bf44d52986","msg":"dashboards changed"}
+✔ only the creator opens and edits a private dashboard; every member a project one (945.351459ms)
+{"level":30,"time":1795330497680,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330497681,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330497682,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330497684,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330497696,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_shared","dashboard_id":"68e653bc-cb99-4d24-bf98-55bf44d52986","sharing":"project","msg":"dashboards changed"}
+{"level":30,"time":1795330497732,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_widget_added","dashboard_id":"68e653bc-cb99-4d24-bf98-55bf44d52986","metric":"runs","group_by":"none","chart":"kpi","msg":"dashboards changed"}
+{"level":30,"time":1795330497737,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_creator","msg":"dashboards request refused"}
+{"level":30,"time":1795330498615,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"3182529d-9f5a-4e62-86b0-afa19b3d442f","msg":"dashboards changed"}
+✔ the creator shares and unshares a dashboard, and each change sends dashboard_shared (958.873167ms)
+{"level":30,"time":1795330498623,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_shared","dashboard_id":"3182529d-9f5a-4e62-86b0-afa19b3d442f","sharing":"project","msg":"dashboards changed"}
+{"level":30,"time":1795330498696,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_shared","dashboard_id":"3182529d-9f5a-4e62-86b0-afa19b3d442f","sharing":"private","msg":"dashboards changed"}
+{"level":30,"time":1795330498697,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330499791,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"4acff35d-40a0-4a75-895e-158e3246d44a","msg":"dashboards changed"}
+✔ a sharing change that is not permitted is refused and sends no event (1115.227583ms)
+{"level":30,"time":1795330499793,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330499793,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330499812,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"invalid_sharing","msg":"dashboards request refused"}
+{"level":30,"time":1795330499813,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"restricted","msg":"dashboards request refused"}
+{"level":30,"time":1795330500888,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"e6e7d067-a24b-410e-8b55-f1e0a23ba289","msg":"dashboards changed"}
+✔ a user of another project gets not-found for a private and a project dashboard (1083.53975ms)
+{"level":30,"time":1795330500890,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"28d798f5-2d2a-43d5-8f34-3699461eeae5","msg":"dashboards changed"}
+{"level":30,"time":1795330500894,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_shared","dashboard_id":"28d798f5-2d2a-43d5-8f34-3699461eeae5","sharing":"project","msg":"dashboards changed"}
+{"level":30,"time":1795330500894,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330500895,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330500895,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330500896,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330501750,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_created","dashboard_id":"b3aaa9e2-4932-4ef2-8f5b-2170419d6a7f","msg":"dashboards changed"}
+✔ a user outside the project and a support session are refused (860.019208ms)
+{"level":30,"time":1795330501753,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"dashboard_shared","dashboard_id":"b3aaa9e2-4932-4ef2-8f5b-2170419d6a7f","sharing":"project","msg":"dashboards changed"}
+{"level":30,"time":1795330501753,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330501754,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111112","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330501754,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+{"level":30,"time":1795330501754,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"restricted","msg":"dashboards request refused"}
+{"level":30,"time":1795330501756,"pid":97499,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards","project_id":"11111111-1111-4111-8111-111111111111","outcome":"not_found","msg":"dashboards request refused"}
+✔ every whitelisted metric, group-by, chart and range combination that fits is accepted (224.342917ms)
+✔ a full filter and a top N are kept (37.85325ms)
+✔ a day grouping drops the top N: a time series has no Other, the range caps it (1.725583ms)
+✔ the day query has an explicit limit of the dates the longest range touches, and ignores a top N (15.714875ms)
+✔ unknown metrics, group-bys and charts are rejected (1.244375ms)
+✔ a pivot key the project has not configured is rejected (0.44475ms)
+✔ a range over the retention window, or not a preset, is rejected (0.384833ms)
+✔ extra fields, a bad filter and a top N over the cap are rejected (1.035417ms)
+✔ SQL text in a string field changes no query text: every value is a bound parameter (1.019833ms)
+{"level":50,"time":1795330481568,"pid":97562,"hostname":"rstagis-MacBook-Pro-3.local","module":"custom-dashboards/widget-data","err":{"type":"Error","message":"statement timeout","stack":"Error: statement timeout\n    at run (~/ratel-wt-rp-139/src/lib/views/custom-dashboards/widget-data.test.ts:24:67)\n    at runNextTicks (node:internal/process/task_queues:64:5)\n    at listOnTimeout (node:internal/timers:567:9)\n    at process.processTimers (node:internal/timers:541:7)\n    at async <anonymous> (~/ratel-wt-rp-139/src/lib/views/custom-dashboards/widget-data.ts:48:47)\n    at async Promise.all (index 1)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-139/src/lib/views/custom-dashboards/widget-data.test.ts:10:16)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3)"},"project_id":"p","widget_id":"b","msg":"dashboard widget query failed"}
+✔ each widget gets its own result; a failed one reads failed (188.1915ms)
+ℹ tests 134
+ℹ suites 0
+ℹ pass 134
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 29446.128709

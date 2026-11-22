@@ -1,0 +1,19 @@
+✔ flag on: only the root is tagged, and the trace summary has its experiment, name and descriptors (1509.278084ms)
+✔ flag off: no span and no summary has a variant (163.671125ms)
+✔ flag on: a trace tagged only with a mapped app.variant is stored as that variant of the mapped experiment (200.048834ms)
+✔ refresh summarizes each trace from its canonical whole-trace representative (1539.7765ms)
+✔ refresh recomputes a trace in full when later spans arrive (168.393042ms)
+✔ refresh is idempotent — a replayed cursor recomputes rather than accumulates (171.53875ms)
+✔ refresh advances the cursor to the last span it folded in (202.421333ms)
+✔ refresh honors its batch and time budget, then resumes from the cursor (151.607791ms)
+✔ refresh skips spans newer than the visibility lag until they settle (133.078125ms)
+✔ refresh releases its advisory lock and yields to a contending tick (132.773542ms)
+✔ refresh rolls the variant up from the root span, else from the first tagged span (138.278292ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3517.074042

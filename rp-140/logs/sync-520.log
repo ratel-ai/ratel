@@ -1,0 +1,53 @@
+
+copied (31)
+  src/lib/views/code-handoff/config.test.ts
+  src/lib/views/code-handoff/config.ts
+  src/lib/views/code-handoff/fake-github.ts
+  src/lib/views/code-handoff/github/app-auth.test.ts
+  src/lib/views/code-handoff/github/app-auth.ts
+  src/lib/views/code-handoff/github/client.test.ts
+  src/lib/views/code-handoff/github/client.ts
+  src/lib/views/code-handoff/github/webhook-signature.test.ts
+  src/lib/views/code-handoff/github/webhook-signature.ts
+  src/lib/views/code-handoff/link-service.integration.test.ts
+  src/lib/views/code-handoff/link-service.ts
+  src/lib/views/code-handoff/marker.test.ts
+  src/lib/views/code-handoff/marker.ts
+  src/lib/views/code-handoff/paths.test.ts
+  src/lib/views/code-handoff/paths.ts
+  src/lib/views/code-handoff/ports.ts
+  src/lib/views/code-handoff/repository-view.test.ts
+  src/lib/views/code-handoff/repository-view.ts
+  src/lib/views/code-handoff/setup-state.test.ts
+  src/lib/views/code-handoff/setup-state.ts
+  src/lib/views/code-handoff/store.integration.test.ts
+  src/lib/views/code-handoff/store.ts
+  src/lib/views/code-handoff/webhook-handler.test.ts
+  src/components/console/code-handoff/RepoPicker.tsx
+  src/components/console/code-handoff/RepositorySettings.tsx
+  src/components/console/code-handoff/UnlinkRepo.tsx
+  src/app/(console)/project/[projectId]/settings/repository/actions.ts
+  src/app/(console)/project/[projectId]/settings/repository/loading.tsx
+  src/app/api/github/install/route.ts
+  src/app/api/github/setup/route.ts
+  src/app/api/github/webhook/route.ts
+
+updated (2)
+  src/lib/console/settings/tabs.ts
+  src/lib/console/settings/tabs.test.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |  13 +++
+ .../(app)/project/[projectId]/settings/layout.tsx  |  14 ++-
+ .../[projectId]/settings/repository/page.tsx       |  38 +++++++
+ apps/web/lib/analytics/track-server.ts             |   2 +
+ apps/web/lib/code-handoff/gate.ts                  |  59 +++++++++++
+ apps/web/lib/code-handoff/webhook-handler.ts       | 113 +++++++++++++++++++++
+ apps/web/lib/code-handoff/wiring.ts                |  67 ++++++++++++
+ apps/web/lib/db/migrations/0109_code_handoff.sql   |  53 ++++++++++
+ apps/web/lib/db/schema.ts                          | 102 +++++++++++++++++++
+ apps/web/lib/mcp/operations/account.test.ts        |   6 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   9 +-
+ 11 files changed, 462 insertions(+), 14 deletions(-)
+
+applied 33 change(s) from 4d88df36

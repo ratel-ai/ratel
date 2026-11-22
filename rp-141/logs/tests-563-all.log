@@ -1,0 +1,297 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (6.149791ms)
+  ✔ assembles the Cloud edition from the seam (0.482625ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.177125ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.407708ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.222166ms)
+  ✔ throws when a port is missing or the edition key is unknown (7.983417ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.709708ms)
+  ✔ throws when cloud is requested but the seam is null (0.427709ms)
+  ✔ reports zero ee boundary violations on the real tree (943.930583ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.4055ms)
+✔ createComposition (965.449541ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.321375ms)
+  ✔ the core modules landed so far register their jobs and steps in layer order (0.457708ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (5.938375ms)
+  ✔ refuses a job kind or drain step registered twice (0.327208ms)
+✔ registry root (7.343917ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.323166ms)
+✔ every kind has a tier and a budget, and an unknown kind waits with the sweeps (1.519041ms)
+✔ the demo project does not count toward the project limit, as in the console (43.657417ms)
+✔ Enterprise limits say unlimited rather than serializing as null (4.115625ms)
+✔ plan and subscription state come from the same helpers as the Billing page (20.635917ms)
+✔ match quality not on the plan says so (2.180083ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (3.11925ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (2.068416ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (2.06225ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (3.119417ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (2.999958ms)
+✔ ids are unique, snake_case, and stable-looking (0.809834ms)
+✔ every operation is discoverable: title, description, known domain (0.235416ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.44675ms)
+✔ every params schema converts to JSON Schema for discovery (26.551292ms)
+✔ write operations are exactly those declaring mutates (0.926667ms)
+✔ read-only assembly drops every mutating operation (12.9575ms)
+✔ the operation contract matches the reviewed snapshot (13.746708ms)
+✔ list_use_cases returns the use cases; get_use_case adds turns, calls, dates, model and cost per run (39.835708ms)
+✔ create_use_case creates as the key's project and emits one event; an empty selector or a taken name is refused (38.767458ms)
+✔ every tool refuses as forbidden with FF_FINE_TUNING off, and reads or writes nothing (9.346833ms)
+✔ build_dataset starts a build as the key's project and returns the building version (6.89175ms)
+✔ with no training opt-in, build_dataset refuses with reason no_consent and a message that names the opt-in (2.551625ms)
+✔ get_dataset returns status, counts, the redaction report and settings, and no row text (3.510667ms)
+{"level":50,"time":1795336259381,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (35.447ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (18.015125ms)
+✔ without an edition's name the 401 realm stays ratel (0.720375ms)
+✔ an older protocol version still negotiates (10.667916ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (45.116916ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (17.66775ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.791584ms)
+✔ every tool definition is exactly what the fixture pins (32.294292ms)
+✔ each staged tool publishes its stage, and only that, as _meta (35.121667ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (20.382667ms)
+✔ each tool carries the annotations the Claude directory reviews (19.055792ms)
+✔ no tool description tells the model what to do first (18.313292ms)
+✔ calling a tool runs its operation and reports failures in-band (43.984917ms)
+✔ an unregistered tool name is refused by the transport (9.512417ms)
+✔ a notification is accepted with no body (7.463375ms)
+✔ a missing credential is rejected before any protocol work (0.612708ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (43.9585ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (7.988708ms)
+✔ an exhausted rate limit returns 429 with Retry-After (16.73575ms)
+✔ malformed JSON gets the reserved parse-error code (0.350917ms)
+✔ an oversized batch is refused rather than amplified (0.268209ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.15375ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.62275ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.741667ms)
+✔ repeated bad credentials stop reaching the authenticator at all (0.509041ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.403708ms)
+✔ successful calls are never charged to the failure budget (95.38475ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (30.616458ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.760875ms)
+{"level":50,"time":1795336259383,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795336259458,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795336259618,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-141/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-141/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-141/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-141/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-141/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-141/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-141/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-141/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795336259626,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":26,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795336259645,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795336259697,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":2,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795336259714,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795336259715,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795336259715,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:418:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:422:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795336259716,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:434:15)\n    at handleMcpRequest (~/ratel-wt-rp-141/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/mcp/route-handler.test.ts:438:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795336259717,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795336259843,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795336259844,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795336259844,"pid":17347,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ every published tool has a stage entry, so a new tool cannot skip the decision (1.01225ms)
+✔ the stage map names no tool that does not exist (0.206541ms)
+✔ every stage is one of the four, and each stage has tools (1.804ms)
+✔ the loop walks Monitor → Insights → Improve → Ship with these tools (0.130167ms)
+✔ the stage is published as tool metadata, and absent outside the loop (0.461542ms)
+{"level":30,"time":1795336257990,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"ea140cbd-134b-4710-931b-e9b22fc3f09d","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336258062,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ a build stores rows, counts, settings, the redaction report and the content hash, and ends ready (9821.641958ms)
+{"level":30,"time":1795336258062,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336258062,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"ea140cbd-134b-4710-931b-e9b22fc3f09d","rows":5,"train":5,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336258734,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"7ef00333-42cf-439c-b43b-d3eaafae5e20","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336258809,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ no stored row holds a fixture email, phone number, card number or key, and no session and no end user is on both sides (1208.651625ms)
+{"level":30,"time":1795336258809,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336258809,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"7ef00333-42cf-439c-b43b-d3eaafae5e20","rows":6,"train":0,"eval":6,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336258815,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"ac2e54ff-bc54-4027-8860-43e0926f696b","version":2,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336258863,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336258864,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"ac2e54ff-bc54-4027-8860-43e0926f696b","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336258868,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"7e1d8391-02ba-4180-b251-64614ce3d4ce","version":3,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336258943,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336258943,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"7e1d8391-02ba-4180-b251-64614ce3d4ce","rows":6,"train":6,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336258949,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"848cc715-89e3-4f44-876d-a8acb1ab1aae","version":4,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336258992,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336258992,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"848cc715-89e3-4f44-876d-a8acb1ab1aae","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259002,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"5b83f2f9-8647-475a-abb2-a0354f7b7739","version":5,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259038,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259039,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"5b83f2f9-8647-475a-abb2-a0354f7b7739","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259043,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"e098f153-ade7-4f9b-87b4-13a36dc76f70","version":6,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259109,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259109,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"e098f153-ade7-4f9b-87b4-13a36dc76f70","rows":6,"train":6,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259116,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"2797fdf6-00a7-4632-8da2-39dff95e3b02","version":7,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259146,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259146,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"2797fdf6-00a7-4632-8da2-39dff95e3b02","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259150,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"3a62af53-1457-4919-bcbd-4a556ae05afe","version":8,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259188,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259188,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"3a62af53-1457-4919-bcbd-4a556ae05afe","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259191,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"4daffac8-b409-4d01-a9da-00c3208d2913","version":9,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259235,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259235,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"4daffac8-b409-4d01-a9da-00c3208d2913","rows":6,"train":6,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259239,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"2eada060-69dd-459a-b348-1739029d7817","version":10,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259269,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259269,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"2eada060-69dd-459a-b348-1739029d7817","rows":6,"train":3,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336258864,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336258943,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336258992,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259038,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259109,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259146,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259188,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259235,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259269,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336259602,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"b75b8fe6-6728-4ff5-b044-c95d4f6fe908","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259632,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ two builds with the same settings on the same traces have the same content hash; a build that stops after one page resumes to it (420.909792ms)
+{"level":30,"time":1795336259632,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259632,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"b75b8fe6-6728-4ff5-b044-c95d4f6fe908","rows":5,"train":2,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259636,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"8fe8fcdb-5100-4c94-8680-c8d33d891c1c","version":2,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336259657,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"8fe8fcdb-5100-4c94-8680-c8d33d891c1c","calls_done":2,"calls":6,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336259676,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"8fe8fcdb-5100-4c94-8680-c8d33d891c1c","calls_done":4,"calls":6,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336259696,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336259696,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"8fe8fcdb-5100-4c94-8680-c8d33d891c1c","rows":5,"train":2,"eval":3,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336259696,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336260014,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"b8de5111-7d30-4c89-8556-3ba448122a4e","version":1,"outcome":"queued","msg":"dataset build queued"}
+✔ with the flag off or no opt-in, a start is refused and stores nothing; the job fails with a typed reason and keeps no row (324.738667ms)
+{"level":30,"time":1795336260017,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"b8de5111-7d30-4c89-8556-3ba448122a4e","reason":"flag_off","outcome":"failed","msg":"dataset build failed"}
+{"level":30,"time":1795336260019,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"508a7a70-a077-4680-8910-1f71a90cda2a","version":2,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336260021,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"508a7a70-a077-4680-8910-1f71a90cda2a","reason":"no_consent","outcome":"failed","msg":"dataset build failed"}
+{"level":30,"time":1795336260333,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"6e2e2bb2-3623-40b9-9f0f-8eb0673ffb1f","version":1,"outcome":"queued","msg":"dataset build queued"}
+✔ over the row cap, the build fails with too_large and keeps no row (343.646917ms)
+{"level":30,"time":1795336260366,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"6e2e2bb2-3623-40b9-9f0f-8eb0673ffb1f","reason":"too_large","outcome":"failed","msg":"dataset build failed"}
+{"level":30,"time":1795336260713,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"65043de2-ce03-4924-b80a-743a4dd02dc0","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336260744,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ a ready dataset is immutable: appendRows is refused and the database refuses a row update (394.983541ms)
+✔ no source file updates a stored dataset row (119.666583ms)
+{"level":30,"time":1795336260744,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336260744,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"65043de2-ce03-4924-b80a-743a4dd02dc0","rows":5,"train":3,"eval":2,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261228,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"27acbaa7-3dc5-4a91-b333-609db6e44f38","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336261248,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ withdrawing the opt-in deletes the datasets and rows of that project only (394.6465ms)
+{"level":30,"time":1795336261248,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336261248,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"27acbaa7-3dc5-4a91-b333-609db6e44f38","rows":5,"train":5,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261253,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"33333333-3333-4333-8333-333333333333","dataset_id":"cdb6a94d-989e-4ef4-b296-faa7fd701232","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336261273,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"33333333-3333-4333-8333-333333333333","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336261273,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"33333333-3333-4333-8333-333333333333","dataset_id":"cdb6a94d-989e-4ef4-b296-faa7fd701232","rows":1,"train":1,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261273,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"33333333-3333-4333-8333-333333333333","project_id":"33333333-3333-4333-8333-333333333333","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336261526,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"04755f67-816a-48be-b3b5-fdacdf4e19c1","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336261544,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ a built dataset names its use case's first task as its source in the lineage (268.730541ms)
+{"level":30,"time":1795336261544,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"11111111-1111-4111-8111-111111111111","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336261544,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"11111111-1111-4111-8111-111111111111","dataset_id":"04755f67-816a-48be-b3b5-fdacdf4e19c1","rows":5,"train":5,"eval":0,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261740,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"14214de5-79c8-48aa-b05b-c5dbd5477550","version":1,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336261757,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"66666666-6666-4666-8666-666666666666","project_id":"66666666-6666-4666-8666-666666666666","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+✔ interleaved turns: the earliest duplicate call by capture time stays, in one go and in pages of one call (265.921417ms)
+{"level":30,"time":1795336261757,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"66666666-6666-4666-8666-666666666666","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336261757,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"14214de5-79c8-48aa-b05b-c5dbd5477550","rows":3,"train":2,"eval":1,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261759,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","version":2,"outcome":"queued","msg":"dataset build queued"}
+{"level":30,"time":1795336261770,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","calls_done":1,"calls":5,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336261780,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","calls_done":2,"calls":5,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336261792,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","calls_done":3,"calls":5,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336261800,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","calls_done":4,"calls":5,"outcome":"continued","msg":"dataset build continued"}
+{"level":30,"time":1795336261810,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"lineage/resolve","projectId":"66666666-6666-4666-8666-666666666666","stage":"improve","kind":"dataset","sourceKind":"task","msg":"lineage link recorded"}
+{"level":30,"time":1795336261810,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"66666666-6666-4666-8666-666666666666","dataset_id":"074660e7-d3e5-4240-b5a4-28af5493f9ce","rows":3,"train":2,"eval":1,"outcome":"ready","msg":"dataset built"}
+{"level":30,"time":1795336261810,"pid":17349,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"lineage_link_recorded","distinctId":"system:fine_tuning","projectId":"66666666-6666-4666-8666-666666666666","project_id":"66666666-6666-4666-8666-666666666666","stage":"improve","kind":"dataset","source_stage":"insights","source_kind":"task","msg":"event"}
+{"level":30,"time":1795336245496,"pid":17350,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"given","msg":"training consent given"}
+✔ an admin gives the opt-in: the row holds the Clerk id, the time and the text version, and one event (46.420333ms)
+✔ giving it again changes nothing and emits no event (1.000542ms)
+✔ an admin withdraws it: the datasets are deleted and one event is emitted (0.784208ms)
+✔ withdrawing with no opt-in is refused, but the datasets are still deleted (0.391209ms)
+✔ a member reads the opt-in and the text, but cannot give or withdraw it (1.511583ms)
+✔ signed out, not a member, flag off, a support session, a stale text or a bad body change nothing (3.478333ms)
+✔ a store failure is not swallowed (5.438333ms)
+{"level":30,"time":1795336245502,"pid":17350,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","outcome":"already_given","msg":"training consent given"}
+{"level":30,"time":1795336245503,"pid":17350,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"withdrawn","msg":"training consent withdrawn"}
+{"level":30,"time":1795336245504,"pid":17350,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/consent-api","project_id":"p1","datasets_deleted":0,"outcome":"not_given","msg":"training consent withdrawal refused"}
+{"level":30,"time":1795336246952,"pid":17495,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/build","project_id":"p1","dataset_id":"d1","version":1,"outcome":"queued","msg":"dataset build queued"}
+✔ POST starts a build: 202, a building version, its job queued; GET lists it with no row text (58.282292ms)
+✔ with no opt-in, POST is refused with no_consent and a message that names the opt-in (1.300458ms)
+✔ flag off is not found; bad settings are 400; an unknown use case is 404; a support session cannot build (6.036042ms)
+✔ a grant holds the Clerk id, the time and the text version, and a second grant returns the first (9250.675375ms)
+✔ project B cannot read or withdraw the grant of project A (597.389958ms)
+✔ a withdrawal stamps who and when, keeps the row, and a new grant is a new row (528.07875ms)
+✔ FF_FINE_TUNING is a core switch, so an edition's flags port can decide it (1.086167ms)
+✔ OSS: off with nothing set; FF_FINE_TUNING or RATEL_EXPERIMENTAL_FEATURES turns it on (0.556583ms)
+✔ Cloud: the port decides in the project's organization, for the person or a caller with no session (0.936ms)
+✔ Cloud: an operator's FF_FINE_TUNING comes first; a failed decision is off (0.268375ms)
+✔ a decision that throws: off, one error logged with err, one exception reported (0.34ms)
+✔ a switch that is on lists the organization and logs nothing (0.250917ms)
+✔ email: addresses become [EMAIL_n] (7.520667ms)
+✔ email near misses stay: a handle, a decorator, a version tag (0.571625ms)
+✔ phone: international and local numbers with separators become [PHONE_n] (0.993833ms)
+✔ phone near misses stay: version strings, dates, short numbers, bare digit runs (0.328083ms)
+✔ payment card: Luhn-valid numbers become [CARD_n], with or without separators (0.31525ms)
+✔ payment card near misses stay: a 16-digit order number that fails Luhn (0.17725ms)
+✔ IBAN: mod-97-valid IBANs become [IBAN_n], compact or grouped (0.610125ms)
+✔ IBAN near misses stay: a bad check digit, an id that only looks like one (0.180583ms)
+✔ national id: a valid codice fiscale and a US SSN become [NATIONAL_ID_n] (0.188417ms)
+✔ national id near misses stay: a bad check letter, impossible SSNs (0.180542ms)
+✔ secrets: API key shapes, bearer tokens, JWTs and private key blocks become [SECRET_n] (1.007708ms)
+✔ secret near misses stay: prose words, a short bearer, a public key block (0.147042ms)
+✔ the same value in one call gets the same index; a new value gets the next one (0.774834ms)
+✔ counts name each kind once per occurrence (0.148125ms)
+✔ redaction covers system, tool definitions, message text, tool call arguments, tool results and the output (0.477333ms)
+✔ redactCall keeps the other fields of the call and leaves the input untouched (0.571791ms)
+✔ redaction is pure: the same input gives the same output and counts (0.760958ms)
+✔ addCounts sums per kind (0.382166ms)
+✔ REDACTION_VERSION changes with the rule list (0.679667ms)
+✔ one task resolves to its closed turns and their calls, never another task's or another project's (6640.695709ms)
+✔ the call filter by model or by span name removes the other calls of the same turn (301.517167ms)
+✔ an intent resolves to the turn its prompt landed in; the date range bounds the turns (327.242125ms)
+✔ the stats of one task: its closed turns, its calls, its model and the stored cost per run (319.67275ms)
+✔ the task picker lists the project's tasks with closed turns, busiest first (325.515542ms)
+✔ use cases are scoped to their project, names are unique among live ones, and archiving frees the name (356.322917ms)
+✔ a turn that fails one enabled scorer is dropped; judge_criteria is skipped (4.595625ms)
+✔ a pinned turn passes the filter; an excluded turn never enters, even when pinned too (0.81525ms)
+✔ a pinned or excluded call key acts on that call only (0.8405ms)
+✔ user scorer fails, errors and self-corrections drop per their rule; skip does not drop (1.117833ms)
+✔ a call with no stored content or no reply is dropped with its reason (0.530959ms)
+✔ the reply comes from the messages after input_message_count when the call has no output (0.386ms)
+✔ dedup: exact drops same input, near also drops case, space and digit variants; the earliest stays (5.531458ms)
+✔ dedup keeps the earliest call even when turns arrive newest first (0.405916ms)
+✔ rows are redacted before dedup; the redaction report sums kept rows (2.780875ms)
+✔ rows carry their source, ordinal and side (4.775667ms)
+✔ the row hash and the content hash follow their written definition (0.381041ms)
+✔ one end user across two sessions stays on one side (13.454958ms)
+✔ one session with two end users stays on one side (6.463ms)
+✔ a chain: sessions A and B share user 1, B and C share user 2: all three stay on one side (11.573125ms)
+✔ missing keys: a null never joins turns; a turn with neither key is its own group (10.294084ms)
+✔ a turn in task_eval_cases puts its whole connected group on the eval side (0.360084ms)
+✔ eval fraction 0 puts every row in train, 1 puts every row in eval (0.264208ms)
+✔ property: over random turns with both keys and random nulls, no session id and no end-user key is on both sides (242.436417ms)
+✔ the same turns in another order give the same rows, sides and content hash (6.364875ms)
+✔ the same input and settings give the same rows, sides and content hash; another seed changes the split (17.070083ms)
+✔ a build in pages that resumes from its stored rows gives the rows of a build in one go (3.059166ms)
+✔ interleaved turns: the earliest duplicate call by capture time stays, whatever the turns' end times (0.193625ms)
+✔ interleaved calls: an order by each turn's first call is not enough; the global call order is (0.161125ms)
+✔ two duplicate calls with the same capture time: the smaller event id stays, in any input order (0.13875ms)
+✔ cost per run averages the runs whose calls are all priced, by hand: (0.03 + 0.05) / 2 = 0.04 (6.640458ms)
+✔ with no priced run the cost per run is Unpriced (null), not zero (0.268458ms)
+✔ the current model is the most used one; a tie goes to the one used last (0.27925ms)
+✔ no turn: zero volume, no model, no cost; more turns than read: sampled (0.188167ms)
+✔ a selector with one task parses and drops duplicates and empty filters (3.32325ms)
+✔ an unknown key, at the top or in the call filter, is refused as unknown_key (1.081791ms)
+✔ a selector with no task and no intent is refused as empty_selector (0.275209ms)
+✔ a bad value is refused as invalid_selector (1.633709ms)
+✔ the window is the date range, else the last 30 days (0.20725ms)
+✔ the call filter keeps a call only when its model and its span name are listed (0.178333ms)
+{"level":30,"time":1795336259280,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+✔ a member creates a use case for one task, lists it, renames it and archives it, with one event each (26.374584ms)
+✔ an unknown key or an empty selector is refused with its typed error, and nothing is written (4.226042ms)
+✔ a taken name is 409; an unknown use case is 404 (1.5275ms)
+✔ signed out, not a member, flag off or a support session write nothing (0.738ms)
+{"level":30,"time":1795336259286,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_updated","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795336259286,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_archived","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795336259292,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","use_case_id":"55555555-5555-4555-8555-555555555555","action":"use_case_created","outcome":"saved","msg":"use case written"}
+{"level":30,"time":1795336259293,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_created","reason":"name_taken","outcome":"rejected","msg":"use case write refused"}
+{"level":30,"time":1795336259293,"pid":24118,"hostname":"rstagis-MacBook-Pro-3.local","module":"fine-tuning/use-cases-api","project_id":"p1","action":"use_case_archived","reason":"not_found","outcome":"rejected","msg":"use case write refused"}
+✔ a stored ref is read back strictly (1.45525ms)
+✔ a fine-tuning dataset is an improve-stage kind; its ref opens its use case, a bare ref the Fine-tuning page (11.281958ms)
+ℹ tests 166
+ℹ suites 2
+ℹ pass 166
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18282.445667

@@ -1,0 +1,50 @@
+✔ the demo project does not count toward the project limit, as in the console (21.248166ms)
+✔ Enterprise limits say unlimited rather than serializing as null (2.791208ms)
+✔ plan and subscription state come from the same helpers as the Billing page (15.473584ms)
+✔ match quality not on the plan says so (1.81225ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.629916ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (0.978042ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (1.222583ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (1.886ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (1.76475ms)
+✔ ids are unique, snake_case, and stable-looking (0.6095ms)
+✔ every operation is discoverable: title, description, known domain (0.193625ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.278667ms)
+✔ every params schema converts to JSON Schema for discovery (10.188542ms)
+✔ write operations are exactly those declaring mutates (0.531375ms)
+✔ read-only assembly drops every mutating operation (6.626625ms)
+✔ the operation contract matches the reviewed snapshot (8.286292ms)
+{"level":50,"time":1795338486018,"pid":26321,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp/ship","err":{"type":"Error","message":"statement timeout","stack":"Error: statement timeout\n    at Object.loadSessionChat (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:507:49)\n    at Object.execute (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.ts:634:16)\n    at async traceMcpToolCall (~/ratel-wt-rp-123-507/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (~/ratel-wt-rp-123-507/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (~/ratel-wt-rp-123-507/src/lib/mcp/operations/ship.test.ts:510:20)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"session chat for the view failed; the call answers without it"}
+✔ list_shipments walks trails for the newest few only (18.557333ms)
+✔ list_shipments with a shipmentId returns that one, or not found (4.453ms)
+✔ Ship and lineage work for an OAuth user with no stage flag, deciding only the eval step for them (3.806834ms)
+✔ get_lineage resolves one step back, with the plan deciding whether an insight names its run (1.669708ms)
+✔ get_lineage with chain returns the chain oldest first; an unknown kind is invalid (3.094625ms)
+✔ get_analysis_freshness reports the project and one section (17.474333ms)
+✔ get_analysis_freshness rejects an unknown section (1.984125ms)
+✔ get_session returns the timeline without text unless asked (2.481792ms)
+✔ get_session shows message text only with the content opt-in, cut short (3.009ms)
+✔ get_session pages through a long session (2.07225ms)
+✔ an unknown session is not found (1.510375ms)
+✔ get_session asks for text of the returned window only (1.471208ms)
+✔ textCallsInWindow reads only the window's model calls that kept their text (0.224792ms)
+✔ get_session answers the agent when the view's own read fails, without the view (8.166791ms)
+✔ get_session adds the console's SessionChat for its view only, and never to the agent's data (5.834791ms)
+✔ get_session_step_content reads the inspector's text, and says when the opt-in is off or the key may not read it (6.135042ms)
+✔ get_session withholds message text from an API key without the content scope, even with the opt-in on (RC-585) (3.094375ms)
+✔ get_shipment_watch: each watched shipment's verdict, changed and removed tools, runs and newest traces (2.585625ms)
+✔ get_shipment_watch with a shipmentId reads that one, or not found (3.373625ms)
+✔ get_shipment_watch refuses when the ship watch is off for the caller (1.56825ms)
+✔ FF_SHIP_MONITOR is a core switch, so an edition's flags port can decide it (0.701125ms)
+✔ OSS: off with nothing set, for the page and for an MCP caller (0.203125ms)
+✔ OSS: FF_SHIP_MONITOR turns the watch on, and only a true value does (0.101291ms)
+✔ Cloud: the flags port decides it for the organization, or for the caller and the project (0.571167ms)
+✔ Cloud: an FF_SHIP_MONITOR value in the environment comes first; a failed decision is off (0.213125ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4839.014333

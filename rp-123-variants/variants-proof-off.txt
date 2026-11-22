@@ -1,0 +1,10 @@
+$ cd src && env -u FF_VARIANT_EXPERIMENTS npx tsx proof-variants.mts   # ratel beluga/rp-123-variants 5b5c73fe
+FF_VARIANT_EXPERIMENTS=(unset)
+switch for the project: false
+save mapping app.variant -> checkout-model: {"ok":false,"message":"You cannot change mappings of this project."}; stored 0
+ingest: ok=true
+otel_spans with a variant: 0 of 48
+trace summaries by variant: {"-/-":24}
+rail shows Variants for: []
+MCP list_variant_experiments: {"ok":false,"error":"forbidden","message":"Variant experiments are not available for this project.","reason":"variant_experiments_off"}
+MCP get_variant_experiment: {"ok":false,"error":"forbidden","message":"Variant experiments are not available for this project.","reason":"variant_experiments_off"}

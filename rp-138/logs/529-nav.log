@@ -1,0 +1,98 @@
+✔ project URLs are rooted at /project/<id>, encoded (0.766833ms)
+✔ the project id is read back from the path (0.2165ms)
+✔ with a project, the rail links every core destination to that project (0.975625ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.072ms)
+✔ outside a project, the organization rail lists its projects page (0.742709ms)
+✔ composition additions follow the core destinations with stable ids (0.249583ms)
+✔ the OSS composition adds no destination (0.187708ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.557667ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (1.281958ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.573041ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.237125ms)
+✔ the active item matches exact index pages and nested paths (0.405459ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.318583ms)
+✔ switching project keeps the section the reader is on (0.078042ms)
+✔ a project outside the organization's list is not found (0.066125ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.059916ms)
+✖ the command menu lists the project's pages, the organization's, then every project (3.418125ms)
+✔ outside a project the command menu lists the organization's pages only (0.257292ms)
+✔ the command menu finds a page by its keywords, not only its name (0.841125ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.652875ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.279625ms)
+✔ visibleOrganizationNav hides only the paths given (0.138833ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.489833ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.216541ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.294083ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.192584ms)
+✔ Traces holds All traces, Agents and MCP servers for every project (0.238917ms)
+✔ every declared step names a distinct id and a target (0.564708ms)
+✔ steps whose target is missing are dropped, in order (0.826334ms)
+✔ the tour walks the rail in its own order (0.154375ms)
+✔ every navigation step names an item of the project rail (0.755708ms)
+✔ the sidebar renders an anchor for every step that is not about the demo project (42.498083ms)
+✔ a page with no tour targets resolves to no steps (0.228708ms)
+✔ the demo step is the only one gated on the demo project (0.160167ms)
+✔ the Agent health step runs only when its anchor is on the page (0.180708ms)
+✔ the Agent health step targets its own anchor and is not demo-only (0.129375ms)
+✔ a target needs a box and must not sit in a folded subtree (0.224542ms)
+✔ the Tasks page's freshness waits on the task scores, a job this edition runs (0.734417ms)
+✔ the sidebar renders the analysis freshness line inside a project (0.657208ms)
+✔ project home decides whether to offer the guided tour (0.648167ms)
+✔ Settings › API keys renders the quickstart under the key list (0.463333ms)
+✔ a turn page offers "run to test" behind the eval gate (0.465917ms)
+✔ the trace span inspector is given the SDK events page to link to (0.47825ms)
+✔ Settings › Developer builds each SDK event's trace link (0.484916ms)
+✔ a project page asks for the last-project cookie when it names another project (0.431625ms)
+✔ the project layout returns its page when no database is configured (0.370084ms)
+✔ project home and onboarding build the ingest address with the same function (1.353833ms)
+✔ the capture nudge's unchanged lines are lines of the quickstart it is a diff against (0.190584ms)
+✔ the playground rank route and the traces routes resolve the project through findProjectScope (1.327917ms)
+✔ the Sessions list page checks the project scope itself, as its two routes do (0.486417ms)
+✔ root metadata sets a title template on the product name, a description and an icon (0.587167ms)
+✔ every job that works on one project runs in the project log context (61.781208ms)
+✔ startup lends the edition the onboarding service with the other core services (0.336ms)
+✔ the playground page is headed "Test a search", under Catalog (0.249625ms)
+✔ the shell hands the edition's overlays and palette actions to the frame, which mounts the overlays after the shortcuts dialog (0.499458ms)
+ℹ tests 55
+ℹ suites 0
+ℹ pass 54
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1978.988458
+
+✖ failing tests:
+
+test at lib/console/navigation.test.ts:1:14137
+✖ the command menu lists the project's pages, the organization's, then every project (3.418125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'Project|Overview|/project/11111111-1111-4111-8111-111111111111',
+      'Project|Agent health|/project/11111111-1111-4111-8111-111111111111/health',
+      'Project|Self-corrections|/project/11111111-1111-4111-8111-111111111111/health/self-corrections',
+      'Project|Traces|/project/11111111-1111-4111-8111-111111111111/traces',
+  +   'Project|Agents|/project/11111111-1111-4111-8111-111111111111/agents',
+  +   'Project|MCP servers|/project/11111111-1111-4111-8111-111111111111/mcp',
+      'Project|Tasks|/project/11111111-1111-4111-8111-111111111111/tasks',
+      'Project|Intents|/project/11111111-1111-4111-8111-111111111111/intents',
+      'Project|Flows|/project/11111111-1111-4111-8111-111111111111/intents/flows',
+      'Project|Map|/project/11111111-1111-4111-8111-111111111111/intents/map',
+      'Project|Improvements|/project/11111111-1111-4111-8111-111111111111/improvement',
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/console/navigation.test.ts:475:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'Project|Overview|/project/11111111-1111-4111-8111-111111111111', 'Project|Agent health|/project/11111111-1111-4111-8111-111111111111/health', 'Project|Self-corrections|/project/11111111-1111-4111-8111-111111111111/health/self-corrections', 'Project|Traces|/project/11111111-1111-4111-8111-111111111111/traces', 'Project|Agents|/project/11111111-1111-4111-8111-111111111111/agents', 'Project|MCP servers|/project/11111111-1111-4111-8111-111111111111/mcp', 'Project|Tasks|/project/11111111-1111-4111-8111-111111111111/tasks', 'Project|Intents|/project/11111111-1111-4111-8111-111111111111/intents', 'Project|Flows|/project/11111111-1111-4111-8111-111111111111/intents/flows', 'Project|Map|/project/11111111-1111-4111-8111-111111111111/intents/map', 'Project|Improvements|/project/11111111-1111-4111-8111-111111111111/improvement', 'Project|Fixes|/project/11111111-1111-4111-8111-111111111111/improvement/fixes', 'Project|Quality|/project/11111111-1111-4111-8111-111111111111/quality', 'Project|Adaptive ranking|/project/11111111-1111-4111-8111-111111111111/improvement/adaptive-ranking', 'Project|Ship|/project/11111111-1111-4111-8111-111111111111/ship', 'Project|Catalog|/project/11111111-1111-4111-8111-111111111111/catalogs', 'Project|Tools|/project/11111111-1111-4111-8111-111111111111/catalogs/tools', 'Project|Skills|/project/11111111-1111-4111-8111-111111111111/catalogs/skills', 'Project|Test a search|/project/11111111-1111-4111-8111-111111111111/playground', 'Project|Settings|/project/11111111-1111-4111-8111-111111111111/settings', 'Pages|Admin|/admin', 'Overview|Usage and spend|/project/11111111-1111-4111-8111-111111111111/dashboards', 'Settings|API keys|/project/11111111-1111-4111-8111-111111111111/settings/api-keys', 'Settings|Danger zone|/project/11111111-1111-4111-8111-111111111111/settings/danger', 'Quality|Experiments|/project/11111111-1111-4111-8111-111111111111/calibration', 'Settings|SDK events|/project/11111111-1111-4111-8111-111111111111/runtime-events', 'Organization|Projects|/org/acme', 'Organization|Integrations|/org/acme/mcp', 'Organization|Settings|/org/acme/settings', 'Projects|One|/project/11111111-1111-4111-8111-111111111111/traces', 'Projects|Two|/project/22222222-2222-4222-8222-222222222222/traces', 'Projects|All projects|/org/acme', 'Projects|New project|/onboarding?organization=acme' ],
+    expected: [ 'Project|Overview|/project/11111111-1111-4111-8111-111111111111', 'Project|Agent health|/project/11111111-1111-4111-8111-111111111111/health', 'Project|Self-corrections|/project/11111111-1111-4111-8111-111111111111/health/self-corrections', 'Project|Traces|/project/11111111-1111-4111-8111-111111111111/traces', 'Project|Tasks|/project/11111111-1111-4111-8111-111111111111/tasks', 'Project|Intents|/project/11111111-1111-4111-8111-111111111111/intents', 'Project|Flows|/project/11111111-1111-4111-8111-111111111111/intents/flows', 'Project|Map|/project/11111111-1111-4111-8111-111111111111/intents/map', 'Project|Improvements|/project/11111111-1111-4111-8111-111111111111/improvement', 'Project|Fixes|/project/11111111-1111-4111-8111-111111111111/improvement/fixes', 'Project|Quality|/project/11111111-1111-4111-8111-111111111111/quality', 'Project|Adaptive ranking|/project/11111111-1111-4111-8111-111111111111/improvement/adaptive-ranking', 'Project|Ship|/project/11111111-1111-4111-8111-111111111111/ship', 'Project|Catalog|/project/11111111-1111-4111-8111-111111111111/catalogs', 'Project|Tools|/project/11111111-1111-4111-8111-111111111111/catalogs/tools', 'Project|Skills|/project/11111111-1111-4111-8111-111111111111/catalogs/skills', 'Project|Test a search|/project/11111111-1111-4111-8111-111111111111/playground', 'Project|Settings|/project/11111111-1111-4111-8111-111111111111/settings', 'Pages|Admin|/admin', 'Overview|Usage and spend|/project/11111111-1111-4111-8111-111111111111/dashboards', 'Settings|API keys|/project/11111111-1111-4111-8111-111111111111/settings/api-keys', 'Settings|Danger zone|/project/11111111-1111-4111-8111-111111111111/settings/danger', 'Quality|Experiments|/project/11111111-1111-4111-8111-111111111111/calibration', 'Settings|SDK events|/project/11111111-1111-4111-8111-111111111111/runtime-events', 'Organization|Projects|/org/acme', 'Organization|Integrations|/org/acme/mcp', 'Organization|Settings|/org/acme/settings', 'Projects|One|/project/11111111-1111-4111-8111-111111111111/traces', 'Projects|Two|/project/22222222-2222-4222-8222-222222222222/traces', 'Projects|All projects|/org/acme', 'Projects|New project|/onboarding?organization=acme' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

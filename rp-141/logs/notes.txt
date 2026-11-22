@@ -1,0 +1,8 @@
+RP-141 fine-tuning (ratel-cloud #561 #563 #567 #575) -> core FF_FINE_TUNING
+ratel beluga/rp-141-fine-tuning: 76bda4c2 (561), 4c11c62e (563), f0ee3e86 (567), 755a6aaf (575); base beluga/rp-123-variants 5b5c73fe
+platform (checked-out branch): a254adc cloud-fine-tuning -> FF_FINE_TUNING
+migrations: 0052_fine_tuning (up 0111+0112), 0053_fine_tuning_datasets (up 0113 + trigger), 0054_fine_tuning_use_case_overrides (up 0114)
+#575 "off switch" = build setting scorers on|off, not a flag.
+Deferred infra: PostHog cloud-fine-tuning declaration + tftest (infra/module/posthog.tf, ratel_cloud.tftest.hcl); .flags.local.example.json (excluded).
+Not ported: nav icon "fine-tuning" (GraduationCap) - NavIconName is the edition's; uses "improvements". User scorers (run_scores) - Evals area not in core: userScores returns empty.
+Helpers: bin/port-sync.sh (3-way), bin/render.mjs + bin/own-merge.sh (3-way for owned files), bin/decide.mjs.

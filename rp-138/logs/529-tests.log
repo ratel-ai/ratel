@@ -1,0 +1,229 @@
+✔ project URLs are rooted at /project/<id>, encoded (1.000584ms)
+✔ the project id is read back from the path (0.263583ms)
+✔ with a project, the rail links every core destination to that project (1.489583ms)
+✔ without a project, project-scoped destinations are absent, not disabled (0.13075ms)
+✔ outside a project, the organization rail lists its projects page (0.885ms)
+✔ composition additions follow the core destinations with stable ids (0.776417ms)
+✔ the OSS composition adds no destination (0.214042ms)
+✔ an edition's project group sits between the core pages and Settings, under its label (0.429375ms)
+✔ an edition's group placed in setup is one collapsible row between Catalog and Settings (upstream's APIs row) (1.412167ms)
+✔ the Cloud edition's rail matches upstream's: the APIs row in setup, Members and Billing with jumps and keywords (0.732334ms)
+✔ Settings sits in a section of its own in both rails, the edition's items in another (0.33725ms)
+✔ the active item matches exact index pages and nested paths (0.291334ms)
+✔ an item is lit on every path it has absorbed, old URLs included (0.82475ms)
+✔ switching project keeps the section the reader is on (0.17125ms)
+✔ a project outside the organization's list is not found (0.135792ms)
+✔ the entry goes to the first project, else to onboarding, else nowhere (0.1215ms)
+✔ the command menu lists the project's pages, the organization's, then every project (0.652ms)
+✔ outside a project the command menu lists the organization's pages only (0.152958ms)
+✔ the command menu finds a page by its keywords, not only its name (0.93775ms)
+✔ an edition's nav items carry their keywords and shortcuts into the rail and ⌘K (0.78075ms)
+✔ g then a letter jumps to the rail item that owns it, in either rail (0.531541ms)
+✔ visibleOrganizationNav hides only the paths given (0.188666ms)
+✔ the project rail groups into Monitor, Insights, Improve and Ship, then setup, for everyone (0.566167ms)
+✔ the shell's organization: the project's own, else the route's, else the active one, else the first (upstream's AppFrame) (0.274167ms)
+✔ Sandboxes is not in the rail or ⌘K unless the switch is on (0.455875ms)
+✔ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (0.240292ms)
+✔ Traces holds All traces, Agents and MCP servers for every project (0.250125ms)
+✔ every declared step names a distinct id and a target (1.099584ms)
+✔ steps whose target is missing are dropped, in order (0.790834ms)
+✔ the tour walks the rail in its own order (0.340875ms)
+✔ every navigation step names an item of the project rail (0.595542ms)
+✔ the sidebar renders an anchor for every step that is not about the demo project (67.450667ms)
+✔ a page with no tour targets resolves to no steps (0.11225ms)
+✔ the demo step is the only one gated on the demo project (0.290791ms)
+✔ the Agent health step runs only when its anchor is on the page (0.209209ms)
+✔ the Agent health step targets its own anchor and is not demo-only (0.146541ms)
+✔ a target needs a box and must not sit in a folded subtree (0.245833ms)
+✔ the Tasks page's freshness waits on the task scores, a job this edition runs (0.946583ms)
+✔ the sidebar renders the analysis freshness line inside a project (0.625708ms)
+✔ project home decides whether to offer the guided tour (0.522375ms)
+✔ Settings › API keys renders the quickstart under the key list (0.357625ms)
+✔ a turn page offers "run to test" behind the eval gate (0.361375ms)
+✔ the trace span inspector is given the SDK events page to link to (0.172334ms)
+✔ Settings › Developer builds each SDK event's trace link (0.344375ms)
+✔ a project page asks for the last-project cookie when it names another project (0.485875ms)
+✔ the project layout returns its page when no database is configured (3.248625ms)
+✔ project home and onboarding build the ingest address with the same function (1.922333ms)
+✔ the capture nudge's unchanged lines are lines of the quickstart it is a diff against (0.342167ms)
+✔ the playground rank route and the traces routes resolve the project through findProjectScope (1.386792ms)
+✔ the Sessions list page checks the project scope itself, as its two routes do (0.1475ms)
+✔ root metadata sets a title template on the product name, a description and an icon (0.492541ms)
+✔ every job that works on one project runs in the project log context (31.738334ms)
+✔ startup lends the edition the onboarding service with the other core services (0.533667ms)
+✔ the playground page is headed "Test a search", under Catalog (0.250209ms)
+✔ the shell hands the edition's overlays and palette actions to the frame, which mounts the overlays after the shortcuts dialog (0.156083ms)
+✔ a feature span is named feature.<name>.<operation> and returns the work's value (4.699ms)
+✔ a failure marks the span as an error with its stable type only, never the class, and still throws (0.729166ms)
+✔ a framework redirect or not-found is control flow, not an error (0.381083ms)
+✔ without a registered provider the work runs untraced (0.653625ms)
+✔ the Agents and MCP servers pages each resolve their context in a feature.agents_pages span (10.534375ms)
+✔ a page's not-found is its outcome, not an error (0.955833ms)
+✔ a project's tool-run mining config is decided in a feature.tool_run_insights span (1.597ms)
+{"level":30,"time":1795326342018,"pid":49303,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":1,"turns":1,"spans":5,"model_calls":1,"tool_calls":2,"mcp_traces":1,"cost_usd":0.00054,"size_kb":2.097,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ a tool call under an invoke_agent span with no agent attribute: payload.agent is the span name, agent_key is the agent (4122.88ms)
+{"level":30,"time":1795326342019,"pid":49303,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":5,"model_calls":1,"tool_calls":2,"error_spans":0,"cost_usd":0.00054,"cost_bucket":"<$0.001","models":["claude-sonnet-5"],"input_tokens":120,"output_tokens":30,"duration_ms":900,"size_kb":2.097,"size_bucket":"1-10 KB","mcp":true,"has_session":true,"session_hash":"df6da1c183f17de7","sdk_language":null,"scopes":["support-app"],"msg":"trace_ingested"}
+✔ flag off: every registered tool runs without forView and answers exactly as on main (359.708083ms)
+✔ the Integrations page's tool count is the flag-off tools/list, as main's (86.951833ms)
+✔ the demo project does not count toward the project limit, as in the console (29.025208ms)
+✔ Enterprise limits say unlimited rather than serializing as null (3.423583ms)
+✔ plan and subscription state come from the same helpers as the Billing page (23.301375ms)
+✔ match quality not on the plan says so (2.024333ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (2.4535ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (1.110916ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (2.02275ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (3.109875ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (2.259583ms)
+✔ list_agents lists the agents with their stats, the handoffs, the environments and each page link (78.535959ms)
+✔ get_agent returns the tools, the MCP servers, the handoffs and the filtered Traces link (2.313ms)
+✔ get_agent of an agent with no run in the window is not found (1.558417ms)
+✔ list_clients returns the harnesses, versions, countries and splits, with the unknown-client hint (168.41575ms)
+✔ ids are unique, snake_case, and stable-looking (1.054125ms)
+✔ every operation is discoverable: title, description, known domain (0.348958ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.429ms)
+✔ every params schema converts to JSON Schema for discovery (21.645917ms)
+✔ write operations are exactly those declaring mutates (1.004334ms)
+✔ read-only assembly drops every mutating operation (32.739459ms)
+✔ the operation contract matches the reviewed snapshot (26.977959ms)
+✔ list_sdk_events: the summary, facets and newest events for the window (65.550708ms)
+✔ list_sdk_events over-fetches by one so a full page says there is more (5.728292ms)
+✔ view rejects lists what Ratel refused, with reason and size (4.657666ms)
+✔ view drops lists what the SDK shed before sending (3.964792ms)
+✔ a failed count costs that number, not the answer (3.567584ms)
+✔ a timed-out list is reported as a timeout (2.846375ms)
+✔ get_sdk_event returns the payload, cut at the cap (3.714709ms)
+✔ get_sdk_event: a small payload comes whole (2.866875ms)
+✔ get_sdk_event: an unknown event is not found (2.018583ms)
+✔ list_api_keys lists keys as the page does, never the hash or the key (6.238125ms)
+✔ get_sdk_setup hands out the page's snippets with the key read from the environment (3.812ms)
+✔ get_sdk_setup adds the MCP server guide (RC-780) (2.203792ms)
+✔ get_sdk_setup with captureContent adds the capture lines (3.219292ms)
+✔ developer: captured text for an API key with the content opt-in off is withheld (4.2645ms)
+✔ developer: captured text for an API key with the content opt-in on is returned (3.84875ms)
+✔ developer: captured text for a signed-in member, whatever the opt-in is returned (6.643833ms)
+✔ list_mcp_servers lists the servers with their stats, the environments and each page link (70.229041ms)
+✔ get_mcp_server returns the tools, the calling agents and no protocol or transport when none is kept (3.757625ms)
+✔ get_mcp_server of a server with no call in the window is not found (3.755458ms)
+{"level":50,"time":1795326343950,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (33.802708ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (15.310792ms)
+✔ without an edition's name the 401 realm stays ratel (0.731125ms)
+✔ an older protocol version still negotiates (14.115583ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (30.413792ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (66.946541ms)
+✔ a signed-in person without app access is refused at the door with 403 (1.303ms)
+✔ every tool definition is exactly what the fixture pins (30.072166ms)
+✔ each staged tool publishes its stage, and only that, as _meta (23.115083ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (20.208333ms)
+✔ each tool carries the annotations the Claude directory reviews (18.300042ms)
+✔ no tool description tells the model what to do first (29.026917ms)
+✔ calling a tool runs its operation and reports failures in-band (45.701333ms)
+✔ an unregistered tool name is refused by the transport (12.276792ms)
+✔ a notification is accepted with no body (10.4485ms)
+✔ a missing credential is rejected before any protocol work (0.6015ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (51.699375ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (8.127541ms)
+✔ an exhausted rate limit returns 429 with Retry-After (9.560208ms)
+✔ malformed JSON gets the reserved parse-error code (0.476834ms)
+✔ an oversized batch is refused rather than amplified (0.792292ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.443625ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.990917ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.756833ms)
+✔ repeated bad credentials stop reaching the authenticator at all (1.337667ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.796458ms)
+✔ successful calls are never charged to the failure budget (70.714584ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (16.674416ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.516125ms)
+{"level":50,"time":1795326343952,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795326344065,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795326344220,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-138/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-138/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-138/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-138/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-138/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-138/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-138/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-138/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795326344231,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":29,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795326344256,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795326344315,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795326344325,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795326344327,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795326344328,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:412:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:416:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795326344329,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:428:15)\n    at handleMcpRequest (~/ratel-wt-rp-138/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-138/src/lib/mcp/route-handler.test.ts:432:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795326344330,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795326344330,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795326344330,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795326344331,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795326344331,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795326344331,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795326344419,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795326344419,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795326344419,"pid":49346,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ an experimental feature is off with nothing set (0.952ms)
+✔ its own flag turns it on in either edition, and only it (0.159375ms)
+✔ RATEL_EXPERIMENTAL_FEATURES turns every feature on in the open-source edition (0.105208ms)
+✔ Cloud ignores RATEL_EXPERIMENTAL_FEATURES (0.096792ms)
+✔ without a port, featureEnabled reads the environment as experimentalFeatureEnabled does (0.834291ms)
+✔ with a port, the edition decides each switch for whoever asks (1.374416ms)
+✔ with a port, the FF_* environment value comes first, either way (0.809208ms)
+✔ with a port, a failed read is off (0.747125ms)
+{"level":30,"time":1795326344167,"pid":49351,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":0.869,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the client facts are there, the caller's IP is not (3311.311333ms)
+{"level":30,"time":1795326344167,"pid":49351,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":50,"size_kb":0.869,"size_bucket":"<1 KB","mcp":true,"has_session":false,"sdk_language":null,"scopes":["@modelcontextprotocol/server"],"msg":"trace_ingested"}
+✔ the summary sweep fills each trace's models, tools, service and environment (4030.5445ms)
+✔ filter by model and by tool narrows the Turns list (368.044458ms)
+✔ a trace that starts before the window but has an in-window root is in the filtered list as in the unfiltered one (388.486625ms)
+✔ the Turns totals follow the same filter (274.371ms)
+{"level":30,"time":1795326344146,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by model and by tool narrows Sessions: a session matches when any of its turns matches (382.215542ms)
+{"level":30,"time":1795326344165,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795326344178,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795326344190,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795326344193,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795326344207,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"failed","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ facet values for a project and window come from one rollup query (245.1915ms)
+✔ the Sessions facet window is the Turns default range: it ignores rows outside it (183.709125ms)
+✔ the Sessions filter finds the matching sessions once per page, not once per walked head (0.353ms)
+✔ without a filter the list queries are unchanged (0.254792ms)
+✔ the summary sweep fills each trace's agents and MCP servers from its spans (201.327666ms)
+{"level":30,"time":1795326345070,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by agent and by MCP server narrows the Turns list and Sessions (240.034083ms)
+{"level":30,"time":1795326345077,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795326345079,"pid":49357,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ the facets offer the agent and MCP server values (236.873709ms)
+✔ the sweep fills harnesses and countries; Turns filter by them and the facets offer them (303.348292ms)
+✔ with the flag off, Sessions shows no filter bar (32.793792ms)
+✔ with the flag on, Sessions shows the bar with the URL's chips and no name search (27.22775ms)
+✔ the bar shows the agent and MCP server chips from the URL (5.292375ms)
+✔ every narrowing parameter becomes a chip, so no filter hides (1.191583ms)
+✔ exact experiment links read as exact, and removing the last tag drops exactTags (0.196292ms)
+✔ removing a chip drops the page cursor and the open row, and keeps the rest (0.094208ms)
+✔ measures read as ranges in plain units (13.715042ms)
+✔ logs only show the filters that narrow logs (1.079917ms)
+✔ clear filters keeps the window, sort, view options and the compare selection (0.9845ms)
+✔ the search box writes the name filter and Logs retire the old event-name param (0.492959ms)
+✔ the add-filter popover offers the values seen in the window, with counts only in the span unit (0.883084ms)
+✔ toggling a value adds or removes it; single-value fields replace (0.398167ms)
+✔ a preset window replaces custom days; switching tabs leaves the page and open row behind (0.564625ms)
+✔ grouped Spans apply the variant and top-level filters their chips show (5.251875ms)
+✔ traceFilterFromSearch reads the rollup filters from the URL (RC-505) (0.905708ms)
+✔ rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip (0.76325ms)
+✔ rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds (0.5245ms)
+✔ facetAgent and facetServer are read, shown as chips and offered as fields (0.728709ms)
+✔ the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3) (0.278958ms)
+✔ facetHarness and facetCountry are entity filters: read, chipped and offered (RC-778) (0.499291ms)
+{"level":30,"time":1795326341559,"pid":49368,"hostname":"rstagis-MacBook-Pro-3.local","module":"agents/overrides-api","project_id":"p1","outcome":"saved","msg":"agent override changed"}
+✔ an admin renames an agent: saved and tracked (25.396292ms)
+✔ a member who is not an admin cannot write an override (0.816792ms)
+✔ a merge chain is rejected with a clear error (0.855458ms)
+✔ signed out, not a member, a support session or a bad body write nothing (2.906208ms)
+{"level":30,"time":1795326341564,"pid":49368,"hostname":"rstagis-MacBook-Pro-3.local","module":"agents/overrides-api","project_id":"p1","reason":"merge_target_is_merged","outcome":"rejected","msg":"agent override rejected"}
+{"level":30,"time":1795326347621,"pid":49369,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":1.03,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ the span loader gives no reader the IP, only its country (2487.829292ms)
+{"level":30,"time":1795326347621,"pid":49369,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":50,"size_kb":1.03,"size_bucket":"1-10 KB","mcp":true,"has_session":false,"sdk_language":null,"scopes":["@modelcontextprotocol/server"],"msg":"trace_ingested"}
+{"level":30,"time":1795326347932,"pid":49369,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","traces":1,"sessions":0,"turns":0,"spans":2,"model_calls":0,"tool_calls":1,"mcp_traces":1,"cost_usd":null,"size_kb":1.03,"trace_lines_dropped":0,"msg":"otlp_batch_ingested"}
+✔ no MCP tool that reads spans, logs or clients returns the raw IP (419.772459ms)
+✔ no source file names a client_ip column, and only ingest's derivation names the IP field (442.049167ms)
+{"level":30,"time":1795326347932,"pid":49369,"hostname":"rstagis-MacBook-Pro-3.local","module":"otlp/ingest-log","project_id":"11111111-1111-4111-8111-111111111111","spans":2,"model_calls":0,"tool_calls":1,"error_spans":0,"cost_usd":null,"cost_bucket":"unpriced","models":[],"input_tokens":0,"output_tokens":0,"duration_ms":50,"size_kb":1.03,"size_bucket":"1-10 KB","mcp":true,"has_session":false,"sdk_language":null,"scopes":["@modelcontextprotocol/server"],"msg":"trace_ingested"}
+ℹ tests 182
+ℹ suites 0
+ℹ pass 182
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14905.443167

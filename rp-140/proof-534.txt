@@ -1,0 +1,17 @@
+$ npx tsx proof-534.mts   # branch beluga/rp-140-code-handoff, switch unset
+FF_CODE_HANDOFF=(unset)  (switch in core: yes)
+POST /api/github/webhook (push to main, 1 commit with ratel-fix): 200 {"removed":0,"stored":0}
+repo_commits: []
+span ingested with service.version=0123456
+drain step deploy_watch_version: {"links":0,"shipped":0}
+fix_shipments: []
+SDK setup copy (deployVersion=false): (no service.version line)
+
+$ FF_CODE_HANDOFF=1 npx tsx proof-534.mts
+FF_CODE_HANDOFF=1  (switch in core: yes)
+POST /api/github/webhook (push to main, 1 commit with ratel-fix): 200 {"removed":0,"stored":1}
+repo_commits: [{"sha":"0123456","fixIds":["craft:0b6c3a8e-1f2d-4c5b-9a7e-3d2c1b0a9f8e"],"deployed":false}]
+span ingested with service.version=0123456
+drain step deploy_watch_version: {"links":1,"shipped":1}
+fix_shipments: [{"fix_id":"craft:0b6c3a8e-1f2d-4c5b-9a7e-3d2c1b0a9f8e","version":"0123456789abcdef0123456789abcdef01234567","shipped_by":"github:9","notes":"Tighten the search tool"}]
+SDK setup copy (deployVersion=true): // Set service.version to the commit sha of the deploy (for example / // OTEL_RESOURCE_ATTRIBUTES=service.version=$GITHUB_SHA

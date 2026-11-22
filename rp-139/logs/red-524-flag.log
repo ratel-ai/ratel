@@ -1,0 +1,8 @@
+ℹ todo 0
+ℹ duration_ms 563.910291
+
+✖ failing tests:
+
+test at lib/platform/pivots-flag.test.ts:1:1
+✖ lib/platform/pivots-flag.test.ts (558.26075ms)
+  'test failed'

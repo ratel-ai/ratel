@@ -1,0 +1,12 @@
+(commit 33dc3ac7, branch beluga/rp-139-pivots-flags)
+$ npx tsx scripts/.proof-543.mts
+FF_CUSTOM_DASHBOARDS=(unset)
+createDashboard: {"ok":true,"dashboard":{"id":"ab1d0fbf-b1d8-4343-ad74-1d75931a1239","projectId":"11111111-1111-4111-8111-111111111111","name":"Cost by client","createdBy":"user_alice","sharing":"private","createdAt":"2026-11-22T06:55:48.947Z","updatedAt":"2026-11-22T06:55:48.947Z"}}
+widget cost by client: {"kind":"groups","groupBy":"pivot:client","groups":[{"key":"acme","value":0.75,"runs":2},{"key":"globex","value":1,"runs":1}],"other":null}
+MCP list_dashboards: {"dashboards":[{"id":"ab1d0fbf-b1d8-4343-ad74-1d75931a1239","name":"Cost by client","sharing":"project","createdAt":"2026-11-22T06:55:48.947Z","updatedAt":"2026-11-22T06:55:48.994Z","href":"/project/11111111-1111-4111-8111-111111111111/dashboards/ab1d0fbf-b1d8-4343-ad74-1d75931a1239"}]}
+
+$ FF_CUSTOM_DASHBOARDS=1 npx tsx scripts/.proof-543.mts
+FF_CUSTOM_DASHBOARDS=1
+createDashboard: {"ok":true,"dashboard":{"id":"a2fd5ca9-3837-44b7-beb4-927d02d7aae5","projectId":"11111111-1111-4111-8111-111111111111","name":"Cost by client","createdBy":"user_alice","sharing":"private","createdAt":"2026-11-22T06:55:59.891Z","updatedAt":"2026-11-22T06:55:59.891Z"}}
+widget cost by client: {"kind":"groups","groupBy":"pivot:client","groups":[{"key":"acme","value":0.75,"runs":2},{"key":"globex","value":1,"runs":1}],"other":null}
+MCP list_dashboards: {"dashboards":[{"id":"a2fd5ca9-3837-44b7-beb4-927d02d7aae5","name":"Cost by client","sharing":"project","createdAt":"2026-11-22T06:55:59.891Z","updatedAt":"2026-11-22T06:55:59.959Z","href":"/project/11111111-1111-4111-8111-111111111111/dashboards/a2fd5ca9-3837-44b7-beb4-927d02d7aae5"}]}

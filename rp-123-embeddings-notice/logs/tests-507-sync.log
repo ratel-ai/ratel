@@ -1,0 +1,63 @@
+▶ rewrite-imports
+  ✔ derives lib rules from the map, longest first, and keeps explicit rules (0.632833ms)
+  ✔ rewrites static, type, re-export, require and dynamic imports (0.252375ms)
+  ✔ reports @/lib specifiers no rule maps, and leaves already-layered ones alone (0.112292ms)
+✔ rewrite-imports (1.386292ms)
+▶ partitions and identifiers
+  ✔ splits a named import per symbol and keeps type modifiers and aliases (0.324083ms)
+  ✔ maps type-only, re-export and namespace forms to the partition's default (0.131666ms)
+  ✔ imports a partitioned member of a namespace from its own module (0.092334ms)
+  ✔ keeps relative imports inside one moved folder and absolutizes the ones that cross entries (0.228ms)
+  ✔ renames identifiers on word boundaries only (0.095291ms)
+  ✔ runs partitions, specifiers and identifiers in order (0.149916ms)
+  ✔ splits a relative import into a partitioned hub once it is absolutized (3.480042ms)
+✔ partitions and identifiers (4.674166ms)
+▶ brand strings
+  ✔ turns the product's name in a string into the configured name, with its import (0.47625ms)
+  ✔ puts the import with the file's own imports, below a leading doc comment (0.060792ms)
+  ✔ takes 'Ratel Cloud' whole, and keeps a template's own expressions (0.035959ms)
+  ✔ wraps a JSX attribute in braces (0.030833ms)
+  ✔ escapes what a template would read as code (0.030584ms)
+  ✔ leaves comments, identifiers, the SDK's name and files without the word alone (0.039916ms)
+  ✔ skips a listed path, where the word is someone else's product in a fixture (0.032833ms)
+  ✔ writes the default name into a test's assertions, which read the default environment (0.040667ms)
+✔ brand strings (0.84275ms)
+▶ private-strings
+  ✔ matches a hashed word by whole token, case-insensitively, in prose and in paths (0.491ms)
+  ✔ a hash entry never matches its own line in the list (0.047292ms)
+  ✔ regex entries guard only the code root; hashed words guard the whole tree (3.140917ms)
+  ✔ finds matching lines by pattern (0.07075ms)
+✔ private-strings (3.800959ms)
+▶ sync
+  ✔ copies mapped folders with rewritten imports, skips excluded paths (4.042042ms)
+  ✔ lands a file with its own entry only there, not in its copied folder (3.584916ms)
+  ✔ lands a file with its own entry inside an excluded folder, and nothing else from there (3.974583ms)
+  ✔ bootstraps an owned file once and never overwrites it afterwards (4.738042ms)
+  ✔ is idempotent and mirrors deletions (3.683333ms)
+  ✔ reports private-string hits and unmapped specifiers (2.138833ms)
+  ✔ never lands an upstream path that names confidential data, and never prints it (2.224333ms)
+  ✔ formats every planned code file in one run, then guards what would land (2.450791ms)
+  ✔ the batch formatter runs the repository's biome over a staged mirror, overrides included (291.159417ms)
+  ✔ limits a run to one destination prefix with `only` (2.460584ms)
+✔ sync (320.687292ms)
+▶ undecided
+  ✔ counts a path under the mode of its entry, a folder's or its own (0.127542ms)
+  ✔ lets the most specific entry decide (0.045792ms)
+  ✔ lists a path no entry covers, and not one that only shares a prefix (0.041166ms)
+  ✔ counts a path naming confidential data as decided, and never repeats it (0.104292ms)
+✔ undecided (0.366917ms)
+▶ biome copy override
+  ✔ lists copy entries, a folder as a glob followed by the owned files inside it (0.997708ms)
+  ✔ matches map.json in the repository's biome.json (8.97975ms)
+✔ biome copy override (10.0245ms)
+▶ source
+  ✔ fails before planning when --source or RATEL_CLOUD_DIR is not a ratel-cloud checkout (83.7745ms)
+✔ source (83.831916ms)
+ℹ tests 39
+ℹ suites 8
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 474.277792

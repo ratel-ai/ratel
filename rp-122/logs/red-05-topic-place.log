@@ -1,0 +1,53 @@
+{"level":30,"time":1795322241250,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+✔ the sandbox's baseline hash is the production hash on the OpenAI engine (1.98125ms)
+✖ the model param resolves through the decision engine only (1.327125ms)
+✔ sandbox run: the engine picks a topic, and --set minConfidence=0.99 reaches its config (9.828375ms)
+✔ sandbox run: none of these is no topic (0.754584ms)
+✔ sandbox run without the engine's key says which key (0.30275ms)
+✔ flag on: the assign_topics root carries the sandbox id and the config hash (2.162583ms)
+✔ flag on: each placement call's span carries its sandbox input, capped (0.979667ms)
+✔ flag off or absent: no sandbox attribute on any span (1.307458ms)
+{"level":30,"time":1795322241251,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":0,"abstained":1,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":30,"time":1795322241252,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322241253,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:193:29)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:193:5)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":0,"msg":"topic reading failed"}
+{"level":30,"time":1795322241255,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":2,"answered":2,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":20,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322241256,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:31)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:7)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":0,"msg":"topic reading failed"}
+{"level":30,"time":1795322241256,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+{"level":50,"time":1795322241256,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"topics/assign","err":{"type":"Error","message":"stop after the first call","stack":"Error: stop after the first call\n    at Object.readingStart (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:175:11)\n    at read (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:701:28)\n    at assignProjectTopics (~/ratel-wt-rp-122/src/lib/readings/topics/job.ts:651:26)\n    at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:31)\n    at AsyncLocalStorage.run (node:internal/async_local_storage/async_context_frame:63:14)\n    at withAgentRun (~/ratel-wt-rp-122/src/lib/platform/agent-run.ts:56:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:237:7)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"p1","duration_ms":0,"msg":"topic reading failed"}
+{"level":30,"time":1795322241257,"pid":24048,"hostname":"rstagis-MacBook-Pro-3.local","module":"decisions/openai-judge","model":"gpt-6-luna","cases":1,"answered":1,"abstained":0,"refused":0,"unanswered":0,"not_asked":0,"input_tokens":10,"usd":0,"msg":"openai judging finished"}
+ℹ tests 8
+ℹ suites 0
+ℹ pass 7
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1859.55275
+
+✖ failing tests:
+
+test at lib/readings/topics/place-sandbox.test.ts:1:3365
+✖ the model param resolves through the decision engine only (1.327125ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /not an openai\/ model/. Input:
+  
+  'TypeError: "anthropic/claude-sonnet-5-5" is not a jev/, sage/ or openai/ model'
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:124:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: TypeError: "anthropic/claude-sonnet-5-5" is not a jev/, sage/ or openai/ model
+        at resolveDecisionModel (~/ratel-wt-rp-122/src/lib/readings/topics/place.sandbox.ts:89:62)
+        at <anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:124:23)
+        at getActual (node:assert:611:5)
+        at strict.throws (node:assert:759:24)
+        at TestContext.<anonymous> (~/ratel-wt-rp-122/src/lib/readings/topics/place-sandbox.test.ts:124:10)
+        at Test.runInAsyncScope (node:async_hooks:214:14)
+        at Test.run (node:internal/test_runner/test:1106:25)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:788:7),
+    expected: /not an openai\/ model/,
+    operator: 'throws',
+    diff: 'simple'
+  }

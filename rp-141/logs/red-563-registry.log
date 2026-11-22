@@ -1,0 +1,70 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (0.795417ms)
+  ✔ assembles the Cloud edition from the seam (0.214709ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.159ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.128958ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.077958ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.304959ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.055667ms)
+  ✔ throws when cloud is requested but the seam is null (0.065458ms)
+  ✔ reports zero ee boundary violations on the real tree (535.072917ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.239208ms)
+✔ createComposition (537.801625ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.244916ms)
+  ✖ the core modules landed so far register their jobs and steps in layer order (1.865667ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (0.545583ms)
+  ✔ refuses a job kind or drain step registered twice (0.158541ms)
+✖ registry root (2.940917ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.160292ms)
+ℹ tests 15
+ℹ suites 2
+ℹ pass 14
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3714.044375
+
+✖ failing tests:
+
+test at lib/composition/composition.test.ts:1:7837
+✖ the core modules landed so far register their jobs and steps in layer order (1.865667ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'assign_topics',
+  -   'build_fine_tuning_dataset',
+      'build_trace_turns',
+      'categorize_queries',
+      'cluster_intents',
+      'compute_trace_signals',
+      'craft_tools',
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/composition/composition.test.ts:260:12)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Suite.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1518:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [
+      'assign_topics',         'build_trace_turns',
+      'categorize_queries',    'cluster_intents',
+      'compute_trace_signals', 'craft_tools',
+      'draft_fix',             'explore_tool_usage',
+      'fold_intent_graph',     'index_repo_code',
+      'label_workflows',       'match_quality_run',
+      'refill_pivot_dims',     'refresh_task_eval_set',
+      'score_tasks',           'simulate_fix_eval',
+      'simulate_task_eval',    'what_if_step'
+    ],
+    expected: [ 'assign_topics', 'build_fine_tuning_dataset', 'build_trace_turns', 'categorize_queries', 'cluster_intents', 'compute_trace_signals', 'craft_tools', 'draft_fix', 'explore_tool_usage', 'fold_intent_graph', 'index_repo_code', 'label_workflows', 'match_quality_run', 'refill_pivot_dims', 'refresh_task_eval_set', 'score_tasks', 'simulate_fix_eval', 'simulate_task_eval', 'what_if_step' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

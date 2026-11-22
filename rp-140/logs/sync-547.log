@@ -1,0 +1,61 @@
+
+updated (26)
+  src/components/console/home/SetupGuide.tsx
+  src/lib/console/settings/tabs.ts
+  src/lib/console/settings/tabs.test.ts
+  src/lib/console/onboarding/quickstart.ts
+  src/components/console/lineage/ShipmentsTable.tsx
+  src/lib/views/code-handoff/deploy/detect-by-version.ts
+  src/lib/views/code-handoff/deploy/on-deployment-status.ts
+  src/lib/views/code-handoff/deploy/on-push.test.ts
+  src/lib/views/code-handoff/deploy/on-push.ts
+  src/lib/views/code-handoff/deploy/sdk-setup-ui.test.ts
+  src/lib/views/code-handoff/deploy/shipment-commits-ui.test.ts
+  src/lib/views/code-handoff/deploy/signals.test.ts
+  src/lib/views/code-handoff/handoff/handoff-fix.test.ts
+  src/lib/views/code-handoff/handoff/handoff-fix.ts
+  src/lib/views/code-handoff/handoff/view.test.ts
+  src/lib/views/code-handoff/handoff/view.ts
+  src/lib/views/code-handoff/handoff/wiring.ts
+  src/lib/views/code-handoff/link-service.ts
+  src/lib/views/code-handoff/paths.ts
+  src/lib/views/code-handoff/repository-view.test.ts
+  src/lib/views/code-handoff/webhook-handler.test.ts
+  src/components/console/code-handoff/deploy/opened-shipment-commits.tsx
+  src/app/(console)/project/[projectId]/settings/repository/actions.ts
+  src/app/api/github/install/route.ts
+  src/lib/mcp/operations/code-handoff.ts
+  src/lib/mcp/operations/code-handoff.test.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |  13 +
+ .../[projectId]/settings/repository/page.tsx       |  36 +++
+ .../app/(app)/project/[projectId]/ship/page.tsx    |   2 +
+ apps/web/components/dashboard/SdkQuickstart.tsx    |   7 +-
+ apps/web/components/home/v2/OverviewPage.tsx       |   7 +-
+ .../web/components/settings/v2/ApiKeysSettings.tsx |   2 +-
+ apps/web/components/settings/v2/SdkQuickstart.tsx  |   5 +-
+ apps/web/lib/analytics/track-server.ts             |   3 +
+ .../deploy/commits.integration.test.ts             |  31 +++
+ .../deploy/deploy-watch.integration.test.ts        | 206 ++++++++++++++
+ .../deploy/shipment-commits.integration.test.ts    |  49 ++++
+ .../lib/code-handoff/handoff/load-brief.test.ts    |  70 +++++
+ apps/web/lib/code-handoff/handoff/load-brief.ts    |  98 +++++++
+ .../code-handoff/link-service.integration.test.ts  | 302 +++++++++++++++++++++
+ .../web/lib/code-handoff/store.integration.test.ts | 168 ++++++++++++
+ apps/web/lib/code-handoff/webhook-handler.ts       | 105 +++++++
+ apps/web/lib/code-handoff/wiring.ts                |  63 +++++
+ apps/web/lib/cron/drain.ts                         |  17 ++
+ apps/web/lib/db/migrations/0109_code_handoff.sql   |  53 ++++
+ apps/web/lib/db/schema.ts                          | 102 +++++++
+ apps/web/lib/jobs/handlers.ts                      |   3 +
+ apps/web/lib/jobs/runner.ts                        |   3 +-
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  38 +++
+ apps/web/lib/mcp/operations/contract.test.ts       |   2 +
+ apps/web/lib/mcp/operations/developer.test.ts      |  10 +
+ apps/web/lib/mcp/operations/developer.ts           |   8 +-
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/stages.ts                         |   1 +
+ 28 files changed, 1398 insertions(+), 8 deletions(-)
+
+applied 26 change(s) from 1989f3f3

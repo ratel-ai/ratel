@@ -1,0 +1,137 @@
+
+copied (57)
+  packages/gateway/src/gateway.ts
+  packages/gateway/src/listener.ts
+  packages/gateway/src/logger.ts
+  packages/gateway/src/protocol.ts
+  packages/gateway/test/conformance.test.ts
+  packages/gateway/test/fixtures/invalid/manifest/bad-sandbox-id.json
+  packages/gateway/test/fixtures/invalid/manifest/enum-without-values.json
+  packages/gateway/test/fixtures/invalid/manifest/int-default-not-integer.json
+  packages/gateway/test/fixtures/invalid/manifest/missing-sdk.json
+  packages/gateway/test/fixtures/invalid/manifest/model-without-provider.json
+  packages/gateway/test/fixtures/invalid/manifest/provider-key-value.json
+  packages/gateway/test/fixtures/invalid/manifest/scalar-without-type.json
+  packages/gateway/test/fixtures/invalid/manifest/structured-input-without-schema.json
+  packages/gateway/test/fixtures/invalid/manifest/tool-bad-hint.json
+  packages/gateway/test/fixtures/invalid/manifest/unknown-param-kind.json
+  packages/gateway/test/fixtures/invalid/messages/bad-ts.json
+  packages/gateway/test/fixtures/invalid/messages/missing-v.json
+  packages/gateway/test/fixtures/invalid/messages/register.bad-manifest.json
+  packages/gateway/test/fixtures/invalid/messages/registered.frame-over-64kb.json
+  packages/gateway/test/fixtures/invalid/messages/run.end.error-without-error.json
+  packages/gateway/test/fixtures/invalid/messages/run.event.missing-seq.json
+  packages/gateway/test/fixtures/invalid/messages/run.event.tool.call.bad-mode.json
+  packages/gateway/test/fixtures/invalid/messages/run.event.unknown-kind.json
+  packages/gateway/test/fixtures/invalid/messages/run.lease.missing-run-id.json
+  packages/gateway/test/fixtures/invalid/messages/run.reject.unknown-reason.json
+  packages/gateway/test/fixtures/invalid/messages/run.start.bad-config-hash.json
+  packages/gateway/test/fixtures/invalid/messages/tool.confirm.decision.edit-without-args.json
+  packages/gateway/test/fixtures/invalid/messages/unknown-type.json
+  packages/gateway/test/fixtures/invalid/messages/wrong-v.json
+  packages/gateway/test/fixtures/valid/manifest/chat-python.json
+  packages/gateway/test/fixtures/valid/manifest/structured.json
+  packages/gateway/test/fixtures/valid/messages/drain.json
+  packages/gateway/test/fixtures/valid/messages/events.ack.json
+  packages/gateway/test/fixtures/valid/messages/manifest.update.json
+  packages/gateway/test/fixtures/valid/messages/register.json
+  packages/gateway/test/fixtures/valid/messages/registered.json
+  packages/gateway/test/fixtures/valid/messages/run.ack.json
+  packages/gateway/test/fixtures/valid/messages/run.cancel.json
+  packages/gateway/test/fixtures/valid/messages/run.end.error.json
+  packages/gateway/test/fixtures/valid/messages/run.end.json
+  packages/gateway/test/fixtures/valid/messages/run.event.log.json
+  packages/gateway/test/fixtures/valid/messages/run.event.span.ref.json
+  packages/gateway/test/fixtures/valid/messages/run.event.text.delta.json
+  packages/gateway/test/fixtures/valid/messages/run.event.tool.call.json
+  packages/gateway/test/fixtures/valid/messages/run.event.tool.result.json
+  packages/gateway/test/fixtures/valid/messages/run.lease.json
+  packages/gateway/test/fixtures/valid/messages/run.reject.busy.json
+  packages/gateway/test/fixtures/valid/messages/run.reject.invalid_params.json
+  packages/gateway/test/fixtures/valid/messages/run.reject.unknown_sandbox.json
+  packages/gateway/test/fixtures/valid/messages/run.start.chat-replay.json
+  packages/gateway/test/fixtures/valid/messages/run.start.json
+  packages/gateway/test/fixtures/valid/messages/tool.confirm.decision.json
+  packages/gateway/test/fixtures/valid/messages/tool.confirm.decision.reject.json
+  packages/gateway/test/fixtures/valid/messages/tool.confirm.request.json
+  packages/gateway/test/fixtures/valid/messages/tool.fake.request.json
+  packages/gateway/test/fixtures/valid/messages/tool.fake.result.json
+  packages/gateway/test/gateway.integration.test.ts
+
+updated (2)
+  packages/gateway/protocol/schema/manifest.schema.json
+  packages/gateway/protocol/schema/messages/tool.fake.request.schema.json
+
+owned files changed upstream since the last sync; port by hand:
+apps/gateway/Dockerfile                            |  43 ++
+ apps/gateway/package.json                          |  32 ++
+ apps/gateway/protocol/schema/envelope.schema.json  |  80 ++++
+ apps/gateway/protocol/schema/manifest.schema.json  | 213 +++++++++
+ apps/gateway/protocol/schema/message.schema.json   | 271 ++++++++++++
+ .../protocol/schema/messages/drain.schema.json     |  28 ++
+ .../schema/messages/events.ack.schema.json         |  28 ++
+ .../schema/messages/manifest.update.schema.json    |  26 ++
+ .../protocol/schema/messages/register.schema.json  |  58 +++
+ .../schema/messages/registered.schema.json         |  69 +++
+ .../protocol/schema/messages/run.ack.schema.json   |  20 +
+ .../schema/messages/run.cancel.schema.json         |  24 +
+ .../protocol/schema/messages/run.end.schema.json   |  77 ++++
+ .../protocol/schema/messages/run.event.schema.json | 179 ++++++++
+ .../protocol/schema/messages/run.lease.schema.json |  25 ++
+ .../schema/messages/run.reject.schema.json         |  54 +++
+ .../protocol/schema/messages/run.start.schema.json |  74 ++++
+ .../messages/tool.confirm.decision.schema.json     |  72 +++
+ .../messages/tool.confirm.request.schema.json      |  34 ++
+ .../schema/messages/tool.fake.request.schema.json  |  43 ++
+ .../schema/messages/tool.fake.result.schema.json   |  37 ++
+ apps/gateway/src/main.ts                           | 114 +++++
+ apps/gateway/test/support.ts                       | 172 ++++++++
+ apps/gateway/tsconfig.json                         |  33 ++
+ apps/web/.env.example                              |   6 +
+ apps/web/Dockerfile                                |   9 +
+ .../[projectId]/sessions/[sessionId]/page.tsx      |   2 +
+ .../[projectId]/traces/[traceId]/trace-v2.tsx      |   5 +-
+ apps/web/app/onboarding/actions.ts                 |   1 +
+ apps/web/components/shell/AppFrame.tsx             |   9 +-
+ apps/web/components/shell/nav-icons.ts             |   2 +
+ apps/web/components/shell/types.ts                 |   2 +
+ apps/web/lib/analytics/track-server.ts             |   8 +
+ apps/web/lib/api-keys/action-handlers.ts           |   2 +
+ apps/web/lib/cron/drain.ts                         |  17 +
+ apps/web/lib/db/index.ts                           |   3 +-
+ apps/web/lib/db/migrations/0111_sandbox_runs.sql   |  82 ++++
+ .../lib/db/migrations/0112_api_key_created_by.sql  |   3 +
+ apps/web/lib/db/migrations/0113_sandbox_fakes.sql  |  24 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 +
+ apps/web/lib/db/schema.ts                          | 172 ++++++++
+ apps/web/lib/decisions/openai.ts                   |  15 +-
+ apps/web/lib/jobs/handlers.ts                      |   7 +-
+ apps/web/lib/match-quality/judges/openai.ts        |   5 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/navigation/v2.test.ts                 |  20 +-
+ apps/web/lib/navigation/v2.ts                      |  31 +-
+ apps/web/lib/observability/agent-run.ts            |  22 +-
+ apps/web/lib/observability/model-call.ts           |  17 +-
+ .../lib/otlp/dimensions/ingest.integration.test.ts |   1 +
+ apps/web/lib/otlp/ingest-spans.ts                  |  19 +-
+ apps/web/lib/otlp/logs-route-handler.test.ts       |   1 +
+ .../lib/otlp/route-handler.agent-health.test.ts    |   1 +
+ ...route-handler.real-fixtures.integration.test.ts |   1 +
+ apps/web/lib/otlp/route-handler.test.ts            |   1 +
+ .../lib/sandboxes/fakes/adapters/fake-alerts.ts    |  29 ++
+ apps/web/lib/sandboxes/flag.ts                     |  50 +++
+ apps/web/lib/sandboxes/navigation.ts               |  35 ++
+ apps/web/lib/sandboxes/playground.ts               |  44 ++
+ apps/web/lib/sandboxes/tests/navigation.test.ts    |  35 ++
+ .../sandboxes/tests/pg-store.integration.test.ts   | 281 ++++++++++++
+ .../sandboxes/tests/run-api.integration.test.ts    | 490 +++++++++++++++++++++
+ apps/web/lib/topics/job.ts                         |  97 +++-
+ apps/web/lib/topics/place-sandbox.test.ts          | 218 +++++++++
+ apps/web/lib/topics/place.sandbox.ts               |  91 ++++
+ apps/web/lib/topics/place.ts                       |  25 +-
+ apps/web/lib/trace-signals/turns/segment.ts        |   2 +-
+ apps/web/lib/trace-signals/workflows/label-job.ts  |  67 ++-
+ apps/web/package.json                              |   2 +
+ 69 files changed, 3720 insertions(+), 62 deletions(-)
+
+applied 59 change(s) from 59f4531b

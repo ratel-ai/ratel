@@ -1,0 +1,34 @@
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@/lib' imported from ~/ratel-wt-rp-141/src/lib/views/fine-tuning/flag.ts
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:316:9)
+    at packageResolve (node:internal/modules/esm/resolve:768:81)
+    at moduleResolve (node:internal/modules/esm/resolve:858:18)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-141/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795335501944:2:3744)
+    at resolveDirectory (file://~/ratel-wt-rp-141/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795335501944:2:4243)
+    at resolveTsPaths (file://~/ratel-wt-rp-141/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795335501944:2:4984)
+    at async resolve (file://~/ratel-wt-rp-141/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795335501944:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22) {
+  code: 'ERR_MODULE_NOT_FOUND'
+}
+
+Node.js v24.12.0
+✖ lib/views/fine-tuning/tests/flag.test.ts (816.103333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 828.564959
+
+✖ failing tests:
+
+test at lib/views/fine-tuning/tests/flag.test.ts:1:1
+✖ lib/views/fine-tuning/tests/flag.test.ts (816.103333ms)
+  'test failed'

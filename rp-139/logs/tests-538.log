@@ -1,0 +1,98 @@
+✔ presets: end user, session, environment and client company, each with ordered keys (3.100917ms)
+✔ pivotKeys: a preset reads its preset's keys, a custom pivot its one key (0.386167ms)
+✔ validateCustomKey: trims, accepts attribute keys, refuses empty, long, odd characters and preset ids (0.358708ms)
+✔ validateLabel: trims and refuses empty or over 40 characters (0.162333ms)
+✔ planPivot: a preset gets its id as key, its name as default label, the next position (3.576458ms)
+✔ planPivot: a custom key gets its key as default label, or the label given (0.183792ms)
+✔ planPivot: refuses an unknown preset, a bad key, a bad label and a duplicate (0.15725ms)
+✔ planPivot: refuses a sixth pivot (0.170167ms)
+✔ planPivot: the next position follows the highest, even with gaps (0.185125ms)
+✔ sortPivots: by position, then key; the input is not changed (13.719417ms)
+✔ movePivot: up and down swap with the neighbour and renumber from 0 (0.30575ms)
+✔ movePivot: an edge move keeps the order, an unknown key is null (0.143ms)
+✔ with cloud-pivots off no pivot is read and the bar has no pivot filter (1.606875ms)
+✔ with cloud-pivots on the bar filters by the configured pivots, keys and labels only (0.336834ms)
+✔ the table has a row per value, Other and (none), and a value links to filtered Sessions (36.028708ms)
+✔ with more than one pivot the table offers the picker (7.160833ms)
+✔ the picked pivot is the configured one the URL names, else the first, else none (3.573667ms)
+✔ a value row links to Sessions filtered by it; Other and (none) link nowhere (1.675958ms)
+✔ picking another pivot keeps the window (0.129542ms)
+✔ per value: runs, error rate, p50 and cost, most runs first, then the (none) row (3479.260458ms)
+✔ past the top values the rest fold into Other, its p50 over its own runs (314.216042ms)
+✔ an empty window has no rows (330.144708ms)
+✔ the summary sweep fills each trace's models, tools, service and environment (3462.811458ms)
+✔ filter by model and by tool narrows the Turns list (373.320792ms)
+✔ a trace that starts before the window but has an in-window root is in the filtered list as in the unfiltered one (325.388291ms)
+✔ the Turns totals follow the same filter (380.60725ms)
+{"level":30,"time":1795329233826,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by model and by tool narrows Sessions: a session matches when any of its turns matches (444.2275ms)
+{"level":30,"time":1795329233844,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329233861,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329233892,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":2,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329233896,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329233926,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"failed","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ facet values for a project and window come from one rollup query (297.02625ms)
+✔ the Sessions facet window is the Turns default range: it ignores rows outside it (338.751667ms)
+✔ the Sessions filter finds the matching sessions once per page, not once per walked head (0.405375ms)
+✔ without a filter the list queries are unchanged (0.274ms)
+✔ the summary sweep fills each trace's agents and MCP servers from its spans (347.365875ms)
+{"level":30,"time":1795329235259,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ filter by agent and by MCP server narrows the Turns list and Sessions (363.308958ms)
+{"level":30,"time":1795329235270,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329235274,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ the agent and MCP server facet values are read only when the entity filters are on (316.760875ms)
+✔ the sweep fills harnesses and countries; Turns filter by them and the facets offer them with the entity filters on (396.891833ms)
+{"level":30,"time":1795329236199,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ a pivot filter keeps only the matching traces on Turns and Sessions (221.487209ms)
+{"level":30,"time":1795329236207,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":1,"more":false,"msg":"traces_session_list_page_loaded"}
+{"level":30,"time":1795329236210,"pid":49821,"hostname":"rstagis-MacBook-Pro-3.local","module":"traces-sessions-list","project_id":"11111111-1111-4111-8111-111111111111","filter":"all","rows":0,"more":false,"msg":"traces_session_list_page_loaded"}
+✔ pivot facet values are the top values of each asked pivot, read only when asked (174.49875ms)
+✔ an empty filter has no condition, as before pivots (0.703084ms)
+✔ a pivot value is a containment on dims, so the GIN index serves it (0.99275ms)
+✔ values of one pivot are alternatives, pivots combine with AND (0.178666ms)
+✔ a key that no pivot can have is ignored (0.335625ms)
+✔ the pivot condition joins the other properties (0.251958ms)
+✔ without pivots the facet query is the same SQL as on main (2.652ms)
+✔ with pivots the facet query also counts each pivot's values from dims (0.32425ms)
+✔ with the flag off, Sessions shows no filter bar (33.437959ms)
+✔ with the flag on, Sessions shows the bar with the URL's chips and no name search (22.004708ms)
+✔ with cloud-project-entities on, the bar shows the agent and MCP server chips from the URL (7.608208ms)
+✔ with cloud-project-entities off, facetAgent and facetServer in the URL show no chip (14.931125ms)
+✔ with cloud-pivots on, the bar shows a configured pivot's chip with its label and raw value (9.447625ms)
+✔ with cloud-pivots off, pivot parameters in the URL show no chip (16.977208ms)
+✔ every narrowing parameter becomes a chip, so no filter hides (2.322083ms)
+✔ exact experiment links read as exact, and removing the last tag drops exactTags (0.313167ms)
+✔ removing a chip drops the page cursor and the open row, and keeps the rest (0.111ms)
+✔ measures read as ranges in plain units (15.735917ms)
+✔ logs only show the filters that narrow logs (0.563708ms)
+✔ clear filters keeps the window, sort, view options and the compare selection (0.5795ms)
+✔ the search box writes the name filter and Logs retire the old event-name param (0.82275ms)
+✔ the add-filter popover offers the values seen in the window, with counts only in the span unit (2.107166ms)
+✔ toggling a value adds or removes it; single-value fields replace (0.804375ms)
+✔ a preset window replaces custom days; switching tabs leaves the page and open row behind (0.182416ms)
+✔ grouped Spans apply the variant and top-level filters their chips show (1.718791ms)
+✔ traceFilterFromSearch reads the rollup filters from the URL (RC-505) (0.430541ms)
+✔ rollup bar (RC-506): a model or tool chip goes to the URL and reads back as a chip (0.346542ms)
+✔ rollup bar (RC-506): fields come from the rollup facets, with cost and token thresholds (0.220958ms)
+✔ with the entity filters on, facetAgent and facetServer are read, shown as chips and offered as fields (0.414291ms)
+✔ with the entity filters off, facetAgent and facetServer are ignored and no facet shows (0.381083ms)
+✔ only configured pivot keys are read from the URL (0.139417ms)
+✔ a pivot filter shows as a chip with the pivot label and the raw value (0.06375ms)
+✔ the bar offers one field per configured pivot with its values, only with pivots (0.269375ms)
+✔ toggling a pivot value adds and removes it in the URL, and clear removes it (0.416416ms)
+✔ a pivot link filters Sessions or Turns by one value (0.282ms)
+✔ 50 facet values and one selected value outside them give 50 options, the selected one first (0.5505ms)
+✔ a selected value inside the facets moves first and is not offered twice (0.435667ms)
+✔ more than 50 URL values for one pivot: the first 50 filter, and the control has 50 options (0.773125ms)
+✔ with fewer than 50 facet values and no outside selection the pivot options are as before (0.409917ms)
+✔ the non-pivot controls keep their options: no cap, a selected outside value on top (0.168292ms)
+✔ the conversation filter is a chip on the run list, and is no filter of the span list (AOBS-3) (0.06425ms)
+✔ facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778) (0.245209ms)
+ℹ tests 78
+ℹ suites 0
+ℹ pass 78
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10093.375708

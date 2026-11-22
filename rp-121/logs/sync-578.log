@@ -1,0 +1,78 @@
+
+copied (1)
+  src/lib/views/session-chat/bands.ts
+
+updated (23)
+  src/lib/ingest/trace-events/queries.integration.test.ts
+  src/lib/ingest/otlp/__fixtures__/real/README.md
+  src/lib/catalog/wire.ts
+  src/lib/catalog/wire.test.ts
+  src/lib/views/tasks/session.ts
+  src/lib/views/tasks/session.test.ts
+  src/components/console/tasks/SessionView.tsx
+  src/components/console/tasks/TaskView.tsx
+  src/lib/views/tasks/tasks-ui.test.ts
+  src/components/console/badgers/honeybadger-assets.ts
+  src/lib/mcp/apps/load.ts
+  src/lib/console/badgers.test.ts
+  src/postcss.config.mjs
+  src/lib/views/session-replay/load.ts
+  src/lib/views/session-replay/timeline.test.ts
+  src/lib/views/session-replay/timeline.ts
+  src/lib/views/session-replay/view.ts
+  src/lib/views/session-chat/load.ts
+  src/lib/views/session-chat/model.test.ts
+  src/lib/views/session-chat/model.ts
+  src/components/console/session-chat/SessionChatView.tsx
+  src/components/console/session-chat/SessionTrack.tsx
+  src/components/console/session-chat/format.ts
+
+deleted (2)
+  src/lib/platform/otel/server-traces.test.ts
+  src/lib/platform/otel/server-traces.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (6)
+  {"path":"src/lib/views/tasks/session.ts","specifier":"@/lib/tasks/session-bands"}
+  {"path":"src/components/console/tasks/TaskView.tsx","specifier":"@/lib/tasks/steps-view"}
+  {"path":"src/lib/views/session-replay/view.ts","specifier":"@/lib/tasks/session-bands"}
+  {"path":"src/lib/views/session-chat/load.ts","specifier":"@/lib/tasks/session-segments"}
+  {"path":"src/lib/views/session-chat/model.ts","specifier":"@/lib/tasks/session-bands"}
+  {"path":"src/components/console/session-chat/SessionChatView.tsx","specifier":"@/lib/tasks/steps-view"}
+
+owned files changed upstream since the last sync; port by hand:
+.../health/tasks/sessions/[sessionId]/page.tsx     | 17 +++-
+ .../[projectId]/sessions/[sessionId]/page.tsx      | 14 +++-
+ .../project/[projectId]/tasks/[taskId]/page.tsx    | 16 +++-
+ apps/web/components/ds/step-kind.tsx               | 26 +++++++
+ apps/web/lib/analytics/track-server.ts             |  1 +
+ apps/web/lib/db/migrations/0111_task_segments.sql  | 27 +++++++
+ apps/web/lib/db/migrations/meta/_journal.json      |  7 ++
+ apps/web/lib/db/schema.ts                          | 20 +++++
+ apps/web/lib/jobs/observability.ts                 |  1 +
+ apps/web/lib/mcp/route-handler.test.ts             |  1 +
+ apps/web/lib/otlp/agent-health-bridge.ts           |  9 ++-
+ apps/web/lib/otlp/derive-agent-runs.ts             | 27 ++-----
+ apps/web/lib/otlp/derive-steps.test.ts             | 90 ++++++++++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  2 +
+ apps/web/lib/session-chat/load.integration.test.ts | 48 ++++++++++++
+ apps/web/lib/tasks/page-model.integration.test.ts  | 80 ++++++++++++++++++-
+ apps/web/lib/tasks/page-model.ts                   | 19 ++++-
+ apps/web/lib/tasks/palette.ts                      | 10 +--
+ apps/web/lib/tasks/queries.ts                      | 60 ++++++++++++++-
+ apps/web/lib/trace-signals/constants.ts            |  3 +
+ apps/web/lib/trace-signals/page-model.ts           |  8 +-
+ apps/web/lib/trace-signals/signals/compute-job.ts  |  6 +-
+ .../lib/trace-signals/tool-run-insights.test.ts    | 14 +++-
+ apps/web/lib/trace-signals/tool-run-insights.ts    | 14 +++-
+ apps/web/lib/trace-signals/turns/build-job.ts      | 17 +++-
+ apps/web/lib/trace-signals/turns/queries.ts        | 13 +++-
+ apps/web/lib/trace-signals/turns/schedule.ts       |  7 +-
+ apps/web/lib/trace-signals/turns/segment.ts        |  6 +-
+ .../turns/typed-steps.integration.test.ts          | 80 +++++++++++++++++++
+ .../lib/trace-signals/turns/typed-steps.test.ts    | 37 +++++++++
+ apps/web/lib/trace-signals/typed-steps.test.ts     | 35 +++++++++
+ apps/web/lib/trace-signals/typed-steps.ts          | 28 +++++++
+ apps/web/lib/trace-signals/workflows/place.ts      | 18 ++---
+ 33 files changed, 695 insertions(+), 66 deletions(-)
+
+applied 26 change(s) from 3331d608

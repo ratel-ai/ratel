@@ -1,0 +1,92 @@
+{"level":30,"time":1795339118792,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"skipped_no_key","payer":"customer","backend":"api","msg":"model_call"}
+✔ 401 when the Authorization header is missing (15.059458ms)
+✔ 401 when the key is unknown or revoked (0.525667ms)
+✔ 413 for a chunked over-cap body without full buffering or upstream calls (5.908083ms)
+✔ 503 when the database is not configured (0.452917ms)
+✔ 402 out of embedding credits emits a quota event, not an exception (0.58975ms)
+✔ 402 when the organization can't be resolved emits a quota event, not an exception (0.318375ms)
+✔ 503 when the upstream provider key is not configured (0.843916ms)
+✔ stamps project and org onto the request log context (2.052791ms)
+✔ 400 on a non-JSON body (0.363125ms)
+✔ 400 when input is missing or empty (0.894791ms)
+✔ 400 rejects a different model with a clear message (0.347916ms)
+✔ 200 accepts the public model alias (0.489ms)
+✔ the response never leaks the underlying model — `model` is the public alias (0.474333ms)
+✔ 400 when there are more than MAX_INPUTS inputs (0.358375ms)
+✔ 200 forwards to DeepInfra and returns the body (model aliased) (0.499458ms)
+✔ 200 accepts a request that omits model (defaults to the served model) (0.308166ms)
+✔ 502 when the upstream is unreachable (0.443208ms)
+✔ 400 when the provider rejects the request (upstream 4xx) (0.653709ms)
+✔ 502 when the provider 5xxs (0.279334ms)
+✔ 502 when the provider returns unreadable JSON is captured (0.302875ms)
+✔ records a usage row on success (tokens, input count, status ok) (0.285667ms)
+✔ records an error row when the upstream fails (0.450959ms)
+✔ a metering failure never breaks the embedding response (0.341292ms)
+✔ upstream 401/403 (our credential problem) surfaces as 502, not a client 400 (0.63825ms)
+✔ upstream 429 is surfaced as a 429 rate-limit error (0.210792ms)
+✔ charges the call against the balance on success (cost = tokens × rate) (3.756666ms)
+✔ regrants the monthly allowance when the window has elapsed, then serves (0.4295ms)
+✔ 402 when the window elapsed but there's nothing to grant (free tier) (0.127625ms)
+✔ fires auto-recharge only when a charge crosses the threshold (0.248583ms)
+✔ an oversized input is cut before forwarding and reported (1.003334ms)
+✔ a single string input is truncated and stays a string (0.674958ms)
+✔ within-budget requests get no truncation field and no event (0.377291ms)
+✔ an upstream 4xx forwards the provider's reason with the model id aliased (0.324542ms)
+✔ a `detail`-shaped upstream error is forwarded too (0.272333ms)
+✔ an unparseable upstream 4xx body falls back to the opaque message (0.274458ms)
+✔ upstream 402 (our provider balance) surfaces as 502 and never blames or leaks to the caller (0.396375ms)
+✔ the forwarded reason never leaks the provider brand, URLs, or the bare model id (0.608708ms)
+✔ the forwarded reason is capped and stripped of C1/bidi/zero-width controls (1.0155ms)
+✔ `error`-as-string and top-level `message` upstream shapes are forwarded (0.713083ms)
+✔ does not auto-recharge when disabled or no card on file (0.320042ms)
+✔ a lone surrogate in the input never reaches the provider (1.085917ms)
+{"level":30,"time":1795339118794,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118797,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118797,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118798,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118799,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118799,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","error_type":"unknown","msg":"model_call"}
+{"level":30,"time":1795339118799,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118800,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118800,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","error_type":"unknown","msg":"model_call"}
+{"level":30,"time":1795339118801,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118801,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118801,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118802,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118802,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118802,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118806,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118807,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":1,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118807,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118808,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118808,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118809,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118809,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118810,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118810,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118810,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118811,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118811,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118812,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118813,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":null,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"error","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118813,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+{"level":30,"time":1795339118814,"pid":91634,"hostname":"rstagis-MacBook-Pro-3.local","module":"observability/model-call","provider":"deepinfra","model":"BAAI/bge-base-en-v1.5","feature":"embeddings_proxy","organization_id":"org-1","project_id":"project-1","input_tokens":4,"output_tokens":null,"cost_usd":0,"duration_ms":0,"outcome":"ok","payer":"customer","backend":"api","msg":"model_call"}
+✔ formatLatency reads in ms below a second and seconds above (0.902833ms)
+✔ failureHint says none yet, all succeeded, or the failed share (0.344667ms)
+✔ the modes carry this project's picks, with spend only where there was any (1.006458ms)
+✔ totals add picks, spend and failures across the modes (0.247833ms)
+✔ toQuickstartKey never passes a live key into a support session (0.111209ms)
+✔ embedding bars carry a tooltip line per day (5.57475ms)
+✔ DailyBars scales to the peak and labels every bar for screen readers (7.4495ms)
+✔ Tool Picker renders the modes table and the quickstart (18.89525ms)
+✔ without a key the quickstart offers to make one (5.518834ms)
+✔ Embeddings shows the chart with usage and a first step without (9.348917ms)
+✔ RC-601: with cloud-embeddings-region-notice on, Embeddings says it runs in the US; off, nothing changes (11.354791ms)
+ℹ tests 52
+ℹ suites 0
+ℹ pass 52
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2761.881875

@@ -1,0 +1,7 @@
+✖ a Jev judge call outside any run is its own span; an error call is an error span (1.35125ms)
+✖ a rejected key is one error call, under the default feature (1.599125ms)
+ℹ pass 34
+ℹ fail 2
+✖ failing tests:
+✖ a Jev judge call outside any run is its own span; an error call is an error span (1.35125ms)
+✖ a rejected key is one error call, under the default feature (1.599125ms)

@@ -1,0 +1,58 @@
+✔ an SDK project: runs end well, the right tool in the top 5 (not the first pick); no calls rate (the SDK counts no calls) (2.894958ms)
+✔ an OpenTelemetry project: completed runs and calls that worked; no top-5 rate without a search (0.390125ms)
+✔ a mixed project adds both kinds of run into one rate (0.249458ms)
+✔ only the reading's own window counts: the comparison days before it are left out (0.223291ms)
+✔ a rate below the evidence floor is left out (0.154291ms)
+✔ self-corrections: a recovered one costs half; an older reading without the counts treats every one as unrecovered (0.121167ms)
+✔ tasks: failed runs over task runs, weighted by runs; none when runs were mixed together (0.167875ms)
+✔ the measured half: weights shared out among the rates there are, and its missing points add up (0.152334ms)
+✔ a reading stored before the top-5 count has no top-5 rate, rather than a different one (0.087042ms)
+✔ typed steps: failed model and code steps count in calls work; top 5 stays tool-only and drops out with no searches (0.161ms)
+✔ each turn takes exactly one shape, with waste shapes first (4.943542ms)
+✔ the shapes partition the measurable turns and sort by count (2.57175ms)
+✔ the first-try tile counts a two-step turn with a fresh search per need (0.470792ms)
+✔ tiles carry the Wilson interval of their share, a 7-day series and a delta (14.952334ms)
+✔ the band leads with the right tool in the top 5: a second search that served it still counts (RC-226) (6.220583ms)
+✔ tiles show no figure under the floor and no delta without a covered previous window (1.283792ms)
+✔ capture level: content when most searches carried text, tools with tool ids, else events (0.235416ms)
+✔ the flow is deterministic and resolves open signals to ids and tints (26.04ms)
+✔ typed steps: a day counts model and code steps and their failures only when asked to (0.628875ms)
+✔ model-call facts join the priced call by trace and span, in the window only (1573.01675ms)
+✔ finish inputs read the window's segments and the topics of its runs (217.895084ms)
+✔ model calls read calls per run, errors, latency, tokens, cost, finish reasons and retries (1.8535ms)
+✔ model calls without facts read no tokens and no cost (0.131958ms)
+✔ a kind with no steps reads null (0.087583ms)
+✔ tool calls equal today's tool numbers on tool fixtures (4.398125ms)
+✔ skills read apart from tools, with their own after-error counts (0.167917ms)
+✔ code steps read calls, errors, p95 and their share of run time (0.159333ms)
+✔ handoffs read routes from the agent that handed off and the receiving run's errors (8.638459ms)
+✔ user messages read messages per segment, the sentiment mix and the asked-again share (0.436917ms)
+✔ user messages without segments read per run (0.122542ms)
+✔ tasks read runs, finish rate, cost per run, duration, self-corrections and the weakest step from segments (0.349125ms)
+✔ no segments read no tasks (0.085ms)
+✔ the signal run stores the per-kind readings and step calls only with typed steps on (5.292083ms)
+✔ the kinds table lists the preset's kinds that ran, in kind order, with plain numbers (15.617875ms)
+✔ the model table reads tokens, cost, latency and how calls stopped (0.420334ms)
+✔ handoffs, user messages and tasks read in plain words; tasks show by name (2.859958ms)
+✔ the presets are links that keep the window (0.129666ms)
+✔ no ledger: the empty state everywhere but development, where the demo fixture shows (1643.938334ms)
+✔ a ledger below the floor reads as collecting, even in development (192.04375ms)
+{"level":30,"time":1795319850141,"pid":9934,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4470d44f-38f7-4390-882b-8f3d6ac158cf","trigger":"manual","window_days":7,"turns_scanned":155,"runs_placed":25,"placement_written":25,"unbuilt_at_start":0,"early_reading":true,"signals_open":2,"signals_new":2,"signals_resolved":0,"pair_tools":4,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+✔ after a run the page is ready with tiles, shapes, flow and signals (546.575375ms)
+{"level":30,"time":1795319850651,"pid":9934,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"dcb4b077-cffc-4725-bb42-d1c78b11ad9b","trigger":"manual","window_days":7,"turns_scanned":173,"runs_placed":25,"placement_written":25,"unbuilt_at_start":0,"early_reading":true,"signals_open":4,"signals_new":4,"signals_resolved":0,"pair_tools":4,"queries_truncated":false,"self_corrections":24,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+✔ plan slicing: free sees three signals and reads no evidence at all (502.132125ms)
+{"level":30,"time":1795319851027,"pid":9934,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"566b662d-952d-4d93-b1ca-c380dfefc630","trigger":"manual","window_days":7,"turns_scanned":130,"runs_placed":0,"placement_written":0,"unbuilt_at_start":0,"early_reading":true,"signals_open":1,"signals_new":1,"signals_resolved":0,"pair_tools":2,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+✔ evidence reads query text live: pruned events are expired, missing text is not captured (387.521208ms)
+{"level":30,"time":1795319851662,"pid":9934,"hostname":"rstagis-MacBook-Pro-3.local","module":"trace-signals/compute-job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"da5386e6-2923-46f9-b627-6108cbb0883a","trigger":"manual","window_days":7,"turns_scanned":155,"runs_placed":25,"placement_written":25,"unbuilt_at_start":0,"early_reading":true,"signals_open":2,"signals_new":2,"signals_resolved":0,"pair_tools":4,"queries_truncated":false,"self_corrections":0,"self_correcting_issues":0,"duration_ms":0,"msg":"trace signal run completed"}
+✔ typed steps: the page carries the per-kind readings only with the flag on (628.559167ms)
+✔ a model-only project renders the model call tables (25.689625ms)
+✔ a flat chat with a tool call renders model and tool rows, and the presets filter them (5.747875ms)
+✔ the default view keeps engine names out (5.354875ms)
+ℹ tests 46
+ℹ suites 0
+ℹ pass 46
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6386.103417

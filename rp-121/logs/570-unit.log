@@ -1,0 +1,126 @@
+✔ typed step fixtures survive OTLP JSON decoding with their span relationships (3.356208ms)
+✔ the tool row carries its MCP server (1.950166ms)
+✔ the disabled derivations preserve the main fixture output byte for byte (5.814ms)
+✔ production shapes produce code and nested agent handoffs (1.805292ms)
+✔ infrastructure, SDK, client and short spans are not code steps (0.165625ms)
+✔ typed model rows store hashes, counts, reasoning and a stable signature without message text (0.491375ms)
+✔ the bridge gates new rows and workflow roots with one flag (0.410792ms)
+✔ typed model and agent rows keep the captured ask and the system mark as main writes them (0.340709ms)
+✔ a batch with a turn event enqueues one build and drains it, with no gate (1.184292ms)
+✔ nothing is enqueued without deps, without accepted events or without a turn event (0.119709ms)
+✔ a coalesced enqueue that returns no job does not drain (0.070167ms)
+✔ an enqueue failure is reported, never thrown (0.236916ms)
+✔ invocations pair by invocation_id even when ends arrive out of order (4.462042ms)
+✔ without invocation ids an end pairs with the oldest open start of its tool (0.690542ms)
+✔ a start without an end is unknown and an end past the pairing window stands alone (0.359167ms)
+✔ attribution comes from the latest earlier search listing the tool (1.898708ms)
+✔ a tool reached only by retrying the same ask misses first try (0.440167ms)
+✔ a tool listed by a fresh search for a new ask is still first try (0.472ms)
+✔ a tool nobody listed has no offering and a blind turn has no first-try verdict (0.223542ms)
+✔ a skill invocation is attributed from skill searches only (0.17325ms)
+✔ turn facts: counts, distinct tools, abandoned, hits (0.536584ms)
+✔ steps keep no text: queries are salted hashes and equal asks hash equal (1.782042ms)
+✔ building page by page writes the ledger one full pass would, at every cut (72.297541ms)
+✔ an end on a later page pairs into its start's closed turn (invocation id absent) (1.414459ms)
+✔ an end on a later page pairs into its start's closed turn (invocation id inv-1) (0.599375ms)
+✔ a gateway row on a later page dedupes against a native row of a closed turn (14.876042ms)
+✔ an unpaired start reloads every later turn of its session, not just its own (5.674292ms)
+✔ an idle-closed turn a later page continues is reloaded and re-derived (3.37575ms)
+✔ a search and its invocation in two pages attribute as one turn (3.38625ms)
+✔ rebuilding a turn from its own steps reproduces it (2.806208ms)
+✔ an imported turn reloaded from the ledger stays closed, alone or with more of its run (8.762875ms)
+✔ an event already stored is not counted twice (1.226209ms)
+✔ declared turn ids win and the earlier turn closes on the next one (4.039791ms)
+✔ a declared turn is not split by a long gap between its own events (0.276167ms)
+✔ inferred turns split on a gap over 90 s and not at or under it (0.338875ms)
+✔ an inferred turn is capped at 40 steps (0.446583ms)
+✔ an inferred turn is capped at 15 minutes of event time (0.745042ms)
+✔ a search after an invocation stays in the turn: that is the re-search pattern (0.386333ms)
+✔ mixed SDKs: undeclared events join the preceding declared turn within the gap, else start an inferred one (0.76125ms)
+✔ gateway rows within 2 s of a native twin are dropped, others stand in (0.281834ms)
+✔ a gateway invocation of a different tool is not a twin (0.150625ms)
+✔ a backwards clock marks the turn and never splits it (0.454333ms)
+✔ a long call's end joins its start's turn even after the gap (0.20325ms)
+✔ the latest turn stays open until its session is idle for 30 minutes (0.188042ms)
+✔ an imported run closes as soon as it is built; live runs still wait out the idle window (0.389959ms)
+✔ a session that mixes imported and live events waits like a live one (0.097834ms)
+✔ OTLP rows group by trace, one turn each, with no abandoned verdict (0.0975ms)
+✔ segmentation is independent of input order (0.108375ms)
+✔ code steps require GenAI work and stop at twenty in event-time order (5.294334ms)
+✔ a model-only ingest schedules a build only with typed steps enabled (0.142209ms)
+✔ the demo project does not count toward the project limit, as in the console (17.214041ms)
+✔ Enterprise limits say unlimited rather than serializing as null (1.924292ms)
+✔ plan and subscription state come from the same helpers as the Billing page (11.449959ms)
+✔ match quality not on the plan says so (1.121875ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (1.092583ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (0.597375ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (0.885834ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (1.28ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (0.99375ms)
+{"level":50,"time":1795318287049,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (~/ratel-wt-rp-121/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (29.338625ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (24.24ms)
+✔ without an edition's name the 401 realm stays ratel (0.513625ms)
+✔ an older protocol version still negotiates (6.848208ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (24.482416ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (12.019ms)
+✔ a signed-in person without app access is refused at the door with 403 (0.436208ms)
+✔ every tool definition is exactly what the fixture pins (12.352167ms)
+✔ each staged tool publishes its stage, and only that, as _meta (16.728958ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (13.029083ms)
+✔ each tool carries the annotations the Claude directory reviews (13.241917ms)
+✔ no tool description tells the model what to do first (11.134125ms)
+✔ calling a tool runs its operation and reports failures in-band (30.47425ms)
+✔ an unregistered tool name is refused by the transport (5.022958ms)
+✔ a notification is accepted with no body (5.057ms)
+✔ a missing credential is rejected before any protocol work (0.245709ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (18.98025ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (13.573042ms)
+✔ an exhausted rate limit returns 429 with Retry-After (10.918958ms)
+✔ malformed JSON gets the reserved parse-error code (0.32375ms)
+✔ an oversized batch is refused rather than amplified (0.283167ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.128833ms)
+✔ an exception while verifying a credential is a 401, never a 500 (0.317542ms)
+✔ the 401 from a failed verification still advertises where to authenticate (0.265541ms)
+✔ repeated bad credentials stop reaching the authenticator at all (0.332458ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.207875ms)
+✔ successful calls are never charged to the failure budget (55.620167ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (10.670542ms)
+✔ an unconfigured database does not spend the caller's failure budget (0.279667ms)
+{"level":50,"time":1795318287051,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (~/ratel-wt-rp-121/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795318287095,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795318287186,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (~/ratel-wt-rp-121/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (~/ratel-wt-rp-121/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (~/ratel-wt-rp-121/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (~/ratel-wt-rp-121/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (~/ratel-wt-rp-121/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (~/ratel-wt-rp-121/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (~/ratel-wt-rp-121/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (~/ratel-wt-rp-121/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (~/ratel-wt-rp-121/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (~/ratel-wt-rp-121/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795318287191,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":15,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795318287203,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795318287235,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795318287246,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795318287247,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795318287247,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:412:15)\n    at handleMcpRequest (~/ratel-wt-rp-121/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:416:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:428:15)\n    at handleMcpRequest (~/ratel-wt-rp-121/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (~/ratel-wt-rp-121/src/lib/mcp/route-handler.test.ts:432:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795318287248,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795318287315,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795318287315,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795318287315,"pid":49203,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ FF_TYPED_STEPS is a core switch, so an edition's flags port can decide it (0.396916ms)
+✔ OSS: off with nothing set (0.500292ms)
+✔ OSS: FF_TYPED_STEPS turns typed steps on, and only a true value does (0.146334ms)
+✔ OSS: RATEL_EXPERIMENTAL_FEATURES turns typed steps on; another switch does not (0.064834ms)
+✔ Cloud: the flags port decides it for the project, on and off (0.862292ms)
+✔ Cloud: an FF_TYPED_STEPS value set by the operator comes first (0.227958ms)
+✔ Cloud: a failed decision is off (0.094166ms)
+✔ stored steps map to public kinds while legacy search and run markers stay unclassified (0.36675ms)
+✔ the preset parser accepts the five URL values and defaults unknown inputs to all (0.642041ms)
+✔ presets select their step kinds and flow omits annotations (0.388833ms)
+ℹ tests 98
+ℹ suites 0
+ℹ pass 98
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6033.642292

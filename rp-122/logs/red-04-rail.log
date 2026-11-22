@@ -1,0 +1,5 @@
+✖ Sandboxes is not in the rail or ⌘K unless the switch is on (0.294917ms)
+✖ Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground (3.227666ms)
+ℹ tests 26
+ℹ pass 24
+ℹ fail 2

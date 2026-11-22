@@ -1,0 +1,15 @@
+Progress: resolved 559, reused 425, downloaded 1, added 0
+ WARN  2 deprecated subdependencies found: @esbuild-kit/core-utils@3.3.2, @esbuild-kit/esm-loader@2.6.5
+Packages: +3
++++
+Progress: resolved 559, reused 425, downloaded 1, added 3, done
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: @clerk/shared@3.48.0, core-js@3.51.0,               │
+│   esbuild@0.18.20, esbuild@0.25.12, esbuild@0.27.7.                          │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Done in 1.5s using pnpm v10.28.2

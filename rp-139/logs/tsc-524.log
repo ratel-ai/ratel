@@ -1,0 +1,74 @@
+../../ratel-wt-rp-120/packages/design-system/src/components/input.tsx(10,6): error TS2322: Type '{ ref?: Ref<HTMLInputElement> | undefined; key?: Key | null | undefined; accept?: string | undefined; alt?: string | undefined; autoComplete?: HTMLInputAutoCompleteAttribute | undefined; ... 304 more ...; className: string; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Type '{ ref?: Ref<HTMLInputElement> | undefined; key?: Key | null | undefined; accept?: string | undefined; alt?: string | undefined; autoComplete?: HTMLInputAutoCompleteAttribute | undefined; ... 304 more ...; className: string; }' is not assignable to type 'ClassAttributes<HTMLInputElement>'.
+    Types of property 'ref' are incompatible.
+      Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<HTMLInputElement> | undefined' is not assignable to type 'React.Ref<HTMLInputElement> | undefined'.
+        Type '(instance: HTMLInputElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<HTMLInputElement> | undefined'.
+          Type '(instance: HTMLInputElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: HTMLInputElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+                Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                    Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../../ratel-wt-rp-120/packages/design-system/src/components/input.tsx(21,6): error TS2322: Type '{ ref?: Ref<HTMLTextAreaElement> | undefined; key?: Key | null | undefined; autoComplete?: string | undefined; cols?: number | undefined; dirName?: string | undefined; ... 288 more ...; className: string; }' is not assignable to type 'DetailedHTMLProps<TextareaHTMLAttributes<HTMLTextAreaElement>, HTMLTextAreaElement>'.
+  Type '{ ref?: Ref<HTMLTextAreaElement> | undefined; key?: Key | null | undefined; autoComplete?: string | undefined; cols?: number | undefined; dirName?: string | undefined; ... 288 more ...; className: string; }' is not assignable to type 'ClassAttributes<HTMLTextAreaElement>'.
+    Types of property 'ref' are incompatible.
+      Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<HTMLTextAreaElement> | undefined' is not assignable to type 'React.Ref<HTMLTextAreaElement> | undefined'.
+        Type '(instance: HTMLTextAreaElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<HTMLTextAreaElement> | undefined'.
+          Type '(instance: HTMLTextAreaElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: HTMLTextAreaElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+                Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                    Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../ee/src/src/health/ui/imports/logos.tsx(15,6): error TS2322: Type '{ children: Element; suppressHydrationWarning?: boolean | undefined; className?: string | undefined; color?: string | undefined; height?: string | number | undefined; id?: string | undefined; ... 481 more ...; key?: Key | ... 1 more ... | undefined; }' is not assignable to type 'SVGProps<SVGSVGElement>'.
+  Types of property 'ref' are incompatible.
+    Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<SVGSVGElement> | undefined' is not assignable to type 'React.Ref<SVGSVGElement> | undefined'.
+      Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<SVGSVGElement> | undefined'.
+        Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+          Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../ee/src/src/health/ui/imports/logos.tsx(26,6): error TS2322: Type '{ children: Element; suppressHydrationWarning?: boolean | undefined; className?: string | undefined; color?: string | undefined; height?: string | number | undefined; id?: string | undefined; ... 481 more ...; key?: Key | ... 1 more ... | undefined; }' is not assignable to type 'SVGProps<SVGSVGElement>'.
+  Types of property 'ref' are incompatible.
+    Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<SVGSVGElement> | undefined' is not assignable to type 'React.Ref<SVGSVGElement> | undefined'.
+      Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<SVGSVGElement> | undefined'.
+        Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+          Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../ee/src/src/health/ui/imports/logos.tsx(64,6): error TS2322: Type '{ children: Element[]; suppressHydrationWarning?: boolean | undefined; className?: string | undefined; color?: string | undefined; height?: string | number | undefined; id?: string | undefined; ... 481 more ...; key?: Key | ... 1 more ... | undefined; }' is not assignable to type 'SVGProps<SVGSVGElement>'.
+  Types of property 'ref' are incompatible.
+    Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<SVGSVGElement> | undefined' is not assignable to type 'React.Ref<SVGSVGElement> | undefined'.
+      Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<SVGSVGElement> | undefined'.
+        Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+          Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../ee/src/src/health/ui/imports/logos.tsx(74,6): error TS2322: Type '{ children: Element; suppressHydrationWarning?: boolean | undefined; className?: string | undefined; color?: string | undefined; height?: string | number | undefined; id?: string | undefined; ... 481 more ...; key?: Key | ... 1 more ... | undefined; }' is not assignable to type 'SVGProps<SVGSVGElement>'.
+  Types of property 'ref' are incompatible.
+    Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<SVGSVGElement> | undefined' is not assignable to type 'React.Ref<SVGSVGElement> | undefined'.
+      Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<SVGSVGElement> | undefined'.
+        Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+          Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+../ee/src/src/health/ui/imports/logos.tsx(85,6): error TS2322: Type '{ children: Element; suppressHydrationWarning?: boolean | undefined; className?: string | undefined; color?: string | undefined; height?: string | number | undefined; id?: string | undefined; ... 481 more ...; key?: Key | ... 1 more ... | undefined; }' is not assignable to type 'SVGProps<SVGSVGElement>'.
+  Types of property 'ref' are incompatible.
+    Type 'import("~/ratel-wt-rp-120/node_modules/.pnpm/@types+react@19.3.0/node_modules/@types/react/index").Ref<SVGSVGElement> | undefined' is not assignable to type 'React.Ref<SVGSVGElement> | undefined'.
+      Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type 'Ref<SVGSVGElement> | undefined'.
+        Type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)' is not assignable to type '(instance: SVGSVGElement | null) => void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+          Type 'void | (() => VoidOrUndefinedOnly)' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'. Two different types with this name exist, but they are unrelated.
+            Type '() => VoidOrUndefinedOnly' is not assignable to type 'void | (() => VoidOrUndefinedOnly)'.
+              Type '() => VoidOrUndefinedOnly' is not assignable to type '() => VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                Type 'VoidOrUndefinedOnly' is not assignable to type 'VoidOrUndefinedOnly'. Two different types with this name exist, but they are unrelated.
+                  Type '{ [UNDEFINED_VOID_ONLY]: never; }' is not assignable to type 'VoidOrUndefinedOnly'.
+lib/console/pivots/actions.ts(70,55): error TS2554: Expected 1 arguments, but got 2.
+lib/console/pivots/reader.ts(15,51): error TS2554: Expected 1 arguments, but got 2.

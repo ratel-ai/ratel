@@ -1,0 +1,6 @@
+$ FF_SANDBOXES unset: GET /api/projects/<id>/sandboxes/runners
+{"level":30,"time":1795323210051,"pid":92890,"hostname":"rstagis-MacBook-Pro-3.local","module":"request-log","requestId":"d8376edf-afbb-4d64-824a-499fe6a48f3a","method":"GET","path":"/api/projects/36703eb5-3407-4309-8757-0936ef754535/sandboxes/runners","status":404,"duration_ms":9,"msg":"api_request"}
+  404 {"error":"not_found"}
+$ FF_SANDBOXES=1: GET /api/projects/<id>/sandboxes/runners (as the open-source edition's local operator)
+{"level":30,"time":1795323210054,"pid":92890,"hostname":"rstagis-MacBook-Pro-3.local","module":"request-log","requestId":"3802fc86-9700-44cb-9b14-77d543d2e327","method":"GET","path":"/api/projects/36703eb5-3407-4309-8757-0936ef754535/sandboxes/runners","status":200,"duration_ms":2,"msg":"api_request"}
+  200 {"runners":[{"id":"95a8d452-4658-4b6c-b28d-b4c0d8dcb1a9","instanceId":"rnr_proof","mine":true,"online":true,"startable":true,"manifest":"{…}","maxConcurrency":2,"connectedAt":"2026-11-22T04:52:59.400Z","lastSeenAt":"2026-11-22T04:52:59.400Z"}]}

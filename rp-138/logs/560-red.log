@@ -1,0 +1,75 @@
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/views/clients/country-codes' imported from ~/ratel-wt-rp-138/src/lib/views/clients/country-codes.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806267:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806267:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806267:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/views/clients/country-codes'
+}
+
+Node.js v24.12.0
+✖ lib/views/clients/country-codes.test.ts (673.251875ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '~/ratel-wt-rp-138/src/lib/views/clients/country-map-model' imported from ~/ratel-wt-rp-138/src/lib/views/clients/country-map-model.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806298:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806298:2:4237)
+    at async resolve (file://~/ratel-wt-rp-138/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795325806298:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file://~/ratel-wt-rp-138/src/lib/views/clients/country-map-model'
+}
+
+Node.js v24.12.0
+✖ lib/views/clients/country-map-model.test.ts (687.308417ms)
+~/ratel-wt-rp-138/src/lib/views/mcp-servers/paths.test.ts:4
+  mcpCountryTracesHref,
+  ^
+SyntaxError: The requested module './paths' does not provide an export named 'mcpCountryTracesHref'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/views/mcp-servers/paths.test.ts (679.819291ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 703.636875
+
+✖ failing tests:
+
+test at lib/views/clients/country-codes.test.ts:1:1
+✖ lib/views/clients/country-codes.test.ts (673.251875ms)
+  'test failed'
+
+test at lib/views/clients/country-map-model.test.ts:1:1
+✖ lib/views/clients/country-map-model.test.ts (687.308417ms)
+  'test failed'
+
+test at lib/views/mcp-servers/paths.test.ts:1:1
+✖ lib/views/mcp-servers/paths.test.ts (679.819291ms)
+  'test failed'

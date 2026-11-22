@@ -1,0 +1,101 @@
+
+copied (29)
+  src/lib/ingest/otlp/span-rows.pivots.test.ts
+  src/components/console/home/PivotBreakdown.tsx
+  src/components/console/home/PivotBreakdownTable.tsx
+  src/lib/synthesis/traces/facet-limit.ts
+  src/lib/ingest/pivots/candidates-query.integration.test.ts
+  src/lib/ingest/pivots/candidates-query.ts
+  src/lib/ingest/pivots/candidates.test.ts
+  src/lib/ingest/pivots/candidates.ts
+  src/lib/ingest/pivots/store.ts
+  src/lib/views/custom-dashboards/actions.ts
+  src/lib/views/custom-dashboards/model.test.ts
+  src/lib/views/custom-dashboards/model.ts
+  src/lib/views/custom-dashboards/present.test.ts
+  src/lib/views/custom-dashboards/present.ts
+  src/lib/views/custom-dashboards/query.integration.test.ts
+  src/lib/views/custom-dashboards/query.ts
+  src/lib/views/custom-dashboards/service.integration.test.ts
+  src/lib/views/custom-dashboards/service.ts
+  src/lib/views/custom-dashboards/spec.test.ts
+  src/lib/views/custom-dashboards/spec.ts
+  src/lib/views/custom-dashboards/store.ts
+  src/lib/views/custom-dashboards/widget-data.test.ts
+  src/lib/views/custom-dashboards/widget-data.ts
+  src/components/console/custom-dashboards/DashboardList.tsx
+  src/components/console/custom-dashboards/DashboardSharing.tsx
+  src/components/console/custom-dashboards/DashboardView.tsx
+  src/components/console/custom-dashboards/WidgetBody.tsx
+  src/components/console/custom-dashboards/WidgetEditor.tsx
+  src/app/(console)/project/[projectId]/dashboards/[dashboardId]/page.tsx
+
+updated (16)
+  src/lib/jobs/policy.ts
+  src/lib/jobs/kinds.ts
+  src/components/console/home/OverviewView.tsx
+  src/app/(console)/project/[projectId]/dashboards/page.tsx
+  src/lib/console/settings/tabs.ts
+  src/lib/console/settings/tabs.test.ts
+  src/app/(console)/project/[projectId]/settings/layout.tsx
+  src/lib/synthesis/traces/trace-filters.ts
+  src/lib/synthesis/traces/v2/filters-ui.test.ts
+  src/lib/synthesis/traces/v2/filters.test.ts
+  src/lib/synthesis/traces/v2/filters.ts
+  src/components/console/traces/RunsView.tsx
+  src/components/console/traces/TraceFilterBar.tsx
+  src/components/console/traces-sessions/SessionListView.tsx
+  src/lib/console/scope/moved-pages.ts
+  src/lib/console/scope/moved-pages.test.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/app/(app)/project/[projectId]/page.tsx    |   4 +-
+ .../project/[projectId]/traces/(tabs)/runs-v2.tsx  |  14 +-
+ .../projects/[projectId]/traces/sessions/route.ts  |  14 +-
+ apps/web/app/api/v1/traces/route.ts                |   3 +
+ apps/web/components/home/v2/OverviewPage.tsx       |  21 ++-
+ apps/web/components/shell/AppFrame.tsx             |   9 +-
+ apps/web/components/shell/types.ts                 |   2 +
+ .../components/traces-sessions/SessionListPage.tsx |  13 +-
+ apps/web/lib/analytics/track-client.ts             |   3 +
+ apps/web/lib/analytics/track-server.ts             |   7 +
+ apps/web/lib/custom-dashboards/flag.ts             |   6 +
+ apps/web/lib/custom-dashboards/session.ts          |  35 ++++
+ apps/web/lib/db/migrations/0109_project_pivots.sql |  15 ++
+ .../lib/db/migrations/0110_trace_summary_dims.sql  |  17 ++
+ .../lib/db/migrations/0111_custom_dashboards.sql   |  26 +++
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 +++
+ apps/web/lib/db/schema.ts                          |  80 ++++++++++
+ apps/web/lib/jobs/handlers.ts                      |   3 +
+ apps/web/lib/jobs/runner.ts                        |   3 +-
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  63 ++++++++
+ apps/web/lib/mcp/operations/account.test.ts        |   1 +
+ apps/web/lib/mcp/operations/contract.test.ts       |   3 +
+ apps/web/lib/mcp/operations/dashboards.test.ts     | 165 +++++++++++++++++++
+ apps/web/lib/mcp/operations/dashboards.ts          | 143 +++++++++++++++++
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/route-handler.apps.test.ts        |  15 +-
+ apps/web/lib/mcp/route-handler.test.ts             |   2 +
+ apps/web/lib/mcp/stages.ts                         |   2 +
+ apps/web/lib/navigation/v2.test.ts                 |  25 +++
+ apps/web/lib/navigation/v2.ts                      |  27 +++-
+ apps/web/lib/otlp/ingest-spans.pivots.test.ts      | 122 ++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  31 +++-
+ apps/web/lib/otlp/route-handler.ts                 |   2 +
+ apps/web/lib/otlp/span-rows.ts                     |  35 +++-
+ apps/web/lib/pivots/actions.ts                     |  56 +++++++
+ apps/web/lib/pivots/filter-options.ts              |  31 ++++
+ apps/web/lib/pivots/flag.test.ts                   |  65 ++++++++
+ apps/web/lib/pivots/flag.ts                        |  88 ++++++++++
+ apps/web/lib/pivots/ingest.ts                      |  48 ++++++
+ apps/web/lib/pivots/model.test.ts                  | 113 +++++++++++++
+ apps/web/lib/pivots/model.ts                       | 128 +++++++++++++++
+ apps/web/lib/pivots/reader.ts                      |  19 +++
+ apps/web/lib/pivots/settings.integration.test.ts   | 174 ++++++++++++++++++++
+ apps/web/lib/pivots/settings.ts                    | 177 +++++++++++++++++++++
+ apps/web/lib/traces/summary-refresh.ts             | 106 +++++++++++-
+ .../lib/traces/trace-filters.integration.test.ts   |  60 +++++++
+ apps/web/lib/traces/trace-filters.test.ts          |  67 ++++++++
+ 47 files changed, 2033 insertions(+), 33 deletions(-)
+
+applied 45 change(s) from 1fd5b0a7

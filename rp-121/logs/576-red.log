@@ -1,0 +1,601 @@
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/rp121-red/src/lib/readings/trace-signals/segments/merge' imported from /private/tmp/rp121-red/src/lib/readings/trace-signals/segments/merge.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376342:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376342:2:4237)
+    at async resolve (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376342:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/rp121-red/src/lib/readings/trace-signals/segments/merge'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/segments/merge.test.ts (720.5165ms)
+
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/rp121-red/src/lib/readings/trace-signals/segments/pieces' imported from /private/tmp/rp121-red/src/lib/readings/trace-signals/segments/pieces.test.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:274:11)
+    at moduleResolve (node:internal/modules/esm/resolve:864:10)
+    at defaultResolve (node:internal/modules/esm/resolve:990:11)
+    at nextResolve (node:internal/modules/esm/hooks:785:28)
+    at resolveBase (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376359:2:3744)
+    at async resolveDirectory (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376359:2:4237)
+    at async resolve (file://~/ratel-wt-rp-121/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/esm/index.mjs?1795319376359:2:5355)
+    at async nextResolve (node:internal/modules/esm/hooks:785:22)
+    at async AsyncLoaderHooksOnLoaderHookWorker.resolve (node:internal/modules/esm/hooks:269:24)
+    at async handleMessage (node:internal/modules/esm/worker:251:18) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/rp121-red/src/lib/readings/trace-signals/segments/pieces'
+}
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/segments/pieces.test.ts (754.2065ms)
+✔ the compact copy keeps tool calls only, with only the fields mining and the task reading read (1.295166ms)
+✔ collection stops at the cap and the stored result says so (1.69275ms)
+✔ a failing workflow is stored and detected, with evidence at the failing step (4.551875ms)
+✔ a workflow keeps last run's id when its core drifts by a tool, signal keys included (1.561208ms)
+✔ a fresh fingerprint never collides with an id carried over to another workflow (0.126ms)
+✔ the stored shape holds no member turn ids and stays small for twelve wide workflows, readings included (86.886959ms)
+✔ without a multi-tool turn the workflow kinds are not measured (0.288042ms)
+✔ the display name is the typical order, by display name where one is known (0.186ms)
+✔ guessed runs that never went quiet hide workflows, and the stored basis says why (0.303541ms)
+✔ with enough runs carrying turn ids, only those are mined (1.732292ms)
+✔ runs that only search store a blocked basis instead of nothing (0.172ms)
+✔ every collected run is placed in one task or none, and each task counts exactly its placed runs (1.267875ms)
+✔ flag on: tool-less agent runs form one task per agent at the mining floor, its runs placed in it (0.595708ms)
+✔ flag on: an agent task keeps last run's id, and tool tasks read as before beside it (1.154208ms)
+✔ flag on: an agent run that also called tools is a tool run, never an agent task (0.302ms)
+✔ flag off: agent runs form no task and the basis still reads no tool calls (0.112708ms)
+✔ flag on: a basis decided before the reading as 'no tool calls' is lifted by agent runs (0.161083ms)
+✖ typed steps on: model-only runs form a task on their signature and are placed in it (2.16975ms)
+✔ typed steps on: tool-only runs give the same tasks and ids as with the flag off (2.372959ms)
+✖ typed user-message pieces mine separate tasks from one trace (0.814917ms)
+✔ default mining: Beluga's 18 multi-tool runs make no task (support floor 10) (5.506583ms)
+✔ tool-run mining: the same runs make the task_define + task_update task (3.164041ms)
+✔ workflowMiningFor: FF_TOOL_RUN_INSIGHTS on gives the tool-run config; off or unset gives none (1.062542ms)
+✔ without the switch, the flag is off (tests and local runs read as before) (0.231333ms)
+✖ workflowMiningFor: FF_TYPED_STEPS on adds typed-step mining, beside or without the tool-run config (1.961458ms)
+✔ health numbers on a hand-computed example (1.995958ms)
+✔ examples are capped, and skills do not count as calls (0.53125ms)
+✔ an empty workflow has zeros and nulls, not NaN (0.360666ms)
+✖ typed steps on: a model-only run's failing and slowest step is its model token (1.966208ms)
+✔ support floor: 9 turns of a group are not a workflow, 10 are (4.054292ms)
+✔ support floor: the 1% share wins over 10 once there are enough multi-tool turns (36.927208ms)
+✔ single-tool turns are counted as single steps and never mined; skills are left out (0.802542ms)
+✔ IDF and the helper rule keep a tool in 80% of turns out of every core (5.505ms)
+✔ a helper that really belongs to a group joins its core (2.27825ms)
+✔ closed sets: A,B,C wins over A,B when C nearly always comes along (2.671375ms)
+✔ two workflows that share tools are separated (3.415833ms)
+✔ the fingerprint is the sorted core's hash and survives an optional tool (6.644709ms)
+✔ typical order, order stability and the entry tool (1.406375ms)
+✔ runs that stopped early join by Jaccard and do not count against order stability (1.2885ms)
+✔ maxWorkflows caps the list, and the output is deterministic (5.388208ms)
+✔ the candidate cap truncates a dense lattice without failing (10.807708ms)
+✖ typed steps on: runs of model calls alone form a task on their signature (2.435625ms)
+✖ typed steps on: a mixed signature (model + code + tool) is one task in step order (0.376667ms)
+✔ typed steps on: a single tool still forms no task (0.084917ms)
+✔ typed steps on: tool-only runs give the same workflows and ids as with the flag off (4.367875ms)
+✔ every run gets a task or null: two or more distinct tools, read by the basis, matching a core (2.170042ms)
+✔ a single tool never joins a task, even when its weight alone would match the core (0.221583ms)
+✔ members by task keep the input order (0.185042ms)
+✔ a task's shape is read again from the runs placed in it, its core unchanged (1.310083ms)
+✔ placement agrees with mining on a clean project (9.909459ms)
+✖ typed steps on: model-only and mixed runs are placed on their tokens; a lone tool still is not (3.637125ms)
+✖ typed steps on: placement agrees with mining on model-only and mixed runs (0.4975ms)
+✔ a task's runs: finished, failed somewhere, recovered (2.419042ms)
+✔ steps come in the task's order, then optional tools, then helpers (0.6865ms)
+✔ each step: calls, failures, retries, switches and give-ups from the self-corrections (0.16475ms)
+✔ what comes next after a step, repeats collapsed, the end of the run included (0.126959ms)
+✔ each step's typical time and the wait before the next call (0.105542ms)
+✔ self-corrections over the task's runs, by kind (0.113541ms)
+✔ a run with no tool call is not finished (0.062958ms)
+✔ a run whose last call (a skill) failed is not finished even when its last tool call worked (0.050958ms)
+✔ cost: summed and typical over the runs linked to priced model calls (0.153875ms)
+✔ an empty task reads as zeros, not as a division by zero (0.154875ms)
+✔ usage: tokens over the linked runs and every run's wall time, stored for Fixes (RC-211) (0.103667ms)
+✔ usage counts SDK runs only, as the live read on Fixes does (0.135166ms)
+✖ typed steps on: a task of model and code steps reads each token as a step (2.417417ms)
+/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/units.test.ts:5
+  formsTask,
+  ^
+SyntaxError: The requested module '@/lib/readings/trace-signals/workflows/units' does not provide an export named 'formsTask'
+    at #asyncInstantiate (node:internal/modules/esm/module_job:302:21)
+    at async ModuleJob.run (node:internal/modules/esm/module_job:405:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.12.0
+✖ lib/readings/trace-signals/workflows/units.test.ts (699.349792ms)
+✔ buildIntentFlow orders tools by who sends to whom, arcs forward arrows over and backward under, and labels P(b|a) (22.51925ms)
+✔ buildIntentFlow keeps the eight most involved tools and says how many it left out (1.037208ms)
+✔ rows: a chain stays on one line, a fan-out spreads around its source, separate chains take separate rows, nothing crosses (0.784333ms)
+✔ a hop that skips over a tool on its own row arcs above it, and its label sits on the crest, off every card (0.503584ms)
+✔ tools earn their place by dependency: a sure hop between rarely called tools is drawn, a busy pair with no order is not (0.833958ms)
+✔ layerGraph cuts a surviving cycle at its weakest edge, so every tool gets a column (0.322875ms)
+✖ typed flow keeps model and code kinds, including a model-only node (2.801542ms)
+✔ the list: one row per task, busiest first, with its status, finish rate and weakest step (7.344459ms)
+✔ recorded self-corrections win over the ones read from steps, for every task alike (2.073208ms)
+✔ intents served, top two on the list, with how many in all (1.558042ms)
+✔ runs that asked for a task and called no tool count as unfinished (1.180042ms)
+✔ before a reading, when runs are mixed, and when nothing repeats (6.753083ms)
+✔ one task: its steps in order with the failing one marked, its numbers, issues and fixes (12.484584ms)
+✔ an issue linked to a drafted fix opens it; a tool's issue names its tool (1.344ms)
+✔ with Fixes' model: a task lists and counts Fixes' own, a description fix goes to Quality › Descriptions, an issue opens the fix that resolves it (3.196459ms)
+✔ cost is measured from linked model calls, else estimated from the project's round-trip price (1.979292ms)
+✔ a run stored before tasks were read step by step still lists its steps, without numbers (2.779209ms)
+✔ an unknown task is no page (0.681459ms)
+✔ the weakest step skips helpers and steps that never failed (0.59925ms)
+✔ an agent task reads its agent's name, made readable, without a model-written label (2.276ms)
+✔ a model-written label still names an agent task (0.995584ms)
+✖ typed task details show model and code steps with segment run counts (0.223084ms)
+✖ Tasks: one header, four numbers, then every task over its steps as pins, with its status, weakest step, issues and fixes (6.821541ms)
+✖ the intents a task serves are pins that open on Intents: the first, and how many more (1.621583ms)
+✖ the states before a reading, when runs mix, and when nothing repeats (4.316458ms)
+✖ a task's page: a header in its color, its numbers, its steps as a drawing (11.2755ms)
+✖ a task's page: self-corrections as one strip, issues, fixes and intents as compact rows (1.649667ms)
+✖ a task's page: example runs as how each ended, its calls as pins with repeats folded, and the way into Traces (1.30475ms)
+✖ a step's panel: its numbers, what came next and its neighbours (6.220792ms)
+✖ an issue's panel: its number, what it is about, its sentences and what to do (1.966667ms)
+✖ a healthy task: no status mark, the tools some runs add after its steps, and no issue (4.457167ms)
+✖ a conversation: its turns with the task's steps marked, each opening in Traces (0.44575ms)
+✖ a task the reading no longer finds is said in place, with the way back; loading mirrors the pages (0.361625ms)
+✖ run conversion controls require eval data and identify existing cases (1.407792ms)
+✖ a model-only task renders its typed step, flow, and segment run count without an engine label (0.289792ms)
+ℹ tests 103
+ℹ suites 0
+ℹ pass 76
+ℹ fail 27
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3482.671375
+
+✖ failing tests:
+
+test at lib/readings/trace-signals/segments/merge.test.ts:1:1
+✖ lib/readings/trace-signals/segments/merge.test.ts (720.5165ms)
+  'test failed'
+
+test at lib/readings/trace-signals/segments/pieces.test.ts:1:1
+✖ lib/readings/trace-signals/segments/pieces.test.ts (754.2065ms)
+  'test failed'
+
+test at lib/readings/trace-signals/signals/workflow-run.test.ts:1:11864
+✖ typed steps on: model-only runs form a task on their signature and are placed in it (2.16975ms)
+  AssertionError [ERR_ASSERTION]: model-only runs lift the 'no tool calls' block
+  + actual - expected
+  
+  + 'no_tool_calls'
+  - null
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/signals/workflow-run.test.ts:377:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'no_tool_calls',
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/signals/workflow-run.test.ts:1:13147
+✖ typed user-message pieces mine separate tasks from one trace (0.814917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   [
+  -     'model:first'
+  -   ],
+  -   [
+  -     'model:second'
+  -   ]
+  - ]
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/signals/workflow-run.test.ts:412:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ [ 'model:first' ], [ 'model:second' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/tool-run-insights.test.ts:1:3241
+✖ workflowMiningFor: FF_TYPED_STEPS on adds typed-step mining, beside or without the tool-run config (1.961458ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + null
+  - {
+  -   typedSteps: true
+  - }
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/tool-run-insights.test.ts:116:10)
+      at async Test.run (node:internal/test_runner/test:1113:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: { typedSteps: true },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/health.test.ts:1:2971
+✖ typed steps on: a model-only run's failing and slowest step is its model token (1.966208ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/health.test.ts:141:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/mine.test.ts:1:6752
+✖ typed steps on: runs of model calls alone form a task on their signature (2.435625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'model:triage'
+  - ]
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/mine.test.ts:203:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'model:triage' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/mine.test.ts:1:7391
+✖ typed steps on: a mixed signature (model + code + tool) is one task in step order (0.376667ms)
+  TypeError: Cannot read properties of undefined (reading 'coreTools')
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/mine.test.ts:220:29)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+
+test at lib/readings/trace-signals/workflows/place.test.ts:1:4065
+✖ typed steps on: model-only and mixed runs are placed on their tokens; a lone tool still is not (3.637125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   'model-only': null,
+  -   'model-only': 'triage',
+      'one-tool': null,
+  +   mixed: null
+  -   mixed: 'mixed'
+    }
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/place.test.ts:165:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { 'model-only': null, mixed: null, 'one-tool': null },
+    expected: { 'model-only': 'triage', mixed: 'mixed', 'one-tool': null },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/place.test.ts:1:4808
+✖ typed steps on: placement agrees with mining on model-only and mixed runs (0.4975ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  0 !== 2
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/place.test.ts:185:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/reading.test.ts:1:6368
+✖ typed steps on: a task of model and code steps reads each token as a step (2.417417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  2 !== 6
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/readings/trace-signals/workflows/reading.test.ts:293:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 6,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at lib/readings/trace-signals/workflows/units.test.ts:1:1
+✖ lib/readings/trace-signals/workflows/units.test.ts (699.349792ms)
+  'test failed'
+
+test at lib/views/tasks/flow-layout.test.ts:1:7899
+✖ typed flow keeps model and code kinds, including a model-only node (2.801542ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      [
+  +     undefined,
+  +     'model:engine'
+  -     'model_call',
+  -     'Model call'
+      ],
+      [
+  +     undefined,
+  +     'code:prepare_respon…'
+  -     'code',
+  -     'Prepare response'
+      ]
+    ]
+  
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/views/tasks/flow-layout.test.ts:265:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ [ undefined, 'model:engine' ], [ undefined, 'code:prepare_respon…' ] ],
+    expected: [ [ 'model_call', 'Model call' ], [ 'code', 'Prepare response' ] ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at lib/views/tasks/model.test.ts:1:14566
+✖ typed task details show model and code steps with segment run counts (0.223084ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/views/tasks/model.test.ts:592:31)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:3281
+✖ Tasks: one header, four numbers, then every task over its steps as pins, with its status, weakest step, issues and fixes (6.821541ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:6023
+✖ the intents a task serves are pins that open on Intents: the first, and how many more (1.621583ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:6787
+✖ the states before a reading, when runs mix, and when nothing repeats (4.316458ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:8068
+✖ a task's page: a header in its color, its numbers, its steps as a drawing (11.2755ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:9758
+✖ a task's page: self-corrections as one strip, issues, fixes and intents as compact rows (1.649667ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:11062
+✖ a task's page: example runs as how each ended, its calls as pins with repeats folded, and the way into Traces (1.30475ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:12345
+✖ a step's panel: its numbers, what came next and its neighbours (6.220792ms)
+  ReferenceError: React is not defined
+      at DotMeter (~/ratel-wt-rp-121/packages/design-system/src/components/dot-matrix.tsx:109:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at renderNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6905:18)
+      at renderChildrenArray (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6674:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6441:13)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:13336
+✖ an issue's panel: its number, what it is about, its sentences and what to do (1.966667ms)
+  ReferenceError: React is not defined
+      at NounIcon (~/ratel-wt-rp-121/packages/design-system/src/components/entity.tsx:44:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at renderNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6905:18)
+      at renderChildrenArray (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6674:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6441:13)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:13995
+✖ a healthy task: no status mark, the tools some runs add after its steps, and no issue (4.457167ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:14648
+✖ a conversation: its turns with the task's steps marked, each opening in Traces (0.44575ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:16099
+✖ a task the reading no longer finds is said in place, with the way back; loading mirrors the pages (0.361625ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:16632
+✖ run conversion controls require eval data and identify existing cases (1.407792ms)
+  ReferenceError: React is not defined
+      at Page (~/ratel-wt-rp-121/packages/design-system/src/components/page-header.tsx:90:3)
+      at Object.react_stack_bottom_frame (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:9808:18)
+      at renderWithHooks (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5062:19)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5497:23)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+      at finishFunctionComponent (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5106:13)
+      at renderElement (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:5552:11)
+      at retryNode (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6417:31)
+      at renderNodeDestructive (~/ratel-wt-rp-121/node_modules/.pnpm/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/cjs/react-dom-server-legacy.node.development.js:6367:11)
+
+test at lib/views/tasks/tasks-ui.test.ts:1:17225
+✖ a model-only task renders its typed step, flow, and segment run count without an engine label (0.289792ms)
+  TypeError: Cannot read properties of undefined (reading 'id')
+      at TestContext.<anonymous> (/private/tmp/rp121-red/src/lib/views/tasks/tasks-ui.test.ts:618:31)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)

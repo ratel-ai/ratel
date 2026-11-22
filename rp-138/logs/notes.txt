@@ -1,0 +1,23 @@
+RP-138 notes (entities group: ratel-cloud #522 #527 #560 #529)
+
+Client IP: read country at ingest, then drop the IP. Places changed vs upstream:
+- migration 0046_client_facts: no client_ip column (ingest/otlp/schema.ts too)
+- ingest/otlp/span-rows.ts: no clientIp in the row
+- ingest/otlp/client-session-store.ts: no client_ip read/write; stored session gives country; back-fill fills null geo_country
+- ingest/otlp/dimensions/client.ts: IP in memory only; span w/o own address takes session country; strippedAddresses fallback
+- ingest/otlp/dimensions/index.ts, ingest-spans.ts, route-handler.ts: strippedAddresses (FF_INGEST_STRIP_CLIENT_ADDRESS on -> country still read from body as sent)
+- synthesis/traces/queries.ts: no admin-only column select, no viewer role
+- views/traces/trace-view-props.ts, trace-v2.tsx: no viewerRole
+- components/console/traces/SpanInspector.tsx: no "Client IP (admins only)" row
+- ingest/otlp-raw/trace-raw-route.ts (+test): IP keys dropped for every reader, admins too; raw route.ts not changed (no role)
+- synthesis/traces/client-facts-gate.ts (+test; removed in 529), span-client-facts test: no reader gets IP
+- views/clients/client-ip-access.integration.test.ts: rewritten: no column, no attribute, no loader field, static guard
+- ingest/otlp/dimensions/client-facts.integration.test.ts: geo_country instead of client_ip; 2 strip-on cases
+- views/mcp-servers/setup-guide.ts: guide text says IP dropped, not admin-only
+- 7 OtelSpan fixture tests: no clientIp field
+Divergences: a row with its own private IP may take the session country on back-fill (upstream keeps null).
+
+Deferred (platform, not touched by rule):
+- src/observability/track-client.ts: add client_country_clicked to CLIENT_EVENT_NAMES (#560)
+- deploy/CI image build: pass GEO_DB_MONTH=$(date -u +%Y-%m) build arg (else geo layer cached until arg/no-cache)
+- PostHog flag cloud-project-entities deletion (infra), after 529 ships

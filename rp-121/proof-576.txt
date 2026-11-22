@@ -1,0 +1,8 @@
+$ npx tsx proof-576.mts   # FF_TYPED_STEPS unset (default)
+FF_TYPED_STEPS=(unset) -> typedStepsOn=false
+closed turns=0 job=completed task_segments=0 tasks=0
+
+$ FF_TYPED_STEPS=1 npx tsx proof-576.mts
+FF_TYPED_STEPS=1 -> typedStepsOn=true
+closed turns=10 job=completed task_segments=10 tasks=1
+  task fec1be2aaef2: runs=10 callsPerRun=2 examples=10 first example steps=["code","model_call"]

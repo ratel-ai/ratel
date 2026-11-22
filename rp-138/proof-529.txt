@@ -1,0 +1,5 @@
+# ratel beluga/rp-138-entities-529 @ 67104f96 (#529: FF_AGENTS_PAGES removed)
+== list_clients over MCP (real FF_AGENTS_PAGES gate), FF_AGENTS_PAGES unset vs =1
+  trace rollup: [{"harnesses":["cursor"],"countries":["GB"]}]
+  FF_AGENTS_PAGES=(unset) -> {"harnesses":[{"harness":"cursor","calls":1}],"countries":[{"country":"GB","calls":1,"sessions":1}]}
+  FF_AGENTS_PAGES=1 -> {"harnesses":[{"harness":"cursor","calls":1}],"countries":[{"country":"GB","calls":1,"sessions":1}]}

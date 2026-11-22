@@ -1,0 +1,96 @@
+
+copied (21)
+  src/lib/ingest/otlp/__fixtures__/client-facts/README.md
+  src/lib/ingest/otlp/__fixtures__/client-facts/py-stdio-codex-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/py-stdio-codex-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-claude-code-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-claude-code-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-cursor-initialize.otlp.json
+  src/lib/ingest/otlp/__fixtures__/client-facts/ts-http-cursor-tools-call.otlp.json
+  src/lib/ingest/otlp/__fixtures__/geo/GeoIP2-Country-Test.mmdb
+  src/lib/ingest/otlp/__fixtures__/geo/README.md
+  src/lib/ingest/otlp/dimensions/client-facts-support.ts
+  src/lib/ingest/otlp/dimensions/client.test.ts
+  src/lib/ingest/otlp/dimensions/geo.test.ts
+  src/lib/ingest/otlp/dimensions/geo.ts
+  src/lib/mcp/operations/clients.test.ts
+  src/lib/mcp/operations/clients.ts
+  src/components/console/clients/ClientsFilters.tsx
+  src/components/console/clients/ClientsView.tsx
+  src/components/console/clients/labels.test.ts
+  src/components/console/clients/labels.ts
+  src/lib/views/clients/queries.integration.test.ts
+  src/lib/views/clients/queries.ts
+
+updated (12)
+  src/lib/ingest/otlp/derive-tools.ts
+  src/lib/ingest/otlp/dimensions/index.test.ts
+  src/lib/ingest/otlp/dimensions/index.ts
+  src/lib/ingest/otlp-raw/redact.test.ts
+  src/lib/ingest/otlp-raw/redact.ts
+  src/lib/synthesis/traces/trace-filters.ts
+  src/lib/synthesis/traces/v2/filters.test.ts
+  src/lib/synthesis/traces/v2/filters.ts
+  src/lib/mcp/telemetry/session.ts
+  src/lib/views/mcp-servers/paths.test.ts
+  src/lib/views/mcp-servers/paths.ts
+  src/lib/views/mcp-servers/queries.ts
+
+owned, bootstrapped from upstream (now yours to maintain) (9)
+  src/lib/views/clients/client-ip-access.integration.test.ts
+  src/scripts/fetch-geo-db.mjs
+  src/lib/platform/db/migrations/0046_client_facts.sql
+  src/lib/platform/db/migrations/meta/0046_snapshot.json
+  src/lib/ingest/otlp/client-session-store.ts
+  src/lib/ingest/otlp/dimensions/client.ts
+  src/lib/ingest/otlp/dimensions/client-facts.integration.test.ts
+  src/lib/synthesis/traces/client-facts-gate.ts
+  src/lib/synthesis/traces/client-facts-gate.integration.test.ts
+
+owned files changed upstream since the last sync; port by hand:
+apps/web/.env.example                              |   4 +
+ apps/web/Dockerfile                                |  16 +-
+ .../project/[projectId]/mcp/[server]/page.tsx      |   2 +-
+ .../web/app/(app)/project/[projectId]/mcp/page.tsx | 100 +++++++-
+ .../[projectId]/traces/[traceId]/trace-v2.tsx      |   4 +
+ .../[projectId]/traces/[traceId]/raw/route.ts      |   2 +-
+ apps/web/app/api/v1/traces/route.ts                |   4 +
+ apps/web/components/traces/v2/SpanInspector.tsx    |  32 +++
+ apps/web/lib/analytics/track-server.ts             |   1 +
+ .../clients/client-ip-access.integration.test.ts   | 214 ++++++++++++++++
+ apps/web/lib/db/migrations/0111_client_facts.sql   |  18 ++
+ apps/web/lib/db/migrations/0112_client_geo.sql     |  12 +
+ .../db/migrations/0113_trace_summary_harnesses.sql |   8 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 ++
+ apps/web/lib/db/schema.ts                          |  27 ++
+ .../lib/mcp-servers/queries.integration.test.ts    |  10 +-
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  51 ++++
+ apps/web/lib/mcp/operations/contract.test.ts       |   1 +
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/stages.ts                         |   1 +
+ apps/web/lib/otlp-raw/trace-raw-route.test.ts      |  28 +-
+ apps/web/lib/otlp-raw/trace-raw-route.ts           |   9 +-
+ apps/web/lib/otlp/client-session-store.ts          | 111 ++++++++
+ .../dimensions/client-facts.integration.test.ts    | 285 +++++++++++++++++++++
+ apps/web/lib/otlp/dimensions/client.ts             | 257 +++++++++++++++++++
+ apps/web/lib/otlp/ingest-spans.ts                  |  67 ++++-
+ apps/web/lib/otlp/route-handler.ts                 |   4 +
+ apps/web/lib/otlp/span-rows.ts                     |  39 ++-
+ apps/web/lib/session-chat/trace-view-ui.test.ts    |   8 +
+ .../traces/client-facts-gate.integration.test.ts   |  76 ++++++
+ apps/web/lib/traces/client-facts-gate.ts           |  30 +++
+ apps/web/lib/traces/compare.test.ts                |   8 +
+ apps/web/lib/traces/comparison.test.ts             |   8 +
+ apps/web/lib/traces/queries.ts                     |  19 +-
+ apps/web/lib/traces/summary-refresh.ts             |  20 +-
+ .../lib/traces/trace-filters.integration.test.ts   |  46 +++-
+ apps/web/lib/traces/tree.test.ts                   |   8 +
+ apps/web/lib/traces/v2/trace-view-props.ts         |  25 +-
+ apps/web/lib/traces/v2/views-ui.test.ts            |   8 +
+ apps/web/lib/traces/view.test.ts                   |   8 +
+ apps/web/lib/traces/waterfall.test.ts              |   8 +
+ apps/web/package.json                              |   1 +
+ apps/web/scripts/fetch-geo-db.mjs                  |  51 ++++
+ 43 files changed, 1620 insertions(+), 34 deletions(-)
+
+applied 42 change(s) from 945f7343

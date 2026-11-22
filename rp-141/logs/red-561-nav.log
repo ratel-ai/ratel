@@ -1,0 +1,38 @@
+✔ Fine-tuning is not in the rail or ⌘K unless the switch is on (2.644084ms)
+✖ Fine-tuning sits under Improvements after Sandboxes, keeps the top level, and selects itself on its pages (3.434042ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 596.142583
+
+✖ failing tests:
+
+test at lib/console/navigation.test.ts:1:24100
+✖ Fine-tuning sits under Improvements after Sandboxes, keeps the top level, and selects itself on its pages (3.434042ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+  +   'Adaptive ranking',
+      'Sandboxes',
+  -   'Fine-tuning'
+    ]
+  
+      at TestContext.<anonymous> (~/ratel-wt-rp-141/src/lib/console/navigation.test.ts:762:10)
+      at Test.runInAsyncScope (node:async_hooks:214:14)
+      at Test.run (node:internal/test_runner/test:1106:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:788:18)
+      at Test.postRun (node:internal/test_runner/test:1235:19)
+      at Test.run (node:internal/test_runner/test:1163:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'Adaptive ranking', 'Sandboxes' ],
+    expected: [ 'Sandboxes', 'Fine-tuning' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

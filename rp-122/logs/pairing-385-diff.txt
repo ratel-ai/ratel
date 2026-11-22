@@ -1,0 +1,30 @@
+== schema diff (gateway vs #385 6e27eeda)
+diff -r /tmp/rc-sbx/apps/gateway/protocol/schema/manifest.schema.json ~/ratel-wt-sandbox/protocol/sandbox/v1/schema/manifest.schema.json
+23c23,28
+<         "dirty": { "description": "True when the working tree has uncommitted changes.", "type": "boolean" }
+---
+>         "dirty": { "description": "True when the working tree has uncommitted changes.", "type": "boolean" },
+>         "revision": {
+>           "description": "Optional. A revision of the loaded sandbox code: lowercase hex SHA-256 of the sandbox files' content. It changes with every edit of a sandbox file, also without git or in a dirty checkout.",
+>           "type": "string",
+>           "pattern": "^[0-9a-f]{64}$"
+>         }
+57a63,66
+>         },
+>         "modelKind": {
+>           "description": "Optional. language-model: run() gets an AI SDK LanguageModel, so a model value is callable only through a listed provider (gateway, or the model's own provider). Absent: run() gets the bare model ID.",
+>           "enum": ["language-model"]
+diff -r /tmp/rc-sbx/apps/gateway/protocol/schema/messages/tool.fake.request.schema.json ~/ratel-wt-sandbox/protocol/sandbox/v1/schema/messages/tool.fake.request.schema.json
+39c39,44
+<         "args": true
+---
+>         "args": true,
+>         "messages": {
+>           "description": "Optional. Up to the last 6 messages of the conversation before the call.",
+>           "type": "array",
+>           "maxItems": 6
+>         }
+== fixtures diff
+Only in ~/ratel-wt-sandbox/protocol/sandbox/v1/conformance: conformance.test.mjs
+Only in ~/ratel-wt-sandbox/protocol/sandbox/v1/conformance/invalid/messages: manifest.update.bad-revision.json
+Only in ~/ratel-wt-sandbox/protocol/sandbox/v1/conformance/valid/messages: manifest.update.revision.json

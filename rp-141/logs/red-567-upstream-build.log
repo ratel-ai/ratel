@@ -1,0 +1,118 @@
+✖ a build stores rows, counts, settings, the redaction report and the content hash, and ends ready (1983.418375ms)
+✖ RC-1130: an excluded run is absent from the next build and stays in the earlier version; a pinned run that fails a scorer is in the next build (204.510791ms)
+✖ RC-1130: the rows route pages in ordinal order and filters by side; project B cannot read rows or set overrides of project A (206.160958ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14009.419833
+
+✖ failing tests:
+
+test at lib/views/fine-tuning/tests/upstream-red.integration.test.ts:1:1615
+✖ a build stores rows, counts, settings, the redaction report and the content hash, and ends ready (1983.418375ms)
+  error: column "plan" of relation "organizations" does not exist
+      at pe.Oe (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:442:11)
+      at pe.tt (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:220:16)
+      at pe.parse (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:104:21)
+      at D.Ne (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1763)
+      at <anonymous> (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1155)
+      at wasm://wasm/0269dffe:wasm-function[10979]:0x5ad04f
+      at wasm://wasm/0269dffe:wasm-function[3598]:0x281dd2
+      at wasm://wasm/0269dffe:wasm-function[3640]:0x289ccf
+      at wasm://wasm/0269dffe:wasm-function[3650]:0x289f2b
+      at wasm://wasm/0269dffe:wasm-function[9956]:0x55697c {
+    length: 130,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '49',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_target.c',
+    line: '1073',
+    routine: 'checkInsertTargets',
+    query: "\n    insert into organizations (id, name, slug, plan) values ('22222222-2222-4222-8222-222222222222', 'Acme', 'acme', 'pro');\n    insert into projects (id, organization_id, name, slug) values\n      ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'A', 'a'), ('33333333-3333-4333-8333-333333333333', '22222222-2222-4222-8222-222222222222', 'B', 'b'), ('55555555-5555-4555-8555-555555555555', '22222222-2222-4222-8222-222222222222', 'C', 'c'),\n      ('66666666-6666-4666-8666-666666666666', '22222222-2222-4222-8222-222222222222', 'D', 'd');\n    insert into fine_tuning_consents (project_id, given_by, text_version) values ('11111111-1111-4111-8111-111111111111', 'user_1', 'v1'), ('33333333-3333-4333-8333-333333333333', 'user_1', 'v1'), ('66666666-6666-4666-8666-666666666666', 'user_1', 'v1');\n  ",
+    params: undefined,
+    queryOptions: undefined
+  }
+
+test at lib/views/fine-tuning/tests/upstream-red.integration.test.ts:23:4323
+✖ RC-1130: an excluded run is absent from the next build and stays in the earlier version; a pinned run that fails a scorer is in the next build (204.510791ms)
+  error: column "plan" of relation "organizations" does not exist
+      at pe.Oe (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:442:11)
+      at pe.tt (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:220:16)
+      at pe.parse (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:104:21)
+      at D.Ne (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1763)
+      at <anonymous> (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1155)
+      at wasm://wasm/0269dffe:wasm-function[10979]:0x5ad04f
+      at wasm://wasm/0269dffe:wasm-function[3598]:0x281dd2
+      at wasm://wasm/0269dffe:wasm-function[3640]:0x289ccf
+      at wasm://wasm/0269dffe:wasm-function[3650]:0x289f2b
+      at wasm://wasm/0269dffe:wasm-function[9956]:0x55697c {
+    length: 130,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '49',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_target.c',
+    line: '1073',
+    routine: 'checkInsertTargets',
+    query: "\n    insert into organizations (id, name, slug, plan) values ('22222222-2222-4222-8222-222222222222', 'Acme', 'acme', 'pro');\n    insert into projects (id, organization_id, name, slug) values\n      ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'A', 'a'), ('33333333-3333-4333-8333-333333333333', '22222222-2222-4222-8222-222222222222', 'B', 'b'), ('55555555-5555-4555-8555-555555555555', '22222222-2222-4222-8222-222222222222', 'C', 'c'),\n      ('66666666-6666-4666-8666-666666666666', '22222222-2222-4222-8222-222222222222', 'D', 'd');\n    insert into fine_tuning_consents (project_id, given_by, text_version) values ('11111111-1111-4111-8111-111111111111', 'user_1', 'v1'), ('33333333-3333-4333-8333-333333333333', 'user_1', 'v1'), ('66666666-6666-4666-8666-666666666666', 'user_1', 'v1');\n  ",
+    params: undefined,
+    queryOptions: undefined
+  }
+
+test at lib/views/fine-tuning/tests/upstream-red.integration.test.ts:23:6889
+✖ RC-1130: the rows route pages in ordinal order and filters by side; project B cannot read rows or set overrides of project A (206.160958ms)
+  error: column "plan" of relation "organizations" does not exist
+      at pe.Oe (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:442:11)
+      at pe.tt (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:220:16)
+      at pe.parse (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pg-protocol/src/parser.ts:104:21)
+      at D.Ne (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1763)
+      at <anonymous> (~/ratel-wt-rp-141/node_modules/.pnpm/@electric-sql+pglite@0.5.12/node_modules/@electric-sql/pglite/dist/index.js:5:1155)
+      at wasm://wasm/0269dffe:wasm-function[10979]:0x5ad04f
+      at wasm://wasm/0269dffe:wasm-function[3598]:0x281dd2
+      at wasm://wasm/0269dffe:wasm-function[3640]:0x289ccf
+      at wasm://wasm/0269dffe:wasm-function[3650]:0x289f2b
+      at wasm://wasm/0269dffe:wasm-function[9956]:0x55697c {
+    length: 130,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '49',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_target.c',
+    line: '1073',
+    routine: 'checkInsertTargets',
+    query: "\n    insert into organizations (id, name, slug, plan) values ('22222222-2222-4222-8222-222222222222', 'Acme', 'acme', 'pro');\n    insert into projects (id, organization_id, name, slug) values\n      ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', 'A', 'a'), ('33333333-3333-4333-8333-333333333333', '22222222-2222-4222-8222-222222222222', 'B', 'b'), ('55555555-5555-4555-8555-555555555555', '22222222-2222-4222-8222-222222222222', 'C', 'c'),\n      ('66666666-6666-4666-8666-666666666666', '22222222-2222-4222-8222-222222222222', 'D', 'd');\n    insert into fine_tuning_consents (project_id, given_by, text_version) values ('11111111-1111-4111-8111-111111111111', 'user_1', 'v1'), ('33333333-3333-4333-8333-333333333333', 'user_1', 'v1'), ('66666666-6666-4666-8666-666666666666', 'user_1', 'v1');\n  ",
+    params: undefined,
+    queryOptions: undefined
+  }

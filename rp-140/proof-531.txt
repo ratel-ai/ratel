@@ -1,0 +1,22 @@
+$ npx tsx proof-531.mts   # branch beluga/rp-140-code-handoff, switch unset
+FF_CODE_HANDOFF=(unset)  (switch in core: yes)
+index_repo_code run: {"outcome":"complete","indexed":2,"pointers":2,"remaining":0}
+  pointer: tool find_task -> src/tools/tasks.ts:1
+  pointer: model claude-sonnet-5-5 -> src/agent.ts:1
+MCP handoff_fix (first call, fix craft:c-merge): {"error":"forbidden"}
+MCP handoff_fix (second call, fix craft:c-merge): {"error":"forbidden"}
+
+$ FF_CODE_HANDOFF=1 npx tsx proof-531.mts
+FF_CODE_HANDOFF=1  (switch in core: yes)
+index_repo_code run: {"outcome":"complete","indexed":2,"pointers":2,"remaining":0}
+  pointer: tool find_task -> src/tools/tasks.ts:1
+  pointer: model claude-sonnet-5-5 -> src/agent.ts:1
+  event: fix_handed_off
+MCP handoff_fix (first call, fix craft:c-merge): {"handoff":{"fixId":"craft:c-merge","target":"github-issue-claude","url":"https://github.com/acme/agent/issues/1","issueNumber":"1","created":true}}
+MCP handoff_fix (second call, fix craft:c-merge): {"handoff":{"fixId":"craft:c-merge","target":"github-issue-claude","url":"https://github.com/acme/agent/issues/1","issueNumber":"1","created":false}}
+issue #1 in acme/agent: "Ratel fix: Merge find_task and assign_task"
+  | @claude
+  | src/tools/tasks.ts:1 find_task (tool)
+  | - 4bf92f3577b34da6a3ce929d0e0e4736: http://localhost:3000/project/11111111-1111-4111-8111-111111111111/traces/4bf92f3577b34da6a3ce929d0e0e4736
+  | 4. Put the line `ratel-fix: craft:c-merge` in the pull request body.
+  | ratel-fix: craft:c-merge

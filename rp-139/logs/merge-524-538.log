@@ -1,0 +1,32 @@
+== 524
+Auto-merging infra/module/posthog.tf
+CONFLICT (content): Merge conflict in infra/module/posthog.tf
+Auto-merging infra/module/tests/ratel_cloud.tftest.hcl
+CONFLICT (content): Merge conflict in infra/module/tests/ratel_cloud.tftest.hcl
+Automatic merge failed; fix conflicts and then commit the result.
+M  apps/web/app/(app)/project/[projectId]/traces/(tabs)/spans/spans-v2.tsx
+M  apps/web/components/session-chat/SessionTrack.tsx
+M  apps/web/components/traces/v2/SpanInspector.tsx
+M  apps/web/components/traces/v2/SpansView.tsx
+A  apps/web/components/traces/v2/TraceAgents.tsx
+A  apps/web/components/traces/v2/TraceRunMetrics.tsx
+M  apps/web/components/traces/v2/TraceTimeline.tsx
+M  apps/web/components/traces/v2/TraceView.tsx
+A  apps/web/lib/catalogs/telemetry-declared-tools.integration.test.ts
+A  apps/web/lib/catalogs/telemetry-declared-tools.ts
+== 538
+Auto-merging infra/module/posthog.tf
+CONFLICT (content): Merge conflict in infra/module/posthog.tf
+Auto-merging infra/module/tests/ratel_cloud.tftest.hcl
+CONFLICT (content): Merge conflict in infra/module/tests/ratel_cloud.tftest.hcl
+Automatic merge failed; fix conflicts and then commit the result.
+M  apps/web/app/(app)/project/[projectId]/traces/(tabs)/spans/spans-v2.tsx
+M  apps/web/components/session-chat/SessionTrack.tsx
+M  apps/web/components/traces/v2/SpanInspector.tsx
+M  apps/web/components/traces/v2/SpansView.tsx
+A  apps/web/components/traces/v2/TraceAgents.tsx
+A  apps/web/components/traces/v2/TraceRunMetrics.tsx
+M  apps/web/components/traces/v2/TraceTimeline.tsx
+M  apps/web/components/traces/v2/TraceView.tsx
+A  apps/web/lib/catalogs/telemetry-declared-tools.integration.test.ts
+A  apps/web/lib/catalogs/telemetry-declared-tools.ts

@@ -1,0 +1,29 @@
+✔ list_agents lists the agents with their stats, the handoffs, the environments and each page link (18.836125ms)
+✔ get_agent returns the tools, the MCP servers, the handoffs and the filtered Traces link (1.611125ms)
+✔ get_agent of an agent with no run in the window is not found (1.089125ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (2.457875ms)
+✔ list_clients returns the harnesses, versions, countries and splits, with the unknown-client hint (18.705541ms)
+✔ list_clients is refused as forbidden when the flag is off (1.354458ms)
+✔ list_mcp_servers lists the servers with their stats, the environments and each page link (19.666833ms)
+✔ get_mcp_server returns the tools, the calling agents and no protocol or transport when none is kept (1.833458ms)
+✔ get_mcp_server of a server with no call in the window is not found (0.946666ms)
+✔ both tools refuse as forbidden with cloud-project-entities off, and read nothing (1.641209ms)
+✔ detectionOf reads a heuristic source with the entity's rule (1.387916ms)
+✔ detectionOf gives an explicit source no rule (0.189667ms)
+✔ detectionOf is null for a missing or unknown source (0.181833ms)
+✔ explainDetection names the rule and the attribute that makes a guess explicit (0.245791ms)
+✔ explainDetection shows explicit sources with no warning (0.101083ms)
+✔ weakestSource aggregates to the weakest source of the group (0.834958ms)
+✔ the fact table names every key ingest reads for an MCP server and its clients (0.719833ms)
+✔ only the explicit client name is SDK only (0.655042ms)
+✔ each snippet sets service.name to the server's name and reads the exporter from env (0.363333ms)
+✔ the guide states the stdio and stateless limits and how to send no client IP (0.176792ms)
+✔ no em dashes in the guide (0.151834ms)
+ℹ tests 21
+ℹ suites 0
+ℹ pass 21
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4456.69525

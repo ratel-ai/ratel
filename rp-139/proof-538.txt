@@ -1,0 +1,14 @@
+(commit fa79e84c)
+$ npx tsx scripts/.proof-538.mts
+FF_PIVOTS=(unset)
+Sessions/Turns pivot filters: []
+Turns ?pivot.client=acme: filter={} -> 3 of 3 runs
+Overview group-by: not shown (no pivot filter options)
+
+$ FF_PIVOTS=1 npx tsx scripts/.proof-538.mts
+FF_PIVOTS=1
+Sessions/Turns pivot filters: [{"key":"client","label":"Client company"}]
+Turns ?pivot.client=acme: filter={"pivots":{"client":["acme"]}} -> 2 of 3 runs
+Overview group-by client:
+  value acme runs=2 errorRate=0.5 p50=1000ms cost=0.03
+  value globex runs=1 errorRate=0 p50=1000ms cost=0.03

@@ -1,0 +1,122 @@
+[PostHog] `isFeatureEnabled` is deprecated and will be removed in a future major version. Use `posthog.evaluateFlags(distinctId, ...)` and call `flags.isEnabled(key)` instead — this consolidates flag evaluation into a single `/flags` request per incoming request.
+✔ FF_EVAL_GATE=1 turns the eval gate on, PostHog unasked (0.443917ms)
+✔ FF_EVAL_GATE=0 turns the eval gate off whatever PostHog says (0.060666ms)
+✔ FF_CLOUD_EVAL_GATE alone does not turn the eval gate on: the core never reads it (0.054375ms)
+✔ the diagnostics menu says the eval gate is on with FF_EVAL_GATE=1 and no FF_CLOUD_EVAL_GATE (0.300334ms)
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1023:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:29)
+    at async RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:16)
+    at async RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:9)
+    at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+    at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13)
+}
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1023:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:29)
+    at async RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:16)
+    at async RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:9)
+    at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+    at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13)
+}
+✔ integration: a PostHog value turns the eval gate on for one organization only (21.55275ms)
+✔ the diagnostics menu shows the PostHog value for the reader's organization (0.457ms)
+✔ each core switch is its own PostHog flag (0.327375ms)
+✔ PostHog decides for the actor, else the signed-in person, else the organization (0.120125ms)
+✔ without PostHog, or without an answer, a switch reads its default: off (0.09ms)
+✔ a failed decision is off and reported (0.117458ms)
+✔ the menu shows the eval gate of the displayed project's organization, not the active one (0.19125ms)
+✔ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (0.146667ms)
+✔ with no project displayed, the project flags fall back to the active organization (0.105625ms)
+✔ the menu's project flags are refreshed only for a project the reader belongs to (1.73175ms)
+✔ off a project page, the menu's flags are the active organization's (RP-65) (0.297291ms)
+Error while flushing PostHog PostHogFetchNetworkError: Network error while fetching PostHog
+    at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1023:27
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:29)
+    at async RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:16)
+    at async RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:9)
+    at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+    at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13) {
+  error: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13),
+  [cause]: SyntaxError: Unexpected token 'o', "[object Blob]" is not valid JSON
+      at JSON.parse (<anonymous>)
+      at Object.fetch (<ratel-platform>/src/access/feature-flags.test.ts:52:25)
+      at RatelPostHog.fetch (~/ratel-wt-rp-120/node_modules/.pnpm/posthog-node@5.45.2/node_modules/posthog-node/dist/client.js:197:50)
+      at ~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:1006:41
+      at retriable (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/utils/index.js:391:35)
+      at RatelPostHog.fetchWithRetry (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:982:61)
+      at RatelPostHog.sendBatch (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:812:20)
+      at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+      at async RatelPostHog._flushRoute (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:864:17)
+      at async RatelPostHog._flush (~/ratel-wt-rp-120/node_modules/.pnpm/@posthog+core@1.63.1/node_modules/@posthog/core/dist/posthog-core-stateless.js:824:13)
+}
+✔ FLAGS is the complete flat registry (86.309708ms)
+✔ code declarations are derived from FLAGS: the launch allowlist, the eval gate, catalog drift and MCP Apps (0.617625ms)
+✔ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (0.480584ms)
+✔ isPostHogConfigured reflects POSTHOG_KEY (0.319167ms)
+✔ importing the registry without PostHog env does not throw (0.25725ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 558.927375

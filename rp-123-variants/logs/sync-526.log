@@ -1,0 +1,72 @@
+
+copied (10)
+  src/lib/mcp/operations/variants.test.ts
+  src/lib/views/variants/compare.integration.test.ts
+  src/lib/views/variants/domain/bootstrap.ts
+  src/lib/views/variants/domain/compare.test.ts
+  src/lib/views/variants/domain/compare.ts
+  src/lib/views/variants/paths.ts
+  src/app/(console)/project/[projectId]/variants/[experiment]/page.tsx
+  src/app/(console)/project/[projectId]/variants/page.tsx
+  src/components/console/variants/VariantComparisonView.tsx
+  src/components/console/variants/VariantExperimentsView.tsx
+
+owned, bootstrapped from upstream (now yours to maintain) (7)
+  src/lib/views/variants/compare-service.ts
+  src/lib/views/variants/navigation.ts
+  src/lib/mcp/operations/variants.ts
+  src/app/(console)/project/[projectId]/variants/context.ts
+  src/lib/platform/db/migrations/0051_trace_summary_variant_index.sql
+  src/lib/platform/db/migrations/meta/0051_snapshot.json
+  src/lib/views/variants/compare-store.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (5)
+  {"path":"src/lib/views/variants/compare-service.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/lib/views/variants/navigation.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/lib/views/variants/navigation.ts","specifier":"@/lib/flags-org"}
+  {"path":"src/lib/mcp/operations/variants.ts","specifier":"@/lib/flags-ingest"}
+  {"path":"src/app/(console)/project/[projectId]/variants/context.ts","specifier":"@/lib/flags-ingest"}
+
+owned files changed upstream since the last sync; port by hand:
+.../[projectId]/settings/variant-actions.ts        |  63 ++++++
+ .../settings/variant-mappings-section.test.ts      |  11 +
+ .../(app)/project/[projectId]/variants/context.ts  |  53 +++++
+ .../web/components/settings/v2/GeneralSettings.tsx |   4 +-
+ .../settings/v2/VariantMappingsSection.tsx         |  50 +++++
+ apps/web/components/shell/AppFrame.tsx             |   9 +-
+ apps/web/components/shell/nav-icons.ts             |   2 +
+ apps/web/components/shell/types.ts                 |   2 +
+ apps/web/lib/analytics/track-server.ts             |   3 +
+ apps/web/lib/db/migrations/0110_variant_tags.sql   |  22 ++
+ .../migrations/0111_variant_attribute_mappings.sql |  12 ++
+ .../0118_trace_summary_variant_index.sql           |  10 +
+ apps/web/lib/db/migrations/meta/_journal.json      |  21 ++
+ apps/web/lib/db/schema.ts                          |  47 +++++
+ apps/web/lib/mcp/__fixtures__/tools-list.json      |  87 ++++++++
+ apps/web/lib/mcp/operations/contract.test.ts       |   2 +
+ apps/web/lib/mcp/operations/index.ts               |   2 +
+ apps/web/lib/mcp/operations/variants.ts            | 170 +++++++++++++++
+ apps/web/lib/mcp/route-handler.test.ts             |   1 +
+ apps/web/lib/mcp/stages.ts                         |   2 +
+ apps/web/lib/navigation/v2.test.ts                 |  20 ++
+ apps/web/lib/navigation/v2.ts                      |  10 +-
+ apps/web/lib/otlp/ingest-spans.ts                  |  29 ++-
+ apps/web/lib/otlp/span-rows.ts                     |  45 +++-
+ apps/web/lib/session-chat/trace-view-ui.test.ts    |   3 +
+ apps/web/lib/traces/compare.test.ts                |   3 +
+ apps/web/lib/traces/comparison.test.ts             |   3 +
+ .../lib/traces/summary-refresh.integration.test.ts |  55 +++++
+ apps/web/lib/traces/summary-refresh.ts             |  33 ++-
+ apps/web/lib/traces/tree.test.ts                   |   3 +
+ apps/web/lib/traces/v2/views-ui.test.ts            |   3 +
+ apps/web/lib/traces/view.test.ts                   |   3 +
+ apps/web/lib/traces/waterfall.test.ts              |   3 +
+ apps/web/lib/variants/compare-service.ts           |  99 +++++++++
+ apps/web/lib/variants/compare-store.ts             | 233 +++++++++++++++++++++
+ apps/web/lib/variants/flag.ts                      |  38 ++++
+ apps/web/lib/variants/mapping-actions.ts           |  98 +++++++++
+ apps/web/lib/variants/navigation.test.ts           |  47 +++++
+ apps/web/lib/variants/navigation.ts                |  60 ++++++
+ 39 files changed, 1349 insertions(+), 12 deletions(-)
+
+applied 17 change(s) from 0261fef8

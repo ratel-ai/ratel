@@ -1,0 +1,12 @@
+(commit d9a4d185, branch beluga/rp-139-pivots-flags)
+$ npx tsx scripts/.proof-539.mts
+FF_PIVOTS=(unset)
+addPivot(client): ok, pivots=client
+span rows: 1; the row keeps tenant.id: "acme"
+otel_trace_summaries.dims for t1: {"client":"acme"}
+
+$ FF_PIVOTS=1 npx tsx scripts/.proof-539.mts
+FF_PIVOTS=1
+addPivot(client): ok, pivots=client
+span rows: 1; the row keeps tenant.id: "acme"
+otel_trace_summaries.dims for t1: {"client":"acme"}

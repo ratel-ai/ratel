@@ -1,0 +1,113 @@
+
+updated (60)
+  src/lib/ingest/trace-events/queries.integration.test.ts
+  src/lib/ingest/otlp/__fixtures__/real/README.md
+  src/lib/ingest/otlp/__fixtures__/typed-steps.test.ts
+  src/lib/ingest/otlp/__fixtures__/typed-steps.ts
+  src/lib/ingest/otlp/derive-model-calls.test.ts
+  src/lib/ingest/otlp/derive-model-calls.ts
+  src/lib/catalog/wire.ts
+  src/lib/catalog/wire.test.ts
+  src/lib/ledger/turns/normalize.ts
+  src/lib/readings/trace-signals/steps/metrics-query.ts
+  src/lib/readings/trace-signals/steps/metrics.test.ts
+  src/lib/readings/trace-signals/steps/metrics.ts
+  src/lib/readings/trace-signals/segments/job.integration.test.ts
+  src/lib/readings/trace-signals/segments/write.integration.test.ts
+  src/lib/readings/trace-signals/segments/write.ts
+  src/lib/readings/trace-signals/health-outcomes.ts
+  src/lib/readings/trace-signals/signals/analyze.ts
+  src/lib/readings/trace-signals/signals/compute.ts
+  src/lib/readings/trace-signals/signals/project-metrics.ts
+  src/lib/readings/trace-signals/signals/project-metrics.test.ts
+  src/lib/readings/trace-signals/signals/types.ts
+  src/lib/readings/trace-signals/signals/workflow-run.ts
+  src/lib/readings/trace-signals/signals/workflow-run.test.ts
+  src/lib/readings/trace-signals/workflows/decide-queries.ts
+  src/lib/readings/trace-signals/workflows/health.ts
+  src/lib/readings/trace-signals/workflows/health.test.ts
+  src/lib/readings/trace-signals/workflows/mine.ts
+  src/lib/readings/trace-signals/workflows/mine.test.ts
+  src/lib/readings/trace-signals/workflows/place-queries.ts
+  src/lib/readings/trace-signals/workflows/place.test.ts
+  src/lib/readings/trace-signals/workflows/reading.ts
+  src/lib/readings/trace-signals/workflows/reading.test.ts
+  src/lib/readings/trace-signals/workflows/select.ts
+  src/lib/readings/trace-signals/workflows/types.ts
+  src/lib/readings/trace-signals/workflows/units.ts
+  src/lib/readings/trace-signals/workflows/units.test.ts
+  src/lib/views/health/page-model.integration.test.ts
+  src/lib/views/tasks/model.ts
+  src/lib/views/tasks/model.test.ts
+  src/lib/views/tasks/session.ts
+  src/lib/views/tasks/session.test.ts
+  src/lib/views/tasks/examples.ts
+  src/lib/views/tasks/examples.test.ts
+  src/lib/views/tasks/flow-layout.ts
+  src/lib/views/tasks/queries.integration.test.ts
+  src/components/console/health/StepKindTables.tsx
+  src/lib/views/health/step-kinds-ui.test.ts
+  src/components/console/tasks/SessionView.tsx
+  src/components/console/tasks/TaskView.tsx
+  src/lib/views/tasks/flow-layout.test.ts
+  src/lib/views/tasks/tasks-ui.test.ts
+  src/components/console/badgers/honeybadger-assets.ts
+  src/lib/mcp/apps/load.ts
+  src/lib/console/badgers.test.ts
+  src/postcss.config.mjs
+  src/lib/views/session-replay/load.ts
+  src/lib/views/session-replay/timeline.ts
+  src/lib/views/session-chat/load.ts
+  src/lib/views/session-chat/model.test.ts
+  src/lib/views/session-chat/model.ts
+
+deleted (4)
+  src/lib/platform/otel/server-traces.test.ts
+  src/lib/platform/otel/server-traces.ts
+  src/lib/ingest/otlp/__fixtures__/typed-steps-main.json
+  src/lib/ingest/otlp/__fixtures__/typed-steps-main.json
+
+owned files changed upstream since the last sync; port by hand:
+.../app/(app)/project/[projectId]/health/page.tsx  |   7 +-
+ .../health/tasks/sessions/[sessionId]/page.tsx     |  11 +-
+ .../[projectId]/sessions/[sessionId]/page.tsx      |   9 +-
+ .../project/[projectId]/tasks/[taskId]/page.tsx    |  16 ++-
+ apps/web/components/ds/step-kind.tsx               |  26 +++++
+ apps/web/components/health/v2/SummaryView.tsx      |  17 ++-
+ apps/web/lib/analytics/track-server.ts             |   1 +
+ apps/web/lib/db/migrations/0111_task_segments.sql  |  27 +++++
+ apps/web/lib/db/migrations/meta/_journal.json      |   7 ++
+ apps/web/lib/db/schema.ts                          |  20 ++++
+ apps/web/lib/jobs/observability.ts                 |   1 +
+ apps/web/lib/otlp/agent-health-bridge.test.ts      |   1 -
+ apps/web/lib/otlp/agent-health-bridge.ts           |  18 ++--
+ apps/web/lib/otlp/derive-agent-runs.ts             |  25 ++---
+ apps/web/lib/otlp/derive-steps.test.ts             |  74 +++++++++++++
+ .../lib/otlp/dimensions/ingest.integration.test.ts |  10 +-
+ apps/web/lib/otlp/ingest-spans.ts                  |   5 +-
+ apps/web/lib/session-chat/load.integration.test.ts |  35 ++++++
+ apps/web/lib/tasks/page-model.integration.test.ts  |  90 +++++++++++++++-
+ apps/web/lib/tasks/page-model.ts                   |  10 +-
+ apps/web/lib/tasks/palette.ts                      |  10 +-
+ apps/web/lib/tasks/queries.ts                      | 118 ++++++++++-----------
+ apps/web/lib/topics/agent-run-test-support.ts      |   8 +-
+ apps/web/lib/trace-signals/constants.ts            |   3 +
+ apps/web/lib/trace-signals/page-model.ts           |  11 +-
+ .../signals/agent-tasks.integration.test.ts        |  24 +++--
+ apps/web/lib/trace-signals/signals/compute-job.ts  |  31 +++++-
+ .../trace-signals/signals/integration-support.ts   |   3 +
+ apps/web/lib/trace-signals/signals/ledger.ts       |  14 ---
+ .../lib/trace-signals/tool-run-insights.test.ts    |   7 +-
+ apps/web/lib/trace-signals/tool-run-insights.ts    |   5 +-
+ .../turns/agent-run.integration.test.ts            |  94 ++++++++--------
+ apps/web/lib/trace-signals/turns/build-job.ts      |  22 ++--
+ apps/web/lib/trace-signals/turns/queries.ts        |  13 ++-
+ apps/web/lib/trace-signals/turns/schedule.ts       |   6 +-
+ apps/web/lib/trace-signals/turns/segment.ts        |   6 +-
+ .../turns/typed-steps.integration.test.ts          |  75 +++++++++++++
+ .../lib/trace-signals/turns/typed-steps.test.ts    |  37 +++++++
+ apps/web/lib/trace-signals/view.ts                 |   9 +-
+ apps/web/lib/trace-signals/workflows/place.ts      |  20 ++--
+ 40 files changed, 684 insertions(+), 242 deletions(-)
+
+applied 64 change(s) from a3e917ac

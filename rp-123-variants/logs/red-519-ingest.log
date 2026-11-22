@@ -1,0 +1,3 @@
+✖ flag on: only the root is tagged, and the trace summary has its experiment, name and descriptors (1592.435417ms)
+✔ flag off: no span and no summary has a variant (171.26075ms)
+✖ flag on: a trace tagged only with a mapped app.variant is stored as that variant of the mapped experiment (152.854125ms)

@@ -1,0 +1,23 @@
+# ratel beluga/rp-138-entities @ 11e0fcec (#522 #527 #560, behind FF_AGENTS_PAGES)
+# real DB-IP Lite file fetched by src/scripts/fetch-geo-db.mjs:
+-rw-r--r--@ 1 rstagi  wheel  8515063 Nov 21 21:47 /tmp/rp138-geo/dbip-country-lite.mmdb
+$ GEO_COUNTRY_MMDB_PATH=/tmp/rp138-geo/dbip-country-lite.mmdb
+
+== POST /v1/traces (MCP server spans from 8.8.8.8, User-Agent claude-code/2.1.3), FF_INGEST_STRIP_CLIENT_ADDRESS=(unset)
+  route -> 202
+  otel_spans client columns: geo_country, harness, mcp_transport  (no client_ip)
+  span {"name":"POST /mcp","harness":null,"harness_source":null,"geo_country":null,"mcp_transport":null}
+  span {"name":"tools/call get_forecast","harness":"claude-code","harness_source":"heuristic","geo_country":"US","mcp_transport":"http"}
+  "8.8.8.8" anywhere in otel_spans/trace_events: false
+
+== POST /v1/traces (MCP server spans from 8.8.8.8, User-Agent claude-code/2.1.3), FF_INGEST_STRIP_CLIENT_ADDRESS=1
+  route -> 202
+  otel_spans client columns: geo_country, harness, mcp_transport  (no client_ip)
+  span {"name":"POST /mcp","harness":null,"harness_source":null,"geo_country":null,"mcp_transport":null}
+  span {"name":"tools/call get_forecast","harness":"claude-code","harness_source":"heuristic","geo_country":"US","mcp_transport":"http"}
+  "8.8.8.8" anywhere in otel_spans/trace_events: false
+
+== list_clients over MCP (real FF_AGENTS_PAGES gate), FF_AGENTS_PAGES unset vs =1
+  trace rollup: [{"harnesses":["cursor"],"countries":["GB"]}]
+  FF_AGENTS_PAGES=(unset) -> {"error":"forbidden","reason":"project_entities_off"}
+  FF_AGENTS_PAGES=1 -> {"harnesses":[{"harness":"cursor","calls":1}],"countries":[{"country":"GB","calls":1,"sessions":1}]}

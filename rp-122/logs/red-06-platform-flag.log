@@ -1,0 +1,14 @@
+✖ each core switch is its own PostHog flag (0.240833ms)
+✖ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (0.642667ms)
+✖ with no project displayed, the project flags fall back to the active organization (0.176583ms)
+✖ FLAGS is the complete flat registry (43.881ms)
+✖ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (1.08075ms)
+ℹ tests 20
+ℹ pass 15
+ℹ fail 5
+✖ failing tests:
+✖ each core switch is its own PostHog flag (0.240833ms)
+✖ the menu asks each gate's subject: the project for the eval gate, drift and the Agents pages, the person only for MCP Apps (0.642667ms)
+✖ with no project displayed, the project flags fall back to the active organization (0.176583ms)
+✖ FLAGS is the complete flat registry (43.881ms)
+✖ a session's flag view holds the live flags: launch access, the eval gate, catalog drift and MCP Apps (1.08075ms)

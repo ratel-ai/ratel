@@ -1,0 +1,23 @@
+Scope: all 6 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +435
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 435, reused 433, downloaded 0, added 172
+Progress: resolved 435, reused 433, downloaded 0, added 294
+Progress: resolved 435, reused 433, downloaded 0, added 431
+Progress: resolved 435, reused 433, downloaded 0, added 433
+Progress: resolved 435, reused 433, downloaded 0, added 435, done
+
+devDependencies:
++ @biomejs/biome 2.4.13
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: @clerk/shared@3.48.0, core-js@3.51.0,               │
+│   esbuild@0.18.20, esbuild@0.25.12, esbuild@0.27.7.                          │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Done in 4.5s using pnpm v10.28.2

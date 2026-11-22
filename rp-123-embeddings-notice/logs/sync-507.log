@@ -1,0 +1,40 @@
+
+copied (9)
+  src/lib/views/ship-monitor/changes.test.ts
+  src/lib/views/ship-monitor/changes.ts
+  src/lib/views/ship-monitor/load.integration.test.ts
+  src/lib/views/ship-monitor/load.ts
+  src/lib/views/ship-monitor/route.test.ts
+  src/lib/views/ship-monitor/route.ts
+  src/lib/views/ship-monitor/watch.test.ts
+  src/lib/views/ship-monitor/watch.ts
+  src/components/console/ship-monitor/ShipmentWatchCard.tsx
+
+updated (1)
+  src/components/console/lineage/ShipmentsTable.tsx
+
+owned, bootstrapped from upstream (now yours to maintain) (3)
+  src/lib/views/ship-monitor/gate.ts
+  src/lib/views/ship-monitor/gate.test.ts
+  src/app/api/projects/[projectId]/ship/watch/route.ts
+
+unmapped @/lib specifiers (add a map or rewrite rule) (2)
+  {"path":"src/lib/views/ship-monitor/gate.ts","specifier":"@/lib/flags-org"}
+  {"path":"src/lib/views/ship-monitor/gate.test.ts","specifier":"@/lib/flags-org"}
+
+owned files changed upstream since the last sync; port by hand:
+.../app/(app)/project/[projectId]/ship/page.tsx    | 24 ++++++++-
+ .../api/projects/[projectId]/ship/watch/route.ts   | 45 ++++++++++++++++
+ apps/web/lib/eval-gate/gate.ts                     | 16 +++++-
+ apps/web/lib/mcp/__fixtures__/tools-list.json      | 33 ++++++++++++
+ apps/web/lib/mcp/operations/account.test.ts        |  1 +
+ apps/web/lib/mcp/operations/account.ts             |  1 +
+ apps/web/lib/mcp/operations/contract.test.ts       |  1 +
+ apps/web/lib/mcp/operations/ship.test.ts           | 57 +++++++++++++++++++-
+ apps/web/lib/mcp/operations/ship.ts                | 61 +++++++++++++++++++++-
+ apps/web/lib/mcp/route-handler.test.ts             |  1 +
+ apps/web/lib/mcp/stages.ts                         |  1 +
+ apps/web/lib/ship-monitor/gate.ts                  | 20 +++++++
+ 12 files changed, 255 insertions(+), 6 deletions(-)
+
+applied 13 change(s) from 2c40100e
