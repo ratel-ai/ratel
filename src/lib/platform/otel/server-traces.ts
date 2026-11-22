@@ -10,8 +10,7 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import { isMcpToolSpan } from "@/lib/mcp/telemetry/export";
-import { FilteredSpanProcessor, isModelCallSpan } from "@/lib/platform/otel/ratel-export";
+import { FilteredSpanProcessor } from "@/lib/platform/otel/ratel-export";
 
 /**
  * Server traces: the requests, Postgres queries and outbound calls of this process, sent to an
@@ -34,6 +33,11 @@ export type ServerTracesConfig = {
 };
 
 export type ServerTracesDependencies = {
+  /**
+   * Which spans may leave as server traces. The boot path keeps model-call and MCP tool spans
+   * out: they carry customer text (and `lib/mcp` sits above this layer, so it decides there).
+   */
+  accept: ConstructorParameters<typeof FilteredSpanProcessor>[1];
   /** The process's own resource; `resourceAttributes` win over it. */
   baseResource: Resource;
   /** Where spans go; the OTLP/HTTP exporter for the configured URL unless a test hands one. */
@@ -65,7 +69,7 @@ export function resolveServerTracesConfig(environment: Environment): ServerTrace
 /** The span processor that sends server traces, for the process's tracer provider. */
 export function serverTracesProcessor(
   config: ServerTracesConfig,
-  { baseResource, exporter, exportTimeoutMillis }: ServerTracesDependencies,
+  { accept, baseResource, exporter, exportTimeoutMillis }: ServerTracesDependencies,
 ): SpanProcessor {
   const resource = baseResource.merge(resourceFromAttributes(config.resourceAttributes));
   // The exporter also adds OTEL_EXPORTER_OTLP_TRACES_HEADERS from the environment (ours win per
@@ -74,7 +78,7 @@ export function serverTracesProcessor(
   const target = exporter ?? new OTLPTraceExporter({ url: config.url, headers: config.headers });
   return new FilteredSpanProcessor(
     new BatchSpanProcessor(new ServerTracesExporter(target, resource), { exportTimeoutMillis }),
-    (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
+    accept,
   );
 }
 

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
-import { MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
-import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
+import { isMcpToolSpan, MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
+import { isModelCallSpan, MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 import {
   resolveServerTracesConfig,
   serverTracesProcessor,
@@ -23,6 +23,7 @@ function traced(environment: Record<string, string>) {
       "deployment.environment.name": "production",
     }),
     exporter,
+    accept: (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
   });
   const provider = new BasicTracerProvider({ spanProcessors: [processor] });
   return { exporter, processor, provider };

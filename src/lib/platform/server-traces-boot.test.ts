@@ -4,6 +4,8 @@ import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { trace } from "@opentelemetry/api";
 import { registerNodeInstrumentation } from "@/instrumentation.node";
+import { MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
+import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 
 // Server traces at boot (`instrumentation.node.ts`) with only the APM collector configured, as
 // Cloud's sidecar is, against a collector on this machine. The registration is once per process,
@@ -55,6 +57,8 @@ test("with only OTEL_EXPORTER_OTLP_ENDPOINT set, server traces and outbound call
     await fetch(`${upstreamOrigin}/outbound?q=customer`);
     span.end();
   });
+  trace.getTracer(MODEL_CALL_TRACER).startSpan("model-call-probe").end();
+  trace.getTracer(MCP_TOOL_TRACER).startSpan("mcp-tool-probe").end();
   await flush();
 
   const traces = received.filter((request) => request.path === "/v1/traces");
@@ -66,6 +70,10 @@ test("with only OTEL_EXPORTER_OTLP_ENDPOINT set, server traces and outbound call
   assert.ok(
     body.includes("ratel-app") && body.includes("pf-aaa-bbb"),
     "the server-traces resource",
+  );
+  assert.ok(
+    !body.includes("model-call-probe") && !body.includes("mcp-tool-probe"),
+    "model-call and MCP tool spans, which carry customer text, stay out",
   );
   assert.ok(!body.includes("ratel-cloud"), "not the self-telemetry service name");
   assert.ok(!body.includes("/v1/traces"), "the exporter's own requests are not traced");

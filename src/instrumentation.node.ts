@@ -116,6 +116,7 @@ export async function registerNodeInstrumentation(
       ...(serverTraces
         ? [
             serverTracesProcessor(serverTraces, {
+              accept: (span) => !isModelCallSpan(span) && !isMcpToolSpan(span),
               baseResource: resource,
               exportTimeoutMillis: EXPORT_TIMEOUT_MS,
             }),
