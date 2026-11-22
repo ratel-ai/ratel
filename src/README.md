@@ -72,7 +72,7 @@ Variants pages and their MCP tools), and fine-tuning (the Fine-tuning page: a pr
 opt-in, use cases over its model calls, redacted dataset versions to review, export as JSONL and delete, and their MCP tools), and the ship watch (live watch cards for shipped fixes on the Ship page and the MCP tool `get_shipment_watch`). Cloud
 ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
 `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`,
-`FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF`, `FF_VARIANT_EXPERIMENTS`, `FF_FINE_TUNING` and `FF_SHIP_MONITOR`. The eval gate's pages live in the
+`FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF`, `FF_VARIANT_EXPERIMENTS`, `FF_FINE_TUNING`, `FF_SHIP_MONITOR` and `FF_EVALS`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,

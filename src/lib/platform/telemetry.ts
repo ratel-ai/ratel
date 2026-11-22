@@ -136,6 +136,21 @@ export const SERVER_EVENT_NAMES = [
   "repo_unlinked",
   // A fix handed off to Claude Code (RC-918): lib/views/code-handoff/handoff/handoff-fix.ts.
   "fix_handed_off",
+  // Evals (RC-279 and its follow-ups, FF_EVALS): lib/views/evals, lib/views/scorers and the eval suite MCP tools.
+  "eval_run_queued",
+  "eval_run_finished",
+  "eval_nightly_changed",
+  "eval_simulation_queued",
+  "eval_simulation_finished",
+  "eval_removed",
+  "eval_updated",
+  "eval_created",
+  "eval_scorer_switched",
+  "eval_step_answer_set",
+  "eval_continued_from_step",
+  "eval_run_settings_set",
+  "eval_reply_edited",
+  "scorer_changed",
   // Fine-tuning (RC-1123, RC-1124): lib/views/fine-tuning/consent-api.ts, use-cases-api.ts.
   "training_consent_given",
   "training_consent_withdrawn",

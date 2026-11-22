@@ -12,6 +12,7 @@ import {
   editionRegistrations,
   placeEditionOperations,
 } from "@/lib/mcp/operations/edition";
+import { evalSuiteReadOperations, evalSuiteWriteOperations } from "@/lib/mcp/operations/evals";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
 import { fineTuningOperations } from "@/lib/mcp/operations/fine-tuning";
 import { healthOperations } from "@/lib/mcp/operations/health";
@@ -88,6 +89,7 @@ export function assembleOperations(
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
+    ...evalSuiteReadOperations(),
     ...fineTuningOperations(),
     ...writeOperations(),
     ...runtimeWriteOperations(),
@@ -95,6 +97,7 @@ export function assembleOperations(
     ...loopWriteOperations(),
     ...loopTaskWriteOperations(),
     ...loopEvalSetWriteOperations(),
+    ...evalSuiteWriteOperations(),
     ...codeHandoffOperations(),
   ];
   const operations = placeEditionOperations(core, adaptEditionOperations(registrations, core));

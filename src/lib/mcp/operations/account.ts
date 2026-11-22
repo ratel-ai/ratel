@@ -96,6 +96,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_SHIP_MONITOR",
     note: "ship watch: get_shipment_watch reads how shipped fixes behave live (changed tools since the ship vs the 7 days before, calls of removed tools, runs before and after, a verdict); the watch cards on the console's Ship page",
   },
+  {
+    key: "FF_EVALS",
+    note: "Evals: the agent-wide eval set, its runs (by hand, nightly, fix simulations) and user scorers; the run_eval_set and simulate_eval_set jobs and the MCP tools list_evals, get_eval_run, run_evals, change_eval, change_scorer and list_scorers",
+  },
 ];
 
 export interface AccountOperationDeps {

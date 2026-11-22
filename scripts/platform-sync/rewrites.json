@@ -24,6 +24,7 @@
     { "from": "@/lib/trace-signals/flag", "to": "@/lib/views/health/agent-health-flag", "exact": true },
     { "from": "@/lib/session-replay/actions", "to": "@/app/(console)/(session-replay)/session-replay-actions", "exact": true },
     { "from": "@/lib/entitlements", "to": "@/lib/platform/entitlements", "exact": true },
+    { "from": "@/lib/flags-org", "to": "@/lib/platform/organization-flags", "exact": true },
     { "from": "@/lib/analytics/track-server", "to": "@/lib/platform/telemetry", "exact": true },
     { "from": "@/lib/analytics/product-events", "to": "@/lib/platform/telemetry", "exact": true },
     { "from": "@/lib/observability/report-exception", "to": "@/lib/platform/telemetry", "exact": true },

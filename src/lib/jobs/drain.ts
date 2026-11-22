@@ -158,6 +158,9 @@ export const DRAIN_ERROR_AREAS: Readonly<Record<string, string>> = {
   what_if_prune: "whatIfErrors",
   // Code handoff's deploy watch (RC-920), isolated as upstream.
   deploy_watch_version: "deployWatchErrors",
+  // Evals (FF_EVALS): the nightly enqueue and the transcript prune, as upstream files them.
+  eval_nightly_enqueue: "evalErrors",
+  eval_transcript_prune: "evalErrors",
 };
 
 function heartbeatErrors(errors: Record<string, string>): Record<string, string[]> {

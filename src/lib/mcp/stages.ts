@@ -119,6 +119,12 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   draft_task_test: "improve",
   change_task_simulation: "improve",
   change_fix_eval_set: "improve",
+  list_scorers: "improve",
+  change_scorer: "improve",
+  list_evals: "improve",
+  change_eval: "improve",
+  run_evals: "improve",
+  get_eval_run: "improve",
   dismiss_fix: "improve",
   // Fine-tuning (RC-1124): use cases over the project's model calls.
   list_use_cases: "improve",

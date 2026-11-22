@@ -20,6 +20,7 @@ import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
 import { projects } from "@/lib/platform/projects/schema";
 import { emptyChange } from "@/lib/views/eval-gate/change";
+import type { EvalResult } from "@/lib/views/evals/domain/types";
 import { createFixShipment } from "@/lib/views/fixes/loop-queries";
 import type { FixExperimentRow, FixShipmentRow } from "@/lib/views/fixes/schema";
 import { fixStats } from "@/lib/views/fixes/select";
@@ -374,6 +375,7 @@ function deps(events: Tracked[], over: Partial<LoopOperationDeps> = {}): LoopOpe
     taskShipmentsFor: async () => [],
     loadProjectFixesWithIntents: async () => model,
     listEvalBadges: async () => ({}),
+    latestEvalSet: async () => null,
     latestFixDraft: async () => null,
     scorersFor: async () => [{ kind: "ends_well", enabled: true, source: "default", version: 1 }],
     dailyScoresFor: async () => [],
@@ -1761,4 +1763,109 @@ test("list_fixes returns the Fixes page's savings scaled to the period, and each
     { state: "none" },
     "a failed read costs the badge, never the tool",
   );
+});
+
+/** RC-626: one eval-set simulation of the fix: an eval with a spec (generated inputs, a stand-in answer) and one without. */
+function evalSet(): NonNullable<Awaited<ReturnType<LoopOperationDeps["latestEvalSet"]>>> {
+  const at = new Date("2026-11-13T10:00:00.000Z");
+  const result = (
+    evalId: string,
+    side: "before" | "after",
+    over: Partial<EvalResult> = {},
+  ): EvalResult => ({
+    id: `${evalId}-${side}`,
+    projectId: PROJECT,
+    runId: "run-1",
+    evalId,
+    side,
+    passed: true,
+    verdicts: [],
+    change: null,
+    durationMs: 10,
+    costUsd: 0,
+    toolCalls: 2,
+    toolAnswers: [{ tool: "get_seat_map", source: "recorded", reason: "matched_recording", ms: 5 }],
+    transcript: null,
+    error: null,
+    createdAt: at,
+    ...over,
+  });
+  const standIn = {
+    tool: "hold_fare",
+    source: "stand-in" as const,
+    reason: "stand_in_model" as const,
+    ms: 5,
+  };
+  return {
+    run: { id: "run-1", status: "completed" },
+    names: new Map([
+      ["e-spec", "Spec eval"],
+      ["e-plain", "Plain eval"],
+    ]),
+    rows: [
+      {
+        evalId: "e-spec",
+        outcome: "unverified",
+        before: result("e-spec", "before", {
+          passed: false,
+          generated: ["systemPrompt", "context"],
+        }),
+        after: result("e-spec", "after", {
+          generated: ["systemPrompt", "context"],
+          toolAnswers: [standIn, standIn],
+        }),
+      },
+      { evalId: "e-plain", outcome: "same", before: result("e-plain", "before"), after: null },
+    ],
+  };
+}
+
+test("RC-626: get_eval names each eval result's generated inputs and stand-in answers; a result without a spec has no generated key", async () => {
+  const out = data<{
+    eval: unknown;
+    evalSet: { runId: string; status: string; results: Record<string, unknown>[] };
+  }>(
+    await run("get_eval", { fixId: fix.id }, [], {
+      latestEvalSet: async (projectId, fixId) => (
+        assert.deepEqual([projectId, fixId], [PROJECT, fix.id]), evalSet()
+      ),
+    }),
+  );
+  assert.equal(out.evalSet.runId, "run-1");
+  assert.deepEqual(out.evalSet.results, [
+    {
+      evalId: "e-spec",
+      name: "Spec eval",
+      side: "before",
+      outcome: "unverified",
+      passed: false,
+      error: null,
+      standIns: { count: 0, tools: [] },
+      generated: ["systemPrompt", "context"],
+    },
+    {
+      evalId: "e-spec",
+      name: "Spec eval",
+      side: "after",
+      outcome: "unverified",
+      passed: true,
+      error: null,
+      standIns: { count: 2, tools: ["hold_fare", "hold_fare"] },
+      generated: ["systemPrompt", "context"],
+    },
+    {
+      evalId: "e-plain",
+      name: "Plain eval",
+      side: "before",
+      outcome: "same",
+      passed: true,
+      error: null,
+      standIns: { count: 0, tools: [] },
+    },
+  ]);
+});
+
+test("RC-626: get_eval of a fix with no eval-set simulation is unchanged: no evalSet key", async () => {
+  const out = data<Record<string, unknown>>(await run("get_eval", { fixId: fix.id }));
+  assert.deepEqual(Object.keys(out), ["eval"]);
 });

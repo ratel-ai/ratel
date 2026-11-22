@@ -4,8 +4,8 @@ import { drizzle } from "drizzle-orm/pglite";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { createDrizzleEvalStore } from "@/lib/views/evals/adapters/drizzle-store";
 import { evalResults, evals, evalTasks } from "@/lib/views/evals/schema";
+import { createDrizzleEvalStore } from "../adapters/drizzle-store";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";

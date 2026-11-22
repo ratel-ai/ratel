@@ -213,6 +213,13 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // User scorers and the eval suite (RC-614), behind FF_EVALS.
+  ["list_scorers", false],
+  ["list_evals", false],
+  ["get_eval_run", false],
+  ["change_scorer", true],
+  ["change_eval", true],
+  ["run_evals", true],
   // Code handoff (RC-918): opens a GitHub issue for Claude Code.
   ["handoff_fix", true],
 ];

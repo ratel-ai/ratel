@@ -3,8 +3,7 @@ import { test } from "node:test";
 import { JOB_ASKS, jobAsk, jobAskFor, jobAskSpec, jobKindOfAsk } from "./job-ask";
 
 /**
- * Owned (ADR-0030): upstream's `job-ask.test.ts` cases for the agent job kinds this tree has (the
- * Evals kinds `run_eval_set` and `simulate_eval_set` are not ported). The specs are the table each
+ * Owned (ADR-0030): upstream's `job-ask.test.ts` cases for the agent job kinds. The specs are the table each
  * module's `register.ts` checks against its payload; the payload shapes are the producers'.
  */
 
@@ -59,6 +58,20 @@ const CASES: Record<Kind, { payload: unknown; ask: string; hidden: readonly stri
     },
     ask: "Run a what-if step (runId run-3)",
     hidden: ["variant", "lookup", "Find the customer record"],
+  },
+  run_eval_set: {
+    payload: { runId: "run-4", workflowId: "wf-3", evalId: "eval-1" },
+    ask: "Run an eval set (runId run-4, workflowId wf-3, evalId eval-1)",
+    hidden: [],
+  },
+  simulate_eval_set: {
+    payload: {
+      runId: "run-5",
+      evalIds: ["eval-1", "eval-2"],
+      change: { patches: [{ description: "Rewritten catalog text" }] },
+    },
+    ask: "Simulate a fix on an eval set (runId run-5, evalIds eval-1 eval-2)",
+    hidden: ["change", "patches", "Rewritten catalog text"],
   },
 };
 
@@ -154,11 +167,7 @@ test("every kind's ask, with or without ids, reads back as its job kind", () => 
 test("a stored run's old machine ask still reads as its job kind", () => {
   assert.equal(jobKindOfAsk(`draft_fix for project ${PROJECT}\n{"fixId":"f-9"}`), "draft_fix");
   assert.equal(jobKindOfAsk(`cluster_intents for project ${PROJECT}`), "cluster_intents");
-  assert.equal(
-    jobKindOfAsk(`run_eval_set for project ${PROJECT}`),
-    null,
-    "an Evals kind is not a job here",
-  );
+  assert.equal(jobKindOfAsk(`run_eval_set for project ${PROJECT}`), "run_eval_set");
 });
 
 test("an ask that is not a job's reads as no job kind", () => {

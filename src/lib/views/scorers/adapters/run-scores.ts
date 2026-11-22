@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import type { ScoreResult, Scorer } from "@/lib/views/scorers/domain/types";
 import { runScores } from "@/lib/views/scorers/schema";
+import type { ScoreResult, Scorer } from "../domain/types";
 
 type Db = ReturnType<typeof getDb>;
 

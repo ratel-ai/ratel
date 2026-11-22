@@ -10,8 +10,7 @@
  * payload. Here `lib/jobs` sits below the modules that own those payloads (`check-layers`), so
  * the table ({@link JOB_ASKS}) holds the words and the allowlists without the payload types, and
  * each module's `register.ts` checks its kind's entry against its payload with {@link jobAskFor}
- * and passes it to `inProjectLogContext`. The words and the allowlists are upstream's; the Evals
- * kinds are not ported.
+ * and passes it to `inProjectLogContext`. The words and the allowlists are upstream's.
  */
 
 /** Every payload key with its decision: `true` shows it in the ask. A new payload field fails typecheck until it has one. */
@@ -51,6 +50,14 @@ export const JOB_ASKS = {
   cluster_intents: { words: "Cluster intents", allow: {} },
   draft_fix: { words: "Draft a fix", allow: { fixId: true, requestedBy: false } },
   what_if_step: { words: "Run a what-if step", allow: { runId: true, variant: false } },
+  run_eval_set: {
+    words: "Run an eval set",
+    allow: { runId: true, workflowId: true, evalId: true },
+  },
+  simulate_eval_set: {
+    words: "Simulate a fix on an eval set",
+    allow: { runId: true, evalIds: true, change: false },
+  },
 } as const satisfies Record<string, JobAskSpec>;
 
 /** A job kind that runs as one agent run. */

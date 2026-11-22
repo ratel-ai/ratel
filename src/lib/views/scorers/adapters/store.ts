@@ -1,21 +1,16 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { evals } from "@/lib/views/evals/schema";
-import {
-  parseDefinition,
-  parseName,
-  parseThreshold,
-  ScorerConfigError,
-} from "@/lib/views/scorers/domain/config";
+import { evalScorerOverrides, type ScorerRow, scorers } from "@/lib/views/scorers/schema";
+import { parseDefinition, parseName, parseThreshold, ScorerConfigError } from "../domain/config";
 import {
   DEFAULT_GOOD_THRESHOLD,
   SCORER_SCOPES,
   type Scorer,
   type ScorerOverride,
   type ScorerScope,
-} from "@/lib/views/scorers/domain/types";
-import type { NewScorer, ScorerPatch, ScorerRepository } from "@/lib/views/scorers/ports";
-import { evalScorerOverrides, type ScorerRow, scorers } from "@/lib/views/scorers/schema";
+} from "../domain/types";
+import type { NewScorer, ScorerPatch, ScorerRepository } from "../ports";
 
 type Db = ReturnType<typeof getDb>;
 

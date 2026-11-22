@@ -42,6 +42,9 @@ export function hasPaidAccess(org: OrgLimitView): boolean {
   return resolvePlanId(org) !== "free";
 }
 
+/** Upstream's name for {@link hasPaidAccess}, for copied callers (the Evals area's nightly runs). */
+export const hasPaidPlan = hasPaidAccess;
+
 /** Whether the workspace can change its own plan; only an edition with plans can. */
 export function billingSelfServe(org: OrgLimitView): boolean {
   return composition.entitlements.plans?.summary(org).selfServeBilling ?? false;

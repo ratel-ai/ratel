@@ -2,6 +2,11 @@ import { z } from "zod";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { type HealthIssueRowsViewData, loadHealthIssueRows } from "@/lib/mcp/operations/health";
+import {
+  type EvalSetSimulation,
+  evalSetData,
+  latestEvalSetSimulation,
+} from "@/lib/mcp/operations/loop/eval-set";
 import { fixesSummary } from "@/lib/mcp/operations/loop/eval-sets";
 import {
   type InsightView,
@@ -71,6 +76,7 @@ import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 // The shipment record of the task loop (`fixSeams.recordShipment`): mark_fix_shipped queues
 // the post-ship measures with the eval gate on.
 import "@/lib/views/task-evals/ship";
+import { evalsEnabledForActor } from "@/lib/views/evals/gate";
 
 /**
  * The improvement loop as tools (RC-43): Insights → Improve → Ship, so an
@@ -120,6 +126,15 @@ export interface LoopOperationDeps {
     projectId: string,
     fixId: string,
   ) => ReturnType<typeof latestTaskSimulations>;
+  /**
+   * RC-626: the fix's newest eval-set simulation (Evals), or null. Owned: only with `FF_EVALS` on
+   * for the caller, so Evals data stays hidden with the switch off.
+   */
+  latestEvalSet: (
+    projectId: string,
+    fixId: string,
+    actor: string,
+  ) => Promise<EvalSetSimulation | null>;
   /** The fix's newest simulation, queued, running or done (RC-70). */
   latestEval: (
     projectId: string,
@@ -170,6 +185,10 @@ export const defaultLoopDeps: LoopOperationDeps = {
   runSimulation,
   runTaskSimulation,
   latestTaskSimulations: (projectId, fixId) => latestTaskSimulations(projectId, fixId),
+  latestEvalSet: async (projectId, fixId, actor) =>
+    (await evalsEnabledForActor(projectId, actor))
+      ? latestEvalSetSimulation(projectId, fixId)
+      : null,
   latestEval: (projectId, fix) => latestEvalOutcome(projectId, fix),
   evalGateEnabled: (projectId, actor) => evalGateEnabledForActor(projectId, actor),
   recordLineage,
@@ -799,11 +818,19 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       async execute(ctx, params) {
         const fix = await requireFix(deps, ctx.projectId, params.fixId);
         await requireEvalGate(deps, ctx);
+        // RC-626: the fix's eval-set simulation, only when it has one, so other outputs stay as they were.
+        const set = await deps.latestEvalSet(
+          ctx.projectId,
+          fix.id,
+          actorOf(ctx.auth, ctx.projectId),
+        );
+        const withSet = <T extends object>(data: T) =>
+          set ? { ...data, evalSet: evalSetData(set) } : data;
         if (fix.subject.tasks.length > 0) {
           const runs = await deps.latestTaskSimulations(ctx.projectId, fix.id);
           if (runs.length === 0)
             return {
-              data: { eval: null },
+              data: withSet({ eval: null }),
               hint: "No task simulation exists. Call get_fix to check the draft before run_eval.",
             };
           const { eval: view, hint } = taskEvalData(
@@ -812,16 +839,16 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
             runs,
             fixRef(ctx.projectId, fix),
           );
-          return { data: { eval: view }, hint };
+          return { data: withSet({ eval: view }), hint };
         }
         const outcome = await deps.latestEval(ctx.projectId, fix);
         if (!outcome)
           return {
-            data: { eval: null },
+            data: withSet({ eval: null }),
             hint: "This fix was never simulated: run_eval queues a simulation.",
           };
         const { eval: view, hint } = evalData(outcome, fix.id, fixRef(ctx.projectId, fix));
-        return { data: { eval: view }, hint };
+        return { data: withSet({ eval: view }), hint };
       },
     }),
   ];

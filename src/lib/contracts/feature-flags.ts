@@ -22,6 +22,7 @@ export const CORE_FLAGS = [
   "FF_VARIANT_EXPERIMENTS",
   "FF_FINE_TUNING",
   "FF_SHIP_MONITOR",
+  "FF_EVALS",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

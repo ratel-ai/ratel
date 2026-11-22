@@ -12,6 +12,7 @@ import { evalGateEnabledForActor } from "@/lib/views/eval-gate/gate";
 import { type EvalDb, loadRuns } from "@/lib/views/eval-gate/runs";
 import { recordedView } from "@/lib/views/eval-gate/simulate";
 import type { RunRecord } from "@/lib/views/eval-gate/types";
+import { type LiveScoringDeps, liveTaskScorers, scoreLiveRuns } from "@/lib/views/scorers/live";
 import { enqueueDueTaskEvalSets } from "@/lib/views/task-evals/job";
 import type { OrganizationFlagDeps } from "@/lib/views/task-evals/store";
 import { SCORER_VERSION, scoreRun } from "@/lib/views/task-scorers/engine";
@@ -41,6 +42,8 @@ export interface ScoreTasksJobDeps extends TaskJudgeDeps, ReportDeps {
   db?: ReturnType<typeof getDb>;
   flagDeps?: OrganizationFlagDeps;
   now?: () => Date;
+  /** RC-613: the user scorers' models and sample. */
+  live?: LiveScoringDeps;
 }
 
 export interface EnqueueScoreTasksDeps extends ReportDeps {
@@ -87,11 +90,14 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
     .groupBy(taskScoresDaily.taskId);
   const lastDays = new Map(checkpoints.map((row) => [row.taskId, row.day]));
   const counts = { tasks: 0, rows: 0, runs: 0, truncated: false };
+  // RC-613: readings by the user's own scorers, reported only when a task has some.
+  let userReadings = 0;
   for (const task of tasks) {
     if (task.taskId === null) continue;
     const scorers = (await scorersFor(projectId, task.taskId, db)).filter(
       (scorer) => scorer.enabled,
     );
+    const userScorers = await liveTaskScorers(projectId, task.taskId, db);
     const lastDay = lastDays.get(task.taskId);
     // The last reading can cover a partial day. Include it again to capture later runs.
     const firstDay = lastDay ?? task.firstDay;
@@ -129,6 +135,9 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
         scorers.filter((scorer) => scorer.kind !== "judge_criteria"),
       );
       await upsertDailyScores(projectId, task.taskId, day, scores, db);
+      if (userScorers.length > 0)
+        userReadings += (await scoreLiveRuns(projectId, userScorers, runs, day, now, db, deps.live))
+          .readings;
       counts.rows += scores.length;
       counts.runs += runs.length;
     }
@@ -164,6 +173,7 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
   const fields = {
     project_id: projectId,
     ...counts,
+    ...(userReadings > 0 ? { user_readings: userReadings } : {}),
     duration_ms: Math.max(0, Date.now() - startedAt),
   };
   logger.info(fields, "task_scores_written");
@@ -176,7 +186,12 @@ export async function scoreTasksJob(projectId: string, deps: ScoreTasksJobDeps =
     },
   );
   await enqueueDueTaskEvalSets(projectId, { db, flagDeps: deps.flagDeps, now: () => now });
-  return { scored: true, ...counts, orphaned: orphans.length };
+  return {
+    scored: true,
+    ...counts,
+    orphaned: orphans.length,
+    ...(userReadings > 0 ? { userReadings } : {}),
+  };
 }
 
 /**

@@ -273,7 +273,9 @@ describe("registry root", () => {
       "match_quality_run",
       "refill_pivot_dims",
       "refresh_task_eval_set",
+      "run_eval_set",
       "score_tasks",
+      "simulate_eval_set",
       "simulate_fix_eval",
       "simulate_task_eval",
       "what_if_step",
@@ -292,6 +294,7 @@ describe("registry root", () => {
         "before:intent_graph_fold_enqueue",
         "before:intent_engine_enqueue",
         "before:task_scores_enqueue",
+        "before:eval_nightly_enqueue",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
         "after:intent_graph_revisions_prune:retention",
@@ -307,8 +310,15 @@ describe("registry root", () => {
         "after:what_if_prune",
         "after:sandbox_run_events_prune",
         "after:deploy_watch_version",
+        "after:eval_transcript_prune",
       ],
     );
+  });
+
+  it("loading the registry adds the Evals reader to the eval gate's daily budget", async () => {
+    const { evalGateSeams } = await import("@/lib/views/eval-gate/seams");
+    const { evalSetSpendSince } = await import("@/lib/views/evals/spend");
+    assert.equal(evalGateSeams.spendSince.filter((read) => read === evalSetSpendSince).length, 1);
   });
 
   it("loading the registry adds What-if's reader to the eval gate's daily budget", async () => {

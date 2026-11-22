@@ -4262,6 +4262,124 @@
     }
   },
   {
+    "name": "list_scorers",
+    "title": "List scorers",
+    "description": "List the scorers of one task, or the suite scorers. Each scorer has its kind, config, switch, pass threshold (0 to 1) and pass rate of the last 7 days. The id of a built-in task scorer starts with legacy:. Use change_scorer to change a scorer.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "description": "A task id from list_tasks. Without it, the tool lists the suite scorers.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "annotations": {
+      "title": "List scorers",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_evals",
+    "title": "List evals",
+    "description": "List the evals of the suite, or the evals of one task. Each eval has its ask, criteria, tasks, generated (the fields that a model wrote) and the scorers that it switches off. A suggested eval from a low score has suggestedBecause: the scorer, its value and its pass threshold. Use change_eval to change an eval.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "status": {
+          "default": "in_set",
+          "description": "in_set lists approved and suggested evals. archived lists removed evals.",
+          "type": "string",
+          "enum": [
+            "in_set",
+            "archived"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum evals to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List evals",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_eval_run",
+    "title": "Get an eval run",
+    "description": "Read one run of the suite. Each result has pass or fail, verdicts, scorer readings, generated fields and runSettings (the models and limits that it used). A result that kept its text has replay: the system prompt, the message and each step. Each tool step has a source: recorded, mock (a fixed answer) or stand-in (a simulated answer).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A run id from run_evals."
+        }
+      },
+      "required": [
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Get an eval run",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
     "name": "list_use_cases",
     "title": "List fine-tuning use cases",
     "description": "The project's fine-tuning use cases: each one is a name and a selector of model calls (tasks or intents, a date range, a model and span name filter). Call get_use_case for one.",
@@ -6085,6 +6203,470 @@
     },
     "annotations": {
       "title": "Dismiss a drafted fix",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_scorer",
+    "title": "Change a scorer",
+    "description": "Create, update, delete, enable or disable a scorer of a task or of the suite. Kinds: check (field check) compares one run field with a value. expression (JSON rule) is JSONLogic over the run. judge (model judge) reads criteria. decision (model question) asks one closed question.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "delete",
+            "enable",
+            "disable"
+          ]
+        },
+        "scorerId": {
+          "description": "update, delete, enable and disable: a scorer id from list_scorers. A legacy: id accepts only enable and disable.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "scope": {
+          "description": "create: task or suite.",
+          "type": "string",
+          "enum": [
+            "task",
+            "suite"
+          ]
+        },
+        "taskId": {
+          "description": "create with scope task: the task id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "kind": {
+          "description": "create: check, expression, judge or decision.",
+          "type": "string",
+          "enum": [
+            "check",
+            "expression",
+            "judge",
+            "decision"
+          ]
+        },
+        "config": {
+          "description": "check: {path, op, value}. Ops: eq, ne, lt, lte, gt, gte, contains, not_contains, matches, not_matches, exists, not_exists. expression: {logic}. judge: {criteria}. decision: {question, options: [{id, label}], pass: [ids]}.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "goodThreshold": {
+          "description": "A run passes when its value is this or more. The default is 0.5.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a scorer",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_eval",
+    "title": "Change an eval",
+    "description": "Change an eval. create needs a name and the ask. A model writes the missing fields. Other actions: update, archive, scorer_off, scorer_on, scorer_reset. set_step_answer sets a fixed answer at a run step. continue_from_step copies the eval up to a step and runs it. edit_reply changes an agent reply at a step and runs from it. set_run_settings and set_suite_run_settings set the models and limits.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "archive",
+            "scorer_off",
+            "scorer_on",
+            "scorer_reset",
+            "set_step_answer",
+            "continue_from_step",
+            "edit_reply",
+            "set_run_settings",
+            "set_suite_run_settings"
+          ]
+        },
+        "evalId": {
+          "description": "Every action except create and set_suite_run_settings: an eval id from list_evals.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "message": {
+          "description": "The ask the agent gets.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000
+        },
+        "criteria": {
+          "description": "What a good run does, in words. The judge reads it.",
+          "type": "string",
+          "maxLength": 5000
+        },
+        "expectedTool": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tasks": {
+          "description": "The task ids the eval belongs to. The eval reads their scorers.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "A task id from list_tasks."
+          }
+        },
+        "systemPrompt": {
+          "description": "update: the system prompt of the scenario.",
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 20000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "context": {
+          "description": "update: the context values of the environment, for example a booking reference.",
+          "anyOf": [
+            {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "maxLength": 2000
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tools": {
+          "description": "update: the tools the model gets. Each tool has a name, a description and JSON Schema parameters.",
+          "anyOf": [
+            {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "default": "",
+                    "type": "string",
+                    "maxLength": 5000
+                  },
+                  "parameters": {
+                    "default": {
+                      "type": "object",
+                      "properties": {}
+                    },
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runId": {
+          "description": "set_step_answer, continue_from_step and edit_reply: a run id from run_evals.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "step": {
+          "description": "set_step_answer, continue_from_step and edit_reply: a step index from the replay of get_eval_run. edit_reply needs an assistant step.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "reply": {
+          "description": "edit_reply: the new agent reply. It needs text or one call.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "default": "",
+              "description": "The text of the agent reply.",
+              "type": "string",
+              "maxLength": 20000
+            },
+            "calls": {
+              "default": [],
+              "description": "The tool calls of the reply. The new run answers them. A reply with no calls ends the run.",
+              "maxItems": 20,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "The tool name."
+                  },
+                  "args": {
+                    "default": {},
+                    "description": "The tool arguments, as a JSON object.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "target": {
+          "default": "this",
+          "description": "edit_reply: this changes this eval. copy saves a copy and leaves this eval as it is.",
+          "type": "string",
+          "enum": [
+            "this",
+            "copy"
+          ]
+        },
+        "answer": {
+          "description": "set_step_answer: the answer the tool gives, as JSON or text. An answer with an error field is a failed call.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000
+        },
+        "scorerId": {
+          "description": "scorer_off, scorer_on and scorer_reset: a scorer id from list_scorers.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "runSettings": {
+          "description": "set_run_settings and set_suite_run_settings: all the settings of that level. A missing or null setting uses the next level. An empty object clears the level.",
+          "type": "object",
+          "properties": {
+            "agentModel": {
+              "description": "The Claude model of the agent. Null uses the model of the recorded run.",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "temperature": {
+              "description": "From 0 to 1. Only 4.x agent models take a temperature.",
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxTokens": {
+              "description": "The maximum tokens of one agent answer.",
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 64000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxSteps": {
+              "description": "The maximum agent steps of one run.",
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 50
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "budgetUsd": {
+              "description": "The maximum model cost of one run, in USD.",
+              "anyOf": [
+                {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 10
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "toolModel": {
+              "description": "The Claude model that simulates a tool output that the recording does not have.",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "judgeModel": {
+              "description": "The Claude model of the judge.",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change an eval",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "run_evals",
+    "title": "Run evals",
+    "description": "Queue a run of the suite, of the evals of one task, or of one eval. A run spends model budget. The result has runId. Use get_eval_run to read the run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "evalId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "An eval id from list_evals."
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        }
+      }
+    },
+    "annotations": {
+      "title": "Run evals",
       "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": false
