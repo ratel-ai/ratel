@@ -7,6 +7,7 @@ import {
   trace,
 } from "@opentelemetry/api";
 import { composition } from "@/lib/composition/ports";
+import { stableErrorType } from "@/lib/contracts/error-type";
 import { MODEL_CALL_TRACER, selfTelemetryProjectId } from "@/lib/contracts/self-telemetry";
 import type {
   ModelCallMeta,
@@ -28,9 +29,10 @@ import { reportServerException } from "@/lib/platform/telemetry";
  * so a tracked call only runs. An edition that tracks spend takes each record through the
  * telemetry port (`recordModelCall` in `lib/contracts/telemetry.ts`) and writes and prices the
  * line itself; `setModelCallSink` is the unpriced line, for tests and for a deployment's own use. The fields carry ids, a model name, numbers
- * and an outcome; never a prompt or an answer: only the error's class name, or
- * `model_not_enabled` for a Claude model this AWS account may not call on Bedrock yet. That
- * failure also goes to the exception reporter, once per call, with the feature, model and Bedrock
+ * and an outcome; never a prompt or an answer: only a stable `error_type` (`stableErrorType` in
+ * `lib/contracts/error-type.ts`: `throttled`, `server_error`, `model_not_enabled`, ...), never a
+ * class name, which the bundle mangles. A Claude model this AWS account may not call on Bedrock
+ * yet also goes to the exception reporter, once per call, with the feature, model and Bedrock
  * profile.
  *
  * `backend` says which endpoint served the call: `bedrock` for a Claude call when
@@ -73,13 +75,6 @@ function tokens(value: number | null | undefined): number | null {
     : null;
 }
 
-function errorType(error: unknown): string | undefined {
-  if (error === undefined || error === null) return undefined;
-  if (error instanceof ModelNotEnabledError) return error.errorType;
-  if (error instanceof Error) return error.constructor?.name || error.name || "Error";
-  return typeof error;
-}
-
 /** The endpoint that served the call: only Claude calls can go to Bedrock. */
 function backendOf(provider: ModelProvider): AnthropicBackend {
   return provider === "anthropic" ? anthropicBackend() : "api";
@@ -108,7 +103,7 @@ export function recordModelCall(record: ModelCallRecord): void {
     const context = currentLogContext();
     const cached = tokens(record.cachedTokens);
     const written = tokens(record.cacheWriteTokens);
-    const type = record.outcome === "error" ? errorType(record.error) : undefined;
+    const type = record.outcome === "error" ? stableErrorType(record.error) : undefined;
     out.info(
       {
         provider: record.provider,
@@ -227,7 +222,7 @@ function reportNotEnabled(meta: ModelCallMeta, error: ModelNotEnabledError): voi
  * (lib/platform/otel/ratel-export.ts picks these spans out by their tracer). Only calls
  * Ratel pays for: a customer's traffic is theirs, not an agent of ours. Like the log line, the
  * span carries no error message or customer id: the model, the feature as the agent's name,
- * tokens, timing and the error's class name, and the prompt and answer the call site offers
+ * tokens, timing and the error's stable type, and the prompt and answer the call site offers
  * (below).
  *
  * The span is not made active, so the provider's HTTP span keeps its parent and the traces the
@@ -315,7 +310,7 @@ function endModelCallSpan(span: Span | undefined, usage: ModelCallUsage, error?:
     if (cacheRead !== null) attributes["gen_ai.usage.cache_read.input_tokens"] = cacheRead;
     if (cacheWrite !== null) attributes["gen_ai.usage.cache_creation.input_tokens"] = cacheWrite;
     if (error !== undefined) {
-      attributes["error.type"] = errorType(error) ?? "Error";
+      attributes["error.type"] = stableErrorType(error) ?? "unknown";
       span.setStatus({ code: SpanStatusCode.ERROR });
     }
     span.setAttributes(attributes);

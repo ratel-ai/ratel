@@ -87,8 +87,10 @@ test("the span carries no customer ids, prompt or answer", async () => {
   assert.ok(!values.includes("secret answer"));
 });
 
-test("a failed call ends its span as an error with the class name only, and still throws", async () => {
-  class RateLimitError extends Error {}
+test("a failed call ends its span as an error with its stable type only, and still throws", async () => {
+  class RateLimitError extends Error {
+    readonly status = 429;
+  }
   await assert.rejects(
     trackModelCall(META, async () => {
       throw new RateLimitError("customer text in the message");
@@ -98,7 +100,7 @@ test("a failed call ends its span as an error with the class name only, and stil
   const span = spans()[0]!;
   assert.equal(span.status.code, SpanStatusCode.ERROR);
   assert.equal(span.status.message, undefined);
-  assert.equal(span.attributes["error.type"], "RateLimitError");
+  assert.equal(span.attributes["error.type"], "throttled");
   assert.equal(span.attributes["gen_ai.usage.input_tokens"], undefined);
   assert.ok(
     !JSON.stringify({

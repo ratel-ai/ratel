@@ -49,8 +49,8 @@ export interface ModelCallRecord extends ModelCallMeta, ModelCallUsage {
   outcome: ModelCallOutcome;
   durationMs: number;
   /**
-   * The thrown error. A recorder may read its class name, or its own `errorType` string, and
-   * nothing else: the message can hold a provider's text.
+   * The thrown error. A recorder reads its stable type (`stableErrorType` in `error-type.ts`)
+   * and nothing else: the message can hold a provider's text, and the bundle mangles class names.
    */
   error?: unknown;
   /** How many calls the record stands for: refusals in one simulation are one record with their count. */

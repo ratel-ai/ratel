@@ -1103,6 +1103,49 @@ test("raw capture on: one stored export whose body decodes back to the same span
   );
 });
 
+test("with FF_INGEST_STRIP_CLIENT_ADDRESS on, raw capture keeps no client IP address and not the sent gzip", async () => {
+  const { capture, stored } = rawCapture();
+  const { deps, storedSpans } = makeDeps({
+    otlpRawCapture: capture,
+    stripClientAddresses: () => true,
+  });
+  const payload = JSON.parse(otlpJson(1));
+  payload.resourceSpans[0].resource.attributes.push({
+    key: "host.ip",
+    value: { stringValue: "192.0.2.10" },
+  });
+  payload.resourceSpans[0].scopeSpans[0].spans[0].attributes.push({
+    key: "client.address",
+    value: { stringValue: "203.0.113.7" },
+  });
+  const res = await handleTracesRequest(
+    req(gzipSync(JSON.stringify(payload)), { ...auth, "Content-Encoding": "gzip" }),
+    deps,
+  );
+  assert.equal(res.status, 202);
+  assert.equal(storedSpans.flat().length, 1);
+  assert.equal(stored.length, 1);
+  const kept = gunzipSync(compressForStorage(stored[0])).toString("utf8");
+  assert.doesNotMatch(kept, /192\.0\.2\.10|203\.0\.113\.7|host\.ip|client\.address/);
+  assert.match(kept, /gen_ai\.request\.model/);
+  assert.equal(stored[0].gzipped, undefined);
+});
+
+test("with the strip off (the default), raw capture keeps the body and the gzip as sent", async () => {
+  const { capture, stored } = rawCapture();
+  const { deps } = makeDeps({ otlpRawCapture: capture });
+  const payload = JSON.parse(otlpJson(1));
+  payload.resourceSpans[0].resource.attributes.push({
+    key: "host.ip",
+    value: { stringValue: "192.0.2.10" },
+  });
+  const wire = gzipSync(JSON.stringify(payload));
+  const res = await handleTracesRequest(req(wire, { ...auth, "Content-Encoding": "gzip" }), deps);
+  assert.equal(res.status, 202);
+  assert.match(gunzipSync(compressForStorage(stored[0])).toString("utf8"), /192\.0\.2\.10/);
+  assert.deepEqual(stored[0].gzipped, new Uint8Array(wire));
+});
+
 test("raw capture is not attempted for a rejected export", async () => {
   const { capture, stored } = rawCapture();
   const { deps } = makeDeps({ otlpRawCapture: capture });
