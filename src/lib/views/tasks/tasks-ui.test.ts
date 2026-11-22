@@ -578,6 +578,86 @@ test("a conversation: its turns with the task's steps marked, each opening in Tr
   assert.match(empty, /No closed turns[^]*Back to Tasks/);
 });
 
+test("typed steps: a conversation reads by step kind and as its tasks, a task band running across turns", () => {
+  const at = new Date("2026-09-01T10:00:00Z");
+  const turn = (id: string) =>
+    ({
+      id,
+      projectId: PROJECT_ID,
+      sessionId: "s1",
+      startedAt: at,
+      endedAt: at,
+    }) as unknown as TraceTurnRow;
+  const step = (turnId: string, ordinal: number, over: Partial<TraceTurnStepRow>) =>
+    ({
+      turnId,
+      ordinal,
+      kind: "invoke",
+      targetType: "tool",
+      targetId: null,
+      outcome: "ok",
+      tookMs: 12,
+      hitCount: null,
+      ...over,
+    }) as unknown as TraceTurnStepRow;
+  const html = render(
+    createElement(SessionView, {
+      projectId: PROJECT_ID,
+      sessionId: "s1",
+      names: {},
+      typedSteps: true,
+      bands: [
+        {
+          id: "a",
+          workflowId: "booking",
+          label: "Book a flight",
+          startTurnId: "t1",
+          startOrdinal: 1,
+          endTurnId: "t2",
+          endOrdinal: 1,
+        },
+        {
+          id: "b",
+          workflowId: "carts",
+          label: "Fill a cart",
+          startTurnId: "t2",
+          startOrdinal: 2,
+          endTurnId: "t2",
+          endOrdinal: 3,
+        },
+      ],
+      crumbs: [],
+      backHref: `${ROOT}/health/tasks`,
+      backLabel: "Back to Tasks",
+      turns: [
+        {
+          turn: turn("t1"),
+          steps: [
+            step("t1", 1, { kind: "user_message", tookMs: null }),
+            step("t1", 2, { kind: "model_call", targetId: "gpt-x" }),
+          ],
+        },
+        {
+          turn: turn("t2"),
+          steps: [
+            step("t2", 1, { targetId: "find" }),
+            step("t2", 2, { kind: "user_message", tookMs: null }),
+            step("t2", 3, { kind: "code", targetId: "load_cart" }),
+          ],
+        },
+      ],
+    }),
+  );
+  assertHouseStyle(html, "typed session");
+  assert.match(html, /data-step-kind="model_call"[^>]*>[^]*Model call/);
+  assert.doesNotMatch(html, /gpt-x/, "engine names stay out");
+  assert.match(html, /data-step-task="carts"[^>]*>[^]*Load cart/);
+  assert.match(
+    html,
+    /data-turn="t2"[^]*data-turn-task="booking"[^>]*>[^]*Book a flight[^]*from an earlier turn[^]*data-turn-task="carts"/,
+  );
+});
+
 test("a task the reading no longer finds is said in place, with the way back; loading mirrors the pages", () => {
   const gone = render(
     createElement(TaskGone, { projectId: PROJECT_ID, known: true, reading: true }),

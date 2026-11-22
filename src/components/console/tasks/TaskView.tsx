@@ -4,6 +4,7 @@ import { Section } from "@ratel/design-system/section";
 import { type StatProps, StatRow } from "@ratel/design-system/stat-row";
 import { TASK_COLOR_CLASSES } from "@ratel/design-system/task-colors";
 import type { ReactNode } from "react";
+import { StepsViewControl } from "@/components/console/tasks/StepsViewControl";
 import { TaskFlowDiagram } from "@/components/console/tasks/TaskFlowDiagram";
 import {
   TaskColorBar,
@@ -20,12 +21,14 @@ import {
   NounTitle,
 } from "@/components/console/tasks/TaskSections";
 import { TaskPipeline } from "@/components/console/tasks/TaskSteps";
+import type { StepsView } from "@/lib/readings/trace-signals/steps";
 import { compactNumber } from "@/lib/views/intents/map/map-model";
 import { buildIntentFlow } from "@/lib/views/tasks/flow-layout";
 import { formatMoney, formatMs, formatPer100, formatShare, plural } from "@/lib/views/tasks/format";
 import type { CostView, TaskDetailModel } from "@/lib/views/tasks/model";
 import { selfCorrectionsHref, tasksHref } from "@/lib/views/tasks/paths";
 import type { ExampleRun } from "@/lib/views/tasks/queries";
+import { taskStepsView } from "@/lib/views/tasks/steps-view";
 
 /** Arrows the drawing shows: any hop taken in at least this share of a step's visits. */
 const FLOW_MIN_P = 0.1;
@@ -46,6 +49,7 @@ export function TaskView({
   listHref,
   scoring,
   testRuns,
+  stepsView,
 }: {
   projectId: string;
   task: TaskDetailModel;
@@ -54,18 +58,23 @@ export function TaskView({
   listHref?: string;
   scoring?: ReactNode;
   testRuns?: readonly string[];
+  /** Typed steps only: the `?steps=` preset. Absent, the page shows every step and no preset control. */
+  stepsView?: StepsView;
 }) {
   const names = Object.fromEntries(
     [...task.steps, ...task.sideSteps].map((step) => [step.toolId, step.label]),
   );
+  const shown = stepsView ? taskStepsView(task, stepsView) : task;
   const flow = buildIntentFlow(
-    { edges: task.flow.edges, tools: task.flow.tools, names },
+    { edges: shown.flow.edges, tools: shown.flow.tools, names },
     { minP: FLOW_MIN_P, typedSteps: task.typedSteps },
   );
   // The drawing earns its place only when runs leave the straight line of steps.
   const branches =
-    flow.nodes.length > task.steps.length ||
-    flow.arrows.length > Math.max(0, task.steps.length - 1);
+    flow.nodes.length > shown.steps.length ||
+    flow.arrows.length > Math.max(0, shown.steps.length - 1);
+  const noneShown =
+    stepsView !== undefined && shown.steps.length === 0 && shown.sideSteps.length === 0;
   return (
     <Page>
       <PageHeader
@@ -82,14 +91,34 @@ export function TaskView({
       />
       <PageBody>
         <StatRow stats={stats(projectId, task)} />
-        <Section title={<NounTitle noun="task">Steps</NounTitle>} actions={orderNote(task)}>
-          <TaskPipeline
-            steps={task.steps}
-            sideSteps={task.sideSteps}
-            hasReading={task.hasReading}
-            color={task.color}
-          />
-          {branches || task.typedSteps ? (
+        <Section
+          title={<NounTitle noun="task">Steps</NounTitle>}
+          actions={
+            stepsView ? (
+              <span className="flex flex-wrap items-center gap-3">
+                {orderNote(task)}
+                <StepsViewControl value={stepsView} />
+              </span>
+            ) : (
+              orderNote(task)
+            )
+          }
+        >
+          {noneShown ? (
+            <p data-steps-none className="text-ui text-fg-muted">
+              {stepsView === "intents"
+                ? "This task holds no user message step. The intents it serves are listed below."
+                : "This task has no step of these kinds."}
+            </p>
+          ) : (
+            <TaskPipeline
+              steps={shown.steps}
+              sideSteps={shown.sideSteps}
+              hasReading={task.hasReading}
+              color={task.color}
+            />
+          )}
+          {!noneShown && (branches || task.typedSteps) ? (
             <Disclosure
               defaultOpen={task.typedSteps}
               title="How runs move between steps"

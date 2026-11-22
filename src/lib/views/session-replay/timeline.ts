@@ -25,9 +25,13 @@ export interface TimelineTurn {
   steps: TimelineLedgerStep[];
 }
 
+/** Typed ledger steps (`cloud-typed-steps`) drawn as steps of their own. */
+export type TypedStepKind = "user_message" | "code" | "handoff";
+
 export interface TimelineLedgerStep {
   ordinal: number;
-  kind: "search" | "invoke";
+  /** `model_call` (typed steps only) is not drawn itself: it gives its ordinal to the joined model call it matches. */
+  kind: "search" | "invoke" | "model_call" | TypedStepKind;
   traceEventId: string;
   occurredAt: Date;
   /** The step's `trace_events` row still exists. */
@@ -54,6 +58,8 @@ export interface TimelineModelCall {
   latencyMs: number | null;
   /** The call's payload carried message or system text. The text itself never leaves the database. */
   hasContent: boolean;
+  /** Thinking tokens; set only with typed steps. */
+  reasoningTokens?: number | null;
 }
 
 export interface TimelineSelfCorrection {
@@ -98,6 +104,18 @@ export type TimelineStep =
       cachedTokens: number | null;
       costUsd: number | null;
       latencyMs: number | null;
+      /** The stored model call step it matched (typed steps only). */
+      ordinal?: number;
+      reasoningTokens?: number | null;
+    })
+  | (StepBase & {
+      kind: "step";
+      stepKind: TypedStepKind;
+      ordinal: number;
+      traceEventId: string;
+      name: string | null;
+      outcome: string | null;
+      tookMs: number | null;
     })
   | (StepBase & {
       kind: "search";
@@ -163,19 +181,27 @@ export function buildSessionTimeline(input: TimelineInput): SessionTimeline {
   return { sessionId: input.sessionId, turnCount: turns.length, steps, coverage };
 }
 
-/** A turn's model calls and ledger steps by time; a call at the same instant as a step comes first. */
+/**
+ * A turn's model calls and ledger steps by time; a call at the same instant as
+ * a step comes first. With typed steps, a stored model call step takes the
+ * joined call nearest in time and places it at its own ordinal.
+ */
 function turnSteps(
   turn: TimelineTurn,
   turnIndex: number,
   calls: readonly TimelineModelCall[],
   corrections: readonly TimelineSelfCorrection[],
 ): TimelineStep[] {
-  const ledger = [...turn.steps].sort((a, b) => a.ordinal - b.ordinal);
+  const ordered = [...turn.steps].sort((a, b) => a.ordinal - b.ordinal);
+  const paired = pairStoredCalls(ordered, calls);
+  const ledger = ordered.filter((step) => step.kind !== "model_call" || paired.has(step.ordinal));
+  const taken = new Set(paired.values());
+  const free = calls.filter((call) => !taken.has(call));
   const marks = ledgerMarks(ledger, corrections);
   const out: TimelineStep[] = [];
   let lastCall: TimelineModelCall | null = null;
   let c = 0;
-  const pushCall = (call: TimelineModelCall) => {
+  const pushCall = (call: TimelineModelCall, ordinal?: number) => {
     lastCall = call;
     out.push({
       kind: "model_call",
@@ -193,11 +219,17 @@ function turnSteps(
       cachedTokens: call.cachedTokens,
       costUsd: call.costUsd,
       latencyMs: call.latencyMs,
+      ...(ordinal !== undefined ? { ordinal } : {}),
+      ...(call.reasoningTokens !== undefined ? { reasoningTokens: call.reasoningTokens } : {}),
     });
   };
   for (const step of ledger) {
-    while (c < calls.length && calls[c]!.occurredAt.getTime() <= step.occurredAt.getTime())
-      pushCall(calls[c++]!);
+    while (c < free.length && free[c]!.occurredAt.getTime() <= step.occurredAt.getTime())
+      pushCall(free[c++]!);
+    if (step.kind === "model_call") {
+      pushCall(paired.get(step.ordinal)!, step.ordinal);
+      continue;
+    }
     const before = lastCall as TimelineModelCall | null;
     const base = {
       index: 0,
@@ -221,7 +253,7 @@ function turnSteps(
         hitCount: step.hitCount,
         hitIds: step.hitIds ?? [],
       });
-    } else {
+    } else if (step.kind === "invoke") {
       out.push({
         ...base,
         kind: "tool_call",
@@ -232,9 +264,45 @@ function turnSteps(
         outcome: step.outcome,
         tookMs: step.tookMs,
       });
+    } else {
+      out.push({
+        ...base,
+        kind: "step",
+        stepKind: step.kind,
+        ordinal: step.ordinal,
+        traceEventId: step.traceEventId,
+        name: step.targetId,
+        outcome: step.outcome,
+        tookMs: step.tookMs,
+      });
     }
   }
-  while (c < calls.length) pushCall(calls[c++]!);
+  while (c < free.length) pushCall(free[c++]!);
+  return out;
+}
+
+/** Each stored model call step (by ordinal) with the unpaired joined call nearest in time; a step with no call left keeps none. */
+function pairStoredCalls(
+  ledger: readonly TimelineLedgerStep[],
+  calls: readonly TimelineModelCall[],
+): Map<number, TimelineModelCall> {
+  const out = new Map<number, TimelineModelCall>();
+  const left = new Set(calls);
+  for (const step of ledger) {
+    if (step.kind !== "model_call") continue;
+    let best: TimelineModelCall | null = null;
+    for (const call of left) {
+      if (
+        !best ||
+        Math.abs(call.occurredAt.getTime() - step.occurredAt.getTime()) <
+          Math.abs(best.occurredAt.getTime() - step.occurredAt.getTime())
+      )
+        best = call;
+    }
+    if (!best) continue;
+    left.delete(best);
+    out.set(step.ordinal, best);
+  }
   return out;
 }
 
@@ -257,6 +325,7 @@ function ledgerMarks(
       if (invoked) add(step.ordinal, "loop");
       continue;
     }
+    if (step.kind !== "invoke") continue;
     invoked = true;
     if (!step.targetId) continue;
     const key = `${step.targetType ?? ""}:${step.targetId}`;

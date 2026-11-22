@@ -2,11 +2,20 @@ import { and, eq, inArray } from "drizzle-orm";
 import { events } from "@/lib/ingest/otlp/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
+import { traceTopics, traceTurnTopics } from "@/lib/readings/topics/schema";
 import { loadSessionLens } from "@/lib/views/session-replay/annotations-load";
 import { loadSessionReplay, type ReplayDb } from "@/lib/views/session-replay/load";
+import type { SessionTimeline } from "@/lib/views/session-replay/timeline";
 import { chipText } from "@/lib/views/session-replay/view";
 import { forkTargets } from "@/lib/views/session-replay/what-if";
-import { buildSessionChat, type ChatCallText, type SessionChat } from "./model";
+import { loadSessionSegments } from "@/lib/views/tasks/session-segments";
+import {
+  buildSessionChat,
+  type ChatCallText,
+  chatBands,
+  type SessionChat,
+  type TurnIntent,
+} from "./model";
 import { chatTextOf } from "./text";
 
 /**
@@ -22,16 +31,20 @@ const logger = getLogger("session-chat");
 export interface SessionChatOptions {
   /** The project's content opt-in (`session_replay_settings.read_content`). */
   readContent: boolean;
+  /** `cloud-typed-steps`: typed steps, task bands and each turn's intent. */
+  typedSteps?: boolean;
 }
+
+const SENTIMENTS: ReadonlySet<string> = new Set(["positive", "neutral", "negative"]);
 
 /** The session as a chat, or null when the project has no closed turn in it. */
 export async function loadSessionChat(
   projectId: string,
   sessionId: string,
-  { readContent }: SessionChatOptions,
+  { readContent, typedSteps = false }: SessionChatOptions,
   db: ReplayDb = getDb(),
 ): Promise<SessionChat | null> {
-  const replay = await loadSessionReplay(projectId, sessionId, db);
+  const replay = await loadSessionReplay(projectId, sessionId, db, { typedSteps });
   if (!replay) return null;
   const callIds = replay.timeline.steps.flatMap((step) =>
     step.kind === "model_call" ? [step.eventId] : [],
@@ -39,7 +52,11 @@ export async function loadSessionChat(
   // One after the other: the page reads on a single connection.
   const texts = readContent ? await loadChatTexts(projectId, callIds, db) : null;
   const lens = await loadSessionLens(projectId, replay.timeline, db);
-  const chat = buildSessionChat({ ...replay, texts });
+  const chat = buildSessionChat({ ...replay, texts, typedSteps });
+  if (typedSteps) {
+    chat.bands = await loadBands(projectId, sessionId, chat, replay.timeline, db);
+    chat.intents = await loadIntents(projectId, chat, db);
+  }
   // The context split of each call: counts only, the same lens as the step-by-step view.
   chat.splits = Object.fromEntries(
     lens.calls.map((call) => [
@@ -62,6 +79,7 @@ export async function loadSessionChat(
       segments: chat.segments.length,
       problems: chat.problems.length,
       text_off: chat.textOff,
+      bands: chat.bands?.length ?? null,
     },
     "session_chat_built",
   );
@@ -83,6 +101,69 @@ export async function loadChatTexts(
         and(eq(events.projectId, projectId), inArray(events.id, eventIds.slice(i, i + ID_CHUNK))),
       );
     for (const row of rows) out.set(row.id, chatTextOf(row.payload));
+  }
+  return out;
+}
+
+/** The session's task segments as bands, named by their tasks. */
+async function loadBands(
+  projectId: string,
+  sessionId: string,
+  chat: SessionChat,
+  timeline: SessionTimeline,
+  db: ReplayDb,
+) {
+  const segments = await loadSessionSegments(projectId, sessionId, db);
+  return chatBands(
+    chat,
+    timeline,
+    segments,
+    new Map(
+      segments.flatMap((segment) =>
+        segment.label ? [[segment.workflowId, segment.label] as const] : [],
+      ),
+    ),
+  );
+}
+
+/** Each turn's intent name and the person's tone, by turn index. Names and labels only, never ask text. */
+async function loadIntents(
+  projectId: string,
+  chat: SessionChat,
+  db: ReplayDb,
+): Promise<Record<number, TurnIntent>> {
+  const indexOf = new Map(chat.turns.map((turn) => [turn.turnId, turn.turnIndex]));
+  if (indexOf.size === 0) return {};
+  const rows = await db
+    .select({
+      turnId: traceTurnTopics.turnId,
+      verdict: traceTurnTopics.verdict,
+      sentiment: traceTurnTopics.sentiment,
+      name: traceTopics.name,
+    })
+    .from(traceTurnTopics)
+    .leftJoin(
+      traceTopics,
+      and(
+        eq(traceTopics.projectId, traceTurnTopics.projectId),
+        eq(traceTopics.topicId, traceTurnTopics.topicId),
+      ),
+    )
+    .where(
+      and(
+        eq(traceTurnTopics.projectId, projectId),
+        inArray(traceTurnTopics.turnId, [...indexOf.keys()]),
+      ),
+    );
+  const out: Record<number, TurnIntent> = {};
+  for (const row of rows) {
+    const topic = row.verdict === "topic" ? row.name : null;
+    const sentiment =
+      row.sentiment && SENTIMENTS.has(row.sentiment)
+        ? (row.sentiment as TurnIntent["sentiment"])
+        : null;
+    if (topic === null && sentiment === null) continue;
+    out[indexOf.get(row.turnId)!] = { topic, sentiment };
   }
   return out;
 }

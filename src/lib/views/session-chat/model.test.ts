@@ -10,6 +10,7 @@ import {
 import {
   buildSessionChat,
   type ChatCallText,
+  chatBands,
   formatDuration,
   formatStepTime,
   MIN_SEGMENT_MS,
@@ -306,4 +307,119 @@ test("formatDuration", () => {
   assert.equal(formatDuration(65_000), "1 min 5 s");
   assert.equal(formatDuration(120_000), "2 min");
   assert.equal(formatDuration(3_900_000), "1 h 5 min");
+});
+
+function typedStep(
+  ordinal: number,
+  ms: number,
+  kind: "user_message" | "model_call" | "code" | "handoff",
+  targetId: string | null,
+  tookMs: number | null,
+): TimelineLedgerStep {
+  return {
+    ordinal,
+    kind,
+    traceEventId: `ev-${ordinal}-${ms}`,
+    occurredAt: at(ms),
+    eventPresent: true,
+    targetType: null,
+    targetId,
+    outcome: "ok",
+    tookMs,
+    searchType: null,
+    hitCount: null,
+    hitIds: null,
+  };
+}
+
+test("typed steps: each segment says its public kind, code and handoffs read in words, model calls keep their thinking", () => {
+  const turns = [
+    turn("t1", 0, 5_000, [
+      typedStep(1, 100, "user_message", null, null),
+      typedStep(2, 500, "model_call", "triage", 1_000),
+      typedStep(3, 2_000, "code", "load_cart", 300),
+      invoke(4, 2_500, "find", 200),
+      typedStep(5, 3_000, "handoff", "billing_agent", 500),
+    ]),
+  ];
+  const calls = [{ ...call("c1", "t1", 500, 1_000), reasoningTokens: 320 }];
+  const timeline = buildSessionTimeline({
+    sessionId: "s1",
+    turns,
+    modelCalls: calls,
+    selfCorrections: [],
+  });
+  const model = buildSessionChat({ timeline, turns, texts: null, typedSteps: true });
+  assert.deepEqual(
+    model.segments.filter((s) => s.kind !== "wait").map((s) => [s.kind, s.publicKind, s.label]),
+    [
+      ["ask", null, "Ask"],
+      ["user_message", "user_message", "User message"],
+      ["model_call", "model_call", "claude-opus-5-5"],
+      ["code", "code", "Load cart"],
+      ["tool_call", "tool_call", "find"],
+      ["handoff", "handoff", "Handoff to billing agent"],
+    ],
+  );
+  assert.equal(model.segments.find((s) => s.kind === "model_call")?.reasoningTokens, 320);
+  const legacy = buildSessionChat({ timeline, turns, texts: null });
+  assert.equal("publicKind" in legacy.segments[0]!, false, "flag off keeps today's segments");
+});
+
+test("task bands sit on the track from their first step to their last, across turns", () => {
+  const turns = [
+    turn("t1", 0, 5_000, [
+      typedStep(1, 100, "user_message", null, null),
+      invoke(2, 1_000, "find", 500),
+    ]),
+    turn("t2", 10_000, 15_000, [
+      typedStep(1, 10_100, "user_message", null, null),
+      invoke(2, 11_000, "book", 400),
+      typedStep(3, 12_000, "user_message", null, null),
+      invoke(4, 13_000, "refund", 300),
+    ]),
+  ];
+  const timeline = buildSessionTimeline({
+    sessionId: "s1",
+    turns,
+    modelCalls: [],
+    selfCorrections: [],
+  });
+  const model = buildSessionChat({ timeline, turns, texts: null, typedSteps: true });
+  const bands = chatBands(
+    model,
+    timeline,
+    [
+      {
+        id: "a",
+        workflowId: "booking",
+        startTurnId: "t1",
+        startOrdinal: 1,
+        endTurnId: "t2",
+        endOrdinal: 2,
+      },
+      {
+        id: "b",
+        workflowId: "refunds",
+        startTurnId: "t2",
+        startOrdinal: 3,
+        endTurnId: "t2",
+        endOrdinal: 4,
+      },
+    ],
+    new Map([["booking", "Book a trip"]]),
+  );
+  const segmentAt = (stepIndex: number) => model.segments.find((s) => s.stepIndex === stepIndex)!;
+  const first = timeline.steps.find((s) => s.kind === "step" && s.turnId === "t1")!.index;
+  const book = timeline.steps.find((s) => s.kind === "tool_call" && s.targetId === "book")!.index;
+  assert.deepEqual(bands[0], {
+    segmentId: "a",
+    workflowId: "booking",
+    label: "Book a trip",
+    firstStep: first,
+    lastStep: book,
+    trackStartMs: segmentAt(first).trackStartMs,
+    trackEndMs: segmentAt(book).trackStartMs + segmentAt(book).trackMs,
+  });
+  assert.equal(bands[1]!.label, "Task", "a task with no name yet reads as a task");
 });

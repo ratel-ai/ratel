@@ -1,3 +1,4 @@
+import { typedStepName } from "@/lib/views/tasks/session-bands";
 import type { Annotation } from "./annotations";
 import type { SessionLens } from "./annotations-load";
 import { type CompositionGap, LENS_PARTS, type LensPart } from "./composition";
@@ -191,6 +192,8 @@ function stepTitle(step: TimelineStep): string {
       return `Search · ${step.hitCount ?? step.hitIds.length} ${(step.hitCount ?? step.hitIds.length) === 1 ? "hit" : "hits"}`;
     case "tool_call":
       return `${step.targetId ?? "Unknown tool"} · ${OUTCOME_LABEL[step.outcome ?? "unknown"] ?? step.outcome}`;
+    case "step":
+      return typedStepName(step.stepKind, step.name);
   }
 }
 
@@ -207,7 +210,8 @@ function stepDetail(step: TimelineStep): string | null {
   }
   if (step.kind === "search")
     return step.hitIds.length > 0 ? `Top: ${step.hitIds.slice(0, 3).join(", ")}` : null;
-  if (step.kind === "tool_call") return step.tookMs !== null ? `${n(step.tookMs)} ms` : null;
+  if (step.kind === "tool_call" || step.kind === "step")
+    return step.tookMs !== null ? `${n(step.tookMs)} ms` : null;
   return step.endedBy ? `Ended by ${step.endedBy.replace(/_/g, " ")}` : null;
 }
 

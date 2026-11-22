@@ -8,6 +8,7 @@ import { traceSelfCorrections } from "@/lib/readings/trace-signals/schema";
 import {
   buildSessionTimeline,
   type SessionTimeline,
+  type TimelineLedgerStep,
   type TimelineModelCall,
   type TimelineTurn,
 } from "./timeline";
@@ -37,6 +38,21 @@ const HAS_CONTENT = sql<boolean>`(
   or jsonb_path_exists(${events.payload}, '$.messages[*].content[*] ? (@.type == "text" && @.text != "")')
 )`;
 
+/** `typedSteps` (`cloud-typed-steps`): keep the typed steps of the ledger and each model call's thinking tokens. */
+export interface ReplayOptions {
+  typedSteps?: boolean;
+}
+
+const LEGACY_KINDS: ReadonlySet<string> = new Set(["search", "invoke"]);
+const TYPED_KINDS: ReadonlySet<string> = new Set([
+  "search",
+  "invoke",
+  "model_call",
+  "user_message",
+  "code",
+  "handoff",
+]);
+
 /** The session's timeline, or null when the project has no turn in it, open or closed. */
 export async function loadSessionTimeline(
   projectId: string,
@@ -51,7 +67,9 @@ export async function loadSessionReplay(
   projectId: string,
   sessionId: string,
   db: ReplayDb = getDb(),
+  { typedSteps = false }: ReplayOptions = {},
 ): Promise<{ timeline: SessionTimeline; turns: TimelineTurn[] } | null> {
+  const kept = typedSteps ? TYPED_KINDS : LEGACY_KINDS;
   // Open turns too (AOBS-3): the Sessions tab lists a live session, so it opens.
   const ledger = await listSessionTurns(projectId, sessionId, db, { includeOpen: true });
   if (ledger.length === 0) return null;
@@ -68,10 +86,10 @@ export async function loadSessionReplay(
     detour: turn.detour,
     reSearchCount: turn.reSearchCount,
     steps: steps
-      .filter((step) => step.kind === "search" || step.kind === "invoke")
+      .filter((step) => kept.has(step.kind))
       .map((step) => ({
         ordinal: step.ordinal,
-        kind: step.kind as "search" | "invoke",
+        kind: step.kind as TimelineLedgerStep["kind"],
         traceEventId: step.traceEventId,
         occurredAt: step.occurredAt,
         eventPresent: traceIdByEvent.has(step.traceEventId),
@@ -97,7 +115,7 @@ export async function loadSessionReplay(
   );
   const turnIds = turns.map((turn) => turn.id);
   const [modelCalls, selfCorrections] = await Promise.all([
-    loadCalls(projectId, turns, traceIdsByTurn, db),
+    loadCalls(projectId, turns, traceIdsByTurn, db, typedSteps),
     db
       .select({
         turnId: traceSelfCorrections.turnId,
@@ -156,6 +174,7 @@ async function loadCalls(
   turns: readonly TimelineTurn[],
   traceIdsByTurn: ReadonlyMap<string, ReadonlySet<string>>,
   db: ReplayDb,
+  typedSteps: boolean,
 ): Promise<TimelineModelCall[]> {
   const byTrace = new Map<string, TimelineTurn[]>();
   for (const turn of turns)
@@ -180,6 +199,7 @@ async function loadCalls(
         cachedTokens: events.cachedTokens,
         costUsd: events.costUsd,
         latencyMs: events.latencyMs,
+        reasoningTokens: events.reasoningTokens,
         hasContent: HAS_CONTENT,
       })
       .from(events)
@@ -208,6 +228,7 @@ async function loadCalls(
         costUsd: cost !== null && Number.isFinite(cost) ? cost : null,
         latencyMs: row.latencyMs,
         hasContent: row.hasContent === true,
+        ...(typedSteps ? { reasoningTokens: row.reasoningTokens } : {}),
       });
     }
   }

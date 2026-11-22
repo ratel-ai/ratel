@@ -1,3 +1,4 @@
+import { type PublicStepKind, stepKindOf } from "@/lib/readings/trace-signals/steps/kind";
 import type { LensPart } from "@/lib/views/session-replay/composition";
 import type {
   SessionTimeline,
@@ -5,6 +6,7 @@ import type {
   TimelineStep,
   TimelineTurn,
 } from "@/lib/views/session-replay/timeline";
+import { type BandSegment, segmentBands, typedStepName } from "@/lib/views/tasks/session-bands";
 
 /**
  * The session replay as a chat (RC-281): per turn the person's ask, the work
@@ -30,6 +32,8 @@ export interface SessionChatInput {
   turns: readonly Pick<TimelineTurn, "id" | "startedAt" | "endedAt" | "steps">[];
   /** Text by model call event id, or null when the project's content opt-in is off. */
   texts: ReadonlyMap<string, ChatCallText> | null;
+  /** `cloud-typed-steps`: each segment says its public step kind and a model call its thinking tokens. */
+  typedSteps?: boolean;
 }
 
 export type ProblemKind = StepMark | "failed";
@@ -75,7 +79,15 @@ export interface ChatTurn {
   trackEndMs: number;
 }
 
-export type SegmentKind = "ask" | "model_call" | "search" | "tool_call" | "wait";
+export type SegmentKind =
+  | "ask"
+  | "model_call"
+  | "search"
+  | "tool_call"
+  | "wait"
+  | "user_message"
+  | "code"
+  | "handoff";
 
 export interface TrackSegment {
   kind: SegmentKind;
@@ -95,6 +107,28 @@ export interface TrackSegment {
   eventId: string | null;
   /** A search's ranked results (tool ids), best first. */
   hits: string[];
+  /** Typed steps only: the step's public kind, null for an ask, a search or a wait. */
+  publicKind?: PublicStepKind | null;
+  /** Typed steps only, on a model call: its thinking tokens when the call reported them. */
+  reasoningTokens?: number | null;
+}
+
+/** A task segment drawn over the track (typed steps only). */
+export interface ChatBand {
+  segmentId: string;
+  workflowId: string;
+  label: string;
+  /** The first and last timeline step it covers. */
+  firstStep: number;
+  lastStep: number;
+  trackStartMs: number;
+  trackEndMs: number;
+}
+
+/** What a turn was about (typed steps only): its intent's name and the person's tone, shown on its first user message. */
+export interface TurnIntent {
+  topic: string | null;
+  sentiment: "positive" | "neutral" | "negative" | null;
 }
 
 /** One model call's numbers, for the context inspector (RC-284). */
@@ -135,6 +169,10 @@ export interface SessionChat {
   /** By step index: why a tool choice was good or bad (RC-524); set by the loader, absent steps have none. */
   verdicts?: Record<number, ChatVerdict[]>;
   segments: TrackSegment[];
+  /** Typed steps only: the task segments over the track, in order; set by the loader. */
+  bands?: ChatBand[];
+  /** Typed steps only: by turn index, what the turn was about; set by the loader. */
+  intents?: Record<number, TurnIntent>;
   problems: ChatProblem[];
   trackTotalMs: number;
   realTotalMs: number;
@@ -149,14 +187,19 @@ const SPLIT_OF_STEP = {
   tool_call: "toolMs",
   search: "searchMs",
 } as const;
-const KIND_OF_STEP: Record<TimelineStep["kind"], SegmentKind> = {
+const KIND_OF_STEP: Record<Exclude<TimelineStep["kind"], "step">, SegmentKind> = {
   turn: "ask",
   model_call: "model_call",
   search: "search",
   tool_call: "tool_call",
 };
 
-export function buildSessionChat({ timeline, turns, texts }: SessionChatInput): SessionChat {
+export function buildSessionChat({
+  timeline,
+  turns,
+  texts,
+  typedSteps = false,
+}: SessionChatInput): SessionChat {
   const turnById = new Map(turns.map((turn) => [turn.id, turn]));
   const searchTook = new Map(
     turns.flatMap((turn) => turn.steps.map((step) => [step.traceEventId, step.tookMs] as const)),
@@ -180,14 +223,19 @@ export function buildSessionChat({ timeline, turns, texts }: SessionChatInput): 
     for (const step of steps) {
       const kinds = problemKinds(step);
       const realMs = durationOf(step, searchTook);
-      if (step.kind !== "turn") split[SPLIT_OF_STEP[step.kind]] += realMs ?? 0;
+      if (step.kind !== "turn" && step.kind !== "step")
+        split[SPLIT_OF_STEP[step.kind]] += realMs ?? 0;
       const segment = track.place(
         step,
-        KIND_OF_STEP[step.kind],
+        step.kind === "step" ? step.stepKind : KIND_OF_STEP[step.kind],
         labelOf(step),
         realMs,
         kinds.length > 0,
       );
+      if (typedSteps) {
+        segment.publicKind = publicKindOf(step);
+        if (step.kind === "model_call") segment.reasoningTokens = step.reasoningTokens ?? null;
+      }
       if (kinds.length > 0) {
         problemSteps += 1;
         problems.push({
@@ -252,6 +300,43 @@ export function buildSessionChat({ timeline, turns, texts }: SessionChatInput): 
     trackTotalMs: track.trackPos,
     realTotalMs: Math.max(0, track.cursor - track.origin),
   };
+}
+
+/**
+ * The task segments over the chat's track: each from its first step's start
+ * to its last step's end, named by its task (or "Task" before it has a name).
+ */
+export function chatBands(
+  chat: Pick<SessionChat, "segments">,
+  timeline: Pick<SessionTimeline, "steps">,
+  segments: readonly BandSegment[],
+  names: ReadonlyMap<string, string>,
+): ChatBand[] {
+  const positions = timeline.steps.map((step) => ({
+    turnId: step.turnId,
+    ordinal: "ordinal" in step && step.ordinal !== undefined ? step.ordinal : null,
+  }));
+  const byStep = new Map(
+    chat.segments.flatMap((segment) =>
+      segment.stepIndex === null ? [] : [[segment.stepIndex, segment] as const],
+    ),
+  );
+  return segmentBands(positions, segments).flatMap((band) => {
+    const first = byStep.get(timeline.steps[band.first]!.index);
+    const last = byStep.get(timeline.steps[band.last]!.index);
+    if (!first || !last) return [];
+    return [
+      {
+        segmentId: band.segmentId,
+        workflowId: band.workflowId,
+        label: names.get(band.workflowId) ?? "Task",
+        firstStep: first.stepIndex!,
+        lastStep: last.stepIndex!,
+        trackStartMs: first.trackStartMs,
+        trackEndMs: last.trackStartMs + last.trackMs,
+      },
+    ];
+  });
 }
 
 /** "11 s", "1 min 5 s", "1 h 5 min"; under a second is "<1 s". */
@@ -357,7 +442,9 @@ function stepsByTurn(steps: readonly TimelineStep[]): TimelineStep[][] {
 
 function problemKinds(step: TimelineStep): ProblemKind[] {
   const kinds: ProblemKind[] =
-    step.kind === "tool_call" && step.outcome === "error" ? ["failed"] : [];
+    (step.kind === "tool_call" || step.kind === "step") && step.outcome === "error"
+      ? ["failed"]
+      : [];
   return [...kinds, ...step.marks];
 }
 
@@ -374,6 +461,22 @@ function durationOf(
       return searchTook.get(step.traceEventId) ?? null;
     case "tool_call":
       return step.tookMs;
+    case "step":
+      return step.stepKind === "user_message" ? 0 : step.tookMs;
+  }
+}
+
+function publicKindOf(step: TimelineStep): PublicStepKind | null {
+  switch (step.kind) {
+    case "turn":
+    case "search":
+      return null;
+    case "model_call":
+      return "model_call";
+    case "tool_call":
+      return stepKindOf({ kind: "invoke", targetType: step.targetType });
+    case "step":
+      return step.stepKind;
   }
 }
 
@@ -387,6 +490,8 @@ function labelOf(step: TimelineStep): string {
       return "Search";
     case "tool_call":
       return step.targetId ?? "Tool call";
+    case "step":
+      return typedStepName(step.stepKind, step.name);
   }
 }
 

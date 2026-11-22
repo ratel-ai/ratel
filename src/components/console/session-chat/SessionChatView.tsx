@@ -5,14 +5,18 @@ import { cn } from "@ratel/design-system/cn";
 import { usePeek } from "@ratel/design-system/panel";
 import { isTypingTarget } from "@ratel/design-system/peek";
 import { Callout } from "@ratel/design-system/states";
+import { TASK_COLOR_CLASSES, type TaskColorSlot } from "@ratel/design-system/task-colors";
 import { Check, Ellipsis, ListChecks, TriangleAlert, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WhatIfSetup } from "@/components/console/session-replay/SessionTimeline";
+import type { StepsView } from "@/lib/readings/trace-signals/steps/view";
 import { createUrlWriter, withQueryUpdates } from "@/lib/synthesis/traces/v2/url-writer";
 import type { PanelChat, PanelChatTurn } from "@/lib/views/session-chat/actions";
+import { bandColors, bandOfStep, turnBands } from "@/lib/views/session-chat/bands";
 import {
+  type ChatBand,
   type ChatTurn,
   formatStepTime,
   type SessionChat,
@@ -30,6 +34,7 @@ import {
   type TurnPhase,
   type Zoom,
 } from "@/lib/views/session-chat/playback";
+import { segmentAnnotation, showsSegment } from "@/lib/views/tasks/steps-view";
 import { clockTime, segmentTime, stepWords } from "./format";
 import { SessionChatPanel } from "./SessionChatPanel";
 import { SessionTrack, type Speed, type TrackMarker } from "./SessionTrack";
@@ -90,6 +95,8 @@ export interface SessionChatViewProps {
   marker?: TrackMarker;
   /** "Open full trace" on a work line; off for a chat with no trace (an eval run). */
   traceLinks?: boolean;
+  /** Typed steps only: the `?steps=` preset. The steps it leaves out drop from the action lists and fade on the track. */
+  stepsView?: StepsView;
 }
 
 export function SessionChatView({
@@ -105,6 +112,7 @@ export function SessionChatView({
   syncUrl = true,
   className,
   panelMode = "push",
+  stepsView,
 }: SessionChatViewProps) {
   const { id, open: openPeek, close: closePeek } = usePeek();
   // Closed once, the default inspector stays closed until a click opens a panel.
@@ -137,7 +145,8 @@ export function SessionChatView({
   const [zoom, setZoom] = useState<Zoom>(() => parseZoom(searchParams.get("zoom")));
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
-  const [showActions, setShowActions] = useState(false);
+  // With a steps preset the steps are the point: the action lists start open.
+  const [showActions, setShowActions] = useState(stepsView !== undefined);
   const [follow, setFollow] = useState(synced);
   // Following starts when the playhead leaves where the page opened, or when someone ticks it.
   const [startT] = useState(t);
@@ -294,6 +303,7 @@ export function SessionChatView({
                   showActions={showActions}
                   peek={peek}
                   onOpen={open}
+                  stepsView={stepsView}
                 />
               ),
             )}
@@ -315,6 +325,7 @@ export function SessionChatView({
             if (call !== undefined) open({ kind: "step", stepIndex: call });
           }}
           marker={marker}
+          dimmed={stepsView ? (segment) => !showsSegment(segment, stepsView) : undefined}
         />
       </div>
       {peek && panelMode === "push" ? (
@@ -426,6 +437,7 @@ function TurnBlock({
   showActions,
   peek,
   onOpen,
+  stepsView,
 }: {
   chat: SessionChat;
   phase: Exclude<TurnPhase, { phase: "future" }>;
@@ -433,10 +445,19 @@ function TurnBlock({
   showActions: boolean;
   peek: ChatPeek | null;
   onOpen: (peek: ChatPeek) => void;
+  stepsView?: StepsView;
 }) {
   const { turn } = phase;
   const selected = (kind: "ask" | "reply" | "work") =>
     peek?.kind === kind && peek.turnIndex === turn.turnIndex;
+  const bands = chat.bands ?? [];
+  const colors = bandColors(bands);
+  const view = stepsView
+    ? {
+        shows: (segment: TrackSegment) => showsSegment(segment, stepsView),
+        note: (segment: TrackSegment) => segmentAnnotation(segment, stepsView, chat),
+      }
+    : undefined;
   return (
     <>
       <Bubble
@@ -447,6 +468,7 @@ function TurnBlock({
         selected={selected("ask")}
         onClick={() => onOpen({ kind: "ask", turnIndex: turn.turnIndex })}
       />
+      {bands.length > 0 ? <TurnTasks items={turnBands(bands, turn)} colors={colors} /> : null}
       {phase.phase === "live" ? (
         <ActionList
           heading={
@@ -458,6 +480,9 @@ function TurnBlock({
           done={phase.done}
           current={phase.current}
           currentElapsedMs={phase.currentElapsedMs}
+          bands={bands}
+          colors={colors}
+          view={view}
           onOpen={onOpen}
         />
       ) : (
@@ -472,6 +497,9 @@ function TurnBlock({
               done={turnSteps(chat, turn)}
               current={null}
               currentElapsedMs={0}
+              bands={bands}
+              colors={colors}
+              view={view}
               onOpen={onOpen}
             />
           ) : null}
@@ -491,20 +519,71 @@ function TurnBlock({
   );
 }
 
-/** The steps of a turn so far (A5): each done step with its time, and the current one with a running timer. */
+/** The tasks a turn takes part in (typed steps): one chip per task band, saying when it began earlier or goes on after. */
+function TurnTasks({
+  items,
+  colors,
+}: {
+  items: ReturnType<typeof turnBands>;
+  colors: ReadonlyMap<string, TaskColorSlot>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <ul
+      aria-label="Tasks in this turn"
+      data-turn-tasks
+      className="flex flex-wrap items-center gap-1.5 self-start"
+    >
+      {items.map(({ band, fromBefore, continues }) => {
+        const color = TASK_COLOR_CLASSES[colors.get(band.workflowId) ?? "neutral"];
+        return (
+          <li
+            key={band.segmentId}
+            data-turn-task={band.workflowId}
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-md border-l-2 px-2 text-xs text-fg",
+              color.bgSubtle,
+              color.border,
+            )}
+          >
+            <span className="truncate">{band.label}</span>
+            {fromBefore ? <span className="text-fg-subtle">· from an earlier turn</span> : null}
+            {continues ? <span className="text-fg-subtle">· goes on in the next turn</span> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The steps of a turn so far (A5): each done step with its time, and the current one with a running timer. With task bands, each task's steps sit under its name. */
 function ActionList({
   heading,
   done,
   current,
   currentElapsedMs,
+  bands = [],
+  colors = new Map(),
+  view,
   onOpen,
 }: {
   heading?: ReactNode;
   done: readonly TrackSegment[];
   current: TrackSegment | null;
   currentElapsedMs: number;
+  bands?: readonly ChatBand[];
+  colors?: ReadonlyMap<string, TaskColorSlot>;
+  /** A steps preset: the steps it shows, and the label it puts on a step. */
+  view?: {
+    shows: (segment: TrackSegment) => boolean;
+    note: (segment: TrackSegment) => string | null;
+  };
   onOpen: (peek: ChatPeek) => void;
 }) {
+  const rows = [
+    ...done.map((segment) => ({ segment, running: false })),
+    ...(current ? [{ segment: current, running: true }] : []),
+  ].filter(({ segment }) => !view || view.shows(segment));
   return (
     <div
       data-action-list={current ? "live" : "done"}
@@ -514,22 +593,29 @@ function ActionList({
         <div className="mb-1 flex items-center gap-1.5 text-ui text-fg-muted">{heading}</div>
       ) : null}
       <ol className="flex flex-col">
-        {done.map((segment) => (
-          <ActionRow
-            key={segment.stepIndex}
-            segment={segment}
-            time={segmentTime(segment)}
-            onOpen={onOpen}
-          />
-        ))}
-        {current ? (
-          <ActionRow
-            segment={current}
-            time={formatStepTime(currentElapsedMs)}
-            running
-            onOpen={onOpen}
-          />
-        ) : null}
+        {rows.map(({ segment, running }, i) => {
+          const band = bandOfStep(bands, segment.stepIndex);
+          const startsBand =
+            band !== null && band !== bandOfStep(bands, rows[i - 1]?.segment.stepIndex ?? null);
+          return (
+            <ActionRow
+              key={segment.stepIndex}
+              segment={segment}
+              time={running ? formatStepTime(currentElapsedMs) : segmentTime(segment)}
+              running={running}
+              band={
+                band
+                  ? {
+                      label: startsBand ? band.label : null,
+                      border: TASK_COLOR_CLASSES[colors.get(band.workflowId) ?? "neutral"].border,
+                    }
+                  : null
+              }
+              note={view?.note(segment) ?? null}
+              onOpen={onOpen}
+            />
+          );
+        })}
       </ol>
       {done.length === 0 && !current ? (
         <p className="text-ui text-fg-subtle">No step yet.</p>
@@ -542,15 +628,29 @@ function ActionRow({
   segment,
   time,
   running = false,
+  band = null,
+  note = null,
   onOpen,
 }: {
   segment: TrackSegment;
+  /** An inferred label under the step (thinking tokens, the turn's intent and tone). */
+  note?: string | null;
   time: string;
   running?: boolean;
+  /** The task band the step sits in: its name on the band's first row, and its color as a left rule. */
+  band?: { label: string | null; border: string } | null;
   onOpen: (peek: ChatPeek) => void;
 }) {
   return (
-    <li data-action-row={running ? "running" : "done"}>
+    <li
+      data-action-row={running ? "running" : "done"}
+      className={cn(band && cn("border-l-2 pl-2", band.border))}
+    >
+      {band?.label ? (
+        <div data-band-label className="pt-1 text-xs font-medium text-fg-muted">
+          {band.label}
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() =>
@@ -570,6 +670,11 @@ function ActionRow({
         </span>
         <span className={cn("tabular-nums", running ? "text-fg" : "text-fg-subtle")}>{time}</span>
       </button>
+      {note ? (
+        <div data-step-note className="pb-1 pl-6.5 text-xs text-fg-subtle">
+          {note}
+        </div>
+      ) : null}
     </li>
   );
 }
