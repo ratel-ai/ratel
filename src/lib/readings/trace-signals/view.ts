@@ -4,6 +4,7 @@ import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
 import type { HealthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { StoredSetup } from "@/lib/readings/trace-signals/setup-facts";
 import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
+import type { StepReadings } from "@/lib/readings/trace-signals/steps/metrics";
 import type { WorkflowsView } from "@/lib/readings/trace-signals/view-workflows";
 
 /**
@@ -632,6 +633,11 @@ export interface HealthPageModel {
   emptyEarlyReading?: true;
   /** How far the early reading has got: runs read of the runs there are. Set only with `earlyReading`. */
   earlyProgress?: EarlyProgress;
+  /**
+   * Agent health per step kind (RC-1077, `summary.steps`). Set only with
+   * `cloud-typed-steps` on and a reading that stored it; never public.
+   */
+  steps?: StepReadings;
   /**
    * The Health score (RC-225, `health-score.ts`): 0 to 100 from the reading's
    * open issues, with its change since the previous reading and what fixing

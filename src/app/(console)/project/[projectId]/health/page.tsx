@@ -26,6 +26,7 @@ import {
 } from "@/lib/readings/trace-signals/inferred-tools-query";
 import { type PartialReading, partialReading } from "@/lib/readings/trace-signals/partial-reading";
 import { loadPartialFacts } from "@/lib/readings/trace-signals/partial-reading-query";
+import { parseStepsView } from "@/lib/readings/trace-signals/steps";
 import { toolRunInsightsEnabled } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   applyPlanLimits,
@@ -73,7 +74,10 @@ export default async function AgentHealthPage({
 
   const { project, organization, user } = await requireProjectScope(projectId);
   const limits = getAgentHealthLimits(organization);
-  const windowDays = parseWindowDays((await searchParams).days, limits.agentHealthWindowDays);
+  const query = await searchParams;
+  const windowDays = parseWindowDays(query.days, limits.agentHealthWindowDays);
+  // The per-kind tables' preset (RC-1078); the tables show only with `cloud-typed-steps` (FF_TYPED_STEPS) on.
+  const stepsView = parseStepsView(query.steps);
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
@@ -203,6 +207,7 @@ export default async function AgentHealthPage({
       share={share}
       partial={partial}
       inferredTools={inferredTools}
+      stepsView={stepsView}
     />
   );
 }

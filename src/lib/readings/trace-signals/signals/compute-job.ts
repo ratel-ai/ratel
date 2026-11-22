@@ -76,6 +76,8 @@ import {
   startSignalRun as startSignalRunFn,
 } from "@/lib/readings/trace-signals/signals/queries";
 import { withStoredToolStandings } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
+import type { StepFinishInputs } from "@/lib/readings/trace-signals/steps/metrics";
+import { loadStepFinishInputs as loadStepFinishInputsFn } from "@/lib/readings/trace-signals/steps/metrics-query";
 import { workflowMiningFor } from "@/lib/readings/trace-signals/tool-run-insights";
 import {
   FIRST_READING_FLOOR,
@@ -136,6 +138,8 @@ export interface ComputeJobDeps {
   countUnbuilt: (projectId: string, since: Date | string) => Promise<number>;
   /** Write each run's task (`trace_turns.workflow_id`) for the window's runs. */
   writePlacement: typeof writeTaskPlacementFn;
+  /** The window's segments and run topics for the per-kind readings (RC-1077, `cloud-typed-steps`). */
+  loadStepFinishInputs: typeof loadStepFinishInputsFn;
   /**
    * The window's self-corrections (`self-corrections/run.ts`): rewrites its
    * `trace_self_corrections` rows and finds the `self_correcting` issues, which join this
@@ -220,6 +224,7 @@ function defaultDeps(env: Env): ComputeJobDeps {
     countUnbuilt: (projectId, since) =>
       countUnbuiltTurnEventsFn(projectId, since, UNBUILT_COUNT_CAP),
     writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),
+    loadStepFinishInputs: (projectId, window) => loadStepFinishInputsFn(projectId, window),
     recordSelfCorrections: recordSelfCorrectionsForRun,
     ...computeSeams,
     // Imports are the edition's: without an importer, no import is ever running.
@@ -395,6 +400,9 @@ export async function computeProjectTraceSignals(
       deps,
       result.segmentPlacement,
     );
+    const steps = result.stepMetrics
+      ? result.stepMetrics.finish(await stepFinishInputsFor(projectId, window, deps))
+      : undefined;
     const corrections = await selfCorrectionsFor(
       projectId,
       window,
@@ -426,6 +434,7 @@ export async function computeProjectTraceSignals(
         ...(partial ? { unbuiltAtStart } : {}),
         ...(earlyReading ? { earlyReading } : {}),
         ...(corrections ? { selfCorrections: corrections.stored } : {}),
+        ...(steps ? { steps } : {}),
       },
       turnsScanned: result.turnsScanned,
       turnSourceMix: result.turnSourceMix,
@@ -554,6 +563,23 @@ async function selfCorrectionsFor(
 }
 
 /** Best-effort: the backlog only marks a reading partial, so a failed count never fails the run. */
+/** Best-effort: without segments and topics the step readings show no tasks, sentiment or asked-again share. */
+async function stepFinishInputsFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  deps: Pick<ComputeJobDeps, "loadStepFinishInputs">,
+): Promise<StepFinishInputs> {
+  try {
+    return await deps.loadStepFinishInputs(projectId, { start: window.start, end: window.end });
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "step readings inputs unreadable");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_step_readings",
+    });
+    return {};
+  }
+}
+
 async function unbuiltFor(
   projectId: string,
   since: Date | string,

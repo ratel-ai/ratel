@@ -54,6 +54,8 @@ const same =
 
 const MODEL_RULES: Rules<HealthPageModel> = {
   windowDays: same("windowDays"),
+  // Flagged and member-only (RC-1078): task names and step names stay private.
+  steps: () => undefined,
   turns: same("turns"),
   waitingOn: same("waitingOn"),
   floor: same("floor"),

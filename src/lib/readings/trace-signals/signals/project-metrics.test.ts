@@ -206,3 +206,44 @@ test("the flow is deterministic and resolves open signals to ids and tints", () 
     view.edges.some((e) => e.kind === "sequence" && e.from === "find" && e.to === "assign"),
   );
 });
+
+test("typed steps: a day counts model and code steps and their failures only when asked to", () => {
+  const typed = signalTurns([fresh({ lane: "otlp" }).end("lookup")])[0]!;
+  const steps = [
+    ...typed.steps,
+    {
+      ...typed.steps[0]!,
+      ordinal: 2,
+      kind: "model_call" as const,
+      targetType: null,
+      targetId: "claude",
+      outcome: "error" as const,
+    },
+    {
+      ...typed.steps[0]!,
+      ordinal: 3,
+      kind: "code" as const,
+      targetType: null,
+      targetId: "render",
+      outcome: "ok" as const,
+    },
+    {
+      ...typed.steps[0]!,
+      ordinal: 4,
+      kind: "user_message" as const,
+      targetType: null,
+      targetId: null,
+      outcome: null,
+    },
+  ];
+  const off = new DailyBuckets();
+  off.add({ ...typed, steps });
+  assert.equal(off.values()[0]!.steps, undefined);
+  assert.equal(off.values()[0]!.otel?.calls, 1);
+
+  const on = new DailyBuckets({ typedSteps: true });
+  on.add({ ...typed, steps });
+  on.add({ ...typed, steps });
+  assert.deepEqual(on.values()[0]!.steps, { calls: 4, failed: 2 });
+  assert.equal(on.values()[0]!.otel?.calls, 2);
+});

@@ -55,6 +55,11 @@ import type {
 } from "@/lib/readings/trace-signals/signals/types";
 import { createWorkflowCollector } from "@/lib/readings/trace-signals/signals/workflow-run";
 import type { StoredWorkflows } from "@/lib/readings/trace-signals/signals/workflow-stored";
+import {
+  createStepMetrics,
+  type StepMetrics,
+  type StepReadings,
+} from "@/lib/readings/trace-signals/steps/metrics";
 import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
 
 /**
@@ -130,6 +135,12 @@ export interface RunSummary {
    * failed.
    */
   selfCorrections?: StoredSelfCorrections;
+  /**
+   * Agent health per step kind (RC-1077, `steps/metrics.ts`). Set only with
+   * `cloud-typed-steps` on; the compute job adds the task readings once the
+   * run's segments are written.
+   */
+  steps?: StepReadings;
 }
 
 export interface AnalysisResult {
@@ -152,6 +163,8 @@ export interface AnalysisResult {
    */
   placement: ReadonlyMap<string, string | null>;
   segmentPlacement?: SegmentPlacement;
+  /** The per-kind readings, to finish again with the stored segments (`cloud-typed-steps`). */
+  stepMetrics?: StepMetrics;
 }
 
 export interface LinkingCounts {
@@ -192,7 +205,11 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
   const stats: ProjectStats = createProjectStats(options.maxQueryHashes);
   const journey = createJourneyStats();
   const prerequisites = createPrerequisiteStats(options.prereqWindowMs);
-  const daily = new DailyBuckets();
+  const typedSteps = options.workflowMining?.typedSteps === true;
+  const daily = new DailyBuckets({ typedSteps });
+  const stepMetrics = typedSteps
+    ? createStepMetrics({ modelCalls: context.modelCalls ?? undefined })
+    : null;
   const workflows = createWorkflowCollector(
     options.maxWorkflowTurns,
     floors,
@@ -230,6 +247,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
       countPrerequisites(prerequisites, turn);
       if (otel && otelFacts) accumulateOtelTurn(otel, turn, otelFacts);
       workflows.collect(turn);
+      stepMetrics?.add(turn);
       if (turn.lane === "runtime") linking.sdkRuns += 1;
       if (turn.linked) linking.linkedRuns += 1;
     },
@@ -297,6 +315,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
           ...(mined.stored.turnsWithTools > 0 || mined.agentRuns > 0 || mined.stored.basis?.blocked
             ? { workflows: mined.stored }
             : {}),
+          ...(stepMetrics ? { steps: stepMetrics.finish() } : {}),
         },
         turnsScanned: stats.turns,
         turnSourceMix: { ...stats.mix },
@@ -305,6 +324,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
         linking: { ...linking },
         placement: mined.placement,
         ...(mined.segmentPlacement ? { segmentPlacement: mined.segmentPlacement } : {}),
+        ...(stepMetrics ? { stepMetrics } : {}),
       };
     },
   };
