@@ -13,7 +13,7 @@ import { test } from "node:test";
  * in the statement around each `.from(<table>)` or `from <table>`.
  */
 
-const ROOTS = ["lib", "app"];
+const ROOTS = ["src/lib", "src/app"];
 const TABLE_READ =
   /\.from\((traceEvents|otelSpans|otelLogs|otlpRawExports|events)\)|from (trace_events|otel_spans|otel_logs|otlp_raw_exports)\b/g;
 const PROJECT_FILTER = /project_?id|projectId/i;

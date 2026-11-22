@@ -129,8 +129,8 @@ test("query strings, which can carry customer text, are cut from URLs", async ()
 });
 
 test("the open-source build has no Datadog dependency: server traces are plain OTLP", () => {
-  for (const manifest of ["package.json", "src/package.json"]) {
-    const root = join(import.meta.dirname, "../../../..");
+  for (const manifest of ["package.json", "web/package.json"]) {
+    const root = join(import.meta.dirname, "../../../../..");
     const pkg = JSON.parse(readFileSync(join(root, manifest), "utf8"));
     const names = Object.keys({
       ...pkg.dependencies,
