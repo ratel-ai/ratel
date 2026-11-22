@@ -2,7 +2,7 @@
 
 The core of the platform application, in layers. A file imports its own layer or a lower one,
 never a higher one; nothing here imports the UI (`@/components`, `@/app`) outside tests.
-`pnpm check:layers` enforces it ([ADR-0030](../../docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md)).
+`pnpm check:layers` enforces it ([ADR-0030](../../../docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md)).
 
 | Level | Folder | Holds |
 |---|---|---|
