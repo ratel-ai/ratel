@@ -195,6 +195,7 @@ async function ClientsTab({
 
   return (
     <ClientsView
+      projectId={project.id}
       now={new Date().toISOString()}
       tabs={tabs}
       guide={setupGuide()}

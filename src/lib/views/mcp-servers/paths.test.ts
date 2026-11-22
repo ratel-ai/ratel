@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  mcpCountryTracesHref,
   mcpServerCatalogHref,
   mcpServerClientsHref,
   mcpServerHref,
@@ -61,4 +62,16 @@ test("Clients and Catalog are filtered by the server", () => {
   );
   // The Catalog's search matches a tool group by its label, the server name (`lib/catalog/v2/tree.ts`).
   assert.equal(mcpServerCatalogHref(PROJECT, "github"), `${ROOT}/catalogs?q=github`);
+});
+
+test("a caller country opens the Traces sessions list filtered to it, with the window, environment and server (RC-1058)", () => {
+  assert.equal(mcpCountryTracesHref(PROJECT, "IT"), `${ROOT}/traces?facetCountry=IT`);
+  assert.equal(
+    mcpCountryTracesHref(PROJECT, "gb", { range: "7d", environment: "prod", server: "docs-mcp" }),
+    `${ROOT}/traces?facetCountry=GB&facetServer=docs-mcp&range=7d&facetEnvironment=prod`,
+  );
+  assert.equal(
+    mcpCountryTracesHref(PROJECT, "US", { range: "custom", from: "2026-11-01", to: "2026-11-02" }),
+    `${ROOT}/traces?facetCountry=US&range=custom&from=2026-11-01&to=2026-11-02`,
+  );
 });

@@ -2166,6 +2166,7 @@
     { "from": "apps/web/components/mcp-servers/McpServersFilters.tsx", "mode": "excluded", "$why": "replaced by the approved RP-25 design (RP-28): components/console/agents/EntityFilters.tsx, a core file (search, environment, status, hidden; the range sits in the header)" },
     { "$slice": "clients", "from": "apps/web/components/clients", "to": "src/components/console/clients", "mode": "copy" },
     { "from": "apps/web/lib/clients", "to": "src/lib/views/clients", "mode": "copy" },
+    { "from": "apps/web/components/clients/CountryMap.tsx", "to": "src/components/console/clients/CountryMap.tsx", "mode": "owned", "$why": "the map svg keeps role=group with a biome-ignore: this repository's a11y lint asks for a fieldset, which an svg cannot be" },
     { "from": "apps/web/lib/entities", "to": "src/lib/views/entities", "mode": "copy" },
     { "from": "apps/web/components/ds/detection-marker.tsx", "to": "src/components/console/agents/DetectionMarker.tsx", "mode": "owned", "$why": "the design-system package cannot import the core's views/entities (the rule and fix), so the marker sits with the entity pages' shared parts and takes Badge and Tooltip from @ratel/design-system" },
     { "from": "apps/web/components/mcp-servers/McpServerSetupGuide.tsx", "to": "src/components/console/mcp-servers/McpServerSetupGuide.tsx", "mode": "copy" },

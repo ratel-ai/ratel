@@ -5,6 +5,7 @@ import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Users } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { ReactNode } from "react";
 import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
 import { McpServerSetupGuide } from "@/components/console/mcp-servers/McpServerSetupGuide";
@@ -18,6 +19,7 @@ import type {
   ValueCount,
 } from "@/lib/views/clients/queries";
 import type { Detection } from "@/lib/views/entities/detection";
+import { mcpCountryTracesHref } from "@/lib/views/mcp-servers/paths";
 import type { McpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
 import { ClientsFilters } from "./ClientsFilters";
 import { countryLabel, harnessLabel, reportedLabel, transportLabel } from "./labels";
@@ -57,6 +59,17 @@ type HarnessStats = Pick<HarnessRow, "calls" | "sessions" | "errorRate">;
 const LINK =
   "rounded-md underline decoration-line-strong underline-offset-4 outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-focus";
 
+/** The caller map ships its world geometry in its own chunk, loaded on this tab only (RC-1058). */
+const CountryMap = dynamic(() => import("./CountryMap").then((module) => module.CountryMap), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="aspect-[960/482] w-full animate-pulse rounded-lg border border-line bg-raised"
+      aria-hidden
+    />
+  ),
+});
+
 const COUNTRY_COLUMNS: Column<CountryRow>[] = [
   { id: "country", header: "Country", cell: (row) => countryLabel(row.country) },
   {
@@ -82,12 +95,14 @@ const COUNTRY_COLUMNS: Column<CountryRow>[] = [
  * shows here.
  */
 export function ClientsView({
+  projectId,
   overview,
   filters,
   tabs,
   now,
   guide,
 }: {
+  projectId: string;
   /** Null when the read failed: unknown, not empty. */
   overview: ClientsOverviewView | null;
   /** The standard OpenTelemetry setup guide (RC-780): how a server reports its clients. */
@@ -111,7 +126,12 @@ export function ClientsView({
             description="Clients show up here once your MCP servers send spans for their calls."
           />
         ) : (
-          <ClientsSections overview={overview} now={now} />
+          <ClientsSections
+            overview={overview}
+            now={now}
+            countryHref={(code) => countryTracesHref(projectId, code, filters)}
+            serverFiltered={filters.server !== null}
+          />
         )}
         {guide ? (
           <McpServerSetupGuide
@@ -124,7 +144,17 @@ export function ClientsView({
   );
 }
 
-function ClientsSections({ overview, now }: { overview: ClientsOverviewView; now: string }) {
+function ClientsSections({
+  overview,
+  now,
+  countryHref,
+  serverFiltered,
+}: {
+  overview: ClientsOverviewView;
+  now: string;
+  countryHref: (code: string) => string;
+  serverFiltered: boolean;
+}) {
   const hasUnknown = overview.harnesses.some((row) => row.harness === null);
   return (
     <>
@@ -150,6 +180,13 @@ function ClientsSections({ overview, now }: { overview: ClientsOverviewView; now
       ) : null}
 
       <Section title="By country">
+        {overview.countries.some((row) => row.country !== null) ? (
+          <CountryMap
+            countries={overview.countries}
+            hrefFor={countryHref}
+            serverFiltered={serverFiltered}
+          />
+        ) : null}
         <DataTable
           caption="Calls by country"
           columns={COUNTRY_COLUMNS}
@@ -328,6 +365,17 @@ function ClientName({
       <DetectionMarker detection={detection} />
     </span>
   );
+}
+
+/** Traces filtered to a caller country, keeping the tab's window, environment and server. */
+function countryTracesHref(projectId: string, code: string, filters: ClientsFilterState): string {
+  const { range } = filters;
+  return mcpCountryTracesHref(projectId, code, {
+    range: range.preset,
+    ...(range.preset === "custom" ? { from: range.from, to: range.to } : {}),
+    environment: filters.environment,
+    server: filters.server,
+  });
 }
 
 function emptyTitle(filters: ClientsFilterState): string {

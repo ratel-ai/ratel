@@ -62,6 +62,22 @@ export function mcpServerTracesHref(
   ]);
 }
 
+/**
+ * Traces' sessions list, filtered by a caller country (`facetCountry`, the
+ * Traces facet) and by the server the Clients tab shows, if any (RC-1058).
+ */
+export function mcpCountryTracesHref(
+  projectId: string,
+  country: string,
+  query: McpServersQuery & { server?: string | null } = {},
+): string {
+  return withQuery(`${projectRoot(projectId)}/traces`, [
+    ["facetCountry", country.toUpperCase()],
+    ...(query.server ? [["facetServer", query.server] as const] : []),
+    ...windowParams(query),
+  ]);
+}
+
 export const MCP_TAB_PARAM = "tab";
 export const MCP_CLIENTS_TAB = "clients";
 export const MCP_SERVER_PARAM = "server";

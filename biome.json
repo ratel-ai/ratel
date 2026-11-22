@@ -1402,6 +1402,7 @@
         "!src/lib/views/mcp-servers/setup-guide.ts",
         "src/app/api/projects/\\[projectId\\]/agents/overrides/route.ts",
         "src/components/console/clients/**",
+        "!src/components/console/clients/CountryMap.tsx",
         "!src/components/console/clients/ClientsFilters.tsx",
         "src/lib/views/clients/**",
         "!src/lib/views/clients/queries.integration.test.ts",
