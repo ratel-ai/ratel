@@ -10,6 +10,8 @@
     { "from": "@/components/health/v2/issue-rows", "to": "@/lib/views/health/issue-rows", "exact": true },
     { "from": "@/components/intents/v2/", "to": "@/components/console/intents/" },
     { "from": "@/components/intent-map/", "to": "@/components/console/intent-map/" },
+    { "from": "@/components/evals/", "to": "@/components/console/evals/" },
+    { "from": "@/components/scorers/", "to": "@/components/console/scorers/" },
     { "from": "@/components/shell/nav-icons", "to": "@/components/console/shell/nav-icons", "exact": true },
     { "from": "@/lib/utils", "to": "@ratel/design-system/cn", "exact": true },
     { "from": "@/lib/cn", "to": "@ratel/design-system/cn", "exact": true },

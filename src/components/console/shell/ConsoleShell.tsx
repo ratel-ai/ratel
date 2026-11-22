@@ -9,7 +9,9 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
+import { getSessionContext } from "@/lib/platform/session";
 import { customDashboardsEnabled } from "@/lib/views/custom-dashboards/session";
+import { evalsOrganizationIds } from "@/lib/views/evals/gate";
 import { fineTuningOrganizationIds } from "@/lib/views/fine-tuning/flag";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 import { sandboxesProjectIds } from "@/lib/views/sandboxes/navigation";
@@ -36,6 +38,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
     customDashboards,
     variantsProjects,
     fineTuningOrganizations,
+    evalsOrganizations,
   ] = await Promise.all([
     entityPagesOrganizationIds(organizations),
     // RC-1102: Sandboxes shows for a project with FF_SANDBOXES on (decided per project, as its pages decide it).
@@ -46,6 +49,12 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
     variantsProjectIds(organizations, projects).catch(() => []),
     // RC-1123: Fine-tuning shows in an organization with FF_FINE_TUNING on.
     fineTuningOrganizationIds(organizations).catch(() => []),
+    // RC-291: Evals shows under Improvements in an organization with FF_EVALS on.
+    getSessionContext()
+      .then((session) =>
+        evalsOrganizationIds(organizations, { distinctId: session?.user.externalId ?? "" }),
+      )
+      .catch(() => []),
   ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
@@ -79,6 +88,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           customDashboards,
           variantsProjects,
           fineTuningOrganizations,
+          evalsOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

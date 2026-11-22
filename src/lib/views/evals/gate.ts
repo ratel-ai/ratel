@@ -29,6 +29,14 @@ export async function evalsEnabledForActor(
   return organizationFlagEnabled(EVALS_FLAG, { projectId, actor }, deps);
 }
 
+/** The Evals pages' check: the project alone, before anything streams (the `(evals)` route group). */
+export async function evalsEnabledForProject(
+  projectId: string,
+  deps: OrganizationFlagDeps = defaultOrganizationFlagDeps,
+): Promise<boolean> {
+  return organizationFlagEnabled(EVALS_FLAG, { projectId }, deps);
+}
+
 /** The rail's check (RC-291): which of the person's organizations have Evals on. A failed decision is off. */
 export async function evalsOrganizationIds(
   organizations: readonly Pick<Organization, "id">[],

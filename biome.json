@@ -1379,20 +1379,31 @@
         "!src/lib/views/evals/tests/run.integration.test.ts",
         "!src/lib/views/evals/register.ts",
         "!src/lib/views/evals/fill/spec.ts",
+        "!src/lib/views/evals/tests/nav.test.ts",
+        "!src/lib/views/evals/tests/nightly.test.ts",
+        "!src/lib/views/evals/tests/simulation.integration.test.ts",
+        "!src/lib/views/evals/tests/fix-page-ui.test.ts",
         "!src/lib/views/evals/gate.ts",
         "!src/lib/views/evals/gate.test.ts",
         "!src/lib/views/evals/tests/tables.integration.test.ts",
         "!src/lib/views/evals/schema.ts",
         "!src/lib/views/evals/spend.ts",
+        "src/components/console/evals/**",
         "src/lib/views/scorers/**",
         "!src/lib/views/scorers/live.integration.test.ts",
         "!src/lib/views/scorers/adapters/models.ts",
         "!src/lib/views/scorers/schema.ts",
+        "src/components/console/scorers/**",
         "src/lib/mcp/operations/evals/**",
         "!src/lib/mcp/operations/evals/evals.integration.test.ts",
         "!src/lib/mcp/operations/evals/index.ts",
         "src/lib/mcp/operations/loop/eval-set.ts",
         "src/lib/mcp/operations/loop/eval-set.integration.test.ts",
+        "src/app/(console)/(evals)/project/\\[projectId\\]/tasks/\\[taskId\\]/scorers/**",
+        "src/app/(console)/(evals)/project/\\[projectId\\]/evals/**",
+        "src/app/(console)/(evals)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/page.tsx",
+        "src/app/(console)/(evals)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/loading.tsx",
+        "src/app/(console)/(evals)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/simulations/**",
         "src/components/console/eval-gate/**",
         "src/app/(console)/(eval-gate)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "src/lib/contracts/error-type.ts",
@@ -1587,7 +1598,9 @@
         "src/components/console/shell/ShellSkeleton.tsx",
         "src/components/console/onboarding/GuidedTour.tsx",
         "src/app/(console)/(stage-spine)/project/\\[projectId\\]/tasks/**",
-        "src/mcp-apps/**"
+        "src/mcp-apps/**",
+        "src/components/console/evals/**",
+        "src/components/console/scorers/**"
       ],
       "linter": {
         "rules": {
@@ -1609,6 +1622,16 @@
           },
           "security": {
             "noDangerouslySetInnerHtml": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["src/components/console/evals/**"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "noLabelWithoutControl": "off"
           }
         }
       }
@@ -1644,7 +1667,8 @@
       "includes": [
         "src/components/console/health/share/SharedPageActions.tsx",
         "src/components/console/health/workflow-icons.ts",
-        "src/components/console/sandboxes/ParamsPanel.tsx"
+        "src/components/console/sandboxes/ParamsPanel.tsx",
+        "src/lib/views/scorers/form.ts"
       ],
       "linter": {
         "rules": {

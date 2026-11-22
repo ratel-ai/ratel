@@ -99,6 +99,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
   const fineTuning = Boolean(
     project && data.fineTuningOrganizations?.includes(project.organizationId),
   );
+  const evals = Boolean(project && data.evalsOrganizations?.includes(project.organizationId));
   const items = useMemo(
     () =>
       consoleNav({
@@ -112,6 +113,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         dashboards,
         variants,
         fineTuning,
+        evals,
       }),
     [
       project,
@@ -124,6 +126,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       dashboards,
       variants,
       fineTuning,
+      evals,
     ],
   );
   const activeId = activeNavItemId(pathname, items);

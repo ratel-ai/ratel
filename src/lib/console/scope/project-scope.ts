@@ -67,5 +67,10 @@ export async function requireProjectScope(projectId: string): Promise<ProjectSco
   return scope;
 }
 
-/** Upstream's name for the same read, kept so copied call sites stay identical. */
-export const getProjectScope = requireProjectScope;
+/**
+ * Upstream's name for the same read, kept so copied call sites stay identical. Upstream also takes the reader's user id; here the session gives it, so a
+ * copied call site's second argument is ignored.
+ */
+export function getProjectScope(projectId: string, _userId?: string): Promise<ProjectScope> {
+  return requireProjectScope(projectId);
+}

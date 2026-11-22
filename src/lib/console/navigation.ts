@@ -88,6 +88,7 @@ export function consoleNav({
   dashboards = false,
   variants = false,
   fineTuning = false,
+  evals = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -119,6 +120,8 @@ export function consoleNav({
   variants?: boolean;
   /** `FF_FINE_TUNING` on in the shown project's organization (RC-1123): a Fine-tuning page under Improvements. */
   fineTuning?: boolean;
+  /** `FF_EVALS` on in the shown project's organization (RC-291): Evals, last under Improvements. */
+  evals?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -399,7 +402,7 @@ export function consoleNav({
     : [];
   return [
     ...(root
-      ? stageRailNav(root, core, setupRows, entityPages, sandboxes, variants, fineTuning)
+      ? stageRailNav(root, core, setupRows, entityPages, sandboxes, variants, fineTuning, evals)
       : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
@@ -426,6 +429,7 @@ function stageRailNav(
   sandboxes = false,
   variants = false,
   fineTuning = false,
+  evals = false,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -555,6 +559,18 @@ function stageRailNav(
             href: `${root}/fine-tuning`,
             icon: "improvements" as const,
             keywords: ["fine-tuning", "training", "datasets", "use cases", "small model", "opt-in"],
+          },
+        ]
+      : []),
+    // Upstream's Evals (RC-291) is the last item under Improvements.
+    ...(evals
+      ? [
+          {
+            id: "evals",
+            label: "Evals",
+            href: `${root}/evals`,
+            icon: "improvements" as const,
+            keywords: ["evals", "eval set", "tests", "runs", "regressions"],
           },
         ]
       : []),

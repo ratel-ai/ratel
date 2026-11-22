@@ -34,18 +34,21 @@ export function ScoreChart({
   shipments = [],
   projectId = "",
   taskId = "",
+  scorer,
 }: {
   rows: readonly ScoreChartRow[];
   today: string;
   shipments?: readonly TaskShipment[];
   projectId?: string;
   taskId?: string;
+  /** RC-615: a scorer's detail page shows that scorer only. */
+  scorer?: ScorerKind;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const search = useSearchParams();
   const requested = search.get("scoreScorer");
-  const selected = SCORER_KINDS.find((kind) => kind === requested) ?? "ends_well";
+  const selected = scorer ?? SCORER_KINDS.find((kind) => kind === requested) ?? "ends_well";
   const table = search.get("scoreView") === "table";
   const days = Array.from({ length: 14 }, (_, index) =>
     new Date(Date.parse(`${today}T00:00:00Z`) - (13 - index) * 86_400_000)
@@ -69,13 +72,15 @@ export function ScoreChart({
       description="Daily pass rate for the last 14 days (UTC)."
       actions={
         <>
-          <Select
-            aria-label="Compare scorer"
-            options={SCORER_KINDS.map((kind) => ({ value: kind, label: SCORE_LABELS[kind] }))}
-            value={selected}
-            disabled={pending}
-            onValueChange={(value) => choose("scoreScorer", value)}
-          />
+          {scorer ? null : (
+            <Select
+              aria-label="Compare scorer"
+              options={SCORER_KINDS.map((kind) => ({ value: kind, label: SCORE_LABELS[kind] }))}
+              value={selected}
+              disabled={pending}
+              onValueChange={(value) => choose("scoreScorer", value)}
+            />
+          )}
           <Button
             variant="ghost"
             size="sm"

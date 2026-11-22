@@ -36,6 +36,8 @@ export type ShellData = {
   variantsProjects?: readonly string[];
   /** RC-1123: the organizations whose projects show Fine-tuning under Improvements (`FF_FINE_TUNING` on). */
   fineTuningOrganizations?: readonly string[];
+  /** RC-291: the organizations whose projects show Evals under Improvements (`FF_EVALS` on). */
+  evalsOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
