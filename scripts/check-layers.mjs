@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Layer check for apps/web/lib (ADR-0030): a file in a layer may import its own layer or a lower
+// Layer check for src/lib (ADR-0030): a file in a layer may import its own layer or a lower
 // one, never a higher one, and nothing under lib/ may import the UI (`@/components`, `@/app`).
-// Usage (from repo root): node scripts/check-layers.mjs [--lib apps/web/lib] [--allow scripts/layers-allow.json]
+// Usage (from repo root): node scripts/check-layers.mjs [--lib src/lib] [--allow scripts/layers-allow.json]
 //
 // The allowlist is a ratchet: an entry silences one violation (`<path>:<specifier>`) while the
 // copied code is being layered, and an entry that no longer matches anything is itself an error,
@@ -113,11 +113,11 @@ function arg(name, fallback) {
 }
 
 if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const libRoot = resolve(REPO_ROOT, arg("--lib", "apps/web/lib"));
+  const libRoot = resolve(REPO_ROOT, arg("--lib", "src/lib"));
   const allowPath = resolve(REPO_ROOT, arg("--allow", "scripts/layers-allow.json"));
   const allow = existsSync(allowPath) ? JSON.parse(readFileSync(allowPath, "utf8")) : [];
   const { violations, stale } = scanLayers({ libRoot, allow });
-  for (const v of violations) console.error(`${join("apps/web/lib", v.path)}:${v.line}  ${v.reason}  (${v.specifier})`);
+  for (const v of violations) console.error(`${join("src/lib", v.path)}:${v.line}  ${v.reason}  (${v.specifier})`);
   for (const key of stale) console.error(`stale allowlist entry, remove it: ${key}`);
   if (violations.length > 0 || stale.length > 0) process.exit(1);
   console.log(`layers clean: 0 violations${allow.length ? `, ${allow.length} allowed` : ""}`);

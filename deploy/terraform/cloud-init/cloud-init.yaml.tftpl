@@ -1,0 +1,15 @@
+#cloud-config
+# Written by deploy/terraform/cloud-init. The ratel user logs in with the deploy's own key; the
+# adm group lets it read the install log. install.sh installs git and Docker, then Ratel.
+users:
+  - default
+  - name: ratel
+    groups: [sudo, adm]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+package_update: true
+packages: [curl, ca-certificates]
+runcmd:
+  - [sh, -c, "curl -fsSL '${install_url}' | sh -s -- --yes --ref '${ref}' --dir ${install_dir} ${access_args}"]

@@ -6,36 +6,23 @@ This file is for AI coding agents (Claude Code, Cursor, Codex, Aider, etc.) **wo
 
 If you're a human, you probably want [README.md](README.md).
 
+This repo holds the platform (`src`, `ee`, `packages/brand`, `packages/design-system`). The SDKs (Rust core, TypeScript and Python SDKs, adapters, rankers, telemetry, protocol and examples) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); work on them there.
+
 ---
 
 ## Build & test
 
-Prerequisites: Rust stable (pinned via `rust-toolchain.toml`), Node 24+, pnpm 10.28+. The Python SDK also needs Python 3.11 and [`uv`](https://docs.astral.sh/uv/).
+Prerequisites: Node 24+, pnpm 10.28+.
 
 ```bash
-# Rust
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --check --all
-
-# TS
 pnpm install
 pnpm -r build
 pnpm -r typecheck
 pnpm -r lint
 pnpm -r test
-
-# Python (from src/sdk/python/; needs uv). Same install as CI: mypy and pytest need the
-# telemetry extras, and maturin refuses to run with both VIRTUAL_ENV and CONDA_PREFIX set.
-uv venv --python 3.11 .venv
-uv pip install --python .venv maturin pytest pytest-asyncio ruff mypy \
-  mcp opentelemetry-sdk -e ../../telemetry/python
-unset CONDA_PREFIX && VIRTUAL_ENV=$PWD/.venv .venv/bin/maturin develop
-.venv/bin/ruff check . && .venv/bin/mypy ratel_ai && .venv/bin/pytest
 ```
 
-Don't skip clippy or biome — CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the single required `ci-gate` check and will reject PRs that don't land green.
+Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the single required `ci-gate` check and will reject PRs that don't land green.
 
 ## Workflow
 
@@ -45,17 +32,17 @@ Don't skip clippy or biome — CI (`.github/workflows/ci.yml`) runs all of the a
 ## Repo conventions
 
 - **TDD is mandatory** for backend / business-logic / library code — write the failing test first, then the implementation (red → green → refactor). Frontend code without business logic can skip. See [CONTRIBUTING.md](CONTRIBUTING.md).
-- **Backend before frontend**: features that aren't frontend-only land on the Rust core (with tests) first, then surface in the SDK.
+- **Backend before frontend**: features that aren't frontend-only land on the backend (with tests) first, then surface in the console.
 - **Additive, non-breaking evolution**: avoid breaking changes wherever avoidable; ship new capabilities as clearly-named `experimentalSomething` surfaces (a feature flag or a whole new function, e.g. `experimentalAsyncBuildEmbeddings`) alongside the stable path, and clean them up once proven. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **ADRs are kept minimal and current.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format. Amend in place for small drift (paths, names, counts, statuses); write a superseding ADR for real decision reversals; compact periodically (git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md).
-- **Folder READMEs are kept current.** Every folder under `src/`, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout, and any folder-specific commands. If you add or move things, update the README in the same commit.
+- **Folder READMEs are kept current.** Every package folder, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout, and any folder-specific commands. If you add or move things, update the README in the same commit.
 - **Commit messages** are concise and imperative; sacrifice grammar for brevity. Use conventional prefixes (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`, `ci:`). **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
   - Good: `feat(core): rank skills alongside tools in search_capabilities`
   - Bad: `updated some files`
 
 ## Code from ratel-cloud
 
-The platform at `apps/web` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
+The platform at `src` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
 `RATEL_CLOUD_DIR`) through [`scripts/platform-sync/`](scripts/platform-sync/README.md)
 (ADR-0030). It is **moved, not rewritten**: every file taken from upstream is tracked in
 `scripts/platform-sync/map.json` and landed by the sync, so the difference from upstream stays

@@ -5,7 +5,7 @@
 //      split per symbol into one import per destination module; symbols no partition names go
 //      to the hub's `default` destination and are reported as unmapped;
 //   2. specifiers — every other import specifier is rewritten by the longest matching rule:
-//      explicit rules from `rewrites.json`, then every `apps/web/lib/<from> -> apps/web/lib/<to>`
+//      explicit rules from `rewrites.json`, then every `apps/web/lib/<from> -> src/lib/<to>`
 //      pair in `map.json`;
 //   3. identifiers — whole-word renames (`clerkId` -> `externalId`), so the open-source tree
 //      never carries a vendor name in a column or a field.
@@ -13,7 +13,9 @@
 import { IMPORT_RE } from "../check-ee-boundary.mjs";
 import { LAYERS } from "../check-layers.mjs";
 
-const LIB = "apps/web/lib/";
+// Upstream (ratel-cloud) keeps its app in apps/web; this repository keeps it in src.
+const SOURCE_LIB = "apps/web/lib/";
+const LIB = "src/lib/";
 
 /** Specifier rules in matching order: explicit rules from rewrites.json, then the map's lib moves. */
 export function buildRules(map, rewrites) {
@@ -22,8 +24,8 @@ export function buildRules(map, rewrites) {
   const derived = [];
   for (const entry of map.entries ?? []) {
     if (entry.mode === "excluded" || !entry.to) continue;
-    if (!entry.from.startsWith(LIB) || !entry.to.startsWith(LIB)) continue;
-    const from = `@/lib/${entry.from.slice(LIB.length)}`.replace(/\.tsx?$/, "");
+    if (!entry.from.startsWith(SOURCE_LIB) || !entry.to.startsWith(LIB)) continue;
+    const from = `@/lib/${entry.from.slice(SOURCE_LIB.length)}`.replace(/\.tsx?$/, "");
     const to = `@/lib/${entry.to.slice(LIB.length)}`.replace(/\.tsx?$/, "");
     // A partitioned hub is split per symbol, never redirected whole.
     if (from === to || hubs.has(from)) continue;

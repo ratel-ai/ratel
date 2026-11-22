@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
-  "include": ["src/catalog.type-test.ts", "src/define-plugin.type-test.ts", "src/experiment.type-test.ts"],
-  "exclude": []
-}

@@ -1,0 +1,5416 @@
+[
+  {
+    "name": "whoami",
+    "title": "Who am I",
+    "description": "Identify the credential calling this server: which project and organization it can reach. Most tools act on a project, and this tells you which one you have.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "title": "Who am I",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_projects",
+    "title": "List projects",
+    "description": "List the projects this credential can reach, with their ids and slugs. Use the returned id as projectId for other operations.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {}
+    },
+    "annotations": {
+      "title": "List projects",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_project_overview",
+    "title": "Project overview",
+    "description": "Counts of skills and active experiments for a project, plus whether it has ingested any telemetry yet. The best first call to orient in a project.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      }
+    },
+    "annotations": {
+      "title": "Project overview",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_skills",
+    "title": "List skills",
+    "description": "Ratel skills in the project catalog with their status, tags, and a preview of the body. Filter by status or end user, search by name or description, sort by name, runs or last update. Use get_skill for a full body.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "status": {
+          "description": "Restrict to one lifecycle status.",
+          "type": "string",
+          "enum": [
+            "draft",
+            "published",
+            "archived"
+          ]
+        },
+        "endUserId": {
+          "description": "Restrict to a single end user id, when the project segments by one.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "query": {
+          "description": "Case-insensitive text matched against the name, the searchable description and the agent description.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sort": {
+          "description": "Order as the Skills table does. Omitted: most recently updated first.",
+          "type": "string",
+          "enum": [
+            "name",
+            "runs",
+            "updated"
+          ]
+        },
+        "direction": {
+          "description": "Sort direction. Defaults to ascending for name and descending otherwise.",
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "offset": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "annotations": {
+      "title": "List skills",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_skill",
+    "title": "Get skill",
+    "description": "One skill in full, including the complete body text and both descriptions.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skillId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "skillId"
+      ]
+    },
+    "annotations": {
+      "title": "Get skill",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_catalog_status",
+    "title": "Catalog status",
+    "description": "One-call health check for a project's catalog: how many skills and tools exist, how many tools carry a usable description, the published catalog version, and whether the runtime has adopted it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Catalog status",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_declared_tools",
+    "title": "Tools the runtime declares",
+    "description": "Tools the runtime has declared to Ratel, with their definitions and freshness. Flags any with no description text, which is the single most common reason a tool is never retrieved. This is what the runtime says exists; list_invoked_tools is what telemetry has seen actually called.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "includeInactive": {
+          "default": false,
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Tools the runtime declares",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_invoked_tools",
+    "title": "Tools telemetry has seen called",
+    "description": "Tools telemetry has actually seen invoked, with call counts, token usage, cost, and last-seen time. Compare against list_declared_tools to find declared-but-unused or used-but-undeclared tools.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Tools telemetry has seen called",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_catalog_overrides",
+    "title": "List retrieval-description overrides",
+    "description": "Searchable-description overrides set in Ratel for runtime catalog entries, which replace the description the runtime would otherwise match on.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List retrieval-description overrides",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_runtime_catalog",
+    "title": "Catalog tools and skills",
+    "description": "The tools and skills the Catalog page shows, with each one's entryId, agent description, searchable description in effect and where it comes from, the runtime default, any override and whether the runtime adopted it, tags, staleness and usage. Take entryId from here for set_catalog_override.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "kind": {
+          "default": "all",
+          "description": "Restrict to tools or skills.",
+          "type": "string",
+          "enum": [
+            "tool",
+            "skill",
+            "all"
+          ]
+        },
+        "query": {
+          "description": "Case-insensitive text matched against the name, the searchable description and the agent description.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "source": {
+          "default": "all",
+          "description": "managed: synced from the runtime, editable with set_catalog_override. observed: seen in traces only. cloud: skills created in Ratel.",
+          "type": "string",
+          "enum": [
+            "managed",
+            "observed",
+            "cloud",
+            "all"
+          ]
+        },
+        "sort": {
+          "default": "calls",
+          "description": "Skills sort by runs for calls; tokens and cost apply to tools.",
+          "type": "string",
+          "enum": [
+            "name",
+            "calls",
+            "tokens",
+            "cost",
+            "lastSeen"
+          ]
+        },
+        "direction": {
+          "description": "Sort direction. Defaults to ascending for name and descending otherwise.",
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "offset": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "annotations": {
+      "title": "Catalog tools and skills",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_trace_health",
+    "title": "Latency and error rate",
+    "description": "Headline health over a window, from spans: trace count, error rate (a trace failed when its root span reports an error), p50 and p95 latency, plus token and cost totals. The cheapest answer to how a project is performing. For spend questions prefer get_cost_by_day, which reads the metrics the customer sees on their own dashboard and works even when trace surfaces are off.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "includeDaily": {
+          "default": false,
+          "description": "Also return a per-day series over the window.",
+          "type": "boolean"
+        }
+      }
+    },
+    "annotations": {
+      "title": "Latency and error rate",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_traces",
+    "title": "List traces",
+    "description": "Runs (traces) as the Runs page lists them: duration, status, spans, tokens, cost, variant. Filter by name, model, tool, experiment, variant, status, service, environment or duration, token and cost ranges; sort and page with cursor. includeDetails adds each run's ask and tools. get_run_summary opens one; get_run_stats totals the same filters.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "errorOnly": {
+          "description": "Only traces containing an error span.",
+          "type": "boolean"
+        },
+        "experiment": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "rootName": {
+          "description": "Run (top-level span) name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "spanName": {
+          "description": "Keep runs with a span whose name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "arm": {
+          "description": "Experiment variant (arm) contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "conversationId": {
+          "description": "Keep the runs of one conversation: the exact gen_ai.conversation.id, which is also the session id get_session takes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "description": "Span status, any of.",
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "unset",
+              "ok",
+              "error"
+            ]
+          }
+        },
+        "service": {
+          "description": "Exact service names, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "environment": {
+          "description": "Exact deployment environments, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "minDurationMs": {
+          "description": "Span duration at least this, in ms.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxDurationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minTokens": {
+          "description": "Span tokens (input plus output) at least this.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minCostUsd": {
+          "description": "Span cost at least this, in USD.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxCostUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sort": {
+          "default": "started",
+          "type": "string",
+          "enum": [
+            "started",
+            "duration",
+            "tokens",
+            "cost"
+          ]
+        },
+        "direction": {
+          "default": "desc",
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "cursor": {
+          "description": "nextCursor from the previous call. Keep every other parameter the same; it carries the window.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "includeFacets": {
+          "default": false,
+          "description": "Also return the available filter values for this window.",
+          "type": "boolean"
+        },
+        "includeDetails": {
+          "default": false,
+          "description": "Also return each run's ask (when content is captured), tools called, and status.",
+          "type": "boolean"
+        }
+      }
+    },
+    "annotations": {
+      "title": "List traces",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_trace",
+    "title": "Get trace",
+    "description": "The span breakdown for one trace: each span's name, kind, status, duration, tokens, and where they apply its step kind, model, tool, cost, error type and search. Payload bodies are not returned: get_span opens one span in full, get_trace_conversation shows the messages.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "limit": {
+          "default": 200,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        }
+      },
+      "required": [
+        "traceId"
+      ]
+    },
+    "annotations": {
+      "title": "Get trace",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_span_groups",
+    "title": "Spans grouped by model, tool or operation",
+    "description": "Span statistics grouped by operation name, model or tool: call counts, error counts, latency and token usage. The only grouped view carrying latency, which leaves out the time a step waited for a person. Also by MCP server, command, skill, agent, chat, task or repo; tool counts each Bash:<command> as Bash. For per-tool token and cost totals that match the dashboard, prefer get_cost_by_tool.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "errorOnly": {
+          "description": "Only traces containing an error span.",
+          "type": "boolean"
+        },
+        "experiment": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "groupBy": {
+          "default": "name",
+          "type": "string",
+          "enum": [
+            "name",
+            "model",
+            "tool",
+            "server",
+            "command",
+            "skill",
+            "agent",
+            "chat",
+            "task",
+            "repo"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Spans grouped by model, tool or operation",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_span_totals",
+    "title": "Span totals for a filtered slice",
+    "description": "One row of span totals for a filtered slice: span count, error count, token totals and cost. Use it to size a specific slice (one model, one tool, errors only) rather than to browse. Same source as get_trace_health, so prefer that one for latency percentiles, or get_cost_by_day for spend.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "errorOnly": {
+          "description": "Only traces containing an error span.",
+          "type": "boolean"
+        },
+        "experiment": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "annotations": {
+      "title": "Span totals for a filtered slice",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_cost_by_day",
+    "title": "Cost and tokens per day",
+    "description": "Per-day token counts and cost from the derived event metrics, broken down by context source. This is the series the project home page and dashboard render, so it is the number to quote for spend, and it is available whether or not trace surfaces are enabled. Use the span-based tools instead for latency or individual requests.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      }
+    },
+    "annotations": {
+      "title": "Cost and tokens per day",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_cost_by_tool",
+    "title": "Cost and tokens per tool",
+    "description": "Calls and context tokens per tool over a window, one row per tool name, largest first, from the derived event metrics: the source to quote for per-tool spend. usedTokens counts the model calls that called the tool, unusedTokens those that only declared it. Ratel gateway meta-tools are marked. Use list_span_groups by tool for latency or error counts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Cost and tokens per tool",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_traces_ingest_diagnostics",
+    "title": "Trace ingest diagnostics",
+    "description": "Whether this project has received any agent events or OTel spans, and when the latest of each arrived. Answers whether a project that looks empty has received data at all. For why SDK events were refused or dropped, call list_sdk_events with view rejects or drops.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Trace ingest diagnostics",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_run_summary",
+    "title": "Run as a conversation",
+    "description": "One run told as a conversation, as the run panel shows it: the ask, the answer, each model call, tool call and search in order with its timing, the run's error, and totals for duration, tokens and cost. The best first read of a run. get_span opens a step by its id; get_trace_conversation has the full messages.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "maxSteps": {
+          "default": 50,
+          "description": "Steps to list (max 100).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "traceId"
+      ]
+    },
+    "annotations": {
+      "title": "Run as a conversation",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_span",
+    "title": "Get span",
+    "description": "One span in full, as the step inspector and Details tab show it: identity, timing, status, model, tokens, cost, search query and hits, error type, tool arguments and result, and its attributes and experiment attributes, each value previewed. Use get_trace to find span ids.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "spanId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The span id, from get_trace or get_run_summary."
+        },
+        "attributePrefix": {
+          "description": "Only attributes whose key starts with this, e.g. gen_ai. or ratel.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "traceId",
+        "spanId"
+      ]
+    },
+    "annotations": {
+      "title": "Get span",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_trace_conversation",
+    "title": "Trace conversation",
+    "description": "The Conversation tab of one trace: the system, user, assistant and tool messages in order, each once, and the tool calls with their arguments and results. Needs message content capture; without it the list is empty and get_run_summary still shows the steps. Page long conversations with offset.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "offset": {
+          "default": 0,
+          "description": "Messages to skip, for the next page.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "default": 40,
+          "description": "Messages to return (max 100).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxChars": {
+          "default": 1500,
+          "description": "Characters kept per message.",
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 4000
+        },
+        "includeToolCalls": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "traceId"
+      ]
+    },
+    "annotations": {
+      "title": "Trace conversation",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_spans",
+    "title": "List spans",
+    "description": "Individual spans across runs, as the Spans page lists them: name, step kind, model, tool, duration, status, tokens and cost. All spans or top-level only, the same filters and sorts as list_traces, paged by cursor. For totals per model or tool use list_span_groups; get_span opens one.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "scope": {
+          "default": "all",
+          "description": "root lists top-level spans only.",
+          "type": "string",
+          "enum": [
+            "all",
+            "root"
+          ]
+        },
+        "name": {
+          "description": "Span name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "errorOnly": {
+          "description": "Only spans with error status.",
+          "type": "boolean"
+        },
+        "experiment": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "arm": {
+          "description": "Experiment variant (arm) contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "description": "Span status, any of.",
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "unset",
+              "ok",
+              "error"
+            ]
+          }
+        },
+        "service": {
+          "description": "Exact service names, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "environment": {
+          "description": "Exact deployment environments, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "minDurationMs": {
+          "description": "Span duration at least this, in ms.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxDurationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minTokens": {
+          "description": "Span tokens (input plus output) at least this.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minCostUsd": {
+          "description": "Span cost at least this, in USD.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxCostUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "sort": {
+          "default": "started",
+          "type": "string",
+          "enum": [
+            "started",
+            "duration",
+            "tokens",
+            "cost"
+          ]
+        },
+        "direction": {
+          "default": "desc",
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "cursor": {
+          "description": "nextCursor from the previous call. Keep every other parameter the same; it carries the window.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List spans",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_logs",
+    "title": "List logs",
+    "description": "SDK logs and experiment records, as the Logs page lists them, newest first: name, time, trace and span, service, experiment and variant, with body and attributes previewed. Filter by name, experiment, or logs with no trace; paged by cursor. For one trace's ranking records use get_trace_ranking.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "eventName": {
+          "description": "Log name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "experiment": {
+          "description": "Experiment name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "tracelessOnly": {
+          "default": false,
+          "description": "Only logs not attached to a trace.",
+          "type": "boolean"
+        },
+        "cursor": {
+          "description": "nextCursor from the previous call. Keep every other parameter the same; it carries the window.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List logs",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "compare_traces",
+    "title": "Compare two traces",
+    "description": "Two traces side by side, as the Compare page shows them: name, duration, status, span and error counts, tokens, cost and experiment variant for each, the difference B minus A, and how many of each experiment record type each one has. Use it to compare a slow run with a fast one or two variants.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceIdA": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "traceIdB": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The second trace id; must differ from traceIdA."
+        }
+      },
+      "required": [
+        "traceIdA",
+        "traceIdB"
+      ]
+    },
+    "annotations": {
+      "title": "Compare two traces",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_trace_ranking",
+    "title": "Trace ranking records",
+    "description": "The Ranking tab of one trace: the experiment records it carries, in order (results, comparisons, skips, fallbacks, drops, outcomes), each with its variant, role and key attributes such as agreement and result counts. Empty when no experiment touched the run. list_logs searches these across runs.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "traceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The 32-character hex trace id, as list_traces returns it."
+        },
+        "limit": {
+          "default": 50,
+          "description": "Records to return (max 100).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "traceId"
+      ]
+    },
+    "annotations": {
+      "title": "Trace ranking records",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_turn",
+    "title": "Get turn",
+    "description": "One agent turn call by call, as the turn page shows it: each search with its query and top hits, each tool or skill call with its outcome, timing, rank it was offered at and error, plus the session's previous and next turn. Turn ids come from Agent health insights and tasks. A call with a traceId opens with get_run_summary.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The turn id (a UUID)."
+        },
+        "limit": {
+          "default": 50,
+          "description": "Calls to return (max 100).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "turnId"
+      ]
+    },
+    "annotations": {
+      "title": "Get turn",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_run_stats",
+    "title": "Run totals for a filtered set",
+    "description": "Totals for the runs matching the same filters as list_traces, as the Runs page header shows them: run count, failed runs (a run failed when its root span reports an error), error rate, p50, p95 and p99 duration, tokens, cost, and runs per day or hour. For the unfiltered project get_trace_health is cheaper; for spend to quote prefer get_cost_by_day.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "tool": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "errorOnly": {
+          "description": "Only traces containing an error span.",
+          "type": "boolean"
+        },
+        "experiment": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "rootName": {
+          "description": "Run (top-level span) name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "spanName": {
+          "description": "Keep runs with a span whose name contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "arm": {
+          "description": "Experiment variant (arm) contains this text.",
+          "type": "string",
+          "maxLength": 200
+        },
+        "conversationId": {
+          "description": "Keep the runs of one conversation: the exact gen_ai.conversation.id, which is also the session id get_session takes.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "description": "Span status, any of.",
+          "maxItems": 3,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "unset",
+              "ok",
+              "error"
+            ]
+          }
+        },
+        "service": {
+          "description": "Exact service names, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "environment": {
+          "description": "Exact deployment environments, any of.",
+          "maxItems": 20,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "minDurationMs": {
+          "description": "Span duration at least this, in ms.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxDurationMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minTokens": {
+          "description": "Span tokens (input plus output) at least this.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxTokens": {
+          "type": "number",
+          "minimum": 0
+        },
+        "minCostUsd": {
+          "description": "Span cost at least this, in USD.",
+          "type": "number",
+          "minimum": 0
+        },
+        "maxCostUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bucket": {
+          "default": "day",
+          "description": "Volume series granularity. Hourly applies to windows up to 7 days.",
+          "type": "string",
+          "enum": [
+            "day",
+            "hour"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "title": "Run totals for a filtered set",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_mcp_servers",
+    "title": "List MCP servers",
+    "description": "The MCP servers this project's traces show, one row per server and side: provided (the server's own spans) or consumed (an agent's calls to it). Each has calls, error rate, p95 latency, sessions, first and last seen in the window. Call get_mcp_server for one server's tools and calling agents.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the calls of this deployment environment (deployment.environment.name). The servers stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "annotations": {
+      "title": "List MCP servers",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_mcp_server",
+    "title": "Get an MCP server",
+    "description": "One MCP server from list_mcp_servers: its stats, per-tool calls, errors and p50/p95 latency, the agents that call it, and the protocol versions and transports in use when the spans name them.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "server": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The server key, as list_mcp_servers returns it."
+        },
+        "role": {
+          "description": "Which side: provided or consumed. Defaults to the side with the most calls.",
+          "type": "string",
+          "enum": [
+            "provided",
+            "consumed"
+          ]
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the calls of this deployment environment (deployment.environment.name). The servers stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "server"
+      ]
+    },
+    "annotations": {
+      "title": "Get an MCP server",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_agents",
+    "title": "List agents",
+    "description": "The agents this project's traces show, detected from the spans. Each has runs (traces it ran in), errors, error rate, cost, p95 run latency, first and last seen in the window. Also returns the handoffs: one edge per calling agent and called agent, with a count. Call get_agent for one agent's tools and MCP servers.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the runs of this deployment environment. The agents stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      }
+    },
+    "annotations": {
+      "title": "List agents",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_agent",
+    "title": "Get an agent",
+    "description": "One agent from list_agents: its stats, the tools it calls (calls, errors, p95 latency), the MCP servers it calls, and the agents it hands work to and gets work from.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "agent": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The agent key, as list_agents returns it."
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "environment": {
+          "description": "Only the runs of this deployment environment. The agents stay the same.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "agent"
+      ]
+    },
+    "annotations": {
+      "title": "Get an agent",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_agent_health",
+    "title": "Get agent health",
+    "description": "The Agent health page for a 7, 30 or 90 day window: tiles, turn shapes, flow map, capture level and what more capture unlocks, setup, page state, open issues (cut to the plan) and hidden ones, recent imports. Call list_issue_examples for an issue's turns.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "windowDays": {
+          "default": 7,
+          "description": "Days to read: 7, 30 or 90. A window longer than the plan includes falls back to the longest it does.",
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 7
+            },
+            {
+              "type": "number",
+              "const": 30
+            },
+            {
+              "type": "number",
+              "const": 90
+            }
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get agent health",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_issue_examples",
+    "title": "List issue examples",
+    "description": "Example turns behind one or more Agent health issues, newest first: each step of the turn (search, tool call, outcome, rank) with the step the issue is about flagged. Turns per issue follow the plan; none on a plan without examples. Issue ids come from get_agent_health.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "issueIds": {
+          "minItems": 1,
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 36,
+            "maxLength": 36
+          },
+          "description": "Issue ids from get_agent_health or list_insights."
+        }
+      },
+      "required": [
+        "issueIds"
+      ]
+    },
+    "annotations": {
+      "title": "List issue examples",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "set_health_signal_hidden",
+    "title": "Hide or show a slow tool issue",
+    "description": "Hide an open slow tool issue (latency_outlier or wait_heavy) as slow by design, or show a hidden one again. Changes what the team's Agent health page lists, not what is measured. Hidden issues appear in get_agent_health as hiddenIssues.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "signalId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The issue id from get_agent_health (issues or hiddenIssues)."
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "true hides the issue as slow by design; false shows it again."
+        }
+      },
+      "required": [
+        "signalId",
+        "hidden"
+      ]
+    },
+    "annotations": {
+      "title": "Hide or show a slow tool issue",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "request_analysis",
+    "title": "Request a fresh reading",
+    "description": "Ask for a fresh reading of Agent health (what: health) or of Intents (what: intents), each with a 10 minute cooldown. Returns the job id to poll with get_job_status, or the cooldown. Then get_analysis_freshness.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "what": {
+          "type": "string",
+          "enum": [
+            "health",
+            "intents"
+          ],
+          "description": "health: the Agent health reading. intents: the Intents reading."
+        }
+      },
+      "required": [
+        "what"
+      ]
+    },
+    "annotations": {
+      "title": "Request a fresh reading",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "get_self_corrections",
+    "title": "Get self-corrections",
+    "description": "The Self-corrections page: how often the agent goes back on itself per 100 turns against the window before, by kind, after which tool, by task and by intent, top phrases (when replies are captured), recent examples and the fixes of open issues. Filter by tool, task or intent.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "windowDays": {
+          "default": 7,
+          "description": "Days to read: 7, 30 or 90. A window longer than the plan includes falls back to the longest it does.",
+          "anyOf": [
+            {
+              "type": "number",
+              "const": 7
+            },
+            {
+              "type": "number",
+              "const": 30
+            },
+            {
+              "type": "number",
+              "const": 90
+            }
+          ]
+        },
+        "tool": {
+          "description": "Only after this tool: a catalog id, or skill:<id>.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "task": {
+          "description": "Only in this task id (get_agent_health tasks).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "intent": {
+          "description": "Only in this intent id (list_intents).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get self-corrections",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_intents",
+    "title": "List intents",
+    "description": "The Intents page: what people want from the agent, each intent with turns, share, answered rate, sentiment, tasks, tools, self-corrections, asked again, what people ask next and trend, plus the Flows (where conversations go step by step). Call get_intent for one intent's breakdown.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "sort": {
+          "default": "turns",
+          "description": "turns: busiest first. answered: least answered first. negative: most negative first. name: A to Z.",
+          "type": "string",
+          "enum": [
+            "turns",
+            "answered",
+            "negative",
+            "name"
+          ]
+        },
+        "includeFlows": {
+          "default": true,
+          "description": "Include the Flows: where conversations go, step by step.",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List intents",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "get_intent",
+    "title": "Get intent",
+    "description": "One intent's panel: its numbers, what its asks are for and the ways people ask it, what else the same ask wants, the steps it is done in (usual tools and order, matching task) and a few example asks, cut short. Intent ids come from list_intents.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "intentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "An intent id from list_intents."
+        },
+        "examples": {
+          "default": 3,
+          "description": "Example asks to include (0 to 5).",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "intentId"
+      ]
+    },
+    "annotations": {
+      "title": "Get intent",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_calibrations",
+    "title": "List calibrations",
+    "description": "Experiments in this project that recorded ranking comparisons, with how many selections were compared and how many disagreed. The starting point for calibration work: find the experiment with a mismatch rate worth explaining, then open it with get_calibration.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List calibrations",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_calibration",
+    "title": "Calibration detail",
+    "description": "How two arms of one experiment agreed over a window: per-arm-pair comparison and mismatch counts, top-1 and exact-order agreement, each side's latency and outcomes, the shadow's reliability, and recent comparisons. Use list_calibration_mismatches to see only the ones that disagreed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "experimentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Experiment name, as returned by list_calibrations."
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "experimentName"
+      ]
+    },
+    "annotations": {
+      "title": "Calibration detail",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_calibration_mismatches",
+    "title": "Calibration mismatches",
+    "description": "The individual real queries where two arms returned different rankings, with both rankings and how they differ. This is the concrete work list for improving retrieval: take a query from here, reproduce it with test_retrieval, and test a description change against it.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "experimentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "facets": {
+          "description": "Narrow to particular kinds of disagreement.",
+          "maxItems": 5,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "top1",
+              "order",
+              "missing",
+              "added",
+              "outcome"
+            ]
+          }
+        },
+        "match": {
+          "default": "any",
+          "description": "How several facets combine: any matches one of them, all needs every one.",
+          "type": "string",
+          "enum": [
+            "any",
+            "all"
+          ]
+        },
+        "includeAgreements": {
+          "default": false,
+          "description": "Also return selections where the two arms agreed.",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "offset": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "experimentName"
+      ]
+    },
+    "annotations": {
+      "title": "Calibration mismatches",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_experiment",
+    "title": "Experiment detail",
+    "description": "One experiment over a window: per-arm traces, errors, latency, tokens and cost, each arm against the baseline, the capabilities whose rank moved, detected issues, shadow agreement and reliability, and conversion. Find names with list_calibrations; drill into disagreements with list_calibration_mismatches.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "experimentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Experiment name, as returned by list_calibrations."
+        }
+      },
+      "required": [
+        "experimentName"
+      ]
+    },
+    "annotations": {
+      "title": "Experiment detail",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_selection",
+    "title": "Selection inspector",
+    "description": "One shadow-tested search in full: the query, both arms' rankings with scores, how far they agreed at k, each arm's outcome and duration, its trace id, and its lifecycle records. Take a selectionId from list_calibration_mismatches or get_quality; reproduce it with test_retrieval.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "selectionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A selectionId from list_calibration_mismatches or get_quality."
+        }
+      },
+      "required": [
+        "selectionId"
+      ]
+    },
+    "annotations": {
+      "title": "Selection inspector",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_match_quality_runs",
+    "title": "List match quality runs",
+    "description": "Past analyses of search quality, each with the evidence census that bounds how much its proposals are worth. Read the census before the proposals: a run over a window with no invoked-tool records measured agreement with the baseline, not accuracy.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List match quality runs",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_match_quality_run",
+    "title": "Get match quality run",
+    "description": "One match quality analysis in full: what the run could see, what it concluded, and the searchable-description rewrites it proposed. Omit runId for the most recent run. Apply, dismiss or revert a proposal with review_description_rewrite.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "applied",
+            "dismissed",
+            "superseded",
+            "reverted"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get match quality run",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_quality",
+    "title": "Quality: misses",
+    "description": "How often search put the right tool first over a window, the change vs the window before, the customer's own ranking beside ours, and the searches where it did not (right tool, rank, what came first, how we know). Filter with q or outcome. Fix one with list_description_rewrites.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "range": {
+          "default": "7d",
+          "description": "The window, as the console's presets: 7d, 14d, 30d, 3m or 12m. Compared with the window before it.",
+          "type": "string",
+          "enum": [
+            "7d",
+            "14d",
+            "30d",
+            "3m",
+            "12m"
+          ]
+        },
+        "q": {
+          "description": "Case-insensitive text matched against the search and both tool names.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "outcome": {
+          "description": "missing: the right tool was not returned. lower: returned, but not first.",
+          "type": "string",
+          "enum": [
+            "missing",
+            "lower"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Quality: misses",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_description_rewrites",
+    "title": "Quality: description rewrites",
+    "description": "The searchable-description rewrites waiting and applied: current vs proposed text, why, what a replay of past searches says each does, all pending ones together, and whether a runtime picks overrides up. Pass proposalId for one rewrite's missed searches, or tool for one tool's card. Act with review_description_rewrite.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "tool": {
+          "description": "A tool's catalog entry id (toolId here, rightTool.id in get_quality): only its rewrites, with their missed searches, and its card.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "proposalId": {
+          "description": "Only this rewrite, with the searches it missed.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "range": {
+          "default": "7d",
+          "description": "The window the tool card's search counts cover.",
+          "type": "string",
+          "enum": [
+            "7d",
+            "14d",
+            "30d",
+            "3m",
+            "12m"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "Quality: description rewrites",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "review_description_rewrite",
+    "title": "Apply, dismiss or revert a description rewrite",
+    "description": "Act on a searchable-description rewrite from list_description_rewrites: apply writes its text as the catalog override, dismiss closes it, revert restores the exact text it replaced, apply_all applies every pending one. Prefer this to set_catalog_override for a drafted rewrite.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "dismiss",
+            "revert",
+            "apply_all"
+          ]
+        },
+        "proposalId": {
+          "description": "The rewrite's proposalId. Required for apply, dismiss and revert; ignored by apply_all.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Apply, dismiss or revert a description rewrite",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "run_quality_analysis",
+    "title": "Start a quality analysis",
+    "description": "Queue a match quality analysis of the last 7, 14 or 30 days of searches: it judges which tool was right and drafts description rewrites. Counts against the plan's monthly runs. Returns the job id to poll with get_job_status, then read list_description_rewrites.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "windowDays": {
+          "default": 7,
+          "description": "Days of searches to analyse: 7, 14 or 30.",
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "annotations": {
+      "title": "Start a quality analysis",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_ranking_graphs",
+    "title": "Adaptive ranking: graphs",
+    "description": "The project's intent graphs for adaptive ranking: who built each, whether a runtime ranks from it, revision, size and how much it has learned, plus the setup steps still open. Open one with get_ranking_graph to see whether it helps.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Adaptive ranking: graphs",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_ranking_graph",
+    "title": "Adaptive ranking: one graph",
+    "description": "Whether one intent graph helps: serving state, how often the right tool comes first with and without it, recall@1/3/5, nDCG@5 and MRR@5 both ways, the verdict, live recall before and after, warnings, facts, its busiest ask groups and the setup steps left.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "graphKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A graphKey from list_ranking_graphs. Omit for the merged Ratel graph."
+        }
+      }
+    },
+    "annotations": {
+      "title": "Adaptive ranking: one graph",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_tool_cousage",
+    "title": "List tool co-usage",
+    "description": "Tools that run together in the same turn or the same session, from real invocations: each set with how many units ran it, the task it is when its tools are a task's steps (taskId), and for pairs the overlap and each direction's conditional share. mergeCandidatesOnly keeps the pairs the agent never runs apart.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scope": {
+          "default": "turn",
+          "description": "turn: tools called in one turn; session: tools called anywhere in one session.",
+          "type": "string",
+          "enum": [
+            "turn",
+            "session"
+          ]
+        },
+        "size": {
+          "description": "Only sets of exactly this many tools (sets reach as many tools as the biggest task).",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8
+        },
+        "minSupport": {
+          "description": "Only sets seen in at least this many units.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "tool": {
+          "description": "Only sets containing this tool id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mergeCandidatesOnly": {
+          "default": false,
+          "description": "Only pairs with Jaccard lower bound >= 0.9 and support >= 20.",
+          "type": "boolean"
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List tool co-usage",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_tool_transitions",
+    "title": "List tool transitions",
+    "description": "What the agent runs after a given tool, from real invocations: next-tool probabilities with confidence bounds and lift, in one turn or across a session, the order a task's steps run in. kind=next is the call right after; kind=before is any later call in the same unit.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scope": {
+          "default": "turn",
+          "type": "string",
+          "enum": [
+            "turn",
+            "session"
+          ]
+        },
+        "kind": {
+          "default": "next",
+          "type": "string",
+          "enum": [
+            "next",
+            "before"
+          ]
+        },
+        "from": {
+          "description": "Only transitions leaving this tool id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "to": {
+          "description": "Only transitions arriving at this tool id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "minN": {
+          "description": "Only transitions seen at least this many times.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List tool transitions",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_intent_tool_usage",
+    "title": "List intent tool usage",
+    "description": "Which tools serve each kind of search the agent makes: for every intent grouped from real search queries, the tools the agent went on to call in the same turn or session, as a share of that intent's units with a confidence bound. Rows group by intent, biggest first.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "scope": {
+          "default": "turn",
+          "type": "string",
+          "enum": [
+            "turn",
+            "session"
+          ]
+        },
+        "intentId": {
+          "description": "Only this intent: an intentId from an earlier page of this list.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "minUnits": {
+          "description": "Only intents carried by at least this many units.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List intent tool usage",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_tool_crafts",
+    "title": "List drafted fixes",
+    "description": "Fixes drafted by rules from how the agent runs its tools: merge tools it never runs apart, combine a task's steps into one tool, tighten a schema whose first calls fail, retire a tool nobody calls, rewrite a description searches miss. Each row has the kind of fix, the tools it changes, the drafted tool and its fixId on Fixes.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "superseded",
+            "dismissed"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List drafted fixes",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_tool_craft",
+    "title": "Get a drafted fix",
+    "description": "One drafted fix in full: the evidence, the tools as they are today, and the drafted definition (JSON, TypeScript and Python).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "craftId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      },
+      "required": [
+        "craftId"
+      ]
+    },
+    "annotations": {
+      "title": "Get a drafted fix",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_flag_status",
+    "title": "Feature flag status",
+    "description": "The deployment's feature switches and whether each is on: the eval gate, adaptive ranking's catalog drift and MCP Apps views. A switched-off surface refuses with forbidden and names its switch; an empty result from any other tool means there is no data.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Feature flag status",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_quota_status",
+    "title": "Plan and limits",
+    "description": "The organization's plan and subscription state (paid, past due, period end), its limits, usage against each quota (projects, skills per project, members) counted as the console counts them, and this project's match quality runs left this month. Explains quota_exceeded errors on writes.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Plan and limits",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_job_status",
+    "title": "Background job status",
+    "description": "Status of a background job by id, or every job currently queued or running for the project. Analysis work such as a match quality run is queued, so poll this rather than assuming it failed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "jobId": {
+          "description": "A specific job id, as returned by an operation that enqueues work.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Background job status",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "list_sdk_events",
+    "title": "SDK events",
+    "description": "What Settings › Developer shows: SDK events received over 24h, 7d or 30d with received, dropped and rejected counts, type and source facets, and the newest rows. view rejects lists events Ratel refused (reason, size); view drops lists what the SDK dropped before sending. get_sdk_event returns one event's payload.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "range": {
+          "default": "7d",
+          "description": "The window, as on the Developer page.",
+          "type": "string",
+          "enum": [
+            "24h",
+            "7d",
+            "30d"
+          ]
+        },
+        "view": {
+          "default": "events",
+          "description": "events: what arrived. rejects: what Ratel refused. drops: what the SDK reported dropping.",
+          "type": "string",
+          "enum": [
+            "events",
+            "rejects",
+            "drops"
+          ]
+        },
+        "type": {
+          "description": "Only this event type, e.g. invoke_error. See facets.types.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "sourceId": {
+          "description": "Only this SDK source. See facets.sources.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "SDK events",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_sdk_event",
+    "title": "SDK event payload",
+    "description": "One SDK event as Settings › Developer opens it: its type, source, timing, ids and the payload exactly as the SDK sent it, cut at 4000 characters. Take the identifier from list_sdk_events.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "identifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The event's identifier from list_sdk_events: the SDK's event id, or the stored row id."
+        }
+      },
+      "required": [
+        "identifier"
+      ]
+    },
+    "annotations": {
+      "title": "SDK event payload",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_api_keys",
+    "title": "API keys",
+    "description": "The project's API keys as Settings › API keys lists them: name, prefix, access (full, read_only, ingest or custom, with its scopes; publishable keys are safe to ship in an app), status, created, last used and expiry. Never the key itself. Keys are created and revoked in the console; get_sdk_setup shows how to use one.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "API keys",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_sdk_setup",
+    "title": "SDK setup",
+    "description": "The quickstart Settings › API keys shows: the traces endpoint, the env var the key is read from, the install line and a snippet per language (TypeScript, curl). Set captureContent to include the content capture lines. No key is inlined; list_api_keys shows the project's keys.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "captureContent": {
+          "default": false,
+          "description": "Include the opt-in lines that send search queries and tool arguments on spans.",
+          "type": "boolean"
+        }
+      }
+    },
+    "annotations": {
+      "title": "SDK setup",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_improvement_signals",
+    "title": "What to fix",
+    "description": "The single best starting point for improving a catalog: skills that get retrieved in search but never actually invoked, the most common user queries, and the tools erroring most often.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "endUserId": {
+          "description": "Restrict to a single end user id, when the project segments by one.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "What to fix",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_search_queries_for_skill",
+    "title": "Queries that retrieved a skill",
+    "description": "The real user queries that caused a given skill to be retrieved. The fastest way to see whether a skill's description is matching the intent you meant it to. Identify the skill by name, as the runtime does.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skillName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "The skill's name, as it appears in the catalog and in retrieval telemetry."
+        },
+        "endUserId": {
+          "description": "Restrict to a single end user id, when the project segments by one.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "skillName"
+      ]
+    },
+    "annotations": {
+      "title": "Queries that retrieved a skill",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "test_retrieval",
+    "title": "Test retrieval against the live catalog",
+    "description": "Rank a query against this project's real catalog, once as stored and once with proposed description edits applied, and return the difference. Nothing is written: this is how to check a rewrite fixes a query before saving it with update_skill or set_catalog_override. Mode bm25 is free; embeddings and hybrid call the embedding provider, cost money, and are metered tighter.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "The prompt to rank, ideally a real one from calibration or search history."
+        },
+        "mode": {
+          "default": "bm25",
+          "description": "bm25 is free; embeddings and hybrid spend the embedding provider budget.",
+          "type": "string",
+          "enum": [
+            "bm25",
+            "embeddings",
+            "hybrid"
+          ]
+        },
+        "topKSkills": {
+          "default": 5,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "topKTools": {
+          "default": 5,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "embeddingWeight": {
+          "default": 0.5,
+          "description": "How much the embedding score counts in hybrid mode.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "drafts": {
+          "default": {
+            "skill": {},
+            "tool": {}
+          },
+          "description": "Unsaved edits to test, keyed by skill name or tool name. Send only the kind you are editing. Omit entirely to rank the catalog as it stands.",
+          "type": "object",
+          "properties": {
+            "skill": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "description": "Replacement retrieval text to test. Not saved.",
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "tags": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  }
+                }
+              }
+            },
+            "tool": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "description": "Replacement retrieval text to test. Not saved.",
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "tags": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "includeSyncedTools": {
+          "default": true,
+          "description": "Include runtime-synced tool definitions in the bench.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "annotations": {
+      "title": "Test retrieval against the live catalog",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_shipments",
+    "title": "List shipments",
+    "description": "The Ship page: changes that went live, newest first (shipments recorded with mark_fix_shipped and applied description rewrites), each with the fix it came from and, for the newest few, its trail back to the run it started from. Use get_lineage for any other object.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "shipmentId": {
+          "description": "Only this shipment, with its full trail.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List shipments",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "get_lineage",
+    "title": "Get lineage",
+    "description": "Where an object came from: one step back (source) or the full chain back to the run (chain: true, oldest first), for kind trace, metric, insight, intent, task, fix, experiment, eval or shipment and its id. On a plan without example turns an insight names its metric, not its run.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "trace",
+            "metric",
+            "insight",
+            "intent",
+            "task",
+            "fix",
+            "experiment",
+            "eval",
+            "shipment"
+          ],
+          "description": "The object's kind."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The object's id, e.g. an insight id, issue:<id> for a fix, or a shipment id."
+        },
+        "chain": {
+          "default": false,
+          "description": "true: the whole chain back to Monitor. false: one step back.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "annotations": {
+      "title": "Get lineage",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "get_analysis_freshness",
+    "title": "Get analysis freshness",
+    "description": "When the project's analysis last finished, whether it is working now and import progress; with section (overview, health, self_corrections, tasks, intents, fixes) also that page's last finished time and pending jobs. Poll after request_analysis; get_job_status follows one job.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "section": {
+          "description": "One page's analysis: its own background jobs.",
+          "type": "string",
+          "enum": [
+            "overview",
+            "health",
+            "self_corrections",
+            "tasks",
+            "intents",
+            "fixes"
+          ]
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get analysis freshness",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    }
+  },
+  {
+    "name": "get_session",
+    "title": "Get session replay",
+    "description": "One session step by step: turns, model calls, searches and tool calls, what the context held at each model call, notes on unused or missing tools and why each tool choice was good or bad, with totals. Message text only with the content opt-in. Also What-if options and past runs, read only.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The session id, as traces carry it."
+        },
+        "offset": {
+          "default": 0,
+          "description": "First step to return, for paging through a long session.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "steps": {
+          "default": 60,
+          "description": "Steps to return (max 200).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200
+        },
+        "includeText": {
+          "default": false,
+          "description": "Include message text of model calls that kept it. Only honoured when the project's content opt-in is on.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sessionId"
+      ]
+    },
+    "annotations": {
+      "title": "Get session replay",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_tasks",
+    "title": "List tasks",
+    "description": "List the project's tasks with their runs, status, finish rate and fix counts, plus the reading's totals, its state and the asks no task serves. Call get_task with a taskId for its steps, issues, scorers and eval set.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List tasks",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "get_task",
+    "title": "Get task",
+    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with FF_EVAL_GATE on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A task id from list_tasks."
+        }
+      },
+      "required": [
+        "taskId"
+      ]
+    },
+    "annotations": {
+      "title": "Get task",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "monitor"
+    }
+  },
+  {
+    "name": "list_insights",
+    "title": "List insights",
+    "description": "The open findings about the agent, worst first, in the words Agent health shows: what went wrong, what it costs, what to do, and the trace or reading it came from (source). Follow one with get_fix. For catalog-level hints use get_improvement_signals.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "kind": {
+          "description": "Only insights of this kind, e.g. tool_errors.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List insights",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "insights"
+    }
+  },
+  {
+    "name": "list_fixes",
+    "title": "List fixes",
+    "description": "List proposed fixes with their effect, insightIds, taskIds, draft, eval badge and shipped version, and the Fixes page's counts and potential savings per day, week or month. Filter by insightId, taskId, kind, tool or intent. Call get_fix to read the change.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "insightId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "An insight id from list_insights."
+        },
+        "taskId": {
+          "description": "Only fixes that affect this task id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "kind": {
+          "description": "Only fixes of this kind.",
+          "type": "string",
+          "enum": [
+            "rewrite",
+            "retire",
+            "merge",
+            "combine",
+            "build",
+            "skill",
+            "fail-clearly",
+            "schema",
+            "fold",
+            "parallel",
+            "enrich",
+            "preload",
+            "split",
+            "prerequisite",
+            "tell-apart",
+            "fewer-results"
+          ]
+        },
+        "tool": {
+          "description": "Only fixes that change this catalog tool id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "intent": {
+          "description": "Only fixes that serve this intent id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "status": {
+          "default": "open",
+          "type": "string",
+          "enum": [
+            "open",
+            "applied",
+            "all"
+          ]
+        },
+        "period": {
+          "default": "month",
+          "description": "The period savings are scaled to.",
+          "type": "string",
+          "enum": [
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      }
+    },
+    "annotations": {
+      "title": "List fixes",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_fix",
+    "title": "Get fix",
+    "description": "Read one fix with its change, taskIds, draft, evidence, experiments and shipments. The chain lists its sources in order. A ready draft supplies the change when the eval gate is on. Pass fixId or insightId. Call run_eval to simulate the fix.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        },
+        "insightId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "An insight id from list_insights."
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get fix",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_eval",
+    "title": "Get eval of a fix",
+    "description": "Read the latest simulation without starting one. A fix with tasks returns one result per task, including scorerVersion and score breakdown. Other fixes return the per-fix result. Poll this tool after run_eval. The eval is null before the first simulation.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Get eval of a fix",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "list_task_simulations",
+    "title": "List a task's simulations",
+    "description": "Each fix's latest simulation on one task: state (better, worse, same, running, none) and whether it is stale after an edit. Pass fixId for one simulation's change, draft status, fix tests, task tests, replayed runs and runs. Edit with change_task_simulation; run it with run_eval.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A fix id from list_fixes, e.g. craft:<uuid>."
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum rows to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "taskId"
+      ]
+    },
+    "annotations": {
+      "title": "List a task's simulations",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_fix_eval_set",
+    "title": "Get the evals of a fix",
+    "description": "Read the evals that a fix is simulated on. Each eval has its expected outcome, role (holdout or evidence) and latest result. The result also has the change, method, block reason, latest simulation (interval, evidence, breakdown, judge) and earlier runs. Use change_fix_eval_set to edit the evals. Use run_eval to simulate the fix.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "pattern": "^(rewrite|craft|issue|intent):\\S{1,200}$",
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>."
+        },
+        "limit": {
+          "default": 25,
+          "description": "Maximum evals to return (max 50).",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Get the evals of a fix",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "create_skill",
+    "title": "Create skill",
+    "description": "Add a skill to the project catalog. Subject to the organization's skills-per-project plan limit. Creates as a draft unless status is set to published.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skill": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "searchableDescription": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 262144
+            },
+            "tags": {
+              "default": [],
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "tools": {
+              "default": [],
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "metadata": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 128
+                }
+              }
+            },
+            "status": {
+              "default": "draft",
+              "type": "string",
+              "enum": [
+                "draft",
+                "published"
+              ]
+            },
+            "model": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "endUserId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "body"
+          ]
+        }
+      },
+      "required": [
+        "skill"
+      ]
+    },
+    "annotations": {
+      "title": "Create skill",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "update_skill",
+    "title": "Update skill",
+    "description": "Change one or more fields of an existing skill. Pass expectedVersion to make the edit conditional on the version you read, which is how concurrent edits are detected.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skillId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "patch": {
+          "type": "object",
+          "properties": {
+            "expectedVersion": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "searchableDescription": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 4096
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "body": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 262144
+            },
+            "tags": {
+              "maxItems": 64,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            },
+            "tools": {
+              "maxItems": 256,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "metadata": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "additionalProperties": {
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 128
+                }
+              }
+            },
+            "endUserId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "skillId",
+        "patch"
+      ]
+    },
+    "annotations": {
+      "title": "Update skill",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "publish_skill",
+    "title": "Publish skill",
+    "description": "Move a skill to published so the retrieval engine can serve it. Publishing bumps the project's catalog version.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skillId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "skillId"
+      ]
+    },
+    "annotations": {
+      "title": "Publish skill",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "archive_skill",
+    "title": "Archive skill",
+    "description": "Move a skill to archived so it stops being served. Archiving is reversible by publishing again; it does not delete the skill.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skillId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "skillId"
+      ]
+    },
+    "annotations": {
+      "title": "Archive skill",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "import_skills",
+    "title": "Import skills",
+    "description": "Bulk upsert skills by name: each one is created if absent, updated if its content differs, and left alone if identical. Made for onboarding an existing folder of skill files in one call. The plan limit is checked against the whole batch first, so an import that would exceed it changes nothing at all.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "skills": {
+          "minItems": 1,
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "searchableDescription": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 262144
+              },
+              "tags": {
+                "default": [],
+                "maxItems": 64,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "tools": {
+                "default": [],
+                "maxItems": 256,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "metadata": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "additionalProperties": {
+                  "maxItems": 64,
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                }
+              },
+              "status": {
+                "default": "draft",
+                "type": "string",
+                "enum": [
+                  "draft",
+                  "published"
+                ]
+              },
+              "model": {
+                "type": "string",
+                "maxLength": 128
+              },
+              "endUserId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            },
+            "required": [
+              "name",
+              "description",
+              "body"
+            ]
+          }
+        }
+      },
+      "required": [
+        "skills"
+      ]
+    },
+    "annotations": {
+      "title": "Import skills",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "set_catalog_override",
+    "title": "Override a catalog entry's searchable description",
+    "description": "Replace the searchable description (the text retrieval matches against) of one runtime-synced tool or skill. Take kind and entryId from list_runtime_catalog. Pass null to clear the override and fall back to the runtime's text. Does not change the description the agent reads.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "tool",
+            "skill",
+            "fact"
+          ],
+          "description": "Which catalog the entry belongs to, as reported by list_runtime_catalog."
+        },
+        "entryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The entry's entryId from list_runtime_catalog. A tool's name is not always its entryId."
+        },
+        "searchableDescription": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The replacement text, or null to clear the override."
+        }
+      },
+      "required": [
+        "kind",
+        "entryId",
+        "searchableDescription"
+      ]
+    },
+    "annotations": {
+      "title": "Override a catalog entry's searchable description",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "generate_tool_crafts",
+    "title": "Draft fixes",
+    "description": "Queues a drafting run: rules read how the agent runs its tools, its tasks and the searches that missed a tool, and draft fixes (merges, combined steps, tighter schemas, prerequisites, rewrites, retirements and more). No model is called. Returns a jobId; poll get_job_status, then list_tool_crafts.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        }
+      }
+    },
+    "annotations": {
+      "title": "Draft fixes",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "run_eval",
+    "title": "Run eval on a fix",
+    "description": "Queue one simulation per affected task when FF_EVAL_GATE is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Run eval on a fix",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "create_experiment",
+    "title": "Create experiment for a fix",
+    "description": "Declare an A/B experiment for a fix: a name and two arms the agent's runtime tags its spans with (ratel.experiment.id and ratel.experiment.arm), so the experiment pages compare them. Creates a record and its lineage link to the fix; does not change the agent. chain is oldest first: trace, insight, fix, experiment.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        },
+        "name": {
+          "description": "The ratel.experiment.id value. Defaults to fix-<kind>-<short id>.",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,79}$"
+        },
+        "baselineArm": {
+          "default": "baseline",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,39}$"
+        },
+        "candidateArm": {
+          "default": "fix",
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,39}$"
+        },
+        "trafficPercent": {
+          "default": 50,
+          "description": "Share of traffic on the candidate arm.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Create experiment for a fix",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "mark_fix_shipped",
+    "title": "Mark fix shipped",
+    "description": "Record that a fix is live in a version of the agent, linked to the fix, the insight it resolves and, optionally, the experiment that tested it. It then shows on the project's Ship page. Returns the full lineage chain, oldest first: trace, insight, fix, experiment (when given), shipment. Records only; deploys nothing.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "description": "The agent version or release that carries the fix, e.g. v1.4.2 or a commit sha."
+        },
+        "experimentId": {
+          "description": "The experiment from create_experiment that tested it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "fixId",
+        "version"
+      ]
+    },
+    "annotations": {
+      "title": "Mark fix shipped",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
+    "name": "change_task_scorer",
+    "title": "Change a task scorer",
+    "description": "Turn one of a task's scorers on or off with its setting, or reset it to the default. max_* kinds need max, expected_tool needs tool, judge_criteria needs criteria. Returns the saved scorer. Read scorers with get_task.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ends_well",
+            "max_self_corrections",
+            "max_latency_ms",
+            "max_cost_usd",
+            "expected_tool",
+            "max_tool_calls",
+            "judge_criteria"
+          ]
+        },
+        "action": {
+          "default": "save",
+          "description": "reset returns the scorer to its default.",
+          "type": "string",
+          "enum": [
+            "save",
+            "reset"
+          ]
+        },
+        "enabled": {
+          "description": "Required to save: on or off.",
+          "type": "boolean"
+        },
+        "max": {
+          "description": "The limit for max_* kinds; a whole number for max_tool_calls and max_self_corrections.",
+          "type": "number",
+          "minimum": 0
+        },
+        "tool": {
+          "description": "The tool id expected_tool checks for.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "criteria": {
+          "description": "What judge_criteria asks a judge model to check.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 5000
+        }
+      },
+      "required": [
+        "taskId",
+        "kind"
+      ]
+    },
+    "annotations": {
+      "title": "Change a task scorer",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_task_eval_set",
+    "title": "Change a task's eval set",
+    "description": "Edit the runs a task's fixes are tested on: pin, unpin or exclude a case (caseId), add a run (runId, with an optional proposal from draft_task_test to save it as a test), restore an excluded run (caseId or runId), or refresh the set (returns jobId for get_job_status).",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "pin",
+            "unpin",
+            "exclude",
+            "add",
+            "restore",
+            "refresh"
+          ]
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A case id from get_task (evalSet.rows) or list_task_simulations."
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A run id: a turn id from get_task's exampleRuns or a trace."
+        },
+        "proposal": {
+          "description": "A test from draft_task_test, edited or not; only with add.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[^\\r\\n]+$"
+            },
+            "ask": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 10000
+            },
+            "expected": {
+              "type": "object",
+              "properties": {
+                "tool": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxToolCalls": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxSelfCorrections": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxLatencyMs": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "maxCostUsd": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "tool",
+                "maxToolCalls",
+                "maxSelfCorrections",
+                "maxLatencyMs",
+                "maxCostUsd"
+              ],
+              "additionalProperties": false
+            },
+            "criteria": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 5000
+            }
+          },
+          "required": [
+            "name",
+            "ask",
+            "expected",
+            "criteria"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taskId",
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a task's eval set",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "draft_task_test",
+    "title": "Draft a task test from a run",
+    "description": "Ask a model to draft a test from one completed run of a task: a name, the ask, the expected outcome and criteria. Spends model budget; saves nothing. Save it with change_task_eval_set action add, this runId and the proposal.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A completed run (turn id) of this task, from get_task's exampleRuns."
+        }
+      },
+      "required": [
+        "taskId",
+        "runId"
+      ]
+    },
+    "annotations": {
+      "title": "Draft a task test from a run",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_task_simulation",
+    "title": "Change a task simulation",
+    "description": "Edit what a fix is simulated with on one task: draft saves a hand-edited change (a FixChange, as get_fix returns it), add_test adds a run as a fix test (runId, expected, criteria), edit_test changes one (caseId). Then run_eval; mark_fix_shipped marks it live.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "taskId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A task id from list_tasks."
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "A fix id from list_fixes, e.g. craft:<uuid>."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "add_test",
+            "edit_test"
+          ]
+        },
+        "change": {
+          "description": "draft: the whole change, e.g. { version: 1, patches: { tool_id: \"new description\" }, hide: [], add: [], collapse: [], dedupeRetries: [], topK: null, skillSteps: [], unsupportedReason: null }.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A run id: a turn id from get_task's exampleRuns or a trace."
+        },
+        "caseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "A case id from get_task (evalSet.rows) or list_task_simulations."
+        },
+        "expected": {
+          "description": "add_test and edit_test: what the run should do.",
+          "type": "object",
+          "properties": {
+            "tool": {
+              "description": "The tool the run should call.",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxToolCalls": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxSearches": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxFailedCalls": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "avoidTools": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              }
+            },
+            "endsWell": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxSelfCorrections": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxCostUsd": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxLatencyMs": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "criteria": {
+          "default": "",
+          "description": "add_test and edit_test: what a judge checks, in words.",
+          "type": "string",
+          "maxLength": 10000
+        }
+      },
+      "required": [
+        "taskId",
+        "fixId",
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a task simulation",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "change_fix_eval_set",
+    "title": "Change a fix's eval set",
+    "description": "Edit the runs a fix is simulated on: create picks them from history, top_up adds more, add_run adds one (runId: a run or trace id), update_case changes a case's expected outcome (fields left out keep their value), remove_case drops one. Read it with get_fix_eval_set.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "pattern": "^(rewrite|craft|issue|intent):\\S{1,200}$",
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>."
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "create",
+            "top_up",
+            "add_run",
+            "update_case",
+            "remove_case"
+          ]
+        },
+        "runId": {
+          "description": "add_run: a run id or a trace id.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "caseId": {
+          "description": "update_case and remove_case: a caseId from get_fix_eval_set.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "tool": {
+          "description": "The tool that should be in the first list the agent sees; null clears it.",
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 500
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxToolCalls": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxSearches": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxFailedCalls": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "avoidTools": {
+          "description": "Tools the run should not call.",
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "endsWell": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxSelfCorrections": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxCostUsd": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxLatencyMs": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "description": "What the run should achieve, in words.",
+          "type": "string",
+          "maxLength": 2000
+        },
+        "criteria": {
+          "description": "What a judge checks, in words.",
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "fixId",
+        "action"
+      ]
+    },
+    "annotations": {
+      "title": "Change a fix's eval set",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "dismiss_fix",
+    "title": "Dismiss a drafted fix",
+    "description": "Dismiss a drafted tool change (a craft: fix) so it leaves the list and later readings do not draft it again. Other kinds are refused: a description rewrite is dismissed where it is applied. Returns the dismissed fix id.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "pattern": "^(rewrite|craft|issue|intent):\\S{1,200}$",
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>."
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Dismiss a drafted fix",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  }
+]

@@ -58,3 +58,10 @@ test("web only queues jobs and migrates; the worker runs them, unpublished, and 
   assert.doesNotMatch(worker, /ports:/);
   assert.doesNotMatch(worker, /DATABASE_MIGRATE_ON_BOOT/);
 });
+
+test("db, web and worker come back after a reboot, and the demo does not", () => {
+  const anchor = compose.slice(compose.indexOf("x-platform:"), compose.indexOf("\nservices:"));
+  assert.match(anchor, /\n {2}restart: unless-stopped\n/, "web and worker inherit it");
+  assert.match(service("db"), /\n {4}restart: unless-stopped\n/);
+  assert.doesNotMatch(service("demo"), /restart:/, "a one-shot seed");
+});
