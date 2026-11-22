@@ -37,7 +37,7 @@ test("a feature span is named feature.<name>.<operation> and returns the work's 
   assert.equal(span?.status.code, SpanStatusCode.UNSET);
 });
 
-test("a failure marks the span as an error with the error's type only, and still throws", async () => {
+test("a failure marks the span as an error with its stable type only, never the class, and still throws", async () => {
   const { exporter, tracer } = recorder();
   class QuotaError extends Error {}
   await assert.rejects(
@@ -54,7 +54,11 @@ test("a failure marks the span as an error with the error's type only, and still
   const [span] = exporter.getFinishedSpans();
   assert.equal(span?.status.code, SpanStatusCode.ERROR);
   assert.equal(span?.status.message, undefined);
-  assert.equal(span?.attributes["error.type"], "QuotaError");
+  assert.equal(
+    span?.attributes["error.type"],
+    "unknown",
+    "never the class name: the bundle mangles it",
+  );
   assert.equal(span?.events.length, 0, "no exception event: its message could hold customer text");
 });
 

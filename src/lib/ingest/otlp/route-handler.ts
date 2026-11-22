@@ -41,6 +41,7 @@ import { type PersistSpansDeps, persistDecodedSpans } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
+import { stripClientAddresses } from "./strip-client-address";
 
 /**
  * The monthly event cap, through the entitlements port: `checkEventQuota` before the
@@ -119,6 +120,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   agentSpanDedupe: AgentSpanDedupeDeps;
   /** Stored `gen_ai` log records join their spans; absent, none are read. */
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
+  /** `FF_INGEST_STRIP_CLIENT_ADDRESS` (strip-client-address.ts); absent, the environment decides. */
+  stripClientAddresses?: () => boolean;
   /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
@@ -278,7 +281,14 @@ export async function handleTracesRequest(
       organization?.id,
     );
   }
-  const bytes = inflated.bytes;
+  // With the switch on, no IP address of the sender is decoded or stored (strip-client-address.ts).
+  const sanitized = stripClientAddresses(
+    "traces",
+    transport,
+    inflated.bytes,
+    deps.stripClientAddresses?.(),
+  );
+  const bytes = sanitized.bytes;
 
   let spans: ReturnType<typeof decodeOtlp>;
   try {
@@ -364,7 +374,10 @@ export async function handleTracesRequest(
       signal: "traces",
       contentType: transport === "json" ? "application/json" : "application/x-protobuf",
       body: bytes,
-      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+      gzipped:
+        !sanitized.stripped && isGzipEncoding(req.headers.get("content-encoding"))
+          ? read.bytes
+          : undefined,
       itemCount: spans.length,
       traceIds: [...new Set(spans.map((span) => span.traceId))],
     },

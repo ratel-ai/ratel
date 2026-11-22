@@ -1,4 +1,5 @@
 import { type Attributes, type Span, SpanStatusCode, type Tracer, trace } from "@opentelemetry/api";
+import { stableErrorType } from "./error-type";
 
 /**
  * Feature spans: one span named `feature.<name>.<operation>` where a feature is wired in, so each
@@ -66,11 +67,6 @@ function recordFailure(span: Span, error: unknown): void {
     span.setAttribute("feature.outcome", digest);
     return;
   }
-  span.setAttribute("error.type", errorType(error));
+  span.setAttribute("error.type", stableErrorType(error) ?? "unknown");
   span.setStatus({ code: SpanStatusCode.ERROR });
-}
-
-function errorType(error: unknown): string {
-  if (error instanceof Error) return error.constructor.name || error.name || "Error";
-  return typeof error;
 }

@@ -110,12 +110,13 @@ test("on Bedrock, a Claude line says backend bedrock and keeps provider anthropi
   }
 });
 
-test("a failed call is a line with the error's class and no tokens; a refusal carries its count", async () => {
+test("a failed call is a line with a stable error type, never the class, and no tokens; a refusal carries its count", async () => {
   const { lines, restore } = capture();
   try {
     await assert.rejects(
       trackModelCall(META, async () => {
-        throw new TypeError("nope");
+        class UpstreamDown extends Error {}
+        throw new UpstreamDown("prompt text that must not be logged");
       }),
     );
     recordModelCall({ ...META, outcome: "refused_budget", durationMs: 0, calls: 3 });
@@ -127,7 +128,7 @@ test("a failed call is a line with the error's class and no tokens; a refusal ca
         fields.input_tokens,
       ]),
       [
-        ["error", "TypeError", undefined, null],
+        ["error", "unknown", undefined, null],
         ["refused_budget", undefined, 3, null],
       ],
     );

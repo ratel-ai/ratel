@@ -34,6 +34,7 @@ import {
   trackAcceptedIngestRequest,
 } from "./ingest-observability";
 import { toOtelLogRows } from "./log-rows";
+import { stripClientAddresses } from "./strip-client-address";
 
 export const MAX_BODY_BYTES = 4_000_000;
 export const MAX_LOG_RECORDS = 5_000;
@@ -58,6 +59,8 @@ export interface LogsHandlerDeps extends IngestObservabilityDeps {
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
   setRequestLogContext?: typeof setRequestLogContextFn;
+  /** `FF_INGEST_STRIP_CLIENT_ADDRESS` (strip-client-address.ts); absent, the environment decides. */
+  stripClientAddresses?: () => boolean;
   /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** Restate a stored model call with its new `gen_ai` logs; absent, off. */
@@ -197,7 +200,14 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
       organization?.id,
     );
   }
-  const bytes = inflated.bytes;
+  // With the switch on, no IP address of the sender is decoded or stored (strip-client-address.ts).
+  const sanitized = stripClientAddresses(
+    "logs",
+    transport,
+    inflated.bytes,
+    deps.stripClientAddresses?.(),
+  );
+  const bytes = sanitized.bytes;
 
   let records: ReturnType<typeof decodeOtlpLogs>;
   try {
@@ -295,7 +305,10 @@ export async function handleLogsRequest(req: Request, deps: LogsHandlerDeps): Pr
       signal: "logs",
       contentType: transport === "json" ? "application/json" : "application/x-protobuf",
       body: bytes,
-      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+      gzipped:
+        !sanitized.stripped && isGzipEncoding(req.headers.get("content-encoding"))
+          ? read.bytes
+          : undefined,
       itemCount: records.length,
       traceIds: [...new Set(records.flatMap((record) => (record.traceId ? [record.traceId] : [])))],
     },

@@ -64,6 +64,19 @@ test("preserves the CloudWatch request fields as top-level pino fields", async (
   );
 });
 
+test("the request line never carries the caller's IP address", async () => {
+  const { logger, records } = createCaptureLogger();
+  const handler = withRequestLog(async () => new Response(null, { status: 202 }), logger, noLabels);
+  await handler(
+    new Request("https://cloud.ratel.sh/api/v1/traces", {
+      method: "POST",
+      headers: { "x-forwarded-for": "203.0.113.7, 10.0.0.1", "x-real-ip": "203.0.113.7" },
+    }),
+  );
+  assert.equal(records.length, 1);
+  assert.doesNotMatch(JSON.stringify(records[0]), /203\.0\.113\.7|10\.0\.0\.1/);
+});
+
 test("logs status 500 and rethrows the original handler error", async () => {
   const { logger, records } = createCaptureLogger();
   const thrown = new Error("database unavailable");

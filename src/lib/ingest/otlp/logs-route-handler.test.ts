@@ -734,6 +734,45 @@ test("raw capture of a gzip export keeps the inflated body and the sent gzip", a
   assert.deepEqual(stored[0].gzipped, new Uint8Array(sent));
 });
 
+test("with FF_INGEST_STRIP_CLIENT_ADDRESS on, raw capture of a log export keeps no client IP address", async () => {
+  const { capture, stored } = rawCapture();
+  const payload = JSON.parse(otlpLogsJson(LIFECYCLE));
+  payload.resourceLogs[0].resource.attributes.push({
+    key: "host.ip",
+    value: { stringValue: "192.0.2.10" },
+  });
+  payload.resourceLogs[0].scopeLogs[0].logRecords[0].attributes.push({
+    key: "client.address",
+    value: { stringValue: "203.0.113.7" },
+  });
+  const sent = gzipSync(JSON.stringify(payload));
+  const response = await handleLogsRequest(
+    request(sent, { Authorization: "Bearer rtl_test", "Content-Encoding": "gzip" }),
+    makeDeps({ otlpRawCapture: capture, stripClientAddresses: () => true }),
+  );
+  assert.equal(response.status, 202);
+  assert.equal(stored.length, 1);
+  const kept = gunzipSync(compressForStorage(stored[0])).toString("utf8");
+  assert.doesNotMatch(kept, /192\.0\.2\.10|203\.0\.113\.7|host\.ip|client\.address/);
+  assert.equal(stored[0].itemCount, 2);
+  assert.equal(stored[0].gzipped, undefined);
+});
+
+test("with the strip off (the default), a log export is captured as sent", async () => {
+  const { capture, stored } = rawCapture();
+  const payload = JSON.parse(otlpLogsJson(LIFECYCLE));
+  payload.resourceLogs[0].resource.attributes.push({
+    key: "host.ip",
+    value: { stringValue: "192.0.2.10" },
+  });
+  const response = await handleLogsRequest(
+    request(JSON.stringify(payload), { Authorization: "Bearer rtl_test" }),
+    makeDeps({ otlpRawCapture: capture }),
+  );
+  assert.equal(response.status, 202);
+  assert.match(new TextDecoder().decode(stored[0].body), /192\.0\.2\.10/);
+});
+
 test("gen_ai details records are stored with ids and content", async () => {
   const inserted: unknown[] = [];
   const response = await handleLogsRequest(
