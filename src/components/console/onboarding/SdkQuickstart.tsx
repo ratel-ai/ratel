@@ -31,6 +31,7 @@ export function SdkQuickstart({
   defaultLang = "typescript",
   maxHeight,
   captureContent = false,
+  deployVersion = false,
   className,
 }: {
   /** Absolute OTLP traces URL for this deployment. */
@@ -42,12 +43,14 @@ export function SdkQuickstart({
   maxHeight?: number | string;
   /** Include the content-capture switch in the TypeScript snippet. */
   captureContent?: boolean;
+  /** Ask for `service.version` = the deployed commit sha (`FF_CODE_HANDOFF`, decided on the server). */
+  deployVersion?: boolean;
   className?: string;
 }) {
   const [lang, setLang] = useState<QuickstartLang>(defaultLang);
   const snippets = useMemo(
-    () => buildQuickstartSet({ endpoint, serviceName, captureContent }),
-    [endpoint, serviceName, captureContent],
+    () => buildQuickstartSet({ endpoint, serviceName, captureContent, deployVersion }),
+    [endpoint, serviceName, captureContent, deployVersion],
   );
   const { install, code } = snippets[lang];
   const label = QUICKSTART_LANG_LABELS[lang];

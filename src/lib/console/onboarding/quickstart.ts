@@ -49,6 +49,12 @@ export interface QuickstartTarget {
    * byte-identical to the one we have always handed out.
    */
   captureContent?: boolean;
+  /**
+   * Tell the reader to set `service.version` to the commit sha of the deploy,
+   * so the deploy watch (`FF_CODE_HANDOFF`, RC-921) sees which commit is
+   * live. Off by default, and when off the snippet is unchanged.
+   */
+  deployVersion?: boolean;
 }
 
 /**
@@ -92,10 +98,26 @@ const CAPTURE_LINES: readonly string[] = [
   "",
 ];
 
+/** The OTel resource attribute the deploy watch reads, and an env var that holds the commit sha in CI. */
+export const QUICKSTART_VERSION_ATTRIBUTE = "service.version";
+export const QUICKSTART_VERSION_EXAMPLE = "GITHUB_SHA";
+
+/**
+ * The lines that ask for `service.version` = the deployed commit sha. NodeSDK
+ * reads `OTEL_RESOURCE_ATTRIBUTES` itself, so nothing else changes.
+ */
+const DEPLOY_VERSION_LINES: readonly string[] = [
+  `// Set ${QUICKSTART_VERSION_ATTRIBUTE} to the commit sha of the deploy (for example`,
+  `// ${QUICKSTART_VERSION_EXAMPLE}), so Ratel sees which commit is live:`,
+  `// OTEL_RESOURCE_ATTRIBUTES=${QUICKSTART_VERSION_ATTRIBUTE}=$${QUICKSTART_VERSION_EXAMPLE}`,
+  "",
+];
+
 function typescriptSnippet({
   endpoint,
   serviceName,
   captureContent = false,
+  deployVersion = false,
 }: QuickstartTarget): QuickstartSnippet {
   return {
     lang: "typescript",
@@ -107,6 +129,7 @@ function typescriptSnippet({
       'import { RatelSpanProcessor } from "@ratel-ai/cloud-sdk/otel";',
       "",
       ...(captureContent ? CAPTURE_LINES : []),
+      ...(deployVersion ? DEPLOY_VERSION_LINES : []),
       "const sdk = new NodeSDK({",
       `  serviceName: ${quoted(serviceName)},`,
       "  spanProcessors: [",

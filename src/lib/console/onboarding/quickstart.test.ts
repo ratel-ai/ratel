@@ -187,3 +187,22 @@ test("buildQuickstartSet passes the capture choice through", () => {
   const set = buildQuickstartSet({ ...TARGET, captureContent: true });
   assert.ok(set.typescript.code.includes(QUICKSTART_CAPTURE_ENV));
 });
+
+test("deployVersion off leaves every snippet byte-identical; on adds the service.version lines to TypeScript only", () => {
+  for (const lang of QUICKSTART_LANGS) {
+    assert.deepEqual(
+      buildQuickstart(lang, { ...TARGET, deployVersion: false }),
+      buildQuickstart(lang, TARGET),
+    );
+  }
+  const on = buildQuickstart("typescript", { ...TARGET, deployVersion: true }).code;
+  assert.match(
+    on,
+    /\/\/ Set service\.version to the commit sha of the deploy \(for example\n\/\/ GITHUB_SHA\)/,
+  );
+  assert.match(on, /OTEL_RESOURCE_ATTRIBUTES=service\.version=\$GITHUB_SHA/);
+  assert.equal(
+    buildQuickstart("curl", { ...TARGET, deployVersion: true }).code,
+    buildQuickstart("curl", TARGET).code,
+  );
+});

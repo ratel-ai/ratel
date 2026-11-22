@@ -8,6 +8,7 @@ import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
 import { BASE_URL } from "@/lib/platform/app-config";
 import { loadPivotFilterOptions } from "@/lib/synthesis/pivots/filter-options";
 import { pickGroupPivot } from "@/lib/synthesis/pivots/group-by-view";
+import { showDeployVersionGuidance } from "@/lib/views/code-handoff/deploy/sdk-setup";
 import { loadOverview, type OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
 
@@ -78,6 +79,7 @@ export async function OverviewPage({
           root={data.root}
           endpoint={`${BASE_URL}/v1/traces`}
           serviceName={project.slug}
+          deployVersion={await showDeployVersionGuidance(organization)}
         />
       }
       contextPanel={

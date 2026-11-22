@@ -6,6 +6,8 @@ import {
   QUICKSTART_KEY_ENV,
   QUICKSTART_LANG_LABELS,
   QUICKSTART_LANGS,
+  QUICKSTART_VERSION_ATTRIBUTE,
+  QUICKSTART_VERSION_EXAMPLE,
 } from "@/lib/console/onboarding/quickstart";
 import {
   sdkEventLabel,
@@ -52,6 +54,7 @@ import {
 } from "@/lib/platform/db/statement-timeout";
 import { getProjectById, listApiKeysForProject } from "@/lib/platform/projects/queries";
 import { publicUrl } from "@/lib/platform/public-url";
+import { codeHandoffEnabledForActor } from "@/lib/views/code-handoff/gate";
 import { buildMcpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
 import { projectEntitiesEnabledForActor } from "@/lib/views/project-entities/flag";
 
@@ -92,6 +95,8 @@ export interface DeveloperOperationDeps extends ContentAccessDeps {
   publicUrl: (path: string) => string;
   /** `FF_AGENTS_PAGES` for the caller: on, get_sdk_setup also returns the MCP server guide (RC-780). */
   projectEntitiesEnabled: (projectId: string, actor: string) => Promise<boolean>;
+  /** Whether `FF_CODE_HANDOFF` is on for the caller in the project. Absent means off. */
+  codeHandoffEnabled?: (projectId: string, actor: string) => Promise<boolean>;
   now: () => Date;
 }
 
@@ -142,6 +147,8 @@ export const defaultDeveloperDeps: DeveloperOperationDeps = {
   publicUrl,
   // The core's FF_AGENTS_PAGES switch (upstream's cloud-project-entities flag service).
   projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
+  // The core's FF_CODE_HANDOFF switch (upstream's cloud-code-handoff organization flag).
+  codeHandoffEnabled: (projectId, actor) => codeHandoffEnabledForActor(projectId, actor),
   now: () => new Date(),
   contentOptIn: readContentOptIn,
 };
@@ -466,15 +473,15 @@ export function developerOperations(
         const project = await deps.getProject(ctx.projectId);
         if (!project) throw notFound("project");
         const endpoint = deps.publicUrl("/v1/traces");
+        const actor = mcpActor(ctx.auth, ctx.projectId);
+        const deployVersion = (await deps.codeHandoffEnabled?.(ctx.projectId, actor)) ?? false;
         const snippets = buildQuickstartSet({
           endpoint,
           serviceName: project.slug,
           captureContent: params.captureContent,
+          deployVersion,
         });
-        const mcpServer = (await deps.projectEntitiesEnabled(
-          ctx.projectId,
-          mcpActor(ctx.auth, ctx.projectId),
-        ))
+        const mcpServer = (await deps.projectEntitiesEnabled(ctx.projectId, actor))
           ? buildMcpServerGuide({ tracesEndpoint: endpoint, serviceName: "my-mcp-server" })
           : null;
         return {
@@ -498,7 +505,11 @@ export function developerOperations(
             })),
             ...(mcpServer ? { mcpServer } : {}),
           },
-          hint: `Set ${QUICKSTART_KEY_ENV} to a key from Settings › API keys. After the first send, list_sdk_events and get_traces_ingest_diagnostics confirm it arrived.`,
+          hint:
+            `Set ${QUICKSTART_KEY_ENV} to a key from Settings › API keys. After the first send, list_sdk_events and get_traces_ingest_diagnostics confirm it arrived.` +
+            (deployVersion
+              ? ` Set ${QUICKSTART_VERSION_ATTRIBUTE} to the commit sha of the deploy (for example ${QUICKSTART_VERSION_EXAMPLE}), so Ratel records when a fix-tagged commit goes live.`
+              : ""),
         };
       },
     }),

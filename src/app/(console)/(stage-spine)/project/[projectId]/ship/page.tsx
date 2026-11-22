@@ -4,6 +4,7 @@ import { Section } from "@ratel/design-system/section";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Rocket } from "lucide-react";
 import Link from "next/link";
+import { shipmentCommitsFor } from "@/components/console/code-handoff/deploy/opened-shipment-commits";
 import { type OpenedShipment, ShipmentsTable } from "@/components/console/lineage/ShipmentsTable";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
@@ -80,6 +81,7 @@ export default async function ShipPage({
             );
           },
         }),
+        commits: await shipmentCommitsFor(organization, project.id, opened.ref.id),
       }
     : null;
   const fixes = fixHref(project.id);

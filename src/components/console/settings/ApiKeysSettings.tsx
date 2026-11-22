@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/platform/app-config";
 import { listApiKeysForProject } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
+import { showDeployVersionGuidance } from "@/lib/views/code-handoff/deploy/sdk-setup";
 import { ApiKeysTable } from "./ApiKeysTable";
 import { LoadError } from "./LoadError";
 import { requireProjectScope } from "./project-scope";
@@ -40,7 +41,11 @@ export async function ApiKeysSettings({ projectId }: { projectId: string }) {
       ) : (
         <LoadError what="API keys" />
       )}
-      <SdkQuickstart endpoint={apiUrl("/traces")} serviceName={project.slug} />
+      <SdkQuickstart
+        endpoint={apiUrl("/traces")}
+        serviceName={project.slug}
+        deployVersion={await showDeployVersionGuidance(organization)}
+      />
     </PageBody>
   );
 }

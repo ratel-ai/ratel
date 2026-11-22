@@ -1,5 +1,7 @@
 import { getLogger } from "@/lib/platform/logger";
 import { readGitHubAppConfig } from "./config";
+import { handleDeploymentStatus } from "./deploy/on-deployment-status";
+import { handlePush } from "./deploy/on-push";
 import { codeHandoffEnabledForActor } from "./gate";
 import { verifyWebhookSignature } from "./github/webhook-signature";
 import type { RepoLinkRow } from "./schema";
@@ -29,6 +31,10 @@ export interface GitHubWebhookDeps {
 export interface GitHubEventResult {
   /** Links removed. */
   removed: number;
+  /** Pushed commits recorded (`push` only). */
+  stored?: number;
+  /** Fix shipments recorded (`deployment_status` only). */
+  shipped?: number;
 }
 
 export type GitHubEventHandler = (
@@ -51,6 +57,8 @@ const logger = getLogger("code-handoff/webhook");
 export const GITHUB_EVENT_HANDLERS: Record<string, GitHubEventHandler> = {
   installation: handleInstallation,
   installation_repositories: handleInstallationRepositories,
+  push: handlePush,
+  deployment_status: handleDeploymentStatus,
 };
 
 const defaultDeps: GitHubWebhookDeps = {
@@ -88,10 +96,7 @@ export function createGitHubWebhookHandler(
       return Response.json({ error: "invalid_json" }, { status: 400 });
     }
     const result = await handler(payload, deps);
-    logger.info(
-      { event, action: payload.action, removed: result.removed },
-      "handled github webhook",
-    );
+    logger.info({ event, action: payload.action, ...result }, "handled github webhook");
     return Response.json(result);
   };
 }

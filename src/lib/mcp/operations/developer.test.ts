@@ -520,3 +520,35 @@ for (const { name, caller, optIn, sees } of CONTENT_CASES) {
     }
   });
 }
+
+/* ------------------- get_sdk_setup: deploy watch copy (RC-921) ------------------- */
+
+test("get_sdk_setup with FF_CODE_HANDOFF off hands out the snippets unchanged", async () => {
+  const off = await run("get_sdk_setup", {}, { codeHandoffEnabled: async () => false });
+  const absent = await run("get_sdk_setup", {});
+  assert.deepEqual(off.data, absent.data);
+  assert.equal(off.hint, absent.hint);
+  assert.ok(!JSON.stringify(off).includes("service.version"));
+});
+
+test("get_sdk_setup with FF_CODE_HANDOFF on tells the reader to set service.version to the commit sha", async () => {
+  const asked: [string, string][] = [];
+  const { data, hint } = await run(
+    "get_sdk_setup",
+    {},
+    {
+      codeHandoffEnabled: async (projectId, actor) => {
+        asked.push([projectId, actor]);
+        return true;
+      },
+    },
+  );
+  const snippets = data.snippets as Array<{ lang: string; code: string }>;
+  assert.equal(asked.length, 1);
+  assert.match(snippets[0]?.code ?? "", /service\.version to the commit sha of the deploy/);
+  assert.match(snippets[0]?.code ?? "", /OTEL_RESOURCE_ATTRIBUTES=service\.version=\$GITHUB_SHA/);
+  assert.match(
+    hint ?? "",
+    /Set service\.version to the commit sha of the deploy \(for example GITHUB_SHA\)/,
+  );
+});

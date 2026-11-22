@@ -6,7 +6,7 @@ import { stepIndex, withPeek } from "@ratel/design-system/peek";
 import { Skeleton } from "@ratel/design-system/states";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { type ReactNode, useState, useTransition } from "react";
 import { formatStamp, relativeTime } from "@/lib/console/settings/format";
 import type { ShipmentRow } from "@/lib/views/lineage/shipments";
 import type { LineageRef } from "@/lib/views/lineage/types";
@@ -16,6 +16,8 @@ import { LineageSteps, SourceLink } from "./SourceLink";
 export interface OpenedShipment {
   id: string;
   trail: readonly LineageRef[];
+  /** The repo commits that carried it (`FF_CODE_HANDOFF`), rendered on the server. */
+  commits?: ReactNode;
 }
 
 /**
@@ -133,6 +135,7 @@ export function ShipmentsTable({
             {trail ? <ShipmentTrail trail={trail} projectId={projectId} /> : <TrailSkeleton />}
           </section>
         ) : null}
+        {showing && opened?.id === showing.ref.id ? opened.commits : null}
       </Panel>
     </>
   );

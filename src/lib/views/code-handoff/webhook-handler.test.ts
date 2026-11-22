@@ -92,7 +92,7 @@ test("signed installation_repositories removed removes only those repos' links",
 
 test("an unknown event, or another action, answers 200 and writes nothing", async () => {
   const { handler, writes } = harness();
-  const unknown = await handler(delivery("push", { ref: "refs/heads/main" }));
+  const unknown = await handler(delivery("star", { action: "created" }));
   assert.equal(unknown.status, 200);
   assert.deepEqual(await unknown.json(), { ignored: true });
   assert.equal((await handler(delivery("toString", {}))).status, 200);

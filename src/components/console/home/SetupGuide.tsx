@@ -21,14 +21,17 @@ export function SetupGuide({
   root,
   endpoint,
   serviceName,
+  deployVersion = false,
 }: {
   root: string;
   /** Absolute OTLP traces URL for this deployment. */
   endpoint: string;
   /** Project slug, sent as the OpenTelemetry `service.name`. */
   serviceName: string;
+  /** Ask for `service.version` = the deployed commit sha (`FF_CODE_HANDOFF`, decided on the server). */
+  deployVersion?: boolean;
 }) {
-  const snippets = buildQuickstartSet({ endpoint, serviceName });
+  const snippets = buildQuickstartSet({ endpoint, serviceName, deployVersion });
   const install = snippets.typescript.install;
   const samples = QUICKSTART_LANGS.map((lang) => ({
     label: QUICKSTART_LANG_LABELS[lang],

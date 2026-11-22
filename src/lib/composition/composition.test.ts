@@ -305,6 +305,7 @@ describe("registry root", () => {
         "after:match_quality_sweep",
         "after:what_if_prune",
         "after:sandbox_run_events_prune",
+        "after:deploy_watch_version",
       ],
     );
   });

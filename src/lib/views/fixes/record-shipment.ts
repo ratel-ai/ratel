@@ -35,7 +35,7 @@ export interface RecordFixShipmentInput {
   /** Who shipped, as the row stores it: a Clerk id, or `project:<id>` for an API key. */
   shippedBy: string;
   actor: RecordLineageInput["actor"];
-  surface: "mcp" | "fixes";
+  surface: "mcp" | "fixes" | "github";
 }
 
 export interface RecordFixShipmentDeps {

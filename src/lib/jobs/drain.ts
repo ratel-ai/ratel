@@ -156,6 +156,8 @@ export const DRAIN_ERROR_AREAS: Readonly<Record<string, string>> = {
   quality_snapshot_refresh: "qualityErrors",
   match_quality_sweep: "matchQualityErrors",
   what_if_prune: "whatIfErrors",
+  // Code handoff's deploy watch (RC-920), isolated as upstream.
+  deploy_watch_version: "deployWatchErrors",
 };
 
 function heartbeatErrors(errors: Record<string, string>): Record<string, string[]> {
