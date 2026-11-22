@@ -9,7 +9,7 @@ Accepted — experimental rollout
 ## Context
 
 Ratel's core trace stream already records the product facts that power inspection, adaptive
-ranking, suggestions, and catalog views. Ratel Cloud can infer some of those facts from the
+ranking, suggestions, and catalog views. Ratel can infer some of those facts from the
 parallel OpenTelemetry projection, but sampling, processors, and the OTel content-capture gate
 make OTel an observation channel rather than a census. Catalog definitions are state as well as
 change observations: definition events make changes visible, but current state cannot be
@@ -53,7 +53,7 @@ The remotely publishable v1 event set is:
 For search events, the envelope `event_id` identifies the search. A hit's zero-based rank is its
 position in the ordered `hits[]` array rather than a repeated field on each hit.
 
-The adaptive-ranking events (ADR-0014) let a consumer of a served graph, such as Ratel Cloud
+The adaptive-ranking events (ADR-0014) let a consumer of a served graph, such as Ratel
 ranking a runtime with `learn: false`, observe its health and state without waiting for a
 search. They carry no user content: cluster ids, similarities, counts, redacted model
 identities, and the status report. A model identity is `name#hash` (`public_model_identity`): the endpoint's
@@ -121,7 +121,7 @@ Every event is flattened into this v2 envelope:
 | `end_user_id` | optional application-provided subject id |
 | `turn_id` | optional application turn id; the SDK turn scope stamps it ([ADR-0026](0026-turn-scope.md)) |
 | `trace_id`, `span_id` | optional active OTel correlation ids |
-| `turn_id` | optional, host-supplied; correlates a search with the invoke(s) of the same agent turn (pairs with the ADR-0014 credit slot) — the key Ratel Cloud uses to pair events when building the intent graph server-side |
+| `turn_id` | optional, host-supplied; correlates a search with the invoke(s) of the same agent turn (pairs with the ADR-0014 credit slot) — the key Ratel uses to pair events when building the intent graph server-side |
 | `type` and payload | flattened event tag and fields |
 
 `event_id` is the canonical deduplication and join key. The same value survives fan-out,
@@ -202,7 +202,7 @@ exists.
 
 ## Consequences
 
-- Ratel Cloud product facts no longer depend on OTel sampling or content capture, while OTel
+- Ratel product facts no longer depend on OTel sampling or content capture, while OTel
   interoperability and host-owned provider configuration remain intact.
 - The runtime vocabulary is now a frozen cross-language contract with a conformance burden.
 - Slow or failed subscribers cannot stall an agent, at the accepted cost of observable loss.

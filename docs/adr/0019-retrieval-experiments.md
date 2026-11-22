@@ -537,7 +537,7 @@ dispatch. The caller is responsible for excluding content and high-cardinality p
 - Assignment is reproducible and testable. Allocation order and experiment id are cohort inputs,
   so changing them is an explicit rollout change.
 - Fallback, N-arm comparison, empty rankings, result-level parity, and delayed outcomes have one
-  shared vocabulary across OTel backends and Ratel Cloud.
+  shared vocabulary across OTel backends and Ratel.
 - The raw unit id never leaves the process, but its unsalted short hash is pseudonymous and
   cross-experiment joinable. Hosts should pass opaque stable ids rather than email addresses or
   other direct identifiers.

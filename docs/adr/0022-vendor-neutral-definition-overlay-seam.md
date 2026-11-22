@@ -13,7 +13,7 @@ supply that description at runtime and how.
 
 ADR-0021 made the retrieval description an independent, tunable field. Tuning it is only useful
 if it can be changed without redeploying the host, which means some component outside the process
-must be able to supply it. Ratel Cloud is the first such component, and the first implementation
+must be able to supply it. Ratel is the first such component, and the first implementation
 of this seam was built and named for it: `attachCloudDefinitions`, `CloudDefinitions*` types, a
 `useCloudDefinitions` flag, and the wire attribute `ratel.catalog.use_cloud_definitions`.
 

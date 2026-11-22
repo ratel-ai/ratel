@@ -93,7 +93,7 @@ test("redaction leaves tool, product, status and project names alone", () => {
   const untouched = [
     "Create Pull Request for RAT-405",
     "Search Jira Tasks by keyword",
-    "List GitHub Issues in Ratel Cloud",
+    "List GitHub Issues in Acme Cloud",
     "open the Design Review Board",
     "move task to In Progress",
     "export report to Google Sheets",
@@ -120,12 +120,12 @@ test("a capitalised phrase the catalog itself uses is a product or field, never 
   const catalog = catalogText([
     {
       id: "list_tasks",
-      does: "List tasks in Ratel Cloud",
+      does: "List tasks in Acme Cloud",
       searchable: "Sort by Due Date, Created Date or Priority.",
     },
     { id: "jira_sync", does: "Jira Cloud Sync status" },
   ]);
-  assert.equal(redactPeople("tasks for Ratel Cloud", catalog), "tasks for Ratel Cloud");
+  assert.equal(redactPeople("tasks for Acme Cloud", catalog), "tasks for Acme Cloud");
   assert.equal(
     redactPeople("sort tasks by Due Date for Ana Lima", catalog),
     "sort tasks by Due Date for a teammate",
@@ -139,14 +139,14 @@ test("a capitalised phrase the catalog itself uses is a product or field, never 
     "tasks for a teammate and a teammate",
   );
   // Without a catalog the phrase cannot be told from a name, so the conservative choice stands.
-  assert.equal(redactPeople("tasks for Ratel Cloud"), "tasks for a teammate");
+  assert.equal(redactPeople("tasks for Acme Cloud"), "tasks for a teammate");
 });
 
 test("the chain checks names against the options it is deciding between", () => {
-  const options = [{ id: "cloud", does: "Everything about Ratel Cloud" }];
-  const chain = refusalChain("usage for Ratel Cloud by Ana Lima", FRAMING, options);
+  const options = [{ id: "cloud", does: "Everything about Acme Cloud" }];
+  const chain = refusalChain("usage for Acme Cloud by Ana Lima", FRAMING, options);
   assert.equal(chain.length, 4);
-  assert.ok(chain[2]!.input.endsWith("Search query: usage for Ratel Cloud by a teammate"));
+  assert.ok(chain[2]!.input.endsWith("Search query: usage for Acme Cloud by a teammate"));
 });
 
 test("the refusal chain tries the query as written, then with context, then the same two redacted", () => {
@@ -278,7 +278,7 @@ test("a query naming a tool is never reworded into a different query", async () 
 
 test("a product named in the catalog survives redaction end to end", async () => {
   const options = [
-    { id: "a", does: "Alpha tool", searchable: "Reports for Ratel Cloud" },
+    { id: "a", does: "Alpha tool", searchable: "Reports for Acme Cloud" },
     { id: "b", does: "Beta tool" },
   ];
   const { fetchImpl, calls } = scriptedFetch([
@@ -287,11 +287,11 @@ test("a product named in the catalog survives redaction end to end", async () =>
     choiceResponse("a", { a: 0.9, b: 0.1 }),
   ]);
   await decisionClient({ apiKey: "k", fetchImpl, sleep: noSleep }).decideChoice(
-    "report for Ratel Cloud by Ana Lima",
+    "report for Acme Cloud by Ana Lima",
     options,
     FRAMING,
   );
-  assert.match(String(calls[2]?.body.input), /report for Ratel Cloud by a teammate$/);
+  assert.match(String(calls[2]?.body.input), /report for Acme Cloud by a teammate$/);
 });
 
 test("the re-read uses the wording that got through, not the one that was refused", async () => {

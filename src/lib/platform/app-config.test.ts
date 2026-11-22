@@ -19,8 +19,8 @@ test("the defaults are local development on the open-source edition", () => {
 
 test("the environment overrides both; a blank value is the default; no trailing slash", () => {
   assert.deepEqual(
-    resolveAppConfig({ APP_NAME: "Ratel Cloud", BASE_URL: "https://ratel.example.com/" }),
-    { name: "Ratel Cloud", baseUrl: "https://ratel.example.com" },
+    resolveAppConfig({ APP_NAME: "Ratel Staging", BASE_URL: "https://ratel.example.com/" }),
+    { name: "Ratel Staging", baseUrl: "https://ratel.example.com" },
   );
   assert.deepEqual(resolveAppConfig({ APP_NAME: "  ", BASE_URL: "" }), {
     name: "Ratel",

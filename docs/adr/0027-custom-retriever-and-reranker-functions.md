@@ -25,7 +25,7 @@ probability per choice; open-source decision models are appearing.
 Unlike embeddings, these models share no wire format. The OpenAI-compatible embeddings API is a
 de facto standard many servers speak, so `embedding: { url }` can stay generic. Jev's request
 format is one vendor's and could change completely in a v2; a config option such as
-`systemOne: { url, apiKeyEnv }` would bind every SDK release to it. Ratel Cloud's Tool Picker is
+`systemOne: { url, apiKeyEnv }` would bind every SDK release to it. Ratel's Tool Picker is
 a second such ranker, and Cloud-specific features belong in `@ratel-ai/cloud-sdk`, not here.
 
 ## Decision

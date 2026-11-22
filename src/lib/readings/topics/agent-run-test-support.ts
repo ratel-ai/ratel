@@ -39,7 +39,7 @@ import {
 } from "@/lib/readings/trace-signals/workflows/label-queries";
 
 /**
- * Agent runs end to end on PGlite, for the Intents tests: Ratel Cloud's own
+ * Agent runs end to end on PGlite, for the Intents tests: Ratel's own
  * backend jobs as they export (an `invoke_agent` root with the job's ask and
  * one `chat` child, no tool span), through OTLP ingest, the turn build and
  * the `assign_topics` reading. No model is called: asks are placed by wording.

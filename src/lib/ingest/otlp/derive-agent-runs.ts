@@ -16,7 +16,7 @@ import type { DecodedSpan } from "./types";
 
 /**
  * One `agent_run` ledger row per `invoke_agent` root span (RC-742), so a run
- * that calls no tool still makes a turn. Ratel Cloud's own backend jobs export
+ * that calls no tool still makes a turn. Ratel's own backend jobs export
  * this shape (`lib/observability/agent-run.ts`): one `invoke_agent <job kind>`
  * root with the job's ask, and its `chat` model calls as children. Only tool
  * and search rows made turns before, so these runs made none.

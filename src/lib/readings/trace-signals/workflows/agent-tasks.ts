@@ -9,7 +9,7 @@ import { turnUnit } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * Tasks of tool-less agent runs (RC-747, `cloud-tool-run-insights`). An agent
- * run that calls no tool (an OTLP `invoke_agent` root, RC-742; Ratel Cloud's
+ * run that calls no tool (an OTLP `invoke_agent` root, RC-742; Ratel's
  * own backend jobs) has one `agent` step whose target id is the agent's name.
  * Tool mining needs two tools, so such runs formed no task. Here the runs of
  * one agent form one task once there are `minSupport` of them.

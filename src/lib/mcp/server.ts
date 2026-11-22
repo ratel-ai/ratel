@@ -13,13 +13,13 @@ import type { McpOperation, Registry } from "@/lib/mcp/registry";
 import { stageMeta, toolStage } from "@/lib/mcp/stages";
 import { productName, productSlug } from "@/lib/platform/product-name";
 
-/** The server is named by `productSlug()`: "ratel", or the edition's ("ratel-cloud"). */
+/** The server is named by `productSlug()`: "ratel", or the edition's slug. */
 export const MCP_SERVER_VERSION = "0.1.0";
 
 /**
  * How the model is told to use this server. Deliberately short: it is prepended
  * to the agent's context on every session, so it should orient and stop. It
- * opens with the edition's product name ("Ratel Cloud"), "Ratel" without one.
+ * opens with the edition's product name ("Ratel"), "Ratel" without one.
  */
 const INSTRUCTIONS_BODY = `agent context-usage analytics.
 

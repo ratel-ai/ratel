@@ -419,7 +419,7 @@ flag, default `true` (rank and learn). With
 `learn: false` the registry still ranks against the attached graph but its trace sink is never
 decorated with a learner, so the graph is never learned into. An explicit or
 `rebuildOnModelChange` rebuild still re-embeds its centroids and bumps `rev`. This
-is the shape a runtime needs to consume a graph produced elsewhere — Ratel Cloud, the second
+is the shape a runtime needs to consume a graph produced elsewhere — Ratel, the second
 producer named in [What is open source](#what-is-open-source), replaying a project's stored
 runtime events through this same learner and serving one graph per project — without a
 consumer's own traffic silently mutating a document whose revisions the producer, and a
@@ -437,7 +437,7 @@ default.
 
 **`usage_ranking_status`, an SDK-emitted status event.** Once a runtime can
 consume a graph it did not learn, "is a graph attached" (what `usage_boost`'s presence proves)
-stops being enough — Ratel Cloud's dashboard needs to know whether ranking is on, off, unknown,
+stops being enough — Ratel's dashboard needs to know whether ranking is on, off, unknown,
 or paused *before* any search happens, and which graph revision a runtime is running: its own,
 or one served by cloud. The enable, disable, and rebuild entry points therefore emit a
 `usage_ranking_status` trace event (`status`, `reason`, `rev`, an optional caller-supplied

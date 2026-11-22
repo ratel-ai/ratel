@@ -14,7 +14,7 @@ import {
 import { APP_NAME } from "@/lib/platform/app-config";
 
 /**
- * What did not make it in this window: events Ratel Cloud refused (with the
+ * What did not make it in this window: events Ratel refused (with the
  * reason, so the producer can fix it) and events the SDK shed before sending
  * (from its own drop reports). Cloud keeps only the metadata of a refused
  * event, never its payload.
