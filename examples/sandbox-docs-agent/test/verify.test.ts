@@ -31,8 +31,8 @@ describe("ratel sandbox verify on the docs agent", () => {
       "tools.searchDocs": "wired",
       "tools.readDoc": "wired",
       "tools.createTicket": "wired",
-      // No `defaults` to compare: production reads the same catalog, with no resolveLocal.
-      "config hash": "skipped",
+      // No `defaults`: the baseline run reads through the SDK what production reads.
+      "config hash": "wired",
     });
     expect(report.ok).toBe(true);
   });

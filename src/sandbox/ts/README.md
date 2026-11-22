@@ -229,7 +229,11 @@ captured content stay in memory and are never exported. Verify calls your model 
 `--dry` swaps the models of an AI SDK sandbox for a stand-in that calls each tool once, and fakes
 side effects with a fixed value. The command exits 1 when a param is not wired, and names it.
 Pass `defaults` (the object production gives `resolveLocal`) and `example` to `sandbox()` to check
-the production hash and to run without `--input`.
+the production hash and to run without `--input`. With no `defaults`, sdk prompt and model params
+still get the check: the run with no overrides must read through the SDK exactly the param
+defaults, which is what production reads (the catalog value, else the code's default).
+`ratel sandbox run --dry` runs once with the same stand-in model and fixed fakes (a `--fake` file
+still wins). The stand-in's reply shows the start of the system prompt it got.
 
 ## The playground runner: `ratel sandbox dev`
 

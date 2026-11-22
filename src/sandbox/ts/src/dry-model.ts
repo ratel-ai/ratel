@@ -8,7 +8,7 @@
 export const DRY_REPLY = "Dry run: no model was called.";
 
 interface DryCallOptions {
-  readonly prompt?: readonly { readonly role?: string }[];
+  readonly prompt?: readonly { readonly role?: string; readonly content?: unknown }[];
   readonly tools?: readonly {
     readonly type?: string;
     readonly name: string;
@@ -96,7 +96,7 @@ export function exampleOf(schema: unknown): unknown {
 function scriptedContent(options: DryCallOptions): Content[] {
   const tools = (options.tools ?? []).filter((t) => (t.type ?? "function") === "function");
   const answered = (options.prompt ?? []).some((m) => m.role === "tool");
-  if (tools.length === 0 || answered) return [{ type: "text", text: DRY_REPLY }];
+  if (tools.length === 0 || answered) return [{ type: "text", text: dryReply(options) }];
   return tools.map((t, i) => ({
     type: "tool-call",
     toolCallId: `dry_${i + 1}`,
@@ -104,6 +104,16 @@ function scriptedContent(options: DryCallOptions): Content[] {
     input: JSON.stringify(exampleOf(t.inputSchema) ?? {}),
   }));
 }
+
+/** DRY_REPLY, then the start of the system prompt the stand-in got: a dry run shows what the code sent. */
+export function dryReply(options: DryCallOptions): string {
+  const system = (options.prompt ?? []).find((m) => m.role === "system")?.content;
+  if (typeof system !== "string" || system === "") return DRY_REPLY;
+  const start = system.length > SYSTEM_ECHO ? `${system.slice(0, SYSTEM_ECHO)}...` : system;
+  return `${DRY_REPLY} System prompt: ${JSON.stringify(start)}`;
+}
+
+const SYSTEM_ECHO = 60;
 
 function finishOf(content: readonly Content[]): { unified: string; raw: string } {
   const reason = content.some((c) => c.type === "tool-call") ? "tool-calls" : "stop";

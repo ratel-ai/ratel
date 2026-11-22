@@ -5,8 +5,8 @@ import { buildManifest } from "../manifest.js";
 import { coerceOverride } from "../params.js";
 import { runSandbox } from "../run.js";
 import type { Sandbox } from "../sandbox.js";
-import { ToolModeError } from "../tools.js";
-import { verifySandbox } from "../verify.js";
+import { type ToolChannel, ToolModeError } from "../tools.js";
+import { dryRunSandbox, verifySandbox } from "../verify.js";
 import { installVerifyTracing, type VerifyTracing } from "../verify-tracing.js";
 import { dryToolChannel } from "./dry-tools.js";
 import { type LoadedSandbox, loadSandboxes, messageOf } from "./load.js";
@@ -51,21 +51,21 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
   }
   if (request.kind === "verify") return verify(request, loaded, tracing as VerifyTracing);
   const overrides = coerceSets(found, request.sets);
+  const dry = request.dry ? dryRunSandbox(found) : undefined;
   try {
     // A chat sandbox streams its reply: show it as it comes, on stderr, so stdout keeps only the result.
-    const result = await runSandbox(found, {
+    const result = await runSandbox(dry?.subject ?? found, {
       input: request.input,
       overrides,
       // The resolver imports `ai` and the providers from the sandbox file's project.
       resolveContext: { from: join(request.root, loaded.file) },
       onText: (text) => process.stderr.write(text),
       toolModes: request.tools,
-      toolChannel: localToolChannel(
-        found,
-        request.fakes,
-        (line) => process.stderr.write(`${line}\n`),
-        { from: join(request.root, loaded.file) },
-      ),
+      toolChannel: dry
+        ? withPinnedFakes(dryToolChannel(), request.fakes)
+        : localToolChannel(found, request.fakes, (line) => process.stderr.write(`${line}\n`), {
+            from: join(request.root, loaded.file),
+          }),
       onEvent: (event) => {
         if (event.kind === "tool.call") process.stderr.write(`\n[${event.tool} ${event.mode}] `);
         if (event.kind === "tool.result")
@@ -89,6 +89,8 @@ async function handle(request: WorkerRequest): Promise<WorkerReply> {
     )
       throw err;
     throw new Error(`${found.id}: run() threw: ${messageOf(err)}`);
+  } finally {
+    dry?.restore();
   }
 }
 
@@ -133,4 +135,18 @@ function coerceSets(
     overrides[name] = param ? coerceOverride(param, raw) : raw;
   }
   return overrides;
+}
+
+/** The dry channel, with the --fake files first: a pinned fake still wins in a dry run. */
+function withPinnedFakes(
+  channel: ToolChannel,
+  fakes: Readonly<Record<string, unknown>>,
+): ToolChannel {
+  return {
+    fake: (request, signal) =>
+      Object.hasOwn(fakes, request.tool)
+        ? Promise.resolve({ result: fakes[request.tool], isError: false, source: "pinned" })
+        : channel.fake(request, signal),
+    confirm: (request, signal) => channel.confirm(request, signal),
+  };
 }

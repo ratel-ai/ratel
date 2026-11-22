@@ -17,6 +17,8 @@ export type Command =
       readonly tools: Readonly<Record<string, ToolMode>>;
       /** A JSON file per tool whose content is its fake result. */
       readonly fakes: Readonly<Record<string, string>>;
+      /** A stand-in model instead of real model calls, and fixed fakes (AI SDK sandboxes). */
+      readonly dry?: true;
     }
   | {
       readonly command: "verify";
@@ -48,7 +50,7 @@ export class CliError extends Error {
 export const USAGE = `Usage:
   ratel sandbox list [--json]
   ratel sandbox run <id> --input <file> [--set name=value]... [--tool name=real|fake|confirm]...
-                       [--fake name=<file.json>]...
+                       [--fake name=<file.json>]... [--dry]
   ratel sandbox verify <id> [--input <file>] [--model <provider/model>] [--dry]
   ratel sandbox push [<id>] [--dry-run [--out <file.tar.gz>]] [--url <ratel url>]
   ratel sandbox dev [--url <ratel url>]
@@ -98,9 +100,11 @@ function parseRun(rest: readonly string[]): Command {
   const sets: [string, string][] = [];
   const tools: Record<string, ToolMode> = {};
   const fakes: Record<string, string> = {};
+  let dry = false;
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i] as string;
-    if (arg === "--input" || arg === "--set" || arg === "--tool" || arg === "--fake") {
+    if (arg === "--dry") dry = true;
+    else if (arg === "--input" || arg === "--set" || arg === "--tool" || arg === "--fake") {
       const value = rest[++i];
       if (value === undefined) throw new CliError(`${arg} needs a value`);
       if (arg === "--input") input = value;
@@ -125,7 +129,7 @@ function parseRun(rest: readonly string[]): Command {
   }
   if (sandboxId === undefined) throw new CliError(`a sandbox id is required\n${USAGE}`);
   if (input === undefined) throw new CliError(`--input <file> is required\n${USAGE}`);
-  return { command: "run", sandboxId, input, sets, tools, fakes };
+  return { command: "run", sandboxId, input, sets, tools, fakes, ...(dry ? { dry: true } : {}) };
 }
 
 function parseVerify(rest: readonly string[]): Command {

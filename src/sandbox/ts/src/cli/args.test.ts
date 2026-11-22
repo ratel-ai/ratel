@@ -28,3 +28,14 @@ describe("parseArgs: dev", () => {
     expect(() => parseArgs(["sandbox", "dev", "--nope"])).toThrow(CliError);
   });
 });
+
+describe("parseArgs: run --dry", () => {
+  it("sets dry only when --dry is given", () => {
+    expect(parseArgs(["sandbox", "run", "a", "--input", "in.json", "--dry"])).toMatchObject({
+      command: "run",
+      dry: true,
+    });
+    expect(parseArgs(["sandbox", "run", "a", "--input", "in.json"])).not.toHaveProperty("dry");
+    expect(USAGE).toMatch(/sandbox run <id>[^\n]*\n[^\n]*\[--dry\]/);
+  });
+});

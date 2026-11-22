@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { SpanStatusCode, trace } from "@opentelemetry/api";
 import type { ReadableSpan } from "@opentelemetry/sdk-trace-node";
+import type { CatalogRead } from "./catalog.js";
 import { DryModel } from "./dry-model.js";
 import { localConfigHash, RATEL_SANDBOX_CONFIG_HASH, RATEL_SANDBOX_ID } from "./otel.js";
 import { bareModelId, type ModelParam, type ParamMap, type ScalarParam } from "./params.js";
@@ -177,6 +178,8 @@ interface RunRecord {
   readonly spans: readonly ReadableSpan[];
   readonly configHash?: string;
   readonly error?: string;
+  /** The prompts and models the run read through the SDK catalog. */
+  readonly catalogReads?: readonly CatalogRead[];
 }
 
 type Run = (label: string, overrides: Record<string, unknown>) => Promise<RunRecord>;
@@ -215,7 +218,12 @@ async function runOnce(
           ...(options.toolChannel ? { toolChannel: options.toolChannel } : {}),
         });
         root.setAttribute(RATEL_SANDBOX_CONFIG_HASH, result.configHash);
-        return { traceId, configHash: result.configHash, overrides: result.overrides };
+        return {
+          traceId,
+          configHash: result.configHash,
+          overrides: result.overrides,
+          catalogReads: result.catalogReads,
+        };
       } catch (err) {
         root.setStatus({ code: SpanStatusCode.ERROR });
         return { traceId, error: err instanceof Error ? err.message : String(err) };
@@ -230,6 +238,7 @@ async function runOnce(
     spans: options.spans.spansOf(done.traceId),
     ...(done.configHash ? { configHash: done.configHash } : {}),
     ...(done.error ? { error: done.error } : {}),
+    ...(done.catalogReads ? { catalogReads: done.catalogReads } : {}),
   };
 }
 
@@ -450,11 +459,20 @@ function checkConfigHash(
     .map((r) => r.label);
   if (unchanged.length > 0)
     return row("not_wired", `the hash did not change with: ${unchanged.join(", ")}`);
-  if (!sandbox.defaults)
-    return row(
-      "skipped",
-      "changes with each override; the sandbox has no `defaults`, so the production hash is not checked",
-    );
+  if (!sandbox.defaults) {
+    const sdk = sdkBaselineProblem(sandbox, baseline);
+    if (sdk === undefined)
+      return row(
+        "skipped",
+        "changes with each override; the sandbox has no `defaults`, so the production hash is not checked",
+      );
+    return sdk === null
+      ? row(
+          "wired",
+          `changes with each override; no overrides = what production reads through the SDK (${base.slice(0, 12)})`,
+        )
+      : row("not_wired", sdk);
+  }
   const production = localConfigHash(sandbox.defaults);
   return production === base
     ? row("wired", `changes with each override; no overrides = production (${base.slice(0, 12)})`)
@@ -462,6 +480,34 @@ function checkConfigHash(
         "not_wired",
         `no overrides gives ${base.slice(0, 12)}, production (resolveLocal) gives ${production.slice(0, 12)}: the param names or defaults differ from the defaults object`,
       );
+}
+
+/**
+ * For a sandbox whose prompts and models come from the SDK: production reads the same
+ * catalog with no override, so its hash is the baseline's when the baseline run read
+ * exactly the param defaults (the catalog value, else the code's default). Returns
+ * undefined when no sdk prompt or model param was read, null when they all match, else
+ * what differs.
+ */
+function sdkBaselineProblem(sandbox: Sandbox, baseline: RunRecord): string | null | undefined {
+  const sources = Object.entries(sandbox.sdkParams ?? {}).filter(
+    ([, source]) => source.kind === "prompt" || source.kind === "model",
+  );
+  if (sources.length === 0) return undefined;
+  const differ: string[] = [];
+  let checked = 0;
+  for (const [name, source] of sources) {
+    const read = baseline.catalogReads?.find(
+      (r) => source.kind === r.kind && "id" in source && r.id === source.id,
+    );
+    if (!read) continue;
+    checked++;
+    if ((read.catalog ?? read.default) !== sandbox.params[name]?.default) differ.push(name);
+  }
+  if (checked === 0) return undefined;
+  return differ.length === 0
+    ? null
+    : `with no overrides, production reads other values for ${differ.join(", ")} than the params list: reload the sandbox after a catalog change`;
 }
 
 /** A tool mode verify can run without a reviewer and without a real side effect. */
@@ -550,6 +596,16 @@ function withDryModels(sandbox: Sandbox): Sandbox {
     callableProviders: () => [{ provider: "dry", keys: [] }],
   });
   return { ...sandbox, resolve: resolve as ModelResolver<unknown> };
+}
+
+/**
+ * The sandbox with the stand-in model of --dry, for `ratel sandbox run --dry`: models
+ * resolved by an AI SDK resolver, and sdk model id strings handed to the AI SDK. Call
+ * `restore` after the run.
+ */
+export function dryRunSandbox(sandbox: Sandbox): { subject: Sandbox; restore: () => void } {
+  const restore = hasSdkModel(sandbox) ? routeModelIdsToDry() : () => {};
+  return { subject: withDryModels(sandbox), restore };
 }
 
 function hasSdkModel(sandbox: Sandbox): boolean {

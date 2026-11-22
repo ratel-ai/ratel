@@ -20,6 +20,8 @@ export type WorkerRequest =
       readonly tools: Readonly<Record<string, ToolMode>>;
       /** Fake results by tool name, read from the --fake files. */
       readonly fakes: Readonly<Record<string, unknown>>;
+      /** The stand-in model of verify --dry, and fixed fakes for tools without a --fake file. */
+      readonly dry?: boolean;
     }
   | {
       readonly kind: "verify";

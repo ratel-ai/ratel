@@ -258,7 +258,12 @@ async function runCommand(
   files: string[],
 ): Promise<number> {
   const input = readJson("--input", command.input);
+  if (command.dry)
+    process.stderr.write(
+      `Running ${command.sandboxId} with a stand-in model (--dry): AI SDK models make no call.\n`,
+    );
   const reply = await askWorker({
+    ...(command.dry ? { dry: true } : {}),
     kind: "run",
     root,
     files,

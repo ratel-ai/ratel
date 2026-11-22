@@ -88,6 +88,7 @@ pnpm ratel sandbox run docs-agent --input chat.json --fake createTicket=ticket.j
 
 # Prove that the model, the prompt and the tools reach the model call (--dry: no model call).
 pnpm ratel sandbox run docs-agent --input chat.json --set system="Answer in French."
+pnpm ratel sandbox run docs-agent --input chat.json --dry   # stand-in model: shows the system prompt it got
 pnpm ratel sandbox verify docs-agent --input chat.json
 pnpm ratel sandbox verify docs-agent --input chat.json --dry
 
