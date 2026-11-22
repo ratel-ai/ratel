@@ -28,6 +28,7 @@ export type Command =
       /** A stand-in model instead of real model calls (AI SDK sandboxes). */
       readonly dry: boolean;
     }
+  | { readonly command: "serve" }
   | {
       readonly command: "push";
       /** Absent: every discovered sandbox. */
@@ -50,7 +51,8 @@ export const USAGE = `Usage:
                        [--fake name=<file.json>]...
   ratel sandbox verify <id> [--input <file>] [--model <provider/model>] [--dry]
   ratel sandbox push [<id>] [--dry-run [--out <file.tar.gz>]] [--url <ratel url>]
-  ratel sandbox dev [--url <ratel url>]`;
+  ratel sandbox dev [--url <ratel url>]
+  ratel sandbox serve   (container entrypoint: reads RATEL_INSTANCE_TOKEN and RATEL_GATEWAY_URL)`;
 
 const TOOL_MODES: readonly ToolMode[] = ["real", "fake", "confirm"];
 
@@ -66,6 +68,10 @@ export function parseArgs(argv: readonly string[]): Command {
   if (group === "sandbox" && sub === "run") return parseRun(rest);
   if (group === "sandbox" && sub === "verify") return parseVerify(rest);
   if (group === "sandbox" && sub === "push") return parsePush(rest);
+  if (group === "sandbox" && sub === "serve") {
+    if (rest[0] !== undefined) throw new CliError(`unknown option ${rest[0]} for "sandbox serve"`);
+    return { command: "serve" };
+  }
   throw new CliError(`unknown command "${[group, sub].filter(Boolean).join(" ")}"\n${USAGE}`);
 }
 

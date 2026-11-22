@@ -51,8 +51,44 @@
         },
         "manifest": {
           "$ref": "../manifest.schema.json"
+        },
+        "role": {
+          "description": "Optional. dev (the default when absent): a developer's `ratel sandbox dev`. instance: a hosted instance of a pushed version (`ratel sandbox serve`).",
+          "enum": [
+            "dev",
+            "instance"
+          ]
+        },
+        "versionId": {
+          "description": "Optional. The sandbox version an instance serves, from its instance token.",
+          "type": "string",
+          "minLength": 1
+        },
+        "sessionId": {
+          "description": "Optional. The session a stateful instance serves, from its instance token.",
+          "type": "string",
+          "minLength": 1
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "role"
+            ],
+            "properties": {
+              "role": {
+                "const": "instance"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "versionId"
+            ]
+          }
+        }
+      ]
     }
   }
 }

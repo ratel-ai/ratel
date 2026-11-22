@@ -242,3 +242,62 @@ describe("Connection", () => {
     });
   });
 });
+
+describe("Connection in instance mode", () => {
+  function instance(maxReconnects = 2) {
+    let n = 0;
+    return new Connection({
+      runner: { instanceId: "ins_test" },
+      manifest: MANIFEST,
+      stamp: { nextId: () => `msg_${++n}`, now: () => new Date("2026-11-20T10:00:00Z") },
+      random: () => 0,
+      instance: {
+        gatewayUrl: "wss://gw",
+        token: "itok_1",
+        versionId: "sv_1",
+        sessionId: "ses_1",
+        maxReconnects,
+      },
+    });
+  }
+
+  it("opens the socket with its own token, no exchange, and registers as an instance", () => {
+    const conn = instance();
+    expect(conn.step({ type: "start" })).toEqual([
+      { type: "open-socket", socket: 1, gatewayUrl: "wss://gw", token: "itok_1" },
+    ]);
+    const [register] = sent(conn.step({ type: "socket.open", socket: 1 }));
+    expect(register?.payload).toMatchObject({
+      role: "instance",
+      versionId: "sv_1",
+      sessionId: "ses_1",
+      runner: { instanceId: "ins_test" },
+    });
+  });
+
+  it("exits on drain instead of moving to a new socket", () => {
+    const conn = ready(instance());
+    const drain: Envelope = { v: 1, type: "drain", id: "c2", ts: "", payload: {} };
+    expect(conn.step({ type: "socket.frame", socket: 1, frame: drain })).toEqual([
+      { type: "close-socket", socket: 1 },
+      { type: "exit", reason: "drained" },
+    ]);
+    expect(conn.phase.kind).toBe("stopped");
+  });
+
+  it("reconnects with the same token, then exits when the socket stays closed", () => {
+    const conn = ready(instance(2));
+    expect(conn.step({ type: "socket.closed", socket: 1, reason: "1006" })).toContainEqual({
+      type: "schedule-retry",
+      delayMs: 1000,
+    });
+    expect(conn.step({ type: "retry.due" })).toEqual([
+      { type: "open-socket", socket: 2, gatewayUrl: "wss://gw", token: "itok_1" },
+    ]);
+    conn.step({ type: "socket.closed", socket: 2, reason: "401" });
+    conn.step({ type: "retry.due" });
+    expect(conn.step({ type: "socket.closed", socket: 3, reason: "401" })).toEqual([
+      { type: "exit", reason: "the connection closed for good (401)" },
+    ]);
+  });
+});

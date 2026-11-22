@@ -33,9 +33,12 @@ export class ChildHost {
   /** Live runs, with the child that runs each one. */
   readonly #runs = new Map<string, { handlers: RunHandlers; child: ChildProcess }>();
   readonly #root: string;
+  readonly #env: NodeJS.ProcessEnv | undefined;
 
-  constructor(root: string) {
+  /** `env`: the child's environment. Default: this process's. */
+  constructor(root: string, env?: NodeJS.ProcessEnv) {
     this.#root = root;
+    this.#env = env;
   }
 
   /**
@@ -112,6 +115,7 @@ export class ChildHost {
       cwd: this.#root,
       execArgv: ["--import", import.meta.resolve("tsx")],
       stdio: ["ignore", "inherit", "inherit", "ipc"],
+      ...(this.#env ? { env: this.#env } : {}),
     });
     child.on("message", (reply: ChildReply) => this.#onReply(reply));
     child.once("exit", (code) => {

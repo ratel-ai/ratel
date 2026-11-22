@@ -43,6 +43,13 @@ export interface TestController {
   waitForFrame(match: (f: ReceivedFrame) => boolean, timeoutMs?: number): Promise<ReceivedFrame>;
   /** Drops every open socket without a close handshake. */
   dropAll(): void;
+  /** The gateway URL a hosted instance dials (RATEL_GATEWAY_URL). */
+  readonly gatewayUrl: string;
+  /**
+   * An instance token with these claims, as Ratel would start a container with
+   * (RATEL_INSTANCE_TOKEN). Like an exchanged token, it opens one socket.
+   */
+  issueInstanceToken(claims: Readonly<Record<string, unknown>>): string;
   /** Sends a frame on the newest open socket. */
   send(frame: Envelope): void;
   /** Sends run.start (the fixture, with this runId and payload changes). Returns the runId. */
@@ -138,6 +145,13 @@ export async function startTestController(
       for (const ws of open) ws.terminate();
     },
     send: (frame) => newest?.send(JSON.stringify(frame)),
+    gatewayUrl: "",
+    issueInstanceToken: (claims) => {
+      const body = Buffer.from(JSON.stringify({ v: 1, ...claims }), "utf8").toString("base64url");
+      const token = `${body}.stub-signature-${++tokenCount}`;
+      issued.add(token);
+      return token;
+    },
     startRun: (runId, payload = {}) => {
       controller.send({
         ...serverFrame("run.start", { ...(runStart.payload as object), ...payload }, runId),
@@ -250,7 +264,10 @@ export async function startTestController(
 
   await new Promise<void>((resolve) => http.listen(options.port ?? 0, "127.0.0.1", resolve));
   const { port } = http.address() as AddressInfo;
-  return Object.assign(controller, { url: `http://127.0.0.1:${port}` });
+  return Object.assign(controller, {
+    url: `http://127.0.0.1:${port}`,
+    gatewayUrl: `ws://127.0.0.1:${port}`,
+  });
 }
 
 /** A valid message fixture from protocol/sandbox/v1/conformance. */

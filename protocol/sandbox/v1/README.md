@@ -38,7 +38,7 @@ Every frame, in both directions: `{ v, type, id, ts, runId?, seq?, payload }`
 
 | Type | From | Purpose |
 |---|---|---|
-| `register` | worker | Runner instance, capabilities, max concurrency, manifest |
+| `register` | worker | Runner instance, capabilities, max concurrency, manifest; for a hosted instance `role: instance`, `versionId`, optional `sessionId` |
 | `registered` | controller | Connection ID and limits (frame size, ack, lease, confirm timeouts) |
 | `manifest.update` | worker | A new manifest after a hot reload |
 | `run.start` | controller | Sandbox, session, input, params, tool modes, context, config hash, replay. Idempotent by `runId` |

@@ -145,6 +145,18 @@ finalizes it, then prints the version id and its playground URL. It reads `RATEL
 [`protocol/sandbox/v1/schema/push`](../../../protocol/sandbox/v1/schema/push).
 `pnpm push-stub -- --port 4200` starts a local stub of it for demos.
 
+### Inside a hosted container: `ratel sandbox serve`
+
+`ratel sandbox serve` is the container entrypoint. It reads `RATEL_INSTANCE_TOKEN` and
+`RATEL_GATEWAY_URL` from the env, loads the sandboxes of the bundle in the working folder and
+dials `<gateway>/runner?token=…`. It needs no project key and does no token exchange. It
+registers with `role: instance` and the version and session ids of the token, then serves runs
+over the same sandbox/v1 protocol as `ratel sandbox dev`, with no file watcher. It exits 0 on
+`drain`, on SIGTERM, or when the socket stays closed after the reconnect backoff
+(`RATEL_INSTANCE_MAX_RECONNECTS`, default 5). Secrets arrive as plain env vars and are never
+logged. The user code never sees the instance token. Traces go to `RATEL_URL` with the instance
+token as bearer and `ratel.sandbox.instance=hosted`.
+
 ## Local runs: the `ratel` CLI
 
 ```bash

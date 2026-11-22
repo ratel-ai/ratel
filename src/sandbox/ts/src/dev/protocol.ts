@@ -29,6 +29,12 @@ export interface RegisterPayload {
   readonly capabilities: readonly string[];
   readonly maxConcurrency: number;
   readonly manifest: Manifest;
+  /** Absent: dev. instance: a hosted instance of a pushed version (`ratel sandbox serve`). */
+  readonly role?: "dev" | "instance";
+  /** The version an instance serves. Set with role instance. */
+  readonly versionId?: string;
+  /** The session a stateful instance serves. */
+  readonly sessionId?: string;
 }
 
 export interface Limits {

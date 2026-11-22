@@ -5,10 +5,21 @@ import { discoverSandboxFiles } from "../cli/discover.js";
 import { type Manifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
 import { ChildHost } from "./child-host.js";
 import { ConnectError, exchangeToken, runnerSocketUrl } from "./connect-http.js";
-import { Connection, type ConnectionEffect, type ConnectionEvent } from "./connection.js";
-import { type Envelope, type FrameStamp, MAX_FRAME_BYTES, parseFrame } from "./protocol.js";
+import {
+  Connection,
+  type ConnectionEffect,
+  type ConnectionEvent,
+  type InstanceGrant,
+} from "./connection.js";
+import {
+  type Envelope,
+  type FrameStamp,
+  MAX_FRAME_BYTES,
+  parseFrame,
+  type RunnerInfo,
+} from "./protocol.js";
 import { type RunStartPayload, Runs, type RunsEffect } from "./runs.js";
-import { playgroundResource } from "./tracing.js";
+import { playgroundResource, type ResourceAttributes } from "./tracing.js";
 import { POLL_INTERVAL_MS, type ProjectWatcher, watchProject } from "./watch.js";
 import { openSocket, type Socket } from "./ws-socket.js";
 
@@ -36,6 +47,22 @@ export interface DevOptions {
   readonly onFrame?: (frame: Envelope) => void;
 }
 
+/** `ratel sandbox serve`: a hosted instance of a pushed version. */
+export interface InstanceOptions {
+  readonly root: string;
+  /** Where the instance dials, with its token. No project key, no exchange. */
+  readonly grant: InstanceGrant;
+  /** The Ratel API that receives the OTLP traces, with the instance token as bearer. */
+  readonly baseUrl: string;
+  readonly out: (line: string) => void;
+  /** The environment of the child that runs user code. Default: this process's. */
+  readonly childEnv?: NodeJS.ProcessEnv;
+  readonly random?: () => number;
+}
+
+/** Resource attribute of every span a hosted instance exports. */
+export const RATEL_SANDBOX_INSTANCE = "ratel.sandbox.instance";
+
 export interface DevHandle {
   /** Settles when the runner stops: resolves on stop(), rejects on a fatal error. */
   readonly done: Promise<void>;
@@ -43,9 +70,65 @@ export interface DevHandle {
 }
 
 /** Loads the sandboxes, connects to Ratel and keeps the connection alive until stop(). */
-export async function startDev(options: DevOptions): Promise<DevHandle> {
-  const child = new ChildHost(options.root);
-  const runner = runnerInfo(options.root);
+export function startDev(options: DevOptions): Promise<DevHandle> {
+  return startWorker({
+    ...options,
+    label: "ratel sandbox dev",
+    runner: runnerInfo(options.root),
+    bearer: options.apiKey,
+    watch: options.watch ?? true,
+  });
+}
+
+/**
+ * Loads the sandboxes of the bundle in the working folder and serves runs as one
+ * instance of a version. No file watcher. `done` resolves when the controller
+ * drains the instance or the socket stays closed after the reconnect backoff.
+ */
+export function startInstance(options: InstanceOptions): Promise<DevHandle> {
+  const { grant } = options;
+  return startWorker({
+    root: options.root,
+    baseUrl: options.baseUrl,
+    out: options.out,
+    label: "ratel sandbox serve",
+    runner: instanceInfo(grant),
+    bearer: grant.token,
+    watch: false,
+    instance: grant,
+    resource: {
+      [RATEL_SANDBOX_INSTANCE]: "hosted",
+      "ratel.sandbox.version_id": grant.versionId,
+      ...(grant.sessionId ? { "ratel.sandbox.session_id": grant.sessionId } : {}),
+    },
+    ...(options.childEnv ? { childEnv: options.childEnv } : {}),
+    ...(options.random ? { random: options.random } : {}),
+  });
+}
+
+interface WorkerConfig {
+  readonly root: string;
+  readonly baseUrl: string;
+  /** dev: the project key, for the token exchange and the traces. */
+  readonly apiKey?: string;
+  readonly out: (line: string) => void;
+  readonly label: string;
+  readonly runner: RunnerInfo;
+  /** The bearer of the OTLP trace export. */
+  readonly bearer: string;
+  readonly watch: boolean;
+  readonly instance?: InstanceGrant;
+  /** Extra resource attributes of the exported spans. */
+  readonly resource?: ResourceAttributes;
+  readonly childEnv?: NodeJS.ProcessEnv;
+  readonly fetch?: typeof fetch;
+  readonly random?: () => number;
+  readonly onFrame?: (frame: Envelope) => void;
+}
+
+async function startWorker(options: WorkerConfig): Promise<DevHandle> {
+  const child = new ChildHost(options.root, options.childEnv);
+  const runner = options.runner;
   const loadManifest = (): Promise<Manifest> => {
     const files = discoverSandboxFiles(options.root);
     const build = buildInfo(options.root, files);
@@ -56,8 +139,8 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
     });
     return child.restart(files, build, {
       baseUrl: options.baseUrl,
-      apiKey: options.apiKey,
-      resource,
+      apiKey: options.bearer,
+      resource: { ...resource, ...options.resource },
     });
   };
   const manifest = await loadManifest();
@@ -68,6 +151,7 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
     stamp,
     maxConcurrency: MAX_CONCURRENCY,
     random: options.random,
+    ...(options.instance ? { instance: options.instance } : {}),
   });
   const runs = new Runs({ stamp, maxConcurrency: MAX_CONCURRENCY });
   const sockets = new Map<number, Socket>();
@@ -158,7 +242,11 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   const perform = (effect: ConnectionEffect): void => {
     switch (effect.type) {
       case "exchange-token":
-        exchangeToken({ baseUrl: options.baseUrl, apiKey: options.apiKey, fetch: options.fetch })
+        exchangeToken({
+          baseUrl: options.baseUrl,
+          apiKey: options.apiKey ?? "",
+          fetch: options.fetch,
+        })
           .then((grant) => {
             projectId = grant.projectId ?? projectId;
             step({ type: "token.ok", gatewayUrl: grant.gatewayUrl, token: grant.token });
@@ -214,8 +302,9 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
           );
         } else {
           options.out(`connected (${effect.connectionId})`);
-          for (const line of playgroundLines(options.baseUrl, projectId, connection.manifest))
-            options.out(line);
+          if (!options.instance)
+            for (const line of playgroundLines(options.baseUrl, projectId, connection.manifest))
+              options.out(line);
         }
         return;
       case "disconnected":
@@ -226,6 +315,11 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
       case "fatal":
         shutdown();
         settle?.reject(new Error(effect.message));
+        return;
+      case "exit":
+        options.out(`exiting: ${effect.reason}`);
+        shutdown();
+        settle?.resolve();
         return;
       case "frame":
         onRunFrame(effect.frame);
@@ -260,9 +354,13 @@ export async function startDev(options: DevOptions): Promise<DevHandle> {
   };
 
   options.out(
-    `ratel sandbox dev: ${manifest.sandboxes.length} sandbox(s): ${manifest.sandboxes.map((t) => t.id).join(", ") || "(none)"}`,
+    `${options.label}: ${manifest.sandboxes.length} sandbox(s): ${manifest.sandboxes.map((t) => t.id).join(", ") || "(none)"}`,
   );
-  if (options.watch ?? true)
+  if (options.instance)
+    options.out(
+      `instance of version ${options.instance.versionId}${options.instance.sessionId ? `, session ${options.instance.sessionId}` : ""}`,
+    );
+  if (options.watch)
     watcher = watchProject(options.root, {
       onChange: () => void reload(),
       onPolling: (reason, files) =>
@@ -296,6 +394,15 @@ export function playgroundLines(
   const prefix = projectId ? `${base}/project/${encodeURIComponent(projectId)}` : base;
   const width = Math.max(0, ...manifest.sandboxes.map((t) => t.id.length));
   return manifest.sandboxes.map((t) => `  ${t.id.padEnd(width)}  ${prefix}/sandboxes/${t.id}`);
+}
+
+/** One per container: the host name differs per container, the version and session per start. */
+function instanceInfo(grant: InstanceGrant): RunnerInfo {
+  const host = hostname();
+  const digest = createHash("sha256")
+    .update(`${host}\0${grant.versionId}\0${grant.sessionId ?? ""}`)
+    .digest("hex");
+  return { instanceId: `ins_${digest.slice(0, 16)}`, host };
 }
 
 /** Stable across restarts of the same project on the same machine. */

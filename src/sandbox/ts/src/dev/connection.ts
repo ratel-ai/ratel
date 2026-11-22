@@ -67,11 +67,30 @@ export type ConnectionEffect =
     }
   | { readonly type: "disconnected"; readonly reason: string; readonly retryInMs: number }
   | { readonly type: "fatal"; readonly message: string }
+  /** Instance mode: the worker is done (drain, or the socket closed for good). Exit cleanly. */
+  | { readonly type: "exit"; readonly reason: string }
   /** A frame for the run layer (run.start, run.cancel, events.ack, drain…). */
   | { readonly type: "frame"; readonly frame: Envelope };
 
+/**
+ * A hosted instance: it dials the gateway with the token it was started with
+ * (no exchange), and ends on drain or when the socket stays closed.
+ */
+export interface InstanceGrant {
+  readonly gatewayUrl: string;
+  readonly token: string;
+  readonly versionId: string;
+  readonly sessionId?: string;
+  /** Reconnect attempts after a close before the instance gives up. Default 5. */
+  readonly maxReconnects?: number;
+}
+
+export const DEFAULT_MAX_RECONNECTS = 5;
+
 export interface ConnectionOptions {
   readonly runner: RunnerInfo;
+  /** Instance mode. Absent: dev mode, with a token exchange per connection. */
+  readonly instance?: InstanceGrant;
   readonly manifest: Manifest;
   readonly stamp: FrameStamp;
   readonly capabilities?: readonly string[];
@@ -149,6 +168,8 @@ export class Connection {
   }
 
   #exchange(attempt: number): ConnectionEffect[] {
+    const instance = this.#options.instance;
+    if (instance) return this.#open(attempt, instance.gatewayUrl, instance.token);
     this.#phase = { kind: "exchanging", attempt };
     return [{ type: "exchange-token" }];
   }
@@ -182,6 +203,8 @@ export class Connection {
     }
     if (phase.kind !== "ready") return [];
     if (incoming.type === "drain") {
+      // An instance does not move: the provider stops its container.
+      if (this.#options.instance) return this.#exit("drained", phase.socket);
       if (phase.next) return [];
       this.#phase = { ...phase, next: { kind: "exchanging" } };
       return [{ type: "exchange-token" }];
@@ -214,6 +237,9 @@ export class Connection {
   }
 
   #retry(attempt: number, reason: string): ConnectionEffect[] {
+    const instance = this.#options.instance;
+    if (instance && attempt >= (instance.maxReconnects ?? DEFAULT_MAX_RECONNECTS))
+      return this.#exit(`the connection closed for good (${reason})`);
     const delayMs = backoffDelay(attempt, this.#options.random);
     this.#phase = { kind: "waiting", attempt: attempt + 1 };
     return [
@@ -240,12 +266,28 @@ export class Connection {
     return effects;
   }
 
+  #exit(reason: string, ...sockets: number[]): ConnectionEffect[] {
+    this.#phase = { kind: "stopped", reason };
+    return [
+      ...sockets.map((socket): ConnectionEffect => ({ type: "close-socket", socket })),
+      { type: "exit", reason },
+    ];
+  }
+
   #register(): Envelope<"register", RegisterPayload> {
+    const instance = this.#options.instance;
     return frame(this.#options.stamp, "register", {
       runner: this.#options.runner,
       capabilities: [...(this.#options.capabilities ?? [])],
       maxConcurrency: this.#options.maxConcurrency ?? 1,
       manifest: this.#manifest,
+      ...(instance
+        ? {
+            role: "instance" as const,
+            versionId: instance.versionId,
+            ...(instance.sessionId ? { sessionId: instance.sessionId } : {}),
+          }
+        : {}),
     });
   }
 }

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
-import { DEFAULT_BASE_URL, startDev } from "../dev/runtime.js";
+import { DEFAULT_BASE_URL, startDev, startInstance } from "../dev/runtime.js";
 import { CliError, type Command, parseArgs, USAGE } from "./args.js";
 import { buildInfo } from "./build-info.js";
 import { type Bundle, buildBundle, formatBytes } from "./bundle.js";
@@ -33,6 +33,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   const root = process.cwd();
+  if (command.command === "serve") return serveCommand(root);
   if (command.command === "dev") {
     if (command.deprecatedAlias)
       process.stderr.write("ratel: `ratel dev` is deprecated, use `ratel sandbox dev`\n");
@@ -150,6 +151,63 @@ function uploadProgress(sandboxId: string, bundle: Bundle): (sent: number, total
     shown = percent;
     const line = `${sandboxId}  uploading ${formatBytes(sent)} / ${formatBytes(bundle.data.length)} (${percent}%)`;
     process.stderr.write(process.stderr.isTTY ? `\r${line}` : `${line}\n`);
+  };
+}
+
+/**
+ * `ratel sandbox serve`: the entrypoint of a hosted container. It dials the
+ * gateway with the instance token from its env: no project key, no exchange.
+ * Exits 0 on drain, on SIGTERM, or when the socket stays closed, so the
+ * provider can stop the container. It never prints env values.
+ */
+async function serveCommand(root: string): Promise<number> {
+  const token = process.env.RATEL_INSTANCE_TOKEN;
+  const gatewayUrl = process.env.RATEL_GATEWAY_URL;
+  if (!token || !gatewayUrl)
+    throw new CliError("ratel sandbox serve needs RATEL_INSTANCE_TOKEN and RATEL_GATEWAY_URL");
+  const claims = instanceClaims(token);
+  const maxReconnects = process.env.RATEL_INSTANCE_MAX_RECONNECTS;
+  // The user's code runs in the child: it never sees the instance token.
+  const { RATEL_INSTANCE_TOKEN: _token, ...childEnv } = process.env;
+  const handle = await startInstance({
+    root,
+    baseUrl: process.env.RATEL_URL || DEFAULT_BASE_URL,
+    grant: {
+      gatewayUrl,
+      token,
+      ...claims,
+      ...(maxReconnects && /^\d+$/.test(maxReconnects)
+        ? { maxReconnects: Number(maxReconnects) }
+        : {}),
+    },
+    childEnv,
+    out: (line) => process.stdout.write(`${line}\n`),
+  });
+  const stop = () => handle.stop();
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+  await handle.done;
+  return 0;
+}
+
+/**
+ * The version and session of an instance token: `<base64url(claims JSON)>.<signature>`.
+ * Read, not verified: the gateway verifies the token on upgrade.
+ */
+function instanceClaims(token: string): { versionId: string; sessionId?: string } {
+  let claims: { versionId?: unknown; sessionId?: unknown } | undefined;
+  try {
+    claims = JSON.parse(Buffer.from(token.split(".")[0] ?? "", "base64url").toString("utf8"));
+  } catch {
+    claims = undefined;
+  }
+  if (typeof claims?.versionId !== "string" || claims.versionId === "")
+    throw new CliError("RATEL_INSTANCE_TOKEN is not an instance token: it has no versionId claim");
+  return {
+    versionId: claims.versionId,
+    ...(typeof claims.sessionId === "string" && claims.sessionId !== ""
+      ? { sessionId: claims.sessionId }
+      : {}),
   };
 }
 
