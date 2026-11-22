@@ -1,0 +1,122 @@
+# Publishes the OSS image docker.io/ratelai/ratel for linux/amd64 and linux/arm64 (RELEASING.md).
+#   release (called by release-please.yml with `version`)   X.Y.Z, X.Y, latest
+#   a pushed tag vX.Y.Z or vX.Y.Z-rc.N                      X.Y.Z, X.Y, latest (a pre-release: only its version)
+#   a push to main                                          edge
+#   manual dispatch with `tag`                              that tag only (a test, for example 0.0.0-test)
+# Each image carries OCI labels, a provenance attestation and an SBOM. After the push, the smoke
+# job runs the amd64 image on Postgres and waits for /api/health.
+name: image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_call:
+    inputs:
+      version:
+        description: Release version without the v (X.Y.Z)
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image tag to push (for example 0.0.0-test)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ inputs.version || inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: docker.io/ratelai/ratel
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # The arm64 half builds under QEMU, which is slow.
+    timeout-minutes: 120
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # semver: from `version` when called, else from the pushed tag (it skips a branch push).
+          # A pre-release gets only its full version, and `latest` follows only a final release.
+          tags: |
+            type=semver,pattern={{version}},value=${{ inputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.version }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=edge,branch=main,enable=${{ inputs.version == '' && inputs.tag == '' }}
+          labels: |
+            org.opencontainers.image.title=Ratel
+            org.opencontainers.image.description=Ratel Platform, open-source edition
+            org.opencontainers.image.vendor=Ratel
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
+          annotations: |
+            org.opencontainers.image.title=Ratel
+            org.opencontainers.image.description=Ratel Platform, open-source edition
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/Dockerfile
+          target: oss
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: NEXT_DEPLOYMENT_ID=${{ steps.meta.outputs.version }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=image-oss
+          cache-to: type=gha,scope=image-oss,mode=max
+
+  smoke:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ratel
+          POSTGRES_PASSWORD: ratel
+          POSTGRES_DB: ratel
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ratel -d ratel" --health-interval 5s --health-timeout 3s --health-retries 15
+    steps:
+      - name: Pull and run the pushed image
+        env:
+          REF: ${{ env.IMAGE }}:${{ needs.publish.outputs.version }}
+        run: |
+          docker pull "$REF"
+          docker run -d --name ratel --network host \
+            -e DATABASE_URL=postgres://ratel:ratel@127.0.0.1:5432/ratel -e DATABASE_SSL=disable \
+            -e DATABASE_MIGRATE_ON_BOOT=1 "$REF"
+      - name: Wait for /api/health
+        run: |
+          for _ in $(seq 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health; then echo; exit 0; fi
+            sleep 2
+          done
+          docker logs ratel
+          exit 1
