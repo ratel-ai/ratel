@@ -7,7 +7,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 export const dynamic = "force-dynamic";
 
 /**
- * `/embeddings`, now the project's. Owned (ADR-0030): upstream's proxy redirects it; here the
+ * `/embeddings`, now the project's. Owned (ADR-0004): upstream's proxy redirects it; here the
  * route does. The embeddings page is the edition's, so without it the old address stays a 404.
  */
 export default async function LegacyEmbeddingsPage({

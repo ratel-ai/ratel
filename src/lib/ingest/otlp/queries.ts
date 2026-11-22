@@ -33,7 +33,7 @@ import { NON_ROUND_TRIP_OPERATIONS } from "./constants";
 
 /**
  * The event, span and log writes, and the derived-metric reads the overview and the MCP cost
- * tools take (owned fragment of the upstream queries hub, ADR-0030).
+ * tools take (owned fragment of the upstream queries hub, ADR-0004).
  */
 
 /** A raw event paired with the metrics derived from it: the unit of ingest. */
@@ -62,7 +62,7 @@ export type DailyAggregateRow = {
 };
 
 /**
- * Store a batch of agent events and their derived metrics (ADR-0013). Raw events go into
+ * Store a batch of agent events and their derived metrics. Raw events go into
  * `events` with `ON CONFLICT (project_id, dedupe_hash) DO NOTHING` so SDK retries are
  * idempotent; one `event_metrics` row per freshly inserted event. Not one transaction, so a
  * crash between the two inserts leaves an event with no metrics row. Returns the number of

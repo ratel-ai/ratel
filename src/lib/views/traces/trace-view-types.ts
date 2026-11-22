@@ -11,7 +11,7 @@ import type { TraceSession } from "@/lib/views/session-chat/trace-session";
  * page's loader (`trace-view-props.ts`), get_trace's MCP view (`lib/mcp/operations/observability.ts`)
  * and the content-free copy (`without-captured-text.ts`).
  *
- * Owned, no upstream counterpart (ADR-0030): upstream declares these in
+ * Owned, no upstream counterpart (ADR-0004): upstream declares these in
  * `components/traces/v2/TraceView.tsx` and imports them from lib/; here lib/ never imports the
  * UI, so the same shape lives in the layer that builds it. `rewrites.json` partitions the two
  * names out of the component's specifier. The component keeps its own declaration, and the trace

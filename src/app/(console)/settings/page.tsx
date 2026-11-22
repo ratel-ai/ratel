@@ -5,7 +5,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 
 export const dynamic = "force-dynamic";
 
-/** `/settings`, now the project's. Owned (ADR-0030): upstream's proxy redirects it; here the route does. */
+/** `/settings`, now the project's. Owned (ADR-0004): upstream's proxy redirects it; here the route does. */
 export default async function LegacySettingsPage({
   searchParams,
 }: {

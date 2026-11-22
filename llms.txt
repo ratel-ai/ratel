@@ -70,7 +70,7 @@ Create an API key in the project's Settings, set it as `RATEL_API_KEY` where the
 
 ## Optional
 
-- [ADR-0029](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0029-platform-cloud-modules-private-repository.md) and [ADR-0030](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md): how the platform is built.
+- [ADR-0003](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0003-two-editions-one-application.md) and [ADR-0004](https://github.com/ratel-ai/ratel/blob/main/docs/adr/0004-layered-core-and-module-ownership.md): how the platform is built.
 - [AGENTS.md](https://github.com/ratel-ai/ratel/blob/main/AGENTS.md): for coding agents working inside this repository.
 - [Contributing](https://github.com/ratel-ai/ratel/blob/main/CONTRIBUTING.md)
 - [License](https://github.com/ratel-ai/ratel/blob/main/LICENSE.md)

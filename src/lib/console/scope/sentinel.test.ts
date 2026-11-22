@@ -10,7 +10,7 @@ const USER_ID = "11111111-1111-4111-8111-111111111111";
 
 test("underscore sentinel uses Next's routable escaped segment", async () => {
   const sentinelPage = fileURLToPath(
-    // Owned (ADR-0030): the route lives under app/(console), one folder deeper from here.
+    // Owned (ADR-0004): the route lives under app/(console), one folder deeper from here.
     new URL("../../../app/(console)/project/%255F/[[...path]]/page.tsx", import.meta.url),
   );
 

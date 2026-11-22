@@ -1,4 +1,4 @@
-# The guard list (ADR-0030). Two kinds of line, both case-insensitive:
+# The guard list (ADR-0004). Two kinds of line, both case-insensitive:
 #   - a regular expression: guards the application tree, src, against Cloud-only code.
 #     Vendor and product names are not secrets; the ADRs name them.
 #   - sha256:<hex>: a confidential word as a salted hash, so the word never appears in this

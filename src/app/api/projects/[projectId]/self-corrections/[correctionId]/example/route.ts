@@ -18,7 +18,7 @@ const logger = getLogger("self-corrections/example-route");
 
 /**
  * One self-correction's words, read back from content capture on demand, for a member of its
- * project. A read; no product event. Owned (ADR-0030): the project comes from the console scope.
+ * project. A read; no product event. Owned (ADR-0004): the project comes from the console scope.
  */
 export const GET = withRequestLog(handleGet);
 

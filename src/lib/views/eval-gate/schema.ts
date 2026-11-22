@@ -13,7 +13,7 @@ import {
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * The eval gate's tables. Owned fragment of the upstream schema (ADR-0030): `fix_eval_sets`,
+ * The eval gate's tables. Owned fragment of the upstream schema (ADR-0004): `fix_eval_sets`,
  * `fix_eval_cases` and `fix_eval_runs`, the eval-gate partition of the upstream schema hub,
  * column for column.
  */

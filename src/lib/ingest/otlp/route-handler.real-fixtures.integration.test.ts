@@ -31,7 +31,7 @@ import { loadOtelFacts } from "@/lib/readings/trace-signals/signals/otel-facts-q
  * Real libraries' exports POSTed to the traces route, body by body as they
  * were sent, against a migrated database; then the turn build job over what
  * was stored. What the ledger holds is what the Agent health page reads.
- * Owned (ADR-0030): no plaintext key column, and no flag gate or organization
+ * Owned (ADR-0004): no plaintext key column, and no flag gate or organization
  * lookup on the turn build.
  */
 

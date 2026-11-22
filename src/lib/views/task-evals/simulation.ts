@@ -24,7 +24,7 @@ import {
   refreshTaskEvalSet,
   taskEvalSetFor,
 } from "@/lib/views/task-evals/store";
-// Owned (ADR-0030): the task loop's spend joins the daily budget through the eval gate's seam.
+// Owned (ADR-0004): the task loop's spend joins the daily budget through the eval gate's seam.
 import "./spend";
 import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
 import { scorersFor } from "@/lib/views/task-scorers/store";
@@ -63,7 +63,7 @@ export async function runTaskSimulation(fixId: string, options: TaskSimulationOp
   const ctx = await (deps.loadFix ?? loadFixContext)(projectId, fixId);
   if (!ctx || ctx.projectId !== projectId)
     throw new Error("This fix does not exist in the project.");
-  // Owned (ADR-0030): the gate is FF_EVAL_GATE, so the flag deps are the environment it reads.
+  // Owned (ADR-0004): the gate is FF_EVAL_GATE, so the flag deps are the environment it reads.
   const resolved = await resolveFixChange(projectId, ctx.fix, { db, actor, env: deps.flagDeps });
   if (resolved.status === "drafting")
     return { status: "drafting" as const, runs: [] as TaskEvalRunRow[] };
@@ -157,7 +157,7 @@ export async function reserveTaskSimulation(
 ) {
   const db = deps.db ?? getDb();
   return db.transaction(async (tx) => {
-    // Owned (ADR-0030): the core has no organizations table; the advisory lock stands in.
+    // Owned (ADR-0004): the core has no organizations table; the advisory lock stands in.
     const [org] = await tx
       .select({ id: projects.organizationId })
       .from(projects)

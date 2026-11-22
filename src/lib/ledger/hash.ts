@@ -19,7 +19,7 @@ import { isLocalEnvironment } from "@/lib/platform/environment";
  * would let a guessable query be confirmed by hashing it. Rotating the salt splits every
  * hash-keyed group from that point on.
  *
- * Owned (ADR-0030): `queryKey` is inlined from upstream's match-quality labels, which
+ * Owned (ADR-0004): `queryKey` is inlined from upstream's match-quality labels, which
  * are L4 and may not be imported from here.
  */
 

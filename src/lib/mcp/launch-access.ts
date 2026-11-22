@@ -13,7 +13,7 @@ import { getLogger } from "@/lib/platform/logger";
  * a grant is cached per person for five minutes, so a session of tool calls does not ask on
  * every request.
  *
- * Owned (ADR-0030): upstream decides a person through its identity provider and flag service,
+ * Owned (ADR-0004): upstream decides a person through its identity provider and flag service,
  * which are the edition's. This file keeps the caching and the fail-closed rule; the decision for
  * a signed-in caller comes from the edition that supplies MCP sign-in (`mcpOAuth.launchAccess`).
  * Without one, the open-source edition, every caller is a project key.

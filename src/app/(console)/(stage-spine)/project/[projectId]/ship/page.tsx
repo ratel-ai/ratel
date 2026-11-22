@@ -23,7 +23,7 @@ export const metadata = { title: "Ship" };
 /**
  * Ship, the fourth stage (RC-45): what went live,
  * each with the fix it came from. Today that is applied description rewrites
- * and shipments recorded through lineage; RC-53 brings releases. Owned (ADR-0030): the
+ * and shipments recorded through lineage; RC-53 brings releases. Owned (ADR-0004): the
  * project comes from the console scope, and the eval gate is read from the environment.
  */
 export default async function ShipPage({

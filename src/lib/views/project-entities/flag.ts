@@ -7,7 +7,7 @@ import type { Organization } from "@/lib/platform/organizations";
  * (`lib/otlp/dimensions`); the flag gates only what a person sees, such as the
  * Agent and MCP server filters of Traces (RC-790).
  *
- * Owned (ADR-0030): the switch is the core's `FF_AGENTS_PAGES`, off by default. Without the
+ * Owned (ADR-0004): the switch is the core's `FF_AGENTS_PAGES`, off by default. Without the
  * edition's flags port it is one switch for the deployment, read from the environment (or
  * `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition); with it, the edition decides it for
  * the organization or the caller (`featureEnabled`). The Traces filters stay on for everyone

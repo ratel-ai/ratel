@@ -16,7 +16,7 @@ import { fixSeams, type ShipmentDeps } from "./seams";
  * and write is scoped by project id, so an id from another project matches
  * nothing.
  *
- * Owned (ADR-0030): a shipment is one inserted row. Upstream's second path (the
+ * Owned (ADR-0004): a shipment is one inserted row. Upstream's second path (the
  * shipment marked live and its tasks queued for measuring, in one transaction)
  * is the `fixSeams.recordShipment` seam the task loop fills.
  */

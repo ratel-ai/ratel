@@ -429,7 +429,7 @@ export async function organizationModelSpendSince(
         sql`coalesce(${fixEvalRuns.finishedAt}, ${fixEvalRuns.createdAt}) >= ${since.toISOString()}::timestamptz`,
       ),
     );
-  // Owned (ADR-0030): fix drafts, the task loop and What-if add what they spent through the seam.
+  // Owned (ADR-0004): fix drafts, the task loop and What-if add what they spent through the seam.
   const others = await Promise.all(
     evalGateSeams.spendSince.map((read) => read(projectId, since, db)),
   );
@@ -439,7 +439,7 @@ export async function organizationModelSpendSince(
 
 /**
  * Serialise the reservations of one organization's daily budget until the transaction ends.
- * Owned (ADR-0030): upstream locks the organization's row (`for update of organizations`);
+ * Owned (ADR-0004): upstream locks the organization's row (`for update of organizations`);
  * the core has no `organizations` table since 0020, so an advisory lock keyed on the
  * project's organization id stands in. Every reservation that reads the budget takes it.
  * Returns false when the project does not exist.

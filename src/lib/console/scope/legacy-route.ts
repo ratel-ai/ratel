@@ -7,7 +7,7 @@ import type { RouteSearchParams } from "./sentinel";
  * their sub-paths; `/embeddings`; and the organization's `/billing` and `/members`, which need the
  * session organization and are null without one). Upstream's proxy answers these before any page
  * runs, with the legacy rules and then the moved-pages rules, in one hop; this edition has no proxy
- * (ADR-0029), so the
+ * (ADR-0003), so the
  * routes under `app/(console)` call this and redirect. `?project=<slug>` is resolved in the
  * session organization's projects; without one the destination keeps the `/project/_` sentinel,
  * which resolves the last or first project in a second hop.

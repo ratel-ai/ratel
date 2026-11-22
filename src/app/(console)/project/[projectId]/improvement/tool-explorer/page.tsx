@@ -29,7 +29,7 @@ export default async function LegacyToolCraftPage({
   if (!askId || !UUID.test(askId) || !isDbConfigured())
     permanentRedirect(legacyToolCraftTarget(projectId, query, null));
 
-  // Owned (ADR-0030): the project comes from the console scope.
+  // Owned (ADR-0004): the project comes from the console scope.
   const { project } = await requireProjectScope(projectId);
   const task = await loadOrFallback({
     operation: "tool_craft_legacy_ask",

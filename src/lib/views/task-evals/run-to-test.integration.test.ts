@@ -40,7 +40,7 @@ async function setup() {
   const deps: RunTestDraftDeps = {
     db,
     now: () => NOW,
-    // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value, not an organization flag.
+    // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value, not an organization flag.
     flagDeps: { FF_EVAL_GATE: "1" },
     model: {
       model: "claude-haiku-5-5",

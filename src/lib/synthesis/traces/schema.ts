@@ -13,11 +13,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** The trace rollups the drain fills from `otel_spans`. Owned fragment of the upstream schema (ADR-0030). */
+/** The trace rollups the drain fills from `otel_spans`. Owned fragment of the upstream schema (ADR-0004). */
 
 /**
  * Per-trace silver rollup over `otel_spans`, the trace-grain analogue of
- * `event_metrics` (ADR-0013). Exactly one row per `(project_id, trace_id)`, so
+ * `event_metrics`. Exactly one row per `(project_id, trace_id)`, so
  * the Traces KPI band and volume chart aggregate a table sized by trace count
  * instead of joining every span in the window.
  *

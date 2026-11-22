@@ -8,7 +8,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { isUniqueViolation } from "@/lib/platform/db/errors";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** The skills catalog reads and writes (owned fragment of the upstream queries hub, ADR-0030). */
+/** The skills catalog reads and writes (owned fragment of the upstream queries hub, ADR-0004). */
 
 type SkillStatus = Skill["status"];
 

@@ -5,7 +5,7 @@
 # Works with no `.env`, on public defaults. `.env.example` lists what to set on a server.
 # Both ports stay on 127.0.0.1: the console has no login and belongs behind your own proxy.
 # `web` serves and only queues jobs (APP_ROLE=api); `worker` runs them, from the same image
-# (ADR-0031). Without APP_ROLE one container does both, as `pnpm dev` does.
+# (ADR-0005). Without APP_ROLE one container does both, as `pnpm dev` does.
 name: ratel
 
 # What web and worker share: one image, one `.env`, one database.

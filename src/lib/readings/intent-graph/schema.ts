@@ -21,7 +21,7 @@ import type {
 /**
  * The intent graph: what a runtime learned about which asks lead to which tools, pushed
  * by the SDK or folded here from stored events, with its read projections and history.
- * Owned fragment of the upstream schema (ADR-0030). `intent_graph_runtime_status`, the
+ * Owned fragment of the upstream schema (ADR-0004). `intent_graph_runtime_status`, the
  * per-source ranking status ingest upserts, lives with ingest.
  *
  * `intent_graphs` is state, not a log: retention never prunes it. Cluster `members`

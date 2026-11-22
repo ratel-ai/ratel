@@ -6,7 +6,7 @@ import { listProjectsForOrganization } from "@/lib/platform/projects/queries";
 import { getSessionContext } from "@/lib/platform/session";
 
 /**
- * The last project a reader was in. Owned (ADR-0030): upstream keeps a pointer on the users row
+ * The last project a reader was in. Owned (ADR-0004): upstream keeps a pointer on the users row
  * and falls back to it when the cookie names no project the reader may see. Identity is the
  * edition's here, so the pointer is too (`SessionPort.lastProject`); without one, the stored
  * pointer is the active organization's first project, so an old link always lands somewhere live.

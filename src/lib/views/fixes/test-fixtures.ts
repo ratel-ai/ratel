@@ -8,7 +8,7 @@ import type { FixGain } from "./types";
  * whose two tools always run together, a flaky tool, a tool nobody calls, and the issues Agent
  * health raised about them.
  *
- * Owned (ADR-0030): the drafted changes are `DraftFixInput`s, the shape the tool crafter's seam
+ * Owned (ADR-0004): the drafted changes are `DraftFixInput`s, the shape the tool crafter's seam
  * delivers, with the worth its filler would have computed written in by hand.
  */
 

@@ -5,7 +5,7 @@ import {
 
 /**
  * Where this edition remembers how a person left the guided tour. Upstream keeps it on
- * `users.onboarding_tour_status`; the users table is the private edition's (ADR-0030), so here it
+ * `users.onboarding_tour_status`; the users table is the private edition's (ADR-0004), so here it
  * is a cookie: per browser, not per account. Read with upstream's `shouldOfferTour`, which treats
  * anything it does not recognise as "never finished" and offers the tour again.
  */

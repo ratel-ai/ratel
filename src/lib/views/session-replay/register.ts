@@ -7,7 +7,7 @@ import "./spend";
 
 /**
  * What session replay contributes to the background machinery: the `what_if_step` job, one
- * queued What-if run sampled in the worker (ADR-0031), and the drain's `what_if_prune` step,
+ * queued What-if run sampled in the worker (ADR-0005), and the drain's `what_if_prune` step,
  * which deletes runs past their 30-day TTL and times out live ones that outlived the stale
  * window. The step is deliberately not retention-only: a timed-out run must free its hold on
  * the daily budget. It keeps upstream's heartbeat keys. No

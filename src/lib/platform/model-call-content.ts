@@ -2,7 +2,7 @@ import type { Attributes } from "@opentelemetry/api";
 
 /**
  * The gen_ai content attributes ingest reads back (`GEN_AI` in lib/ingest/otlp/constants.ts).
- * Owned (ADR-0030): spelled here, since the platform layer does not import ingest.
+ * Owned (ADR-0004): spelled here, since the platform layer does not import ingest.
  */
 const GEN_AI = {
   systemInstructions: "gen_ai.system_instructions",

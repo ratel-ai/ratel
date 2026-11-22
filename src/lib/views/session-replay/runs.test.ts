@@ -22,7 +22,7 @@ test("the What-if tables have no prompt, message, argument or query text column"
 });
 
 test("the session_replay_runs migration only creates tables and their indexes and keys", () => {
-  // Owned (ADR-0030): this repository's migration, whatever its number; upstream reads its 0083.
+  // Owned (ADR-0004): this repository's migration, whatever its number; upstream reads its 0083.
   const file = readdirSync(MIGRATIONS_DIR).find((name) =>
     name.endsWith("_session_replay_runs.sql"),
   );

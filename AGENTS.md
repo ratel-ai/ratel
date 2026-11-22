@@ -34,7 +34,7 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
 - **TDD is mandatory** for backend / business-logic / library code — write the failing test first, then the implementation (red → green → refactor). Frontend code without business logic can skip. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Backend before frontend**: features that aren't frontend-only land on the backend (with tests) first, then surface in the console.
 - **Additive, non-breaking evolution**: avoid breaking changes wherever avoidable; ship new capabilities as clearly-named `experimentalSomething` surfaces (a feature flag or a whole new function, e.g. `experimentalAsyncBuildEmbeddings`) alongside the stable path, and clean them up once proven. See [CONTRIBUTING.md](CONTRIBUTING.md).
-- **ADRs are kept minimal and current.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format. Amend in place for small drift (paths, names, counts, statuses); write a superseding ADR for real decision reversals; compact periodically (git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md).
+- **ADRs are kept minimal and current.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format, listed in `docs/adr/README.md`. Each ADR states the current decision: amend it in place for small drift, rewrite or delete it when the decision changes (no superseded chains; git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md).
 - **Folder READMEs are kept current.** Every package folder, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout, and any folder-specific commands. If you add or move things, update the README in the same commit.
 - **Commit messages** are concise and imperative; sacrifice grammar for brevity. Use conventional prefixes (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`, `ci:`). **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
   - Good: `feat(core): rank skills alongside tools in search_capabilities`
@@ -44,7 +44,7 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
 
 The platform at `src` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
 `RATEL_CLOUD_DIR`) through [`scripts/platform-sync/`](scripts/platform-sync/README.md)
-(ADR-0030). It is **moved, not rewritten**: every file taken from upstream is tracked in
+(ADR-0004). It is **moved, not rewritten**: every file taken from upstream is tracked in
 `scripts/platform-sync/map.json` and landed by the sync, so the difference from upstream stays
 visible and minimal.
 

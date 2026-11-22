@@ -1,6 +1,4 @@
 ^https://github\.com/ratel-ai/ratel/stargazers$
-# ADR-0012 ships in this branch; its blob/main URL 404s until merge. Remove once on main.
-^https://github\.com/ratel-ai/ratel/blob/main/docs/adr/0012-configurable-embedding-models\.md$
 # install.sh ships in this branch; its raw main URL 404s until merge. Remove once on main.
 ^https://raw\.githubusercontent\.com/ratel-ai/ratel/main/install\.sh$
 # deploy.sh ships in this branch; its raw main URL 404s until merge. Remove once on main.
@@ -12,5 +10,3 @@
 ^https://console\.aws\.amazon\.com/cloudformation/
 ^https://portal\.azure\.com/
 ^https://shell\.cloud\.google\.com/
-# The ADRs keep their relative links to protocol/, which moved to ratel-ai/ratel-sdk.
-^file://.*/protocol/

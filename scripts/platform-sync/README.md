@@ -1,7 +1,7 @@
 # `scripts/platform-sync/`
 
 The repeatable copy of the open-source parts of `ratel-cloud` into `src`
-([ADR-0030](../../docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md)). Runs until
+([ADR-0004](../../docs/adr/0004-layered-core-and-module-ownership.md)). Runs until
 `ratel-cloud` is retired; after that the tool and this folder go.
 
 ## Layout

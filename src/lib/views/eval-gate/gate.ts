@@ -9,7 +9,7 @@ export type GateDb = Pick<ReturnType<typeof getDb>, "select">;
  * Whether the eval gate (RC-46 and its follow-up RC-61: holdout, outcome
  * checks, the judge and model replay) is on.
  *
- * Owned (ADR-0030): the `FF_EVAL_GATE` switch, off by default. Without the
+ * Owned (ADR-0004): the `FF_EVAL_GATE` switch, off by default. Without the
  * edition's flags port it is one switch for the deployment, read from the
  * environment (or `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition);
  * with it, the edition decides it for the organization or the asking person

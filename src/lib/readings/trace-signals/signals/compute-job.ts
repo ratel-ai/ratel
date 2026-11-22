@@ -104,7 +104,7 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
  *
  * Logs and events carry counts only: no query text, no end-user ids.
  *
- * Owned (ADR-0030): Agent health is on for every project here, so there is no flag gate.
+ * Owned (ADR-0004): Agent health is on for every project here, so there is no flag gate.
  * The readings that follow a run (live task scores, topics, the tool explorer, fix drafts) are seams: each one's
  * registration fills its enqueue in {@link computeSeams} when it lands, and a run with
  * the seam unset simply queues nothing.

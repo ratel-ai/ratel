@@ -20,5 +20,5 @@ port implementations is mounted; a missing port stops the process at startup
 - `projectNav`: named groups of edition project pages, a labelled section between the core pages and Catalog; a group with `row: { in: "setup" }` is instead one collapsible row between Catalog and Settings, its items the sub-pages (Cloud: the APIs row, with Embeddings and Tool Picker, as upstream). Empty in the open-source edition, whose rail is unchanged.
 - `ee-absent.ts` — what the `#ee-composition` alias resolves to when `ee/src` is absent: `null`.
 
-With ADR-0030 the root splits in two: `ports.ts` (the ports; imports no module) and
+With ADR-0004 the root splits in two: `ports.ts` (the ports; imports no module) and
 `registry.ts` (collects every module's `register.ts`; the one file allowed to import any layer).

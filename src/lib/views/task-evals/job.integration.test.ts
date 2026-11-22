@@ -14,7 +14,7 @@ import { scoreTasksJob } from "@/lib/views/task-scorers/job";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0030): the gate is FF_EVAL_GATE from the environment, not an organization flag.
+// Owned (ADR-0004): the gate is FF_EVAL_GATE from the environment, not an organization flag.
 const FLAGS_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
 const observability = { trackSystemEvent: async () => undefined };
 

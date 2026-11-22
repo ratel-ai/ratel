@@ -140,7 +140,7 @@ import {
  * to wording, and is logged and reported, never fatal. Logs and events carry
  * counts only: no ask text.
  *
- * Owned (ADR-0030): OpenAI is the one decision engine in this edition, and the
+ * Owned (ADR-0004): OpenAI is the one decision engine in this edition, and the
  * default naming model comes from `readings/model-defaults.ts`.
  */
 

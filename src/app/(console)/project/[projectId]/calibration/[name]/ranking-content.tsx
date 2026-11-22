@@ -17,7 +17,7 @@ import { qualityReportHref, reportWindowDays } from "@/lib/views/quality/report-
  * when the experiment exports `ratel.experiment.comparison` records
  * (auto-detected; `?view=generic` falls back to the span-aggregate view).
  *
- * Owned (ADR-0030): adds the member's link to the printable Quality report for
+ * Owned (ADR-0004): adds the member's link to the printable Quality report for
  * this calibration and window, which upstream offers only from its admin console.
  */
 export function RankingCalibrationContent({

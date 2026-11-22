@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Guard against Cloud-only code and confidential names reaching the open-source tree (ADR-0030).
+// Guard against Cloud-only code and confidential names reaching the open-source tree (ADR-0004).
 // Two kinds of entry in private-strings.txt, both case-insensitive:
 //   - a regular expression: guards the application tree (src), where Cloud-only vendor code
 //     would land. Vendor and product names are not secrets; the ADRs name them.

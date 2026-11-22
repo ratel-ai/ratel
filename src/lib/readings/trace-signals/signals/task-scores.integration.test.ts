@@ -24,7 +24,7 @@ test("completed signal runs queue task scores only with the eval gate on", async
         fresh().search(["find_task", "assign_task"]).invoke("find_task").invoke("assign_task"),
       ),
     );
-    // Owned (ADR-0030): the gate is FF_EVAL_GATE from the environment, not an organization flag.
+    // Owned (ADR-0004): the gate is FF_EVAL_GATE from the environment, not an organization flag.
     const flagDeps: Record<string, string | undefined> = { FF_EVAL_GATE: "0" };
     const deps = jobDeps(db, NOW, [], {
       enqueueTaskScores: (projectId) => enqueueScoreTasksJob(projectId, { db, flagDeps }),

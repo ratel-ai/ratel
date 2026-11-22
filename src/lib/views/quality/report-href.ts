@@ -1,7 +1,7 @@
 /**
  * The printable Quality report for one calibration and window:
  * `/report/quality/<project>?calibration=<name>&days=<n>`. Upstream links it only from its
- * admin console; here the calibration detail offers it to the member (ADR-0030).
+ * admin console; here the calibration detail offers it to the member (ADR-0004).
  */
 export function qualityReportHref(projectId: string, experimentName: string, days: number): string {
   return `/report/quality/${encodeURIComponent(projectId)}?calibration=${encodeURIComponent(experimentName)}&days=${days}`;

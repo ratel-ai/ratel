@@ -132,7 +132,7 @@ export const ENGINE_DEFAULTS = {
   /**
    * Seed a project's first run from its Cloud-built graphs and recurring asks.
    * Off: seeding keeps wire ids for serving a graph from the engine, which is
-   * deferred (ADR-0014); here it would only add old, assignment-less clusters.
+   * deferred (the SDK keeps the graph); here it would only add old, assignment-less clusters.
    */
   seed: false,
 } as const;

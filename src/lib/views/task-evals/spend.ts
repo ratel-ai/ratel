@@ -7,7 +7,7 @@ import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
 
 /**
  * The task loop's share of the organization's one daily model budget, read through
- * `evalGateSeams.spendSince`. Owned (ADR-0030): upstream sums the same queries inline in
+ * `evalGateSeams.spendSince`. Owned (ADR-0004): upstream sums the same queries inline in
  * `organizationModelSpendSince` (`lib/eval-gate/store.ts`). Loaded for its side effect by the
  * registrations (the worker and the drain) and by the modules that check the budget in a
  * request, so every process that reads the budget counts the task loop.
