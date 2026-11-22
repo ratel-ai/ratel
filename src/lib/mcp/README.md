@@ -63,7 +63,7 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   same read model as the Variants pages (`views/variants/compare-service.ts`), gated by the core's
   `FF_VARIANT_EXPERIMENTS` for the project and its organization; off, both refuse as forbidden.
 - `operations/fine-tuning.ts` (owned): `list_use_cases`, `get_use_case` and `create_use_case`
-  (RC-1124), through the Fine-tuning page's own store (`views/fine-tuning`), gated by the core's
+  (RC-1124), `build_dataset` and `get_dataset` (RC-1129), through the Fine-tuning page's own store (`views/fine-tuning`), gated by the core's
   `FF_FINE_TUNING` for the caller and the project; off, every tool refuses as forbidden.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,

@@ -45,14 +45,15 @@ export const STAGE_LABELS: Readonly<Record<LineageStage, string>> = {
  *   are insights too (Intents, Agent health › Tasks).
  * - `fix`: a Fix by its id (`issue:<id>`, `craft:<id>`, `rewrite:<id>`,
  *   `intent:<id>`). `experiment`: a calibration by its name. `eval`: an eval
- *   set or run (RC-46).
+ *   set or run (RC-46). `dataset`: a fine-tuning dataset version (RC-1128),
+ *   whose source is the first task (or intent) of its use case.
  * - `shipment`: a change that went live: `rewrite:<id>` for an applied
  *   description rewrite, else the id whoever recorded it chose.
  */
 export const LINEAGE_KINDS = {
   monitor: ["trace", "metric"],
   insights: ["insight", "intent", "task"],
-  improve: ["fix", "experiment", "eval"],
+  improve: ["fix", "experiment", "eval", "dataset"],
   ship: ["shipment"],
 } as const satisfies Record<LineageStage, readonly string[]>;
 
@@ -68,6 +69,7 @@ export const KIND_NOUNS: Readonly<Record<string, string>> = {
   fix: "fix",
   experiment: "experiment",
   eval: "eval",
+  dataset: "dataset",
   shipment: "shipment",
 };
 

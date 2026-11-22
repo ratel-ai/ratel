@@ -36,6 +36,8 @@ export interface ModelCall {
   outputTokens: number | null;
   /** Present only when asked for (`withPayload`). */
   payload: CloudEvent | null;
+  /** The `events` row id (fine-tuning orders calls by it). Set by `loadModelCalls`. */
+  eventId?: string;
   /** The call's trace and span: the span names a call (fine-tuning use cases). Set by `loadModelCalls`. */
   traceId?: string | null;
   spanId?: string | null;
@@ -60,6 +62,7 @@ export async function loadModelCalls(
   for (let i = 0; i < traceIds.length; i += ID_CHUNK) {
     const rows = await db
       .select({
+        eventId: events.id,
         traceId: events.traceId,
         spanId: events.spanId,
         occurredAt: events.occurredAt,
@@ -101,6 +104,7 @@ export async function loadModelCalls(
           inputTokens: row.inputTokens,
           outputTokens: row.outputTokens,
           payload: "payload" in row ? ((row.payload as CloudEvent | null) ?? null) : null,
+          eventId: row.eventId,
           traceId: row.traceId,
           spanId: row.spanId,
         });

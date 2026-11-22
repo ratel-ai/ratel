@@ -90,7 +90,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "FF_FINE_TUNING",
-    note: "fine-tuning: the Fine-tuning page under Improvements (the training opt-in, use cases and their stats), its API routes and the MCP tools list_use_cases, get_use_case and create_use_case",
+    note: "fine-tuning: the Fine-tuning page under Improvements (the training opt-in, use cases and their stats), its API routes and the MCP tools list_use_cases, get_use_case, create_use_case, build_dataset and get_dataset; the build_fine_tuning_dataset job",
   },
 ];
 

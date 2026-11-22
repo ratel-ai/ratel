@@ -42,6 +42,9 @@ export function hrefFor(ref: LineageRef, projectId: string): string | null {
       // An eval carries its own href (`evalRef`): its id is the eval set's, which
       // does not name the fix. Without one, the Fixes page is the closest.
       return fixHref(projectId);
+    case "dataset":
+      // A dataset carries its own href (`datasetRef`): its id does not name the use case.
+      return `${root(projectId)}/fine-tuning`;
     case "shipment":
       return `${shipRoot(projectId)}?peek=${enc(ref.id)}`;
     default:
@@ -103,6 +106,22 @@ export function evalRef(
     id: evalId,
     ...(label ? { label } : {}),
     href: evalPageHref(projectId, fixId),
+  };
+}
+
+/** A fine-tuning dataset version (RC-1128), opening on its use case's page. */
+export function datasetRef(
+  projectId: string,
+  datasetId: string,
+  useCaseId: string,
+  label?: string,
+): LineageRef {
+  return {
+    stage: "improve",
+    kind: "dataset",
+    id: datasetId,
+    ...(label ? { label } : {}),
+    href: `${root(projectId)}/fine-tuning/${enc(useCaseId)}?dataset=${enc(datasetId)}`,
   };
 }
 

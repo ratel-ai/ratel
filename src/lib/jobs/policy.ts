@@ -8,7 +8,7 @@ import type { JobKind } from "@/lib/jobs/runner";
  * Tiers, claimed lowest first (fairness across projects still applies within
  * a tier, see claimNextQueuedJob):
  * - 0, someone is waiting on the page: a simulation, a What-if step, an eval
- *   set refresh, a fix draft;
+ *   set refresh, a fix draft, a fine-tuning dataset build;
  * - 1, fresh data: the chain that turns new runs into readings (turns,
  *   signals, task names and scores, intents, the graph fold) and a match
  *   quality run, which a person can also start by hand;
@@ -23,6 +23,7 @@ export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   simulate_eval_set: 0,
   refresh_task_eval_set: 0,
   draft_fix: 0,
+  build_fine_tuning_dataset: 0,
   build_trace_turns: 1,
   compute_trace_signals: 1,
   label_workflows: 1,
@@ -67,6 +68,7 @@ export const JOB_BUDGET_MS: Record<JobKind, number> = {
   simulate_eval_set: 5 * 60_000,
   refresh_task_eval_set: 2 * 60_000,
   draft_fix: 2 * 60_000,
+  build_fine_tuning_dataset: 5 * 60_000,
   refill_pivot_dims: 5 * 60_000,
   index_repo_code: 2 * 60_000,
 };

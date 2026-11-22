@@ -3729,6 +3729,7 @@
             "fix",
             "experiment",
             "eval",
+            "dataset",
             "shipment"
           ],
           "description": "The object's kind."
@@ -4392,6 +4393,126 @@
       "readOnlyHint": false,
       "destructiveHint": true,
       "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "build_dataset",
+    "title": "Build a fine-tuning dataset",
+    "description": "Changes data: copies the text of the use case's model calls (redacted of emails, phone numbers, cards, IBANs, national ids and secrets) into a new, immutable dataset version. It needs the project's training opt-in. The build runs in the background: poll get_dataset until status is ready or failed.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "useCaseId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The use case id, as list_use_cases returns it."
+        },
+        "settings": {
+          "description": "Optional build settings: filters (noError, noSelfCorrection), dedup (off, exact or near; default near), seed and evalFraction (0 to 0.5, default 0.1). Calls that share a session or an end user always land on one side of the split.",
+          "type": "object",
+          "properties": {
+            "filters": {
+              "default": {
+                "noError": false,
+                "noSelfCorrection": false
+              },
+              "type": "object",
+              "properties": {
+                "noError": {
+                  "default": false,
+                  "type": "boolean"
+                },
+                "noSelfCorrection": {
+                  "default": false,
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            },
+            "dedup": {
+              "default": "near",
+              "type": "string",
+              "enum": [
+                "off",
+                "exact",
+                "near"
+              ]
+            },
+            "seed": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "evalFraction": {
+              "default": 0.1,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.5
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "useCaseId"
+      ]
+    },
+    "annotations": {
+      "title": "Build a fine-tuning dataset",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_dataset",
+    "title": "Get a fine-tuning dataset",
+    "description": "One dataset version from build_dataset: its status (building, ready or failed), train and eval row counts, dropped counts per reason, the redaction report (count per kind) and its build settings. No row text. Redaction is pattern-based: it does not find names or addresses.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "datasetId": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The dataset id, as build_dataset returns it."
+        }
+      },
+      "required": [
+        "datasetId"
+      ]
+    },
+    "annotations": {
+      "title": "Get a fine-tuning dataset",
+      "readOnlyHint": true
     },
     "execution": {
       "taskSupport": "forbidden"

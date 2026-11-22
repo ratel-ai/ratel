@@ -67,14 +67,17 @@ export default async function FineTuningPage({
         description="Turn the model calls of one job into a dataset for a smaller model."
       />
       <PageBody>
-        <TrainingConsentPanel
-          apiHref={`${apiRoot}/consent`}
-          consent={consent}
-          text={consentText()}
-          canEdit={isAdmin}
-        />
+        <div id="training-opt-in" className="scroll-mt-4">
+          <TrainingConsentPanel
+            apiHref={`${apiRoot}/consent`}
+            consent={consent}
+            text={consentText()}
+            canEdit={isAdmin}
+          />
+        </div>
         <UseCasesPanel
           apiHref={`${apiRoot}/use-cases`}
+          pageHref={`/project/${encodeURIComponent(project.id)}/fine-tuning`}
           useCases={rows}
           taskOptions={taskOptions}
           taskNames={taskNames}

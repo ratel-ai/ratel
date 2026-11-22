@@ -6,10 +6,18 @@ import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { getDb } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { type ServerEventContext, trackServerEvent } from "@/lib/platform/telemetry";
+import { createDrizzleDatasetStore } from "@/lib/views/fine-tuning/adapters/drizzle-dataset-store";
 import {
   createDrizzleModelCallSource,
   createDrizzleUseCaseStore,
 } from "@/lib/views/fine-tuning/adapters/drizzle-store";
+import { type StartResult, startDatasetBuild } from "@/lib/views/fine-tuning/build";
+import { requestBuildDeps } from "@/lib/views/fine-tuning/build-route-deps";
+import {
+  BuildInputSchema,
+  type Dataset,
+  viewOfDataset,
+} from "@/lib/views/fine-tuning/domain/dataset";
 import type { UseCaseStats } from "@/lib/views/fine-tuning/domain/stats";
 import {
   parseSelector,
@@ -25,7 +33,8 @@ import { USE_CASE_REJECTIONS, viewOfUseCase } from "@/lib/views/fine-tuning/use-
 
 /**
  * The Fine-tuning page over MCP (RC-1124): `list_use_cases`,
- * `get_use_case` and `create_use_case`. They read and write through the
+ * `get_use_case` and `create_use_case`; and (RC-1129) `build_dataset` and
+ * `get_dataset`. They read and write through the
  * page's own `lib/fine-tuning` store, behind the page's flag,
  * `FF_FINE_TUNING`: off, they refuse as forbidden, as the page is not
  * found.
@@ -43,6 +52,14 @@ export interface FineTuningOperationDeps {
   /** Turns, calls, date range, current model and cost per run in the use case's window. */
   useCaseStats: (projectId: string, useCase: UseCase) => Promise<UseCaseStats>;
   track: (context: ServerEventContext, useCase: UseCase) => Promise<void>;
+  /** Starts a dataset build: the guards (flag, training opt-in), a `building` version, its job. */
+  buildDataset: (
+    projectId: string,
+    useCaseId: string,
+    input: unknown,
+    actor: string,
+  ) => Promise<StartResult>;
+  getDataset: (projectId: string, id: string) => Promise<Dataset | null>;
 }
 
 export const defaultFineTuningDeps: FineTuningOperationDeps = {
@@ -71,6 +88,12 @@ export const defaultFineTuningDeps: FineTuningOperationDeps = {
       intents: useCase.selector.intentIds.length,
       call_filter: useCase.selector.callFilter !== undefined,
       surface: "mcp",
+    }),
+  buildDataset: (projectId, useCaseId, input, actor) =>
+    startDatasetBuild(projectId, useCaseId, input, actor, requestBuildDeps()),
+  getDataset: (projectId, id) =>
+    withStatementTimeout((db) => createDrizzleDatasetStore(db).getDataset(projectId, id), {
+      operation: "mcp_get_dataset",
     }),
 };
 
@@ -161,6 +184,68 @@ export function fineTuningOperations(
           });
         await deps.track(mcpEventContext(ctx), result.useCase);
         return { data: viewOfUseCase(result.useCase) };
+      },
+    }),
+    defineOperation({
+      id: "build_dataset",
+      domain: "writes",
+      title: "Build a fine-tuning dataset",
+      description:
+        "Changes data: copies the text of the use case's model calls (redacted of emails, phone numbers, cards, IBANs, national ids and secrets) into a new, immutable dataset version. It needs the project's training opt-in. The build runs in the background: poll get_dataset until status is ready or failed.",
+      keywords: ["build dataset", "redacted dataset", "dataset version"],
+      scope: "project",
+      mutates: true,
+      params: z.object({
+        ...projectScoped,
+        useCaseId: uuidParam().describe("The use case id, as list_use_cases returns it."),
+        settings: BuildInputSchema.optional().describe(
+          "Optional build settings: filters (noError, noSelfCorrection), dedup (off, exact or near; default near), seed and evalFraction (0 to 0.5, default 0.1). Calls that share a session or an end user always land on one side of the split.",
+        ),
+      }),
+      async execute(ctx, params) {
+        const actor = mcpActor(ctx.auth, ctx.projectId);
+        await requireFineTuning(deps, ctx.projectId, actor);
+        const result = await deps.buildDataset(
+          ctx.projectId,
+          params.useCaseId,
+          params.settings ?? {},
+          actor,
+        );
+        if (!result.ok) {
+          if (result.reason === "use_case_not_found") throw notFound("use case");
+          if (result.reason === "invalid")
+            throw invalidParams(result.message, [{ path: "settings", message: result.message }]);
+          throw new McpOperationError("forbidden", result.message, { reason: result.reason });
+        }
+        return {
+          data: viewOfDataset(result.dataset),
+          hint: "The build runs in the background. Call get_dataset with this id until status is ready or failed.",
+        };
+      },
+    }),
+    defineOperation({
+      id: "get_dataset",
+      domain: "improvement",
+      title: "Get a fine-tuning dataset",
+      description:
+        "One dataset version from build_dataset: its status (building, ready or failed), train and eval row counts, dropped counts per reason, the redaction report (count per kind) and its build settings. No row text. Redaction is pattern-based: it does not find names or addresses.",
+      keywords: ["dataset status", "fine-tuning dataset", "redaction report"],
+      scope: "project",
+      mutates: false,
+      params: z.object({
+        ...projectScoped,
+        datasetId: uuidParam().describe("The dataset id, as build_dataset returns it."),
+      }),
+      async execute(ctx, params) {
+        await requireFineTuning(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
+        const dataset = await deps.getDataset(ctx.projectId, params.datasetId);
+        if (!dataset) throw notFound("dataset");
+        return {
+          data: viewOfDataset(dataset),
+          ...(dataset.status === "building"
+            ? { hint: "Still building: call get_dataset again in a few seconds." }
+            : {}),
+        };
       },
     }),
   ];

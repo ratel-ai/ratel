@@ -4,10 +4,8 @@ import { withRequestLog } from "@/lib/platform/request-log";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
-import {
-  createDrizzleConsentStore,
-  createDrizzleDatasetStore,
-} from "@/lib/views/fine-tuning/adapters/drizzle-store";
+import { createDrizzleDatasetStore } from "@/lib/views/fine-tuning/adapters/drizzle-dataset-store";
+import { createDrizzleConsentStore } from "@/lib/views/fine-tuning/adapters/drizzle-store";
 import { type ConsentApiDeps, handleConsentRequest } from "@/lib/views/fine-tuning/consent-api";
 import { fineTuningEnabled } from "@/lib/views/fine-tuning/flag";
 
@@ -21,7 +19,7 @@ const deps: ConsentApiDeps = {
   fineTuningEnabled: (organization) => fineTuningEnabled(organization),
   isRestricted: isRestrictedBySupportSession,
   consents: () => createDrizzleConsentStore(getDb()),
-  datasets: () => createDrizzleDatasetStore(),
+  datasets: () => createDrizzleDatasetStore(getDb()),
   track: ({ name, externalId, projectId, organizationId, ...properties }) =>
     trackServerEvent(
       name,

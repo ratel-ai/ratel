@@ -6,7 +6,6 @@ import type { TrainingConsent } from "../domain/consent";
 import type { UseCase, UseCaseSelector } from "../domain/use-case";
 import type {
   ConsentStore,
-  DatasetStore,
   MatchedTurn,
   ModelCallSource,
   UseCaseStore,
@@ -58,15 +57,6 @@ export function createDrizzleConsentStore(db: Db): ConsentStore {
         `),
       );
       return row ? toConsent(row) : null;
-    },
-  };
-}
-
-/** No dataset table exists yet: the dataset task replaces this with the real delete. */
-export function createDrizzleDatasetStore(): DatasetStore {
-  return {
-    async deleteDatasets() {
-      return 0;
     },
   };
 }

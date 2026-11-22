@@ -142,6 +142,10 @@ export const SERVER_EVENT_NAMES = [
   "use_case_created",
   "use_case_updated",
   "use_case_archived",
+  // A dataset build (RC-1128): lib/views/fine-tuning/build-deps.ts.
+  "dataset_build_started",
+  "dataset_built",
+  "dataset_build_failed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

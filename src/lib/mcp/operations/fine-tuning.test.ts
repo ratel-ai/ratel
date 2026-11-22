@@ -3,6 +3,9 @@ import { test } from "node:test";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
+import type { Dataset } from "@/lib/views/fine-tuning/domain/dataset";
+import { emptyCounts } from "@/lib/views/fine-tuning/domain/redaction";
+import { buildSettings, emptyDrops } from "@/lib/views/fine-tuning/domain/rows";
 import type { UseCase } from "@/lib/views/fine-tuning/domain/use-case";
 import { type FineTuningOperationDeps, fineTuningOperations } from "./fine-tuning";
 
@@ -41,8 +44,34 @@ const STATS = {
   sampled: false,
 };
 
+const DATASET_ID = "77777777-7777-4777-8777-777777777777";
+const DATASET: Dataset = {
+  id: DATASET_ID,
+  projectId: PROJECT,
+  useCaseId: USE_CASE_ID,
+  version: 1,
+  status: "ready",
+  settings: {
+    ...buildSettings(USE_CASE.selector),
+    window: { since: "2026-10-21T00:00:00.000Z", until: "2026-11-20T00:00:00.000Z" },
+  },
+  contentHash: "abc",
+  counts: {
+    turns: 12,
+    calls: 14,
+    cursor: { capturedAt: "2026-11-19T00:00:00.000Z", eventId: "e-1" },
+    train: 9,
+    eval: 2,
+    dropped: { ...emptyDrops(), duplicate_near: 1 },
+  },
+  redactionReport: { ...emptyCounts(), email: 3 },
+  createdBy: `project:${PROJECT}`,
+  createdAt: new Date("2026-11-20T00:00:00.000Z"),
+  failedReason: null,
+};
+
 function harness(overrides: Partial<FineTuningOperationDeps> = {}) {
-  const calls = { created: [] as unknown[], tracked: 0, reads: 0 };
+  const calls = { created: [] as unknown[], tracked: 0, reads: 0, builds: [] as unknown[] };
   const deps: FineTuningOperationDeps = {
     fineTuningEnabled: async () => true,
     listUseCases: async () => {
@@ -62,6 +91,25 @@ function harness(overrides: Partial<FineTuningOperationDeps> = {}) {
     useCaseStats: async () => STATS,
     track: async () => {
       calls.tracked++;
+    },
+    buildDataset: async (projectId, useCaseId, input, actor) => {
+      calls.builds.push({ projectId, useCaseId, input, actor });
+      if (useCaseId !== USE_CASE_ID)
+        return { ok: false, reason: "use_case_not_found", message: "none" };
+      return {
+        ok: true,
+        dataset: {
+          ...DATASET,
+          status: "building",
+          contentHash: null,
+          counts: null,
+          redactionReport: null,
+        },
+      };
+    },
+    getDataset: async (_projectId, id) => {
+      calls.reads++;
+      return id === DATASET_ID ? DATASET : null;
     },
     ...overrides,
   };
@@ -127,6 +175,8 @@ test("every tool refuses as forbidden with FF_FINE_TUNING off, and reads or writ
     ["list_use_cases", {}],
     ["get_use_case", { useCaseId: USE_CASE_ID }],
     ["create_use_case", { name: "Triage", selector: { taskIds: ["triage"] } }],
+    ["build_dataset", { useCaseId: USE_CASE_ID }],
+    ["get_dataset", { datasetId: DATASET_ID }],
   ] as const) {
     const result = await run(id, params);
     assert.ok(!result.ok);
@@ -135,4 +185,69 @@ test("every tool refuses as forbidden with FF_FINE_TUNING off, and reads or writ
   }
   assert.equal(calls.reads, 0);
   assert.deepEqual(calls.created, []);
+  assert.deepEqual(calls.builds, []);
+});
+
+test("build_dataset starts a build as the key's project and returns the building version", async () => {
+  const { run, calls } = harness();
+  const built = await run("build_dataset", {
+    useCaseId: USE_CASE_ID,
+    settings: { seed: 3, dedup: "exact" },
+  });
+  assert.ok(built.ok, JSON.stringify(built));
+  assert.equal((built.data as { status: string }).status, "building");
+  assert.deepEqual(calls.builds, [
+    {
+      projectId: PROJECT,
+      useCaseId: USE_CASE_ID,
+      input: {
+        seed: 3,
+        dedup: "exact",
+        filters: { noError: false, noSelfCorrection: false },
+        evalFraction: 0.1,
+      },
+      actor: `project:${PROJECT}`,
+    },
+  ]);
+  const missing = await run("build_dataset", { useCaseId: "66666666-6666-4666-8666-666666666666" });
+  assert.equal(missing.ok === false && missing.error, "not_found");
+  const bad = await run("build_dataset", {
+    useCaseId: USE_CASE_ID,
+    settings: { evalFraction: 0.9 },
+  });
+  assert.equal(bad.ok === false && bad.error, "invalid_params");
+});
+
+test("with no training opt-in, build_dataset refuses with reason no_consent and a message that names the opt-in", async () => {
+  const { run } = harness({
+    buildDataset: async () => ({
+      ok: false,
+      reason: "no_consent",
+      message: "An organization admin must give the training opt-in first.",
+    }),
+  });
+  const refused = await run("build_dataset", { useCaseId: USE_CASE_ID });
+  assert.ok(!refused.ok);
+  assert.equal(refused.error, "forbidden");
+  assert.equal(refused.reason, "no_consent");
+  assert.match(refused.message, /opt-in/);
+});
+
+test("get_dataset returns status, counts, the redaction report and settings, and no row text", async () => {
+  const { run } = harness();
+  const got = await run("get_dataset", { datasetId: DATASET_ID });
+  assert.ok(got.ok);
+  const data = got.data as Record<string, unknown>;
+  assert.equal(data.status, "ready");
+  const { cursor: _cursor, ...shown } = DATASET.counts!;
+  assert.deepEqual(data.counts, shown, "the counts, without the job's resume cursor");
+  assert.deepEqual(data.redactionReport, DATASET.redactionReport);
+  assert.equal((data.settings as { dedup: string }).dedup, "near");
+  assert.deepEqual(
+    Object.keys(data).filter((key) => /^(rows|content|messages|output)$/.test(key)),
+    [],
+  );
+  assert.equal(JSON.stringify(data).includes('"role"'), false, "no message of a row");
+  const missing = await run("get_dataset", { datasetId: "66666666-6666-4666-8666-666666666666" });
+  assert.equal(missing.ok === false && missing.error, "not_found");
 });

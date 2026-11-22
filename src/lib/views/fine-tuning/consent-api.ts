@@ -46,7 +46,7 @@ export interface ConsentApiDeps {
   /** An admin support session may look but not change. */
   isRestricted: () => Promise<boolean>;
   consents: () => ConsentStore;
-  datasets: () => DatasetStore;
+  datasets: () => Pick<DatasetStore, "deleteDatasets">;
   track: (event: ConsentEvent) => Promise<void>;
 }
 

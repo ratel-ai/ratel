@@ -8,6 +8,7 @@ import { Section } from "@ratel/design-system/section";
 import { Select } from "@ratel/design-system/select";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ListChecks } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { formatInteger, formatMoney } from "@/lib/synthesis/traces/v2/format";
@@ -30,11 +31,14 @@ export interface UseCaseRowView {
  */
 export function UseCasesPanel({
   apiHref,
+  pageHref,
   useCases,
   taskOptions,
   taskNames,
 }: {
   apiHref: string;
+  /** The Fine-tuning page: a use case opens at `<pageHref>/<id>`, where its datasets are built. */
+  pageHref: string;
   useCases: readonly UseCaseRowView[];
   /** The project's tasks with closed runs in the last 30 days, busiest first. */
   taskOptions: readonly { taskId: string; turns: number }[];
@@ -78,7 +82,14 @@ export function UseCasesPanel({
     {
       id: "name",
       header: "Use case",
-      cell: (row) => <span className="font-medium text-fg">{row.name}</span>,
+      cell: (row) => (
+        <Link
+          href={`${pageHref}/${encodeURIComponent(row.id)}`}
+          className="font-medium text-fg hover:underline"
+        >
+          {row.name}
+        </Link>
+      ),
     },
     {
       id: "selects",
@@ -133,6 +144,7 @@ export function UseCasesPanel({
         columns={columns}
         rows={useCases}
         rowKey={(row) => row.id}
+        onRowOpen={(row) => router.push(`${pageHref}/${encodeURIComponent(row.id)}`)}
         empty={
           <EmptyState
             icon={ListChecks}

@@ -179,6 +179,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["list_use_cases", false],
   ["get_use_case", false],
   ["create_use_case", true],
+  ["build_dataset", true],
+  ["get_dataset", false],
   // Writes the console offers: hide a slow signal, ask for a reading, review a
   // description rewrite, start a metered quality analysis.
   ["set_health_signal_hidden", true],
