@@ -62,8 +62,10 @@ export function resolveParams<P extends ParamMap, M>(
   const resolveModel = resolve ? (id: string) => handled(resolve(id, context)) : bareModelId;
   const values: Record<string, unknown> = {};
   for (const [name, param] of Object.entries(sandbox.params)) {
+    // An sdk model is read by the code through the catalog as `provider/model`: never resolved here.
+    const sdk = sandbox.sdkParams && Object.hasOwn(sandbox.sdkParams, name);
     values[name] =
-      param.kind === "model"
+      param.kind === "model" && !sdk
         ? resolveModel(raw[name] as string)
         : param.kind === "tools"
           ? editedToolset(param, overrides[name] as ToolEdit[] | undefined)

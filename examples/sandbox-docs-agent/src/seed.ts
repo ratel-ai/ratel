@@ -1,7 +1,6 @@
 import "./env.js";
 import type { ModelMessage } from "ai";
 import { reply } from "./agent.js";
-import { routeModelIdsToBedrock } from "./bedrock.js";
 import { inAgentTurn, setupTelemetry } from "./telemetry.js";
 
 // Writes about 20 synthetic sessions to the Ratel project of RATEL_API_KEY:
@@ -45,7 +44,6 @@ export const SESSIONS: readonly (readonly string[])[] = [
 
 async function main(): Promise<void> {
   if (!process.env.RATEL_API_KEY) throw new Error("set RATEL_API_KEY to the key of a demo project");
-  routeModelIdsToBedrock();
   const telemetry = setupTelemetry();
   const runId = Date.now().toString(36);
   let turns = 0;

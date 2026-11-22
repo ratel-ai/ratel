@@ -8,6 +8,15 @@ import { bool, enumParam, int, model, number, prompt, string } from "./params.js
 import { chat, context, defineSandbox, structured } from "./sandbox.js";
 import { tools } from "./tools.js";
 
+export { SDK_TOOLS_PARAM, withSdkParams } from "./auto-params.js";
+export {
+  type CatalogOverrides,
+  type CatalogRead,
+  captureSetup,
+  type SetupCapture,
+  sdkSnapshot,
+  withCatalogRun,
+} from "./catalog.js";
 export {
   ModelResolutionError,
   type ParamIssue,
@@ -29,8 +38,10 @@ export type {
 export {
   buildManifest,
   type Manifest,
+  type ManifestParam,
   type ManifestSandbox,
   manifestSandbox,
+  type ParamSource,
   SDK_NAME,
   SDK_VERSION,
 } from "./manifest.js";
@@ -69,6 +80,7 @@ export {
   type Sandbox,
   type SandboxDefinition,
   type SandboxInput,
+  type SdkParamSource,
   type StructuredInput,
   type TwinEventPayload,
 } from "./sandbox.js";

@@ -45,7 +45,10 @@ export interface ManifestSandbox {
   readonly context: readonly { readonly name: string; readonly default?: unknown }[];
 }
 
-export type ManifestParam = { readonly name: string } & Param;
+/** declared: from the sandbox file. sdk: from the SDK registry or a catalog read. */
+export type ParamSource = "declared" | "sdk";
+
+export type ManifestParam = { readonly name: string; readonly source: ParamSource } & Param;
 
 export interface BuildManifestOptions {
   readonly sandboxes: readonly { readonly sandbox: Sandbox; readonly file?: string }[];
@@ -87,7 +90,11 @@ export function manifestSandbox(sandbox: Sandbox, file?: string): ManifestSandbo
       : {}),
     state: sandbox.state ?? "run",
     ...(sandbox.image ? { image: manifestImage(sandbox.image) } : {}),
-    params: Object.entries(sandbox.params).map(([name, param]) => ({ name, ...param })),
+    params: Object.entries(sandbox.params).map(([name, param]) => ({
+      name,
+      ...param,
+      source: sandbox.sdkParams && Object.hasOwn(sandbox.sdkParams, name) ? "sdk" : "declared",
+    })),
     context: Object.entries(sandbox.context ?? {}).map(([name, value]) => ({
       name,
       default: value,

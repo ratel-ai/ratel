@@ -1,27 +1,36 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { trace } from "@opentelemetry/api";
 import { InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
-import {
-  RATEL_SANDBOX_CONFIG_HASH,
-  resolveLocal,
-  resolveParams,
-  runSandbox,
-  type ToolChannel,
-} from "@ratel-ai/sandbox";
+import { runSandbox, sdkSnapshot, type ToolChannel, withSdkParams } from "@ratel-ai/sandbox";
 import type { LanguageModel, ModelMessage } from "ai";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import docsSandbox from "../docs-agent.sandbox.js";
-import { docsDefaults, reply } from "../src/agent.js";
+import declared from "../docs-agent.sandbox.js";
+import { docsDefaults, docsModelId, reply } from "../src/agent.js";
 import { SESSIONS } from "../src/seed.js";
 import { ConversationIdProcessor, inAgentTurn } from "../src/telemetry.js";
 import { listTickets } from "../src/tickets.js";
 
 // The docs agent with a scripted model (no key, no network): the production
 // path, the sandbox path with a faked createTicket, and the seed sessions.
+
+/** The sandbox as `ratel` loads it: its params come from the SDK. */
+const docsSandbox = withSdkParams(declared, sdkSnapshot());
+
+/** Sends the AI SDK's model ID strings to `model` while `fn` runs. */
+async function withDefaultModel<T>(model: unknown, fn: () => Promise<T>): Promise<T> {
+  const slot = globalThis as { AI_SDK_DEFAULT_PROVIDER?: unknown };
+  const previous = slot.AI_SDK_DEFAULT_PROVIDER;
+  slot.AI_SDK_DEFAULT_PROVIDER = { languageModel: () => model };
+  try {
+    return await fn();
+  } finally {
+    slot.AI_SDK_DEFAULT_PROVIDER = previous;
+  }
+}
 
 type Step = { tool: string; input: unknown } | { text: string };
 
@@ -108,20 +117,17 @@ describe("production reply()", () => {
     expect(toolResults).toEqual(["searchDocs", "readDoc", "createTicket"]);
   });
 
-  it("stamps the production config hash, equal to the sandbox's baseline hash", () => {
-    const provider = new NodeTracerProvider();
-    provider.register();
-    let stamped: unknown;
-    trace.getTracer("t").startActiveSpan("invoke_agent docs-agent", (span) => {
-      // What reply() does with no cfg: the defaults, read through resolveLocal.
-      resolveLocal(docsDefaults, { sandbox: "docs-agent" });
-      stamped = (span as unknown as { attributes: Record<string, unknown> }).attributes[
-        RATEL_SANDBOX_CONFIG_HASH
-      ];
-      span.end();
-    });
-    expect(stamped).toBe(resolveParams(docsSandbox, {}).configHash);
-    trace.disable();
+  it("reads its model and prompt through the catalog: ratel.catalog.json changes them", async () => {
+    const catalogFile = join(dir, "ratel.catalog.json");
+    writeFileSync(catalogFile, JSON.stringify({ prompts: { system: "Answer in French." } }));
+    process.env.RATEL_CATALOG_FILE = catalogFile;
+    try {
+      const { model, prompts } = scriptedModel([{ text: "Bonjour." }]);
+      await withDefaultModel(model, () => reply([{ role: "user", content: "hi" }]));
+      expect(JSON.stringify(prompts[0])).toContain("Answer in French.");
+    } finally {
+      delete process.env.RATEL_CATALOG_FILE;
+    }
   });
 
   it("puts the session's gen_ai.conversation.id on every span of a turn", async () => {
@@ -164,12 +170,12 @@ describe("the docs-agent sandbox", () => {
       confirm: async () => ({ decision: "reject" }),
     };
     const deltas: string[] = [];
-    const run = await runSandbox(
-      {
-        ...docsSandbox,
-        resolve: Object.assign(() => model, { modelKind: "language-model" as const }),
-      },
-      { input: { messages: CONVERSATION }, toolChannel: channel, onText: (t) => deltas.push(t) },
+    const run = await withDefaultModel(model, () =>
+      runSandbox(docsSandbox, {
+        input: { messages: CONVERSATION },
+        toolChannel: channel,
+        onText: (t) => deltas.push(t),
+      }),
     );
     expect(run.toolModes).toEqual({ searchDocs: "real", readDoc: "real", createTicket: "fake" });
     expect(fakes).toEqual(["createTicket"]);
@@ -185,6 +191,19 @@ describe("the docs-agent sandbox", () => {
         toolModes: { createTicket: "real" },
       }),
     ).rejects.toThrow("createTicket: real needs allowReal: true in the sandbox file");
+  });
+
+  it("serves a per-run system prompt through the same reply()", async () => {
+    const { model, prompts } = scriptedModel([{ text: "Done." }]);
+    await withDefaultModel(model, () =>
+      runSandbox(docsSandbox, {
+        input: { messages: CONVERSATION },
+        overrides: { system: "Run-only prompt." },
+      }),
+    );
+    const sent = JSON.stringify(prompts[0]);
+    expect(sent).toContain("Run-only prompt.");
+    expect(sent).not.toContain("You are the Ratel docs assistant");
   });
 });
 
@@ -225,7 +244,7 @@ describe("the runner's real model resolver", () => {
 
   it("resolves the model from the example's ai@6, not the sandbox package's ai@7", async () => {
     const { aiSdkModels } = await import("@ratel-ai/sandbox/ai-sdk");
-    const model = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(docsDefaults.model, {
+    const model = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(docsModelId(), {
       from: sandboxFile,
     })) as { specificationVersion: string };
     // ai@6 speaks the v3 model spec. Resolved from where @ratel-ai/sandbox lives (its dev
@@ -235,7 +254,7 @@ describe("the runner's real model resolver", () => {
       new URL("../../../src/sandbox/ts/package.json", import.meta.url),
     );
     const fromSandboxPackage = (await aiSdkModels({ env: { AI_GATEWAY_API_KEY: "gw" } })(
-      docsDefaults.model,
+      docsModelId(),
       { from: sandboxPackage },
     )) as { specificationVersion: string };
     expect(fromSandboxPackage.specificationVersion).toBe("v4");

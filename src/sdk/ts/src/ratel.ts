@@ -36,6 +36,7 @@ import {
   RuntimeEvents,
   type RuntimeEventsOptions,
 } from "./runtime-events.js";
+import { type RegisteredTool, recordTool } from "./sdk-registry.js";
 import { SkillCatalog } from "./skill-catalog.js";
 import { GET_SKILL_CONTENT_ID, getSkillContentTool } from "./skill-tools.js";
 import { currentTurnId, type ExternalToolCall, type TurnOptions } from "./turn.js";
@@ -703,6 +704,13 @@ export function ratel(config: RatelConfig = {}): Ratel {
         assertNativeTool(tool);
         assertUnreservedId(tool.id);
       }
+      for (const tool of items)
+        recordTool({
+          id: tool.id,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          tool,
+        });
       return catalog.register(items);
     },
     has: (id) => catalog.has(id),
@@ -773,6 +781,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
         const batch: ExecutableTool[] = [];
         const stagedClaims: string[] = [];
         const stagedPassthrough: [string, unknown][] = [];
+        const stagedRecords: RegisteredTool[] = [];
         for (const [id, tool] of Object.entries(appTools)) {
           assertUnreservedId(id);
           // First registration of an id wins, across every view of the core
@@ -782,8 +791,15 @@ export function ratel(config: RatelConfig = {}): Ratel {
           stagedClaims.push(id);
           if (registration === "passthrough") {
             stagedPassthrough.push([id, tool]);
+            stagedRecords.push({ id, description: descriptionOf(tool), tool });
             continue;
           }
+          stagedRecords.push({
+            id,
+            description: registration.description,
+            inputSchema: registration.inputSchema,
+            tool,
+          });
           batch.push({
             id,
             name: id,
@@ -798,6 +814,7 @@ export function ratel(config: RatelConfig = {}): Ratel {
         // The batch validated: commit the passthroughs, then index the executables.
         for (const [id, tool] of stagedPassthrough) passthrough.set(id, tool);
         for (const id of stagedClaims) claimedAdaptedToolIds.add(id);
+        for (const entry of stagedRecords) recordTool(entry);
         return catalog.register(batch);
       },
     };
@@ -965,4 +982,10 @@ export function unadaptedError(isInstalled: (specifier: string) => boolean): Err
       `  - ${f.pkg}: install \`${f.adapter}\` and register via \`ratel(config).adaptTo(${f.factory}()).tools.register(...)\``,
   );
   return new Error(`${intro} Detected in your dependencies:\n${lines.join("\n")}`);
+}
+
+// A passthrough has no catalog registration: read its description off the framework tool.
+function descriptionOf(tool: unknown): string {
+  const description = (tool as { description?: unknown } | null)?.description;
+  return typeof description === "string" ? description : "";
 }

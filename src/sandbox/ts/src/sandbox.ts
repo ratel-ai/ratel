@@ -84,7 +84,12 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export type TwinEventPayload = { readonly kind: string } & Readonly<Record<string, unknown>>;
 
 export interface SandboxDefinition<P extends ParamMap, I, O, M> {
-  readonly params: P;
+  /**
+   * The params Ratel can change per run. Absent: none declared. Tools registered on a
+   * `ratel()` core and prompts and models read through `@ratel-ai/sdk/experimental/catalog`
+   * become params by themselves (`source: "sdk"`); a declared param wins on a name clash.
+   */
+  readonly params?: P;
   readonly input: SandboxInput<I>;
   /** What run() returns: `sandbox.output(schema)` or `sandbox.text()`. Absent: not declared. */
   readonly output?: SandboxOutput<NoInfer<O>>;
@@ -113,26 +118,37 @@ export interface SandboxDefinition<P extends ParamMap, I, O, M> {
 }
 
 export interface Sandbox<P extends ParamMap = ParamMap, I = unknown, O = unknown, M = unknown>
-  extends Omit<SandboxDefinition<P, I, O, M>, "output"> {
+  extends Omit<SandboxDefinition<P, I, O, M>, "output" | "params"> {
   readonly kind: "ratel.sandbox";
   readonly id: string;
+  readonly params: P;
+  /** The params that came from the SDK, not from the sandbox file, by param name. */
+  readonly sdkParams?: Readonly<Record<string, SdkParamSource>>;
   /** Checked against run() in `sandbox()`. Untyped here, so a copy can change run(). */
   readonly output?: SandboxOutput<unknown>;
 }
 
+/** Where an sdk param comes from: a catalog read (prompt or model, by catalog id) or the registered tools. */
+export type SdkParamSource =
+  | { readonly kind: "prompt" | "model"; readonly id: string }
+  | { readonly kind: "tools" };
+
 const SANDBOX_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
-const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+export const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 
 /** Declares a sandbox: the params Ratel can change, the input shape and the run function that calls the real code. */
-export function defineSandbox<P extends ParamMap, I, O, M = string>(
-  id: string,
-  definition: SandboxDefinition<P, I, O, M>,
-): Sandbox<P, I, O, M> {
+export function defineSandbox<
+  P extends ParamMap = Record<never, never>,
+  I = unknown,
+  O = unknown,
+  M = string,
+>(id: string, definition: SandboxDefinition<P, I, O, M>): Sandbox<P, I, O, M> {
+  const params = (definition.params ?? {}) as P;
   if (!SANDBOX_ID.test(id))
     throw new TypeError(
       `"${id}" is not a valid sandbox id: use lowercase letters, digits, '.', '_' and '-'`,
     );
-  for (const [name, param] of Object.entries(definition.params)) {
+  for (const [name, param] of Object.entries(params)) {
     if (!PARAM_NAME.test(name)) throw new TypeError(`${id}: "${name}" is not a valid param name`);
     const problem = checkParamValue(param, param.default);
     if (problem) throw new TypeError(`${id}: ${name} default: ${problem}`);
@@ -147,7 +163,7 @@ export function defineSandbox<P extends ParamMap, I, O, M = string>(
   const output = definition.output;
   if (output && output.kind !== "text" && output.kind !== "structured")
     throw new TypeError(`${id}: output must come from sandbox.output() or sandbox.text()`);
-  return Object.freeze({ kind: "ratel.sandbox", id, ...definition });
+  return Object.freeze({ kind: "ratel.sandbox", id, ...definition, params });
 }
 
 export function isSandbox(value: unknown): value is Sandbox {

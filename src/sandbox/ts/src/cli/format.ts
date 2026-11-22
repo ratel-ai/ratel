@@ -3,13 +3,19 @@ import { defaultMode } from "../tools.js";
 import type { VerifyReport, VerifyStatus } from "../verify.js";
 import type { ToolMode } from "./args.js";
 
-/** The manifest as a readable table: one block per sandbox, one row per param. */
+/** The manifest as a readable table: one block per sandbox, one row per param, its source last. */
 export function formatManifest(manifest: Manifest): string {
   if (manifest.sandboxes.length === 0) return "No sandboxes found (looked for **/*.sandbox.*).\n";
   const lines: string[] = [];
   for (const sandbox of manifest.sandboxes) {
     lines.push(`${sandbox.id}  ${sandbox.file ?? ""}  (${sandbox.input.kind} input)`);
-    const rows = sandbox.params.map((p) => [p.name, typeOf(p), defaultOf(p), constraintsOf(p)]);
+    const rows = sandbox.params.map((p) => [
+      p.name,
+      typeOf(p),
+      defaultOf(p),
+      constraintsOf(p),
+      p.source ?? "declared",
+    ]);
     lines.push(...table(rows).map((row) => `  ${row}`));
     lines.push("");
   }

@@ -3,14 +3,12 @@ import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 import type { ModelMessage } from "ai";
 import { reply } from "./agent.js";
-import { routeModelIdsToBedrock } from "./bedrock.js";
 import { inAgentTurn, setupTelemetry } from "./telemetry.js";
 import { describeStore } from "./tickets.js";
 
 // Chat with the docs agent in the terminal. Each user turn is one
 // `invoke_agent docs-agent` trace; the session is its gen_ai.conversation.id.
 
-routeModelIdsToBedrock();
 const telemetry = setupTelemetry();
 const sessionId = `sess_${randomUUID()}`;
 const history: ModelMessage[] = [];

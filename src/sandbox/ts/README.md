@@ -75,6 +75,28 @@ The manifest lists only the providers the runner can call, by key name. A run wh
 listed provider can call is rejected (`invalid_params`) with what to set or install. The
 playground session ID becomes `gen_ai.conversation.id` on the `invoke_agent <sandbox id>` root.
 
+## Params from the Ratel SDK, with no declaration (experimental)
+
+When the agent code uses `@ratel-ai/sdk`, the sandbox finds its params by itself:
+
+- each tool registered on a `ratel()` core (`r.tools.register(...)`, also through an adapter)
+  goes into one `tools` param. MCP-style `annotations` on the tool set its hint:
+  `readOnlyHint` (real by default), `destructiveHint` (sideEffect: fake by default, never real),
+  neither (confirm). The code hands the model `ratel.toolset(tools)` from
+  `@ratel-ai/sdk/experimental/catalog`: in a run, that is the run's version of the tools.
+- each prompt and model read through `ratel.prompt(id, default)` and `ratel.model(id, default)`
+  becomes a `prompt` or `model` param named by its id (a valid param name only). In a run the same
+  call returns the run's value. The model stays a `provider/model` string: the code turns it into
+  a model client itself.
+
+The runner imports the sandbox file and collects what that import registered and read
+(`captureSetup`), then adds those params with `source: "sdk"` in the manifest (`withSdkParams`).
+A declared param wins on a name clash and has `source: "declared"`. A prompt or model that the
+code reads only inside `run()` cannot be found on load: the first run that reads it adds it, and
+`ratel sandbox dev` sends a `manifest.update`. `ratel sandbox verify` checks sdk params like
+declared ones; with `--dry` an sdk model string goes to the stand-in model. Skills registered on
+the SDK are not params yet.
+
 ## Tools and tool modes
 
 `sandbox.tools(defaults.tools, hints)` makes the toolset a param. Per run, `run()` gets a toolset of
@@ -251,8 +273,10 @@ traces of playground runs, with the resource `deployment.environment.name=playgr
 ## Layout
 
 - `src/params.ts` — param builders and value checks. `src/sandbox.ts` — `sandbox()` and `structured()`.
-- `src/resolve.ts`, `src/run.ts` — per-run resolution and one run. `src/catalog.ts` — the per-run
-  host of the experimental SDK prompt and model catalog (`catalogOverrides` in, `catalogReads` out).
+- `src/resolve.ts`, `src/run.ts` — per-run resolution and one run. `src/catalog.ts` — the
+  experimental SDK slots: the per-run catalog host (overrides and toolset in, `catalogReads` out)
+  and the SDK registry reads (`captureSetup`, `sdkSnapshot`). `src/auto-params.ts` — sdk params
+  (`withSdkParams`).
 - `src/hash.ts` — canonical JSON and the config hash. `src/manifest.ts`, `src/providers.ts` —
   the `protocol/sandbox/v1` manifest.
 - `src/otel.ts` — `resolveLocal` and `stampSandboxInput` (`@opentelemetry/api` peer).

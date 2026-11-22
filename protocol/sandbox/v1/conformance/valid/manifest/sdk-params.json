@@ -1,0 +1,71 @@
+{
+  "sdk": {
+    "language": "typescript",
+    "name": "@ratel-ai/sandbox",
+    "version": "0.1.0"
+  },
+  "providers": [
+    {
+      "provider": "amazon-bedrock",
+      "keys": [
+        "AWS_REGION"
+      ]
+    }
+  ],
+  "sandboxes": [
+    {
+      "id": "docs-agent",
+      "file": "docs-agent.sandbox.ts",
+      "modelResolver": "builtin",
+      "input": {
+        "kind": "chat"
+      },
+      "state": "run",
+      "params": [
+        {
+          "name": "maxSteps",
+          "kind": "scalar",
+          "type": "int",
+          "default": 5,
+          "min": 1,
+          "max": 10,
+          "source": "declared"
+        },
+        {
+          "name": "model",
+          "kind": "model",
+          "default": "amazon-bedrock/eu.anthropic.claude-haiku-5-5",
+          "source": "sdk"
+        },
+        {
+          "name": "system",
+          "kind": "prompt",
+          "default": "You are the Ratel docs assistant.",
+          "source": "sdk"
+        },
+        {
+          "name": "tools",
+          "kind": "tools",
+          "source": "sdk",
+          "default": [
+            {
+              "name": "searchDocs",
+              "description": "Search the Ratel docs by keywords.",
+              "inputSchema": {
+                "type": "object"
+              },
+              "hint": "readOnly"
+            },
+            {
+              "name": "createTicket",
+              "description": "Open a support ticket.",
+              "hint": "sideEffect",
+              "allowReal": false
+            }
+          ]
+        }
+      ],
+      "context": []
+    }
+  ]
+}

@@ -76,7 +76,7 @@ describe("ratel sandbox list", () => {
     expect(r.stdout).toContain("workflow-label");
     expect(r.stdout).toContain("agents/label.sandbox.ts");
     expect(r.stdout).toMatch(/model\s+model\s+anthropic\/claude-sonnet-5-5/);
-    expect(r.stdout).toMatch(/maxTokens\s+int\s+400\s+50\.\.2000/);
+    expect(r.stdout).toMatch(/maxTokens\s+int\s+400\s+50\.\.2000\s+declared/);
   }, 30_000);
 
   it("prints the manifest as JSON with --json", async () => {

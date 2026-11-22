@@ -128,6 +128,10 @@ interface WorkerConfig {
 
 async function startWorker(options: WorkerConfig): Promise<DevHandle> {
   const child = new ChildHost(options.root, options.childEnv);
+  child.onManifest = (next) => {
+    options.out("a run read a new prompt or model; manifest updated");
+    step({ type: "manifest.changed", manifest: next });
+  };
   const runner = options.runner;
   const loadManifest = (): Promise<Manifest> => {
     const files = discoverSandboxFiles(options.root);

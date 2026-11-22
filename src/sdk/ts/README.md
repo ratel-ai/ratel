@@ -543,8 +543,12 @@ Each call returns the first value it finds, with no network call: the override o
 sandbox run, then the local catalog file `ratel.catalog.json` (path from `RATEL_CATALOG_FILE`,
 else the working directory; `{ "prompts": { "<id>": "..." }, "models": { "<id>": "..." } }`),
 then the default. Each read is recorded (`experimentalCatalogReads()`), so `@ratel-ai/sandbox`
-can turn the prompts and models the code reads into params. The sandbox runner serves overrides
-through the `globalThis[Symbol.for("ratel.catalog.host.v1")]` slot.
+can turn the prompts and models the code reads into params. `ratel.toolset(tools)` returns the
+tools to hand the model: a sandbox run's version of them (tool modes, edits), else `tools`.
+
+Every core also records the tools and skills registered on it, and every catalog read, in one
+process registry (`globalThis[Symbol.for("ratel.registry.v1")]`): a sandbox lists those tools as
+params. The sandbox runner serves a run's values through `globalThis[Symbol.for("ratel.catalog.host.v1")]`.
 
 ## Adapter conformance testkit
 
@@ -635,4 +639,4 @@ Message and tool content is off by default; opt in with the `OTEL_INSTRUMENTATIO
 
 ## Package layout
 
-`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers and `prompt-model-catalog.ts` for the experimental `./experimental/catalog` entrypoint), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.
+`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers `prompt-model-catalog.ts` for the experimental `./experimental/catalog` entrypoint and `sdk-registry.ts` for the process registry of registrations), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.

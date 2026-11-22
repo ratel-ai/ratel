@@ -1,23 +1,25 @@
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { fromNodeProviderChain } from "@aws-sdk/credential-providers";
-import { BEDROCK_PREFIX, docsModelId } from "./agent.js";
+import { gateway } from "ai";
 
-// The example's own entry points (chat, seed) pass the model as an ID string,
-// and the AI SDK sends an ID string through AI Gateway. When DOCS_AGENT_MODEL
-// is an `amazon-bedrock/<id>` value, this makes the AI SDK send ID strings to
-// Bedrock instead, with the AWS credential chain (AWS_PROFILE, SSO, static
-// keys). A sandbox run does not need it: the sandbox's resolver handles Bedrock.
+// The agent hands the AI SDK its model as an ID string (from the Ratel catalog).
+// The AI SDK sends ID strings through AI Gateway. This makes it send
+// `amazon-bedrock/<id>` strings to Bedrock instead, with the AWS credential chain
+// (AWS_PROFILE, SSO, static keys), and every other ID to the gateway as before.
 
-/** Routes `amazon-bedrock/<id>` model strings to Bedrock. Returns false when the model is not on Bedrock. */
-export function routeModelIdsToBedrock(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (!docsModelId(env).startsWith(BEDROCK_PREFIX)) return false;
-  const bedrock = createAmazonBedrock({
-    region: env.AWS_REGION ?? env.AWS_DEFAULT_REGION,
-    credentialProvider: fromNodeProviderChain(),
-  });
+export const BEDROCK_PREFIX = "amazon-bedrock/";
+
+/** Installs the AI SDK default provider that routes `amazon-bedrock/` IDs to Bedrock. */
+export function routeModelIds(env: NodeJS.ProcessEnv = process.env): void {
+  let bedrock: ReturnType<typeof createAmazonBedrock> | undefined;
   (globalThis as { AI_SDK_DEFAULT_PROVIDER?: unknown }).AI_SDK_DEFAULT_PROVIDER = {
-    languageModel: (id: string) =>
-      bedrock(id.slice(id.startsWith(BEDROCK_PREFIX) ? BEDROCK_PREFIX.length : 0)),
+    languageModel: (id: string) => {
+      if (!id.startsWith(BEDROCK_PREFIX)) return gateway.languageModel(id);
+      bedrock ??= createAmazonBedrock({
+        region: env.AWS_REGION ?? env.AWS_DEFAULT_REGION,
+        credentialProvider: fromNodeProviderChain(),
+      });
+      return bedrock(id.slice(BEDROCK_PREFIX.length));
+    },
   };
-  return true;
 }

@@ -106,7 +106,8 @@ async function verify(
     };
   const from = join(request.root, loaded.file);
   const note = (line: string) => process.stderr.write(`${line}\n`);
-  if (request.dry && sandbox.resolve?.modelKind !== "language-model")
+  const sdkModel = Object.values(sandbox.sdkParams ?? {}).some((p) => p.kind === "model");
+  if (request.dry && sandbox.resolve?.modelKind !== "language-model" && !sdkModel)
     note(`--dry: ${sandbox.id} calls its model with its own client, so its calls are real`);
   let n = 0;
   const report = await verifySandbox(sandbox, {

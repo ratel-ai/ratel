@@ -1,0 +1,35 @@
+{
+  "sdk": {
+    "language": "typescript",
+    "name": "@ratel-ai/sandbox",
+    "version": "0.1.0"
+  },
+  "providers": [
+    {
+      "provider": "amazon-bedrock",
+      "keys": [
+        "AWS_REGION"
+      ]
+    }
+  ],
+  "sandboxes": [
+    {
+      "id": "docs-agent",
+      "file": "docs-agent.sandbox.ts",
+      "modelResolver": "builtin",
+      "input": {
+        "kind": "chat"
+      },
+      "state": "run",
+      "params": [
+        {
+          "name": "system",
+          "kind": "prompt",
+          "default": "x",
+          "source": "catalog"
+        }
+      ],
+      "context": []
+    }
+  ]
+}

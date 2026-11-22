@@ -3,67 +3,59 @@
 A small chat agent like Ratel Docs Ask AI, built with the Vercel AI SDK (v6) and AI Gateway. It
 answers questions about Ratel from a bundled set of docs pages and opens support tickets. Its
 sandbox, `docs-agent.sandbox.ts`, lets the Ratel playground (or the local `ratel` CLI) run the real
-agent with a changed model, prompt, max steps or tools, one user turn per run.
+agent with a changed model, prompt or tools, one user turn per run.
 
 | Tool | What it does | Hint | Default mode in a sandbox run |
 |---|---|---|---|
-| `searchDocs` | Searches the pages in `src/docs/` by keyword | `readOnly` | `real` |
-| `readDoc` | Reads one page by slug | `readOnly` | `real` |
-| `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite`, or to Postgres when `DATABASE_URL` is set | `sideEffect` | `fake` |
+| `searchDocs` | Searches the pages in `src/docs/` by keyword | `readOnlyHint` | `real` |
+| `readDoc` | Reads one page by slug | `readOnlyHint` | `real` |
+| `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite`, or to Postgres when `DATABASE_URL` is set | `destructiveHint` | `fake` |
 
-`createTicket` never runs real in a sandbox run: the sandbox file does not set `allowReal: true`, so
-the runner refuses a run that asks for it.
+`createTicket` never runs real in a sandbox run: a `destructiveHint` tool is faked by default and
+has no `allowReal`, so the runner refuses a run that asks for it.
 
 The sandbox file also declares the image of a hosted instance: a `node:22-slim` base, `pnpm
 install`, and a Postgres sidecar seeded from `db/seed.sql` with the tickets table. The sidecar
 sets `DATABASE_URL`, so a hosted `createTicket` writes to Postgres. Locally there is no
 `DATABASE_URL`, so tickets stay in the SQLite file.
 
-## The DI change
+## The code: Ratel SDK tools and the catalog (experimental)
 
-The agent's config is one `defaults` object, and `reply` takes it as a parameter. Production
-calls `reply(messages)` and gets the defaults through `resolveLocal`, which returns them unchanged
-and stamps `ratel.sandbox.id` and `ratel.sandbox.config_hash` on the active span. The sandbox passes the
-per-run params instead.
+The agent reads its model and system prompt through the Ratel catalog
+(`@ratel-ai/sdk/experimental/catalog`) and registers its tools on a Ratel core. MCP-style
+`annotations` give each tool its default mode in a sandbox run: `readOnlyHint` runs real,
+`destructiveHint` is faked, a tool with neither asks to confirm.
 
 ```ts
 // src/agent.ts
-export const docsDefaults = { model: "anthropic/claude-sonnet-5.5", system: SYSTEM, maxSteps: 5, tools };
-
-export async function reply(
-  messages: ModelMessage[],
-  cfg: DocsConfig = resolveLocal(docsDefaults, { sandbox: "docs-agent" }), // was: module constants
-  options: ReplyOptions = {},
-): Promise<Reply> {
-  const result = streamText({ model: cfg.model, system: cfg.system, messages, tools: cfg.tools,
-    stopWhen: stepCountIs(cfg.maxSteps), experimental_telemetry: { isEnabled: true } });
-  // ...
+export function docsConfig(): DocsConfig {
+  return {
+    model: catalog.model("model", docsModelId()),   // "provider/model"
+    system: catalog.prompt("system", SYSTEM),        // the template
+    maxSteps: MAX_STEPS,
+    tools: catalog.toolset(tools),                   // a sandbox run's version of the tools
+  };
 }
+await ratel().adaptTo(aiSdk()).tools.register(tools);
+export const docsDefaults = docsConfig();            // read on load: the sandbox finds them
 ```
 
-In production the model is the ID string, which the AI SDK sends through AI Gateway. In a sandbox
-run it is a `LanguageModel` that the runner resolves: through AI Gateway when
-`AI_GATEWAY_API_KEY` is set, else through an installed `@ai-sdk/<provider>` package and its key.
+In production each call returns `ratel.catalog.json` values when that file exists, else the
+defaults. In a sandbox run the same calls return the run's values. The model ID goes to AI Gateway,
+or to Bedrock for an `amazon-bedrock/` ID (`src/bedrock.ts`).
 
 ## The sandbox file
+
+No params block: the model, the prompt and the tools above are its params, with `source: "sdk"`
+in the manifest. A param declared in the sandbox file would win on a name clash.
 
 ```ts
 // docs-agent.sandbox.ts
 export default sandbox("docs-agent", {
-  params: {
-    model: sandbox.model(docsDefaults.model),
-    system: sandbox.prompt(docsDefaults.system),
-    maxSteps: sandbox.int(docsDefaults.maxSteps, { min: 1, max: 10 }),
-    tools: sandbox.tools(docsDefaults.tools, {
-      searchDocs: { readOnly: true },
-      readDoc: { readOnly: true },
-      createTicket: { sideEffect: true }, // faked unless allowReal: true
-    }),
-  },
   input: aiSdkChat(), // run gets { messages }: the conversation so far
-  resolve: aiSdkModels(),
-  run: async ({ input, params, ctx }) =>
-    (await reply(input.messages, params, { onText: ctx.textDelta, abortSignal: ctx.signal })).text,
+  image: sandbox.image({ /* the hosted instance, see above */ }),
+  run: async ({ input, ctx }) =>
+    (await reply(input.messages, undefined, { onText: ctx.textDelta, abortSignal: ctx.signal })).text,
 });
 ```
 
@@ -92,8 +84,9 @@ pnpm ratel sandbox run docs-agent --input chat.json --tool createTicket=fake
 pnpm ratel sandbox run docs-agent --input chat.json --fake createTicket=ticket.json   # a fixed fake
 
 # Prove that the model, the prompt and the tools reach the model call (--dry: no model call).
-pnpm ratel sandbox verify docs-agent
-pnpm ratel sandbox verify docs-agent --dry
+pnpm ratel sandbox run docs-agent --input chat.json --set system="Answer in French."
+pnpm ratel sandbox verify docs-agent --input chat.json
+pnpm ratel sandbox verify docs-agent --input chat.json --dry
 
 # Connect the sandbox to the Ratel playground.
 pnpm ratel sandbox dev
@@ -125,5 +118,6 @@ pnpm --filter @ratel-ai/example-sandbox-docs-agent test
 ```
 
 The test uses a scripted model, so it needs no key. It covers the production path (a real
-ticket), the sandbox path (a faked ticket, the SQLite file unchanged), the refused `real` mode, the
-config hash and the conversation ID on every span.
+ticket), the catalog file, the sandbox path (a faked ticket, the SQLite file unchanged, a per-run
+prompt), the refused `real` mode, `verify --dry` on the sdk params and the conversation ID on
+every span.

@@ -105,6 +105,21 @@ export async function verifySandbox(
   options: VerifyOptions,
 ): Promise<VerifyReport> {
   const subject = options.dry ? withDryModels(sandbox) : sandbox;
+  // An sdk model reaches the code as a `provider/model` string, which the code hands to
+  // the AI SDK: --dry routes such strings to the stand-in for the length of the verify.
+  const restoreProvider = options.dry && hasSdkModel(sandbox) ? routeModelIdsToDry() : undefined;
+  try {
+    return await verifyWith(sandbox, subject, options);
+  } finally {
+    restoreProvider?.();
+  }
+}
+
+async function verifyWith(
+  sandbox: Sandbox,
+  subject: Sandbox,
+  options: VerifyOptions,
+): Promise<VerifyReport> {
   const sentinel = options.sentinel ?? randomSentinel;
   const toolModes = verifyToolModes(sandbox.params);
   const records: RunRecord[] = [];
@@ -473,7 +488,7 @@ function secondModel(
     (m) => m !== param.default,
   );
   const languageModel = sandbox.resolve?.modelKind === "language-model";
-  if (options.dry && languageModel) {
+  if (options.dry && (languageModel || hasSdkModel(sandbox))) {
     const first = candidates[0];
     return first ? { model: first } : { skip: "no second model: pass --model <provider/model>" };
   }
@@ -535,6 +550,22 @@ function withDryModels(sandbox: Sandbox): Sandbox {
     callableProviders: () => [{ provider: "dry", keys: [] }],
   });
   return { ...sandbox, resolve: resolve as ModelResolver<unknown> };
+}
+
+function hasSdkModel(sandbox: Sandbox): boolean {
+  return Object.values(sandbox.sdkParams ?? {}).some((source) => source.kind === "model");
+}
+
+/** Sends the AI SDK's model ID strings to the stand-in. Returns the undo. */
+function routeModelIdsToDry(): () => void {
+  const slot = globalThis as { AI_SDK_DEFAULT_PROVIDER?: unknown };
+  const had = Object.hasOwn(slot, "AI_SDK_DEFAULT_PROVIDER");
+  const previous = slot.AI_SDK_DEFAULT_PROVIDER;
+  slot.AI_SDK_DEFAULT_PROVIDER = { languageModel: (modelId: string) => new DryModel(modelId) };
+  return () => {
+    if (had) slot.AI_SDK_DEFAULT_PROVIDER = previous;
+    else delete slot.AI_SDK_DEFAULT_PROVIDER;
+  };
 }
 
 function runProblem(record: RunRecord): string | null {

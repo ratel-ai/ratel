@@ -53,9 +53,27 @@ describe("buildManifest", () => {
       },
       state: "run",
       params: [
-        { name: "model", kind: "model", default: "anthropic/claude-sonnet-5-5" },
-        { name: "system", kind: "prompt", default: "You name agent workflows." },
-        { name: "maxTokens", kind: "scalar", type: "int", default: 400, min: 50, max: 2000 },
+        {
+          name: "model",
+          kind: "model",
+          default: "anthropic/claude-sonnet-5-5",
+          source: "declared",
+        },
+        {
+          name: "system",
+          kind: "prompt",
+          default: "You name agent workflows.",
+          source: "declared",
+        },
+        {
+          name: "maxTokens",
+          kind: "scalar",
+          type: "int",
+          default: 400,
+          min: 50,
+          max: 2000,
+          source: "declared",
+        },
       ],
       context: [],
     });

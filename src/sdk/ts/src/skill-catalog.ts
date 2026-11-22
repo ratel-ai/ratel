@@ -28,6 +28,7 @@ import {
 } from "./embedding-artifact.js";
 import { type IntentGraph, SkillRegistry } from "./registry.js";
 import type { RuntimeEvent, RuntimeEventsOptions } from "./runtime-events.js";
+import { recordSkill } from "./sdk-registry.js";
 import { traceSearch, traceSearchAsync, traceSkillLoad } from "./telemetry.js";
 
 export type { ReplaceOutcome, Skill, SkillHit };
@@ -179,6 +180,7 @@ export class SkillCatalog {
   async register(skills: Skill | readonly Skill[]): Promise<void> {
     const batch = Array.isArray(skills) ? skills : [skills];
     const localBatch = batch.map((skill) => structuredClone(skill));
+    for (const skill of localBatch) recordSkill({ id: skill.id, description: skill.description });
     await this.registerEffective(
       localBatch.map((skill) => this.applyDefinitionOverride(skill)),
       localBatch,

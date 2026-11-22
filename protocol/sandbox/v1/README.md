@@ -68,6 +68,11 @@ never values) and the sandboxes. A sandbox has an `id`, its input (`structured` 
 - `scalar` — `type` `int`, `number`, `bool`, `enum` (with `values`) or `string`, with `min`,
   `max` or `maxLength`.
 
+A param can carry an optional `source`: `declared` (in the sandbox file; the meaning when absent)
+or `sdk` (a tool registered on the Ratel SDK, or a prompt or model the code read through the SDK
+catalog). The worker sends a `manifest.update` when a run reads a prompt or model that its load
+did not reach, so such a param appears after its first run.
+
 A sandbox can also declare, all optional so phase-1 manifests stay valid:
 
 - `output` — `structured` with a JSON Schema of what run() returns, or `text`.

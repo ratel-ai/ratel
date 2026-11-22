@@ -84,8 +84,9 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
         : {}),
     });
   }
+  const sdk = sdkRunValues(sandbox, resolved.raw, params, options.catalogOverrides);
   const { result: output, reads } = await withCatalogRun(
-    options.catalogOverrides ?? { prompts: {}, models: {} },
+    sdk.overrides,
     () =>
       sandbox.run({
         input: options.input,
@@ -100,6 +101,7 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
           },
         },
       }),
+    sdk.toolset,
   );
   return {
     output,
@@ -108,4 +110,43 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
     toolModes,
     catalogReads: reads,
   };
+}
+
+/**
+ * What the catalog host serves a run of a sandbox with sdk params: the value of each
+ * sdk prompt and model param (by catalog id; a default value too, so the catalog file
+ * cannot change a run that Ratel hashed), and the run's version of the SDK tools.
+ */
+function sdkRunValues(
+  sandbox: Sandbox<ParamMap, unknown, unknown, unknown>,
+  raw: Readonly<Record<string, unknown>>,
+  params: Readonly<Record<string, unknown>>,
+  extra: CatalogOverrides | undefined,
+): { overrides: CatalogOverrides; toolset?: <T>(tools: T) => T } {
+  const prompts: Record<string, string> = { ...extra?.prompts };
+  const models: Record<string, string> = { ...extra?.models };
+  let runTools: Readonly<Record<string, unknown>> | undefined;
+  let sdkToolNames: ReadonlySet<string> = new Set();
+  for (const [name, source] of Object.entries(sandbox.sdkParams ?? {})) {
+    if (source.kind === "prompt") prompts[source.id] = raw[name] as string;
+    else if (source.kind === "model") models[source.id] = raw[name] as string;
+    else {
+      runTools = params[name] as Readonly<Record<string, unknown>>;
+      const param = sandbox.params[name];
+      sdkToolNames = new Set(param?.kind === "tools" ? param.default.map((t) => t.name) : []);
+    }
+  }
+  const overrides = { prompts, models };
+  if (!runTools) return { overrides };
+  const served = runTools;
+  // The code's toolset, with each SDK tool swapped for its run version; a disabled one is left out.
+  const toolset = <T>(tools: T): T => {
+    const out: Record<string, unknown> = {};
+    for (const [name, tool] of Object.entries(tools as Record<string, unknown>)) {
+      if (!sdkToolNames.has(name)) out[name] = tool;
+      else if (Object.hasOwn(served, name)) out[name] = served[name];
+    }
+    return out as T;
+  };
+  return { overrides, toolset };
 }

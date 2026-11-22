@@ -28,6 +28,8 @@ export interface RunHandlers {
 
 export class ChildHost {
   #child: ChildProcess | undefined;
+  /** Receives a manifest the current child sends on its own, after a run grew it. */
+  onManifest?: (manifest: Manifest) => void;
   #nextId = 1;
   readonly #pending = new Map<number, Pending>();
   /** Live runs, with the child that runs each one. */
@@ -117,7 +119,7 @@ export class ChildHost {
       stdio: ["ignore", "inherit", "inherit", "ipc"],
       ...(this.#env ? { env: this.#env } : {}),
     });
-    child.on("message", (reply: ChildReply) => this.#onReply(reply));
+    child.on("message", (reply: ChildReply) => this.#onReply(reply, child));
     child.once("exit", (code) => {
       if (this.#child === child) this.#child = undefined;
       this.#failRuns((r) => r.child === child, `the sandbox worker exited with code ${code}`);
@@ -125,11 +127,16 @@ export class ChildHost {
     return child;
   }
 
-  #onReply(reply: ChildReply): void {
+  #onReply(reply: ChildReply, child: ChildProcess): void {
     if ("id" in reply) {
       const resolve = this.#pending.get(reply.id);
       this.#pending.delete(reply.id);
       resolve?.(reply);
+      return;
+    }
+    if (reply.kind === "manifest.grew") {
+      // A retired child's sandboxes are stale: only the current child's manifest counts.
+      if (child === this.#child) this.onManifest?.(reply.manifest);
       return;
     }
     const run = this.#runs.get(reply.runId);

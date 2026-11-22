@@ -4,6 +4,7 @@ import {
   SpanStatusCode,
   type Tracer,
 } from "@opentelemetry/api";
+import type { CatalogRead } from "../catalog.js";
 import { messageOf } from "../cli/load.js";
 import { ModelResolutionError, SandboxInputError, SandboxParamError } from "../errors.js";
 import {
@@ -44,6 +45,8 @@ export interface ExecuteRunOptions {
   /** Answers the run's fake and confirm tool calls. */
   readonly toolChannel?: ToolChannel;
   readonly confirmTimeoutMs?: number;
+  /** Receives the prompts and models the run read through the SDK catalog. */
+  readonly onCatalogReads?: (reads: readonly CatalogRead[]) => void;
 }
 
 /** Runs the sandbox once under a root span with the sandbox attributes. Never throws. */
@@ -88,6 +91,7 @@ export async function executeRun(sandbox: Sandbox, options: ExecuteRunOptions): 
             ? { confirmTimeoutMs: options.confirmTimeoutMs }
             : {}),
         });
+        options.onCatalogReads?.(result.catalogReads);
         return {
           status: "ok",
           output: result.output,

@@ -201,6 +201,10 @@
         "name": { "$ref": "#/$defs/paramName" },
         "kind": { "enum": ["model", "prompt", "tools", "scalar"] },
         "description": { "type": "string" },
+        "source": {
+          "description": "Where the param comes from. declared: the sandbox file. sdk: a tool registered on the Ratel SDK, or a prompt or model read through its catalog. Absent: declared.",
+          "enum": ["declared", "sdk"]
+        },
         "default": true
       },
       "allOf": [

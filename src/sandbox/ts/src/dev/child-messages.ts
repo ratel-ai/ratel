@@ -37,6 +37,8 @@ export type ChildReply =
       readonly manifest: Manifest;
     }
   | { readonly id: number; readonly ok: false; readonly error: string }
+  /** A run read a prompt or model through the SDK catalog that the load did not reach: its new params. */
+  | { readonly kind: "manifest.grew"; readonly manifest: Manifest }
   | { readonly kind: "run.event"; readonly runId: string; readonly payload: RunEventPayload }
   | { readonly kind: "run.end"; readonly runId: string; readonly result: RunResult }
   /** A fake or confirm tool call waits for the controller. */

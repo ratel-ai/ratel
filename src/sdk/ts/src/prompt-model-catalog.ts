@@ -26,6 +26,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { recordRead } from "./sdk-registry.js";
 
 /** What a catalog entry holds: a prompt template or a `provider/model` id. */
 export type CatalogKind = "prompt" | "model";
@@ -50,6 +51,8 @@ export interface CatalogHost {
   resolve(kind: CatalogKind, id: string): string | undefined;
   /** Called on each read. */
   record(read: CatalogRead): void;
+  /** The toolset this run uses in place of `tools`: tool modes applied, edits and disabled tools served. */
+  toolset?<T>(tools: T): T;
 }
 
 /** The `globalThis` key of the active {@link CatalogHost}. */
@@ -78,6 +81,14 @@ export const ratel = {
   model(id: string, defaultModel: string): string {
     return resolve("model", id, defaultModel);
   },
+  /**
+   * The toolset to hand the model: inside a sandbox run, the run's version of
+   * `tools` (per-run tool modes, edited descriptions, disabled tools); else
+   * `tools` unchanged. Register the tools on a `ratel()` core so a sandbox lists them.
+   */
+  toolset<T extends object>(tools: T): T {
+    return activeHost()?.toolset?.(tools) ?? tools;
+  },
 } as const;
 
 /** Every prompt and model read in this process so far, in first-read order. */
@@ -102,6 +113,7 @@ function resolve(kind: CatalogKind, id: string, fallback: string): string {
   const read: CatalogRead = { kind, id, default: fallback };
   const key = `${kind}:${id}`;
   if (!reads.has(key)) reads.set(key, read);
+  recordRead(read);
   const host = activeHost();
   host?.record(read);
   const override = host?.resolve(kind, id);

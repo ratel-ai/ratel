@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { trace } from "@opentelemetry/api";
+import { withSdkParams } from "../auto-params.js";
+import type { CatalogRead } from "../catalog.js";
 import { type LoadedSandbox, loadSandboxes, messageOf } from "../cli/load.js";
 import { buildManifest, SDK_NAME, SDK_VERSION } from "../manifest.js";
 import type { Sandbox, TwinEventPayload } from "../sandbox.js";
@@ -23,6 +25,8 @@ let envLoaded = false;
 let sandboxes: LoadedSandbox[] = [];
 /** The project root of the loaded sandboxes: their files are relative to it. */
 let projectRoot = process.cwd();
+/** The build of the last manifest request: a manifest the child sends on its own keeps it. */
+let lastBuild: Extract<ChildRequest, { kind: "manifest" }>["build"];
 /** Settles when the last sandbox load ends. A run that arrives during a load waits for it. */
 let loading: Promise<unknown> = Promise.resolve();
 /** Live runs by ID. Deleted when the run ends or is canceled. */
@@ -59,6 +63,7 @@ async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): P
   loadEnvOnce(request.root);
   telemetry = request.telemetry;
   projectRoot = request.root;
+  lastBuild = request.build;
   const load = loadSandboxes(request.root, request.files);
   loading = load.catch(() => {});
   sandboxes = await load;
@@ -67,13 +72,26 @@ async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): P
     id: request.id,
     ok: true,
     kind: "manifest",
-    manifest: buildManifest({
-      sandboxes,
-      build: request.build,
-      env: process.env,
-      root: request.root,
-    }),
+    manifest: currentManifest(),
   };
+}
+
+function currentManifest() {
+  return buildManifest({ sandboxes, build: lastBuild, env: process.env, root: projectRoot });
+}
+
+/**
+ * A run can read a prompt or model that loading the sandbox file did not reach (a
+ * branch of run()). It becomes an sdk param now, and the controller gets the new manifest.
+ */
+function growManifest(id: string, reads: readonly CatalogRead[]): void {
+  const at = sandboxes.findIndex((t) => t.sandbox.id === id);
+  const current = sandboxes[at];
+  if (!current) return;
+  const grown = withSdkParams(current.sandbox, { reads, tools: [], skills: [] });
+  if (grown === current.sandbox) return;
+  sandboxes = sandboxes.map((t, i) => (i === at ? { ...current, sandbox: grown } : t));
+  reply({ kind: "manifest.grew", manifest: currentManifest() });
 }
 
 /** One run. Reports its events and exactly one run.end, unless it was canceled first. */
@@ -95,7 +113,11 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
   );
   channels.set(runId, channel);
   const playground = attachOnce();
+  let reads: readonly CatalogRead[] = [];
   const result = await executeRun(sandbox, {
+    onCatalogReads: (r) => {
+      reads = r;
+    },
     runId,
     start,
     tracer: trace.getTracer(SDK_NAME, SDK_VERSION),
@@ -106,6 +128,7 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
     ...(loaded ? { sandboxFile: join(projectRoot, loaded.file) } : {}),
   });
   end(runId, sandbox, result);
+  growManifest(sandbox.id, reads);
   await playground?.flush().catch((err: unknown) => {
     process.stderr.write(`ratel sandbox dev: trace export failed: ${messageOf(err)}\n`);
   });

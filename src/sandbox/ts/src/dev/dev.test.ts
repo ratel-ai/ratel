@@ -29,6 +29,22 @@ export default sandbox("workflow-label", {
 `;
 }
 
+/** A sandbox whose run() reads a catalog prompt the load never reaches, the way @ratel-ai/sdk does. */
+function lazyPromptSource(): string {
+  return `import { sandbox } from ${JSON.stringify(INDEX)};
+const followUp = () => {
+  const host = globalThis[Symbol.for("ratel.catalog.host.v1")];
+  host?.record({ kind: "prompt", id: "followUp", default: "Ask again." });
+  return host?.resolve("prompt", "followUp") ?? "Ask again.";
+};
+export default sandbox("workflow-label", {
+  params: { maxTokens: sandbox.int(400, { min: 50, max: 2000 }) },
+  input: sandbox.structured({ type: "object", properties: { workflowId: { type: "string" } } }),
+  run: async () => ({ followUp: followUp(), tag: "lazy" }),
+});
+`;
+}
+
 /** The newest register or manifest.update frame: the manifest the controller holds. */
 function lastManifestFrame(c: TestController): ReceivedFrame | undefined {
   return c.frames
@@ -117,7 +133,15 @@ describe.each(
         sandboxes: [
           {
             params: expect.arrayContaining([
-              { name: "maxTokens", kind: "scalar", type: "int", default: 500, min: 50, max: 2000 },
+              {
+                name: "maxTokens",
+                kind: "scalar",
+                type: "int",
+                default: 500,
+                min: 50,
+                max: 2000,
+                source: "declared",
+              },
             ]),
           },
         ],
@@ -166,6 +190,62 @@ describe.each(
       (f) => f.frame.type === "manifest.update" && controller.frames.indexOf(f) >= before,
     );
     expect(controller.sockets).toEqual(["tok_1"]);
+  });
+
+  it("adds a prompt that a run reads first, through manifest.update after the run", async () => {
+    let before = controller.frames.length;
+    writeFileSync(join(project, "agents", "label.sandbox.ts"), lazyPromptSource());
+    await controller.waitForFrame(
+      (f) => f.frame.type === "manifest.update" && controller.frames.indexOf(f) >= before,
+    );
+    const params = () =>
+      (
+        lastManifestFrame(controller)?.frame.payload as {
+          manifest: { sandboxes: { params: { name: string; source?: string }[] }[] };
+        }
+      ).manifest.sandboxes[0]?.params.map((p) => [p.name, p.source]);
+    expect(params()).toEqual([["maxTokens", "declared"]]);
+    before = controller.frames.length;
+    controller.startRun("run_lazy_prompt", { params: { maxTokens: 100 } });
+    await controller.waitForFrame(
+      (f) => f.frame.type === "run.end" && f.frame.runId === "run_lazy_prompt",
+    );
+    const update = await controller.waitForFrame(
+      (f) => f.frame.type === "manifest.update" && controller.frames.indexOf(f) >= before,
+    );
+    expect(update.frame.payload).toMatchObject({
+      manifest: {
+        sandboxes: [
+          {
+            params: expect.arrayContaining([
+              { name: "followUp", kind: "prompt", default: "Ask again.", source: "sdk" },
+            ]),
+          },
+        ],
+      },
+    });
+    expect(params()).toEqual([
+      ["maxTokens", "declared"],
+      ["followUp", "sdk"],
+    ]);
+    // The second run reads the same prompt: no new update.
+    before = controller.frames.length;
+    controller.startRun("run_lazy_prompt_2", { params: { followUp: "Changed." } });
+    const end = await controller.waitForFrame(
+      (f) => f.frame.type === "run.end" && f.frame.runId === "run_lazy_prompt_2",
+    );
+    expect(end.frame.payload).toMatchObject({ status: "ok", output: { followUp: "Changed." } });
+    expect(controller.frames.slice(before).some((f) => f.frame.type === "manifest.update")).toBe(
+      false,
+    );
+    expect(controller.invalid).toEqual([]);
+    expect(dev.stdout()).toContain("a run read a new prompt or model; manifest updated");
+    // Back to the file the later tests expect.
+    before = controller.frames.length;
+    writeFileSync(join(project, "agents", "label.sandbox.ts"), sandboxSource(500, "v3"));
+    await controller.waitForFrame(
+      (f) => f.frame.type === "manifest.update" && controller.frames.indexOf(f) >= before,
+    );
   });
 
   it("reconnects after a dropped socket with backoff and a fresh token", async () => {
