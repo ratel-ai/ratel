@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
+import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { getSessionContext } from "@/lib/platform/session";
@@ -54,6 +55,19 @@ export async function resolveAgentsPageContext(
   projectId: string,
   searchParams: AgentsSearchParams,
   deps: AgentsPageDeps = defaultAgentsPageDeps,
+): Promise<AgentsPageContext> {
+  return withFeatureSpan(
+    "agents_pages",
+    "agents.resolve_context",
+    () => buildAgentsPageContext(projectId, searchParams, deps),
+    { attributes: { "project.id": projectId } },
+  );
+}
+
+async function buildAgentsPageContext(
+  projectId: string,
+  searchParams: AgentsSearchParams,
+  deps: AgentsPageDeps,
 ): Promise<AgentsPageContext> {
   const session = await deps.getSessionContext();
   if (!session) redirect("/");

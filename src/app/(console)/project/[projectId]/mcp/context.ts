@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
+import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { getSessionContext } from "@/lib/platform/session";
@@ -46,6 +47,19 @@ export async function resolveMcpPageContext(
   projectId: string,
   searchParams: McpSearchParams,
   deps: McpPageDeps = defaultMcpPageDeps,
+): Promise<McpPageContext> {
+  return withFeatureSpan(
+    "agents_pages",
+    "mcp_servers.resolve_context",
+    () => buildMcpPageContext(projectId, searchParams, deps),
+    { attributes: { "project.id": projectId } },
+  );
+}
+
+async function buildMcpPageContext(
+  projectId: string,
+  searchParams: McpSearchParams,
+  deps: McpPageDeps,
 ): Promise<McpPageContext> {
   const session = await deps.getSessionContext();
   if (!session) redirect("/");

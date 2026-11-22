@@ -1,3 +1,4 @@
+import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
 import type { WorkflowConfig } from "./workflows/types";
 
@@ -63,5 +64,14 @@ export async function workflowMiningFor(
   organization?: unknown,
   env: Env = process.env,
 ): Promise<Partial<WorkflowConfig> | null> {
-  return (await toolRunInsightsEnabled(projectId, organization, env)) ? TOOL_RUN_MINING : null;
+  return withFeatureSpan(
+    "tool_run_insights",
+    "mining_config",
+    async (span) => {
+      const enabled = await toolRunInsightsEnabled(projectId, organization, env);
+      span.setAttribute("tool_run_insights.enabled", enabled);
+      return enabled ? TOOL_RUN_MINING : null;
+    },
+    { attributes: { "project.id": projectId } },
+  );
 }
