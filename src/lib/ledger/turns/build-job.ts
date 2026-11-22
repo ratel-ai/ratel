@@ -5,6 +5,7 @@ import {
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
+import { typedStepsOn } from "@/lib/platform/typed-steps-flag";
 import {
   DEFAULT_TURN_CONFIG,
   TURN_BUILD_MAX_PAGES,
@@ -13,6 +14,7 @@ import {
   TURN_BUILD_TIME_BUDGET_MS,
   TURN_EVENT_TYPES,
   TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+  TURN_EVENT_TYPES_WITH_TYPED_STEPS,
   type TurnConfig,
 } from "../constants";
 import { traceSignalsHashSalt } from "../hash";
@@ -53,7 +55,8 @@ import {
  * the backlog builds once the secret is set. Logs and events carry counts only: no query
  * text, no end-user ids.
  *
- * Owned (ADR-0030): no feature-flag gate (the Agent health gate is retired, always on),
+ * Owned (ADR-0030): no feature-flag gate (the Agent health gate is retired, always on); the
+ * agent-run and typed-step reads follow `FF_TOOL_RUN_INSIGHTS` and `FF_TYPED_STEPS` for the project,
  * and the seams into the signal runs above (`enqueueReading`, `onBacklogDrained`, `onBacklogProgress`)
  * are optional dependencies the readings register, not imports from L4.
  */
@@ -91,6 +94,12 @@ export interface BuildJobDeps {
    * Never throws: a failed decision is off.
    */
   readsAgentRuns: (projectId: string) => Promise<boolean>;
+  /**
+   * `FF_TYPED_STEPS` for the project (RC-1067, upstream's `cloud-typed-steps`): on, the
+   * build also reads model calls, code steps and handoffs (and the agent runs), so a trace
+   * with model calls only makes a turn. Never throws: a failed decision is off.
+   */
+  readsTypedSteps: (projectId: string) => Promise<boolean>;
   getCursor: typeof getTraceTurnsCursorFn;
   listEvents: typeof listTurnEventsPageFn;
   listHits: typeof listTurnEventHitsFn;
@@ -142,6 +151,7 @@ export const ledgerSeams: Pick<
 function defaultDeps(): BuildJobDeps {
   return {
     readsAgentRuns: (projectId) => toolRunInsightsOn({ projectId }),
+    readsTypedSteps: (projectId) => typedStepsOn({ projectId }),
     getCursor: getTraceTurnsCursorFn,
     listEvents: listTurnEventsPageFn,
     listHits: listTurnEventHitsFn,
@@ -212,9 +222,12 @@ export async function buildProjectTraceTurns(
     return SALT_MISSING;
   }
 
-  const types = (await deps.readsAgentRuns(projectId))
-    ? TURN_EVENT_TYPES_WITH_AGENT_RUNS
-    : TURN_EVENT_TYPES;
+  const typedSteps = await deps.readsTypedSteps(projectId);
+  const types = typedSteps
+    ? TURN_EVENT_TYPES_WITH_TYPED_STEPS
+    : (await deps.readsAgentRuns(projectId))
+      ? TURN_EVENT_TYPES_WITH_AGENT_RUNS
+      : TURN_EVENT_TYPES;
   const start = await resolveStart(projectId, deps, startedAt);
   let since = start.since;
   let pages = 0;
@@ -236,7 +249,7 @@ export async function buildProjectTraceTurns(
       .filter((r) => r.type === "search" || r.type === "skill_search")
       .map((r) => r.id);
     const hits = await deps.listHits(searchIds);
-    const normalized = normalizeEvents(rows, hits, { salt });
+    const normalized = normalizeEvents(rows, hits, { salt, typedSteps });
     const sessionIds = [...new Set(normalized.map((e) => e.sessionId))];
     const declaredKeys = [
       ...new Set(
@@ -257,6 +270,19 @@ export async function buildProjectTraceTurns(
       through: last.receivedAtRaw,
       now,
     });
+    if (typedSteps && written.turnsWritten > 0) {
+      const kinds: Record<string, number> = {};
+      for (const turn of built.turns) {
+        for (const step of turn.steps) kinds[step.kind] = (kinds[step.kind] ?? 0) + 1;
+      }
+      await deps.observability.trackSystemEvent("typed_steps_turn_built", SYSTEM_DISTINCT_ID, {
+        object_action: "typed_steps_turn_built",
+        project_id: projectId,
+        turns_written: written.turnsWritten,
+        steps_written: written.stepsWritten,
+        step_kinds: kinds,
+      });
+    }
     turnsWritten += written.turnsWritten;
     stepsWritten += written.stepsWritten;
     since = last.receivedAtRaw;

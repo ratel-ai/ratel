@@ -1,7 +1,7 @@
 import {
   AGENT_RUN_EVENT_TYPE,
   MAX_STEP_HIT_IDS,
-  TURN_EVENT_TYPES_WITH_AGENT_RUNS,
+  TURN_EVENT_TYPES_WITH_TYPED_STEPS,
 } from "@/lib/ledger/constants";
 import { hashEndUser, hashQuery } from "@/lib/ledger/hash";
 import type {
@@ -22,7 +22,7 @@ import type {
  * rebuild and a re-derivation from stored steps see exactly the same lists.
  */
 
-const TURN_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES_WITH_AGENT_RUNS);
+const TURN_TYPES: ReadonlySet<string> = new Set(TURN_EVENT_TYPES_WITH_TYPED_STEPS);
 
 const ROLE: Record<TurnEventType, EventRole> = {
   search: "search",
@@ -35,10 +35,13 @@ const ROLE: Record<TurnEventType, EventRole> = {
   gateway_error: "single",
   skill_invoke: "single",
   agent_run: "run",
+  otlp_model_call: "step",
+  otlp_step: "step",
 };
 
 export interface NormalizeOptions {
   salt: string;
+  typedSteps?: boolean;
 }
 
 export function normalizeEvents(
@@ -60,6 +63,16 @@ export function normalizeEvent(
   opts: NormalizeOptions,
 ): NormalizedEvent | null {
   if (!TURN_TYPES.has(row.type) || !row.sessionId) return null;
+  const typed = row.type === "otlp_model_call" || row.type === "otlp_step";
+  if (typed && (!opts.typedSteps || row.ingestSource !== "otlp")) return null;
+  const payload = row.payload ?? {};
+  const stepKind =
+    row.type === "otlp_model_call"
+      ? "model_call"
+      : payload.kind === "code" || payload.kind === "handoff"
+        ? payload.kind
+        : null;
+  if (typed && stepKind === null) return null;
   // Only OTLP ingest writes agent runs (`otlp/derive-agent-runs.ts`).
   if (row.type === AGENT_RUN_EVENT_TYPE && row.ingestSource !== "otlp") return null;
   const type = row.type as TurnEventType;
@@ -79,23 +92,39 @@ export function normalizeEvent(
     declaredTurnId: row.turnId ? row.turnId : null,
     traceId: row.traceId,
     endUserKey: hashEndUser(row.endUserId, opts.salt),
-    queryHash: role === "search" ? hashQuery(row.query, opts.salt) : null,
+    queryHash:
+      role === "search"
+        ? hashQuery(row.query, opts.salt)
+        : row.type === "otlp_model_call" && typeof payload.user_message_hash === "string"
+          ? hashQuery(`${payload.user_message_hash}:${payload.user_message_count ?? 0}`, opts.salt)
+          : null,
     topK: role === "search" ? row.topK : null,
     hitCount: role === "search" ? (row.hitCount ?? (listed.length > 0 ? hits.length : null)) : null,
     hitIds: listed.map((h) => h.targetId),
     hitScores: listed.every((h) => h.score !== null) ? listed.map((h) => h.score as number) : null,
-    targetType: target?.targetType ?? null,
-    targetId: target?.targetId ?? null,
+    targetType: typed ? null : (target?.targetType ?? null),
+    targetId: typed
+      ? typeof payload.signature_token === "string"
+        ? payload.signature_token
+        : typeof payload.name === "string"
+          ? payload.name
+          : null
+      : (target?.targetId ?? null),
     invocationId: role === "search" ? null : row.invocationId,
     tookMs: role === "search" || role === "start" ? null : row.tookMs,
+    ...(typed && stepKind ? { stepKind } : {}),
     outcome:
-      role === "run"
-        ? row.failed
+      role === "step"
+        ? payload.status === "error" || row.failed
           ? "error"
           : "ok"
-        : role === "end" || role === "single"
-          ? outcomeOf(type)
-          : null,
+        : role === "run"
+          ? row.failed
+            ? "error"
+            : "ok"
+          : role === "end" || role === "single"
+            ? outcomeOf(type)
+            : null,
     ...(row.rootTool && row.ingestSource === "otlp" ? { rootTool: true } : {}),
   };
 }

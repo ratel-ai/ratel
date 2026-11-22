@@ -49,7 +49,9 @@ export function buildTurns(input: BuildTurnsInput): BuildTurnsResult {
   }
   for (const event of input.events) if (!byId.has(event.id)) byId.set(event.id, event);
 
-  const turns = segmentEvents([...byId.values()], input.now, config).map(draftTurn);
+  const turns = segmentEvents([...byId.values()], input.now, config)
+    .map(draftTurn)
+    .filter((turn) => turn.steps.length > 0);
   const produced = new Set(turns.map((t) => `${t.sessionId}\u0000${t.turnKey}`));
   const orphanedTurnIds = input.stored
     .filter((t) => !produced.has(`${t.sessionId}\u0000${t.turnKey}`))
@@ -121,7 +123,7 @@ export function draftTurn(turn: SegmentedTurn): TurnDraft {
  * is a point in time.
  */
 function eventEnd(event: NormalizedEvent): number {
-  return event.role === "run"
+  return event.role === "run" || event.role === "step"
     ? event.occurredAt + Math.max(0, event.tookMs ?? 0)
     : event.occurredAt;
 }
@@ -149,6 +151,26 @@ export function storedTurnEvents(turn: StoredTurn): NormalizedEvent[] {
     ...(rootTool ? { rootTool: true } : {}),
   });
   return turn.steps.flatMap((step): NormalizedEvent[] => {
+    if (step.kind === "user_message") return [];
+    if (step.kind === "model_call" || step.kind === "code" || step.kind === "handoff")
+      return [
+        {
+          ...base(step),
+          ...NO_SEARCH,
+          id: step.traceEventId,
+          type: step.eventType,
+          role: "step",
+          stepKind: step.kind,
+          occurredAt: step.occurredAt.getTime(),
+          receivedAt: step.receivedAt.getTime(),
+          queryHash: step.queryHash,
+          targetType: null,
+          targetId: step.targetId,
+          invocationId: null,
+          tookMs: step.tookMs,
+          outcome: step.outcome === "error" ? "error" : "ok",
+        },
+      ];
     if (step.kind === "search") return [searchEvent(step, base(step))];
     if (step.kind === "agent") return [agentEvent(step, base(step))];
     return invokeEvents(step, base(step));

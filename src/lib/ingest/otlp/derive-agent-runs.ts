@@ -14,23 +14,8 @@ import { promptOf } from "./prompt-text";
 import { plausibleOccurredAt } from "./reconstruct";
 import type { DecodedSpan } from "./types";
 
-/**
- * One `agent_run` ledger row per `invoke_agent` root span (RC-742), so a run
- * that calls no tool still makes a turn. Ratel Cloud's own backend jobs export
- * this shape (`lib/observability/agent-run.ts`): one `invoke_agent <job kind>`
- * root with the job's ask, and its `chat` model calls as children. Only tool
- * and search rows made turns before, so these runs made none.
- *
- * Only a root span counts: a nested `invoke_agent` (a sub-agent) is part of
- * its parent's run. The row is the root alone: the root ends last, so its
- * children often arrive in an earlier export, and the turn is keyed by the
- * trace either way. A bare `chat` span with no `invoke_agent` root makes no
- * row and no turn.
- *
- * The row carries the run's ask (`prompt`, the root's last user message) and
- * the agent's name; the turn's ask is read from it (`label-queries.ts`).
- * Idempotent: the client-event id is the span's own ids.
- */
+/** Root agent runs with their captured ask. Typed steps also accept workflow
+ * roots. Nested agents become handoff rows in derive-steps. */
 
 export { AGENT_RUN_EVENT_TYPE };
 
@@ -39,16 +24,23 @@ const INT4_MAX = 2_147_483_647;
 const STATUS_ERROR = 2;
 
 /** Every `invoke_agent` root span of the export as an `agent_run` row. */
-export function deriveAgentRuns(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
+export function deriveAgentRuns(
+  spans: readonly DecodedSpan[],
+  options: { typedSteps?: boolean } = {},
+): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
-  return spans.filter(isAgentRunRoot).map((span) => agentRunRow(span, byId));
+  return spans
+    .filter((span) => isAgentRunRoot(span, options.typedSteps))
+    .map((span) => agentRunRow(span, byId));
 }
 
-function isAgentRunRoot(span: DecodedSpan): boolean {
+function isAgentRunRoot(span: DecodedSpan, typedSteps = false): boolean {
   return (
     !span.parentSpanId &&
     Boolean(span.spanId && span.traceId) &&
-    attrString(span.attributes, GEN_AI.operationName) === "invoke_agent"
+    ["invoke_agent", ...(typedSteps ? ["invoke_workflow"] : [])].includes(
+      attrString(span.attributes, GEN_AI.operationName) ?? "",
+    )
   );
 }
 

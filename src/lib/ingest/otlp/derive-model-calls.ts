@@ -3,22 +3,13 @@ import { attrNumber, attrString } from "./anyvalue";
 import { ancestorsOf, indexSpans, resolveUp, SESSION_KEYS, USER_KEYS } from "./attr-resolve";
 import { GEN_AI } from "./constants";
 import { namedAgentOf } from "./dimensions";
-import { isSystemPrompt, promptOf } from "./prompt-text";
+import { isSystemPrompt, promptOf, userMessageFactsOf } from "./prompt-text";
 import { plausibleOccurredAt } from "./reconstruct";
 import { isModelRoundTrip, toolMenuOf } from "./span-facts";
 import type { DecodedSpan } from "./types";
 
-/**
- * One `otlp_model_call` row per model round trip, for Agent health on the OTel
- * lane: how many times the model was called in a run, its tokens, and (when the
- * customer captures it) the names of the tools it was offered and the user's
- * last message, which names and places workflows.
- *
- * Not a turn event type, so the turn ledger never reads these as steps; the
- * signal run reads them per trace as a side table. Tool names only: tool
- * descriptions and schemas never leave the span, and of the messages only the
- * last user message is kept, capped, and only when the customer captured it.
- */
+/** Model round trips for Agent health, with the captured ask and the system
+ * mark. The typed-step path also stores message identities and signature tokens. */
 
 export const OTLP_MODEL_CALL = "otlp_model_call";
 
@@ -94,7 +85,10 @@ function nearest<T>(
 }
 
 /** Every model round trip in the export as an `otlp_model_call` row. */
-export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEvent[] {
+export function deriveModelCalls(
+  spans: readonly DecodedSpan[],
+  options: { typedSteps?: boolean } = {},
+): ParsedTraceEvent[] {
   const byId = indexSpans(spans);
   const models = spans.filter((span) => span.spanId && span.traceId && isModelRoundTrip(span));
   const wrappers = wrappingModelSpans(models, byId);
@@ -109,6 +103,9 @@ export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEven
     const menu = nearest(span, byId, toolMenuOf);
     const model = modelOf(span);
     const prompt = nearest(span, byId, (s) => promptOf(s.attributes));
+    const messages = options.typedSteps
+      ? nearest(span, byId, (s) => userMessageFactsOf(s.attributes))
+      : null;
     // Only an agent the export names: a model call does not take the span
     // name of an `invoke_agent` ancestor (a tool call does).
     const spanAgent = namedAgentOf(span, byId);
@@ -150,6 +147,23 @@ export function deriveModelCalls(spans: readonly DecodedSpan[]): ParsedTraceEven
         type: OTLP_MODEL_CALL,
         derived_from: "otlp",
         ...(model ? { model } : {}),
+        ...(options.typedSteps
+          ? {
+              ...messages,
+              reasoning_tokens: tokenCount(span, [
+                "gen_ai.usage.reasoning_tokens",
+                "gen_ai.usage.output_tokens_details.reasoning_tokens",
+                "ai.usage.reasoningTokens",
+                "llm.token_count.reasoning",
+              ]),
+              signature_token: (
+                attrString(span.attributes, "ratel.step.name")?.trim() ||
+                agent ||
+                model ||
+                "model"
+              ).slice(0, MAX_ID),
+            }
+          : {}),
         ...(menu ? { menu } : {}),
         ...(prompt ? { prompt } : {}),
         ...(prompt && isSystemPrompt(prompt) ? { started_by: "system" } : {}),
