@@ -1,0 +1,18 @@
+# gitleaks on the ratel head (history it reaches; .gitleaks.toml and .gitleaksignore applied)
+# date: 2026-11-22T00:57:55Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel
+# cmd: gitleaks git . --redact --verbose --no-color --log-opts=08519a9a0c308ca09a4412dc4acb43ec59c1f099
+
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+4:58PM INF 218 commits scanned.
+4:58PM INF scanned ~41600282 bytes (41.60 MB) in 5.93s
+4:58PM INF no leaks found
+
+exit 0

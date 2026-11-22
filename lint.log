@@ -1,0 +1,636 @@
+# lint: ee (ratel-platform at ee/src) then platform (CI cloud step)
+# date: 2026-11-22T01:03:26Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel
+# cmd: pnpm --filter @ratel/ee lint && pnpm --filter @ratel/platform lint
+
+
+> @ratel/ee@0.1.0 lint /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel/ee
+> biome check . --no-errors-on-unmatched
+
+src/src/access/flags-org.test.ts:68:16 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    66 │     ["user_roberto", "user_roberto", "user_someone"],
+    67 │   );
+  > 68 │   assert.equal(seen[0]!.personProperties.email, "roberto@ratel.sh");
+       │                ^^^^^^^^
+    69 │ });
+    70 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     66  66 │       ["user_roberto", "user_roberto", "user_someone"],
+     67  67 │     );
+     68     │ - ··assert.equal(seen[0]!.personProperties.email,·"roberto@ratel.sh");
+         68 │ + ··assert.equal(seen[0]?.personProperties.email,·"roberto@ratel.sh");
+     69  69 │   });
+     70  70 │   
+  
+
+src/src/access/flags-org.test.ts:78:20 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    76 │   assert.equal(await evaluateFlagForOrganization("cloud-eval-gate", SOMEONE, OTHER, deps), false);
+    77 │   // The project's organization replaces the active one, under the names flags-ingest sends.
+  > 78 │   assert.deepEqual(seen[1]!.personProperties, {
+       │                    ^^^^^^^^
+    79 │     email: "someone@example.com",
+    80 │     organization_id: OTHER.id,
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     76  76 │     assert.equal(await evaluateFlagForOrganization("cloud-eval-gate", SOMEONE, OTHER, deps), false);
+     77  77 │     // The project's organization replaces the active one, under the names flags-ingest sends.
+     78     │ - ··assert.deepEqual(seen[1]!.personProperties,·{
+         78 │ + ··assert.deepEqual(seen[1]?.personProperties,·{
+     79  79 │       email: "someone@example.com",
+     80  80 │       organization_id: OTHER.id,
+  
+
+src/src/admin/access-status.ts:131:43 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    129 │   let next = 0;
+    130 │   const worker = async () => {
+  > 131 │     while (next < items.length) await run(items[next++]!);
+        │                                           ^^^^^^^^^^^^^^
+    132 │   };
+    133 │   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  
+
+src/src/admin/auth.ts:85:19 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    83 │   const email = verifiedPrimaryEmail(await getSessionUser());
+    84 │   if (!isPlatformAdminEmail(email)) return null;
+  > 85 │   return { email: email!.trim().toLowerCase(), clerkId: userId };
+       │                   ^^^^^^
+    86 │ });
+    87 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     83  83 │     const email = verifiedPrimaryEmail(await getSessionUser());
+     84  84 │     if (!isPlatformAdminEmail(email)) return null;
+     85     │ - ··return·{·email:·email!.trim().toLowerCase(),·clerkId:·userId·};
+         85 │ + ··return·{·email:·email?.trim().toLowerCase(),·clerkId:·userId·};
+     86  86 │   });
+     87  87 │   
+  
+
+src/src/admin/queries.ts:640:23 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    638 │   for (const row of rows) {
+    639 │     if (row.customerId && byCustomerEur.has(row.customerId)) {
+  > 640 │       out.set(row.id, byCustomerEur.get(row.customerId)!);
+        │                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    641 │     }
+    642 │   }
+  
+
+src/src/admin/support/policy.ts:171:7 lint/complexity/useOptionalChain  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Change to an optional chain.
+  
+    169 │ }): LiveSupportSession | null {
+    170 │   const { record, actor } = input;
+  > 171 │   if (!record || !actor || !actor.sessionId) return null;
+        │       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    172 │   if (record.endedAt !== null) return null;
+    173 │   if (record.actorClerkId !== actor.clerkId) return null;
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    169 169 │   }): LiveSupportSession | null {
+    170 170 │     const { record, actor } = input;
+    171     │ - ··if·(!record·||·!actor·||·!actor.sessionId)·return·null;
+        171 │ + ··if·(!record·||·!actor?.sessionId)·return·null;
+    172 172 │     if (record.endedAt !== null) return null;
+    173 173 │     if (record.actorClerkId !== actor.clerkId) return null;
+  
+
+src/src/admin/support/proxy.ts:172:42 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━━
+
+  ! void is confusing inside a union type.
+  
+    170 │  */
+    171 │ export function continueWithSupportHeaders(
+  > 172 │   downstream: NextResponse | undefined | void,
+        │                                          ^^^^
+    173 │   requestHeaders: Headers,
+    174 │ ): NextResponse {
+  
+  i Unsafe fix: Use undefined instead.
+  
+    170 170 │    */
+    171 171 │   export function continueWithSupportHeaders(
+    172     │ - ··downstream:·NextResponse·|·undefined·|·void,
+        172 │ + ··downstream:·NextResponse·|·undefined·|·undefined,
+    173 173 │     requestHeaders: Headers,
+    174 174 │   ): NextResponse {
+  
+
+src/src/apis/pick/engine.test.ts:100:13 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+     98 │   assert.equal(outcome.confident, true);
+     99 │   assert.equal(outcome.tools.length, 3);
+  > 100 │   assert.ok(outcome.tools[1]!.score >= outcome.tools[2]!.score);
+        │             ^^^^^^^^^^^^^^^^^
+    101 │ });
+    102 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     98  98 │     assert.equal(outcome.confident, true);
+     99  99 │     assert.equal(outcome.tools.length, 3);
+    100     │ - ··assert.ok(outcome.tools[1]!.score·>=·outcome.tools[2]!.score);
+        100 │ + ··assert.ok(outcome.tools[1]?.score·>=·outcome.tools[2]!.score);
+    101 101 │   });
+    102 102 │   
+  
+
+src/src/apis/pick/engine.test.ts:100:40 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+     98 │   assert.equal(outcome.confident, true);
+     99 │   assert.equal(outcome.tools.length, 3);
+  > 100 │   assert.ok(outcome.tools[1]!.score >= outcome.tools[2]!.score);
+        │                                        ^^^^^^^^^^^^^^^^^
+    101 │ });
+    102 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+     98  98 │     assert.equal(outcome.confident, true);
+     99  99 │     assert.equal(outcome.tools.length, 3);
+    100     │ - ··assert.ok(outcome.tools[1]!.score·>=·outcome.tools[2]!.score);
+        100 │ + ··assert.ok(outcome.tools[1]!.score·>=·outcome.tools[2]?.score);
+    101 101 │   });
+    102 102 │   
+  
+
+src/src/apis/pick/handler.test.ts:373:29 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    371 │         now += 2_000;
+    372 │         return {
+  > 373 │           answer: { choice: options[0]!.entryId, confidence: 0.9, probabilities: {} },
+        │                             ^^^^^^^^^^^
+    374 │           inputTokens: 500,
+    375 │         };
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    371 371 │           now += 2_000;
+    372 372 │           return {
+    373     │ - ··········answer:·{·choice:·options[0]!.entryId,·confidence:·0.9,·probabilities:·{}·},
+        373 │ + ··········answer:·{·choice:·options[0]?.entryId,·confidence:·0.9,·probabilities:·{}·},
+    374 374 │             inputTokens: 500,
+    375 375 │           };
+  
+
+src/src/billing/plans.test.ts:74:13 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    72 │   const order = ["free", "plus", "pro", "enterprise"] as const;
+    73 │   const allowances = order.map((plan) => PLAN_LIMITS[plan].toolPickerMonthlyAllowanceUsd);
+  > 74 │   assert.ok(allowances[0]! > 0);
+       │             ^^^^^^^^^^^^^^
+    75 │   for (let i = 1; i < allowances.length; i += 1) assert.ok(allowances[i]! > allowances[i - 1]!);
+    76 │ });
+  
+
+src/src/billing/plans.test.ts:75:60 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    73 │   const allowances = order.map((plan) => PLAN_LIMITS[plan].toolPickerMonthlyAllowanceUsd);
+    74 │   assert.ok(allowances[0]! > 0);
+  > 75 │   for (let i = 1; i < allowances.length; i += 1) assert.ok(allowances[i]! > allowances[i - 1]!);
+       │                                                            ^^^^^^^^^^^^^^
+    76 │ });
+    77 │ 
+  
+
+src/src/billing/plans.test.ts:75:77 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    73 │   const allowances = order.map((plan) => PLAN_LIMITS[plan].toolPickerMonthlyAllowanceUsd);
+    74 │   assert.ok(allowances[0]! > 0);
+  > 75 │   for (let i = 1; i < allowances.length; i += 1) assert.ok(allowances[i]! > allowances[i - 1]!);
+       │                                                                             ^^^^^^^^^^^^^^^^^^
+    76 │ });
+    77 │ 
+  
+
+src/src/billing/ui/PlanCards.tsx:71:82 lint/suspicious/noConfusingVoidType  FIXABLE  ━━━━━━━━━━━━━━━
+
+  ! void is confusing inside a union type.
+  
+    69 │   const locked = !canManage || restricted;
+    70 │ 
+  > 71 │   function run(key: PlanId, action: () => Promise<{ ok: false; error: string } | void>) {
+       │                                                                                  ^^^^
+    72 │     setPendingKey(key);
+    73 │     startTransition(async () => {
+  
+  i Unsafe fix: Use undefined instead.
+  
+     69  69 │     const locked = !canManage || restricted;
+     70  70 │   
+     71     │ - ··function·run(key:·PlanId,·action:·()·=>·Promise<{·ok:·false;·error:·string·}·|·void>)·{
+         71 │ + ··function·run(key:·PlanId,·action:·()·=>·Promise<{·ok:·false;·error:·string·}·|·undefined>)·{
+     72  72 │       setPendingKey(key);
+     73  73 │       startTransition(async () => {
+  
+
+src/src/billing/wallet-queries.integration.test.ts:29:5 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    27 │   });
+    28 │   const org = async () =>
+  > 29 │     (await db.select().from(schema.organizations).where(eq(schema.organizations.id, ORG)))[0]!;
+       │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    30 │   return { client, db, org };
+    31 │ }
+  
+
+src/src/decisions/openai.test.ts:37:34 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    36 │ test("an option reads what it does, and when to use it only when that adds something", () => {
+  > 37 │   assert.equal(optionDescription(TWO[0]!), "What it does: Alpha tool\nWhen to use: Find alpha.");
+       │                                  ^^^^^^^
+    38 │   assert.equal(optionDescription(TWO[1]!), "What it does: Beta tool");
+    39 │   assert.equal(
+  
+
+src/src/decisions/openai.test.ts:38:34 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    36 │ test("an option reads what it does, and when to use it only when that adds something", () => {
+    37 │   assert.equal(optionDescription(TWO[0]!), "What it does: Alpha tool\nWhen to use: Find alpha.");
+  > 38 │   assert.equal(optionDescription(TWO[1]!), "What it does: Beta tool");
+       │                                  ^^^^^^^
+    39 │   assert.equal(
+    40 │     optionDescription({ id: "c", does: "Same", searchable: "Same" }),
+  
+
+src/src/decisions/openai.test.ts:148:13 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    146 │   const chain = refusalChain("usage for Ratel Cloud by Ana Lima", FRAMING, options);
+    147 │   assert.equal(chain.length, 4);
+  > 148 │   assert.ok(chain[2]!.input.endsWith("Search query: usage for Ratel Cloud by a teammate"));
+        │             ^^^^^^^^^
+    149 │ });
+    150 │ 
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    146 146 │     const chain = refusalChain("usage for Ratel Cloud by Ana Lima", FRAMING, options);
+    147 147 │     assert.equal(chain.length, 4);
+    148     │ - ··assert.ok(chain[2]!.input.endsWith("Search·query:·usage·for·Ratel·Cloud·by·a·teammate"));
+        148 │ + ··assert.ok(chain[2]?.input.endsWith("Search·query:·usage·for·Ratel·Cloud·by·a·teammate"));
+    149 149 │   });
+    150 150 │   
+  
+
+src/src/decisions/openai.ts:178:39 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    177 │ /** "for" or "For": the lead-in as a query writes it, with either first letter. */
+  > 178 │ const anyCase = (word: string) => `[${word[0]!.toUpperCase()}${word[0]!}]${word.slice(1)}`;
+        │                                       ^^^^^^^^
+    179 │ 
+    180 │ /** A lead-in, then two or more name words. The lead-in is kept, the name goes. */
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    176 176 │   
+    177 177 │   /** "for" or "For": the lead-in as a query writes it, with either first letter. */
+    178     │ - const·anyCase·=·(word:·string)·=>·`[${word[0]!.toUpperCase()}${word[0]!}]${word.slice(1)}`;
+        178 │ + const·anyCase·=·(word:·string)·=>·`[${word[0]?.toUpperCase()}${word[0]!}]${word.slice(1)}`;
+    179 179 │   
+    180 180 │   /** A lead-in, then two or more name words. The lead-in is kept, the name goes. */
+  
+
+src/src/decisions/openai.ts:178:64 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    177 │ /** "for" or "For": the lead-in as a query writes it, with either first letter. */
+  > 178 │ const anyCase = (word: string) => `[${word[0]!.toUpperCase()}${word[0]!}]${word.slice(1)}`;
+        │                                                                ^^^^^^^^
+    179 │ 
+    180 │ /** A lead-in, then two or more name words. The lead-in is kept, the name goes. */
+  
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 225.
+Checked 608 files in 4s. No fixes applied.
+Found 245 warnings.
+
+> @ratel/platform@0.1.0 lint /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel/src
+> biome check app components lib mcp-apps scripts
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/ScoreChart.tsx:58:64 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    56 │   const series = ["overall", selected] as const;
+    57 │   const color = `var(--ds-chart-${selected === "judge_criteria" ? 3 : SCORER_KINDS.indexOf(selected) + 1})`;
+  > 58 │   const hasScores = rows.some((row) => row.n > 0 && row.day >= days[0]! && row.day <= today);
+       │                                                                ^^^^^^^^
+    59 │ 
+    60 │   function choose(key: string, value: string) {
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/ScoreChart.tsx:352:45 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    350 │         <path
+    351 │           key={segment[0]}
+  > 352 │           d={smoothPath(segment.map((at) => points[at]!))}
+        │                                             ^^^^^^^^^^^
+    353 │           fill="none"
+    354 │           strokeWidth={2}
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/ShipmentResults.tsx:44:59 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    42 │         const rows: ComparisonRow[] = SCORER_KINDS.flatMap((kind) =>
+    43 │           shipment.comparison?.[kind]
+  > 44 │             ? [{ id: kind, label: SCORER_LABELS[kind], ...shipment.comparison[kind]! }]
+       │                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    45 │             : [],
+    46 │         );
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/evals.test.ts:92:17 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    90 │   const groups = ["Pinned", "Added by you", "Automatic", "Issue evidence", "Excluded"];
+    91 │   const headings = [...html.matchAll(/<h3[^>]*>(.*?)<\/h3>/g)].map((match) =>
+  > 92 │     visibleText(match[1]!).trim(),
+       │                 ^^^^^^^^^
+    93 │   );
+    94 │   assert.deepEqual(
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/evals.test.ts:105:36 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    103 │     assert.equal(html.split(`href="${row.runHref}"`).length - 1, 1);
+    104 │   }
+  > 105 │   assert.ok(html.includes(`href="${rows[1]!.issueHref}"`));
+        │                                    ^^^^^^^^
+    106 │   assert.ok(text.includes("Run time: Fail"));
+    107 │   assert.equal(html.match(/>Open run<\/a>/g)?.length, 5);
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    103 103 │       assert.equal(html.split(`href="${row.runHref}"`).length - 1, 1);
+    104 104 │     }
+    105     │ - ··assert.ok(html.includes(`href="${rows[1]!.issueHref}"`));
+        105 │ + ··assert.ok(html.includes(`href="${rows[1]?.issueHref}"`));
+    106 106 │     assert.ok(text.includes("Run time: Fail"));
+    107 107 │     assert.equal(html.match(/>Open run<\/a>/g)?.length, 5);
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/evals.test.ts:130:8 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    128 │ test("large groups show five rows and preserve expansion in the URL", () => {
+    129 │   const many = Array.from({ length: 8 }, (_, index) => ({
+  > 130 │     ...rows[0]!,
+        │        ^^^^^^^^
+    131 │     id: String(index),
+    132 │     turnId: `turn-${index}`,
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/page.tsx:4:8 lint/correctness/noUnusedImports  FIXABLE  ━━━━━━━━━━
+
+  ! This import is unused.
+  
+    2 │ import { Section } from "@ratel/design-system/section";
+    3 │ import Link from "next/link";
+  > 4 │ import { notFound } from "next/navigation";
+      │        ^^^^^^^^^^^^
+    5 │ import { TaskEvals } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskEvals";
+    6 │ import { TaskScoring } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskScoring";
+  
+  i Unused imports might be the result of an incomplete refactoring.
+  
+  i Unsafe fix: Remove the unused imports.
+  
+     2  2 │   import { Section } from "@ratel/design-system/section";
+     3  3 │   import Link from "next/link";
+     4    │ - import·{·notFound·}·from·"next/navigation";
+     5  4 │   import { TaskEvals } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskEvals";
+     6  5 │   import { TaskScoring } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskScoring";
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/simulations/DraftEditor.tsx:118:24 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    116 │                   ...draft,
+    117 │                   replay: {
+  > 118 │                     ...draft.replay!,
+        │                        ^^^^^^^^^^^^^
+    119 │                     tools: draft.replay!.tools.map((item, i) =>
+    120 │                       i === index ? { ...item, description: event.target.value } : item,
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/simulations/DraftEditor.tsx:119:28 lint/style/noNonNullAssertion  FIXABLE  ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    117 │                   replay: {
+    118 │                     ...draft.replay!,
+  > 119 │                     tools: draft.replay!.tools.map((item, i) =>
+        │                            ^^^^^^^^^^^^^
+    120 │                       i === index ? { ...item, description: event.target.value } : item,
+    121 │                     ),
+  
+  i Unsafe fix: Replace with optional chain operator ?. This operator includes runtime checks, so it is safer than the compile-only non-null assertion operator
+  
+    117 117 │                     replay: {
+    118 118 │                       ...draft.replay!,
+    119     │ - ····················tools:·draft.replay!.tools.map((item,·i)·=>
+        119 │ + ····················tools:·draft.replay?.tools.map((item,·i)·=>
+    120 120 │                         i === index ? { ...item, description: event.target.value } : item,
+    121 121 │                       ),
+  
+
+app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/simulations/[fixId]/page.tsx:20:7 lint/complexity/useOptionalChain  FIXABLE  ━━━━━━━━━━
+
+  ! Change to an optional chain.
+  
+    18 │   const { project, fixes } = await simulationPageContext(projectId, taskId);
+    19 │   const fix = findFix(fixes, fixIdFromSegment(fixId));
+  > 20 │   if (!fix || !fix.subject.tasks.some((task) => task.id === taskId)) notFound();
+       │       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    21 │   const model = await taskSimulationDetailFor(project.id, taskId, fix);
+    22 │   return (
+  
+  i Unsafe fix: Change to an optional chain.
+  
+    18 18 │     const { project, fixes } = await simulationPageContext(projectId, taskId);
+    19 19 │     const fix = findFix(fixes, fixIdFromSegment(fixId));
+    20    │ - ··if·(!fix·||·!fix.subject.tasks.some((task)·=>·task.id·===·taskId))·notFound();
+       20 │ + ··if·(!fix?.subject.tasks.some((task)·=>·task.id·===·taskId))·notFound();
+    21 21 │     const model = await taskSimulationDetailFor(project.id, taskId, fix);
+    22 22 │     return (
+  
+
+app/(console)/project/[projectId]/improvement/adaptive-ranking/data.ts:151:19 lint/style/noNonNullAssertion ━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    149 │   if (!choice) return { ...base, graph: null, intentsHref: intentsRoot };
+    150 │ 
+  > 151 │   const summary = summaries.find((row) => row.graphKey === choice.graphKey)!;
+        │                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    152 │   const detail = await getIntentGraphDetail(project.id, choice.graphKey);
+    153 │   if (!detail) {
+  
+
+mcp-apps/views/replay/session.test.ts:29:28 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    28 │ test("a run opens on its own turn's work; a session opens with no panel", () => {
+  > 29 │   assert.equal(initialPeek(readSessionChatView(run)!), "work:3");
+       │                            ^^^^^^^^^^^^^^^^^^^^^^^^^
+    30 │   assert.equal(initialPeek(readSessionChatView(short)!), null);
+    31 │   const missing = readSessionChatView(run)!;
+  
+
+mcp-apps/views/replay/session.test.ts:30:28 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    28 │ test("a run opens on its own turn's work; a session opens with no panel", () => {
+    29 │   assert.equal(initialPeek(readSessionChatView(run)!), "work:3");
+  > 30 │   assert.equal(initialPeek(readSessionChatView(short)!), null);
+       │                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    31 │   const missing = readSessionChatView(run)!;
+    32 │   assert.equal(initialPeek({ ...missing, turnIndex: 99 }), null, "a turn the chat does not hold");
+  
+
+mcp-apps/views/replay/session.test.ts:31:19 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    29 │   assert.equal(initialPeek(readSessionChatView(run)!), "work:3");
+    30 │   assert.equal(initialPeek(readSessionChatView(short)!), null);
+  > 31 │   const missing = readSessionChatView(run)!;
+       │                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    32 │   assert.equal(initialPeek({ ...missing, turnIndex: 99 }), null, "a turn the chat does not hold");
+    33 │ });
+  
+
+mcp-apps/views/series/main.tsx:149:41 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    147 │             className="pointer-events-none absolute top-1 z-sticky rounded-lg border border-line bg-overlay px-2.5 py-2 text-xs whitespace-nowrap shadow-overlay"
+    148 │             style={{
+  > 149 │               left: `clamp(0px, calc(${(hover! + 0.5) * width}% - 4rem), calc(100% - 8rem))`,
+        │                                         ^^^^^^
+    150 │             }}
+    151 │           >
+  
+
+mcp-apps/views/series/main.tsx:156:37 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    154 │               <span aria-hidden className="h-0.5 w-3 rounded-full bg-fg-faint" />
+    155 │               <span className="font-semibold text-fg tabular-nums">
+  > 156 │                 {formatValue(values[hover!], config.measure.format, "detail")}
+        │                                     ^^^^^^
+    157 │               </span>
+    158 │               <span className="text-fg-muted">{config.measure.label}</span>
+  
+
+mcp-apps/views/trace/main.tsx:22:18 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    20 │ import { readTraceView } from "./trace";
+    21 │ 
+  > 22 │ const fallback = detailBindings.find((binding) => binding.tool === "get_trace")!;
+       │                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    23 │ 
+    24 │ function Trace({ result }: { result: ToolSuccess }) {
+  
+
+mcp-apps/views/trace/trace.test.ts:21:16 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    20 │ test("a trace without captured text carries no ask, payload content or message attributes", () => {
+  > 21 │   const open = readTraceView(trace)!;
+       │                ^^^^^^^^^^^^^^^^^^^^^
+    22 │   const props = readTraceView(withheld)!;
+    23 │   assert.notEqual(
+  
+
+mcp-apps/views/trace/trace.test.ts:22:17 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    20 │ test("a trace without captured text carries no ask, payload content or message attributes", () => {
+    21 │   const open = readTraceView(trace)!;
+  > 22 │   const props = readTraceView(withheld)!;
+       │                 ^^^^^^^^^^^^^^^^^^^^^^^^
+    23 │   assert.notEqual(
+    24 │     open.title,
+  
+
+scripts/otlp-raw-keys.ts:44:22 lint/style/noNonNullAssertion ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ! Forbidden non-null assertion.
+  
+    42 │       for (;;) {
+    43 │         const page = await readOtlpRawExportPage(tx, {
+  > 44 │           projectId: values.project!,
+       │                      ^^^^^^^^^^^^^^^
+    45 │           since,
+    46 │           until,
+  
+
+The number of diagnostics exceeds the limit allowed. Use --max-diagnostics to increase it.
+Diagnostics not shown: 3171.
+Checked 2547 files in 24s. No fixes applied.
+Found 3162 warnings.
+Found 29 infos.
+
+exit 0

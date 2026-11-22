@@ -1,0 +1,23 @@
+# core feature spans: contract helper and wiring (Agents/MCP pages, tool-run insights)
+# date: 2026-11-22T01:03:16Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel/src
+# cmd: npx tsx --test lib/contracts/feature-spans.test.ts lib/contracts/feature-spans.wiring.test.ts
+
+✔ a feature span is named feature.<name>.<operation> and returns the work's value (3.287375ms)
+✔ a failure marks the span as an error with the error's type only, and still throws (0.831542ms)
+✔ a framework redirect or not-found is control flow, not an error (0.331791ms)
+✔ without a registered provider the work runs untraced (0.239333ms)
+✔ the Agents and MCP servers pages each resolve their context in a feature.agents_pages span (6.712125ms)
+✔ with the flag off the page's not-found is its outcome, not an error (0.726333ms)
+✔ a project's tool-run mining config is decided in a feature.tool_run_insights span (0.552583ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1492.203209
+
+exit 0

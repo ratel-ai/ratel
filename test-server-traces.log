@@ -1,0 +1,32 @@
+# server traces: unit, boot with only OTEL_EXPORTER_OTLP_ENDPOINT, self-telemetry boot (OSS tree)
+# date: 2026-11-22T01:03:14Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel/src
+# cmd: npx tsx --test lib/platform/otel/server-traces.test.ts lib/platform/server-traces-boot.test.ts lib/platform/self-telemetry-boot.test.ts lib/platform/self-telemetry-boot.worker.test.ts
+
+✔ with no OTLP endpoint there are no server traces (0.752625ms)
+✔ the emergency stop wins over the endpoint (0.138458ms)
+✔ the endpoint is the OTLP base: traces go to its /v1/traces, with its own headers only (0.907208ms)
+✔ spans carry the server-traces resource over the process's own (90.301542ms)
+✔ without resource attributes the process's own resource is kept (30.715ms)
+✔ model calls and MCP tool calls, which carry customer text, are never server traces (3.500166ms)
+✔ query strings, which can carry customer text, are cut from URLs (2.8585ms)
+✔ the open-source build has no Datadog dependency: server traces are plain OTLP (1.008375ms)
+✔ with the endpoints unset nothing is registered and nothing is exported (480.923417ms)
+✔ one endpoint alone is a warning, and still nothing is registered (1.69675ms)
+✔ the emergency stop wins over both endpoints (5.809084ms)
+✔ with both endpoints set the process exports its traces and logs, and the flush sends them (360.068542ms)
+[otel] OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is set without OTEL_EXPORTER_OTLP_TRACES_HEADERS. The traces exporter will send unauthenticated requests; set OTEL_EXPORTER_OTLP_TRACES_HEADERS if the collector needs credentials.
+[otel] OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is set without OTEL_EXPORTER_OTLP_LOGS_HEADERS. The logs exporter will send unauthenticated requests; set OTEL_EXPORTER_OTLP_LOGS_HEADERS if the collector needs credentials.
+✔ the worker installs no signal handler of its own: its stop runs the returned flush (940.425125ms)
+✔ with only OTEL_EXPORTER_OTLP_ENDPOINT set, server traces and outbound calls go to it, with its resource (435.129792ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1735.642125
+
+exit 0

@@ -1,0 +1,23 @@
+# ee boundary, lib layers and private strings (CI platform-build step)
+# date: 2026-11-22T01:03:19Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel
+# cmd: pnpm check:boundary && pnpm check:layers && pnpm check:private
+
+
+> ratel-monorepo@ check:boundary /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel
+> node scripts/check-ee-boundary.mjs
+
+ee boundary clean: 0 violations
+
+> ratel-monorepo@ check:layers /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel
+> node scripts/check-layers.mjs
+
+layers clean: 0 violations
+
+> ratel-monorepo@ check:private /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel
+> node scripts/platform-sync/private-strings.mjs
+
+no private strings under .
+
+exit 0

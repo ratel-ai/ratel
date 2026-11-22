@@ -1,0 +1,23 @@
+# Cloud typecheck (ratel-platform at ee/src)
+# date: 2026-11-22T01:03:56Z
+# commit pair: ratel 08519a9a / ratel-platform c06fec32
+# dir: .beluga/scratch/ratel
+# cmd: RATEL_COMPOSITION=cloud pnpm --filter @ratel/platform typecheck
+
+
+> @ratel/platform@0.1.0 typecheck /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel/src
+> node ../scripts/link-ee.mjs --auto && pnpm mcp-apps:build && tsc --noEmit
+
+
+> @ratel/platform@0.1.0 mcp-apps:build /Users/rstagi/.beluga/workspaces/ratel-platform-3fa8/rp-69-trace-ratel-app-datadog/.beluga/scratch/ratel/src
+> tsx scripts/build-mcp-apps.mts
+
+mcp-apps: detail 423 KB, 6 bindings
+mcp-apps: health 571 KB, 1 bindings
+mcp-apps: list 657 KB, 13 bindings
+mcp-apps: replay 545 KB, 3 bindings
+mcp-apps: series 435 KB, 2 bindings
+mcp-apps: trace 608 KB, 1 bindings
+mcp-apps: built 6 views in 3984 ms
+
+exit 0
