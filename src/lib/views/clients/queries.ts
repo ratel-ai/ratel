@@ -1,5 +1,6 @@
 import { type SQL, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
+import { type Detection, detectionOf, weakestSource } from "@/lib/views/entities/detection";
 
 /**
  * Who calls the project's MCP servers (RC-778): the harnesses and their
@@ -36,6 +37,8 @@ export interface HarnessRow {
   /** Within the window: when this harness first called. */
   firstSeenAt: Date;
   lastSeenAt: Date;
+  /** How Ratel detected the harness: the weakest source of its calls (RC-779); null for unknown clients. */
+  detection: Detection | null;
 }
 
 export interface HarnessVersionRow extends HarnessRow {
@@ -175,7 +178,8 @@ const STATS = sql`
   count(*) filter (where ${IS_ERROR})::int as errors,
   count(distinct ${SESSION})::int as sessions,
   min(s.started_at) as first_seen_at,
-  max(s.started_at) as last_seen_at`;
+  max(s.started_at) as last_seen_at,
+  ${weakestSource(sql`s.harness_source`)} as source`;
 
 interface StatRow {
   harness: string | null;
@@ -184,6 +188,7 @@ interface StatRow {
   sessions: number | string;
   first_seen_at: Date | string;
   last_seen_at: Date | string;
+  source: string | null;
 }
 
 interface CountryDbRow {
@@ -224,6 +229,7 @@ function toHarnessRow(row: StatRow): HarnessRow {
     sessions: Number(row.sessions),
     firstSeenAt: new Date(row.first_seen_at),
     lastSeenAt: new Date(row.last_seen_at),
+    detection: detectionOf("client", row.source),
   };
 }
 

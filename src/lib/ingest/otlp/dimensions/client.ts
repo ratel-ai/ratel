@@ -71,12 +71,12 @@ const KIND_SERVER = 2;
 const INITIALIZE = "initialize";
 const MAX_RAW = 128;
 const MAX_VERSION = 64;
-const CLIENT_NAME_KEY = "mcp.client.name";
-const CLIENT_VERSION_KEY = "mcp.client.version";
-const PROTOCOL_VERSION_KEY = "mcp.protocol.version";
-const USER_AGENT_KEYS = ["user_agent.original", "http.user_agent"] as const;
+export const CLIENT_NAME_KEY = "mcp.client.name";
+export const CLIENT_VERSION_KEY = "mcp.client.version";
+export const PROTOCOL_VERSION_KEY = "mcp.protocol.version";
+export const USER_AGENT_KEYS = ["user_agent.original", "http.user_agent"] as const;
 /** The caller's address: stable semconv first, then the older socket and peer keys. */
-const CLIENT_ADDRESS_KEYS = ["client.address", "net.sock.peer.addr", "net.peer.ip"] as const;
+export const CLIENT_ADDRESS_KEYS = ["client.address", "net.sock.peer.addr", "net.peer.ip"] as const;
 const HTTP_SERVER_KEYS = [
   "http.request.method",
   "http.method",

@@ -11,6 +11,7 @@ import { Bot } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
+import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
 import {
   formatDuration,
   formatInteger,
@@ -20,6 +21,7 @@ import {
   formatTimestamp,
 } from "@/lib/synthesis/traces/v2/format";
 import { AGENTS_SHOW_HIDDEN_PARAM } from "@/lib/views/agents/paths";
+import type { Detection } from "@/lib/views/entities/detection";
 import {
   type AgentListEntry,
   type AgentSort,
@@ -38,6 +40,8 @@ import { type EntityFilterState, ErrorPill, ShareMeter, Toned, Trend } from "./E
 
 /** An agent row as the page sends it: dates as ISO strings, its page, its runs per day. */
 export type AgentListItem = AgentListEntry & {
+  /** How Ratel detected the agent (RC-779): a guess shows a marker. */
+  detection?: Detection | null;
   firstSeenAt: string;
   href: string;
   hidden: boolean;
@@ -340,6 +344,7 @@ function AgentCell({ row }: { row: Row }) {
             {agent.displayName}
           </Link>
           {role ? <Badge tone={role === "entry" ? "info" : "neutral"}>{role}</Badge> : null}
+          <DetectionMarker detection={agent.detection ?? null} />
           {agent.hidden ? <Badge>hidden</Badge> : null}
         </span>
         {line ? <span className="truncate text-xs text-fg-subtle">{line}</span> : null}

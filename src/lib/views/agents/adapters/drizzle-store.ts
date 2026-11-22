@@ -1,5 +1,6 @@
 import { type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
+import { detectionOf, weakestSource } from "@/lib/views/entities/detection";
 import {
   type AgentOverride,
   applyOverrideChange,
@@ -176,7 +177,11 @@ export interface AgentQueryScope {
   sources?: readonly string[];
 }
 
-/** One row per agent (after merges): runs (agent × trace), errors, cost, p95 run latency, first and last seen. */
+/**
+ * One row per agent (after merges): runs (agent × trace), errors, cost, p95 run
+ * latency, first and last seen, and the weakest detection source of its spans
+ * (RC-779; `from_service`: a heuristic span took its key from `service.name`).
+ */
 export function agentStatsQuery(
   projectId: string,
   window: AgentWindow,
@@ -190,7 +195,9 @@ export function agentStatsQuery(
         sum(s.cost_usd) as cost_usd,
         extract(epoch from max(s.ended_at) - min(s.started_at)) * 1000 as duration_ms,
         min(s.started_at) as first_seen_at,
-        max(s.started_at) as last_seen_at
+        max(s.started_at) as last_seen_at,
+        ${weakestSource(sql`s.agent_source`)} as agent_source,
+        bool_or(s.agent_source = 'heuristic' and s.agent_key = s.service_name) as from_service
       from otel_spans s${merge.join}
       where ${agentSpans(projectId, window, scope.sources)}
       group by 1, s.trace_id
@@ -201,7 +208,9 @@ export function agentStatsQuery(
       coalesce(sum(r.cost_usd), 0)::float8 as cost_usd,
       percentile_cont(0.95) within group (order by r.duration_ms)::float8 as p95_ms,
       min(r.first_seen_at) as first_seen_at,
-      max(r.last_seen_at) as last_seen_at
+      max(r.last_seen_at) as last_seen_at,
+      ${weakestSource(sql`r.agent_source`)} as agent_source,
+      coalesce(bool_or(r.from_service), false) as from_service
     from runs r
     group by r.agent_key
     order by calls desc, r.agent_key
@@ -334,6 +343,8 @@ interface StatsRow {
   p95_ms: number | string | null;
   first_seen_at: Date | string;
   last_seen_at: Date | string;
+  agent_source: string | null;
+  from_service: boolean | null;
 }
 
 interface ToolRow {
@@ -437,6 +448,7 @@ function toAgentRow(row: StatsRow, view: OverrideView): AgentRow {
     p95Ms: roundMs(row.p95_ms),
     firstSeenAt: new Date(row.first_seen_at),
     lastSeenAt: new Date(row.last_seen_at),
+    detection: detectionOf("agent", row.agent_source, { fromService: row.from_service === true }),
   };
 }
 

@@ -64,6 +64,7 @@ test("the list has one row per server and role, with calls, errors, p95, session
         sessions: 3,
         firstSeenAt: new Date(T0),
         lastSeenAt: new Date(T0 + 3_000),
+        detection: { source: "semconv", rule: null },
       },
       {
         key: "github",
@@ -77,6 +78,7 @@ test("the list has one row per server and role, with calls, errors, p95, session
         sessions: 2,
         firstSeenAt: new Date(T0 + 10_000),
         lastSeenAt: new Date(T0 + 12_000),
+        detection: { source: "heuristic", rule: "tool-prefix" },
       },
     ]);
     assert.deepEqual(environments, ["prod", "staging"]);

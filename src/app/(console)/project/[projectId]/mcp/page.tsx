@@ -6,6 +6,7 @@ import { McpServersView } from "@/components/console/mcp-servers/McpServersView"
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { publicUrl } from "@/lib/platform/public-url";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { afterOutsideSupportSession } from "@/lib/platform/support-session";
 import { trackProductEvent } from "@/lib/platform/telemetry";
@@ -26,6 +27,7 @@ import {
   mcpServersHref,
 } from "@/lib/views/mcp-servers/paths";
 import { listMcpServers, type McpServerList } from "@/lib/views/mcp-servers/queries";
+import { buildMcpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
 import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import {
   listMcpServerExtras,
@@ -131,6 +133,7 @@ async function ServersTab({ context, tabs }: { context: McpPageContext; tabs: Re
     <McpServersView
       now={new Date().toISOString()}
       tabs={tabs}
+      guide={setupGuide()}
       servers={
         loaded
           ? loaded.list.servers.map((row) => {
@@ -194,6 +197,7 @@ async function ClientsTab({
     <ClientsView
       now={new Date().toISOString()}
       tabs={tabs}
+      guide={setupGuide()}
       overview={overview ? toView(overview) : null}
       filters={{
         servers: overview?.servers ?? [],
@@ -223,6 +227,14 @@ function toView(overview: ClientsOverview): ClientsOverviewView {
       lastSeenAt: row.lastSeenAt.toISOString(),
     })),
   };
+}
+
+/** RC-780: the snippets carry this deployment's traces endpoint and an example server name. */
+function setupGuide() {
+  return buildMcpServerGuide({
+    tracesEndpoint: publicUrl("/v1/traces"),
+    serviceName: "my-mcp-server",
+  });
 }
 
 function text(value: string | string[] | undefined): string | undefined {

@@ -1,6 +1,7 @@
 import { type SQL, sql } from "drizzle-orm";
 import type { McpRole } from "@/lib/ingest/otlp/dimensions";
 import { getDb } from "@/lib/platform/db/client";
+import { type Detection, detectionOf, weakestSource } from "@/lib/views/entities/detection";
 
 /**
  * The MCP servers of a project as entities (RC-777): each server a project
@@ -47,6 +48,8 @@ export interface McpServerRow {
   /** Within the window. */
   firstSeenAt: Date;
   lastSeenAt: Date;
+  /** How Ratel detected the server: the weakest source of its spans (RC-779); null on spans stored before RC-772. */
+  detection: Detection | null;
 }
 
 export interface McpServerList {
@@ -188,7 +191,7 @@ export async function projectsWithMcpSpans(
 
 // — Queries, exported for the read-budget test ————————————————————————————————
 
-/** One row per (server, role): calls, errors, p95, sessions, first and last seen. */
+/** One row per (server, role): calls, errors, p95, sessions, first and last seen, the weakest detection source. */
 export function mcpServerStatsQuery(
   projectId: string,
   window: McpServerWindow,
@@ -203,7 +206,8 @@ export function mcpServerStatsQuery(
       min(s.started_at) as first_seen_at,
       max(s.started_at) as last_seen_at,
       (array_agg(s.attributes ->> 'service.version' order by s.started_at desc)
-        filter (where s.mcp_role = 'provided' and s.attributes ? 'service.version'))[1] as version
+        filter (where s.mcp_role = 'provided' and s.attributes ? 'service.version'))[1] as version,
+      ${weakestSource(sql`s.mcp_server_source`)} as source
     from otel_spans s
     where ${serverSpans(projectId, window, only)}
     group by s.mcp_server, s.mcp_role
@@ -333,6 +337,7 @@ interface StatsRow {
   first_seen_at: Date | string;
   last_seen_at: Date | string;
   version: string | null;
+  source: string | null;
 }
 
 interface ToolRow {
@@ -378,6 +383,7 @@ function toServerRow(row: StatsRow): McpServerRow {
     sessions: Number(row.sessions),
     firstSeenAt: new Date(row.first_seen_at),
     lastSeenAt: new Date(row.last_seen_at),
+    detection: detectionOf("mcp-server", row.source),
   };
 }
 

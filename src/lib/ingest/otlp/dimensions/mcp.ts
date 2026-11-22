@@ -24,11 +24,11 @@ export interface SpanMcp {
 
 const KIND_SERVER = 2;
 const KIND_CLIENT = 3;
-const MCP_METHOD_KEY = "mcp.method.name";
+export const MCP_METHOD_KEY = "mcp.method.name";
 /** MCP request span names when the method attribute is missing: `tools/call <tool>`, and the MCP Python SDK's `MCP send tools/call <tool>`. */
 const MCP_SPAN_NAME = /^(?:MCP send )?tools\/call(?: |$)/;
 /** The server's own name (`serverInfo.name` of the MCP handshake), as instrumentations spell it. */
-const SERVER_INFO_KEYS = ["mcp.server.name", "fastmcp.server.name"] as const;
+export const SERVER_INFO_KEYS = ["mcp.server.name", "fastmcp.server.name"] as const;
 export const UPSTREAM_SERVER_KEY = "ratel.upstream.server";
 /** Claude-style names put a literal `mcp` first: `mcp__github__create_issue`. */
 const TOOL_PREFIX = /^(?:mcp__)?([^_](?:[^_]|_(?!_))*)__./;

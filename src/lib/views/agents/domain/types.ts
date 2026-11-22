@@ -8,6 +8,8 @@
  * its first span's start to its last span's end in that trace.
  */
 
+import type { Detection } from "@/lib/views/entities/detection";
+
 export interface AgentWindow {
   since: Date;
   /** Exclusive. */
@@ -35,6 +37,8 @@ export interface AgentRow {
   /** Within the window. */
   firstSeenAt: Date;
   lastSeenAt: Date;
+  /** How Ratel detected the agent: the weakest source of its spans (RC-779); null on spans stored before RC-772. */
+  detection: Detection | null;
 }
 
 export interface AgentList {

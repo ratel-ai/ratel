@@ -10,6 +10,7 @@ import { Server } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
+import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
 import { EntityFilters, WindowControl } from "@/components/console/agents/EntityFilters";
 import {
   type EntityFilterState,
@@ -26,6 +27,8 @@ import {
   formatRelativeTime,
   formatTimestamp,
 } from "@/lib/synthesis/traces/v2/format";
+import type { Detection } from "@/lib/views/entities/detection";
+import type { McpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
 import {
   type McpSort,
   type McpSortColumn,
@@ -36,6 +39,7 @@ import {
   sortMcpServers,
   statusRank,
 } from "@/lib/views/project-entities/mcp-model";
+import { McpServerSetupGuide } from "./McpServerSetupGuide";
 
 /** A server side as the page sends it: dates as ISO strings, its page and what it reaches. */
 export type McpServerListItem = {
@@ -56,6 +60,8 @@ export type McpServerListItem = {
   /** Calling agents' names, busiest first. */
   agents: string[];
   lastError: { tool: string; message: string } | null;
+  /** How Ratel detected the server (RC-779): a guess shows a marker. */
+  detection?: Detection | null;
 };
 
 /** Which side of the call the spans came from. */
@@ -73,10 +79,13 @@ export function McpServersView({
   servers,
   filters,
   tabs,
+  guide,
   now,
 }: {
   /** Null: the read failed. */
   servers: McpServerListItem[] | null;
+  /** The standard OpenTelemetry setup guide (RC-780), open while the list is empty. */
+  guide?: McpServerGuide;
   filters: EntityFilterState;
   /** The MCP page's tabs (Servers, Clients, RC-778); absent on pages without them. */
   tabs?: ReactNode;
@@ -109,6 +118,7 @@ export function McpServersView({
           <Callout tone="danger" title="MCP servers could not be loaded">
             The read failed. Reload the page to try again.
           </Callout>
+          {guide ? <McpServerSetupGuide guide={guide} defaultOpen={false} /> : null}
         </PageBody>
       </Page>
     );
@@ -271,6 +281,7 @@ export function McpServersView({
             }
           />
         </div>
+        {guide ? <McpServerSetupGuide guide={guide} defaultOpen={servers.length === 0} /> : null}
       </PageBody>
     </Page>
   );
@@ -330,12 +341,15 @@ function ServerCell({ row }: { row: McpServerListItem }) {
       : row.tools.slice(0, 4).join(", ") + (row.tools.length > 4 ? ", …" : "");
   return (
     <div className="flex min-w-0 flex-col py-1.5">
-      <Link
-        href={row.href}
-        className="truncate text-fg outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-      >
-        {row.displayName}
-      </Link>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <Link
+          href={row.href}
+          className="truncate text-fg outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {row.displayName}
+        </Link>
+        <DetectionMarker detection={row.detection ?? null} />
+      </span>
       {line ? (
         <span
           className={

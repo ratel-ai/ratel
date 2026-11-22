@@ -64,6 +64,7 @@ test("the list has one row per agent with runs, errors, cost, p95 and first and 
         p95Ms: 880,
         firstSeenAt: new Date(T0 + 100),
         lastSeenAt: new Date(T0 + 10_400),
+        detection: { source: "heuristic", rule: "agent-span-name" },
       },
       {
         key: "supervisor",
@@ -77,6 +78,7 @@ test("the list has one row per agent with runs, errors, cost, p95 and first and 
         p95Ms: 1950,
         firstSeenAt: new Date(T0),
         lastSeenAt: new Date(T0 + 10_010),
+        detection: { source: "semconv", rule: null },
       },
       {
         key: "writer",
@@ -90,9 +92,63 @@ test("the list has one row per agent with runs, errors, cost, p95 and first and 
         p95Ms: 300,
         firstSeenAt: new Date(T0 + 11_000),
         lastSeenAt: new Date(T0 + 11_000),
+        detection: { source: "heuristic", rule: "agent-span-name" },
       },
     ]);
     assert.deepEqual(environments, ["prod", "staging"]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("an agent reads as its weakest source; a heuristic key from service.name names that rule (RC-779)", async () => {
+  const { client, db } = await seeded();
+  try {
+    await insertOtelSpans(
+      SERVICE_ONLY_PROJECT_ID,
+      [
+        span(80, {
+          at: 0,
+          projectId: SERVICE_ONLY_PROJECT_ID,
+          serviceName: "pm-service",
+          agentKey: "pm-service",
+          agentSource: "sdk",
+        }),
+        span(81, {
+          at: 10,
+          projectId: SERVICE_ONLY_PROJECT_ID,
+          serviceName: "pm-service",
+          agentKey: "pm-service",
+          agentSource: "heuristic",
+        }),
+        span(82, {
+          at: 20,
+          projectId: SERVICE_ONLY_PROJECT_ID,
+          serviceName: "pm-service",
+          agentKey: "named",
+          agentSource: "sdk",
+        }),
+        span(83, {
+          at: 30,
+          projectId: SERVICE_ONLY_PROJECT_ID,
+          serviceName: "pm-service",
+          agentKey: "named",
+          agentSource: "semconv",
+        }),
+      ],
+      db,
+    );
+    const { agents } = await createDrizzleAgentStore(db).listAgents(
+      SERVICE_ONLY_PROJECT_ID,
+      WINDOW,
+    );
+    assert.deepEqual(
+      agents.map(({ key, detection }) => ({ key, detection })),
+      [
+        { key: "named", detection: { source: "semconv", rule: null } },
+        { key: "pm-service", detection: { source: "heuristic", rule: "service-name" } },
+      ],
+    );
   } finally {
     await client.close();
   }

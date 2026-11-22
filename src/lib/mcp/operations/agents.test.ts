@@ -34,6 +34,7 @@ const ROW: AgentRow = {
   p95Ms: 870.123,
   firstSeenAt: new Date("2026-11-16T09:00:00.000Z"),
   lastSeenAt: new Date("2026-11-17T09:00:00.000Z"),
+  detection: null,
 };
 
 function harness(overrides: Partial<AgentsOperationDeps> = {}) {

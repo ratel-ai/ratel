@@ -9,6 +9,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
 import { EnvironmentSelect, WindowControl } from "@/components/console/agents/EntityFilters";
 import {
   type EntityFilterState,
@@ -24,6 +25,7 @@ import {
   formatPercent,
   formatRelativeTime,
 } from "@/lib/synthesis/traces/v2/format";
+import type { Detection } from "@/lib/views/entities/detection";
 import type { AgentRole } from "@/lib/views/project-entities/agents-model";
 import { failingToolsHint, latencyHint, mcpStatus } from "@/lib/views/project-entities/mcp-model";
 import { ROLE_LABEL } from "./McpServersView";
@@ -69,6 +71,8 @@ export type McpServerDetailModel = {
     sessions: number;
     firstSeenAt: string;
     lastSeenAt: string;
+    /** How Ratel detected the server (RC-779): shown on its page, guessed or explicit. */
+    detection?: Detection | null;
   };
   roles: { role: McpRole; href: string }[];
   tools: McpToolItem[];
@@ -109,6 +113,7 @@ export function McpServerDetailView({
             {title}
             {status ? <StatusChip status={status} /> : null}
             {server?.version ? <Badge>v{server.version}</Badge> : null}
+            {server ? <DetectionMarker detection={server.detection ?? null} showExplicit /> : null}
           </span>
         }
         actions={

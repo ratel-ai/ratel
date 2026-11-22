@@ -28,6 +28,7 @@ const OVERVIEW: ClientsOverview = {
       sessions: 2,
       firstSeenAt: AT,
       lastSeenAt: AT,
+      detection: null,
     },
     {
       harness: null,
@@ -37,6 +38,7 @@ const OVERVIEW: ClientsOverview = {
       sessions: 2,
       firstSeenAt: AT,
       lastSeenAt: AT,
+      detection: null,
     },
   ],
   versions: [
@@ -49,6 +51,7 @@ const OVERVIEW: ClientsOverview = {
       sessions: 2,
       firstSeenAt: AT,
       lastSeenAt: AT,
+      detection: null,
     },
   ],
   countries: [{ country: "GB", calls: 4, sessions: 2 }],

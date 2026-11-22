@@ -4,6 +4,7 @@
   "rules": [
     { "from": "@/components/ds/", "to": "@ratel/design-system/" },
     { "from": "@/components/ds/dot-loader", "to": "@ratel/design-system/dot-matrix", "exact": true },
+    { "from": "@/components/ds/detection-marker", "to": "@/components/console/agents/DetectionMarker", "exact": true },
     { "from": "@/components/health/card-model", "to": "@/lib/views/health/card-model", "exact": true },
     { "from": "@/components/health/data-gaps-model", "to": "@/lib/views/health/data-gaps-model", "exact": true },
     { "from": "@/components/health/v2/issue-rows", "to": "@/lib/views/health/issue-rows", "exact": true },
@@ -70,6 +71,7 @@
     { "from": "@/components/eval-gate/", "to": "@/components/console/eval-gate/" },
     { "from": "@/components/agents/", "to": "@/components/console/agents/" },
     { "from": "@/components/clients/", "to": "@/components/console/clients/" },
+    { "from": "@/components/mcp-servers/McpServerSetupGuide", "to": "@/components/console/mcp-servers/McpServerSetupGuide", "exact": true },
     { "from": "@/lib/task-scorers", "to": "@/lib/views/task-scorers", "exact": true },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },

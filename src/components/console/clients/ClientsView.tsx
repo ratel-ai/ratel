@@ -6,6 +6,8 @@ import { Section } from "@ratel/design-system/section";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Users } from "lucide-react";
 import type { ReactNode } from "react";
+import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
+import { McpServerSetupGuide } from "@/components/console/mcp-servers/McpServerSetupGuide";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
 import { formatInteger, formatPercent, formatRelativeTime } from "@/lib/synthesis/traces/v2/format";
 import type {
@@ -15,6 +17,8 @@ import type {
   HarnessVersionRow,
   ValueCount,
 } from "@/lib/views/clients/queries";
+import type { Detection } from "@/lib/views/entities/detection";
+import type { McpServerGuide } from "@/lib/views/mcp-servers/setup-guide";
 import { ClientsFilters } from "./ClientsFilters";
 import { countryLabel, harnessLabel, reportedLabel, transportLabel } from "./labels";
 
@@ -82,9 +86,12 @@ export function ClientsView({
   filters,
   tabs,
   now,
+  guide,
 }: {
   /** Null when the read failed: unknown, not empty. */
   overview: ClientsOverviewView | null;
+  /** The standard OpenTelemetry setup guide (RC-780): how a server reports its clients. */
+  guide?: McpServerGuide;
   filters: ClientsFilterState;
   tabs: ReactNode;
   now: string;
@@ -106,6 +113,12 @@ export function ClientsView({
         ) : (
           <ClientsSections overview={overview} now={now} />
         )}
+        {guide ? (
+          <McpServerSetupGuide
+            guide={guide}
+            defaultOpen={overview !== null && overview.harnesses.length === 0}
+          />
+        ) : null}
       </PageBody>
     </Page>
   );
@@ -223,7 +236,11 @@ function ValueTable({
 
 function harnessColumns(now: string): Column<ClientsHarnessItem>[] {
   return [
-    { id: "client", header: "Client", cell: (row) => <ClientName harness={row.harness} /> },
+    {
+      id: "client",
+      header: "Client",
+      cell: (row) => <ClientName harness={row.harness} detection={row.detection} />,
+    },
     ...statColumns<ClientsHarnessItem>(),
     {
       id: "first",
@@ -246,7 +263,11 @@ function harnessColumns(now: string): Column<ClientsHarnessItem>[] {
 
 function versionColumns(now: string): Column<ClientsVersionItem>[] {
   return [
-    { id: "client", header: "Client", cell: (row) => <ClientName harness={row.harness} /> },
+    {
+      id: "client",
+      header: "Client",
+      cell: (row) => <ClientName harness={row.harness} detection={row.detection} />,
+    },
     {
       id: "version",
       header: "Version",
@@ -292,10 +313,19 @@ function statColumns<T extends HarnessStats>(): Column<T>[] {
   ];
 }
 
-function ClientName({ harness }: { harness: string | null }) {
+function ClientName({
+  harness,
+  detection,
+}: {
+  harness: string | null;
+  detection: Detection | null;
+}) {
   return (
-    <span className={harness === null ? "text-fg-muted" : "font-medium text-fg"}>
-      {harnessLabel(harness)}
+    <span className="flex min-w-0 items-center gap-2">
+      <span className={harness === null ? "text-fg-muted" : "font-medium text-fg"}>
+        {harnessLabel(harness)}
+      </span>
+      <DetectionMarker detection={detection} />
     </span>
   );
 }

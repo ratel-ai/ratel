@@ -100,6 +100,16 @@ test("harnesses, versions, countries, transports and protocol versions of the wi
     ],
   );
   assert.equal(overview.harnesses.find((row) => row.harness === "codex")?.errorRate, 1);
+  // RC-779: the real TS SDK exports name no client, so each harness is a User-Agent guess.
+  assert.deepEqual(
+    overview.harnesses.map(({ harness, detection }) => ({ harness, detection })),
+    [
+      { harness: null, detection: null },
+      { harness: "claude-code", detection: { source: "heuristic", rule: "user-agent" } },
+      { harness: "cursor", detection: { source: "heuristic", rule: "user-agent" } },
+      { harness: "codex", detection: { source: "heuristic", rule: "user-agent" } },
+    ],
+  );
   assert.deepEqual(
     overview.versions.map(({ harness, version, calls }) => ({ harness, version, calls })),
     [

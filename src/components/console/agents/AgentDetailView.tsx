@@ -8,6 +8,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ArrowRight, ArrowUpRight, Wrench } from "lucide-react";
 import Link from "next/link";
+import { DetectionMarker } from "@/components/console/agents/DetectionMarker";
 import {
   formatDuration,
   formatInteger,
@@ -15,6 +16,7 @@ import {
   formatPercent,
   formatRelativeTime,
 } from "@/lib/synthesis/traces/v2/format";
+import type { Detection } from "@/lib/views/entities/detection";
 import {
   type AgentRole,
   type AgentToolGroup,
@@ -50,6 +52,8 @@ export type AgentDetailModel = {
     lastSeenAt: string;
     mergedKeys: string[];
     hidden: boolean;
+    /** How Ratel detected the agent (RC-779): shown on its page, guessed or explicit. */
+    detection?: Detection | null;
   };
   role: AgentRole | null;
   mcpServers: number;
@@ -99,6 +103,7 @@ export function AgentDetailView({
             {agent && pill ? (
               <Badge tone="danger">{formatPercent(agent.errorRate)} errors</Badge>
             ) : null}
+            {agent ? <DetectionMarker detection={agent.detection ?? null} showExplicit /> : null}
             {agent?.hidden ? <Badge>hidden</Badge> : null}
           </span>
         }
