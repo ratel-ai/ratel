@@ -17,6 +17,8 @@ import { formatInteger } from "@/lib/synthesis/traces/v2/format";
 import type { DatasetStatus, DatasetView } from "@/lib/views/fine-tuning/domain/dataset";
 import type { RedactionKind } from "@/lib/views/fine-tuning/domain/redaction";
 import type { DropReason } from "@/lib/views/fine-tuning/domain/rows";
+import { SCORER_LABELS } from "@/lib/views/task-scorers/labels";
+import { SCORER_KINDS, type ScorerKind } from "@/lib/views/task-scorers/types";
 
 /** How often the page re-reads while a version is building. */
 const POLL_MS = 2_000;
@@ -69,6 +71,7 @@ export function DatasetBuildForm({
   const router = useRouter();
   const [noError, setNoError] = useState(false);
   const [noSelfCorrection, setNoSelfCorrection] = useState(false);
+  const [scorersOn, setScorersOn] = useState(true);
   const [dedup, setDedup] = useState("near");
   const [evalPercent, setEvalPercent] = useState("10");
   const [seed, setSeed] = useState("0");
@@ -80,6 +83,7 @@ export function DatasetBuildForm({
     setError(null);
     const body = {
       filters: { noError, noSelfCorrection },
+      scorers: scorersOn ? "on" : "off",
       dedup,
       evalFraction: Number(evalPercent) / 100,
       seed: Number(seed),
@@ -133,9 +137,14 @@ export function DatasetBuildForm({
         <fieldset className="flex flex-wrap gap-x-6 gap-y-2" disabled={!consentGiven}>
           <legend className="mb-2 text-ui font-medium text-fg">Quality rules</legend>
           <span className="w-full text-ui text-fg-muted">
-            Runs that fail an enabled task scorer are always left out. Calls that share a session or
-            an end user always land on the same side of the split.
+            Calls that share a session or an end user always land on the same side of the split.
           </span>
+          <Checkbox
+            label="Leave out runs that fail a scorer"
+            checked={scorersOn}
+            onCheckedChange={setScorersOn}
+            disabled={!consentGiven}
+          />
           <Checkbox
             label="Leave out runs with an error"
             checked={noError}
@@ -322,6 +331,13 @@ export function DatasetSummary({ dataset }: { dataset: DatasetView }) {
       ])
     : [];
   const redactedTotal = redaction.reduce((sum, [, n]) => sum + n, 0);
+  const scorerDrops = counts?.scorerDrops;
+  const byScorer = scorerDrops
+    ? SCORER_KINDS.flatMap((kind) => {
+        const n = scorerDrops.byKind[kind];
+        return n ? [{ kind, ...n }] : [];
+      })
+    : [];
 
   return (
     <Section
@@ -339,12 +355,17 @@ export function DatasetSummary({ dataset }: { dataset: DatasetView }) {
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <CountTable
-          caption="Left out, by reason"
-          header="Reason"
-          rows={dropped.map(([reason, n]) => ({ key: reason, label: DROP_LABELS[reason], n }))}
-          empty="No model call was left out."
-        />
+        <div className="flex flex-col gap-4">
+          <CountTable
+            caption="Left out, by reason"
+            header="Reason"
+            rows={dropped.map(([reason, n]) => ({ key: reason, label: DROP_LABELS[reason], n }))}
+            empty="No model call was left out."
+          />
+          {byScorer.length > 0 && scorerDrops ? (
+            <ScorerDropsTable rows={byScorer} runs={scorerDrops.runs} />
+          ) : null}
+        </div>
         <div className="flex flex-col gap-2">
           <CountTable
             caption="Redacted, by kind"
@@ -399,10 +420,53 @@ function CountTable({
   );
 }
 
+/** The runs and calls each task scorer left out. A run that fails two scorers is in both rows. */
+function ScorerDropsTable({
+  rows,
+  runs,
+}: {
+  rows: { kind: ScorerKind; runs: number; calls: number }[];
+  runs: number;
+}) {
+  const columns: Column<{ kind: ScorerKind; runs: number; calls: number }>[] = [
+    { id: "scorer", header: "Scorer", cell: (row) => SCORER_LABELS[row.kind] },
+    {
+      id: "runs",
+      header: "Runs",
+      align: "right",
+      width: "6rem",
+      cell: (row) => formatInteger(row.runs),
+    },
+    {
+      id: "calls",
+      header: "Calls",
+      align: "right",
+      width: "6rem",
+      cell: (row) => formatInteger(row.calls),
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-ui font-medium text-fg">Failed a task scorer, by scorer</h3>
+      <DataTable
+        caption="Failed a task scorer, by scorer"
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.kind}
+        density="compact"
+      />
+      <p className="text-ui text-fg-muted">
+        {formatInteger(runs)} {runs === 1 ? "run" : "runs"} in total. A run that fails two scorers
+        is in both rows.
+      </p>
+    </div>
+  );
+}
+
 function SettingsList({ dataset }: { dataset: DatasetView }) {
   const { settings } = dataset;
   const rules = [
-    "task scorers",
+    settings.scorers === "off" ? "scorers off" : "scorers",
     ...(settings.filters.noError ? ["no error"] : []),
     ...(settings.filters.noSelfCorrection ? ["no self-correction"] : []),
   ];

@@ -254,7 +254,7 @@ export function fineTuningOperations(
         ...projectScoped,
         useCaseId: uuidParam().describe("The use case id, as list_use_cases returns it."),
         settings: BuildInputSchema.optional().describe(
-          "Optional build settings: filters (noError, noSelfCorrection), dedup (off, exact or near; default near), seed and evalFraction (0 to 0.5, default 0.1). Calls that share a session or an end user always land on one side of the split.",
+          "Optional build settings: filters (noError, noSelfCorrection), scorers (on or off; default on: a run that fails a task scorer or a user scorer is left out), dedup (off, exact or near; default near), seed and evalFraction (0 to 0.5, default 0.1). Calls that share a session or an end user always land on one side of the split.",
         ),
       }),
       async execute(ctx, params) {
@@ -283,7 +283,7 @@ export function fineTuningOperations(
       domain: "improvement",
       title: "Get a fine-tuning dataset",
       description:
-        "One dataset version from build_dataset: status (building, ready or failed), train and eval row counts, dropped counts per reason, the redaction report and build settings. No row text: list_dataset_rows reads rows. consoleUrl and exportUrls open the page and the JSONL download for a signed-in member.",
+        "One dataset version from build_dataset: status (building, ready or failed), train and eval row counts, dropped counts per reason, scorerDrops (runs and calls left out per task scorer kind), the redaction report and settings. No row text: list_dataset_rows reads rows. consoleUrl and exportUrls open the page and the JSONL download for a signed-in member.",
       keywords: ["dataset status", "fine-tuning dataset", "redaction report"],
       scope: "project",
       mutates: false,

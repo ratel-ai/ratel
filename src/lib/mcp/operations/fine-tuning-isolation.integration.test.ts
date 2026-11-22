@@ -201,6 +201,7 @@ async function seeded(): Promise<Harness> {
     {
       filters: { noError: false, noSelfCorrection: false },
       dedup: "near",
+      scorers: "on",
       seed: 0,
       evalFraction: 0.1,
     },

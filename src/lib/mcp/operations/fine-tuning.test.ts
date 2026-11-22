@@ -292,12 +292,20 @@ test("build_dataset starts a build as the key's project and returns the building
       input: {
         seed: 3,
         dedup: "exact",
+        scorers: "on",
         filters: { noError: false, noSelfCorrection: false },
         evalFraction: 0.1,
       },
       actor: `project:${PROJECT}`,
     },
   ]);
+  const off = await run("build_dataset", { useCaseId: USE_CASE_ID, settings: { scorers: "off" } });
+  assert.ok(off.ok, JSON.stringify(off));
+  assert.equal(
+    (calls.builds[1]!.input as { scorers: string }).scorers,
+    "off",
+    "RC-1177: the scorer filter can be turned off",
+  );
   const missing = await run("build_dataset", { useCaseId: "66666666-6666-4666-8666-666666666666" });
   assert.equal(missing.ok === false && missing.error, "not_found");
   const bad = await run("build_dataset", {
@@ -331,7 +339,12 @@ test("get_dataset returns status, counts, the redaction report and settings, and
   const { cursor: _cursor, ...shown } = DATASET.counts!;
   assert.deepEqual(
     data.counts,
-    { ...shown, exportSkipped: null },
+    {
+      ...shown,
+      scorerDrops: { runs: 0, calls: 0, byKind: {} },
+      exportSkipped: null,
+      exportSkipReasons: null,
+    },
     "the counts, without the job's resume cursor",
   );
   assert.equal(
@@ -497,4 +510,27 @@ test("delete_dataset deletes the version as the key's project and emits dataset_
   const other = await run("delete_dataset", { datasetId: "66666666-6666-4666-8666-666666666666" });
   assert.equal(other.ok === false && other.error, "not_found");
   assert.deepEqual(calls.events, ["dataset_deleted"]);
+});
+
+test("RC-1177: get_dataset shows the runs and calls each task scorer kind left out", async () => {
+  const scorerDrops = {
+    runs: 3,
+    calls: 4,
+    byKind: { max_latency_ms: { runs: 2, calls: 3 }, max_cost_usd: { runs: 2, calls: 2 } },
+  };
+  const dataset: Dataset = {
+    ...DATASET,
+    counts: { ...DATASET.counts!, dropped: { ...emptyDrops(), scorer_failed: 4 }, scorerDrops },
+  };
+  const { run } = harness({
+    getDataset: async (projectId, id) =>
+      projectId === PROJECT && id === DATASET_ID ? dataset : null,
+  });
+  const got = await run("get_dataset", { datasetId: DATASET_ID });
+  assert.ok(got.ok);
+  assert.deepEqual(
+    (got.data as { counts: { scorerDrops: unknown } }).counts.scorerDrops,
+    scorerDrops,
+  );
+  assert.equal((got.data as { settings: { scorers: string } }).settings.scorers, "on");
 });

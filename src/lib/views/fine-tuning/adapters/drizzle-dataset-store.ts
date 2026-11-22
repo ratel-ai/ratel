@@ -6,12 +6,13 @@ import { loadRuns } from "@/lib/views/eval-gate/runs";
 import { recordedView } from "@/lib/views/eval-gate/simulate";
 import { scorersFor } from "@/lib/views/task-scorers/store";
 import type { Scorer, ScorerRun } from "@/lib/views/task-scorers/types";
-import type {
-  Dataset,
-  DatasetCounts,
-  DatasetFailure,
-  DatasetSettings,
-  DatasetStatus,
+import {
+  type Dataset,
+  type DatasetCounts,
+  type DatasetFailure,
+  type DatasetSettings,
+  type DatasetStatus,
+  withStoredDefaults,
 } from "../domain/dataset";
 import type { UseCaseOverride } from "../domain/overrides";
 import type { RedactionCounts } from "../domain/redaction";
@@ -396,7 +397,7 @@ interface DatasetDbRow {
 }
 
 function toDataset(row: DatasetDbRow): Dataset {
-  return {
+  return withStoredDefaults({
     id: row.id,
     projectId: row.project_id,
     useCaseId: row.use_case_id,
@@ -409,7 +410,7 @@ function toDataset(row: DatasetDbRow): Dataset {
     createdBy: row.created_by,
     createdAt: new Date(row.created_at),
     failedReason: row.failed_reason,
-  };
+  });
 }
 
 function parsed<T>(value: T | string): T {

@@ -23,13 +23,16 @@ import {
   startDatasetBuild,
 } from "../build";
 import { datasetBuildDeps } from "../build-deps";
+import { viewOfDataset } from "../domain/dataset";
 import {
   type DatasetLifecycleEvent,
   type ExportApiDeps,
   handleDatasetDeleteRequest,
   handleDatasetExportRequest,
+  handleDatasetGetRequest,
   ROWS_HEADER,
   SKIPPED_HEADER,
+  SKIPPED_REASONS_HEADER,
 } from "../export-api";
 import {
   handleDatasetRowsRequest,
@@ -798,6 +801,44 @@ test("RC-1130: an excluded run is absent from the next build and stays in the ea
     );
     assert.ok((await turnIdsOf(h.client, first.dataset.id)).includes(turn.s2[0]!));
 
+    // RC-1177: with the scorers off, the run that fails a scorer is kept; the exclusion and the pin act as before.
+    const off = await startDatasetBuild(
+      PROJECT_A,
+      h.useCases[PROJECT_A]!,
+      { ...settings, scorers: "off" },
+      "user_1",
+      h.deps(),
+    );
+    assert.ok(off.ok);
+    assert.equal(off.dataset.settings.scorers, "off");
+    assert.ok((await runDatasetBuild(PROJECT_A, { datasetId: off.dataset.id }, h.deps())).built);
+    const offTurns = new Set(await turnIdsOf(h.client, off.dataset.id));
+    assert.equal(
+      offTurns.has(turn.s1[1]!),
+      true,
+      "a run that fails a scorer is kept with the scorers off",
+    );
+    assert.equal(offTurns.has(turn.s2[0]!), false, "the excluded run stays out");
+    assert.equal(offTurns.size, 5);
+    const offDataset = (await createDrizzleDatasetStore(h.db).getDataset(
+      PROJECT_A,
+      off.dataset.id,
+    ))!;
+    assert.equal(offDataset.counts!.dropped.user_scorer_failed, 0);
+    assert.deepEqual(offDataset.counts!.scorerDrops, { runs: 0, calls: 0, byKind: {} });
+
+    // RC-1177: a version stored before it, with no scorers setting and no scorer drops, loads as scorers on with an empty breakdown.
+    await h.client.query(
+      "update fine_tuning_datasets set settings = settings - 'scorers', counts = counts - 'scorerDrops' where id = $1",
+      [second.dataset.id],
+    );
+    const legacy = (await createDrizzleDatasetStore(h.db).getDataset(
+      PROJECT_A,
+      second.dataset.id,
+    ))!;
+    assert.equal(legacy.settings.scorers, "on");
+    assert.deepEqual(viewOfDataset(legacy).counts?.scorerDrops, { runs: 0, calls: 0, byKind: {} });
+
     // Cleared, the exclusion no longer applies; an exclusion keeps its first time while it stands.
     const cleared = await overrides.setOverride(
       PROJECT_A,
@@ -1068,7 +1109,7 @@ test("RC-1131: the export streams each side in small pages; line counts are the 
 
     // A version without stored skipped counts (built before RC-1131) counts them in one pass.
     await h.client.query(
-      "update fine_tuning_datasets set counts = counts - 'exportSkipped' where id = $1",
+      "update fine_tuning_datasets set counts = counts - 'exportSkipped' - 'exportSkipReasons' where id = $1",
       [dataset.id],
     );
     const old = await handleDatasetExportRequest(
@@ -1173,7 +1214,11 @@ test("RC-1131: delete removes the dataset, its rows and its lineage link; a seco
   }
 });
 
-function exportDeps(h: Harness, projectId: string, options: { pageRows?: number } = {}) {
+function exportDeps(
+  h: Harness,
+  projectId: string,
+  options: Partial<Pick<ExportApiDeps, "pageRows" | "fineTuningEnabled">> = {},
+) {
   const events: DatasetLifecycleEvent[] = [];
   const deps: ExportApiDeps = {
     getSession: async () => ({ user: { id: "u1", externalId: "user_1" } }),
@@ -1222,3 +1267,209 @@ async function seedCall(
     ],
   );
 }
+
+const PROJECT_F = "77777777-7777-4777-8777-777777777777";
+
+test("RC-1176: a tool picker turn: each row carries the tools its history calls, a row with an undefined tool is skipped at export and counted, and a paged build has the same hash", async () => {
+  const h = await seeded();
+  try {
+    await h.client.query(
+      `insert into projects (id, organization_id, name, slug) values ($1, $2, 'F', 'f')`,
+      [PROJECT_F, ORGANIZATION_ID],
+    );
+    await h.client.query(
+      `insert into fine_tuning_consents (project_id, given_by, text_version) values ($1, 'user_1', 'v1')`,
+      [PROJECT_F],
+    );
+    const {
+      rows: [useCase],
+    } = await h.client.query<{ id: string }>(
+      `insert into fine_tuning_use_cases (project_id, name, selector, created_by) values ($1, 'Triage', $2::jsonb, 'user_1') returning id`,
+      [PROJECT_F, JSON.stringify({ taskIds: ["triage"], intentIds: [] })],
+    );
+    const tool = (name: string) => ({
+      name,
+      description: `${name} tool`,
+      parameters: { type: "object" },
+    });
+    const ask = { role: "user", content: "book me a flight" };
+    const calls = (id: string, name: string) => ({
+      role: "assistant",
+      content: [{ type: "tool_call", id, name, arguments: {} }],
+    });
+    const result = (id: string) => ({ role: "tool", tool_call_id: id, content: "done" });
+    const history2 = [ask, calls("c1", "search"), result("c1")];
+    const history3 = [
+      ...history2,
+      calls("c2", "book"),
+      result("c2"),
+      calls("c3", "ghost"),
+      result("c3"),
+    ];
+    await seedTurn(h, PROJECT_F, 30, "f1", [
+      { tools: [tool("search"), tool("lookup")], messages: [ask], output: [calls("c1", "search")] },
+      { tools: [tool("book")], messages: history2, output: [calls("c2", "book")] },
+      {
+        tools: [tool("refund")],
+        messages: history3,
+        output: [{ role: "assistant", content: "booked" }],
+      },
+    ]);
+
+    const settings = { dedup: "off" as const, evalFraction: 0 };
+    const whole = await startDatasetBuild(PROJECT_F, useCase!.id, settings, "user_1", h.deps());
+    assert.ok(whole.ok);
+    const wholeRun = await runDatasetBuild(PROJECT_F, { datasetId: whole.dataset.id }, h.deps());
+    assert.ok(wholeRun.built);
+    const stored = await rowsOf(h.client, whole.dataset.id);
+    const names = stored.map((row) =>
+      ((row.content as { tools?: { name: string }[] }).tools ?? []).map((t) => t.name),
+    );
+    assert.deepEqual(names, [
+      ["search", "lookup"],
+      ["book", "search"],
+      ["refund", "search", "book"],
+    ]);
+
+    const dataset = (await createDrizzleDatasetStore(h.db).getDataset(
+      PROJECT_F,
+      whole.dataset.id,
+    ))!;
+    assert.deepEqual(dataset.counts!.exportSkipped, { train: 1, eval: 0 });
+    assert.equal(dataset.counts!.exportSkipReasons?.train.undefined_tool, 1);
+
+    const { deps } = exportDeps(h, PROJECT_F);
+    const response = await handleDatasetExportRequest(
+      new Request("http://test/export?side=train"),
+      PROJECT_F,
+      dataset.id,
+      deps,
+    );
+    assert.equal(response.headers.get(SKIPPED_HEADER), "1");
+    assert.equal(response.headers.get(SKIPPED_REASONS_HEADER), "undefined_tool=1");
+    const lines = (await response.text())
+      .trim()
+      .split("\n")
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            messages: { tool_calls?: { function: { name: string } }[] }[];
+            tools?: { function: { name: string } }[];
+          },
+      );
+    assert.equal(lines.length, 2);
+    for (const line of lines) {
+      const defined = new Set((line.tools ?? []).map((t) => t.function.name));
+      for (const message of line.messages)
+        for (const call of message.tool_calls ?? [])
+          assert.ok(defined.has(call.function.name), call.function.name);
+    }
+
+    const paged = await startDatasetBuild(PROJECT_F, useCase!.id, settings, "user_1", h.deps());
+    assert.ok(paged.ok);
+    const pagedDeps = h.deps({ pageCalls: 1, maxPagesPerRun: 1 });
+    let hash: string | null = null;
+    for (let i = 0; i < 5 && hash === null; i += 1) {
+      const run = await runDatasetBuild(PROJECT_F, { datasetId: paged.dataset.id }, pagedDeps);
+      if (run.built) hash = run.contentHash;
+    }
+    assert.equal(hash, wholeRun.contentHash);
+  } finally {
+    await h.client.close();
+  }
+});
+
+/** One closed turn of task `triage` with one call per content, one second apart. */
+async function seedTurn(
+  h: Harness,
+  projectId: string,
+  index: number,
+  session: string,
+  contents: Record<string, unknown>[],
+) {
+  const minutes = index * 10;
+  const start = new Date(T0 + minutes * 60_000).toISOString();
+  const end = new Date(T0 + minutes * 60_000 + 30_000).toISOString();
+  await h.client.query(
+    `insert into trace_turns (project_id, session_id, turn_key, turn_source, lane, status, started_at, ended_at, last_received_at, workflow_id)
+     values ($1, $2, $3, 'otlp', 'otlp', 'closed', $4, $5, $5, 'triage')`,
+    [projectId, session, `otlp:${traceId(index)}`, start, end],
+  );
+  await insertOtelSpans(projectId, [span(index * 10, projectId, index, minutes)], h.db as never);
+  for (const [i, content] of contents.entries()) {
+    await h.client.query(
+      `insert into events (project_id, occurred_at, model, cost_usd, trace_id, span_id, payload) values ($1, $2, 'claude-haiku', '0.001', $3, $4, $5::jsonb)`,
+      [
+        projectId,
+        new Date(T0 + minutes * 60_000 + (i + 1) * 1_000).toISOString(),
+        traceId(index),
+        spanId(index * 10 + 1 + i),
+        JSON.stringify({ provider: "anthropic", model: "claude-haiku", ts: start, ...content }),
+      ],
+    );
+  }
+}
+
+test("RC-1178: GET reads one version's view without row text; another project's version and an unknown id are 404; flag off is 404; a read tracks nothing", async () => {
+  const h = await seeded();
+  try {
+    const started = await startDatasetBuild(
+      PROJECT_A,
+      h.useCases[PROJECT_A]!,
+      { scorers: "off" },
+      "user_1",
+      h.deps(),
+    );
+    assert.ok(started.ok);
+    assert.ok(
+      (await runDatasetBuild(PROJECT_A, { datasetId: started.dataset.id }, h.deps())).built,
+    );
+    const dataset = (await createDrizzleDatasetStore(h.db).getDataset(
+      PROJECT_A,
+      started.dataset.id,
+    ))!;
+
+    const { deps, events } = exportDeps(h, PROJECT_A);
+    const response = await handleDatasetGetRequest(PROJECT_A, dataset.id, deps);
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { ok: boolean; dataset: Record<string, unknown> };
+    assert.deepEqual(body, {
+      ok: true,
+      dataset: JSON.parse(JSON.stringify(viewOfDataset(dataset))),
+    });
+    assert.equal((body.dataset.settings as { scorers: string }).scorers, "off");
+    assert.equal(body.dataset.status, "ready");
+    const text = JSON.stringify(body);
+    assert.equal(text.includes('"role"'), false, "no message of a row");
+    assert.equal(text.includes("refund order"), false, "no row text");
+
+    assert.equal(
+      (await handleDatasetGetRequest(PROJECT_A, "00000000-0000-4000-8000-000000000000", deps))
+        .status,
+      404,
+      "unknown id",
+    );
+    assert.equal(
+      (await handleDatasetGetRequest(PROJECT_A, "not-a-uuid", deps)).status,
+      404,
+      "malformed id",
+    );
+    const asB = exportDeps(h, PROJECT_B).deps;
+    const other = await handleDatasetGetRequest(PROJECT_B, dataset.id, asB);
+    assert.equal(other.status, 404, "B cannot read A's dataset");
+    assert.deepEqual(await other.json(), {
+      ok: false,
+      error: "dataset_not_found",
+      message: "This project has no dataset with that ID.",
+    });
+    const off = exportDeps(h, PROJECT_A, { fineTuningEnabled: async () => false }).deps;
+    assert.equal(
+      (await handleDatasetGetRequest(PROJECT_A, dataset.id, off)).status,
+      404,
+      "flag off",
+    );
+    assert.deepEqual(events, [], "a read emits no business event");
+  } finally {
+    await h.client.close();
+  }
+});

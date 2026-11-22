@@ -1,7 +1,16 @@
 import { z } from "zod";
+import { EXPORT_SKIP_REASONS, type ExportSkipReason } from "./jsonl";
 import type { FrozenOverrides } from "./overrides";
 import type { RedactionCounts } from "./redaction";
-import { type BuildSettings, buildSettings, DEDUP_RULES, type DropCounts } from "./rows";
+import {
+  type BuildSettings,
+  buildSettings,
+  DEDUP_RULES,
+  type DropCounts,
+  emptyScorerDrops,
+  SCORER_SETTINGS,
+  type ScorerDrops,
+} from "./rows";
 import type { UseCaseSelector } from "./use-case";
 
 /**
@@ -60,12 +69,21 @@ export interface DatasetCounts {
   train: number;
   eval: number;
   dropped: DropCounts;
+  /** The `scorer_failed` drops per scorer kind (RC-1177). Versions built before RC-1177 do not have it. */
+  scorerDrops?: ScorerDrops;
   /**
    * Rows of each side the JSONL export cannot express (RC-1131): the export
    * skips them. Versions built before RC-1131 do not have it.
    */
   exportSkipped?: { train: number; eval: number };
+  /**
+   * The same rows of each side by reason (RC-1176). Versions built before
+   * RC-1176 do not have it: their export counts them again.
+   */
+  exportSkipReasons?: { train: ExportSkipCounts; eval: ExportSkipCounts };
 }
+
+export type ExportSkipCounts = Record<ExportSkipReason, number>;
 
 export interface Dataset {
   id: string;
@@ -82,6 +100,10 @@ export interface Dataset {
   failedReason: DatasetFailure | null;
 }
 
+export function emptyExportSkips(): ExportSkipCounts {
+  return Object.fromEntries(EXPORT_SKIP_REASONS.map((reason) => [reason, 0])) as ExportSkipCounts;
+}
+
 /** What a person or a tool may set for a build. Everything has a default. */
 export const BuildInputSchema = z
   .object({
@@ -90,6 +112,7 @@ export const BuildInputSchema = z
       .strict()
       .default({ noError: false, noSelfCorrection: false }),
     dedup: z.enum(DEDUP_RULES).default("near"),
+    scorers: z.enum(SCORER_SETTINGS).default("on"),
     seed: z.number().int().min(0).max(2_147_483_647).default(0),
     evalFraction: z.number().min(0).max(0.5).default(0.1),
   })
@@ -111,6 +134,13 @@ export function datasetSettings(
   };
 }
 
+/** A stored version in today's shape: one stored before RC-1177 has no `scorers` setting, and ran with them on. */
+export function withStoredDefaults(dataset: Dataset): Dataset {
+  return dataset.settings.scorers
+    ? dataset
+    : { ...dataset, settings: { ...dataset.settings, scorers: "on" } };
+}
+
 /** What a page, a route and a tool show of a version. Never row text. */
 export function viewOfDataset(dataset: Dataset) {
   return {
@@ -128,7 +158,9 @@ export function viewOfDataset(dataset: Dataset) {
           train: dataset.counts.train,
           eval: dataset.counts.eval,
           dropped: dataset.counts.dropped,
+          scorerDrops: dataset.counts.scorerDrops ?? emptyScorerDrops(),
           exportSkipped: dataset.counts.exportSkipped ?? null,
+          exportSkipReasons: dataset.counts.exportSkipReasons ?? null,
         }
       : null,
     redactionReport: dataset.redactionReport,

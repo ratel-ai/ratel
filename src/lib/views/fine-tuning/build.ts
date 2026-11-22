@@ -9,6 +9,7 @@ import {
   type Dataset,
   type DatasetFailure,
   datasetSettings,
+  emptyExportSkips,
 } from "./domain/dataset";
 import { toChatExample } from "./domain/jsonl";
 import { frozenOverrides } from "./domain/overrides";
@@ -22,6 +23,7 @@ import {
   emptyDrops,
   forcedEvalGroups,
   splitGroups,
+  type ToolSource,
 } from "./domain/rows";
 import { callMatches, selectorWindow, type UseCase } from "./domain/use-case";
 import type {
@@ -195,23 +197,38 @@ export async function runDatasetBuild(
     eval: 0,
     dropped: emptyDrops(),
   };
-  builder.resume(stored, {
-    dropped: counts.dropped,
-    redaction: dataset.redactionReport ?? emptyCounts(),
-  });
-  const hashes = stored.map((row) => row.rowHash);
   const cursor = counts.cursor
     ? { capturedAt: new Date(counts.cursor.capturedAt), eventId: counts.cursor.eventId }
     : null;
+  // The turns an earlier run read: a run counts in the scorer drops once.
+  const readTurns = cursor
+    ? plan.calls.filter((call) => compareCalls(call, cursor) <= 0).map((call) => call.turnId)
+    : [];
+  builder.resume(
+    stored,
+    {
+      dropped: counts.dropped,
+      scorerDrops: counts.scorerDrops,
+      redaction: dataset.redactionReport ?? emptyCounts(),
+    },
+    readTurns,
+  );
+  const hashes = stored.map((row) => row.rowHash);
   const remaining = cursor
     ? plan.calls.filter((call) => compareCalls(call, cursor) > 0)
     : plan.calls;
   let { train, eval: evalRows, calls: callsDone } = counts;
   const exportSkipped = { ...(counts.exportSkipped ?? { train: 0, eval: 0 }) };
+  const exportSkipReasons = {
+    train: { ...emptyExportSkips(), ...counts.exportSkipReasons?.train },
+    eval: { ...emptyExportSkips(), ...counts.exportSkipReasons?.eval },
+  };
   let last = counts.cursor;
   const cap = deps.rowCap ?? datasetRowCap();
   const pageSize = deps.pageCalls ?? PAGE_CALLS;
   const turnCache = new Map<string, CandidateTurn>();
+  // A turn leaves the cache after its last remaining call: its tool sources can be large.
+  const lastCallOfTurn = new Map(remaining.map((call, index) => [call.turnId, index]));
   let pages = 0;
 
   for (let index = 0; index < remaining.length; index += pageSize) {
@@ -220,10 +237,16 @@ export async function runDatasetBuild(
     for (const row of rows) {
       if (row.side === "train") train += 1;
       else evalRows += 1;
-      if (!toChatExample(row.content).ok) exportSkipped[row.side] += 1;
+      const example = toChatExample(row.content);
+      if (!example.ok) {
+        exportSkipped[row.side] += 1;
+        exportSkipReasons[row.side][example.reason] += 1;
+      }
       hashes.push(row.rowHash);
     }
     if (train + evalRows > cap) return fail(projectId, dataset, "too_large", deps);
+    for (const call of page)
+      if (lastCallOfTurn.get(call.turnId)! < index + pageSize) turnCache.delete(call.turnId);
     callsDone += page.length;
     const end = page[page.length - 1]!;
     last = { capturedAt: end.capturedAt.toISOString(), eventId: end.eventId };
@@ -236,7 +259,9 @@ export async function runDatasetBuild(
         train,
         eval: evalRows,
         dropped: progress.dropped,
+        scorerDrops: progress.scorerDrops,
         exportSkipped,
+        exportSkipReasons,
       },
       redaction: progress.redaction,
     });
@@ -274,7 +299,9 @@ export async function runDatasetBuild(
       train,
       eval: evalRows,
       dropped: final.dropped,
+      scorerDrops: final.scorerDrops,
       exportSkipped,
+      exportSkipReasons,
     },
     redaction: final.redaction,
   });
@@ -343,6 +370,8 @@ interface BuildPlan {
   evalCases: Set<string>;
   scorersByTask: Map<string, Scorer[]>;
   calls: PlannedCall[];
+  /** Every model call of each turn, before the call filter: where a row's history finds its tool definitions (RC-1176). */
+  turnCalls: Map<string, { eventId: string; capturedAt: Date }[]>;
 }
 
 /**
@@ -422,6 +451,14 @@ async function planBuild(
     }
   }
   calls.sort(compareCalls);
+  const turnCalls = new Map(
+    turns.map((turn) => [
+      turn.turnId,
+      (byTurn.get(turn.turnId) ?? []).flatMap((call) =>
+        call.eventId ? [{ eventId: call.eventId, capturedAt: call.occurredAt }] : [],
+      ),
+    ]),
+  );
   return {
     turns,
     turnsById: new Map(turns.map((turn) => [turn.turnId, turn])),
@@ -430,6 +467,7 @@ async function planBuild(
     evalCases,
     scorersByTask,
     calls,
+    turnCalls,
   };
 }
 
@@ -455,9 +493,10 @@ async function entriesOf(
         : undefined;
       return scorer?.kind === "expected_tool" ? scorer.tool : null;
     };
-    const [runs, userScores] = await Promise.all([
+    const [runs, userScores, toolSources] = await Promise.all([
       deps.facts.scorerRuns(projectId, missing, expectedTool),
       deps.facts.userScores(projectId, missing),
+      toolSourcesOfTurns(projectId, missing, plan, deps),
     ]);
     for (const turnId of missing) {
       const fact = plan.facts.get(turnId);
@@ -471,6 +510,7 @@ async function entriesOf(
         scorerRun: runs.get(turnId) ?? null,
         userScores: userScores.get(turnId) ?? [],
         calls: [],
+        toolSources: toolSources.get(turnId) ?? [],
       });
     }
   }
@@ -491,4 +531,30 @@ async function entriesOf(
       },
     }),
   );
+}
+
+/** The tool lists of every model call of these turns: read once per turn per run, from the stored content. */
+async function toolSourcesOfTurns(
+  projectId: string,
+  turnIds: readonly string[],
+  plan: BuildPlan,
+  deps: DatasetBuildDeps,
+): Promise<Map<string, ToolSource[]>> {
+  const calls = turnIds.flatMap((turnId) =>
+    (plan.turnCalls.get(turnId) ?? []).map((call) => ({ turnId, ...call })),
+  );
+  const payloads =
+    calls.length > 0
+      ? await deps.facts.callPayloads(
+          projectId,
+          calls.map((call) => call.eventId),
+        )
+      : new Map();
+  const sources = new Map<string, ToolSource[]>(turnIds.map((turnId) => [turnId, []]));
+  for (const call of calls) {
+    const tools = payloads.get(call.eventId)?.tools;
+    if (tools?.length)
+      sources.get(call.turnId)!.push({ capturedAt: call.capturedAt, eventId: call.eventId, tools });
+  }
+  return sources;
 }

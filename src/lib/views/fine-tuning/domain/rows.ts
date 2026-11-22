@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { CloudMessage, CloudToolDef } from "@/lib/ingest/cloud-schema";
 import { scoreRun } from "../../task-scorers/engine";
-import type { Scorer, ScorerRun } from "../../task-scorers/types";
+import type { Scorer, ScorerKind, ScorerRun } from "../../task-scorers/types";
 import {
   addCounts,
   type CallContent,
@@ -19,9 +19,15 @@ import type { UseCaseSelector } from "./use-case";
  * 1. Quality filter, per turn. An excluded turn or call never enters. A pinned
  *    one skips the filter. Otherwise every enabled deterministic task scorer
  *    (`judge_criteria` is skipped) and every user scorer result must not be
- *    `fail`; a `skip` (not measured) does not drop. Optional rules: no error,
- *    no self-correction.
- * 2. Redaction of each call ({@link redactCall}).
+ *    `fail`; a `skip` (not measured) does not drop. With `scorers: "off"`
+ *    (RC-1177) no scorer drops a turn. Optional rules: no error, no
+ *    self-correction. The task scorer drops are counted per scorer kind
+ *    ({@link ScorerDrops}).
+ * 2. Tools of the history (RC-1176): a tool picker sends another tool list on
+ *    each call, so the row adds the definition of each tool its messages call
+ *    that its own call did not send, from the earliest earlier call of the
+ *    turn that defines it ({@link withHistoryTools}). Then redaction of the
+ *    call ({@link redactCall}), the added definitions too.
  * 3. Dedup on the redacted input (system + messages + tools): `exact` on its
  *    canonical JSON, `near` on its normalized text. The earliest row stays.
  * 4. Split by connected group: turns that share a session id or an end-user
@@ -44,6 +50,8 @@ export type DatasetSide = "train" | "eval";
 
 export const DEFAULT_EVAL_FRACTION = 0.1;
 export const DEFAULT_DEDUP: DedupRule = "near";
+export const SCORER_SETTINGS = ["on", "off"] as const;
+export type ScorerSetting = (typeof SCORER_SETTINGS)[number];
 
 export const DROP_REASONS = [
   "excluded",
@@ -59,6 +67,18 @@ export const DROP_REASONS = [
 export type DropReason = (typeof DROP_REASONS)[number];
 export type DropCounts = Record<DropReason, number>;
 
+/**
+ * The task scorer drops (RC-1177): runs and calls in total, and per scorer
+ * kind. A run that fails two scorers counts once in the total and once under
+ * each kind. A run counts when the build first reads it; a call counts when
+ * it is dropped as `scorer_failed`.
+ */
+export interface ScorerDrops {
+  runs: number;
+  calls: number;
+  byKind: Partial<Record<ScorerKind, { runs: number; calls: number }>>;
+}
+
 export interface QualityFilters {
   /** Drop a turn with `trace_turns.error_count > 0`. */
   noError: boolean;
@@ -71,6 +91,8 @@ export interface BuildSettings {
   selector: UseCaseSelector;
   filters: QualityFilters;
   dedup: DedupRule;
+  /** `off`: no task scorer and no user scorer drops a run (RC-1177). */
+  scorers: ScorerSetting;
   seed: number;
   evalFraction: number;
   redactionVersion: number;
@@ -86,6 +108,13 @@ export interface CandidateCall {
   content: (CallContent & { input_message_count?: number }) | null;
 }
 
+/** The tool list one model call of a turn sent: where a later row's history finds its definitions. */
+export interface ToolSource {
+  capturedAt: Date;
+  eventId: string;
+  tools: readonly CloudToolDef[];
+}
+
 /** One turn of the use case, with what the filter reads. */
 export interface CandidateTurn {
   turnId: string;
@@ -99,6 +128,11 @@ export interface CandidateTurn {
   /** The user scorer results of the turn (`run_scores`). */
   userScores: readonly { status: "pass" | "fail" | "skip" }[];
   calls: readonly CandidateCall[];
+  /**
+   * The tool lists of every model call of the turn, in any order. Default:
+   * from `calls`. A paged build gives them, as its pages hold only some calls.
+   */
+  toolSources?: readonly ToolSource[];
 }
 
 /** Per-build context the filter and the split read. */
@@ -149,8 +183,23 @@ export interface CallEntry {
 export interface BuildResult {
   rows: DatasetRow[];
   dropped: DropCounts;
+  scorerDrops: ScorerDrops;
   redaction: RedactionCounts;
   contentHash: string;
+}
+
+/** The counts a paged build stores with each page and replays on resume. */
+export interface BuilderCounts {
+  dropped: DropCounts;
+  /** Absent in the progress of a build started before RC-1177. */
+  scorerDrops?: ScorerDrops;
+  redaction: RedactionCounts;
+}
+
+/** Why the filter drops a turn, and which task scorer kinds it failed. */
+interface TurnVerdict {
+  reason: DropReason | null;
+  failedKinds: ScorerKind[];
 }
 
 /** The settings with their defaults. */
@@ -165,6 +214,7 @@ export function buildSettings(
       noSelfCorrection: input.filters?.noSelfCorrection ?? false,
     },
     dedup: input.dedup ?? DEFAULT_DEDUP,
+    scorers: input.scorers ?? "on",
     seed: input.seed ?? 0,
     evalFraction: input.evalFraction ?? DEFAULT_EVAL_FRACTION,
     redactionVersion: REDACTION_VERSION,
@@ -195,7 +245,10 @@ export class DatasetRowBuilder {
   private readonly rows: DatasetRow[] = [];
   private readonly seen = new Set<string>();
   private dropped = emptyDrops();
+  private scorerDrops = emptyScorerDrops();
   private redaction = emptyCounts();
+  /** Turns the build has read: a run counts in the scorer drops once. */
+  private readonly seenTurns = new Set<string>();
   private nextOrdinal = 0;
 
   constructor(
@@ -205,27 +258,36 @@ export class DatasetRowBuilder {
 
   /**
    * Replay rows stored by an earlier run, so dedup and ordinals continue. The
-   * drop and redaction counts of that run come back with them.
+   * drop and redaction counts of that run come back with them, and the turns
+   * it read (`seenTurns`), so a run is not counted twice.
    */
   resume(
     stored: readonly StoredRow[],
-    counts: { dropped: DropCounts; redaction: RedactionCounts },
+    counts: BuilderCounts,
+    seenTurns: Iterable<string> = [],
   ): void {
     for (const row of [...stored].sort((a, b) => a.ordinal - b.ordinal)) {
       for (const key of this.dedupKeys(row.content)) this.seen.add(key);
       this.nextOrdinal = Math.max(this.nextOrdinal, row.ordinal + 1);
     }
     this.dropped = { ...counts.dropped };
+    this.scorerDrops = copyScorerDrops(counts.scorerDrops ?? emptyScorerDrops());
     this.redaction = { ...counts.redaction };
+    for (const turnId of seenTurns) this.seenTurns.add(turnId);
   }
 
   /** Process one page of calls, in {@link callOrder}; returns the rows it kept. */
   add(entries: readonly CallEntry[]): DatasetRow[] {
     const kept: DatasetRow[] = [];
-    const drops = new Map<CandidateTurn, DropReason | null>();
+    const verdicts = new Map<CandidateTurn, TurnVerdict>();
     for (const { turn, call } of entries) {
-      if (!drops.has(turn)) drops.set(turn, this.turnDrop(turn));
-      const row = this.callRow(turn, call, drops.get(turn) ?? null);
+      let verdict = verdicts.get(turn);
+      if (!verdict) {
+        verdict = this.turnVerdict(turn);
+        verdicts.set(turn, verdict);
+        this.countRun(turn.turnId, verdict);
+      }
+      const row = this.callRow(turn, call, verdict);
       if (row) kept.push(row);
     }
     this.rows.push(...kept);
@@ -233,8 +295,12 @@ export class DatasetRowBuilder {
   }
 
   /** The counts so far; a paged build stores them with each page. */
-  counts(): { dropped: DropCounts; redaction: RedactionCounts } {
-    return { dropped: { ...this.dropped }, redaction: { ...this.redaction } };
+  counts(): Required<BuilderCounts> {
+    return {
+      dropped: { ...this.dropped },
+      scorerDrops: copyScorerDrops(this.scorerDrops),
+      redaction: { ...this.redaction },
+    };
   }
 
   /** The rows this builder kept (not the replayed ones), the counts and the content hash of those rows. */
@@ -246,24 +312,41 @@ export class DatasetRowBuilder {
     };
   }
 
-  private turnDrop(turn: CandidateTurn): DropReason | null {
-    if (this.context.excluded.has(turn.turnId)) return "excluded";
-    if (this.context.pinned.has(turn.turnId)) return null;
-    return qualityDrop(turn, this.settings.filters, this.context.scorersByTask);
+  private turnVerdict(turn: CandidateTurn): TurnVerdict {
+    if (this.context.excluded.has(turn.turnId)) return { reason: "excluded", failedKinds: [] };
+    if (this.context.pinned.has(turn.turnId)) return { reason: null, failedKinds: [] };
+    return qualityVerdict(turn, this.settings, this.context.scorersByTask);
+  }
+
+  /** A run counts in the scorer drops the first time the build reads it. */
+  private countRun(turnId: string, verdict: TurnVerdict): void {
+    if (this.seenTurns.has(turnId)) return;
+    this.seenTurns.add(turnId);
+    if (verdict.reason !== "scorer_failed") return;
+    this.scorerDrops.runs += 1;
+    for (const kind of verdict.failedKinds) kindDrops(this.scorerDrops, kind).runs += 1;
   }
 
   private callRow(
     turn: CandidateTurn,
     call: CandidateCall,
-    turnDrop: DropReason | null,
+    verdict: TurnVerdict,
   ): DatasetRow | null {
     const key = callKey(call);
+    const turnDrop = verdict.reason;
     if (this.context.excluded.has(key)) return this.drop("excluded");
-    if (turnDrop && !(turnDrop !== "excluded" && this.context.pinned.has(key)))
+    if (turnDrop && !(turnDrop !== "excluded" && this.context.pinned.has(key))) {
+      if (turnDrop === "scorer_failed") {
+        this.scorerDrops.calls += 1;
+        for (const kind of verdict.failedKinds) kindDrops(this.scorerDrops, kind).calls += 1;
+      }
       return this.drop(turnDrop);
+    }
     if (!call.content) return this.drop("no_content");
 
-    const { content: redacted, counts } = redactCall(call.content);
+    const { content: redacted, counts } = redactCall(
+      withHistoryTools(call.content, call, turn.toolSources ?? toolSourcesOf(turn.calls)),
+    );
     const content = rowContent(redacted, call.content.input_message_count);
     if (content.output.length === 0) return this.drop("no_output");
 
@@ -416,31 +499,102 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortKeys(value));
 }
 
+/**
+ * The call's content with the definitions of the tools its messages call but
+ * its own tool list lacks: its own tools first, in their order, then the
+ * added ones in order of first use. Each comes from the earliest source
+ * before the call (build order) that defines a tool by that name. A tool no
+ * earlier source defines is not added: the export skips that row.
+ */
+export function withHistoryTools<T extends CallContent>(
+  content: T,
+  at: Pick<CandidateCall, "capturedAt" | "eventId">,
+  sources: readonly ToolSource[],
+): T {
+  const own = content.tools ?? [];
+  const ownNames = new Set(own.map((t) => t.name));
+  const missing = calledToolNames([...content.messages, ...(content.output ?? [])]).filter(
+    (name) => !ownNames.has(name),
+  );
+  if (missing.length === 0) return content;
+  const earlier = sources.filter((source) => compareCalls(source, at) < 0).sort(compareCalls);
+  const added = missing.flatMap((name) => {
+    const definition = earlier.flatMap((source) => source.tools).find((t) => t.name === name);
+    return definition ? [definition] : [];
+  });
+  return added.length === 0 ? content : { ...content, tools: [...own, ...added] };
+}
+
+/** The names of the tools the assistant messages call, each once, in order of first use. */
+export function calledToolNames(messages: readonly CloudMessage[]): string[] {
+  const names = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== "assistant" || typeof message.content === "string") continue;
+    for (const block of message.content) if (block.type === "tool_call") names.add(block.name);
+  }
+  return [...names];
+}
+
+/** The tool lists of calls with stored content. */
+export function toolSourcesOf(calls: readonly CandidateCall[]): ToolSource[] {
+  return calls.flatMap((call) =>
+    call.content?.tools?.length
+      ? [{ capturedAt: call.capturedAt, eventId: call.eventId, tools: call.content.tools }]
+      : [],
+  );
+}
+
 export function emptyDrops(): DropCounts {
   return Object.fromEntries(DROP_REASONS.map((reason) => [reason, 0])) as DropCounts;
+}
+
+export function emptyScorerDrops(): ScorerDrops {
+  return { runs: 0, calls: 0, byKind: {} };
 }
 
 function ownGroup(turnId: string): string {
   return `group:${turnId}`;
 }
 
-function qualityDrop(
+function qualityVerdict(
   turn: CandidateTurn,
-  filters: QualityFilters,
+  settings: BuildSettings,
   scorersByTask: BuildContext["scorersByTask"],
-): DropReason | null {
-  const scorers = (turn.taskId ? (scorersByTask.get(turn.taskId) ?? []) : []).filter(
-    (scorer) => scorer.kind !== "judge_criteria",
-  );
-  if (
-    turn.scorerRun &&
-    scoreRun(turn.scorerRun, scorers).some((result) => result.status === "fail")
-  )
-    return "scorer_failed";
-  if (turn.userScores.some((score) => score.status === "fail")) return "user_scorer_failed";
-  if (filters.noError && turn.errorCount > 0) return "error";
-  if (filters.noSelfCorrection && turn.selfCorrections > 0) return "self_correction";
-  return null;
+): TurnVerdict {
+  // A version stored before RC-1177 has no `scorers`: it ran with them on.
+  if ((settings.scorers ?? "on") === "on") {
+    const scorers = (turn.taskId ? (scorersByTask.get(turn.taskId) ?? []) : []).filter(
+      (scorer) => scorer.kind !== "judge_criteria",
+    );
+    const failedKinds = turn.scorerRun
+      ? [
+          ...new Set(
+            scoreRun(turn.scorerRun, scorers)
+              .filter((result) => result.status === "fail")
+              .map((result) => result.kind),
+          ),
+        ]
+      : [];
+    if (failedKinds.length > 0) return { reason: "scorer_failed", failedKinds };
+    if (turn.userScores.some((score) => score.status === "fail"))
+      return { reason: "user_scorer_failed", failedKinds: [] };
+  }
+  if (settings.filters.noError && turn.errorCount > 0) return { reason: "error", failedKinds: [] };
+  if (settings.filters.noSelfCorrection && turn.selfCorrections > 0)
+    return { reason: "self_correction", failedKinds: [] };
+  return { reason: null, failedKinds: [] };
+}
+
+function kindDrops(drops: ScorerDrops, kind: ScorerKind): { runs: number; calls: number } {
+  return (drops.byKind[kind] ??= { runs: 0, calls: 0 });
+}
+
+function copyScorerDrops(drops: ScorerDrops): ScorerDrops {
+  return {
+    runs: drops.runs,
+    calls: drops.calls,
+    byKind: Object.fromEntries(Object.entries(drops.byKind).map(([kind, n]) => [kind, { ...n }])),
+  };
 }
 
 /** The input messages and the reply. Old rows with no input count: all messages are input. */

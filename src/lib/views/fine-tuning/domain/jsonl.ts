@@ -15,7 +15,8 @@ import type { RowContent } from "./rows";
  *
  * A row the format cannot express is skipped with a reason, never sent half
  * mapped: no assistant message in the reply, an assistant reply with no text
- * and no tool call, no input message, or an image or file block.
+ * and no tool call, no input message, an image or file block, or (RC-1176) a
+ * call of a tool the line's `tools` does not define.
  */
 
 export const EXPORT_SKIP_REASONS = [
@@ -23,6 +24,7 @@ export const EXPORT_SKIP_REASONS = [
   "empty_reply",
   "no_input",
   "unsupported_content",
+  "undefined_tool",
 ] as const;
 export type ExportSkipReason = (typeof EXPORT_SKIP_REASONS)[number];
 
@@ -57,6 +59,16 @@ export function toChatExample(content: RowContent): ChatExample {
     const last = messages[messages.length - 1] as Extract<ChatMessage, { role: "assistant" }>;
     if (!last.content?.trim() && !last.tool_calls?.length)
       return { ok: false, reason: "empty_reply" };
+    const defined = new Set((content.tools ?? []).map((tool) => tool.name));
+    if (
+      messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          message.tool_calls?.some((call) => !defined.has(call.function.name)),
+      )
+    ) {
+      return { ok: false, reason: "undefined_tool" };
+    }
     const tools = content.tools?.length ? { tools: content.tools.map(chatTool) } : {};
     return { ok: true, line: JSON.stringify({ messages, ...tools }) };
   } catch (err) {

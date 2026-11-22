@@ -1,19 +1,28 @@
 import { getLogger } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
-import type { Dataset } from "./domain/dataset";
-import { toChatExample } from "./domain/jsonl";
+import {
+  type Dataset,
+  type ExportSkipCounts,
+  emptyExportSkips,
+  viewOfDataset,
+} from "./domain/dataset";
+import { EXPORT_SKIP_REASONS, toChatExample } from "./domain/jsonl";
 import type { DatasetSide } from "./domain/rows";
 import type { DatasetStore } from "./ports/store";
 
 /**
- * Export and delete of a dataset version (RC-1131):
+ * Read, export and delete of a dataset version (RC-1131, RC-1178):
+ * - `GET /api/projects/<id>/fine-tuning/datasets/<datasetId>` returns its
+ *   view (`viewOfDataset`, as MCP `get_dataset`): status, counts, redaction
+ *   report, settings and content hash, never row text. A read tracks nothing.
  * - `GET /api/projects/<id>/fine-tuning/datasets/<datasetId>/export?side=train|eval`
  *   streams one side as OpenAI chat fine-tuning JSONL, a page of rows at a
  *   time over (dataset_id, ordinal), so no export holds the dataset in
  *   memory. Session auth only (decision `storage-postgres`: no signed link):
  *   a request with an API key is refused. Rows the format cannot express are
- *   skipped, and `x-ratel-skipped-rows` says how many.
+ *   skipped, and `x-ratel-skipped-rows` says how many; (RC-1176)
+ *   `x-ratel-skipped-reasons` says why, as `reason=n` pairs.
  * - `DELETE /api/projects/<id>/fine-tuning/datasets/<datasetId>` removes the
  *   version, its rows and its lineage link.
  * Behind `FF_FINE_TUNING`: off, the routes are not found. A support
@@ -24,6 +33,7 @@ import type { DatasetStore } from "./ports/store";
 export const EXPORT_PAGE_ROWS = 500;
 export const SKIPPED_HEADER = "x-ratel-skipped-rows";
 export const ROWS_HEADER = "x-ratel-rows";
+export const SKIPPED_REASONS_HEADER = "x-ratel-skipped-reasons";
 
 export type DatasetLifecycleEvent =
   | {
@@ -95,8 +105,10 @@ export async function handleDatasetExportRequest(
     });
 
   const pageRows = deps.pageRows ?? EXPORT_PAGE_ROWS;
-  const skipped =
-    dataset.counts.exportSkipped?.[side] ?? (await countSkipped(datasets, dataset, side, pageRows));
+  const reasons =
+    dataset.counts.exportSkipReasons?.[side] ??
+    (await countSkipped(datasets, dataset, side, pageRows));
+  const skipped = EXPORT_SKIP_REASONS.reduce((sum, reason) => sum + reasons[reason], 0);
   const rows = dataset.counts[side] - skipped;
   logger.info(
     { project_id: dataset.projectId, dataset_id: dataset.id, side, rows, skipped },
@@ -114,9 +126,29 @@ export async function handleDatasetExportRequest(
       "content-disposition": `attachment; filename="${exportFileName(dataset, side)}"`,
       "cache-control": "private, no-store",
       [SKIPPED_HEADER]: String(skipped),
+      [SKIPPED_REASONS_HEADER]: EXPORT_SKIP_REASONS.filter((reason) => reasons[reason] > 0)
+        .map((reason) => `${reason}=${reasons[reason]}`)
+        .join(","),
       [ROWS_HEADER]: String(rows),
     },
   });
+}
+
+export async function handleDatasetGetRequest(
+  projectId: string,
+  datasetId: string,
+  deps: ExportApiDeps,
+): Promise<Response> {
+  const scope = await scopeOf(projectId, deps);
+  if (scope instanceof Response) return scope;
+  const dataset = await deps.datasets().getDataset(scope.project.id, datasetId);
+  if (!dataset)
+    return json(404, {
+      ok: false,
+      error: "dataset_not_found",
+      message: "This project has no dataset with that ID.",
+    });
+  return json(200, { ok: true, dataset: viewOfDataset(dataset) });
 }
 
 export async function handleDatasetDeleteRequest(
@@ -193,21 +225,24 @@ function jsonlStream(
   });
 }
 
-/** For a version built before RC-1131, which did not store its skipped counts: one counting pass, a page at a time. */
+/** For a version built before RC-1176, which did not store its skipped counts by reason: one counting pass, a page at a time. */
 async function countSkipped(
   datasets: Pick<DatasetStore, "listRows">,
   dataset: Dataset,
   side: DatasetSide,
   pageRows: number,
-): Promise<number> {
-  let skipped = 0;
+): Promise<ExportSkipCounts> {
+  const skipped = emptyExportSkips();
   for (let after: number | null = null; ; ) {
     const page = await datasets.listRows(dataset.projectId, dataset.id, {
       side,
       after,
       limit: pageRows,
     });
-    skipped += page.filter((row) => !toChatExample(row.content).ok).length;
+    for (const row of page) {
+      const example = toChatExample(row.content);
+      if (!example.ok) skipped[example.reason] += 1;
+    }
     const last = page[page.length - 1];
     if (page.length < pageRows || !last) return skipped;
     after = last.ordinal;
@@ -220,7 +255,7 @@ async function scopeOf(projectId: string, deps: ExportApiDeps) {
     return json(401, {
       ok: false,
       error: "signed_out",
-      message: "Sign in to export or delete datasets.",
+      message: "Sign in to read, export or delete datasets.",
     });
   const scope = await deps.findProjectScope(projectId, session.user.id);
   if (!scope || !(await deps.fineTuningEnabled(scope.organization))) {

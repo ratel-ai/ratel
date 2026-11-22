@@ -48,8 +48,9 @@ test("a call with system text, a tool call and a tool result maps to the hand-wr
   assert.equal(example.line, expected);
 });
 
-test("the recorded reply keeps its tool calls as the last assistant message; no tools and no system leave those out", () => {
+test("the recorded reply keeps its tool calls as the last assistant message; no system leaves it out", () => {
   const example = toChatExample({
+    tools: [{ name: "refund", parameters: { type: "object" } }],
     messages: [{ role: "user", content: "refund 2" }],
     output: [
       {
@@ -73,7 +74,30 @@ test("the recorded reply keeps its tool calls as the last assistant message; no 
         ],
       },
     ],
+    tools: [{ type: "function", function: { name: "refund", parameters: { type: "object" } } }],
   });
+});
+
+test("RC-1176: a row that calls a tool its tools list does not define is skipped as undefined_tool, in the history or in the reply", () => {
+  const user = { role: "user" as const, content: "go" };
+  const call = (name: string) => ({
+    role: "assistant" as const,
+    content: [{ type: "tool_call" as const, id: `c-${name}`, name, arguments: {} }],
+  });
+  const tools = [{ name: "book", parameters: { type: "object" } }];
+  assert.deepEqual(
+    toChatExample({
+      tools,
+      messages: [user, call("search"), { role: "tool", tool_call_id: "c-search", content: "r" }],
+      output: [call("book")],
+    }),
+    { ok: false, reason: "undefined_tool" },
+  );
+  assert.deepEqual(toChatExample({ messages: [user], output: [call("book")] }), {
+    ok: false,
+    reason: "undefined_tool",
+  });
+  assert.ok(toChatExample({ tools, messages: [user], output: [call("book")] }).ok);
 });
 
 test("rows the format cannot express are skipped with a reason", () => {
@@ -113,6 +137,7 @@ test("rows the format cannot express are skipped with a reason", () => {
 
 test("a reply followed by trailing tool results ends at its last assistant message", () => {
   const example = toChatExample({
+    tools: [{ name: "run", parameters: { type: "object" } }],
     messages: [{ role: "user", content: "go" }],
     output: [
       { role: "assistant", content: [{ type: "tool_call", id: "c3", name: "run", arguments: {} }] },

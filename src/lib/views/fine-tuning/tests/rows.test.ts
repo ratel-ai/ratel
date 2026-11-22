@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
+import type { CloudMessage, CloudToolDef } from "@/lib/ingest/cloud-schema";
 import type { Scorer } from "../../task-scorers/types";
 import { emptyCounts } from "../domain/redaction";
 import {
@@ -532,7 +533,11 @@ test("a build in pages that resumes from its stored rows gives the rows of a bui
   const rest = secondRun.add(order.slice(40));
 
   assert.deepEqual([...stored, ...rest], whole.rows);
-  assert.deepEqual(secondRun.counts(), { dropped: whole.dropped, redaction: whole.redaction });
+  assert.deepEqual(secondRun.counts(), {
+    dropped: whole.dropped,
+    scorerDrops: whole.scorerDrops,
+    redaction: whole.redaction,
+  });
 });
 
 const at = (iso: string) => new Date(`2026-11-10T${iso}:00.000Z`);
@@ -578,4 +583,203 @@ test("two duplicate calls with the same capture time: the smaller event id stays
     spans(buildRows([second(), first()], settings({ dedup: "exact" }), NO_CONTEXT).rows),
     ["y"],
   );
+});
+
+// RC-1176: a row's `tools` covers every tool its history calls.
+const tool = (name: string, description = `${name} tool`): CloudToolDef => ({
+  name,
+  description,
+  parameters: { type: "object" },
+});
+const ask: CloudMessage = { role: "user", content: "book me a flight" };
+const calls = (id: string, name: string): CloudMessage => ({
+  role: "assistant",
+  content: [{ type: "tool_call", id, name, arguments: {} }],
+});
+const result = (id: string): CloudMessage => ({ role: "tool", tool_call_id: id, content: "done" });
+const picked = (
+  spanId: string,
+  time: string,
+  tools: CloudToolDef[],
+  messages: CloudMessage[],
+  output: CloudMessage[],
+): CandidateCall => ({
+  ...timed(spanId, "unused", time),
+  content: { tools, messages, output },
+});
+const toolNames = (row: DatasetRow) => (row.content.tools ?? []).map((t) => t.name);
+
+test("tool picker: each row's tools are its own call's tools, then the tools its history calls, in order of first use", () => {
+  const history2 = [ask, calls("c1", "search"), result("c1")];
+  const history3 = [
+    ...history2,
+    calls("c2", "book"),
+    result("c2"),
+    calls("c3", "lookup"),
+    result("c3"),
+  ];
+  const turns = [
+    turn("T", [
+      picked("first", "09:00", [tool("search"), tool("lookup")], [ask], [calls("c1", "search")]),
+      picked("second", "09:01", [tool("book")], history2, [calls("c2", "book")]),
+      picked("third", "09:02", [tool("cancel"), tool("refund")], history3, [calls("c4", "refund")]),
+    ]),
+  ];
+  const rows = buildRows(turns, settings({ dedup: "off" }), NO_CONTEXT).rows;
+  assert.deepEqual(rows.map(toolNames), [
+    ["search", "lookup"],
+    ["book", "search"],
+    ["cancel", "refund", "search", "book", "lookup"],
+  ]);
+  assert.deepEqual(rows[1]!.content.tools![1], tool("search"));
+});
+
+test("tool picker: the earliest call that defines a tool gives its definition; a later call's definition is not used", () => {
+  const history = [ask, calls("c1", "search"), result("c1"), calls("c2", "late"), result("c2")];
+  const turns = [
+    turn("T", [
+      picked("old", "09:00", [tool("search", "first definition")], [ask], [calls("c1", "search")]),
+      picked(
+        "new",
+        "09:01",
+        [tool("search", "second definition")],
+        [ask],
+        [{ role: "assistant", content: "ok" }],
+      ),
+      picked("row", "09:02", [], history, [{ role: "assistant", content: "done" }]),
+      picked("after", "09:03", [tool("late")], [ask], [{ role: "assistant", content: "later" }]),
+    ]),
+  ];
+  const row = buildRows(turns, settings({ dedup: "off" }), NO_CONTEXT).rows.find(
+    (r) => r.spanId === "row",
+  )!;
+  assert.deepEqual(
+    row.content.tools,
+    [tool("search", "first definition")],
+    "late is defined only after the row: not added",
+  );
+});
+
+test("tool picker: added definitions are redacted like the call's own", () => {
+  const leaky = {
+    name: "notify",
+    description: "Mails ops@example.com",
+    parameters: { type: "object" },
+  };
+  const turns = [
+    turn("T", [
+      picked("a", "09:00", [leaky], [ask], [calls("c1", "notify")]),
+      picked(
+        "b",
+        "09:01",
+        [tool("book")],
+        [ask, calls("c1", "notify"), result("c1")],
+        [calls("c2", "book")],
+      ),
+    ]),
+  ];
+  const built = buildRows(turns, settings({ dedup: "off" }), NO_CONTEXT);
+  const added = built.rows[1]!.content.tools![1]!;
+  assert.equal(added.name, "notify");
+  assert.doesNotMatch(added.description ?? "", /ops@example\.com/);
+  assert.equal(built.redaction.email, 2, "one email in each row's tools");
+});
+
+test("tool picker: a resumed build with tool sources gives the content hash of a build in one go", () => {
+  const history2 = [ask, calls("c1", "search"), result("c1")];
+  const turns = [
+    turn("T", [
+      picked("first", "09:00", [tool("search")], [ask], [calls("c1", "search")]),
+      picked("second", "09:01", [tool("book")], history2, [calls("c2", "book")]),
+    ]),
+  ];
+  const s = settings({ dedup: "off" });
+  const groups = splitGroups(turns);
+  const context: BuildContext = {
+    ...NO_CONTEXT,
+    groups,
+    forcedEval: forcedEvalGroups(groups, new Set()),
+  };
+  const whole = buildRows(turns, s, NO_CONTEXT);
+  const order = callOrder(turns);
+  const firstRun = new DatasetRowBuilder(s, context);
+  const stored = firstRun.add(order.slice(0, 1));
+  const secondRun = new DatasetRowBuilder(s, context);
+  secondRun.resume(stored, firstRun.counts());
+  const rest = secondRun.add(order.slice(1));
+  assert.deepEqual(
+    [...stored, ...rest].map((row) => row.rowHash),
+    whole.rows.map((row) => row.rowHash),
+  );
+});
+
+// RC-1177: which task scorer left runs out, and a build with the scorers off.
+const LIMITS = new Map<string, Scorer[]>([
+  [
+    "triage",
+    [
+      { kind: "max_latency_ms", max: 5_000 },
+      { kind: "max_cost_usd", max: 0.01 },
+    ],
+  ],
+]);
+const measured = (latencyMs: number, costUsd: number) => ({
+  scorerRun: { firstList: null, searches: null, calls: [], failed: 0, latencyMs, costUsd },
+});
+const scorerTurns = () => [
+  turn("slow", [call("slow-1", "s1"), call("slow-2", "s2")], measured(9_000, 0.001)),
+  turn("costly", [call("costly-1", "c1")], measured(1_000, 0.5)),
+  turn("both", [call("both-1", "b1")], measured(9_000, 0.5)),
+  turn("fine", [call("fine-1", "f1")], measured(1_000, 0.001)),
+];
+
+test("scorer drops: runs and calls per scorer kind; a run that fails two scorers counts once in the total and once under each kind", () => {
+  const built = buildRows(scorerTurns(), settings(), { ...NO_CONTEXT, scorersByTask: LIMITS });
+  assert.deepEqual(spans(built.rows), ["fine-1"]);
+  assert.equal(built.dropped.scorer_failed, 4);
+  assert.deepEqual(built.scorerDrops, {
+    runs: 3,
+    calls: 4,
+    byKind: { max_latency_ms: { runs: 2, calls: 3 }, max_cost_usd: { runs: 2, calls: 2 } },
+  });
+});
+
+test("scorers off: a run that fails a task scorer or a user scorer is kept; exclusions still apply", () => {
+  const turns = [
+    ...scorerTurns(),
+    turn("user-fail", [call("u-1", "u1")], { userScores: [{ status: "fail" }] }),
+    turn("excluded", [call("x-1", "x1")]),
+  ];
+  const built = buildRows(turns, settings({ scorers: "off", dedup: "off" }), {
+    ...NO_CONTEXT,
+    scorersByTask: LIMITS,
+    excluded: new Set(["excluded"]),
+  });
+  assert.deepEqual(spans(built.rows), ["slow-1", "slow-2", "costly-1", "both-1", "fine-1", "u-1"]);
+  assert.deepEqual(built.dropped, { ...emptyDrops(), excluded: 1 });
+  assert.deepEqual(built.scorerDrops, { runs: 0, calls: 0, byKind: {} });
+});
+
+test("scorer drops: a build resumed in the middle of a run counts that run once", () => {
+  const turns = scorerTurns();
+  const s = settings();
+  const groups = splitGroups(turns);
+  const context: BuildContext = {
+    ...NO_CONTEXT,
+    scorersByTask: LIMITS,
+    groups,
+    forcedEval: forcedEvalGroups(groups, new Set()),
+  };
+  const whole = buildRows(turns, s, { ...NO_CONTEXT, scorersByTask: LIMITS });
+  const order = callOrder(turns);
+  const firstRun = new DatasetRowBuilder(s, context);
+  const stored = firstRun.add(order.slice(0, 1));
+  const secondRun = new DatasetRowBuilder(s, context);
+  secondRun.resume(
+    stored,
+    firstRun.counts(),
+    order.slice(0, 1).map((entry) => entry.turn.turnId),
+  );
+  secondRun.add(order.slice(1));
+  assert.deepEqual(secondRun.counts().scorerDrops, whole.scorerDrops);
 });

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { CloudMessage } from "@/lib/ingest/cloud-schema";
 import type { DatasetView } from "@/lib/views/fine-tuning/domain/dataset";
+import { EXPORT_SKIP_REASONS, type ExportSkipReason } from "@/lib/views/fine-tuning/domain/jsonl";
 import type { DatasetRowView } from "@/lib/views/fine-tuning/domain/overrides";
 
 type SideFilter = "all" | "train" | "eval";
@@ -23,6 +24,14 @@ const SIDE_OPTIONS = [
   { value: "train", label: "Train only" },
   { value: "eval", label: "Eval only" },
 ] as const;
+
+const SKIP_LABELS: Record<ExportSkipReason, string> = {
+  no_reply: "no assistant reply",
+  empty_reply: "a reply with no text and no tool call",
+  no_input: "no input message",
+  unsupported_content: "an image or a file",
+  undefined_tool: "a call of a tool with no definition in the run",
+};
 
 /**
  * Download a ready version as two JSONL files, or delete it (RC-1131). The
@@ -80,7 +89,7 @@ export function DatasetActions({
         <p className="text-ui text-fg-muted">
           {skippedTotal === 0
             ? "Every row is in the export."
-            : `${skippedTotal} ${skippedTotal === 1 ? "row is" : "rows are"} left out of the export (${skipped!.train} train, ${skipped!.eval} eval): the format cannot hold a reply with no assistant text or tool call, or an image or a file.`}
+            : `${skippedTotal} ${skippedTotal === 1 ? "row is" : "rows are"} left out of the export (${skipped!.train} train, ${skipped!.eval} eval). ${skipReasonText(dataset)}`}
         </p>
       ) : null}
       <ConfirmDialog
@@ -355,4 +364,17 @@ function messageText(message: CloudMessage): string {
           : `[${block.type}]`,
     )
     .join(" ");
+}
+
+/** Why rows are left out of the export: the count of each reason, or the format's rules for a version that did not store them. */
+function skipReasonText(dataset: DatasetView): string {
+  const reasons = dataset.counts?.exportSkipReasons;
+  if (!reasons)
+    return "The format cannot hold a reply with no assistant text or tool call, or an image or a file.";
+  const parts = EXPORT_SKIP_REASONS.map(
+    (reason) => [reason, reasons.train[reason] + reasons.eval[reason]] as const,
+  )
+    .filter(([, n]) => n > 0)
+    .map(([reason, n]) => `${n} with ${SKIP_LABELS[reason]}`);
+  return `By reason: ${parts.join(", ")}.`;
 }
