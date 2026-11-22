@@ -111,6 +111,7 @@ export const SERVER_EVENT_NAMES = [
   "fix_shipped",
   "agent_override_updated",
   "mcp_servers_viewed",
+  "variant_experiment_viewed",
   "mcp_clients_viewed",
   "agents_viewed",
   "sandbox_runner_connected",
@@ -246,6 +247,13 @@ export type ProductEventProperties = {
   demo_project_seed_failed: { reason: string };
   onboarding_tour_finished: { outcome: string; last_step_id: string; steps_viewed: number };
   mcp_servers_viewed: { view: "list" | "detail"; servers: number; environment_filtered: boolean };
+  /** RC-871: one variant experiment's comparison. `below_minimum`: variants under the minimum sample. */
+  variant_experiment_viewed: {
+    variants: number;
+    suggestions: number;
+    below_minimum: number;
+    baseline_reason: "named" | "most_runs" | "none";
+  };
   /** RC-778: the MCP page's Clients tab. `harnesses`, `countries`: rows shown. */
   mcp_clients_viewed: {
     harnesses: number;

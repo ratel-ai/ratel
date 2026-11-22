@@ -2506,6 +2506,93 @@
     }
   },
   {
+    "name": "list_variant_experiments",
+    "title": "List variant experiments",
+    "description": "The experiments this project tags on its traces with ratel.variant.experiment and ratel.variant.name, each with its variants and run counts, newest first. Open one with get_variant_experiment.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      }
+    },
+    "annotations": {
+      "title": "List variant experiments",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
+    "name": "get_variant_experiment",
+    "title": "Compare an experiment's variants",
+    "description": "One variant experiment, per variant: runs, error rate, p50 and p95 latency, tokens, cost per successful trace, health signals and task scorer pass rate, each rate and figure with a 95% interval. Names the baseline, warns on variants under the minimum sample and suggests a cheaper variant whose quality stays inside the baseline's interval.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "experiment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "An experiment name from list_variant_experiments."
+        },
+        "since": {
+          "description": "ISO-8601 start of the window. Defaults per operation.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        },
+        "until": {
+          "description": "ISO-8601 end of the window. Defaults to now.",
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+        }
+      },
+      "required": [
+        "experiment"
+      ]
+    },
+    "annotations": {
+      "title": "Compare an experiment's variants",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "improve"
+    }
+  },
+  {
     "name": "list_match_quality_runs",
     "title": "List match quality runs",
     "description": "Past analyses of search quality, each with the evidence census that bounds how much its proposals are worth. Read the census before the proposals: a run over a window with no invoked-tool records measured agreement with the baseline, not accuracy.",

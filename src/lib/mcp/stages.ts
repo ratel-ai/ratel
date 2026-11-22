@@ -109,6 +109,8 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   list_ranking_graphs: "improve",
   get_ranking_graph: "improve",
   get_experiment: "improve",
+  list_variant_experiments: "improve",
+  get_variant_experiment: "improve",
   get_selection: "improve",
   list_task_simulations: "improve",
   get_fix_eval_set: "improve",

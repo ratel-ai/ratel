@@ -148,6 +148,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["list_intents", false],
   ["get_intent", false],
   ["get_experiment", false],
+  ["list_variant_experiments", false],
+  ["get_variant_experiment", false],
   ["get_selection", false],
   ["get_quality", false],
   ["list_description_rewrites", false],

@@ -86,6 +86,7 @@ export function consoleNav({
   entityPages = false,
   sandboxes = false,
   dashboards = false,
+  variants = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -110,6 +111,11 @@ export function consoleNav({
   sandboxes?: boolean;
   /** `FF_CUSTOM_DASHBOARDS` on (RC-888): a Dashboards page under Overview. */
   dashboards?: boolean;
+  /**
+   * `FF_VARIANT_EXPERIMENTS` on and tagged traces in the shown project (RC-871): a Variants page
+   * under Traces.
+   */
+  variants?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -389,7 +395,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxes) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxes, variants) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -413,6 +419,7 @@ function stageRailNav(
   setupRows: readonly NavItem[],
   entityPages: boolean,
   sandboxes = false,
+  variants = false,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -449,36 +456,67 @@ function stageRailNav(
     shortcut: "l",
     keywords: ["shipped", "live", "released", "deployed", "applied", "shipments"],
   };
-  // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget.
+  // Upstream's entities (RC-775, RC-777) and Variants (RC-871) fold under Traces, so the rail
+  // keeps its budget.
   const classicTraces = pick("traces");
-  const traces: NavItem = entityPages
-    ? {
-        ...classicTraces,
-        children: [
-          {
-            id: "traces-all",
-            label: "All traces",
-            href: classicTraces.href,
-            icon: "traces",
-            activeId: classicTraces.id,
-          },
-          {
-            id: "agents",
-            label: "Agents",
-            href: `${root}/agents`,
-            icon: "traces",
-            keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
-          },
-          {
-            id: "mcp-servers",
-            label: "MCP servers",
-            href: `${root}/mcp`,
-            icon: "traces",
-            keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
-          },
-        ],
-      }
-    : classicTraces;
+  const traces: NavItem =
+    entityPages || variants
+      ? {
+          ...classicTraces,
+          children: [
+            {
+              id: "traces-all",
+              label: "All traces",
+              href: classicTraces.href,
+              icon: "traces",
+              activeId: classicTraces.id,
+            },
+            ...(entityPages
+              ? [
+                  {
+                    id: "agents",
+                    label: "Agents",
+                    href: `${root}/agents`,
+                    icon: "traces" as const,
+                    keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
+                  },
+                  {
+                    id: "mcp-servers",
+                    label: "MCP servers",
+                    href: `${root}/mcp`,
+                    icon: "traces" as const,
+                    keywords: [
+                      "mcp",
+                      "model context protocol",
+                      "servers",
+                      "tools",
+                      "latency",
+                      "errors",
+                    ],
+                  },
+                ]
+              : []),
+            ...(variants
+              ? [
+                  {
+                    id: "variants",
+                    label: "Variants",
+                    href: `${root}/variants`,
+                    icon: "traces" as const,
+                    keywords: [
+                      "variants",
+                      "experiments",
+                      "a/b",
+                      "model comparison",
+                      "cheaper model",
+                      "prompt version",
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        }
+      : classicTraces;
   // Upstream's Sandboxes (RC-1102) folds under Improvements, so the rail keeps its budget.
   const classicImprovements = pick("improvements");
   const improvements: NavItem = sandboxes

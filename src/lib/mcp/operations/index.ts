@@ -36,6 +36,7 @@ import {
   toolCrafterWriteOperations,
 } from "@/lib/mcp/operations/tool-crafter";
 import { toolExplorerOperations } from "@/lib/mcp/operations/tool-explorer";
+import { variantOperations } from "@/lib/mcp/operations/variants";
 import { writeOperations } from "@/lib/mcp/operations/writes";
 import { runtimeWriteOperations } from "@/lib/mcp/operations/writes-runtime";
 import { buildRegistry, type McpOperation, type Registry } from "@/lib/mcp/registry";
@@ -72,6 +73,7 @@ export function assembleOperations(
     ...intentsOperations(),
     ...calibrationOperations(),
     ...experimentOperations(),
+    ...variantOperations(),
     ...improvementOperations(),
     ...qualityOperations(),
     ...rankingOperations(),

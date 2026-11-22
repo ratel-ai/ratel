@@ -59,6 +59,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/dashboards.ts`: `list_dashboards` and `get_dashboard` (RC-889), gated by the core's
   `FF_CUSTOM_DASHBOARDS` for the caller and the project (`views/custom-dashboards/flag.ts`), not
   upstream's flag service; off, both refuse as forbidden. A project API key reads only the shared dashboards.
+- `operations/variants.ts`: `list_variant_experiments` and `get_variant_experiment` (RC-870), the
+  same read model as the Variants pages (`views/variants/compare-service.ts`), gated by the core's
+  `FF_VARIANT_EXPERIMENTS` for the project and its organization; off, both refuse as forbidden.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a

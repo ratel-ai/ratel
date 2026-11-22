@@ -104,6 +104,10 @@ export const otelTraceSummaries = pgTable(
     index("otel_trace_summaries_harnesses_idx").using("gin", t.harnesses),
     // The pivot filter (`dims @> $1`).
     index("otel_trace_summaries_dims_idx").using("gin", sql`${t.dims} jsonb_path_ops`),
+    // The variant comparison (RC-870): one experiment's variants in a window.
+    index("otel_trace_summaries_project_variant_started_idx")
+      .on(t.projectId, t.variantExperiment, t.variantName, t.startedAt)
+      .where(sql`${t.variantExperiment} is not null and ${t.variantName} is not null`),
   ],
 );
 

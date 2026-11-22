@@ -86,7 +86,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "FF_VARIANT_EXPERIMENTS",
-    note: "variant experiments: ingest keeps each span's ratel.variant.* tags (or a mapped attribute from Settings > General) and a per-trace rollup",
+    note: "variant experiments: ingest keeps each span's ratel.variant.* tags (or a mapped attribute from Settings > General) and a per-trace rollup; the Variants pages under Traces and the MCP tools list_variant_experiments and get_variant_experiment",
   },
 ];
 

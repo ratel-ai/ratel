@@ -67,7 +67,8 @@ the run API and `ratel sandbox dev` runners through the gateway in `packages/gat
 (Settings > Pivots, pivot keys kept at ingest, `dims` on trace summaries), and custom dashboards
 (widgets over trace summaries, shared by link, and their MCP tools), and code handoff (Settings >
 Repository links a GitHub repo through the deployment's own GitHub App), and variant experiments
-(`ratel.variant.*` tags kept at ingest, per-project attribute mappings in Settings > General). Cloud
+(`ratel.variant.*` tags kept at ingest, per-project attribute mappings in Settings > General, the
+Variants pages and their MCP tools). Cloud
 ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
 `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`,
 `FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF` and `FF_VARIANT_EXPERIMENTS`. The eval gate's pages live in the

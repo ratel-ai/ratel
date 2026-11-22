@@ -778,3 +778,46 @@ test("with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects i
     "the rail item replaces the old Usage and spend entry",
   );
 });
+
+// — RC-871: Variants (FF_VARIANT_EXPERIMENTS) ————————————————————————————————————————————
+
+test("Variants is not in the rail or ⌘K unless the project has tagged traces and the switch is on", () => {
+  const off = consoleNav({ projectId: "p1", additions: [], entityPages: true });
+  assert.ok(!flattenNav(off).some((item) => item.id === "variants"));
+  assert.ok(
+    !commandEntries({ items: off, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/variants",
+    ),
+  );
+});
+
+test("Variants sits under Traces last, selects itself on an experiment's page, and keeps the rail in budget", () => {
+  const items = consoleNav({ projectId: "p1", additions: [], entityPages: true, variants: true });
+  const traces = items.find((item) => item.id === "traces");
+  assert.deepEqual(
+    traces?.children?.map((child) => child.label),
+    ["All traces", "Agents", "MCP servers", "Variants"],
+  );
+  const variants = traces?.children?.find((child) => child.id === "variants");
+  assert.equal(variants?.href, "/project/p1/variants");
+  assert.equal(activeNavItemId("/project/p1/variants/checkout", items), "variants");
+  assert.ok(
+    commandEntries({ items, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/variants",
+    ),
+  );
+  const top = items.map((item) => item.label);
+  assert.deepEqual(
+    top,
+    consoleNav({ projectId: "p1", additions: [] }).map((item) => item.label),
+  );
+});
+
+test("Variants without the entity pages: Traces holds All traces and Variants only", () => {
+  const items = consoleNav({ projectId: "p1", additions: [], variants: true });
+  const traces = items.find((item) => item.id === "traces");
+  assert.deepEqual(
+    traces?.children?.map((child) => child.label),
+    ["All traces", "Variants"],
+  );
+});

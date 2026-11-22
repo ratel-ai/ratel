@@ -358,6 +358,13 @@
       "when": 1795333796044,
       "tag": "0050_variant_experiments",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1795334568705,
+      "tag": "0051_trace_summary_variant_index",
+      "breakpoints": true
     }
   ]
 }

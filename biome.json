@@ -1154,6 +1154,7 @@
         "!src/lib/mcp/operations/clients.ts",
         "!src/lib/mcp/operations/dashboards.ts",
         "!src/lib/mcp/operations/dashboards.test.ts",
+        "!src/lib/mcp/operations/variants.ts",
         "src/mcp-apps/**",
         "!src/mcp-apps/README.md",
         "!src/mcp-apps/build.test.ts",
@@ -1485,7 +1486,11 @@
         "src/app/api/github/**",
         "src/lib/mcp/operations/code-handoff.ts",
         "src/lib/mcp/operations/code-handoff.test.ts",
-        "src/lib/views/variants",
+        "src/lib/views/variants/**",
+        "!src/lib/views/variants/compare-service.ts",
+        "!src/lib/views/variants/navigation.ts",
+        "!src/lib/views/variants/navigation.test.ts",
+        "!src/lib/views/variants/compare-store.ts",
         "src/lib/ingest/variants/domain/tags.ts",
         "src/lib/ingest/variants/domain/tags.test.ts",
         "src/lib/ingest/variants/domain/mappings.ts",
@@ -1493,7 +1498,10 @@
         "src/lib/ingest/variants/mappings-store.ts",
         "src/lib/ingest/variants/ingest.integration.test.ts",
         "src/lib/console/variants/mappings.integration.test.ts",
-        "src/components/console/settings/VariantMappingsForm.tsx"
+        "src/components/console/settings/VariantMappingsForm.tsx",
+        "src/app/(console)/project/\\[projectId\\]/variants/**",
+        "!src/app/(console)/project/\\[projectId\\]/variants/context.ts",
+        "src/components/console/variants/**"
       ],
       "linter": {
         "rules": {
