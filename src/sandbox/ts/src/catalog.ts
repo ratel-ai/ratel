@@ -24,6 +24,20 @@ export interface CatalogHost {
   resolve(kind: CatalogKind, id: string): string | undefined;
   record(read: CatalogRead): void;
   toolset?<T>(tools: T): T;
+  skills?(skills: readonly SkillView[]): readonly SkillView[];
+}
+
+/** A skill as the code offers it to the model (the SDK's `SkillView`). */
+export interface SkillView {
+  readonly id: string;
+  readonly description: string;
+  load(): Promise<string>;
+}
+
+/** What a run serves to the SDK besides prompt and model values. */
+export interface RunServe {
+  readonly toolset?: <T>(tools: T) => T;
+  readonly skills?: (skills: readonly SkillView[]) => readonly SkillView[];
 }
 
 /** One tool registered on a `ratel()` core. `tool` is the object the app registered. */
@@ -34,10 +48,11 @@ export interface RegisteredTool {
   readonly tool: unknown;
 }
 
-/** One skill registered on a `ratel()` core. */
+/** One skill registered on a `ratel()` core. `skill` is the object the app registered. */
 export interface RegisteredSkill {
   readonly id: string;
   readonly description: string;
+  readonly skill?: unknown;
 }
 
 /** The SDK's `globalThis[REGISTRY_KEY]`: every tool, skill and catalog read in this process. */
@@ -69,7 +84,7 @@ export const REGISTRY_KEY: unique symbol = Symbol.for("ratel.registry.v1") as ne
 interface RunScope {
   readonly overrides: CatalogOverrides;
   readonly reads: Map<string, CatalogRead>;
-  readonly toolset?: <T>(tools: T) => T;
+  readonly serve: RunServe;
 }
 
 const scope = new AsyncLocalStorage<RunScope>();
@@ -85,7 +100,10 @@ const host: CatalogHost = {
     if (reads && !reads.has(key)) reads.set(key, read);
   },
   toolset<T>(tools: T): T {
-    return scope.getStore()?.toolset?.(tools) ?? tools;
+    return scope.getStore()?.serve.toolset?.(tools) ?? tools;
+  },
+  skills(skills) {
+    return scope.getStore()?.serve.skills?.(skills) ?? skills;
   },
 };
 
@@ -96,10 +114,10 @@ const host: CatalogHost = {
 export async function withCatalogRun<T>(
   overrides: CatalogOverrides,
   fn: () => T | Promise<T>,
-  toolset?: <S>(tools: S) => S,
+  serve: RunServe = {},
 ): Promise<{ result: T; reads: CatalogRead[] }> {
   installHost();
-  const run: RunScope = { overrides, reads: new Map(), ...(toolset ? { toolset } : {}) };
+  const run: RunScope = { overrides, reads: new Map(), serve };
   const result = await scope.run(run, fn);
   return { result, reads: [...run.reads.values()] };
 }

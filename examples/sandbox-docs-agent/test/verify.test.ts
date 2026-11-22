@@ -26,6 +26,8 @@ describe("ratel sandbox verify on the docs agent", () => {
       model: "wired",
       system: "wired",
       tools: "wired",
+      skills: "wired",
+      "skills.summarizeDoc": "wired",
       "tools.searchDocs": "wired",
       "tools.readDoc": "wired",
       "tools.createTicket": "wired",
@@ -41,6 +43,7 @@ describe("ratel sandbox verify on the docs agent", () => {
       model: { kind: "model", id: "model" },
       system: { kind: "prompt", id: "system" },
       tools: { kind: "tools" },
+      skills: { kind: "skills" },
     });
   });
 });

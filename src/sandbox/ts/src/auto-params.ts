@@ -1,10 +1,12 @@
-import type { CatalogRead, RegisteredTool, SetupCapture } from "./catalog.js";
+import type { CatalogRead, RegisteredSkill, RegisteredTool, SetupCapture } from "./catalog.js";
 import { checkParamValue, model, type Param, type ParamMap, prompt } from "./params.js";
 import { PARAM_NAME, type Sandbox, type SdkParamSource } from "./sandbox.js";
 import { type ToolHints, tools } from "./tools.js";
 
 /** The name of the param that holds the tools registered on the SDK. */
 export const SDK_TOOLS_PARAM = "tools";
+/** The name of the param that holds the skills registered on the SDK (the tools shape). */
+export const SDK_SKILLS_PARAM = "skills";
 
 /**
  * Adds the params that come from the SDK to a sandbox: each prompt and model the code
@@ -20,7 +22,8 @@ export const SDK_TOOLS_PARAM = "tools";
  * manifest changed.
  *
  * A catalog id that is not a valid param name, or a baseline that is not a valid value
- * (a model id without `provider/`), is skipped. Skills are not params yet.
+ * (a model id without `provider/`), is skipped. The skills registered on the SDK go to
+ * the `skills` param (the tools shape), bound to `ratel.skills()` the same way.
  */
 export function withSdkParams<S extends Sandbox>(sandbox: S, capture: SetupCapture): S {
   const added: Record<string, Param> = {};
@@ -55,6 +58,19 @@ export function withSdkParams<S extends Sandbox>(sandbox: S, capture: SetupCaptu
     added[SDK_TOOLS_PARAM] = toolsParam(uncovered);
     sources[SDK_TOOLS_PARAM] = bindings[SDK_TOOLS_PARAM] = { kind: "tools" };
   }
+  const coveredSkills = new Set<string>();
+  for (const [name, param] of Object.entries(sandbox.params)) {
+    if (param.kind !== "tools" || bindings[name]?.kind === "tools") continue;
+    const listed = param.default.filter((t) => capture.skills.some((r) => r.id === t.name));
+    if (listed.length === 0) continue;
+    for (const t of listed) coveredSkills.add(t.name);
+    if (!bindings[name]) bindings[name] = { kind: "skills" };
+  }
+  const freeSkills = capture.skills.filter((s) => !coveredSkills.has(s.id));
+  if (freeSkills.length > 0 && !paramOf(SDK_SKILLS_PARAM)) {
+    added[SDK_SKILLS_PARAM] = skillsParam(freeSkills);
+    sources[SDK_SKILLS_PARAM] = bindings[SDK_SKILLS_PARAM] = { kind: "skills" };
+  }
   if (Object.keys(added).length === 0 && Object.keys(bindings).length === known) return sandbox;
   return Object.freeze({
     ...sandbox,
@@ -86,6 +102,26 @@ function toolsParam(registered: readonly RegisteredTool[]) {
     >;
     toolset[id] = { inputSchema, ...object, description };
     hints[id] = hintsOf(object.annotations);
+  }
+  return tools(toolset, hints);
+}
+
+/**
+ * The SDK skills as a tools-shaped param: one row per skill (enabled, description, mode).
+ * A row's execute loads the skill through the loader `ratel.skills()` hands it.
+ */
+function skillsParam(registered: readonly RegisteredSkill[]) {
+  const toolset: Record<string, object> = {};
+  const hints: Record<string, ToolHints> = {};
+  for (const { id, description, skill } of registered) {
+    const annotations = (skill as { annotations?: unknown } | null | undefined)?.annotations;
+    toolset[id] = {
+      description,
+      inputSchema: { type: "object", properties: {} },
+      execute: (_args: unknown, options?: { ratelLoad?: () => Promise<string> }) =>
+        options?.ratelLoad?.() ?? "",
+    };
+    hints[id] = hintsOf(annotations);
   }
   return tools(toolset, hints);
 }

@@ -1,5 +1,11 @@
 import { bindingsOf } from "./auto-params.js";
-import { type CatalogOverrides, type CatalogRead, withCatalogRun } from "./catalog.js";
+import {
+  type CatalogOverrides,
+  type CatalogRead,
+  type RunServe,
+  type SkillView,
+  withCatalogRun,
+} from "./catalog.js";
 import { SandboxInputError } from "./errors.js";
 import type { ParamMap, ParamValues } from "./params.js";
 import { resolveParams, settleParams } from "./resolve.js";
@@ -102,7 +108,7 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
           },
         },
       }),
-    sdk.toolset,
+    sdk.serve,
   );
   return {
     output,
@@ -127,20 +133,16 @@ function sdkRunValues(
   },
   params: Readonly<Record<string, unknown>>,
   extra: CatalogOverrides | undefined,
-): { overrides: CatalogOverrides; toolset?: <T>(tools: T) => T } {
+): { overrides: CatalogOverrides; serve: RunServe } {
   const prompts: Record<string, string> = { ...extra?.prompts };
   const models: Record<string, string> = { ...extra?.models };
-  const served = new Map<string, unknown>();
-  const bound = new Set<string>();
+  const tools = new BoundSet();
+  const skills = new BoundSet();
   for (const [name, source] of Object.entries(bindingsOf(sandbox))) {
-    if (source.kind === "tools") {
+    if (source.kind === "tools" || source.kind === "skills") {
       const param = sandbox.params[name];
       if (param?.kind !== "tools") continue;
-      const runTools = params[name] as Readonly<Record<string, unknown>>;
-      for (const { name: tool } of param.default) {
-        bound.add(tool);
-        if (Object.hasOwn(runTools, tool)) served.set(tool, runTools[tool]);
-      }
+      (source.kind === "tools" ? tools : skills).add(param, params[name]);
       continue;
     }
     const sdk = sandbox.sdkParams && Object.hasOwn(sandbox.sdkParams, name);
@@ -150,15 +152,65 @@ function sdkRunValues(
     else models[source.id] = value;
   }
   const overrides = { prompts, models };
-  if (bound.size === 0) return { overrides };
-  // The code's toolset, with each bound tool swapped for its run version; a disabled one is left out.
-  const toolset = <T>(tools: T): T => {
-    const out: Record<string, unknown> = {};
-    for (const [name, tool] of Object.entries(tools as Record<string, unknown>)) {
-      if (!bound.has(name)) out[name] = tool;
-      else if (served.has(name)) out[name] = served.get(name);
+  const serve: { -readonly [K in keyof RunServe]: RunServe[K] } = {};
+  if (tools.size > 0) {
+    // The code's toolset, with each bound tool swapped for its run version; a disabled one is left out.
+    serve.toolset = <T>(toolset: T): T => {
+      const out: Record<string, unknown> = {};
+      for (const [name, tool] of Object.entries(toolset as Record<string, unknown>)) {
+        if (!tools.has(name)) out[name] = tool;
+        else if (tools.served.has(name)) out[name] = tools.served.get(name);
+      }
+      return out as T;
+    };
+  }
+  if (skills.size > 0) {
+    // The code's skills, with the run's description and a load through the skill's mode.
+    serve.skills = (list) =>
+      list.flatMap((skill): SkillView[] => {
+        if (!skills.has(skill.id)) return [skill];
+        const run = skills.served.get(skill.id) as RunSkill | undefined;
+        if (!run) return [];
+        const description =
+          typeof run.description === "string" ? run.description : skill.description;
+        const execute = run.execute;
+        return [
+          {
+            id: skill.id,
+            description,
+            load: execute
+              ? async () => String(await execute({}, { messages: [], ratelLoad: skill.load }))
+              : skill.load,
+          },
+        ];
+      });
+  }
+  return { overrides, serve };
+}
+
+interface RunSkill {
+  readonly description?: unknown;
+  readonly execute?: (args: unknown, options: Record<string, unknown>) => unknown;
+}
+
+/** The names a run binds to tools params, and the run's version of each enabled one. */
+class BoundSet {
+  readonly #names = new Set<string>();
+  readonly served = new Map<string, unknown>();
+
+  get size(): number {
+    return this.#names.size;
+  }
+
+  has(name: string): boolean {
+    return this.#names.has(name);
+  }
+
+  add(param: ToolsParam, value: unknown): void {
+    const run = (value ?? {}) as Readonly<Record<string, unknown>>;
+    for (const { name } of param.default) {
+      this.#names.add(name);
+      if (Object.hasOwn(run, name)) this.served.set(name, run[name]);
     }
-    return out as T;
-  };
-  return { overrides, toolset };
+  }
 }

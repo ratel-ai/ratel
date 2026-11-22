@@ -98,8 +98,14 @@ a name clash and keeps `source: "declared"`, but stays bound to the SDK read: a 
 model with the same id, or a declared tools param that lists SDK tools, is what the code reads. A prompt or model that the
 code reads only inside `run()` cannot be found on load: the first run that reads it adds it, and
 `ratel sandbox dev` sends a `manifest.update`. `ratel sandbox verify` checks sdk params like
-declared ones; with `--dry` an sdk model string goes to the stand-in model. Skills registered on
-the SDK are not params yet.
+declared ones; with `--dry` an sdk model string goes to the stand-in model.
+
+Skills registered on a `ratel()` core go into one `skills` param, in the tools shape: one row per
+skill with enabled, description and mode (hints from `annotations`, as for tools). The code offers
+them through `ratel.skills(skills)` from `@ratel-ai/sdk/experimental/catalog`. In a run, that call
+leaves a disabled skill out, returns the edited description, and each `load()` goes through the
+skill's mode: `real` returns the body, `fake` and `confirm` use the `tool.fake` and `tool.confirm`
+messages. The load runs in an `execute_tool <skill id>` span with `ratel.tool.mode`.
 
 ## Tools and tool modes
 

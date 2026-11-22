@@ -1,7 +1,14 @@
 import { ratel } from "@ratel-ai/sdk";
 import { ratel as catalog } from "@ratel-ai/sdk/experimental/catalog";
 import { aiSdk } from "@ratel-ai/vercel-ai-sdk";
-import { type LanguageModel, type ModelMessage, stepCountIs, streamText, tool } from "ai";
+import {
+  type LanguageModel,
+  type ModelMessage,
+  stepCountIs,
+  streamText,
+  type ToolSet,
+  tool,
+} from "ai";
 import { z } from "zod";
 import { BEDROCK_PREFIX, routeModelIds } from "./bedrock.js";
 import { readDoc, searchDocs } from "./docs.js";
@@ -61,6 +68,32 @@ export const tools = {
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
 export const MAX_STEPS = 5;
 
+// A skill: instructions the model loads when it needs them. Registered on the Ratel core
+// like the tools; read-only, so a sandbox run loads it for real by default.
+export const skills = [
+  {
+    id: "summarizeDoc",
+    name: "summarizeDoc",
+    description: "Instructions to summarize one Ratel docs page for the user.",
+    body: "Read the page with readDoc. Answer with at most three bullets and quote commands exactly.",
+    annotations: { readOnlyHint: true },
+  },
+];
+
+/** One tool per skill the run offers: calling it loads the skill's instructions. */
+function skillTools(): ToolSet {
+  return Object.fromEntries(
+    catalog.skills(skills).map((skill) => [
+      skill.id,
+      tool({
+        description: skill.description,
+        inputSchema: z.object({}),
+        execute: async () => ({ instructions: await skill.load() }),
+      }),
+    ]),
+  );
+}
+
 /** The default model: DOCS_AGENT_MODEL when set (e.g. `amazon-bedrock/eu.anthropic.claude-haiku-5-5`). */
 export function docsModelId(env: NodeJS.ProcessEnv = process.env): string {
   return env.DOCS_AGENT_MODEL || DEFAULT_MODEL;
@@ -77,12 +110,14 @@ export function docsConfig(): DocsConfig {
     model: catalog.model("model", docsModelId()),
     system: catalog.prompt("system", SYSTEM),
     maxSteps: MAX_STEPS,
-    tools: catalog.toolset(tools),
+    tools: { ...catalog.toolset(tools), ...skillTools() },
   };
 }
 
-// Registered once, on load: Ratel lists the tools, and a sandbox makes them a param.
-await ratel().adaptTo(aiSdk()).tools.register(tools);
+// Registered once, on load: Ratel lists the tools and skills, and a sandbox makes them params.
+const core = ratel().adaptTo(aiSdk());
+await core.tools.register(tools);
+await core.skills.register(skills);
 routeModelIds();
 // The config on load: a sandbox finds the model and the prompt without a run.
 export const docsDefaults = docsConfig();
@@ -91,7 +126,7 @@ export interface DocsConfig {
   readonly model: LanguageModel;
   readonly system: string;
   readonly maxSteps: number;
-  readonly tools: typeof tools;
+  readonly tools: ToolSet;
 }
 
 export interface ReplyOptions {

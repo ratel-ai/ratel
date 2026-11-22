@@ -136,7 +136,8 @@ export interface Sandbox<P extends ParamMap = ParamMap, I = unknown, O = unknown
 /** Where an sdk param comes from: a catalog read (prompt or model, by catalog id) or the registered tools. */
 export type SdkParamSource =
   | { readonly kind: "prompt" | "model"; readonly id: string }
-  | { readonly kind: "tools" };
+  | { readonly kind: "tools" }
+  | { readonly kind: "skills" };
 
 const SANDBOX_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 export const PARAM_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;

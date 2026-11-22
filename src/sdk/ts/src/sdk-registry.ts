@@ -12,10 +12,11 @@ export interface RegisteredTool {
   readonly tool: unknown;
 }
 
-/** One registered skill. */
+/** One registered skill. `skill` is the object the app registered (its MCP-style `annotations` give a sandbox its hint). */
 export interface RegisteredSkill {
   readonly id: string;
   readonly description: string;
+  readonly skill: unknown;
 }
 
 /** One prompt or model read through the catalog, with the default the code passed. */

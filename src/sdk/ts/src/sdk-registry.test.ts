@@ -40,7 +40,13 @@ describe("process registry of SDK registrations", () => {
         tool,
       },
     ]);
-    expect(registry?.skills).toEqual([{ id: "triage", description: "Triage a bug." }]);
+    expect(registry?.skills).toEqual([
+      {
+        id: "triage",
+        description: "Triage a bug.",
+        skill: { id: "triage", name: "triage", description: "Triage a bug." },
+      },
+    ]);
   });
 
   it("records the framework tool of an adapted registration, passthroughs included", async () => {
@@ -79,5 +85,33 @@ describe("ratel.toolset", () => {
       toolset: <T>(t: T) => ({ a: (t as typeof tools).a }) as T,
     };
     expect(Object.keys(catalog.toolset(tools))).toEqual(["a"]);
+  });
+});
+
+describe("ratel.skills", () => {
+  const skills = [
+    { id: "summarizeDoc", description: "Summarize a page.", body: "Read it, then summarize." },
+    { id: "triage", description: "Triage a bug.", body: "Ask for logs." },
+  ];
+
+  it("returns every skill with its description and a load of its body outside a run", async () => {
+    const view = catalog.skills(skills);
+    expect(view.map((s) => [s.id, s.description])).toEqual([
+      ["summarizeDoc", "Summarize a page."],
+      ["triage", "Triage a bug."],
+    ]);
+    expect(await view[0]?.load()).toBe("Read it, then summarize.");
+  });
+
+  it("returns the view the active sandbox run serves", async () => {
+    slot[CATALOG_HOST_KEY] = {
+      resolve: () => undefined,
+      record: () => {},
+      skills: (list) =>
+        list.slice(0, 1).map((s) => ({ ...s, description: "Edited.", load: async () => "faked" })),
+    };
+    const view = catalog.skills(skills);
+    expect(view.map((s) => [s.id, s.description])).toEqual([["summarizeDoc", "Edited."]]);
+    expect(await view[0]?.load()).toBe("faked");
   });
 });

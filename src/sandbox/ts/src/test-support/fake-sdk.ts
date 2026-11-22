@@ -41,3 +41,15 @@ function registry(): SdkRegistry {
   slot[REGISTRY_KEY] ??= { tools: [], skills: [], reads: [] };
   return slot[REGISTRY_KEY];
 }
+
+export function sdkRegisterSkills(
+  skills: readonly { readonly id: string; readonly description: string }[],
+): void {
+  for (const skill of skills) {
+    const list = registry().skills;
+    const at = list.findIndex((s) => s.id === skill.id);
+    const entry = { id: skill.id, description: skill.description, skill };
+    if (at === -1) list.push(entry);
+    else list[at] = entry;
+  }
+}

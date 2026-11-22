@@ -177,7 +177,12 @@ describe("the docs-agent sandbox", () => {
         onText: (t) => deltas.push(t),
       }),
     );
-    expect(run.toolModes).toEqual({ searchDocs: "real", readDoc: "real", createTicket: "fake" });
+    expect(run.toolModes).toEqual({
+      searchDocs: "real",
+      readDoc: "real",
+      createTicket: "fake",
+      summarizeDoc: "real",
+    });
     expect(fakes).toEqual(["createTicket"]);
     expect(run.output).toBe("I opened a ticket for you.");
     expect(deltas.join("")).toBe("I opened a ticket for you.");

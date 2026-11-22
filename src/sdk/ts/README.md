@@ -544,7 +544,10 @@ sandbox run, then the local catalog file `ratel.catalog.json` (path from `RATEL_
 else the working directory; `{ "prompts": { "<id>": "..." }, "models": { "<id>": "..." } }`),
 then the default. Each read is recorded (`experimentalCatalogReads()`), so `@ratel-ai/sandbox`
 can turn the prompts and models the code reads into params. `ratel.toolset(tools)` returns the
-tools to hand the model: a sandbox run's version of them (tool modes, edits), else `tools`.
+tools to hand the model: a sandbox run's version of them (tool modes, edits), else `tools`. `ratel.skills(skills)`
+returns the skills to offer the model, each with `load()`: in a sandbox run, the run's view (a
+disabled skill left out, an edited description, a load through the skill's mode), else every
+skill, with `load()` returning its body.
 
 Every core also records the tools and skills registered on it, and every catalog read, in one
 process registry (`globalThis[Symbol.for("ratel.registry.v1")]`): a sandbox lists those tools as

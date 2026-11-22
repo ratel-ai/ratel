@@ -55,6 +55,28 @@ export interface CatalogHost {
   record(read: CatalogRead): void;
   /** The toolset this run uses in place of `tools`: tool modes applied, edits and disabled tools served. */
   toolset?<T>(tools: T): T;
+  /** The skills this run offers in place of `skills`: disabled ones left out, edits and modes applied. */
+  skills?(skills: readonly SkillView[]): readonly SkillView[];
+}
+
+/** A skill as the code offers it to the model: what {@link ratel}.skills returns. */
+export interface SkillView {
+  /** The skill id, as registered. */
+  readonly id: string;
+  /** What the model sees: the run's edited description inside a sandbox run. */
+  readonly description: string;
+  /** Loads the skill's instructions: in a sandbox run, through the skill's mode (real, fake, confirm). */
+  load(): Promise<string>;
+}
+
+/** The fields of a registered skill that {@link ratel}.skills reads. */
+export interface SkillSource {
+  /** The skill id. */
+  readonly id: string;
+  /** What the skill covers. */
+  readonly description: string;
+  /** The instructions `load()` returns. */
+  readonly body?: string;
 }
 
 /** The `globalThis` key of the active {@link CatalogHost}. */
@@ -90,6 +112,20 @@ export const ratel = {
    */
   toolset<T extends object>(tools: T): T {
     return activeHost()?.toolset?.(tools) ?? tools;
+  },
+  /**
+   * The skills to offer the model, for example one tool per skill: inside a sandbox
+   * run, the run's view of them (a disabled skill left out, an edited description,
+   * `load()` through the skill's mode); else every skill, with `load()` returning its
+   * body. Register the skills on a `ratel()` core so a sandbox lists them.
+   */
+  skills(skills: readonly SkillSource[]): readonly SkillView[] {
+    const view: SkillView[] = skills.map((skill) => ({
+      id: skill.id,
+      description: skill.description,
+      load: async () => skill.body ?? "",
+    }));
+    return activeHost()?.skills?.(view) ?? view;
   },
 } as const;
 

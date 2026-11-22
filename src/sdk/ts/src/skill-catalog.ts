@@ -180,7 +180,7 @@ export class SkillCatalog {
   async register(skills: Skill | readonly Skill[]): Promise<void> {
     const batch = Array.isArray(skills) ? skills : [skills];
     const localBatch = batch.map((skill) => structuredClone(skill));
-    for (const skill of localBatch) recordSkill({ id: skill.id, description: skill.description });
+    for (const skill of batch) recordSkill({ id: skill.id, description: skill.description, skill });
     await this.registerEffective(
       localBatch.map((skill) => this.applyDefinitionOverride(skill)),
       localBatch,

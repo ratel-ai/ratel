@@ -10,6 +10,7 @@ agent with a changed model, prompt or tools, one user turn per run.
 | `searchDocs` | Searches the pages in `src/docs/` by keyword | `readOnlyHint` | `real` |
 | `readDoc` | Reads one page by slug | `readOnlyHint` | `real` |
 | `createTicket` | Writes a ticket to the SQLite file `.data/tickets.sqlite`, or to Postgres when `DATABASE_URL` is set | `destructiveHint` | `fake` |
+| `summarizeDoc` (skill) | Loads the instructions to summarize one docs page | `readOnlyHint` | `real` |
 
 `createTicket` never runs real in a sandbox run: a `destructiveHint` tool is faked by default and
 has no `allowReal`, so the runner refuses a run that asks for it.
@@ -33,10 +34,12 @@ export function docsConfig(): DocsConfig {
     model: catalog.model("model", docsModelId()),   // "provider/model"
     system: catalog.prompt("system", SYSTEM),        // the template
     maxSteps: MAX_STEPS,
-    tools: catalog.toolset(tools),                   // a sandbox run's version of the tools
+    tools: { ...catalog.toolset(tools), ...skillTools() }, // the run's tools, one tool per skill
   };
 }
-await ratel().adaptTo(aiSdk()).tools.register(tools);
+const core = ratel().adaptTo(aiSdk());
+await core.tools.register(tools);
+await core.skills.register(skills);                  // summarizeDoc, offered via catalog.skills()
 export const docsDefaults = docsConfig();            // read on load: the sandbox finds them
 ```
 
@@ -46,7 +49,7 @@ or to Bedrock for an `amazon-bedrock/` ID (`src/bedrock.ts`).
 
 ## The sandbox file
 
-No params block: the model, the prompt and the tools above are its params, with `source: "sdk"`
+No params block: the model, the prompt, the tools and the skill above are its params, with `source: "sdk"`
 in the manifest. A param declared in the sandbox file would win on a name clash.
 
 ```ts

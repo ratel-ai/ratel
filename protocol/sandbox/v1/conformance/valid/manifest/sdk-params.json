@@ -63,6 +63,22 @@
               "allowReal": false
             }
           ]
+        },
+        {
+          "name": "skills",
+          "kind": "tools",
+          "source": "sdk",
+          "default": [
+            {
+              "name": "summarizeDoc",
+              "description": "Instructions to summarize one Ratel docs page.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              },
+              "hint": "readOnly"
+            }
+          ]
         }
       ],
       "context": []
