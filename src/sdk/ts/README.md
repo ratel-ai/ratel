@@ -527,6 +527,25 @@ Account for these contract differences when updating tests and dashboards:
 | Results and agreement | `ratel.search.results`; dynamic `agreement.attr.<key>` fields | `ratel.experiment.results`; structured `agreement.item_attrs` and `agreement.result_attrs` plus served/shadow facts |
 | Content boundary | Stub-specific | Ranked ids/scores are always measurements; item attrs are capture-gated; result values are not emitted, only agreement booleans |
 
+## Prompt and model catalog (experimental)
+
+Read prompts and models through one API, so a Ratel sandbox can change them per run. It lives on
+its own entrypoint and may change without a major-version bump:
+
+```ts
+import { ratel } from "@ratel-ai/sdk/experimental/catalog";
+
+const system = ratel.prompt("system", "You answer from the docs."); // template string
+const modelId = ratel.model("answer", "anthropic/claude-haiku-5-5"); // provider/model id
+```
+
+Each call returns the first value it finds, with no network call: the override of the active
+sandbox run, then the local catalog file `ratel.catalog.json` (path from `RATEL_CATALOG_FILE`,
+else the working directory; `{ "prompts": { "<id>": "..." }, "models": { "<id>": "..." } }`),
+then the default. Each read is recorded (`experimentalCatalogReads()`), so `@ratel-ai/sandbox`
+can turn the prompts and models the code reads into params. The sandbox runner serves overrides
+through the `globalThis[Symbol.for("ratel.catalog.host.v1")]` slot.
+
 ## Adapter conformance testkit
 
 Building a `RatelAdapter` for another framework? `@ratel-ai/sdk/testkit` ships a runner-agnostic
@@ -616,4 +635,4 @@ Message and tool content is off by default; opt in with the `OTEL_INSTRUMENTATIO
 
 ## Package layout
 
-`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.
+`src/` is the TypeScript surface (including `embedding-artifact.ts` for build/warm helpers and `prompt-model-catalog.ts` for the experimental `./experimental/catalog` entrypoint), `native/` contains the NAPI binding, `npm/` holds platform packages, and tests live beside their source. From the repository root, build with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk... build`; test with `pnpm --filter @ratel-ai/telemetry build && pnpm --filter @ratel-ai/sdk test`.

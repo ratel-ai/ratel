@@ -251,7 +251,8 @@ traces of playground runs, with the resource `deployment.environment.name=playgr
 ## Layout
 
 - `src/params.ts` — param builders and value checks. `src/sandbox.ts` — `sandbox()` and `structured()`.
-- `src/resolve.ts`, `src/run.ts` — per-run resolution and one run.
+- `src/resolve.ts`, `src/run.ts` — per-run resolution and one run. `src/catalog.ts` — the per-run
+  host of the experimental SDK prompt and model catalog (`catalogOverrides` in, `catalogReads` out).
 - `src/hash.ts` — canonical JSON and the config hash. `src/manifest.ts`, `src/providers.ts` —
   the `protocol/sandbox/v1` manifest.
 - `src/otel.ts` — `resolveLocal` and `stampSandboxInput` (`@opentelemetry/api` peer).

@@ -15,6 +15,10 @@
       "types": "./dist/testkit/index.d.ts",
       "default": "./dist/testkit/index.js"
     },
+    "./experimental/catalog": {
+      "types": "./dist/prompt-model-catalog.d.ts",
+      "default": "./dist/prompt-model-catalog.js"
+    },
     "./package.json": "./package.json"
   },
   "license": "MIT",

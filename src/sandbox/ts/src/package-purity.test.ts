@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 // runner and the CLI (src/cli, the `ratel` bin) live behind their own entrypoints. This walks the real
 // module graph of the root entry, then imports it and watches for a socket.
 
-const ALLOWED = ["@opentelemetry/api", "node:crypto", "node:path"];
+const ALLOWED = ["@opentelemetry/api", "node:async_hooks", "node:crypto", "node:path"];
 
 describe("@ratel-ai/sandbox entry stays network-free", () => {
   it("reaches only the allowed packages from index.ts", () => {

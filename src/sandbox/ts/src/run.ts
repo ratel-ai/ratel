@@ -1,3 +1,4 @@
+import { type CatalogOverrides, type CatalogRead, withCatalogRun } from "./catalog.js";
 import { SandboxInputError } from "./errors.js";
 import type { ParamMap, ParamValues } from "./params.js";
 import { resolveParams, settleParams } from "./resolve.js";
@@ -36,6 +37,8 @@ export interface RunSandboxOptions<I> {
   readonly confirmTimeoutMs?: number;
   /** Where the sandbox's resolver imports packages from. The runner passes the sandbox file. */
   readonly resolveContext?: ResolveContext;
+  /** Prompt and model values that the experimental SDK catalog serves to this run, by catalog id. */
+  readonly catalogOverrides?: CatalogOverrides;
 }
 
 export interface RunSandboxResult<O> {
@@ -44,6 +47,8 @@ export interface RunSandboxResult<O> {
   readonly overrides: readonly string[];
   /** The mode each tool ran in. */
   readonly toolModes: Readonly<Record<string, ToolMode>>;
+  /** The prompts and models the run's code read through the experimental SDK catalog. */
+  readonly catalogReads: readonly CatalogRead[];
 }
 
 /**
@@ -79,18 +84,28 @@ export async function runSandbox<P extends ParamMap, I, O, M>(
         : {}),
     });
   }
-  const output = await sandbox.run({
-    input: options.input,
-    params: params as ParamValues<P, M>,
-    ctx: {
-      sandboxId: sandbox.id,
-      context: { ...sandbox.context, ...options.context },
-      signal,
-      log: (message, level = "info") => options.onLog?.(String(message), level),
-      textDelta: (text) => {
-        if (text !== "") options.onText?.(String(text));
-      },
-    },
-  });
-  return { output, configHash: resolved.configHash, overrides: resolved.overrides, toolModes };
+  const { result: output, reads } = await withCatalogRun(
+    options.catalogOverrides ?? { prompts: {}, models: {} },
+    () =>
+      sandbox.run({
+        input: options.input,
+        params: params as ParamValues<P, M>,
+        ctx: {
+          sandboxId: sandbox.id,
+          context: { ...sandbox.context, ...options.context },
+          signal,
+          log: (message, level = "info") => options.onLog?.(String(message), level),
+          textDelta: (text) => {
+            if (text !== "") options.onText?.(String(text));
+          },
+        },
+      }),
+  );
+  return {
+    output,
+    configHash: resolved.configHash,
+    overrides: resolved.overrides,
+    toolModes,
+    catalogReads: reads,
+  };
 }
