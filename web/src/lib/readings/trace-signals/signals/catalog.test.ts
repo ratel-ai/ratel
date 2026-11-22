@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ConfigError, resolveConfig } from "@/config";
 import {
   DEFAULT_FLOORS,
   FIX_SAFETY,
@@ -51,21 +52,24 @@ test("risky routes never auto-apply", () => {
   assert.equal(FIX_SAFETY.rewrite_description, "safe");
 });
 
-test("floors take env overrides and reject nonsense", () => {
-  const saved = { ...process.env };
-  try {
-    process.env.TRACE_SIGNALS_MAGNET_MIN_IMPRESSIONS = "80";
-    process.env.TRACE_SIGNALS_FIRST_TRY_MISS_MIN_LOW = "1.5";
-    process.env.TRACE_SIGNALS_MAGNET_MIN_TOP3_IMPRESSIONS = "35";
-    const floors = resolveFloors();
-    assert.equal(floors.magnet.minImpressions, 80);
-    assert.equal(floors.magnet.minTop3Impressions, 35);
-    assert.equal(DEFAULT_FLOORS.magnet.minTop3Impressions, 20);
-    assert.equal(DEFAULT_FLOORS.magnet.minTop3Low, 0.05);
-    assert.equal(floors.first_try_miss.minLow, 0.15, "a share above 1 falls back to the default");
-  } finally {
-    process.env = saved;
-  }
+test("floors take config overrides and reject nonsense", () => {
+  const floors = resolveFloors(
+    resolveConfig({
+      env: {
+        TRACE_SIGNALS_MAGNET_MIN_IMPRESSIONS: "80",
+        TRACE_SIGNALS_MAGNET_MIN_TOP3_IMPRESSIONS: "35",
+      },
+    }),
+  );
+  assert.equal(floors.magnet.minImpressions, 80);
+  assert.equal(floors.magnet.minTop3Impressions, 35);
+  assert.equal(DEFAULT_FLOORS.magnet.minTop3Impressions, 20);
+  assert.equal(DEFAULT_FLOORS.magnet.minTop3Low, 0.05);
+  assert.throws(
+    () => resolveConfig({ env: { TRACE_SIGNALS_FIRST_TRY_MISS_MIN_LOW: "1.5" } }),
+    ConfigError,
+    "a share above 1 fails",
+  );
 });
 
 test("severity helpers: Wilson bounds, quantiles, a deterministic reservoir", () => {

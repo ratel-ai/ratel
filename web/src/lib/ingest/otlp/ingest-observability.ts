@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import { getLogger, type LogError, type LogWarn } from "@/lib/platform/logger";
 import type { trackServerEvent as trackServerEventFn } from "@/lib/platform/telemetry";
 
@@ -32,11 +33,6 @@ interface IngestObservation {
 
 type IngestCounts = Record<string, number>;
 
-/** OBS_INGEST_SUCCESS_SAMPLE_RATE is a one-in-N denominator; default 100. */
-const DEFAULT_SUCCESS_SAMPLE_RATE = 100;
-
-/** OBS_INGEST_REJECTION_SAMPLE_RATE is a one-in-N denominator; default 100. */
-const DEFAULT_REJECTION_SAMPLE_RATE = 100;
 const logger = getLogger("otlp/ingest-observability");
 const defaultLogWarn: LogWarn = (message, fields) => logger.warn(fields, message);
 
@@ -98,28 +94,24 @@ export async function trackFirstTraceReceived(
   );
 }
 
+/** `ingest.successSampleRate` (OBS_INGEST_SUCCESS_SAMPLE_RATE), a one-in-N denominator. */
 export function shouldSampleIngestSuccess(
   random: () => number = Math.random,
-  configuredRate = process.env.OBS_INGEST_SUCCESS_SAMPLE_RATE,
+  rate = getConfig().ingest.successSampleRate,
 ): boolean {
-  return sampleOneInN(configuredRate, DEFAULT_SUCCESS_SAMPLE_RATE, random);
+  return sampleOneInN(rate, random);
 }
 
+/** `ingest.rejectionSampleRate` (OBS_INGEST_REJECTION_SAMPLE_RATE), a one-in-N denominator. */
 export function shouldSampleIngestRejection(
   random: () => number = Math.random,
-  configuredRate = process.env.OBS_INGEST_REJECTION_SAMPLE_RATE,
+  rate = getConfig().ingest.rejectionSampleRate,
 ): boolean {
-  return sampleOneInN(configuredRate, DEFAULT_REJECTION_SAMPLE_RATE, random);
+  return sampleOneInN(rate, random);
 }
 
-/** One-in-N sampling gate: parse the denominator, treating <=0 (or unparseable) as off. */
-function sampleOneInN(
-  configuredRate: string | undefined,
-  defaultRate: number,
-  random: () => number,
-): boolean {
-  const parsed = Number.parseInt(configuredRate ?? "", 10);
-  const rate = Number.isFinite(parsed) ? parsed : defaultRate;
+/** One-in-N sampling gate, treating <=0 as off. */
+function sampleOneInN(rate: number, random: () => number): boolean {
   if (rate <= 0) return false;
   return random() < 1 / rate;
 }

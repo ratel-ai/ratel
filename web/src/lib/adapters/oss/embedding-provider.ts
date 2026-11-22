@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
+import { type Config, getConfig } from "@/config";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 
 /**
- * Two providers behind one port. With `OPENAI_API_KEY` set, an OpenAI-compatible embeddings
- * endpoint (`OPENAI_BASE_URL` for a private gateway, `OPENAI_EMBEDDING_MODEL` to pick the model).
+ * Two providers behind one port. With `openai.apiKey` (OPENAI_API_KEY) set, an OpenAI-compatible
+ * embeddings endpoint (`openai.baseUrl` for a private gateway, `openai.embeddingModel` to pick the
+ * model).
  * Without it, a hashing vectorizer: a bag of words projected onto a fixed number of dimensions
  * and L2-normalized, so cosine similarity over it means something real and stable (shared
  * vocabulary), just something much cruder than a trained embedding. It is labelled `local` so
@@ -89,17 +91,13 @@ export function createOpenAiEmbeddingProvider(
   };
 }
 
-/** The provider the environment selects: OpenAI-compatible when keyed, else the local hash. */
-export function embeddingProviderFromEnv(
-  env: Record<string, string | undefined> = process.env,
+/** The provider the settings select: OpenAI-compatible when keyed, else the local hash. */
+export function embeddingProviderFromConfig(
+  config: Pick<Config, "openai"> = getConfig(),
 ): EmbeddingProviderPort {
-  const apiKey = env.OPENAI_API_KEY?.trim();
+  const { apiKey, baseUrl, embeddingModel } = config.openai;
   if (!apiKey) return localEmbeddingProvider;
-  return createOpenAiEmbeddingProvider({
-    apiKey,
-    baseUrl: env.OPENAI_BASE_URL,
-    model: env.OPENAI_EMBEDDING_MODEL,
-  });
+  return createOpenAiEmbeddingProvider({ apiKey, baseUrl, model: embeddingModel });
 }
 
-export const ossEmbeddingProvider: EmbeddingProviderPort = embeddingProviderFromEnv();
+export const ossEmbeddingProvider: EmbeddingProviderPort = embeddingProviderFromConfig();

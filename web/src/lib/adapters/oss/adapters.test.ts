@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import pino from "pino";
+import { resolveConfig } from "@/config";
 import {
   createOpenAiEmbeddingProvider,
-  embeddingProviderFromEnv,
+  embeddingProviderFromConfig,
   LOCAL_EMBEDDING_DIMENSIONS,
   localEmbedding,
 } from "./embedding-provider";
@@ -24,10 +25,10 @@ describe("oss session", () => {
     assert.equal(await ossSession.actingAs(), null);
   });
 
-  it("names the organization from RATEL_ORG_NAME, keeping its id and slug", () => {
-    const named = localOrganization({ RATEL_ORG_NAME: "  Acme Labs " });
+  it("names the organization from app.organizationName, keeping its id and slug", () => {
+    const named = localOrganization(resolveConfig({ env: { RATEL_ORG_NAME: "  Acme Labs " } }));
     assert.deepEqual(named, { id: LOCAL_ORGANIZATION_ID, name: "Acme Labs", slug: "local" });
-    assert.equal(localOrganization({}).name, "Local operator");
+    assert.equal(localOrganization(resolveConfig()).name, "Local operator");
   });
 
   it("knows its own organization only, with one member", async () => {
@@ -155,7 +156,7 @@ describe("oss telemetry content guard", () => {
 
 describe("oss embedding provider", () => {
   it("falls back to the local hash without a key and labels it local", async () => {
-    const provider = embeddingProviderFromEnv({});
+    const provider = embeddingProviderFromConfig(resolveConfig());
     assert.equal(provider.local, true);
     const [a, b, empty] = await provider.embed(["refund my order", "my order refund", ""]);
     assert.equal(a.length, LOCAL_EMBEDDING_DIMENSIONS);
@@ -199,10 +200,14 @@ describe("oss embedding provider", () => {
   });
 
   it("selects the OpenAI provider from the environment", () => {
-    const provider = embeddingProviderFromEnv({
-      OPENAI_API_KEY: "sk",
-      OPENAI_EMBEDDING_MODEL: "m",
-    });
+    const provider = embeddingProviderFromConfig(
+      resolveConfig({
+        env: {
+          OPENAI_API_KEY: "sk",
+          OPENAI_EMBEDDING_MODEL: "m",
+        },
+      }),
+    );
     assert.equal(provider.local, false);
     assert.equal(provider.model, "m");
   });

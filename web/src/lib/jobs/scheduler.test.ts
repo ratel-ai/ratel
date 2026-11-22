@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import {
   assertCronConfig,
   createScheduler,
@@ -8,6 +9,9 @@ import {
   startInProcessScheduler,
   stopInProcessScheduler,
 } from "./scheduler";
+
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const config = (env: Record<string, string> = {}) => resolveConfig({ env });
 
 /** A fake interval: the test fires the callback by hand. */
 function fakeTimers() {
@@ -166,29 +170,39 @@ test("the process-global start is idempotent across module reloads", async () =>
 });
 
 test("an external scheduler without a secret is a boot error; in-process needs none", () => {
-  assert.throws(() => assertCronConfig({ RATEL_CRON: "external" }), /CRON_SECRET/);
-  assert.throws(() => assertCronConfig({ RATEL_COMPOSITION: "cloud" }), /CRON_SECRET/);
+  assert.throws(() => assertCronConfig(config({ RATEL_CRON: "external" })), /CRON_SECRET/);
+  assert.throws(() => assertCronConfig(config({ RATEL_COMPOSITION: "cloud" })), /CRON_SECRET/);
   assert.throws(
-    () => assertCronConfig({ RATEL_CRON: "external", CRON_SECRET: "  " }),
+    () => assertCronConfig(config({ RATEL_CRON: "external", CRON_SECRET: "  " })),
     /CRON_SECRET/,
   );
-  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", CRON_SECRET: "s" }));
-  assert.doesNotThrow(() => assertCronConfig({}));
-  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "inprocess" }));
+  assert.doesNotThrow(() => assertCronConfig(config({ RATEL_CRON: "external", CRON_SECRET: "s" })));
+  assert.doesNotThrow(() => assertCronConfig(config({})));
+  assert.doesNotThrow(() => assertCronConfig(config({ RATEL_CRON: "inprocess" })));
 });
 
 test("only the all-in-one process depends on an external scheduler's secret", () => {
-  assert.throws(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "all" }), /CRON_SECRET/);
+  assert.throws(
+    () => assertCronConfig(config({ RATEL_CRON: "external", APP_ROLE: "all" })),
+    /CRON_SECRET/,
+  );
   // An API-only process leaves the tick to the worker, and the worker is its own clock.
-  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "api" }));
-  assert.doesNotThrow(() => assertCronConfig({ RATEL_CRON: "external", APP_ROLE: "worker" }));
-  assert.doesNotThrow(() => assertCronConfig({ RATEL_COMPOSITION: "cloud", APP_ROLE: "worker" }));
+  assert.doesNotThrow(() => assertCronConfig(config({ RATEL_CRON: "external", APP_ROLE: "api" })));
+  assert.doesNotThrow(() =>
+    assertCronConfig(config({ RATEL_CRON: "external", APP_ROLE: "worker" })),
+  );
+  assert.doesNotThrow(() =>
+    assertCronConfig(config({ RATEL_COMPOSITION: "cloud", APP_ROLE: "worker" })),
+  );
 });
 
 test("RATEL_CRON decides where the tick runs; unset means in process for the open-source edition", () => {
-  assert.equal(inProcessCronEnabled({ RATEL_CRON: "inprocess" }), true);
-  assert.equal(inProcessCronEnabled({ RATEL_CRON: "external", RATEL_COMPOSITION: "oss" }), false);
-  assert.equal(inProcessCronEnabled({}), true);
-  assert.equal(inProcessCronEnabled({ RATEL_COMPOSITION: "oss" }), true);
-  assert.equal(inProcessCronEnabled({ RATEL_COMPOSITION: "cloud" }), false);
+  assert.equal(inProcessCronEnabled(config({ RATEL_CRON: "inprocess" })), true);
+  assert.equal(
+    inProcessCronEnabled(config({ RATEL_CRON: "external", RATEL_COMPOSITION: "oss" })),
+    false,
+  );
+  assert.equal(inProcessCronEnabled(config({})), true);
+  assert.equal(inProcessCronEnabled(config({ RATEL_COMPOSITION: "oss" })), true);
+  assert.equal(inProcessCronEnabled(config({ RATEL_COMPOSITION: "cloud" })), false);
 });

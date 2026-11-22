@@ -51,7 +51,7 @@ readers are `lib/ledger/closed-turns.ts`); `sweep-service.ts` (no gate, no organ
 catalog); `signals/integration-support.ts`, `signals/compute-job.integration.test.ts`,
 `sweep.test.ts` and `workflows/fixed-order.test.ts` (no flag or page-model cases; the
 compose-candidate case lands with the tool crafter); `signals/task-scores.integration.test.ts`
-(the gate is the `FF_EVAL_GATE` env value). The page read models (`page-model*`,
+(the gate is the `evalGate` flag, set through the config). The page read models (`page-model*`,
 `page-state*`, `tiles`, `flow-*`, `issue-examples`, `ledger-facts*`, `signals/claims-*`,
 `signals/story`, the self-corrections page files) are `lib/views/health`; `turn-detail*`,
 `turn-linked` and `linked-copy.test` (the turn page of Traces) are `lib/views/traces`; `replay*`

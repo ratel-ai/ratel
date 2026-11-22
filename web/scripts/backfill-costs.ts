@@ -28,11 +28,8 @@
  *   DATABASE_URL=… pnpm --filter @ratel/platform backfill:costs --reprice [--dry-run]
  *     [--project <project id>] [--exclude-organization <organization id>]…
  */
+import "./load-env";
 import { parseArgs } from "node:util";
-import { config } from "dotenv";
-
-config({ path: ".env.local" });
-config({ path: ".env" });
 
 import { getDb } from "@/lib/platform/db/client";
 import {

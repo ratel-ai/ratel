@@ -3,14 +3,15 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { buildMcpAppCatalog, McpAppCatalogError } from "./catalog";
 import { MCP_APPS_FLAG, mcpAppsEnabled } from "./flag";
 import { loadMcpAppCatalog, memoizedCatalog, readGeneratedViews } from "./load";
 import type { McpAppView } from "./types";
 
-// Owned (ADR-0030): upstream's catalog and load cases. The flag cases are the FF_MCP_APPS env
-// switch's: upstream asks its flag service per caller, which this edition does not have.
+// Owned (ADR-0030): upstream's catalog and load cases. The flag cases are the configured
+// `mcpApps` switch's: upstream asks its flag service per caller, which this edition does not have.
 
 const TOOLS = new Set(["whoami", "list_traces", "get_trace"]);
 const view = (name: string, tools: string[]): McpAppView => ({
@@ -79,26 +80,26 @@ const person: McpAuthContext = {
   memberships: [],
 };
 
-test("the flag is the FF_MCP_APPS switch, off by default", async () => {
-  assert.equal(MCP_APPS_FLAG, "FF_MCP_APPS");
-  assert.equal(await mcpAppsEnabled(apiKey, {}), false);
-  assert.equal(await mcpAppsEnabled(apiKey, { FF_MCP_APPS: "false" }), false);
+test("the flag is the mcpApps switch, off by default", async () => {
+  assert.equal(MCP_APPS_FLAG, "mcpApps");
+  assert.equal(await mcpAppsEnabled(apiKey, resolveConfig()), false);
   assert.equal(
-    await mcpAppsEnabled(apiKey, { FF_MCP_APPS: "yes" }),
+    await mcpAppsEnabled(apiKey, resolveConfig({ override: { flags: { mcpApps: false } } })),
     false,
-    "only true or 1 turns it on",
   );
 });
 
-test("FF_MCP_APPS on is on for the whole deployment: a project key and a person alike", async () => {
-  for (const value of ["1", "true", " TRUE "]) {
-    assert.equal(await mcpAppsEnabled(apiKey, { FF_MCP_APPS: value }), true, value);
-    assert.equal(await mcpAppsEnabled(person, { FF_MCP_APPS: value }), true, value);
-  }
+test("mcpApps on is on for the whole deployment: a project key and a person alike", async () => {
+  const on = resolveConfig({ override: { flags: { mcpApps: true } } });
+  assert.equal(await mcpAppsEnabled(apiKey, on), true);
+  assert.equal(await mcpAppsEnabled(person, on), true);
 });
 
-test("RATEL_EXPERIMENTAL_FEATURES turns it on in the open-source edition", async () => {
-  assert.equal(await mcpAppsEnabled(apiKey, { RATEL_EXPERIMENTAL_FEATURES: "1" }), true);
+test("experimentalFeatures turns it on in the open-source edition", async () => {
+  assert.equal(
+    await mcpAppsEnabled(apiKey, resolveConfig({ override: { experimentalFeatures: true } })),
+    true,
+  );
 });
 
 test("a views.json that is missing is no views; one that is broken throws for the route handler to catch", () => {

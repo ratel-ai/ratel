@@ -4,21 +4,19 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createLogger, getLogger, runWithLogContext, setLogContext } from "./logger";
 
 test("production logs default to info", () => {
-  const logger = createLogger({ environment: { NODE_ENV: "production" } });
+  const logger = createLogger({ nodeEnv: "production" });
 
   assert.equal(logger.level, "info");
 });
 
 test("development logs default to debug", () => {
-  const logger = createLogger({ environment: { NODE_ENV: "development" } });
+  const logger = createLogger({ nodeEnv: "development" });
 
   assert.equal(logger.level, "debug");
 });
 
-test("LOG_LEVEL overrides the environment default", () => {
-  const logger = createLogger({
-    environment: { NODE_ENV: "production", LOG_LEVEL: "warn" },
-  });
+test("logging.level overrides the environment default", () => {
+  const logger = createLogger({ nodeEnv: "production", level: "warn" });
 
   assert.equal(logger.level, "warn");
 });
@@ -32,7 +30,7 @@ test("module loggers carry their module as a child binding", () => {
 test("errors are serialized with their type, message, and stack", () => {
   const records: Array<Record<string, unknown>> = [];
   const logger = createLogger({
-    environment: { NODE_ENV: "production" },
+    nodeEnv: "production",
     destination: {
       write(line: string) {
         records.push(JSON.parse(line) as Record<string, unknown>);

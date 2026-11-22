@@ -1,9 +1,9 @@
+import { getConfig } from "@/config";
 import {
   listClosedTurnsPage as listClosedTurnsPageFn,
   TURN_PAGE_SIZE,
 } from "@/lib/ledger/closed-turns";
 import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
-import { envNumber } from "@/lib/platform/env-number";
 import { loadAnalysisContext as loadAnalysisContextFn } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { type AnalysisResult, createAnalysis } from "@/lib/readings/trace-signals/signals/analyze";
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
@@ -21,14 +21,14 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
 const DAY_MS = 86_400_000;
 
 /** The default detector window. The ledger is durable, so up to 90 is allowed. */
-export const DEFAULT_SIGNAL_WINDOW_DAYS = Math.floor(envNumber("TRACE_SIGNALS_WINDOW_DAYS", 30));
+export const DEFAULT_SIGNAL_WINDOW_DAYS = getConfig().traceSignals.windowDays;
 export const MAX_SIGNAL_WINDOW_DAYS = 90;
 /** A shrunk window never goes below a week. */
 export const MIN_SIGNAL_WINDOW_DAYS = 7;
 /** Days scanned before the window so the health band has a previous window to compare. */
 export const COMPARISON_DAYS = 30;
 /** Wall-clock budget of one run, inside the stale-job reaper's ten minutes. */
-export const SIGNAL_TIME_BUDGET_MS = envNumber("TRACE_SIGNALS_TIME_BUDGET_MS", 6 * 60_000);
+export const SIGNAL_TIME_BUDGET_MS = getConfig().traceSignals.timeBudgetMs;
 
 export { TimeBudgetError } from "@/lib/ledger/turn-pages";
 

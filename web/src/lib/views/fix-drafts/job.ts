@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { type Config, getConfig } from "@/config";
 import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { loadToolCorpus } from "@/lib/ingest/runtime-catalog/inventory";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
@@ -25,12 +26,10 @@ import { fixDrafts } from "@/lib/views/fix-drafts/schema";
 import { latestFixDraft, reserveFixDraft } from "@/lib/views/fix-drafts/store";
 import type { Fix } from "@/lib/views/fixes/types";
 
-type Env = Record<string, string | undefined>;
-
-/** Owned (ADR-0030): `env` (the gate and the model key) where upstream takes flag deps. */
+/** Owned (ADR-0030): `config` (the gate and the model key) where upstream takes flag deps. */
 export interface DraftFixDeps {
   db?: ReturnType<typeof getDb>;
-  env?: Env;
+  config?: Config;
   environment?: string;
   now?: () => Date;
   loadFix?: typeof loadFixContext;
@@ -51,12 +50,12 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
   )
     return { status: "invalid_payload" };
   const db = deps.db ?? getDb();
-  const env = deps.env ?? process.env;
+  const config = deps.config ?? getConfig();
   const actor =
     "requestedBy" in payload && typeof payload.requestedBy === "string"
       ? payload.requestedBy
       : DRAFT_FIX_ACTOR;
-  if (!(await evalGateEnabledForActor(projectId, actor, db, env))) return { status: "gate_off" };
+  if (!(await evalGateEnabledForActor(projectId, actor, db, config))) return { status: "gate_off" };
   const loadFix = deps.loadFix ?? (await import("@/lib/views/eval-gate/service")).loadFixContext;
   const ctx = await loadFix(projectId, payload.fixId);
   if (!ctx) return { status: "fix_not_found" };
@@ -69,9 +68,9 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
   const corpus = (await loadToolCorpus(projectId, db)).filter((tool) => ids.has(tool.entryId));
   if (!corpus.length) return { status: "tool_not_found" };
   // Owned (ADR-0030): with no key there is no model, so nothing is reserved, written or sent.
-  const model = deps.model ?? draftModelFromEnv(env, deps.environment, corpus);
+  const model = deps.model ?? draftModelFromEnv(config, deps.environment, corpus);
   if (!model) {
-    recordNoDraftKey(env);
+    recordNoDraftKey(config);
     return { status: "no_model" };
   }
   const turnIds = await loadEvidenceTurnIds(
@@ -247,7 +246,7 @@ export async function draftFixJob(projectId: string, payload: unknown, deps: Dra
 
 /** Owned (ADR-0030): the reads are injectable, so the queueing is testable without the Fixes load. */
 export interface EnqueueProjectFixDraftsDeps {
-  env?: Env;
+  config?: Config;
   environment?: string;
   db?: EvalDb;
   loadOpenFixes?: (projectId: string) => Promise<Fix[] | null>;
@@ -266,11 +265,11 @@ export async function enqueueProjectFixDrafts(
   projectId: string,
   deps: EnqueueProjectFixDraftsDeps = {},
 ) {
-  const env = deps.env ?? process.env;
+  const config = deps.config ?? getConfig();
   const db = deps.db ?? getDb();
-  if (!(await evalGateEnabledForActor(projectId, DRAFT_FIX_ACTOR, db, env))) return;
+  if (!(await evalGateEnabledForActor(projectId, DRAFT_FIX_ACTOR, db, config))) return;
   // Owned (ADR-0030): with no model there is nothing to draft, so nothing is queued.
-  if (!draftModelAvailable(env, deps.environment)) return;
+  if (!draftModelAvailable(config, deps.environment)) return;
   const open = await (deps.loadOpenFixes ?? loadOpenFixes)(projectId);
   if (!open) return;
   for (const fix of open) {

@@ -105,7 +105,7 @@ export interface McpRouteDeps {
    */
   launchAccess?: (auth: McpAuthContext) => Promise<boolean>;
   /**
-   * `FF_MCP_APPS`, for this caller as for every other: whether to publish the ui:// views.
+   * `mcpApps`, for this caller as for every other: whether to publish the ui:// views.
    * `options.initialize` on the initialize of a client that shows views (upstream waits longer there; the switch has no wait).
    */
   mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
@@ -121,7 +121,7 @@ export const defaultRouteDeps: McpRouteDeps = {
   globalLimiter: createTokenBucketRateLimiter(GLOBAL_LIMIT),
   trackServerEvent,
   launchAccess: mcpLaunchAccess,
-  // One switch for the deployment (FF_MCP_APPS): nothing in the options changes it.
+  // One switch for the deployment (mcpApps): nothing in the options changes it.
   mcpApps: (auth) => mcpAppsEnabled(auth),
   appCatalog: mcpAppCatalog,
 };
@@ -334,7 +334,7 @@ export function createMcpRouteHandler(deps: McpRouteDeps = defaultRouteDeps) {
       );
     }
 
-    // Views only with `FF_MCP_APPS` on; whether this client shows them, only then.
+    // Views only with `mcpApps` on; whether this client shows them, only then.
     // What the client says of itself is read first: the initialize of one that shows
     // views is where its session id is issued.
     const client = clientViews(messages, request.headers.get("mcp-session-id"));
@@ -364,7 +364,7 @@ export function createMcpRouteHandler(deps: McpRouteDeps = defaultRouteDeps) {
 }
 
 /**
- * The views to publish for this caller, or undefined with `FF_MCP_APPS`
+ * The views to publish for this caller, or undefined with `mcpApps`
  * off. A view build that fails its checks is logged and reported, and the
  * caller gets the server without views rather than no server.
  */
@@ -426,7 +426,7 @@ async function runMessages(
   deps: McpRouteDeps,
   /** This app's own origin: a view's "Open in Ratel" links go there. */
   consoleOrigin: string | undefined,
-  /** The views to publish (`FF_MCP_APPS`), or undefined. */
+  /** The views to publish (`mcpApps`), or undefined. */
   apps: McpAppCatalog | undefined,
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,

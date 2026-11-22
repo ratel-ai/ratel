@@ -6,10 +6,8 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import {
-  MODEL_CALL_TRACER,
-  RATEL_SELF_TELEMETRY_PROJECT_ENV,
-} from "@/lib/contracts/self-telemetry";
+import { resetConfigForTests } from "@/config";
+import { MODEL_CALL_TRACER } from "@/lib/contracts/self-telemetry";
 import { runWithLogContext } from "@/lib/platform/logger";
 import {
   anthropicUsage,
@@ -42,7 +40,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   while (restores.length) restores.pop()!();
-  delete process.env[RATEL_SELF_TELEMETRY_PROJECT_ENV];
+  delete process.env.RATEL_SELF_TELEMETRY_PROJECT_ID;
+  resetConfigForTests();
   await provider.shutdown();
 });
 
@@ -121,7 +120,8 @@ test("the core's own calls are chat operations", async () => {
 });
 
 test("calls made while analysing the self-telemetry project itself are not traced, so they cannot loop", async () => {
-  process.env[RATEL_SELF_TELEMETRY_PROJECT_ENV] = "own-project";
+  process.env.RATEL_SELF_TELEMETRY_PROJECT_ID = "own-project";
+  resetConfigForTests();
   await trackModelCall({ ...META, projectId: "own-project" }, async () => ({}));
   await runWithLogContext({ project_id: "own-project" }, () =>
     trackModelCall(META, async () => ({})),

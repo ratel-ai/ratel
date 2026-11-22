@@ -83,7 +83,7 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   deriveSpanDimensions?: typeof deriveSpanDimensions;
   traceTurns?: TraceTurnsIngestDeps;
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** `FF_TOOL_RUN_INSIGHTS` for agent-run rows (RC-742). Absent, the switch is read. */
+  /** `toolRunInsights` for agent-run rows (RC-742). Absent, the switch is read. */
   agentRunsEnabled?: AgentHealthBridgeDeps["agentRunsEnabled"];
   /**
    * The agent-span dedupe's storage lookup: an agent wrapper with the run's

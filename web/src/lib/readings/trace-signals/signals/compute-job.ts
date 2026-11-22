@@ -1,3 +1,4 @@
+import { type Config, getConfig } from "@/config";
 import { composition } from "@/lib/composition/ports";
 import type { CompositionPorts } from "@/lib/contracts/composition";
 import {
@@ -113,8 +114,6 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
 const logger = getLogger("trace-signals/compute-job");
 const SYSTEM_DISTINCT_ID = "system:trace-signals";
 
-type Env = Record<string, string | undefined>;
-
 export interface ComputeJobDeps {
   getOrganizationByProjectId: typeof getOrganizationByProjectIdFn;
   getCursor: typeof getTraceTurnsCursorFn;
@@ -165,7 +164,7 @@ export interface ComputeJobDeps {
     pillars: readonly PillarReading[],
   ) => Promise<unknown>;
   /**
-   * Workflow mining tunables for the project (RC-725, `FF_TOOL_RUN_INSIGHTS`
+   * Workflow mining tunables for the project (RC-725, `toolRunInsights`
    * via `workflowMiningFor`); null, the defaults.
    */
   workflowMining?: (
@@ -202,7 +201,7 @@ export function missedBacklog(unbuilt: number, turnsScanned: number): boolean {
   return unbuilt >= Math.max(PARTIAL_READING_MIN_EVENTS, Math.ceil(turnsScanned / 10));
 }
 
-function defaultDeps(env: Env): ComputeJobDeps {
+function defaultDeps(config: Config): ComputeJobDeps {
   return {
     getOrganizationByProjectId: getOrganizationByProjectIdFn,
     getCursor: getTraceTurnsCursorFn,
@@ -215,7 +214,7 @@ function defaultDeps(env: Env): ComputeJobDeps {
     observability: createBackgroundObservability(),
     loadSetupCounts: (projectId, window) => loadSetupCountsFn(projectId, window),
     enqueueLabels: (projectId) => enqueueLabelWorkflowsJobFn(projectId),
-    canLabel: () => anthropicConfigured(env) || decisionEngineConfigured(env),
+    canLabel: () => anthropicConfigured(config) || decisionEngineConfigured(config),
     countUnbuilt: (projectId, since) =>
       countUnbuiltTurnEventsFn(projectId, since, UNBUILT_COUNT_CAP),
     writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),
@@ -224,7 +223,7 @@ function defaultDeps(env: Env): ComputeJobDeps {
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: (projectId) => editionImportRunning(projectId),
     enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
-    workflowMining: (projectId, organization) => workflowMiningFor(projectId, organization, env),
+    workflowMining: (projectId, organization) => workflowMiningFor(projectId, organization, config),
     storeHealthScore: async (projectId, runId, turnsRead, pillars) => {
       const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
       await setRunHealthScoreFn(runId, {
@@ -322,9 +321,9 @@ export async function computeProjectTraceSignals(
   projectId: string,
   payload: { trigger: RunTrigger },
   overrides: Partial<ComputeJobDeps> = {},
-  env: Env = process.env,
+  config: Config = getConfig(),
 ): Promise<ComputeJobResult> {
-  const deps = { ...defaultDeps(env), ...overrides };
+  const deps = { ...defaultDeps(config), ...overrides };
   const organization = await deps.getOrganizationByProjectId(projectId);
 
   const startedAt = deps.now();

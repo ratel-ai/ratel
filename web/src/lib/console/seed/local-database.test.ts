@@ -70,13 +70,10 @@ test("PGHOST and PGHOSTADDR must stay on this machine too", () => {
 
 test("the assertion names what it refused to do", () => {
   assert.throws(
-    () =>
-      assertLocalDatabase("seed intents", {
-        DATABASE_URL: "postgres://u:p@prod.example.com/ratel",
-      }),
+    () => assertLocalDatabase("seed intents", "postgres://u:p@prod.example.com/ratel", {}),
     /^Error: refusing to seed intents: DATABASE_URL points at prod\.example\.com, not this machine\./,
   );
   assert.doesNotThrow(() =>
-    assertLocalDatabase("seed intents", { DATABASE_URL: "postgres://u:p@localhost/ratel" }),
+    assertLocalDatabase("seed intents", "postgres://u:p@localhost/ratel", {}),
   );
 });

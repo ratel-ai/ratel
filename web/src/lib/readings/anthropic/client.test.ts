@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import Anthropic from "@anthropic-ai/sdk";
+import { resolveConfig } from "@/config";
 import { setModelCallExceptionReporter } from "@/lib/platform/model-call";
 import { anthropicAgent, ModelNotEnabled, ModelRefused } from "@/lib/views/eval-gate/models";
 import {
@@ -9,6 +10,9 @@ import {
   anthropicConfigured,
   ModelNotEnabledError,
 } from "./client";
+
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const cfg = (env: Record<string, string>) => resolveConfig({ env });
 
 const message = {
   id: "msg_1",
@@ -78,7 +82,7 @@ const params = { max_tokens: 10, messages: [{ role: "user" as const, content: "h
 
 test("without a backend, a key selects the Anthropic API", async () => {
   const { fetch, seen } = fakeFetch();
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_API_KEY: "sk-test" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_API_KEY: "sk-test" }));
 
   await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
 
@@ -87,18 +91,18 @@ test("without a backend, a key selects the Anthropic API", async () => {
 });
 
 test("without a backend, a missing or placeholder key gives no client", () => {
-  assert.equal(anthropicClient({}, {}), null);
-  assert.equal(anthropicClient({}, { ANTHROPIC_API_KEY: "REPLACE_ME" }), null);
-  assert.equal(anthropicConfigured({}), false);
-  assert.equal(anthropicConfigured({ ANTHROPIC_API_KEY: "REPLACE_ME" }), false);
-  assert.equal(anthropicConfigured({ ANTHROPIC_API_KEY: "sk-test" }), true);
+  assert.equal(anthropicClient({}, cfg({})), null);
+  assert.equal(anthropicClient({}, cfg({ ANTHROPIC_API_KEY: "REPLACE_ME" })), null);
+  assert.equal(anthropicConfigured(cfg({})), false);
+  assert.equal(anthropicConfigured(cfg({ ANTHROPIC_API_KEY: "REPLACE_ME" })), false);
+  assert.equal(anthropicConfigured(cfg({ ANTHROPIC_API_KEY: "sk-test" })), true);
 });
 
 test("on Bedrock, a call goes to the EU profile in Frankfurt and never uses the API key", async () => {
   const { fetch, seen } = fakeFetch();
   const client = anthropicClient(
     { fetch, maxRetries: 0 },
-    { ANTHROPIC_BACKEND: "bedrock", ANTHROPIC_API_KEY: "sk-must-not-leak" },
+    cfg({ ANTHROPIC_BACKEND: "bedrock", ANTHROPIC_API_KEY: "sk-must-not-leak" }),
   );
 
   const reply = await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
@@ -112,12 +116,12 @@ test("on Bedrock, a call goes to the EU profile in Frankfurt and never uses the 
 });
 
 test("on Bedrock, the deployment is configured without any API key", () => {
-  assert.equal(anthropicConfigured({ ANTHROPIC_BACKEND: "bedrock" }), true);
+  assert.equal(anthropicConfigured(cfg({ ANTHROPIC_BACKEND: "bedrock" })), true);
 });
 
 test("on Bedrock, a dated snapshot of a model reaches that model's EU profile", async () => {
   const { fetch, seen } = fakeFetch();
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
   await client!.messages.create({ ...params, model: "claude-haiku-4-5-20251001" });
 
@@ -129,7 +133,7 @@ test("on Bedrock, a dated snapshot of a model reaches that model's EU profile", 
 
 test("on Bedrock, a model with no EU profile fails as not found, with no request", async () => {
   const { fetch, seen } = fakeFetch();
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
   await assert.rejects(
     client!.messages.create({ ...params, model: "claude-fable-5-1" }),
@@ -140,7 +144,7 @@ test("on Bedrock, a model with no EU profile fails as not found, with no request
 
 test("a Bedrock refusal is the same error class the call sites catch", async () => {
   const { fetch } = fakeFetch(403);
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
   await assert.rejects(
     client!.messages.create({ ...params, model: "claude-sonnet-5-5" }),
@@ -165,7 +169,7 @@ function deniedFetch(status: number, text: string): typeof fetch {
 test("on Bedrock, a 403 for a missing Marketplace agreement is ModelNotEnabledError with the model and its EU profile", async () => {
   const client = anthropicClient(
     { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
-    { ANTHROPIC_BACKEND: "bedrock" },
+    cfg({ ANTHROPIC_BACKEND: "bedrock" }),
   );
 
   const err = await client!.messages
@@ -185,7 +189,7 @@ test("on Bedrock, a 403 for a missing Marketplace agreement is ModelNotEnabledEr
 test("on Bedrock, a replay agent on a model not enabled stops with ModelNotEnabled, which is a refusal too", async () => {
   const client = anthropicClient(
     { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
-    { ANTHROPIC_BACKEND: "bedrock" },
+    cfg({ ANTHROPIC_BACKEND: "bedrock" }),
   );
   const restoreReporter = setModelCallExceptionReporter(() => {});
   try {
@@ -210,7 +214,7 @@ test("on Bedrock, another 403 stays a plain refusal", async () => {
       fetch: deniedFetch(403, "User is not authorized to perform: bedrock:InvokeModel"),
       maxRetries: 0,
     },
-    { ANTHROPIC_BACKEND: "bedrock" },
+    cfg({ ANTHROPIC_BACKEND: "bedrock" }),
   );
 
   const err = await client!.messages
@@ -224,7 +228,7 @@ test("on Bedrock, another 403 stays a plain refusal", async () => {
 test("on Bedrock, a throttle that names Marketplace stays a rate limit", async () => {
   const client = anthropicClient(
     { fetch: deniedFetch(429, MARKETPLACE_DENIED), maxRetries: 0 },
-    { ANTHROPIC_BACKEND: "bedrock" },
+    cfg({ ANTHROPIC_BACKEND: "bedrock" }),
   );
 
   const err = await client!.messages
@@ -238,7 +242,7 @@ test("on Bedrock, a throttle that names Marketplace stays a rate limit", async (
 test("on the Anthropic API, a 403 with the same words stays a plain refusal", async () => {
   const client = anthropicClient(
     { fetch: deniedFetch(403, MARKETPLACE_DENIED), maxRetries: 0 },
-    { ANTHROPIC_API_KEY: "sk-test" },
+    cfg({ ANTHROPIC_API_KEY: "sk-test" }),
   );
 
   const err = await client!.messages
@@ -251,7 +255,7 @@ test("on the Anthropic API, a 403 with the same words stays a plain refusal", as
 
 test("on Bedrock, a streamed message reaches the EU profile", async () => {
   const { fetch, seen } = fakeFetch(500);
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
   await assert.rejects(
     client!.messages.stream({ ...params, model: "claude-opus-5-5" }).finalMessage(),
@@ -265,7 +269,7 @@ test("on Bedrock, a streamed message reaches the EU profile", async () => {
 
 test("on Bedrock, a replay recorded on a model with no EU profile continues on the EU fallback", async () => {
   const { fetch, seen } = fakeFetch();
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
   const agent = anthropicAgent(client!, "claude-fable-5-1", "claude-opus-5-5");
 
   await agent.next({ system: undefined, tools: [], messages: [{ role: "user", text: "hi" }] });
@@ -282,7 +286,7 @@ test("on Bedrock, a base URL in the environment cannot move the host out of Fran
   process.env.ANTHROPIC_BEDROCK_BASE_URL = "https://outside-eu.example.invalid";
   try {
     const { fetch, seen } = fakeFetch();
-    const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+    const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
     await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
 
@@ -294,23 +298,30 @@ test("on Bedrock, a base URL in the environment cannot move the host out of Fran
 });
 
 test("on Bedrock, a bearer token gives no client, because it would replace the task role", () => {
-  const env = { ANTHROPIC_BACKEND: "bedrock", AWS_BEARER_TOKEN_BEDROCK: "token" };
-  assert.equal(anthropicClient({}, env), null);
-  assert.equal(anthropicConfigured(env), false);
+  const env = cfg({ ANTHROPIC_BACKEND: "bedrock" });
+  const saved = process.env.AWS_BEARER_TOKEN_BEDROCK;
+  process.env.AWS_BEARER_TOKEN_BEDROCK = "token";
+  try {
+    assert.equal(anthropicClient({}, env), null);
+    assert.equal(anthropicConfigured(env), false);
+  } finally {
+    if (saved === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    else process.env.AWS_BEARER_TOKEN_BEDROCK = saved;
+  }
 });
 
 test("an unknown backend gives no client, even with a key, and no call can leave", () => {
-  const env = { ANTHROPIC_BACKEND: "bedrok", ANTHROPIC_API_KEY: "sk-test" };
+  const env = cfg({ ANTHROPIC_BACKEND: "bedrok", ANTHROPIC_API_KEY: "sk-test" });
   assert.equal(anthropicClient({}, env), null);
   assert.equal(anthropicConfigured(env), false);
 });
 
 test("the active backend is bedrock only when ANTHROPIC_BACKEND says so, else api", () => {
-  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: "bedrock" }), "bedrock");
-  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: " bedrock " }), "bedrock");
-  assert.equal(anthropicBackend({ ANTHROPIC_API_KEY: "sk-test" }), "api");
-  assert.equal(anthropicBackend({}), "api");
-  assert.equal(anthropicBackend({ ANTHROPIC_BACKEND: "REPLACE_ME" }), "api");
+  assert.equal(anthropicBackend(cfg({ ANTHROPIC_BACKEND: "bedrock" })), "bedrock");
+  assert.equal(anthropicBackend(cfg({ ANTHROPIC_BACKEND: " bedrock " })), "bedrock");
+  assert.equal(anthropicBackend(cfg({ ANTHROPIC_API_KEY: "sk-test" })), "api");
+  assert.equal(anthropicBackend(cfg({})), "api");
+  assert.equal(anthropicBackend(cfg({ ANTHROPIC_BACKEND: "REPLACE_ME" })), "api");
 });
 
 for (const [name, status] of [
@@ -319,7 +330,7 @@ for (const [name, status] of [
 ] as const) {
   test(`on Bedrock, ${name} is retried at least twice, even when the caller asks for no retries`, async () => {
     const { fetch, calls } = flakyFetch([status, status]);
-    const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_BACKEND: "bedrock" });
+    const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
     const reply = await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
 
@@ -330,7 +341,7 @@ for (const [name, status] of [
 
 test("on Bedrock, a caller asking for more retries keeps them", async () => {
   const { fetch, calls } = flakyFetch([503, 503, 503]);
-  const client = anthropicClient({ fetch, maxRetries: 3 }, { ANTHROPIC_BACKEND: "bedrock" });
+  const client = anthropicClient({ fetch, maxRetries: 3 }, cfg({ ANTHROPIC_BACKEND: "bedrock" }));
 
   await client!.messages.create({ ...params, model: "claude-sonnet-5-5" });
 
@@ -339,7 +350,7 @@ test("on Bedrock, a caller asking for more retries keeps them", async () => {
 
 test("on the Anthropic API, the caller's retry setting is kept as is", async () => {
   const { fetch, calls } = flakyFetch([503]);
-  const client = anthropicClient({ fetch, maxRetries: 0 }, { ANTHROPIC_API_KEY: "sk-test" });
+  const client = anthropicClient({ fetch, maxRetries: 0 }, cfg({ ANTHROPIC_API_KEY: "sk-test" }));
 
   await assert.rejects(
     client!.messages.create({ ...params, model: "claude-sonnet-5-5" }),

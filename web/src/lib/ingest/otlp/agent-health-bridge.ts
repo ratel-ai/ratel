@@ -27,7 +27,7 @@ import type { DecodedSpan } from "./types";
  *
  * A tool row carries its MCP server and its skill (AOBS-5).
  *
- * With `FF_TOOL_RUN_INSIGHTS` on (RC-742, upstream's `cloud-tool-run-insights`),
+ * With `toolRunInsights` on (RC-742, upstream's `cloud-tool-run-insights`),
  * each `invoke_agent` root span is also an `agent_run` row, so a run with no
  * tool call makes a turn.
  */
@@ -36,7 +36,7 @@ export interface AgentHealthBridgeDeps {
   traceTurns?: TraceTurnsIngestDeps;
   /** The project's SDK invokes near a batch's tool rows. Absent, nothing is dropped. */
   findRuntimeInvokes?: FindRuntimeInvokes;
-  /** `FF_TOOL_RUN_INSIGHTS` for the project. Absent, the switch is read for the project (off unless set). Never throws. */
+  /** `toolRunInsights` for the project. Absent, the switch is read for the project (off unless set). Never throws. */
   agentRunsEnabled?: (projectId: string) => Promise<boolean>;
   logError: LogError;
 }

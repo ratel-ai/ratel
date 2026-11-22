@@ -2,7 +2,7 @@ import type { Instrumentation } from "next";
 
 /**
  * Next runs register() once at server startup, before the first request, which is where an
- * invalid composition has to be caught: without this, the server reports itself ready and then
+ * invalid setting or composition has to be caught: without this, the server reports itself ready and then
  * answers every request with a 500, so a rolling deploy promotes the broken build.
  *
  * The Node-only work lives in instrumentation.node.ts so Edge instrumentation never sees
@@ -15,14 +15,16 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const {
       assertComposition,
+      bootConfig,
       bootBackground,
       registerNodeInstrumentation,
       startProcessStatsIfExported,
     } = await import("./instrumentation.node");
-    const flushTelemetry = await registerNodeInstrumentation(process.env, {
-      deploymentEnvironment: process.env.APP_ENV,
+    const config = await bootConfig();
+    const flushTelemetry = await registerNodeInstrumentation(config, {
+      deploymentEnvironment: config.app.environment,
     });
-    await startProcessStatsIfExported();
+    await startProcessStatsIfExported(config);
     await assertComposition();
     await bootBackground(flushTelemetry);
   }

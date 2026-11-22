@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import {
   createBackgroundObservability,
   defaultBackgroundObservabilityDeps,
@@ -118,7 +119,7 @@ export function resolveJudge(
 ): JudgeEngine | undefined {
   if (!enabled) return undefined;
   if (mockAnalystEnabled()) return mockJudgeEngine();
-  return resolveJudgeEngine(process.env, { budgetUsd });
+  return resolveJudgeEngine(getConfig(), { budgetUsd });
 }
 
 export function resolveAnalystFactory(): {
@@ -129,7 +130,7 @@ export function resolveAnalystFactory(): {
     return { analyst: (context) => mockAnalystDeps(context), mocked: true };
   }
   if (!anthropicConfigured()) return { analyst: undefined, mocked: false };
-  const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL;
+  const model = getConfig().models.analyst || DEFAULT_ANALYST_MODEL;
   return { analyst: () => anthropicAnalystDeps(model), mocked: false };
 }
 

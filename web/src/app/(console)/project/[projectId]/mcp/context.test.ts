@@ -4,7 +4,7 @@ import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { type McpPageDeps, resolveMcpPageContext } from "./context";
 
-/** RP-28: with `FF_AGENTS_PAGES` off, both MCP servers pages are not found. */
+/** RP-28: with `agentsPages` off, both MCP servers pages are not found. */
 
 const PROJECT = { id: "p1", organizationId: "org-1" } as Project;
 const ORGANIZATION = { id: "org-1", slug: "acme" } as Organization;

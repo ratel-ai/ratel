@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 
 /**
  * Topics (Intents): what people ask the agent about, named in plain words, and
@@ -14,8 +14,8 @@ export const TOPIC_INSIGHTS_VERSION = 1;
 /** Days a reading covers. */
 export const TOPIC_WINDOW_DAYS = 30;
 
-/** Closed turns one reading reads at most, newest first. Env `TOPICS_MAX_TURNS`. */
-export const TOPICS_MAX_TURNS = Math.floor(envNumber("TOPICS_MAX_TURNS", 20_000));
+/** Closed turns one reading reads at most, newest first. Config `topics.maxTurns`. */
+export const TOPICS_MAX_TURNS = getConfig().topics.maxTurns;
 
 /** Topics kept at once; a new one waits for a retirement past this. */
 export const MAX_ACTIVE_TOPICS = 20;
@@ -27,17 +27,17 @@ export const MAX_NAMED_PER_RUN = 12;
  * A new topic needs this many turns and this share of the turns with an ask;
  * the asks that fit none must add up to as much before any is looked for.
  */
-export const NEW_TOPIC_MIN_TURNS = Math.floor(envNumber("TOPICS_NEW_MIN_TURNS", 5));
+export const NEW_TOPIC_MIN_TURNS = getConfig().topics.newMinTurns;
 export const NEW_TOPIC_MIN_SHARE = 0.01;
 
-/** Distinct asks put to the decision engine per job, busiest first; the rest are placed by wording. Env `TOPICS_MAX_JUDGED_ASKS`. */
-export const MAX_JUDGED_ASKS = Math.floor(envNumber("TOPICS_MAX_JUDGED_ASKS", 300));
+/** Distinct asks put to the decision engine per job, busiest first; the rest are placed by wording. Config `topics.maxJudgedAsks`. */
+export const MAX_JUDGED_ASKS = getConfig().topics.maxJudgedAsks;
 
-/** Distinct asks in the users' own words read for sentiment by the decision engine per job. Env `TOPICS_MAX_SENTIMENT_ASKS`. */
-export const MAX_SENTIMENT_ASKS = Math.floor(envNumber("TOPICS_MAX_SENTIMENT_ASKS", 300));
+/** Distinct asks in the users' own words read for sentiment by the decision engine per job. Config `topics.maxSentimentAsks`. */
+export const MAX_SENTIMENT_ASKS = getConfig().topics.maxSentimentAsks;
 
-/** The decision engine's input-token cap for one job (both questions share it). Env `TOPICS_MAX_JUDGE_TOKENS`. */
-export const TOPICS_MAX_JUDGE_TOKENS = Math.floor(envNumber("TOPICS_MAX_JUDGE_TOKENS", 2_000_000));
+/** The decision engine's input-token cap for one job (both questions share it). Config `topics.maxJudgeTokens`. */
+export const TOPICS_MAX_JUDGE_TOKENS = getConfig().topics.maxJudgeTokens;
 
 /** Steps a flow draws: the 1st to the 4th turn of a conversation, then Ended. */
 export const FLOW_STEPS = 4;

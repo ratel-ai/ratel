@@ -9,7 +9,7 @@ export const metadata = { title: "Fixes" };
  * better, whatever found them. Filters (`?kind=`, `?task=`, `?tool=`,
  * `?topic=`) and the open fix (`?peek=`) live in the URL and are read on
  * the client. Owned (ADR-0030): no Cloud flag gate; the task simulation links
- * need `FF_EVAL_GATE` (the eval badges).
+ * need `evalGate` (the eval badges).
  */
 export default async function FixesRoute({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = await params;

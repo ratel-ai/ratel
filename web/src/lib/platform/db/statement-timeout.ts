@@ -1,10 +1,10 @@
 import { type Span, SpanStatusCode, trace } from "@opentelemetry/api";
 import { sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { type Config, getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { getDb } from "@/lib/platform/db/client";
 import type * as schema from "@/lib/platform/db/tables";
-
-type Environment = Readonly<Record<string, string | undefined>>;
 
 /**
  * The db surface a bounded read runs against. Typed as the base database rather
@@ -32,11 +32,12 @@ export interface StatementTimeoutOptions {
  * Default per-read `statement_timeout`. Heavy trace/experiment aggregates that
  * exceed this fail fast (Postgres cancels them) instead of hanging until the
  * ALB idle timeout closes the connection — letting the caller degrade
- * gracefully. Protective by default; set `DATABASE_READ_TIMEOUT_MS=0` to
+ * gracefully. Protective by default; set `database.readTimeoutMs` (DATABASE_READ_TIMEOUT_MS) to 0 to
  * disable.
  */
-export const DEFAULT_READ_TIMEOUT_MS = 15_000;
-export const DEFAULT_SUPPLEMENTARY_READ_TIMEOUT_MS = 5_000;
+export const DEFAULT_READ_TIMEOUT_MS = CONFIG_DEFAULTS.database.readTimeoutMs;
+export const DEFAULT_SUPPLEMENTARY_READ_TIMEOUT_MS =
+  CONFIG_DEFAULTS.database.supplementaryReadTimeoutMs;
 
 /**
  * Run `read` under a transaction-scoped `statement_timeout` so a runaway
@@ -96,32 +97,27 @@ export async function withStatementTimeout<T>(
 
 /**
  * Resolve the bounded-read timeout in milliseconds, or `null` when explicitly
- * disabled. Unset or malformed values keep the protective default so a
- * misconfiguration can never silently remove the guard; only an explicit `0`
- * turns it off.
+ * disabled. Unset keeps the protective default, and a malformed value fails the
+ * config, so a misconfiguration can never silently remove the guard; only an
+ * explicit `0` turns it off.
  */
-export function readTimeoutMs(env: Environment = process.env): number | null {
-  return resolveTimeoutMs(env.DATABASE_READ_TIMEOUT_MS, DEFAULT_READ_TIMEOUT_MS);
+export function readTimeoutMs(config: Pick<Config, "database"> = getConfig()): number | null {
+  return orOff(config.database.readTimeoutMs);
 }
 
 /**
  * Resolve the shorter timeout for non-essential reads that can degrade to a
  * fallback without preventing the page's primary content from rendering.
  */
-export function supplementaryReadTimeoutMs(env: Environment = process.env): number | null {
-  return resolveTimeoutMs(
-    env.DATABASE_SUPPLEMENTARY_READ_TIMEOUT_MS,
-    DEFAULT_SUPPLEMENTARY_READ_TIMEOUT_MS,
-  );
+export function supplementaryReadTimeoutMs(
+  config: Pick<Config, "database"> = getConfig(),
+): number | null {
+  return orOff(config.database.supplementaryReadTimeoutMs);
 }
 
-function resolveTimeoutMs(value: string | undefined, fallback: number): number | null {
-  const raw = value?.trim();
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  if (parsed === 0) return null;
-  if (Number.isSafeInteger(parsed) && parsed > 0) return parsed;
-  return fallback;
+/** `0` turns a timeout off. */
+function orOff(timeoutMs: number): number | null {
+  return timeoutMs === 0 ? null : timeoutMs;
 }
 
 function defaultStartActiveSpan<T>(

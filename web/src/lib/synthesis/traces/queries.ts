@@ -17,6 +17,8 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias, unionAll } from "drizzle-orm/pg-core";
+import { getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { GEN_AI } from "@/lib/ingest/otlp/constants";
 import { events, type OtelSpan, otelLogs, otelSpans } from "@/lib/ingest/otlp/schema";
 import { OTLP_RAW_PRUNE_BATCH_SIZE, otlpRawRetentionDays } from "@/lib/ingest/otlp-raw/domain";
@@ -410,7 +412,7 @@ export const DEFAULT_SPAN_PAGE_SIZE = 50;
 export const MAX_SPAN_PAGE_SIZE = 100;
 export const TRACE_FACET_VALUE_LIMIT = 50;
 export const OPERATION_AGGREGATE_LIMIT = 200;
-export const DEFAULT_OTEL_SPAN_RETENTION_DAYS = 30;
+export const DEFAULT_OTEL_SPAN_RETENTION_DAYS = CONFIG_DEFAULTS.otel.spanRetentionDays;
 export const OTEL_SPAN_PRUNE_BATCH_SIZE = 5_000;
 export const OTEL_LOG_PRUNE_BATCH_SIZE = 5_000;
 export const TRACE_SUMMARY_PRUNE_BATCH_SIZE = 5_000;
@@ -1936,22 +1938,21 @@ function operationSortExpression(
   }
 }
 
+/** `otel.spanRetentionDays` (OTEL_SPAN_RETENTION_DAYS), unless the caller overrides it. */
 function retentionDays(override?: number): number {
   if (isValidRetentionDays(override)) return override;
-  const configured = Number(process.env.OTEL_SPAN_RETENTION_DAYS);
+  const configured = getConfig().otel.spanRetentionDays;
   return isValidRetentionDays(configured) ? configured : DEFAULT_OTEL_SPAN_RETENTION_DAYS;
 }
 
+/** `otel.logRetentionDays` (OTEL_LOG_RETENTION_DAYS), else the span retention. */
 function logRetentionDays(override?: number): number {
   if (isValidRetentionDays(override)) return override;
-  const configuredLogRetention = Number(process.env.OTEL_LOG_RETENTION_DAYS);
+  const configuredLogRetention = getConfig().otel.logRetentionDays;
   if (isValidRetentionDays(configuredLogRetention)) {
     return configuredLogRetention;
   }
-  const configuredSpanRetention = Number(process.env.OTEL_SPAN_RETENTION_DAYS);
-  return isValidRetentionDays(configuredSpanRetention)
-    ? configuredSpanRetention
-    : DEFAULT_OTEL_SPAN_RETENTION_DAYS;
+  return retentionDays();
 }
 
 function isValidRetentionDays(value: number | undefined): value is number {

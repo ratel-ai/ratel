@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+import { resolveConfig } from "@/config";
 import { DEFAULT_DRAIN_TIMEOUT_MS, drainTimeoutMs } from "./drain-observer";
 import type { WorkerDeps } from "./worker";
 import {
@@ -9,6 +10,9 @@ import {
   stopBackgroundWorker,
   workerTick,
 } from "./worker-start";
+
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const config = (env: Record<string, string> = {}) => resolveConfig({ env });
 
 /** A worker whose loop is a recording: what it was wired to, its signals, its exits. */
 function harness(overrides: Partial<BackgroundWorkerDeps> = {}) {
@@ -341,10 +345,10 @@ test("ticks cannot pile up: with two unsettled, the next is skipped until one se
 });
 
 test("the watchdog limit reads CRON_DRAIN_TIMEOUT_MS: ten minutes by default, 0 turns it off", () => {
-  assert.equal(drainTimeoutMs({}), DEFAULT_DRAIN_TIMEOUT_MS);
+  assert.equal(drainTimeoutMs(config({})), DEFAULT_DRAIN_TIMEOUT_MS);
   assert.equal(DEFAULT_DRAIN_TIMEOUT_MS, 10 * 60 * 1000);
-  assert.equal(drainTimeoutMs({ CRON_DRAIN_TIMEOUT_MS: "120000" }), 120_000);
-  assert.equal(drainTimeoutMs({ CRON_DRAIN_TIMEOUT_MS: "0" }), 0);
-  assert.equal(drainTimeoutMs({ CRON_DRAIN_TIMEOUT_MS: "ten minutes" }), DEFAULT_DRAIN_TIMEOUT_MS);
-  assert.equal(drainTimeoutMs({ CRON_DRAIN_TIMEOUT_MS: "-1" }), DEFAULT_DRAIN_TIMEOUT_MS);
+  assert.equal(drainTimeoutMs(config({ CRON_DRAIN_TIMEOUT_MS: "120000" })), 120_000);
+  assert.equal(drainTimeoutMs(config({ CRON_DRAIN_TIMEOUT_MS: "0" })), 0);
+  assert.throws(() => config({ CRON_DRAIN_TIMEOUT_MS: "ten minutes" }), /CRON_DRAIN_TIMEOUT_MS/);
+  assert.throws(() => config({ CRON_DRAIN_TIMEOUT_MS: "-1" }), /CRON_DRAIN_TIMEOUT_MS/);
 });

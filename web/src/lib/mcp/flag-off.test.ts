@@ -10,7 +10,7 @@ import { SingleMessageTransport } from "./transport";
 
 /**
  * Flag off, over the whole registry (RW-37): every operation the server
- * registers is called with `FF_MCP_APPS` off (no catalog), and each one
+ * registers is called with `mcpApps` off (no catalog), and each one
  * runs without `forView` and comes back exactly as main's server returned it.
  *
  * The operations' own code with `forView` unset was compared against main on

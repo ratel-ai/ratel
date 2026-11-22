@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Pool } from "pg";
+import { resetConfigForTests } from "@/config";
 import {
   attachPoolErrorHandler,
   isDbConfigured,
@@ -35,7 +36,7 @@ test("idle pool errors log before guarded exception capture", () => {
   assert.deepEqual(captures, [[failure, "system:database", { component: "pg_pool" }]]);
 });
 
-test("TLS is off for a local database and on elsewhere unless DATABASE_SSL says otherwise", () => {
+test("TLS is off for a local database and on elsewhere unless database.ssl says otherwise", () => {
   assert.equal(sslConfig("postgres://ratel@localhost:5432/ratel", undefined), false);
   assert.deepEqual(sslConfig("postgres://ratel@db.internal:5432/ratel", undefined), {
     rejectUnauthorized: false,
@@ -43,15 +44,18 @@ test("TLS is off for a local database and on elsewhere unless DATABASE_SSL says 
   assert.equal(sslConfig("postgres://ratel@db.internal:5432/ratel", "disable"), false);
 });
 
-test("isDbConfigured reads DATABASE_URL", () => {
+test("isDbConfigured reads database.url", () => {
   const previous = process.env.DATABASE_URL;
   try {
     process.env.DATABASE_URL = "";
+    resetConfigForTests();
     assert.equal(isDbConfigured(), false);
     process.env.DATABASE_URL = "postgres://x";
+    resetConfigForTests();
     assert.equal(isDbConfigured(), true);
   } finally {
     if (previous === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previous;
+    resetConfigForTests();
   }
 });

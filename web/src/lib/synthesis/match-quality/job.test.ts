@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resetConfigForTests } from "@/config";
 import { DEFAULT_ANALYST_MODEL } from "./analyst";
 import type { AnalystContext } from "./context";
 import { parseMatchQualityPayload, resolveAnalystFactory } from "./job";
@@ -12,6 +13,7 @@ function withEnv(vars: Record<string, string | undefined>, run: () => void): voi
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+  resetConfigForTests();
   try {
     run();
   } finally {
@@ -19,6 +21,7 @@ function withEnv(vars: Record<string, string | undefined>, run: () => void): voi
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    resetConfigForTests();
   }
 }
 

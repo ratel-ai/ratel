@@ -7,6 +7,7 @@
  * and guarded by a process-global handle so a dev server's module reloads do not stack timers.
  * Several replicas may each run it: the claim is atomic and the steps are idempotent.
  */
+import { type Config, getConfig } from "@/config";
 import { appRole } from "./role";
 
 export type SchedulerDeps = {
@@ -86,16 +87,14 @@ export function stopInProcessScheduler(): void {
 }
 
 /**
- * `RATEL_CRON=inprocess` runs the tick here; `external` leaves it to a caller of
+ * `jobs.cron` (RATEL_CRON) `inprocess` runs the tick here; `external` leaves it to a caller of
  * `GET /api/cron/drain`. Unset: in process for the open-source edition, external for Cloud.
  */
-export function inProcessCronEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  const mode = env.RATEL_CRON?.trim().toLowerCase();
+export function inProcessCronEnabled(config: Pick<Config, "app" | "jobs"> = getConfig()): boolean {
+  const mode = config.jobs.cron;
   if (mode === "inprocess") return true;
   if (mode === "external") return false;
-  return (env.RATEL_COMPOSITION || "oss") === "oss";
+  return config.app.composition === "oss";
 }
 
 /**
@@ -104,9 +103,9 @@ export function inProcessCronEnabled(
  * all-in-one process relies on one: an API-only process leaves the tick to the worker, and the
  * worker is its own clock (`boot-plan.ts`).
  */
-export function assertCronConfig(env: Record<string, string | undefined> = process.env): void {
-  if (appRole(env) !== "all") return;
-  if (inProcessCronEnabled(env) || env.CRON_SECRET?.trim()) return;
+export function assertCronConfig(config: Pick<Config, "app" | "jobs"> = getConfig()): void {
+  if (appRole(config) !== "all") return;
+  if (inProcessCronEnabled(config) || config.jobs.cronSecret) return;
   throw new Error(
     "RATEL_CRON=external needs CRON_SECRET: without it GET /api/cron/drain answers 401 and no tick ever runs",
   );

@@ -14,7 +14,7 @@ import { SingleMessageTransport } from "./transport";
 /**
  * RW-47: a view's own model (OperationResult.view) never reaches the model.
  * For every tool a published view binds, the result's content and
- * structuredContent are byte-identical with `FF_MCP_APPS` on and off; with
+ * structuredContent are byte-identical with `mcpApps` on and off; with
  * it on, `_meta` carries the view under `sh.ratel/view`. RW-48: flag on, a
  * success adds one line after them, as its own text block, saying a view may
  * be showing the data; the data block itself is untouched.

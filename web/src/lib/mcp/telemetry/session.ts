@@ -7,7 +7,7 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
  * The server is stateless (lib/mcp/route-handler.ts): it issues no
  * `Mcp-Session-Id`, so most clients send none, and it never sees a tools/call's
  * `initialize` with the client's name. The one id it does issue goes to a client
- * that shows views, with `FF_MCP_APPS` on (lib/mcp/apps/client-views.ts). A
+ * that shows views, with `mcpApps` on (lib/mcp/apps/client-views.ts). A
  * client that does send the header is taken at its word, so that client's calls
  * are grouped by that id. Otherwise the session is derived from the credential, the
  * client (its User-Agent product) and a fixed 30 minute window.

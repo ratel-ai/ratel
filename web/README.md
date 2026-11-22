@@ -21,11 +21,14 @@ src/              the app's code (Next.js src folder)
   app/            routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the old-address redirects (/dashboard, /traces, /explore, /experiments, /settings and /project/_ to the session organization's project, as upstream's proxy answered them; inside a project, the pages the redesign folded into others), the printable Agent health and Quality reports under (report)/, the public pages of an Agent health share link under share/ (the read-only page at /share/health/<token> under its share bar, and its printable /report: a 404 unless the edition supplies share links), the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
   components/     React components; the design system lives in packages/design-system
   lib/            the core, in layers (see src/lib/README.md)
+  config.ts       every setting and feature flag, read once (zfig): env, a JSON file, or both
+  config-defaults.ts  every setting's default; also the browser's config (`@/config` in browser bundles)
   instrumentation.ts, proxy.ts (Cloud, copied from ee/src)  Next.js hooks; they sit beside app/
 public/           static files
 scripts/          dev, seed, migration and build scripts
 Dockerfile        targets `oss` and `cloud`; build context is the repository root
-next.config.ts    the #ee-composition alias, /v1 and /v2 rewrites, standalone output
+next.config.ts    the #ee-composition alias, the browser's `@/config`, /v1 and /v2 rewrites, standalone output
+config.example.json  a sample config file (see Configuration)
 ```
 
 ## Commands
@@ -51,6 +54,31 @@ pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on 
 docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
+## Configuration
+
+Every setting and feature flag is read through one module, [`src/config.ts`](src/config.ts): the
+schema, each setting's environment variable and its parsing rule. A setting comes from the
+environment, from a JSON config file, or from both:
+
+- **Environment**: the variables in [`.env.example`](.env.example) (`.env.local` in development, the
+  container's environment in a deployment).
+- **File**: `CONFIG_PATH=/path/to/config.json`. Its shape is the schema's nested keys, for example
+  `{ "database": { "url": "postgres://…" }, "flags": { "evalGate": true } }`;
+  [`config.example.json`](config.example.json) shows a few.
+- **Both**: each setting is taken from the first source that sets it: **env > file > default**. A
+  blank env value counts as unset.
+
+An invalid value stops the process at boot with a `ConfigError` that names the key and its
+environment variable; so does a `CONFIG_PATH` that names no file. Code reads `getConfig()`; tests and
+scripts build one with `resolveConfig({ env, configPath })`. Only `NODE_ENV`, the `NEXT_*` variables
+Next reads, `next.config.ts`'s build-time variables and the variables a third-party SDK reads itself
+stay outside it (listed at the top of `config.ts`).
+
+Feature flags have semantic keys (`evalGate`, `rankingCatalogDrift`, `mcpApps`, `agentsPages`,
+`toolRunInsights`): in the file `flags.<key>`, in the environment `FF_EVAL_GATE`,
+`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES` and `FF_TOOL_RUN_INSIGHTS`. A flag
+takes `true`, `1`, `false` or `0`; unset, it is not forced (the edition decides, else off).
+
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
 `APP_ROLE=worker` makes it run them, which is how `docker-compose.yml` runs `web` and `worker`
 ([`lib/jobs/README.md`](src/lib/jobs/README.md)).
@@ -59,14 +87,14 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
 `.env.local`, or on the container, when the app runs anywhere else.
 
-`RATEL_EXPERIMENTAL_FEATURES=1` turns on the experimental features left in the open-source
+`RATEL_EXPERIMENTAL_FEATURES=1` (`experimentalFeatures`) turns on the experimental features left in the open-source
 edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
 published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP Apps, the MCP
 server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), and tool-run
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
-confidence). Cloud ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`
-and `FF_TOOL_RUN_INSIGHTS`. The eval gate's pages live in the
+confidence). Cloud ignores it and reads each flag (`evalGate`, `rankingCatalogDrift`, `mcpApps`,
+`toolRunInsights`) on its own. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,

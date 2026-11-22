@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import type { Config } from "@/config";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -24,10 +25,10 @@ import { scorersFor } from "@/lib/views/task-scorers/store";
 
 /**
  * Owned (ADR-0030): what upstream passes to its organization flag service. Here the gate is
- * `FF_EVAL_GATE`, so the deps are the environment the gate reads; the name stays upstream's so
+ * `evalGate`, so the deps are the configuration the gate reads; the name stays upstream's so
  * the copied callers compile unchanged.
  */
-export type OrganizationFlagDeps = Record<string, string | undefined>;
+export type OrganizationFlagDeps = Config;
 
 export interface RefreshTaskEvalSetDeps {
   db?: EvalDb & Pick<ReturnType<typeof getDb>, "transaction">;

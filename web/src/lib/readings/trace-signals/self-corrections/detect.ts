@@ -1,6 +1,6 @@
+import { getConfig } from "@/config";
 import { isRetrySearch, SAME_ASK_MIN_JACCARD, sameAsk, searchBefore } from "@/lib/ledger/same-ask";
 import type { InvokeOutcome, StepDraft, TurnSource } from "@/lib/ledger/types";
-import { envNumber } from "@/lib/platform/env-number";
 import { jaccard, tokenize } from "@/lib/readings/text/cluster";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
@@ -89,23 +89,19 @@ export const ERROR_KINDS: ReadonlySet<SelfCorrectionKind> = new Set<SelfCorrecti
 
 /**
  * How long after a turn ends the same user's next turn can still be asking
- * again. Env `TRACE_SIGNALS_ASKED_AGAIN_GAP_MS`, default 10 minutes (the
+ * again. Config `traceSignals.askedAgainGapMs`, default 10 minutes (the
  * prerequisites window). On one customer's replay every same-ask pair of
  * consecutive turns was 2 to 5 minutes apart.
  */
-export const ASKED_AGAIN_MAX_GAP_MS = envNumber("TRACE_SIGNALS_ASKED_AGAIN_GAP_MS", 10 * 60_000);
+export const ASKED_AGAIN_MAX_GAP_MS = getConfig().traceSignals.askedAgainGapMs;
 
 /**
  * Content-word Jaccard (`tokenize` in `lib/text/cluster.ts`) at or above which
  * two asks in the users' own words are the same. High on purpose: "find the
  * Q3 roadmap review" and "change the priority of the Q3 roadmap review" share
- * half their words and are two needs. Env `TRACE_SIGNALS_ASKED_AGAIN_TEXT_JACCARD`.
+ * half their words and are two needs. Config `traceSignals.askedAgainTextJaccard`.
  */
-export const ASKED_AGAIN_MIN_TEXT_JACCARD = envNumber(
-  "TRACE_SIGNALS_ASKED_AGAIN_TEXT_JACCARD",
-  0.8,
-  (n) => n > 0 && n <= 1,
-);
+export const ASKED_AGAIN_MIN_TEXT_JACCARD = getConfig().traceSignals.askedAgainTextJaccard;
 
 export interface SelfCorrection {
   kind: SelfCorrectionKind;

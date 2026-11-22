@@ -3,15 +3,17 @@ import {
   ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
   ATTR_SERVICE_NAME,
 } from "@opentelemetry/semantic-conventions";
+import { type Config, getConfig } from "@/config";
 
 /**
  * The platform's own traces and logs (self-telemetry, owned port of the upstream config). The
- * open-source edition exports only where an operator points it: both
- * `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` and `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` must be set, or
- * nothing is exported and nothing leaves the process. There is no vendor default and no key is
- * ever forwarded to an endpoint it was not set for. `OTEL_SDK_DISABLED=true` is the emergency stop.
+ * open-source edition exports only where an operator points it: both `otel.tracesEndpoint`
+ * (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) and `otel.logsEndpoint` (OTEL_EXPORTER_OTLP_LOGS_ENDPOINT)
+ * must be set, or nothing is exported and nothing leaves the process. There is no vendor default
+ * and no key is ever forwarded to an endpoint it was not set for. `otel.sdkDisabled`
+ * (OTEL_SDK_DISABLED=true) is the emergency stop.
  */
-type Environment = Readonly<Record<string, string | undefined>>;
+type OtelConfig = Pick<Config, "otel">;
 
 type OtlpSignalConfig = {
   url: string;
@@ -32,51 +34,40 @@ export type SelfTelemetryConfig = {
   logs: OtlpSignalConfig;
 };
 
-/** The service name when `OTEL_SERVICE_NAME` (the OpenTelemetry standard variable) is unset. */
-export const SERVICE_NAME = "ratel-platform";
-
-/** `OTEL_SERVICE_NAME`, else `ratel-platform`. A deployment keeps its dashboards' name with it. */
-export function serviceName(environment: Environment): string {
-  return environment.OTEL_SERVICE_NAME?.trim() || SERVICE_NAME;
-}
-
-function sdkDisabled(environment: Environment): boolean {
-  return environment.OTEL_SDK_DISABLED?.trim().toLowerCase() === "true";
-}
-
 /** Whether this process exports its own telemetry: only when both signal endpoints are set. */
-export function selfTelemetryEnabled(environment: Environment): boolean {
-  if (sdkDisabled(environment)) return false;
-  return (
-    !!signalOverride(environment, "TRACES").endpoint &&
-    !!signalOverride(environment, "LOGS").endpoint
-  );
+export function selfTelemetryEnabled(config: OtelConfig = getConfig()): boolean {
+  if (config.otel.sdkDisabled) return false;
+  return !!signalOverride(config, "TRACES").endpoint && !!signalOverride(config, "LOGS").endpoint;
 }
 
 export function resolveSelfTelemetryConfig(
-  environment: Environment,
+  config: OtelConfig,
   staticEnvironment: StaticTelemetryEnvironment,
 ): SelfTelemetryConfig | null {
-  if (!selfTelemetryEnabled(environment)) return null;
-  const traces = resolveSignalConfig(environment, "TRACES");
-  const logs = resolveSignalConfig(environment, "LOGS");
+  if (!selfTelemetryEnabled(config)) return null;
+  const traces = resolveSignalConfig(config, "TRACES");
+  const logs = resolveSignalConfig(config, "LOGS");
   if (!traces || !logs) return null;
 
   return {
-    resourceAttributes: processResourceAttributes(environment, staticEnvironment),
-    tracesSamplerRatio: resolveTracesSamplerRatio(environment.OTEL_TRACES_SAMPLER_ARG),
+    resourceAttributes: processResourceAttributes(config, staticEnvironment),
+    tracesSamplerRatio: config.otel.tracesSamplerRatio,
     traces,
     logs,
   };
 }
 
-/** The resource every exporter of this process starts from: its service and deployment. */
+/**
+ * The resource every exporter of this process starts from: its service (`otel.serviceName`,
+ * OTEL_SERVICE_NAME, default `ratel-platform`; a deployment keeps its dashboards' name with it)
+ * and deployment.
+ */
 export function processResourceAttributes(
-  environment: Environment,
+  config: OtelConfig,
   staticEnvironment: StaticTelemetryEnvironment,
 ): SelfTelemetryConfig["resourceAttributes"] {
   return {
-    [ATTR_SERVICE_NAME]: serviceName(environment),
+    [ATTR_SERVICE_NAME]: config.otel.serviceName,
     [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: staticEnvironment.deploymentEnvironment || "development",
   };
 }
@@ -97,10 +88,10 @@ export function isTelemetryExportOrigin(
  * A signal endpoint without matching headers yields an unauthenticated exporter most collectors
  * reject (401) with no local signal. The boot path logs these so the misconfiguration is visible.
  */
-export function unauthenticatedOverrideWarnings(environment: Environment): string[] {
+export function unauthenticatedOverrideWarnings(config: OtelConfig): string[] {
   const warnings: string[] = [];
   for (const signal of ["TRACES", "LOGS"] as const) {
-    const { endpointVar, headersVar, endpoint, rawHeaders } = signalOverride(environment, signal);
+    const { endpointVar, headersVar, endpoint, rawHeaders } = signalOverride(config, signal);
     if (endpoint && !rawHeaders) {
       warnings.push(
         `[otel] ${endpointVar} is set without ${headersVar}. The ${signal.toLowerCase()} exporter will send unauthenticated requests; set ${headersVar} if the collector needs credentials.`,
@@ -111,16 +102,16 @@ export function unauthenticatedOverrideWarnings(environment: Environment): strin
 }
 
 export function selfTelemetryConfigWarnings(
-  environment: Environment,
+  settings: OtelConfig,
   _staticEnvironment: StaticTelemetryEnvironment,
   config: SelfTelemetryConfig | null,
 ): string[] {
-  if (sdkDisabled(environment)) return [];
-  const traces = signalOverride(environment, "TRACES").endpoint;
-  const logs = signalOverride(environment, "LOGS").endpoint;
+  if (settings.otel.sdkDisabled) return [];
+  const traces = signalOverride(settings, "TRACES").endpoint;
+  const logs = signalOverride(settings, "LOGS").endpoint;
   if (!traces && !logs) return [];
 
-  const warnings = unauthenticatedOverrideWarnings(environment);
+  const warnings = unauthenticatedOverrideWarnings(settings);
   for (const [signal, endpoint] of [
     ["TRACES", traces],
     ["LOGS", logs],
@@ -138,29 +129,23 @@ export function selfTelemetryConfigWarnings(
   return warnings;
 }
 
-/** `OTEL_TRACES_SAMPLER_ARG` as a 0..1 root sampling ratio; 1 when unset or invalid. */
-export function resolveTracesSamplerRatio(value: string | undefined): number {
-  const ratio = Number.parseFloat(value ?? "");
-  return Number.isNaN(ratio) ? 1 : Math.min(1, Math.max(0, ratio));
-}
-
 function resolveSignalConfig(
-  environment: Environment,
+  config: OtelConfig,
   signal: "TRACES" | "LOGS",
 ): OtlpSignalConfig | null {
-  const { endpoint, rawHeaders } = signalOverride(environment, signal);
+  const { endpoint, rawHeaders } = signalOverride(config, signal);
   if (!endpoint) return null;
   return { url: endpoint, headers: rawHeaders ? parseKeyPairsIntoRecord(rawHeaders) : {} };
 }
 
-function signalOverride(environment: Environment, signal: "TRACES" | "LOGS") {
-  const endpointVar = `OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`;
-  const headersVar = `OTEL_EXPORTER_OTLP_${signal}_HEADERS`;
+/** A signal's endpoint and headers, and the env variables a warning names for them. */
+function signalOverride(config: OtelConfig, signal: "TRACES" | "LOGS") {
+  const { tracesEndpoint, tracesHeaders, logsEndpoint, logsHeaders } = config.otel;
   return {
-    endpointVar,
-    headersVar,
-    endpoint: environment[endpointVar]?.trim(),
-    rawHeaders: environment[headersVar]?.trim(),
+    endpointVar: `OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`,
+    headersVar: `OTEL_EXPORTER_OTLP_${signal}_HEADERS`,
+    endpoint: signal === "TRACES" ? tracesEndpoint : logsEndpoint,
+    rawHeaders: signal === "TRACES" ? tracesHeaders : logsHeaders,
   };
 }
 

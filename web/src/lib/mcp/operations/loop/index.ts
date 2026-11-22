@@ -85,14 +85,14 @@ import "@/lib/views/task-evals/ship";
  * metadata and never a tool.
  *
  * Listed for everyone with app access, as the console's Fixes and Tasks are. `run_eval` and
- * `get_eval` need `FF_EVAL_GATE`; off, they refuse with `forbidden` (`eval_gate_off`).
+ * `get_eval` need `evalGate`; off, they refuse with `forbidden` (`eval_gate_off`).
  *
  * Owned (ADR-0030): the eval gate is an env flag. `list_tasks` and
  * `get_task` read the Tasks page's model and one task's page; a task's scorers,
- * scores, eval set and shipments only with `FF_EVAL_GATE`. A fix with tasks is simulated once per task on the task's
+ * scores, eval set and shipments only with `evalGate`. A fix with tasks is simulated once per task on the task's
  * eval set (`lib/views/task-evals`); other fixes on their own eval set.
  * A fix's `draft` is its newest fix draft while the eval gate is on
- * (`FF_EVAL_GATE`), else null.
+ * (`evalGate`), else null.
  */
 export interface LoopOperationDeps {
   /** The Tasks page's model, fix counts included (`buildTaskList` with Fixes' open fixes). */
@@ -126,7 +126,7 @@ export interface LoopOperationDeps {
     fix: Pick<Fix, "id" | "short">,
   ) => Promise<SimulationOutcome | null>;
   /**
-   * `FF_EVAL_GATE` for the caller in the project's organization
+   * `evalGate` for the caller in the project's organization
    * (`evalGateEnabledForActor`): an OAuth user as the console decides them, an
    * API key as `project:<id>` with the organization's properties.
    */
@@ -531,7 +531,7 @@ export function loopReadOperations(deps: LoopOperationDeps = defaultLoopDeps): M
       domain: "observability",
       title: "Get task",
       description:
-        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with FF_EVAL_GATE on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+        "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
       keywords: ["get task", "task scorers", "task eval set"],
       scope: "project",
       mutates: false,
@@ -834,7 +834,7 @@ export function loopWriteOperations(deps: LoopOperationDeps = defaultLoopDeps): 
       domain: "writes",
       title: "Run eval on a fix",
       description:
-        "Queue one simulation per affected task when FF_EVAL_GATE is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
+        "Queue one simulation per affected task when the evalGate flag is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
       keywords: ["run eval", "simulate a fix", "before and after"],
       scope: "project",
       mutates: true,

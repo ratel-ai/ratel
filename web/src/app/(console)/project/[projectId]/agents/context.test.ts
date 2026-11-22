@@ -4,7 +4,7 @@ import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { type AgentsPageDeps, resolveAgentsPageContext } from "./context";
 
-/** RC-775: with `FF_AGENTS_PAGES` off, both Agents pages are not found. */
+/** RC-775: with `agentsPages` off, both Agents pages are not found. */
 
 const PROJECT = { id: "p1", organizationId: "org-1" } as Project;
 const ORGANIZATION = { id: "org-1", slug: "acme" } as Organization;

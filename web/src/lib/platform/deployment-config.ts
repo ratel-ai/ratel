@@ -1,18 +1,19 @@
+import { type Config, getConfig } from "@/config";
 import { normalizeOrganizationSettings, slugify } from "@/lib/platform/organization";
 
-type Env = Readonly<Record<string, string | undefined>>;
+type DeploymentConfig = Pick<Config, "app" | "database" | "traceSignals">;
 
-const isOss = (env: Env) => (env.RATEL_COMPOSITION || "oss") === "oss";
+const isOss = (config: DeploymentConfig) => config.app.composition === "oss";
 
 const LOCAL_HOSTS: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /** The compose default, and public: `.env.example` and `docker-compose.yml` both carry it. */
 const DEFAULT_DATABASE_PASSWORD = "ratel";
 
-/** `RATEL_ORG_NAME`, or null when unset. Throws on a name the settings form would refuse. */
-export function configuredOrganizationName(env: Env = process.env): string | null {
-  if (!isOss(env)) return null;
-  const name = env.RATEL_ORG_NAME?.trim();
+/** `app.organizationName` (RATEL_ORG_NAME), or null when unset. Throws on a name the settings form would refuse. */
+export function configuredOrganizationName(config: DeploymentConfig = getConfig()): string | null {
+  if (!isOss(config)) return null;
+  const name = config.app.organizationName;
   if (!name) return null;
   const normalized = normalizeOrganizationSettings({ name, slug: slugify(name) || "org" });
   if (!normalized.ok) throw new Error(`RATEL_ORG_NAME: ${normalized.error}`);
@@ -36,15 +37,14 @@ function databasePassword(url: string | undefined): string | null {
   }
 }
 
-/** What a deployment with a public `BASE_URL` left at its public defaults. Names, never values. */
-export function exposureWarnings(env: Env = process.env): string[] {
-  if (!isOss(env) || !isPublicUrl(env.BASE_URL)) return [];
+/** What a deployment with a public `app.baseUrl` (BASE_URL) left at its public defaults. Names, never values. */
+export function exposureWarnings(config: DeploymentConfig = getConfig()): string[] {
+  if (!isOss(config) || !isPublicUrl(config.app.baseUrl)) return [];
   const warnings: string[] = [];
-  if (databasePassword(env.DATABASE_URL) === DEFAULT_DATABASE_PASSWORD) {
+  if (databasePassword(config.database.url) === DEFAULT_DATABASE_PASSWORD) {
     warnings.push("POSTGRES_PASSWORD is the public default; recreate the database with your own");
   }
-  const salt = env.TRACE_SIGNALS_HASH_SALT?.trim();
-  if (!salt || salt === "REPLACE_ME") {
+  if (!config.traceSignals.hashSalt) {
     warnings.push("TRACE_SIGNALS_HASH_SALT is not set; hashes use the public development salt");
   }
   return warnings;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -17,8 +18,8 @@ import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0030): the gate is FF_EVAL_GATE from the environment, not an organization flag.
-const FLAGS_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
+// Owned (ADR-0030): the gate is the evalGate flag in the configuration, not an organization flag.
+const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 const observability = { trackSystemEvent: async () => undefined };
 
 test("refresh preserves pins, user edits and fix cases while removing stale cases and respecting exclusions", async () => {

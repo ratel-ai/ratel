@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { type Config, getConfig } from "@/config";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -13,7 +14,7 @@ import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { anthropicClient } from "@/lib/readings/anthropic/client";
-import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
+import { resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import type {
   CorpusEntry,
   JudgeEngine,
@@ -220,15 +221,15 @@ const HELPER_READ_TIMEOUT_MS = 5_000;
 /** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. `feature` names its questions on `model_call` lines. */
 export function topicJudgeFromEnv(
   framing: JudgeFraming,
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "openai"> = getConfig(),
   feature = "topics_place",
 ): JudgeEngine | null {
-  const resolved = resolveDecisionEngine(env);
+  const resolved = resolveDecisionEngine(config);
   if (!resolved) return null;
   return openaiJudgeEngine({
     apiKey: resolved.apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
+    baseUrl: config.openai.baseUrl,
+    model: config.openai.decisionsModel,
     framing,
     feature,
     maxInputTokens: TOPICS_MAX_JUDGE_TOKENS,
@@ -238,9 +239,9 @@ export function topicJudgeFromEnv(
 /** One structured-output Anthropic call that names topics; null without a Claude backend. */
 export function anthropicTopicNamer(
   model: string,
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "anthropic"> = getConfig(),
 ): Namer | null {
-  const client = anthropicClient({}, env);
+  const client = anthropicClient({}, config);
   if (!client) return null;
   return async (groups) => {
     const { system, user } = buildNamePrompt(groups);
@@ -288,8 +289,8 @@ async function loadAsksInChunks(
 
 /** The real collaborators; model clients only for what the caller did not supply. */
 function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
-  const nameModel =
-    process.env.TOPICS_LABEL_MODEL || process.env.TRACE_WORKFLOW_LABEL_MODEL || DEFAULT_LABEL_MODEL;
+  const { topicsLabel, traceWorkflowLabel } = getConfig().models;
+  const nameModel = topicsLabel || traceWorkflowLabel || DEFAULT_LABEL_MODEL;
   return {
     now: () => new Date(),
     maxTurns: TOPICS_MAX_TURNS,
@@ -321,7 +322,7 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     sentimentJudge:
       "sentimentJudge" in overrides
         ? null
-        : topicJudgeFromEnv(SENTIMENT_FRAMING, process.env, "topics_sentiment"),
+        : topicJudgeFromEnv(SENTIMENT_FRAMING, getConfig(), "topics_sentiment"),
     name: "name" in overrides ? null : anthropicTopicNamer(nameModel),
     nameModel,
     observability: createBackgroundObservability(),

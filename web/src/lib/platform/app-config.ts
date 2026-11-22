@@ -1,12 +1,16 @@
 /**
- * The product's name and the deployment origin snippets start from. The defaults are local
- * development on the open-source edition; `.env` overrides them. `APP_NAME` is how the Cloud
- * edition names itself, and is deliberately undocumented.
+ * The product's name and the deployment origin snippets start from: `app.name` (APP_NAME) and
+ * `app.baseUrl` (BASE_URL) in `web/src/config.ts`. The defaults are local development on the
+ * open-source edition. `APP_NAME` is how the Cloud edition names itself, and is deliberately
+ * undocumented.
  *
  * Copied modules read these at load, on the server and in the browser, so the root layout writes
  * the server's values into the page (`appConfigScript`) before any bundle runs. An operator can
- * then set them on a running image, with no rebuild.
+ * then set them on a running image, with no rebuild. A browser bundle resolves `@/config` to the
+ * defaults (`config-defaults.ts`): an MCP Apps view, which has no page script, names the app's
+ * default.
  */
+import { type Config, getConfig } from "@/config";
 
 export interface AppConfig {
   name: string;
@@ -18,9 +22,6 @@ export interface AppConfig {
   serviceName?: string;
 }
 
-const DEFAULT_NAME = "Ratel";
-const DEFAULT_BASE_URL = "http://localhost:3000";
-
 /** Path prefix for the Bearer-authed API surface under the deployment origin. */
 export const API_V1_PREFIX = "/api/v1";
 
@@ -30,11 +31,8 @@ function normalizeBaseUrl(value: string): string {
   return trimmed.endsWith(API_V1_PREFIX) ? trimmed.slice(0, -API_V1_PREFIX.length) : trimmed;
 }
 
-export function resolveAppConfig(env: Record<string, string | undefined>): AppConfig {
-  return {
-    name: env.APP_NAME?.trim() || DEFAULT_NAME,
-    baseUrl: normalizeBaseUrl(env.BASE_URL?.trim() || DEFAULT_BASE_URL),
-  };
+export function resolveAppConfig(config: Pick<Config, "app"> = getConfig()): AppConfig {
+  return { name: config.app.name, baseUrl: normalizeBaseUrl(config.app.baseUrl) };
 }
 
 declare global {
@@ -44,8 +42,7 @@ declare global {
 }
 
 const config: AppConfig =
-  (typeof window === "undefined" ? undefined : window.__RATEL_APP_CONFIG__) ??
-  resolveAppConfig(process.env);
+  (typeof window === "undefined" ? undefined : window.__RATEL_APP_CONFIG__) ?? resolveAppConfig();
 
 export const APP_NAME = config.name;
 

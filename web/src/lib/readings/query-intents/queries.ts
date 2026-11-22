@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, inArray, isNotNull, notExists, sql } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { enqueueJob, type JobsDb } from "@/lib/jobs/queries";
 import { jobs } from "@/lib/jobs/schema";
@@ -290,13 +291,10 @@ export async function recordQueryIntentOccurrences(
  * How many un-categorized search events a project accumulates before the drain enqueues
  * a `categorize_queries` job for it. Count-based, not time-based: a busy project is
  * analyzed as soon as it crosses the threshold, a quiet one waits until it has enough
- * new queries to be worth a run. `QUERY_INTENTS_TRIGGER_COUNT=1` categorizes on
+ * new queries to be worth a run. `queryIntents.triggerCount` (QUERY_INTENTS_TRIGGER_COUNT) at 1 categorizes on
  * essentially every new query.
  */
-export const QUERY_INTENTS_TRIGGER_COUNT = Math.max(
-  1,
-  Number.parseInt(process.env.QUERY_INTENTS_TRIGGER_COUNT ?? "", 10) || 40,
-);
+export const QUERY_INTENTS_TRIGGER_COUNT = getConfig().queryIntents.triggerCount;
 
 /**
  * Enqueue a `categorize_queries` job for every project with at least `threshold` search

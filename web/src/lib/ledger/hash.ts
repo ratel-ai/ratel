@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { type Config, getConfig } from "@/config";
 import { isLocalEnvironment } from "@/lib/platform/environment";
 
 /**
@@ -12,7 +13,7 @@ import { isLocalEnvironment } from "@/lib/platform/environment";
  * here too. Each value is hashed under its own domain label so a query and a user id
  * that happen to be equal never collide.
  *
- * The salt comes from `TRACE_SIGNALS_HASH_SALT`. Only a local environment (APP_ENV
+ * The salt comes from `traceSignals.hashSalt` (TRACE_SIGNALS_HASH_SALT). Only a local environment (APP_ENV
  * development, local or test) falls back to the committed development value. A deployed
  * environment with the secret unset (or still holding a `REPLACE_ME` placeholder) gets
  * null, and the build job refuses to hash rather than hashing under a public salt, which
@@ -25,19 +26,16 @@ import { isLocalEnvironment } from "@/lib/platform/environment";
 
 export const DEV_TRACE_SIGNALS_HASH_SALT = "ratel-trace-signals-dev-salt";
 
-/** The literal a provisioning tool seeds a human-supplied secret with until an operator sets it. */
-const SECRET_PLACEHOLDER = "REPLACE_ME";
-
 /** Hex characters kept per hash (128 bits). */
 const HASH_HEX_LENGTH = 32;
 
 /** The hash salt, or null in a deployed environment that has none configured. */
 export function traceSignalsHashSalt(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "app" | "traceSignals"> = getConfig(),
 ): string | null {
-  const configured = env.TRACE_SIGNALS_HASH_SALT?.trim();
-  if (configured && configured !== SECRET_PLACEHOLDER) return configured;
-  return isLocalEnvironment(env) ? DEV_TRACE_SIGNALS_HASH_SALT : null;
+  const configured = config.traceSignals.hashSalt;
+  if (configured) return configured;
+  return isLocalEnvironment(config.app.environment) ? DEV_TRACE_SIGNALS_HASH_SALT : null;
 }
 
 /**

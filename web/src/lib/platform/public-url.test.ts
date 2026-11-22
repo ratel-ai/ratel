@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import { resetConfigForTests } from "@/config";
 import { isOwnOrigin, publicBaseUrl, redirectUrl } from "@/lib/platform/public-url";
 
 const saved = process.env.APP_PUBLIC_URL;
@@ -10,6 +11,7 @@ function restore() {
   else process.env.APP_PUBLIC_URL = saved;
   if (savedEnv === undefined) delete process.env.APP_ENV;
   else process.env.APP_ENV = savedEnv;
+  resetConfigForTests();
 }
 
 describe("publicBaseUrl", () => {
@@ -18,13 +20,16 @@ describe("publicBaseUrl", () => {
   it("falls back to localhost on a laptop", () => {
     delete process.env.APP_PUBLIC_URL;
     delete process.env.APP_ENV;
+    resetConfigForTests();
     assert.equal(publicBaseUrl(), "http://localhost:3000");
   });
 
   it("throws in a deployed environment rather than hand out localhost links", () => {
     delete process.env.APP_PUBLIC_URL;
+    resetConfigForTests();
     for (const env of ["production", "staging"]) {
       process.env.APP_ENV = env;
+      resetConfigForTests();
       assert.throws(() => publicBaseUrl(), /APP_PUBLIC_URL/);
       assert.throws(() => redirectUrl("/admin", "https://ip-10-0-1-5:3000/x"), /APP_PUBLIC_URL/);
     }
@@ -36,6 +41,7 @@ describe("redirectUrl", () => {
 
   it("points at the public origin, not the container address Next puts in request.url", () => {
     process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh/";
+    resetConfigForTests();
     const url = redirectUrl(
       "/admin?x=1",
       "https://ip-10-60-10-130.eu-central-1.compute.internal:3000/api/support-session/end",
@@ -45,6 +51,7 @@ describe("redirectUrl", () => {
 
   it("falls back to the request's own origin when nothing is configured", () => {
     delete process.env.APP_PUBLIC_URL;
+    resetConfigForTests();
     assert.equal(
       redirectUrl("/admin", "http://localhost:3005/api/x").href,
       "http://localhost:3005/admin",
@@ -56,10 +63,12 @@ describe("isOwnOrigin", () => {
   afterEach(() => {
     if (saved === undefined) delete process.env.APP_PUBLIC_URL;
     else process.env.APP_PUBLIC_URL = saved;
+    resetConfigForTests();
   });
 
   it("accepts the public origin when the request URL is the container's address", () => {
     process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh/";
+    resetConfigForTests();
     assert.equal(
       isOwnOrigin("https://cloud.ratel.sh", "http://ip-10-0-1-5:3000/api/agent-health/imports"),
       true,
@@ -68,6 +77,7 @@ describe("isOwnOrigin", () => {
 
   it("accepts the request URL's own origin", () => {
     process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh";
+    resetConfigForTests();
     assert.equal(
       isOwnOrigin("http://localhost:3000", "http://localhost:3000/api/agent-health/imports"),
       true,
@@ -76,6 +86,7 @@ describe("isOwnOrigin", () => {
 
   it("rejects any other site", () => {
     process.env.APP_PUBLIC_URL = "https://cloud.ratel.sh";
+    resetConfigForTests();
     assert.equal(
       isOwnOrigin("https://evil.example", "http://ip-10-0-1-5:3000/api/agent-health/imports"),
       false,

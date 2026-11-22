@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import {
   PREREQ_MIN_LIFT,
   PREREQ_MIN_TURNS,
@@ -33,8 +33,8 @@ import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
  * summary without it falls back to pairs read off the journey's paths.
  */
 
-/** How far back a call looks for what ran before it. Env `PREREQ_WINDOW_MS`, default 10 minutes. */
-export const PREREQ_WINDOW_MS = envNumber("PREREQ_WINDOW_MS", 10 * 60_000);
+/** How far back a call looks for what ran before it. Config `traceSignals.prereqWindowMs`, default 10 minutes. */
+export const PREREQ_WINDOW_MS = getConfig().traceSignals.prereqWindowMs;
 /** Pairs stored at most, strongest first. */
 export const PREREQ_STORED_MAX = 60;
 /** A session is dropped once its last call is this much older than the window before the turn being read. */

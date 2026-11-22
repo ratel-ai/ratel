@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { CloudEvent } from "@/lib/ingest/cloud-schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -124,7 +125,12 @@ async function runOnce(db: Db, env: Record<string, string | undefined>) {
     { runId: run.id, variant: ADD },
     {
       db,
-      models: resolveEvalModels(env, "eval_gate_judge", "development", "eval_gate_what_if"),
+      models: resolveEvalModels(
+        resolveConfig({ env }),
+        "eval_gate_judge",
+        "development",
+        "eval_gate_what_if",
+      ),
       loadStep: async () => recorded(),
       loadCorpus: async () => [],
     },

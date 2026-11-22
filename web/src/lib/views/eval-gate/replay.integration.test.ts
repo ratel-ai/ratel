@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { CloudMessage } from "@/lib/ingest/cloud-schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -515,7 +516,7 @@ test("with no model key a simulation completes, says it can't replay, and never 
   const { client, db } = await setup();
   try {
     const fix = failClearlyFix();
-    const models = resolveEvalModels(NO_KEYS, undefined, "production");
+    const models = resolveEvalModels(resolveConfig({ env: NO_KEYS }), undefined, "production");
     const outcome = await withNoNetwork(() =>
       runSimulation(fix.id, { projectId: PROJECT, deps: deps(db, fix, models) }),
     );
@@ -536,7 +537,7 @@ test("with EVAL_GATE_MOCK_MODEL=1 a simulation runs on the stand-ins, with no ne
   try {
     const fix = failClearlyFix();
     const models = resolveEvalModels(
-      { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" },
+      resolveConfig({ env: { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" } }),
       undefined,
       "development",
     );

@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import pino, { type DestinationStream, type Logger, stdSerializers } from "pino";
-
-type Environment = Readonly<Record<string, string | undefined>>;
+import { getConfig } from "@/config";
 
 export type LogFields = Readonly<Record<string, unknown>>;
 export type LogError = (message: string, err?: unknown, fields?: LogFields) => void;
@@ -20,7 +19,10 @@ export type LogContext = {
 };
 
 export type CreateLoggerOptions = {
-  environment?: Environment;
+  /** `logging.level` (LOG_LEVEL); unset, `debug` in development, else `info`. */
+  level?: string;
+  /** `NODE_ENV`, which Next owns. */
+  nodeEnv?: string;
   destination?: DestinationStream;
 };
 
@@ -80,12 +82,13 @@ export function setLogContext(context: LogContext): void {
 }
 
 export function createLogger({
-  environment = process.env,
+  level = getConfig().logging.level,
+  nodeEnv = process.env.NODE_ENV,
   destination,
 }: CreateLoggerOptions = {}): Logger {
   return pino(
     {
-      level: environment.LOG_LEVEL || (environment.NODE_ENV === "development" ? "debug" : "info"),
+      level: level || (nodeEnv === "development" ? "debug" : "info"),
       redact: REDACTED_FIELDS,
       mixin: requestContextMixin,
       serializers: { err: serializeError },
