@@ -18,6 +18,7 @@ export const CORE_FLAGS = [
   "FF_SANDBOXES",
   "FF_PIVOTS",
   "FF_CUSTOM_DASHBOARDS",
+  "FF_CODE_HANDOFF",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

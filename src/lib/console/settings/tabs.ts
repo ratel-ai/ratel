@@ -14,10 +14,13 @@ export function organizationSettingsRoot(slug: string): string {
   return `${organizationRoot(slug)}/settings`;
 }
 
-/** General, API keys, Pivots (only with `cloud-pivots` on), Developer (SDK events) and Danger zone. */
+/**
+ * General, API keys, Pivots (only with `cloud-pivots` on), Developer (SDK events), Repository
+ * (only with `FF_CODE_HANDOFF` on) and Danger zone.
+ */
 export function projectSettingsTabs(
   projectId: string,
-  options: { pivots?: boolean } = {},
+  options: { pivots?: boolean; repository?: boolean } = {},
 ): TabLink[] {
   const root = projectSettingsRoot(projectId);
   return [
@@ -26,6 +29,7 @@ export function projectSettingsTabs(
     { href: `${root}/api-keys`, label: "API keys" },
     ...(options.pivots ? [{ href: `${root}/pivots`, label: "Pivots" }] : []),
     { href: `${root}/developer`, label: "Developer" },
+    ...(options.repository ? [{ href: `${root}/repository`, label: "Repository" }] : []),
     { href: `${root}/danger`, label: "Danger zone" },
   ];
 }

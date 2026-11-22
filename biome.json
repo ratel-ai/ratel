@@ -1010,7 +1010,6 @@
         "src/components/console/org/ProjectsList.tsx",
         "src/components/console/org/NewProjectButton.tsx",
         "src/components/console/org/OrgSkeleton.tsx",
-        "src/app/(console)/project/\\[projectId\\]/settings/layout.tsx",
         "src/lib/platform/chart.ts",
         "src/lib/synthesis/dashboard.ts",
         "src/lib/synthesis/dashboard.test.ts",
@@ -1464,7 +1463,19 @@
         "!src/lib/views/custom-dashboards/session.ts",
         "!src/lib/views/custom-dashboards/schema.ts",
         "src/components/console/custom-dashboards/**",
-        "src/app/(console)/project/\\[projectId\\]/dashboards/\\[dashboardId\\]/page.tsx"
+        "src/app/(console)/project/\\[projectId\\]/dashboards/\\[dashboardId\\]/page.tsx",
+        "src/lib/views/code-handoff/**",
+        "!src/lib/views/code-handoff/gate.ts",
+        "!src/lib/views/code-handoff/gate.test.ts",
+        "!src/lib/views/code-handoff/wiring.ts",
+        "!src/lib/views/code-handoff/schema.ts",
+        "!src/lib/views/code-handoff/webhook-handler.ts",
+        "!src/lib/views/code-handoff/store.integration.test.ts",
+        "!src/lib/views/code-handoff/link-service.integration.test.ts",
+        "src/components/console/code-handoff/**",
+        "src/app/(console)/project/\\[projectId\\]/settings/repository/**",
+        "!src/app/(console)/project/\\[projectId\\]/settings/repository/page.tsx",
+        "src/app/api/github/**"
       ],
       "linter": {
         "rules": {

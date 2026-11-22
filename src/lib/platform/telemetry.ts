@@ -128,6 +128,9 @@ export const SERVER_EVENT_NAMES = [
   "dashboard_deleted",
   "dashboard_widget_added",
   "dashboard_shared",
+  // Code handoff (RC-914): lib/views/code-handoff/link-service.ts.
+  "repo_linked",
+  "repo_unlinked",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

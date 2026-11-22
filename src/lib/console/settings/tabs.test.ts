@@ -39,6 +39,21 @@ test("project settings show Pivots after API keys only with cloud-pivots on (RC-
   );
 });
 
+test("the Repository tab shows only when code handoff is on", () => {
+  assert.equal(
+    projectSettingsTabs("p1", { repository: false }).some((tab) => tab.label === "Repository"),
+    false,
+  );
+  assert.deepEqual(
+    projectSettingsTabs("p1", { repository: true }).map((tab) => tab.label),
+    ["General", "API keys", "Developer", "Repository", "Danger zone"],
+  );
+  assert.equal(
+    projectSettingsTabs("p1", { repository: true })[3].href,
+    "/project/p1/settings/repository",
+  );
+});
+
 test("organization settings show Danger zone only to the admins who can use it", () => {
   assert.deepEqual(
     organizationSettingsTabs("acme", { danger: true }).map((tab) => [tab.label, tab.href]),
