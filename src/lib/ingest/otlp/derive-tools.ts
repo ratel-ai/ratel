@@ -303,7 +303,11 @@ export function deriveToolInvocations(
     if (!toolId) continue;
     const callSpan = callSpanId(span, byId, childrenOf);
     // The MCP client span under a framework's tool span names the server.
-    const server = mcpServerOfCall(dimensions.get(span.spanId), dimensions.get(callSpan));
+    const own = dimensions.get(span.spanId);
+    const sameCall = dimensions.get(callSpan);
+    const server = mcpServerOfCall(own, sameCall);
+    // Who called the MCP server (RC-773): only an MCP server span knows.
+    const harness = own?.client.harness ?? sameCall?.client.harness ?? null;
     const row = toolRow(
       span,
       byId,
@@ -312,6 +316,7 @@ export function deriveToolInvocations(
       callSpan,
       namedAgentOf(span, byId)?.name ?? null,
       server,
+      harness,
     );
     out.push({
       ...row,
@@ -330,6 +335,7 @@ function toolRow(
   callSpan: string,
   agent: string | null,
   server: string | null,
+  harness: string | null,
 ): ParsedTraceEvent {
   // A call can fail without saying so on the span: its result says it instead.
   const errorType = toolErrorType(span) ?? resultFailure(span);
@@ -373,7 +379,7 @@ function toolRow(
     searchId: null,
     correlationId: null,
     catalogVersion: null,
-    harness: null,
+    harness,
     environment: null,
     endUserId: resolveUp(span, byId, USER_KEYS)?.slice(0, MAX_ID) ?? null,
     inputTokens: null,

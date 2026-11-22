@@ -195,6 +195,22 @@ export const otelSpans = pgTable(
     // written before AOBS-7.
     events: jsonb("events").$type<StoredSpanEvent[]>(),
     links: jsonb("links").$type<StoredSpanLink[]>(),
+    // Who called the MCP server (RC-773), on MCP server spans only, derived at
+    // ingest by `ingest/otlp/dimensions/client.ts`. `harness` is a normalized id
+    // (claude-code | codex | opencode | cursor | vscode | other), `harness_raw`
+    // the client name or User-Agent product it came from, `harness_source`
+    // sdk | semconv | heuristic. `mcp_transport` is stdio | http. Null when the
+    // server reports no caller (a stdio server with no SDK). No column keeps the
+    // caller's IP (RP-138): ingest reads its country and drops it.
+    harness: text("harness"),
+    harnessRaw: text("harness_raw"),
+    harnessVersion: text("harness_version"),
+    harnessSource: text("harness_source"),
+    // The ISO country of the caller's IP, from the local DB-IP file (RC-774). Null
+    // for a private, reserved or unknown address. Visible to every member.
+    geoCountry: text("geo_country"),
+    mcpTransport: text("mcp_transport"),
+    mcpProtocolVersion: text("mcp_protocol_version"),
   },
   (t) => [
     // The entity pages: an agent's or an MCP server's spans, newest first.
@@ -204,6 +220,10 @@ export const otelSpans = pgTable(
     index("otel_spans_project_mcp_server_started_idx")
       .on(t.projectId, t.mcpServer, t.startedAt)
       .where(sql`${t.mcpServer} is not null`),
+    // A later request's spans take their session's client facts (RC-773).
+    index("otel_spans_project_mcp_session_idx")
+      .on(t.projectId, t.mcpSessionId)
+      .where(sql`${t.mcpSessionId} is not null`),
     index("otel_spans_received_at_idx").on(t.receivedAt, t.id),
     index("otel_spans_project_trace_idx").on(t.projectId, t.traceId),
     index("otel_spans_project_event_idx")

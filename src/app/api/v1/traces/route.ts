@@ -1,4 +1,6 @@
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
+import { clientSessionStore } from "@/lib/ingest/otlp/client-session-store";
+import { processGeoLookup } from "@/lib/ingest/otlp/dimensions";
 import {
   findTracesWithModelCalls,
   insertEventsWithMetrics,
@@ -50,6 +52,8 @@ async function handlePost(req: Request) {
     touchApiKey,
     insertEventsWithMetrics,
     insertOtelSpans,
+    clientSessions: clientSessionStore(),
+    geo: processGeoLookup(),
     insertTraceEvents,
     trackServerEvent,
     getOrganizationByProjectId,

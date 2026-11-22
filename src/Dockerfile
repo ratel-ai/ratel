@@ -9,6 +9,16 @@ FROM node:24-trixie-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.28.2 --activate
 WORKDIR /app
 
+# --- geo: the DB-IP IP-to-Country Lite file for the client geo lookup (RC-774) ---
+# CC BY 4.0, no key. GEO_DB_MONTH (YYYY-MM; empty = the current month) is the cache key: a build
+# that passes a new month downloads the new release, the other builds reuse this layer. The script
+# falls back to the previous month while the current one is not published. The Clients tab shows
+# the attribution the licence asks for ("IP Geolocation by DB-IP").
+FROM base AS geo
+ARG GEO_DB_MONTH=
+COPY src/scripts/fetch-geo-db.mjs /tmp/fetch-geo-db.mjs
+RUN node /tmp/fetch-geo-db.mjs /geo/dbip-country-lite.mmdb "${GEO_DB_MONTH}"
+
 # --- deps: workspace manifests only, then filtered install -----------------
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -91,6 +101,10 @@ RUN groupadd --system --gid 1001 ratel \
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# The client geo file (RC-774), read at runtime from GEO_COUNTRY_MMDB_PATH, outside the Next trace.
+# Without it ingest logs one time and stores null countries.
+ENV GEO_COUNTRY_MMDB_PATH=/app/data/dbip-country-lite.mmdb
+COPY --from=geo --chown=ratel:ratel /geo/dbip-country-lite.mmdb /app/data/dbip-country-lite.mmdb
 EXPOSE 3000
 # Readiness: GET /api/health answers 200 once the composition has booted.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

@@ -1,6 +1,14 @@
 import { ancestorsOf } from "../attr-resolve";
 import type { DecodedSpan } from "../types";
 import { agentKeyOf } from "./agent";
+import {
+  type ClientFacts,
+  deriveClientFacts,
+  NO_CLIENT_FACTS,
+  type SessionClientFacts,
+  type StrippedAddresses,
+} from "./client";
+import type { GeoLookup } from "./geo";
 import type { DetectSource } from "./keys";
 import { isMcpServerSpan, type McpRole, mcpOf, mcpSessionIdOf } from "./mcp";
 
@@ -24,6 +32,18 @@ import { isMcpServerSpan, type McpRole, mcpOf, mcpSessionIdOf } from "./mcp";
  */
 
 export { type AgentSource, namedAgentOf, type SpanAgent } from "./agent";
+export {
+  type ClientFacts,
+  type HarnessId,
+  initializedSessions,
+  type McpTransport,
+  NO_CLIENT_FACTS,
+  type SessionClientFacts,
+  type StrippedAddresses,
+  senderAddresses,
+  sessionsToLookUp,
+} from "./client";
+export { type GeoLookup, NO_GEO, processGeoLookup } from "./geo";
 export type { DetectSource } from "./keys";
 export type { McpRole } from "./mcp";
 
@@ -40,6 +60,8 @@ export interface SpanDimensions {
   mcpRole: McpRole | null;
   /** The MCP transport session of the span: its own `mcp.session.id` attribute. */
   mcpSessionId: string | null;
+  /** Who called the MCP server (RC-773): set on MCP server spans only. */
+  client: ClientFacts;
 }
 
 /** Span id to the span's dimensions, for the spans of one export. */
@@ -54,17 +76,27 @@ export const NO_DIMENSIONS: SpanDimensions = {
   mcpServerSource: null,
   mcpRole: null,
   mcpSessionId: null,
+  client: NO_CLIENT_FACTS,
 };
 
 /** The map of an export whose dimensions could not be derived: no span has an entry. */
 export const NO_SPAN_DIMENSIONS: SpanDimensionsById = new Map();
 
-/** The dimensions of every span of the export that has a span id. */
+/**
+ * The dimensions of every span of the export that has a span id. `sessions`
+ * holds the client facts of MCP sessions whose `initialize` an earlier
+ * request stored (see `sessionsToLookUp`). `stripped` holds the sender
+ * addresses the ingest strip removed (RP-138), for the callers' country only.
+ */
 export function deriveSpanDimensions(
   spans: readonly DecodedSpan[],
   index: ReadonlyMap<string, DecodedSpan>,
+  sessions?: SessionClientFacts,
+  geo?: GeoLookup,
+  stripped?: StrippedAddresses,
 ): SpanDimensionsById {
   const out = new Map<string, SpanDimensions>();
+  const clients = deriveClientFacts(spans, index, sessions, geo, stripped);
   for (const span of spans) {
     if (!span.spanId) continue;
     // An MCP server span is where another process starts: the spans at and
@@ -85,6 +117,7 @@ export function deriveSpanDimensions(
       mcpServerSource: mcp?.source ?? null,
       mcpRole: mcp?.role ?? null,
       mcpSessionId: mcpSessionIdOf(span),
+      client: clients.get(span.spanId) ?? NO_CLIENT_FACTS,
     });
   }
   // The caller needs every span's own key first.

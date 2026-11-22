@@ -106,6 +106,13 @@ function span(overrides: Partial<OtelSpan> = {}): OtelSpan {
     mcpSessionId: null,
     events: null,
     links: null,
+    harness: null,
+    harnessRaw: null,
+    harnessVersion: null,
+    harnessSource: null,
+    geoCountry: null,
+    mcpTransport: null,
+    mcpProtocolVersion: null,
     ...overrides,
   };
 }

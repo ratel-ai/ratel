@@ -20,6 +20,8 @@ export type TabLink = {
   meta?: ReactNode;
   /** Match the pathname exactly (an index tab), instead of as a prefix. */
   exact?: boolean;
+  /** Decides the current tab when the tabs share one path and differ by a query parameter (`?tab=`). */
+  current?: boolean;
 };
 
 /**
@@ -39,7 +41,7 @@ export function TabNav({
   return (
     <nav aria-label={label} className={cn("flex items-center gap-1 overflow-x-auto", className)}>
       {tabs.map((tab) => {
-        const active = isCurrentTab(tab.href, pathname, tab.exact);
+        const active = tab.current ?? isCurrentTab(tab.href, pathname, tab.exact);
         return (
           <Link
             key={tab.href}

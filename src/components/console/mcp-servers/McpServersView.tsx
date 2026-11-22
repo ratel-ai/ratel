@@ -9,7 +9,7 @@ import { Callout, EmptyState } from "@ratel/design-system/states";
 import { Server } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { EntityFilters, WindowControl } from "@/components/console/agents/EntityFilters";
 import {
   type EntityFilterState,
@@ -72,11 +72,14 @@ type StatusFilter = (typeof STATUS_FILTERS)[number];
 export function McpServersView({
   servers,
   filters,
+  tabs,
   now,
 }: {
   /** Null: the read failed. */
   servers: McpServerListItem[] | null;
   filters: EntityFilterState;
+  /** The MCP page's tabs (Servers, Clients, RC-778); absent on pages without them. */
+  tabs?: ReactNode;
   now: string;
 }) {
   const router = useRouter();
@@ -95,7 +98,9 @@ export function McpServersView({
     return sort ? sortBy(kept, sort) : sortMcpServers(kept);
   }, [servers, search, status, sort]);
 
-  const header = <PageHeader title="MCP servers" actions={<WindowControl filters={filters} />} />;
+  const header = (
+    <PageHeader title="MCP servers" actions={<WindowControl filters={filters} />} tabs={tabs} />
+  );
   if (servers === null) {
     return (
       <Page>

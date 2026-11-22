@@ -9,6 +9,12 @@ import { ArrowUpRight, SquarePlay } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  countryLabel,
+  harnessWithVersion,
+  reportedLabel,
+  transportLabel,
+} from "@/components/console/clients/labels";
+import {
   formatAttributeValue,
   formatSpanKind,
   formatSpanStatus,
@@ -146,6 +152,7 @@ export function SpanInspector({
           </ol>
         </div>
       ) : null}
+      <ClientFacts span={span} />
 
       {children}
 
@@ -318,5 +325,39 @@ function sortedEntries(attributes: Readonly<Record<string, unknown>>): [string, 
   // Codepoint order: the same on the server and in every browser locale.
   return Object.entries(attributes).sort(([left], [right]) =>
     left < right ? -1 : left > right ? 1 : 0,
+  );
+}
+
+/**
+ * Who called an MCP server's span (RC-773, RC-774): the client, its country,
+ * the transport and the protocol version. No IP row: ingest reads the
+ * country from the caller's IP and drops the IP (RP-138), so no span has one.
+ */
+function ClientFacts({ span }: { span: TraceSpanView }) {
+  const facts: { label: string; value: string }[] = [
+    ...(span.harness || span.harnessVersion
+      ? [{ label: "Client", value: harnessWithVersion(span.harness, span.harnessVersion) }]
+      : []),
+    ...(span.geoCountry ? [{ label: "Country", value: countryLabel(span.geoCountry) }] : []),
+    ...(span.mcpTransport
+      ? [{ label: "Transport", value: transportLabel(span.mcpTransport) }]
+      : []),
+    ...(span.mcpProtocolVersion
+      ? [{ label: "Protocol", value: reportedLabel(span.mcpProtocolVersion) }]
+      : []),
+  ];
+  if (facts.length === 0) return null;
+  return (
+    <section aria-label="Client" className="flex flex-col gap-2">
+      <h3 className="text-xs font-medium text-fg-subtle">Client</h3>
+      <dl className="grid grid-cols-[6rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-ui">
+        {facts.map((fact) => (
+          <div key={fact.label} className="contents">
+            <dt className="text-fg-subtle">{fact.label}</dt>
+            <dd className="min-w-0 break-words text-fg tabular-nums">{fact.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

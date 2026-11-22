@@ -126,13 +126,13 @@ test("the detail has per-tool stats and the calling agents, and no protocol or t
   }
 });
 
-test("the detail lists protocol versions and transports when the spans name them", async () => {
+test("the detail lists the protocol versions and transports ingest derived (RC-773)", async () => {
   const { client, db } = await seeded();
   try {
     await client.exec(`
-      update otel_spans set attributes = attributes || '{"mcp.protocol.version": "2025-06-18", "network.transport": "tcp"}'::jsonb
+      update otel_spans set mcp_protocol_version = '2025-06-18', mcp_transport = 'http'
       where project_id = '${PROJECT_ID}' and mcp_server = 'docs-mcp' and span_id in ('${spanId(1)}', '${spanId(2)}');
-      update otel_spans set attributes = attributes || '{"mcp.protocol.version": "2025-03-26", "network.transport": "pipe"}'::jsonb
+      update otel_spans set mcp_protocol_version = '2025-03-26', mcp_transport = 'stdio'
       where project_id = '${PROJECT_ID}' and span_id = '${spanId(3)}';
     `);
     const detail = await getMcpServer(PROJECT_ID, { key: "docs-mcp" }, WINDOW, db);
@@ -141,8 +141,8 @@ test("the detail lists protocol versions and transports when the spans name them
       { value: "2025-03-26", calls: 1 },
     ]);
     assert.deepEqual(detail?.transports, [
-      { value: "tcp", calls: 2 },
-      { value: "pipe", calls: 1 },
+      { value: "http", calls: 2 },
+      { value: "stdio", calls: 1 },
     ]);
   } finally {
     await client.close();

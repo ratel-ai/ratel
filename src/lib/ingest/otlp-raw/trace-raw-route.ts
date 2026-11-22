@@ -60,7 +60,12 @@ export async function traceRawResponse(
   }
   const format = new URL(request.url).searchParams.get("format") === "otlp" ? "otlp" : "spans";
   deps.setLogContext({ project_id: scope.projectId, trace_id: traceId, format });
-  const policy: RawViewPolicy = { readContent: await deps.readContent(scope.projectId) };
+  // No reader gets a caller's IP keys, an organization admin neither (RC-778; RP-138: the core
+  // keeps no caller IP for anyone to read).
+  const policy: RawViewPolicy = {
+    readContent: await deps.readContent(scope.projectId),
+    readClientAddress: false,
+  };
   deps.setLogContext({ raw_read_content: policy.readContent });
   if (format === "otlp") {
     const raw = await deps.loadRawOtlp(scope.projectId, traceId);

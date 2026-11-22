@@ -177,3 +177,47 @@ test("free text redacts a URL credential", () => {
     `failed: https://x.test/y?token=${REDACTED}`,
   );
 });
+
+test("the caller's IP keys are left out unless the viewer is an admin, whatever readContent says (RC-778)", () => {
+  const attributes = {
+    "client.address": "81.2.69.160",
+    "client.port": 51234,
+    "network.peer.address": "81.2.69.160",
+    "net.peer.ip": "81.2.69.160",
+    "net.sock.peer.addr": "81.2.69.160",
+    "http.client_ip": "81.2.69.160",
+    "http.request.header.x-forwarded-for": ["81.2.69.160, 10.0.0.1"],
+    "http.request.header.x_real_ip": "81.2.69.160",
+    "http.request.header.forwarded": "for=81.2.69.160",
+    "user_agent.original": "claude-code/2.1.3",
+    "server.address": "mcp.example.com",
+    "http.request.method": "POST",
+  };
+  const member = redactAttributes(attributes, READ);
+  assert.equal(JSON.stringify(member).includes("81.2.69.160"), false);
+  assert.deepEqual(Object.keys(member).sort(), [
+    "http.request.method",
+    "server.address",
+    "user_agent.original",
+  ]);
+  assert.equal(
+    JSON.stringify(redactAttributes(attributes, { readContent: false })).includes("81.2.69.160"),
+    false,
+  );
+
+  const admin = redactAttributes(attributes, { ...READ, readClientAddress: true });
+  assert.equal(admin["client.address"], "81.2.69.160");
+  assert.deepEqual(admin["http.request.header.x-forwarded-for"], ["81.2.69.160, 10.0.0.1"]);
+
+  const kvs = redactKeyValues(
+    [
+      { key: "client.address", value: { stringValue: "81.2.69.160" } },
+      { key: "service.name", value: { stringValue: "a" } },
+    ],
+    READ,
+  );
+  assert.deepEqual(
+    kvs?.map((kv) => kv.key),
+    ["service.name"],
+  );
+});

@@ -64,6 +64,10 @@ export const otelTraceSummaries = pgTable(
     // `agent_key` and `mcp_server` of `otel_spans`, for the Traces filters.
     agents: text("agents").array().notNull().default(sql`'{}'::text[]`),
     mcpServers: text("mcp_servers").array().notNull().default(sql`'{}'::text[]`),
+    // The callers' countries (`otel_spans.geo_country`, RC-774), for the Traces country filter.
+    countries: text("countries").array().notNull().default(sql`'{}'::text[]`),
+    // The callers' harnesses (`otel_spans.harness`, RC-778), for the Traces harness filter.
+    harnesses: text("harnesses").array().notNull().default(sql`'{}'::text[]`),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -84,6 +88,8 @@ export const otelTraceSummaries = pgTable(
     // The agent and MCP server filters (`agents && $1`).
     index("otel_trace_summaries_agents_idx").using("gin", t.agents),
     index("otel_trace_summaries_mcp_servers_idx").using("gin", t.mcpServers),
+    index("otel_trace_summaries_countries_idx").using("gin", t.countries),
+    index("otel_trace_summaries_harnesses_idx").using("gin", t.harnesses),
   ],
 );
 

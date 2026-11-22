@@ -62,9 +62,29 @@ export function mcpServerTracesHref(
   ]);
 }
 
-/** The Clients view, filtered by the server. */
-export function mcpServerClientsHref(projectId: string, key: string): string {
-  return withQuery(`${projectRoot(projectId)}/clients`, [["server", key]]);
+export const MCP_TAB_PARAM = "tab";
+export const MCP_CLIENTS_TAB = "clients";
+export const MCP_SERVER_PARAM = "server";
+
+/** The Clients tab of the MCP page (RC-778), optionally filtered by one server. */
+export function mcpClientsHref(
+  projectId: string,
+  query: McpServersQuery & { server?: string | null } = {},
+): string {
+  return withQuery(`${projectRoot(projectId)}/mcp`, [
+    [MCP_TAB_PARAM, MCP_CLIENTS_TAB],
+    ...(query.server ? [[MCP_SERVER_PARAM, query.server] as const] : []),
+    ...windowParams(query),
+  ]);
+}
+
+/** The Clients tab, filtered by the server. */
+export function mcpServerClientsHref(
+  projectId: string,
+  key: string,
+  query: McpServersQuery = {},
+): string {
+  return mcpClientsHref(projectId, { ...query, server: key });
 }
 
 /**

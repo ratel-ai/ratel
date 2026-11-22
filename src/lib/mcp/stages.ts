@@ -59,6 +59,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   get_sdk_event: "monitor",
   list_mcp_servers: "monitor",
   get_mcp_server: "monitor",
+  list_clients: "monitor",
   list_agents: "monitor",
   get_agent: "monitor",
 

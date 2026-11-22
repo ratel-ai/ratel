@@ -69,6 +69,7 @@
     { "from": "@/components/lineage/", "to": "@/components/console/lineage/" },
     { "from": "@/components/eval-gate/", "to": "@/components/console/eval-gate/" },
     { "from": "@/components/agents/", "to": "@/components/console/agents/" },
+    { "from": "@/components/clients/", "to": "@/components/console/clients/" },
     { "from": "@/lib/task-scorers", "to": "@/lib/views/task-scorers", "exact": true },
     { "from": "@/components/traces/TraceCompareView", "to": "@/components/console/traces/compare/TraceCompareView", "exact": true },
     { "from": "@/components/traces/TraceComparePropertiesTable", "to": "@/components/console/traces/compare/TraceComparePropertiesTable", "exact": true },

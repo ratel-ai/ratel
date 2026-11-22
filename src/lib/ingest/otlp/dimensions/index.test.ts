@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   deriveSpanDimensions,
+  NO_CLIENT_FACTS,
   NO_DIMENSIONS,
   namedAgentOf,
   type SpanDimensionsById,
@@ -264,6 +265,7 @@ test("a span with no agent and no service has no key", () => {
     mcpServerSource: null,
     mcpRole: null,
     mcpSessionId: null,
+    client: NO_CLIENT_FACTS,
   });
 });
 

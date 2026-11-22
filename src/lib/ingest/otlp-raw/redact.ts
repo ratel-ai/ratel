@@ -22,6 +22,11 @@ import type {
 export interface RawViewPolicy {
   /** `session_replay_settings.read_content`: show message content. */
   readContent: boolean;
+  /**
+   * An organization admin: the caller's IP and the keys it comes from are kept
+   * (RC-778). Absent or false, they are left out, whatever `readContent` says.
+   */
+  readClientAddress?: boolean;
 }
 
 export const REDACTED = "[REDACTED]";
@@ -46,6 +51,25 @@ const CONTENT_FREE_PREFIXES = [
   "error.",
   "otel.",
 ] as const;
+/**
+ * The keys that carry a caller's IP (RC-778): only an admin reads them. Stable
+ * and older semconv, and forwarded-for / real-ip headers in any spelling.
+ */
+const CLIENT_ADDRESS_KEYS: ReadonlySet<string> = new Set([
+  "client.address",
+  "client.port",
+  "client.socket.address",
+  "client.socket.port",
+  "network.peer.address",
+  "network.peer.port",
+  "net.peer.ip",
+  "net.peer.port",
+  "net.sock.peer.addr",
+  "net.sock.peer.port",
+  "http.client_ip",
+]);
+const CLIENT_ADDRESS_HEADER =
+  /(?:^|[._-])(?:x[-_])?(?:forwarded(?:[-_]for)?|real[-_]ip|client[-_]ip)$/;
 /** A key's last segment (lowercase, `-` as `_`) that names a credential. */
 const CREDENTIAL_NAME =
   /(^|_)(api_?key|access_?key|secret_?key|private_?key|secret|password|passwd|token|credentials?|authorization|cookie)$/;
@@ -78,6 +102,7 @@ export function redactAttributes(
   const out: AttrMap = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (!nested && !policy.readContent && !isContentFreeKey(key)) continue;
+    if (!policy.readClientAddress && isClientAddressKey(key)) continue;
     out[key] = isCredentialKey(key) ? REDACTED : redactValue(key, value, policy);
   }
   return out;
@@ -100,6 +125,7 @@ export function redactKeyValues(
   return values.flatMap((entry) => {
     const key = entry.key ?? "";
     if (!nested && !policy.readContent && !isContentFreeKey(key)) return [];
+    if (!policy.readClientAddress && isClientAddressKey(key)) return [];
     const value = isCredentialKey(key)
       ? { stringValue: REDACTED }
       : redactAnyValue(key, entry.value, policy);
@@ -117,6 +143,15 @@ function isContentFreeKey(key: string): boolean {
     isContentFreeAttributeKey(key) ||
     key === "exception.type" ||
     CONTENT_FREE_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
+
+/** A key that carries a caller's IP: only an admin's view keeps it. */
+export function isClientAddressKey(key: string): boolean {
+  const lower = key.toLowerCase();
+  return (
+    CLIENT_ADDRESS_KEYS.has(lower) ||
+    (lower.includes("header") && CLIENT_ADDRESS_HEADER.test(lower))
   );
 }
 

@@ -19,6 +19,10 @@ export interface TraceFilter {
   agents?: readonly string[];
   /** MCP servers of the trace's spans (`mcp_server`), behind `cloud-project-entities` (RC-790). */
   mcpServers?: readonly string[];
+  /** Harnesses that called the trace's MCP server spans (`harness`), behind `cloud-project-entities` (RC-778). */
+  harnesses?: readonly string[];
+  /** Countries of those callers (`geo_country`), behind `cloud-project-entities` (RC-778). */
+  countries?: readonly string[];
   /** "failed": any span reported an error; "ok": none did. */
   status?: "failed" | "ok";
   minCostUsd?: number;
@@ -27,7 +31,7 @@ export interface TraceFilter {
 
 export type TraceFilterFacetKey = "model" | "tool" | "service" | "environment";
 /** The facets `cloud-project-entities` adds (RC-790). */
-export type TraceEntityFacetKey = "agent" | "server";
+export type TraceEntityFacetKey = "agent" | "server" | "harness" | "country";
 /** `agent` and `server` are present only when the entity filters are on. */
 export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]> &
   Partial<Record<TraceEntityFacetKey, TraceFacetValue[]>>;
@@ -51,7 +55,7 @@ export const EMPTY_TRACE_FILTER_FACETS: TraceFilterFacets = {
   environment: [],
 };
 const FACET_KEYS: readonly TraceFilterFacetKey[] = ["model", "tool", "service", "environment"];
-const ENTITY_FACET_KEYS: readonly TraceEntityFacetKey[] = ["agent", "server"];
+const ENTITY_FACET_KEYS: readonly TraceEntityFacetKey[] = ["agent", "server", "harness", "country"];
 
 /**
  * The rollup condition for a filter on the summary row aliased `s`, or null
@@ -68,6 +72,8 @@ export function traceFilterCondition(filter: TraceFilter | undefined): SQL | nul
     oneOf(sql`s.environment`, filter.environments),
     anyOf(sql`s.agents`, filter.agents),
     anyOf(sql`s.mcp_servers`, filter.mcpServers),
+    anyOf(sql`s.harnesses`, filter.harnesses),
+    anyOf(sql`s.countries`, filter.countries),
     filter.status === "failed"
       ? sql`s.has_error`
       : filter.status === "ok"
@@ -139,7 +145,7 @@ export function traceFacetsQuery(
 ): SQL {
   return sql`
     with w as (
-      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers` : sql``}
+      select s.models, s.tools, s.service_name, s.environment${entities ? sql`, s.agents, s.mcp_servers, s.harnesses, s.countries` : sql``}
       from otel_trace_summaries s
       where s.project_id = ${projectId}
         ${window.since ? sql`and s.started_at >= ${window.since.toISOString()}::timestamptz` : sql``}
@@ -158,7 +164,11 @@ export function traceFacetsQuery(
           ? sql`union all
       select 'agent', v, count(*)::int from w, unnest(w.agents) v group by v
       union all
-      select 'server', v, count(*)::int from w, unnest(w.mcp_servers) v group by v`
+      select 'server', v, count(*)::int from w, unnest(w.mcp_servers) v group by v
+      union all
+      select 'harness', v, count(*)::int from w, unnest(w.harnesses) v group by v
+      union all
+      select 'country', v, count(*)::int from w, unnest(w.countries) v group by v`
           : sql``
       }
     ),

@@ -23,9 +23,20 @@ import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-d
 import { attrString } from "./anyvalue";
 import { indexSpans } from "./attr-resolve";
 import { type ModelPricingIngestDeps, resolveBatchPrices } from "./batch-prices";
+import type { ClientSessionStore } from "./client-session-store";
 import { GEN_AI } from "./constants";
 import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
-import { deriveSpanDimensions, NO_SPAN_DIMENSIONS, type SpanDimensionsById } from "./dimensions";
+import {
+  type ClientFacts,
+  deriveSpanDimensions,
+  type GeoLookup,
+  initializedSessions,
+  NO_SPAN_DIMENSIONS,
+  type SessionClientFacts,
+  type SpanDimensionsById,
+  type StrippedAddresses,
+  sessionsToLookUp,
+} from "./dimensions";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import { playgroundExclusion, type SandboxesFlag } from "./playground";
@@ -72,6 +83,11 @@ export interface PersistSpansContext {
    * values, so an import reprocessed after a mapper fix reaches `otel_spans`.
    */
   spanConflict?: OtelSpanConflict;
+  /**
+   * The sender addresses the ingest strip removed from this export, by span id
+   * (`FF_INGEST_STRIP_CLIENT_ADDRESS`, RP-138): read for the callers' country only.
+   */
+  strippedAddresses?: StrippedAddresses;
 }
 
 export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
@@ -82,6 +98,13 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** The span dimension derivation (`lib/ingest/otlp/dimensions`). Absent, the real one; a test passes one that throws. */
   deriveSpanDimensions?: typeof deriveSpanDimensions;
+  /**
+   * MCP session client facts stored by earlier exports (RC-773). Absent (the
+   * health importer), a span takes only what its own export holds.
+   */
+  clientSessions?: ClientSessionStore;
+  /** The client IP to country lookup (RC-774). Absent, no geo. */
+  geo?: GeoLookup;
   traceTurns?: TraceTurnsIngestDeps;
   findRuntimeInvokes?: FindRuntimeInvokes;
   /** `FF_TOOL_RUN_INSIGHTS` for agent-run rows (RC-742). Absent, the switch is read. */
@@ -129,6 +152,7 @@ export async function persistDecodedSpans(
     endpoint,
     foldIntentGraph = false,
     spanConflict = "ignore",
+    strippedAddresses,
   }: PersistSpansContext,
   deps: PersistSpansDeps,
 ): Promise<PersistSpansResult> {
@@ -173,9 +197,16 @@ export async function persistDecodedSpans(
   // Which entity each span belongs to, decided one time for every row builder
   // below. Fail open: no builder derives it again, so when this throws the
   // batch is stored as before, with null dimension columns.
+  const storedSessions = await findStoredSessions(spans, projectId, deps);
   let dimensions: SpanDimensionsById = NO_SPAN_DIMENSIONS;
   try {
-    dimensions = (deps.deriveSpanDimensions ?? deriveSpanDimensions)(spans, indexSpans(spans));
+    dimensions = (deps.deriveSpanDimensions ?? deriveSpanDimensions)(
+      spans,
+      indexSpans(spans),
+      storedSessions,
+      deps.geo,
+      strippedAddresses,
+    );
   } catch (err) {
     logError("span dimension derivation failed", err, { project_id: projectId });
     deps.captureFailure(err);
@@ -322,9 +353,54 @@ export async function persistDecodedSpans(
     deps.captureFailure(err);
   }
 
+  await fillStoredSessions(spans, dimensions, projectId, deps);
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
   return { ok: true, accepted, calls: allCalls.length, rows };
+}
+
+/**
+ * The client facts of the batch's MCP sessions whose `initialize` an earlier
+ * export stored. Fails open: the spans keep only their own export's facts.
+ */
+async function findStoredSessions(
+  spans: DecodedSpan[],
+  projectId: string,
+  deps: PersistSpansDeps,
+): Promise<SessionClientFacts | undefined> {
+  if (!deps.clientSessions) return undefined;
+  const sessionIds = sessionsToLookUp(spans);
+  if (sessionIds.length === 0) return undefined;
+  try {
+    return await deps.clientSessions.find(projectId, sessionIds);
+  } catch (err) {
+    deps.logError("mcp session client facts lookup failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+    return undefined;
+  }
+}
+
+/**
+ * An `initialize` in this batch whose session's other spans an earlier export
+ * stored: fill them. Runs after the batch's own rows are stored. Fails open.
+ */
+async function fillStoredSessions(
+  spans: DecodedSpan[],
+  dimensions: SpanDimensionsById,
+  projectId: string,
+  deps: PersistSpansDeps,
+): Promise<void> {
+  if (!deps.clientSessions) return;
+  const clients = new Map<string, ClientFacts>();
+  for (const [spanId, entity] of dimensions) clients.set(spanId, entity.client);
+  const sessions = initializedSessions(spans, clients);
+  if (sessions.size === 0) return;
+  try {
+    await deps.clientSessions.fill(projectId, sessions);
+  } catch (err) {
+    deps.logError("mcp session client facts fill failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+  }
 }
 
 /**

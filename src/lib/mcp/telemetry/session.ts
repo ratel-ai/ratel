@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { userAgentProduct } from "@/lib/ingest/otlp/dimensions/client";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 
 /**
@@ -44,8 +45,7 @@ export function mcpSessionId(
 
 /** The MCP client's name from its User-Agent product token, e.g. `claude-code`. */
 export function mcpClientName(headers: Pick<Headers, "get"> | null): string {
-  const product = headers?.get("user-agent")?.trim().split(/[\s/]/, 1)[0];
-  return product || UNKNOWN_CLIENT;
+  return userAgentProduct(headers?.get("user-agent"))?.name || UNKNOWN_CLIENT;
 }
 
 /** The credential behind a call: the key or the user, by id, never the secret. */

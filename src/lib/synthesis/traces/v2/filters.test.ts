@@ -374,3 +374,34 @@ test("the conversation filter is a chip on the run list, and is no filter of the
   );
   assert.deepEqual(filterChips("spans", "?conversation=6b1af9ed"), []);
 });
+
+test("facetHarness and facetCountry are entity filters: read, chipped and offered only with the flag on (RC-778)", () => {
+  const search = "?range=7d&facetHarness=cursor&facetCountry=GB";
+  const facets = {
+    ...EMPTY_TRACE_FACETS,
+    harness: [{ value: "cursor", count: 2 }],
+    country: [{ value: "GB", count: 1 }],
+  };
+  assert.deepEqual(traceFilterFromSearch(search, ON), { harnesses: ["cursor"], countries: ["GB"] });
+  assert.deepEqual(
+    filterChips("rollup", search, ON).map((chip) => `${chip.field} ${chip.value}`),
+    ["Client is cursor", "Country is GB"],
+  );
+  const fields = filterFields("rollup", search, facets, ON);
+  assert.deepEqual(
+    fields.filter((f) => f.id === "harness" || f.id === "country").map((f) => f.label),
+    ["Client", "Country"],
+  );
+  assert.equal(
+    withFilterToggled("rollup", "?range=7d", "harness", "codex"),
+    "?range=7d&facetHarness=codex",
+  );
+  assert.equal(withoutFilters("rollup", search, ON), "?range=7d");
+
+  assert.deepEqual(traceFilterFromSearch(search), {});
+  assert.deepEqual(filterChips("rollup", search), []);
+  assert.equal(
+    filterFields("rollup", search, facets).some((f) => f.id === "harness" || f.id === "country"),
+    false,
+  );
+});

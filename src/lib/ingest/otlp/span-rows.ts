@@ -5,7 +5,9 @@ import { attrNumber, attrString } from "./anyvalue";
 import { AGENT_DIMENSION, GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
 import {
   type DetectSource,
+  type HarnessId,
   type McpRole,
+  type McpTransport,
   NO_DIMENSIONS,
   NO_SPAN_DIMENSIONS,
   type SpanDimensionsById,
@@ -69,6 +71,17 @@ export interface OtelSpanRow {
   /** The span's events and links (AOBS-7); null when it has none or they are not stored. */
   events: StoredSpanEvent[] | null;
   links: StoredSpanLink[] | null;
+  /**
+   * Who called the MCP server (RC-773). No IP: ingest reads its country
+   * (`geoCountry`) and drops it (RP-138), so no row keeps a caller's IP.
+   */
+  harness: HarnessId | null;
+  harnessRaw: string | null;
+  harnessVersion: string | null;
+  harnessSource: DetectSource | null;
+  geoCountry: string | null;
+  mcpTransport: McpTransport | null;
+  mcpProtocolVersion: string | null;
 }
 
 const MAX_ATTRIBUTE_BYTES = 16 * 1024;
@@ -99,11 +112,24 @@ const CONTENT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   // AOBS-7: the question a coding agent asked a person (a `ratel.human.wait` event).
   "ratel.wait.question",
 ]);
+/**
+ * MCP keys are kept so a stored span still says what it was (RC-773): an
+ * `initialize` row is found by its `mcp.method.name`. The caller's address and
+ * User-Agent are not, and no column keeps the IP either (RP-138): only its
+ * country (`geo_country`).
+ */
 const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   "error.type",
   "server.address",
   // AOBS-5: the MCP server of a tool call, a name and no content.
   AGENT_DIMENSION.mcpServer,
+  "mcp.method.name",
+  "mcp.protocol.version",
+  "mcp.client.name",
+  "mcp.client.version",
+  "mcp.server.name",
+  "mcp.server.version",
+  "network.transport",
 ]);
 /**
  * Resource keys a span row keeps: the environment facet in `lib/traces/queries.ts` reads them from `attributes`.
@@ -248,6 +274,13 @@ export function toOtelSpanRows(
       mcpSessionId: entity.mcpSessionId,
       events: events.value,
       links: links.value,
+      harness: entity.client.harness,
+      harnessRaw: text(entity.client.harnessRaw),
+      harnessVersion: text(entity.client.harnessVersion),
+      harnessSource: entity.client.harnessSource,
+      geoCountry: entity.client.geoCountry,
+      mcpTransport: entity.client.mcpTransport,
+      mcpProtocolVersion: text(entity.client.mcpProtocolVersion),
     } satisfies NewOtelSpan;
   });
 }

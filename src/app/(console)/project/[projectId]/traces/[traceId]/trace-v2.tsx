@@ -8,6 +8,7 @@ import { sandboxesEnabledForProject } from "@/lib/platform/sandboxes-flag";
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath } from "@/lib/synthesis/traces/v2/run-noun";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
+import { projectEntitiesEnabledForProject } from "@/lib/views/project-entities/flag";
 import { loadTraceSession } from "@/lib/views/session-chat/trace-session";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { loadTraceViewProps } from "@/lib/views/traces/trace-view-props";
@@ -42,6 +43,9 @@ export async function TracePageV2({
     compareHref: `${tracesPath}${searchFromParams({ ...listParams, peek: undefined, project: undefined, compare: id })}`,
     tab: requestedTab,
     spanId: firstParam(span) ?? null,
+    // RC-1013: the span detail's Client block is behind FF_AGENTS_PAGES (upstream's
+    // cloud-project-entities). No viewer role: no span holds a caller's IP (RP-138).
+    clientFacts: await projectEntitiesEnabledForProject(project.id),
   });
   if (!props) notFound();
   // RC-503: Traces opens on Sessions, so the crumb and Compare go back to the Turns tab.

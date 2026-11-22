@@ -109,6 +109,7 @@ export const SERVER_EVENT_NAMES = [
   "fix_shipped",
   "agent_override_updated",
   "mcp_servers_viewed",
+  "mcp_clients_viewed",
   "agents_viewed",
   "sandbox_runner_connected",
   "sandbox_run_started",
@@ -226,6 +227,13 @@ export type ProductEventProperties = {
   demo_project_seed_failed: { reason: string };
   onboarding_tour_finished: { outcome: string; last_step_id: string; steps_viewed: number };
   mcp_servers_viewed: { view: "list" | "detail"; servers: number; environment_filtered: boolean };
+  /** RC-778: the MCP page's Clients tab. `harnesses`, `countries`: rows shown. */
+  mcp_clients_viewed: {
+    harnesses: number;
+    countries: number;
+    server_filtered: boolean;
+    environment_filtered: boolean;
+  };
   agents_viewed: {
     view: "list" | "detail";
     agents: number;

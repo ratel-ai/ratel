@@ -1,4 +1,5 @@
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { gateClientFacts } from "@/lib/synthesis/traces/client-facts-gate";
 import { loadPayloadContentSafely } from "@/lib/synthesis/traces/payload-content";
 import {
   getTraceSpansWithTruncation,
@@ -31,6 +32,8 @@ export async function loadTraceViewProps(
     compareHref: string;
     tab: string | undefined;
     spanId: string | null;
+    /** `FF_AGENTS_PAGES`: the spans keep their client facts (RC-1013). Off (the default), every fact is null. */
+    clientFacts?: boolean;
   },
 ): Promise<TraceViewProps | null> {
   const id = traceId.toLowerCase();
@@ -44,9 +47,10 @@ export async function loadTraceViewProps(
     loadPayloadContentSafely(projectId, id, "trace_payload"),
   ]);
   if (load.spans.length === 0) return null;
+  const spans = gateClientFacts(load.spans, options.clientFacts === true);
   const runtimeEventsEnabled = true;
-  const summary = buildRunSummary(load.spans, 0, payload);
-  const root = load.spans.find((span) => span.parentSpanId === null) ?? load.spans[0];
+  const summary = buildRunSummary(spans, 0, payload);
+  const root = spans.find((span) => span.parentSpanId === null) ?? spans[0];
   return {
     projectId,
     traceId: id,
@@ -55,11 +59,11 @@ export async function loadTraceViewProps(
     startedAt: summary.startedAt,
     status: summary.status,
     totals: summary.totals,
-    waterfall: buildTraceWaterfall(load.spans),
+    waterfall: buildTraceWaterfall(spans),
     // AOBS-5: the run's agents with each subtree's totals, when it handed work to a sub-agent.
-    agents: subAgentRows(agentSubtrees(load.spans)),
+    agents: subAgentRows(agentSubtrees(spans)),
     // AOBS-7: how the run ran.
-    runMetrics: shownRunMetrics(buildRunMetrics(load.spans)),
+    runMetrics: shownRunMetrics(buildRunMetrics(spans)),
     truncated: load.truncated,
     payloadContent: payload?.view ?? null,
     lifecycle: lifecycle.map((event) => ({

@@ -51,7 +51,14 @@ test("Traces opens Turns filtered by the server, in the same window and environm
 });
 
 test("Clients and Catalog are filtered by the server", () => {
-  assert.equal(mcpServerClientsHref(PROJECT, "acme/tools"), `${ROOT}/clients?server=acme%2Ftools`);
+  assert.equal(
+    mcpServerClientsHref(PROJECT, "acme/tools"),
+    `${ROOT}/mcp?tab=clients&server=acme%2Ftools`,
+  );
+  assert.equal(
+    mcpServerClientsHref(PROJECT, "docs", { range: "7d" }),
+    `${ROOT}/mcp?tab=clients&server=docs&range=7d`,
+  );
   // The Catalog's search matches a tool group by its label, the server name (`lib/catalog/v2/tree.ts`).
   assert.equal(mcpServerCatalogHref(PROJECT, "github"), `${ROOT}/catalogs?q=github`);
 });

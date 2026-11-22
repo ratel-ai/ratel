@@ -82,9 +82,9 @@ export interface McpServerDetail {
   tools: McpToolStat[];
   agents: McpCallingAgent[];
   /**
-   * `mcp.protocol.version` and `network.transport` in use. Absent (not empty)
-   * when no span of the window keeps them: `otel_spans.attributes` keeps
-   * neither key today (RC-773 adds them).
+   * The MCP protocol versions and transports (stdio | http) in use, from the
+   * client facts ingest derives (`mcp_protocol_version`, `mcp_transport`,
+   * RC-773). Absent (not empty) when no span of the window has them.
    */
   protocolVersions?: McpValueCount[];
   transports?: McpValueCount[];
@@ -258,7 +258,7 @@ export function mcpToolsQuery(
   `;
 }
 
-/** `mcp.protocol.version` and `network.transport` values, one scan for both. */
+/** `mcp_protocol_version` and `mcp_transport` values (RC-773), one scan for both. */
 export function mcpFacetsQuery(
   projectId: string,
   ref: Required<McpServerRef>,
@@ -268,8 +268,8 @@ export function mcpFacetsQuery(
     select f.facet, f.value, count(*)::int as calls
     from otel_spans s
     cross join lateral (values
-      ('protocol', s.attributes ->> 'mcp.protocol.version'),
-      ('transport', s.attributes ->> 'network.transport')
+      ('protocol', s.mcp_protocol_version),
+      ('transport', s.mcp_transport)
     ) as f(facet, value)
     where ${serverSpans(projectId, window, ref)} and f.value is not null
     group by f.facet, f.value

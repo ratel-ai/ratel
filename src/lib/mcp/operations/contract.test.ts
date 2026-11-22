@@ -165,6 +165,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // The MCP servers page (RC-777).
   ["list_mcp_servers", false],
   ["get_mcp_server", false],
+  // The MCP page's Clients tab (RC-778).
+  ["list_clients", false],
   // The Agents page (RC-775).
   ["list_agents", false],
   ["get_agent", false],

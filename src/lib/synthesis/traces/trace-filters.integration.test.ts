@@ -480,3 +480,54 @@ test("the agent and MCP server facet values are read only when the entity filter
     await client.close();
   }
 });
+
+// — RC-778: the callers' harnesses and countries ———————————————————————————————
+
+test("the sweep fills harnesses and countries; Turns filter by them and the facets offer them with the entity filters on", async () => {
+  const { client, db } = await seeded();
+  try {
+    await client.exec(`
+      update otel_spans set harness = 'claude-code', geo_country = 'GB', received_at = now() - interval '1 second' where span_id = '${spanId(12)}';
+      update otel_spans set harness = 'cursor', geo_country = 'US', received_at = now() - interval '1 second' where span_id = '${spanId(32)}';
+      update otel_spans set harness = 'cursor', received_at = now() - interval '1 second' where trace_id = '${traceId(2)}';
+    `);
+    await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+    const rows = await db
+      .select({
+        traceId: otelTraceSummaries.traceId,
+        harnesses: otelTraceSummaries.harnesses,
+        countries: otelTraceSummaries.countries,
+      })
+      .from(otelTraceSummaries)
+      .orderBy(asc(otelTraceSummaries.traceId));
+    assert.deepEqual(rows, [
+      { traceId: traceId(1), harnesses: ["claude-code"], countries: ["GB"] },
+      { traceId: traceId(2), harnesses: ["cursor"], countries: [] },
+      { traceId: traceId(3), harnesses: ["cursor"], countries: ["US"] },
+    ]);
+
+    const turns = async (traces: ListTracesOptions["traces"]) =>
+      (await listTraces(PROJECT_ID, { ...WINDOW, traces }, db)).items
+        .map((item) => item.traceId)
+        .sort();
+    assert.deepEqual(await turns({ harnesses: ["cursor"] }), [traceId(2), traceId(3)]);
+    assert.deepEqual(await turns({ countries: ["GB"] }), [traceId(1)]);
+    assert.deepEqual(await turns({ harnesses: ["cursor"], countries: ["US"] }), [traceId(3)]);
+
+    const on = await getTraceFilterFacets(PROJECT_ID, WINDOW, db, 50, { entities: true });
+    assert.deepEqual(on.harness, [
+      { value: "cursor", count: 2 },
+      { value: "claude-code", count: 1 },
+    ]);
+    assert.deepEqual(on.country, [
+      { value: "GB", count: 1 },
+      { value: "US", count: 1 },
+    ]);
+    assert.doesNotMatch(
+      JSON.stringify(traceFacetsQuery(PROJECT_ID, WINDOW, 10)),
+      /harnesses|countries/,
+    );
+  } finally {
+    await client.close();
+  }
+});

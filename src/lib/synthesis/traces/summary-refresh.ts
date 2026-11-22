@@ -245,7 +245,15 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
         coalesce(
           array_agg(distinct s.mcp_server order by s.mcp_server) filter (where s.mcp_server is not null),
           '{}'
-        ) as mcp_servers
+        ) as mcp_servers,
+        coalesce(
+          array_agg(distinct s.geo_country order by s.geo_country) filter (where s.geo_country is not null),
+          '{}'
+        ) as countries,
+        coalesce(
+          array_agg(distinct s.harness order by s.harness) filter (where s.harness is not null),
+          '{}'
+        ) as harnesses
       from otel_spans s
       join changed c
         on c.project_id = s.project_id and c.trace_id = s.trace_id
@@ -254,7 +262,7 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
-      models, tools, service_name, environment, agents, mcp_servers, root_error
+      models, tools, service_name, environment, agents, mcp_servers, root_error, countries, harnesses
     )
     select
       r.project_id,
@@ -273,7 +281,9 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       r.environment,
       a.agents,
       a.mcp_servers,
-      r.root_error
+      r.root_error,
+      a.countries,
+      a.harnesses
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
@@ -292,7 +302,9 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       environment = excluded.environment,
       agents = excluded.agents,
       mcp_servers = excluded.mcp_servers,
-      root_error = excluded.root_error
+      root_error = excluded.root_error,
+      countries = excluded.countries,
+      harnesses = excluded.harnesses
   `);
 }
 

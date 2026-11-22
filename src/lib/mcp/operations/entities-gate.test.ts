@@ -4,11 +4,12 @@ import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
 import { agentsOperations, defaultAgentsDeps } from "./agents";
+import { clientsOperations, defaultClientsDeps } from "./clients";
 import { defaultMcpServersDeps, mcpServersOperations } from "./mcp-servers";
 
 /**
- * Owned (ADR-0030), no upstream counterpart: the default gate of the Agents and MCP servers tools
- * is the core's `FF_AGENTS_PAGES` switch (`featureEnabled`), in place of upstream's
+ * Owned (ADR-0030), no upstream counterpart: the default gate of the Agents and MCP servers tools,
+ * and of the Clients tab's `list_clients` (RC-778, RP-138), is the core's `FF_AGENTS_PAGES` switch (`featureEnabled`), in place of upstream's
  * `cloud-project-entities` flag service. Off, each tool refuses as forbidden and reads nothing.
  */
 
@@ -56,6 +57,21 @@ function registry(reads: string[]) {
       },
       getMcpServer: read("getMcpServer"),
     }),
+    ...clientsOperations({
+      ...defaultClientsDeps,
+      getClientsOverview: async () => {
+        reads.push("getClientsOverview");
+        return {
+          harnesses: [],
+          versions: [],
+          countries: [],
+          transports: [],
+          protocolVersions: [],
+          servers: [],
+          environments: [],
+        };
+      },
+    }),
   ]);
 }
 
@@ -64,6 +80,7 @@ const CALLS = [
   ["get_agent", { agent: "researcher" }],
   ["list_mcp_servers", {}],
   ["get_mcp_server", { server: "docs-mcp" }],
+  ["list_clients", {}],
 ] as const;
 
 test("with FF_AGENTS_PAGES off, every Agents and MCP servers tool refuses as forbidden", async () => {
@@ -92,6 +109,7 @@ test("with FF_AGENTS_PAGES on, the tools read", async () => {
     "getAgent",
     "listMcpServers",
     "getMcpServer",
+    "getClientsOverview",
   ]);
 });
 

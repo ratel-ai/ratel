@@ -183,14 +183,60 @@ test("a trace id that is not hex is 404 and reads nothing", async () => {
     request(),
     { projectId: PROJECT_ID, traceId: "not-a-trace" },
     deps({
-      loadRaw: async () => (
-        (reads += 1), { spans: [], exports: 0, undecodable: 0, truncated: false }
-      ),
+      loadRaw: async () => {
+        reads += 1;
+        return { spans: [], exports: 0, undecodable: 0, truncated: false };
+      },
     }),
   );
 
   assert.equal(response.status, 404);
   assert.equal(reads, 0);
+});
+
+test("no reader, an admin neither, gets the caller's IP from the raw view or the download (RC-778, RP-138)", async () => {
+  const ip = "81.2.69.160";
+  const withIp: DecodedSpan = {
+    ...SPAN,
+    attributes: { ...SPAN.attributes, "client.address": ip, "net.peer.ip": ip },
+  };
+  const span = EXPORT.resourceSpans![0]!.scopeSpans![0]!.spans![0]!;
+  const ipExport: IExportTraceServiceRequest = {
+    resourceSpans: [
+      {
+        ...EXPORT.resourceSpans![0]!,
+        scopeSpans: [
+          {
+            scope: { name: "scope" },
+            spans: [
+              {
+                ...span,
+                attributes: [
+                  { key: "client.address", value: { stringValue: ip } },
+                  ...(span.attributes ?? []),
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const raw: Partial<TraceRawRouteDeps> = {
+    loadRaw: async () => ({ spans: [withIp], exports: 1, undecodable: 0, truncated: false }),
+    loadRawOtlp: async () => ({
+      requests: [ipExport],
+      exports: 1,
+      undecodable: 0,
+      truncated: false,
+    }),
+  };
+  const params = { projectId: PROJECT_ID, traceId: TRACE_ID };
+
+  for (const search of ["", "?format=otlp"]) {
+    const body = await (await traceRawResponse(request(search), params, deps(raw))).text();
+    assert.equal(body.includes(ip), false, search || "spans");
+  }
 });
 
 function request(search = ""): Request {

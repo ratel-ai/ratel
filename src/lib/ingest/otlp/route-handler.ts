@@ -28,7 +28,8 @@ import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platf
 import { reportServerException } from "@/lib/platform/telemetry";
 import type { AgentSpanDedupeDeps } from "./agent-span-dedupe";
 import { decodeOtlp, OtlpDecodeError } from "./decode";
-import { otlpSuccessResponse, transportFor } from "./http";
+import { type StrippedAddresses, senderAddresses } from "./dimensions";
+import { type OtlpTransport, otlpSuccessResponse, transportFor } from "./http";
 import { type IngestLogDeps, logTracesIngested } from "./ingest-log";
 import {
   type IngestObservabilityDeps,
@@ -103,6 +104,10 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
+  /** MCP session client facts across exports (RC-773); see `PersistSpansDeps.clientSessions`. */
+  clientSessions?: PersistSpansDeps["clientSessions"];
+  /** The client IP to country lookup (RC-774); see `PersistSpansDeps.geo`. */
+  geo?: PersistSpansDeps["geo"];
   // Optional monthly-event-cap enforcement, wired by the route; unit tests omit these deps.
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   checkEventQuota?: CheckEventQuota;
@@ -289,6 +294,10 @@ export async function handleTracesRequest(
     deps.stripClientAddresses?.(),
   );
   const bytes = sanitized.bytes;
+  // RP-138: ingest reads a caller's country from its IP, then drops the IP. With the strip on, the
+  // address keys are gone from `bytes`, so read them from the body as sent, for the country only.
+  const strippedAddresses =
+    sanitized.stripped && deps.geo ? strippedSenderAddresses(transport, inflated.bytes) : undefined;
 
   let spans: ReturnType<typeof decodeOtlp>;
   try {
@@ -346,6 +355,7 @@ export async function handleTracesRequest(
       quotaOrgId,
       endpoint: "/v1/traces",
       foldIntentGraph: true,
+      strippedAddresses,
     },
     {
       ...deps,
@@ -461,5 +471,22 @@ function captureProcessingFailure(
     (deps.logError ?? defaultLogError)("exception capture failed", captureError, {
       project_id: projectId,
     });
+  }
+}
+
+/**
+ * The sender address of each span in the body as sent, before the strip (RP-138): only the
+ * client facts read it, for the country. A body that does not decode gives none.
+ */
+function strippedSenderAddresses(
+  transport: OtlpTransport,
+  bytes: Uint8Array,
+): StrippedAddresses | undefined {
+  try {
+    return senderAddresses(
+      decodeOtlp(transport === "json" ? "application/json" : "application/x-protobuf", bytes),
+    );
+  } catch {
+    return undefined;
   }
 }

@@ -34,6 +34,8 @@ export type FilterFieldId =
   | "environment"
   | "agent"
   | "server"
+  | "harness"
+  | "country"
   | "experiment"
   | "variant"
   | "stepName"
@@ -79,7 +81,7 @@ export interface TraceFilterOptions {
 /** The rollup facets: `agent` and `server` come only with the entity filters on. */
 export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
-  Partial<Record<"agent" | "server", readonly TraceFacetValue[]>>;
+  Partial<Record<"agent" | "server" | "harness" | "country", readonly TraceFacetValue[]>>;
 
 /** Never survive a filter change: the page and the open row belong to the old list. */
 const VOLATILE = ["cursor", "peek"] as const;
@@ -97,7 +99,12 @@ const ROLLUP_FILTER_PARAMS_LIST = [
 ] as const;
 export const ROLLUP_FILTER_PARAMS: readonly string[] = ROLLUP_FILTER_PARAMS_LIST;
 /** The rollup bar's parameters behind `cloud-project-entities` (RC-790). */
-export const ENTITY_FILTER_PARAMS = ["facetAgent", "facetServer"] as const;
+export const ENTITY_FILTER_PARAMS = [
+  "facetAgent",
+  "facetServer",
+  "facetHarness",
+  "facetCountry",
+] as const;
 
 /** Every parameter that narrows a list. The search box owns `name` (and `eventName` on Logs). */
 const RUN_FILTER_PARAMS = [
@@ -195,6 +202,8 @@ export function filterChips(
       multi(params, "facetEnvironment", "Environment is"),
       options.entities ? multi(params, "facetAgent", "Agent is") : null,
       options.entities ? multi(params, "facetServer", "MCP server is") : null,
+      options.entities ? multi(params, "facetHarness", "Client is") : null,
+      options.entities ? multi(params, "facetCountry", "Country is") : null,
       measure(params, "Cost", "minCostUsd", "maxCostUsd", (value) => formatMoney(value)),
       measure(params, "Tokens", "minTokens", "maxTokens", (value) => formatInteger(value)),
     ]);
@@ -325,6 +334,24 @@ export function filterFields(
             "MCP server",
             facets.server ?? [],
             new Set(params.getAll("facetServer")),
+            true,
+          )
+        : null,
+      options.entities
+        ? field(
+            "harness",
+            "Client",
+            facets.harness ?? [],
+            new Set(params.getAll("facetHarness")),
+            true,
+          )
+        : null,
+      options.entities
+        ? field(
+            "country",
+            "Country",
+            facets.country ?? [],
+            new Set(params.getAll("facetCountry")),
             true,
           )
         : null,
@@ -481,6 +508,8 @@ export function traceFilterFromSearch(
     environments: values("facetEnvironment"),
     agents: options.entities ? values("facetAgent") : undefined,
     mcpServers: options.entities ? values("facetServer") : undefined,
+    harnesses: options.entities ? values("facetHarness") : undefined,
+    countries: options.entities ? values("facetCountry") : undefined,
     status,
     minCostUsd: minCostUsd ?? undefined,
     minTokens: minTokens ?? undefined,
@@ -741,6 +770,8 @@ const ROLLUP_MULTI: Partial<Record<FilterFieldId, string>> = {
   // Offered only with `cloud-project-entities` on, so a toggle never comes without it.
   agent: "facetAgent",
   server: "facetServer",
+  harness: "facetHarness",
+  country: "facetCountry",
 };
 
 function toggleRollup(params: URLSearchParams, fieldId: FilterFieldId, value: string): void {
