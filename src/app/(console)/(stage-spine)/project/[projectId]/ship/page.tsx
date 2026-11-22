@@ -7,6 +7,7 @@ import Link from "next/link";
 import { shipmentCommitsFor } from "@/components/console/code-handoff/deploy/opened-shipment-commits";
 import { type OpenedShipment, ShipmentsTable } from "@/components/console/lineage/ShipmentsTable";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { ShipmentWatchList } from "@/components/console/ship-monitor/ShipmentWatchCard";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
@@ -17,6 +18,9 @@ import { lineageShowsTraces } from "@/lib/views/lineage/plan";
 import { loadShipments, type ShipmentRow } from "@/lib/views/lineage/shipments";
 import { shipmentTrail } from "@/lib/views/lineage/trail";
 import type { LineageRef } from "@/lib/views/lineage/types";
+import { shipMonitorEnabledFor } from "@/lib/views/ship-monitor/gate";
+import { loadShipmentWatches } from "@/lib/views/ship-monitor/load";
+import type { ShipmentWatch } from "@/lib/views/ship-monitor/watch";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ship" };
@@ -24,7 +28,9 @@ export const metadata = { title: "Ship" };
 /**
  * Ship, the fourth stage (RC-45): what went live,
  * each with the fix it came from. Today that is applied description rewrites
- * and shipments recorded through lineage; RC-53 brings releases. Owned (ADR-0030): the
+ * and shipments recorded through lineage; RC-53 brings releases. With
+ * `FF_SHIP_MONITOR` on, the newest shipped fixes are watched live above the
+ * list, and the Panel watches the opened one. Owned (ADR-0030): the
  * project comes from the console scope, and the eval gate is read from the environment.
  */
 export default async function ShipPage({
@@ -85,11 +91,32 @@ export default async function ShipPage({
       }
     : null;
   const fixes = fixHref(project.id);
+  const watching =
+    shipments !== null && (await shipMonitorEnabledFor(organization).catch(() => false));
+  const watches = watching
+    ? await loadOrFallback<ShipmentWatch[]>({
+        operation: "ship_watch",
+        distinctId,
+        fallback: [],
+        load: () =>
+          withStatementTimeout((db) => loadShipmentWatches(project.id, { now: new Date() }, db), {
+            operation: "ship_watch",
+          }),
+      })
+    : [];
 
   return (
     <Page>
       <PageHeader title="Ship" description="What went live, and the fix each change came from." />
       <PageBody>
+        {watching ? (
+          <Section
+            title="Watching live"
+            description="How each newly shipped fix behaves in live traffic, beside the 7 days before it shipped."
+          >
+            <ShipmentWatchList projectId={project.id} initial={watches} />
+          </Section>
+        ) : null}
         {shipments === null ? (
           <Callout
             tone="danger"
@@ -125,6 +152,7 @@ export default async function ShipPage({
               rows={shipments}
               now={new Date().toISOString()}
               opened={trail}
+              watch={watching}
             />
           </Section>
         )}

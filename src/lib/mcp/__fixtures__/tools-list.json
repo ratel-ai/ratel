@@ -3705,6 +3705,39 @@
     }
   },
   {
+    "name": "get_shipment_watch",
+    "title": "Get shipment watch",
+    "description": "How shipped fixes behave live: for each watched shipment (newest 3, or shipmentId), the changed tools' calls, error rate and p50 since the ship vs the 7 days before, calls of removed tools (expected 0), tool calls and tokens per run before and after, a verdict (healthy, watching, regressed) and the newest traces.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "shipmentId": {
+          "description": "Only this shipment.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "annotations": {
+      "title": "Get shipment watch",
+      "readOnlyHint": true
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
+  },
+  {
     "name": "get_lineage",
     "title": "Get lineage",
     "description": "Where an object came from: one step back (source) or the full chain back to the run (chain: true, oldest first), for kind trace, metric, insight, intent, task, fix, experiment, eval or shipment and its id. On a plan without example turns an insight names its metric, not its run.",

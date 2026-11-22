@@ -160,6 +160,7 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["list_api_keys", false],
   ["get_sdk_setup", false],
   ["list_shipments", false],
+  ["get_shipment_watch", false],
   ["get_lineage", false],
   ["get_analysis_freshness", false],
   ["get_session", false],

@@ -69,6 +69,7 @@
     { "from": "@/components/sandboxes/", "to": "@/components/console/sandboxes/" },
     { "from": "@/components/variants/", "to": "@/components/console/variants/" },
     { "from": "@/components/fine-tuning/", "to": "@/components/console/fine-tuning/" },
+    { "from": "@/components/ship-monitor/", "to": "@/components/console/ship-monitor/" },
     { "from": "@/app/(app)/project/[projectId]/settings/variant-actions", "to": "@/app/(console)/project/[projectId]/settings/variant-actions", "exact": true },
     { "from": "@/components/custom-dashboards/", "to": "@/components/console/custom-dashboards/" },
     { "from": "@/components/code-handoff/", "to": "@/components/console/code-handoff/" },
@@ -614,6 +615,6 @@
     "clerkUserId": "externalUserId",
     "JevFraming": "JudgeFraming",
     "__dirname": "import.meta.dirname",
-    "cloud-mcp-apps": "FF_MCP_APPS", "cloud-code-handoff": "FF_CODE_HANDOFF", "cloud-fine-tuning": "FF_FINE_TUNING"
+    "cloud-mcp-apps": "FF_MCP_APPS", "cloud-code-handoff": "FF_CODE_HANDOFF", "cloud-fine-tuning": "FF_FINE_TUNING", "cloud-ship-monitor": "FF_SHIP_MONITOR"
   }
 }

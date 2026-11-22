@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invalidParams, notFound } from "@/lib/mcp/errors";
+import { forbidden, invalidParams, notFound } from "@/lib/mcp/errors";
 import {
   CONTENT_WITHHELD_HINT,
   credentialMayReadContent,
@@ -62,6 +62,9 @@ import {
   type WhatIfRunView,
   withSessionToolsFirst,
 } from "@/lib/views/session-replay/what-if";
+import { shipMonitorEnabledForActor } from "@/lib/views/ship-monitor/gate";
+import { type LoadWatchesOptions, loadShipmentWatches } from "@/lib/views/ship-monitor/load";
+import type { RunWindow, ShipmentWatch, ToolWindow } from "@/lib/views/ship-monitor/watch";
 
 /**
  * Ship and the reads around it over MCP: what went live (`list_shipments`),
@@ -120,6 +123,9 @@ export interface ShipOperationDeps {
     textWindow: StepWindow | null,
   ) => Promise<LoadedSession | null>;
   loadWhatIfOptions: (projectId: string, organization: Organization) => Promise<WhatIfOptions>;
+  /** `FF_SHIP_MONITOR` for the caller, as the eval gate is decided for them. */
+  shipMonitorEnabled: (projectId: string, actor: string) => Promise<boolean>;
+  loadWatches: (projectId: string, options: LoadWatchesOptions) => Promise<ShipmentWatch[]>;
   /**
    * The session as the console's replay page reads it (lib/session-chat/load.ts), for get_session's view.
    * `mayReadContent` is the caller's half of the content rule (RC-585); the project's opt-in is the other.
@@ -232,6 +238,12 @@ export const defaultShipDeps: ShipOperationDeps = {
       projectId,
       async (id) => (await loadFixes({ projectId: id, organization, topics: false })).open,
     ),
+  shipMonitorEnabled: shipMonitorEnabledForActor,
+  loadWatches: (projectId, options) =>
+    withStatementTimeout((db) => loadShipmentWatches(projectId, options, db), {
+      operation: "ship_watch",
+      timeoutMs: supplementaryReadTimeoutMs(),
+    }),
   // The page's rule: message text only with the project's content opt-in, for everyone.
   loadSessionChat: (projectId, sessionId, mayReadContent) =>
     withStatementTimeout(
@@ -270,6 +282,7 @@ const MESSAGES_SHOWN = 3;
 const WHAT_IF_FIXES = 20;
 const WHAT_IF_TOOLS = 20;
 const WHAT_IF_RUNS = 10;
+const WATCH_TRACES = 5;
 
 async function requireOrganization(
   deps: ShipOperationDeps,
@@ -292,6 +305,51 @@ async function evalsFor(
     logger.error({ err, project_id: projectId }, "eval gate decision failed for ship trail");
     return false;
   }
+}
+
+/** A watch for an agent's context: rates and averages rounded, a few traces. */
+function watchView(projectId: string, watch: ShipmentWatch, tracker: TruncationTracker) {
+  const tool = (window: ToolWindow) => ({
+    calls: window.calls,
+    errors: window.errors,
+    errorRate: round(window.errorRate),
+    p50Ms: round(window.p50Ms, 0),
+  });
+  const runs = (window: RunWindow) => ({
+    runs: window.runs,
+    toolCallsPerRun: round(window.toolCallsPerRun, 2),
+    tokensPerRun: round(window.tokensPerRun, 0),
+  });
+  return {
+    shipmentId: watch.shipment.id,
+    fixId: watch.shipment.fixId,
+    fixKind: watch.shipment.fixKind,
+    fixTitle: watch.shipment.fixTitle,
+    version: watch.shipment.version,
+    shippedAt: watch.shipment.shippedAt,
+    verdict: watch.verdict,
+    changed: watch.changed.map((item) => ({
+      toolId: item.toolId,
+      after: tool(item.after),
+      baseline: tool(item.baseline),
+    })),
+    removed: watch.removed,
+    runs: {
+      tools: watch.runs.tools,
+      before: runs(watch.runs.before),
+      after: runs(watch.runs.after),
+      minRuns: watch.minRuns,
+    },
+    traces: tracker.take(capRows(watch.traces, WATCH_TRACES)).map((trace) => ({
+      traceId: trace.traceId,
+      startedAt: trace.startedAt,
+      tools: trace.tools,
+      error: trace.error,
+      calledRemoved: trace.calledRemoved,
+      href: trace.href,
+    })),
+    href: `/project/${encodeURIComponent(projectId)}/ship?peek=${encodeURIComponent(watch.shipment.id)}`,
+  };
 }
 
 function textView(text: StepText, tracker: TruncationTracker) {
@@ -393,6 +451,47 @@ export function shipOperations(deps: ShipOperationDeps = defaultShipDeps): McpOp
             matching.length === 0
               ? "Nothing shipped yet. A fix applied or marked with mark_fix_shipped shows up here."
               : `Trails are walked for the ${TRAILS_PER_CALL} newest only; pass shipmentId, or get_lineage with kind shipment and chain: true, for any other.`,
+        };
+      },
+    }),
+    defineOperation({
+      id: "get_shipment_watch",
+      domain: "improvement",
+      title: "Get shipment watch",
+      description:
+        "How shipped fixes behave live: for each watched shipment (newest 3, or shipmentId), the changed tools' calls, error rate and p50 since the ship vs the 7 days before, calls of removed tools (expected 0), tool calls and tokens per run before and after, a verdict (healthy, watching, regressed) and the newest traces.",
+      keywords: [
+        "post-ship monitor",
+        "did the fix work",
+        "regression after release",
+        "watch shipment",
+      ],
+      scope: "project",
+      mutates: false,
+      params: z.object({
+        ...projectScoped,
+        shipmentId: z.string().min(1).max(512).optional().describe("Only this shipment."),
+      }),
+      async execute(ctx, params) {
+        const actor = mcpActor(ctx.auth, ctx.projectId);
+        if (!(await deps.shipMonitorEnabled(ctx.projectId, actor)))
+          throw forbidden("The ship watch is not turned on for this project.");
+        const watches = await deps.loadWatches(ctx.projectId, {
+          now: deps.now(),
+          ...(params.shipmentId ? { shipmentId: params.shipmentId } : {}),
+        });
+        if (params.shipmentId && watches.length === 0) throw notFound("shipment watch");
+        const tracker = new TruncationTracker();
+        return {
+          data: {
+            count: watches.length,
+            watches: watches.map((watch) => watchView(ctx.projectId, watch, tracker)),
+          },
+          truncated: tracker.value,
+          hint:
+            watches.length === 0
+              ? "No shipped fix names tools to watch. mark_fix_shipped records one."
+              : "Call again to refresh. Watching turns into a verdict once enough runs arrive.",
         };
       },
     }),

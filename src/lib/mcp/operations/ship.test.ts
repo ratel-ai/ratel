@@ -9,6 +9,8 @@ import type { LineageRef } from "@/lib/views/lineage/types";
 import type { SessionChat } from "@/lib/views/session-chat/model";
 import type { TimelineStep } from "@/lib/views/session-replay/timeline";
 import type { SessionView } from "@/lib/views/session-replay/view";
+import type { LoadWatchesOptions } from "@/lib/views/ship-monitor/load";
+import { buildWatch, type ShipmentWatch } from "@/lib/views/ship-monitor/watch";
 import {
   type LoadedSession,
   type ShipOperationDeps,
@@ -164,6 +166,8 @@ interface Calls {
   trails: number;
   resolve: { ref: LineageRef; traces: boolean; chain: boolean }[];
   sessionText: (StepWindow | null)[];
+  watchActors: string[];
+  watchOptions: LoadWatchesOptions[];
   chats: number;
   /** Whether each view chat read was allowed message text (RC-585). */
   chatText: boolean[];
@@ -183,6 +187,50 @@ function chatOf(sessionId: string): SessionChat {
   };
 }
 
+function watchOf(id: string, status: ShipmentWatch["verdict"]["status"]): ShipmentWatch {
+  const shipment = {
+    id,
+    fixId: "craft:x",
+    fixKind: "enrich" as const,
+    fixTitle: "Return more",
+    version: "1.1.0",
+    shippedAt: "2026-11-04T23:00:00.000Z",
+    tools: ["find_booking", "lookup_reservation"],
+  };
+  return buildWatch(
+    PROJECT,
+    shipment,
+    {
+      before: {
+        tools: [
+          { toolId: "find_booking", calls: 100, errors: 2, p50Ms: 480 },
+          { toolId: "lookup_reservation", calls: 9, errors: 0, p50Ms: 400 },
+        ],
+        runs: { runs: 90, toolCalls: 300, tokens: 450_000 },
+      },
+      after: {
+        tools: [
+          { toolId: "find_booking", calls: 12, errors: 0, p50Ms: 500 },
+          {
+            toolId: "lookup_reservation",
+            calls: status === "regressed" ? 2 : 0,
+            errors: 0,
+            p50Ms: 400,
+          },
+        ],
+        runs: { runs: status === "watching" ? 4 : 12, toolCalls: 36, tokens: 54_000 },
+      },
+      traces: Array.from({ length: 12 }, (_, i) => ({
+        traceId: `t${i}`,
+        startedAt: "2026-11-04T23:30:00.000Z",
+        tools: ["find_booking"],
+        error: false,
+      })),
+    },
+    new Date("2026-11-05T00:00:00.000Z"),
+  );
+}
+
 function harness(
   over: Partial<ShipOperationDeps> = {},
   auth: McpAuthContext = keyAuth,
@@ -193,6 +241,8 @@ function harness(
     trails: 0,
     resolve: [],
     sessionText: [],
+    watchActors: [],
+    watchOptions: [],
     chats: 0,
     chatText: [],
   };
@@ -228,6 +278,17 @@ function harness(
         { name: "find_fare", description: "", searchable: "f".repeat(300) },
       ],
     }),
+    shipMonitorEnabled: async (_projectId, actor) => {
+      calls.watchActors.push(actor);
+      return true;
+    },
+    loadWatches: async (_projectId, options) => {
+      calls.watchOptions.push(options);
+      const all = [watchOf("ship-2", "regressed"), watchOf("ship-1", "watching")];
+      return options.shipmentId
+        ? all.filter((watch) => watch.shipment.id === options.shipmentId)
+        : all;
+    },
     loadSessionChat: async (_projectId, sessionId, mayReadContent) => {
       calls.chats += 1;
       calls.chatText.push(mayReadContent);
@@ -531,4 +592,55 @@ test("get_session withholds message text from an API key without the content sco
     await withScope.run("get_session", { sessionId: "sess-1", includeText: true }),
   );
   assert.ok(shown.steps[1]!.text, "with content:read and the opt-in, text is shown");
+});
+
+test("get_shipment_watch: each watched shipment's verdict, changed and removed tools, runs and newest traces", async () => {
+  const { run, calls } = harness();
+  const out = data<{
+    count: number;
+    watches: {
+      shipmentId: string;
+      verdict: { status: string; reasons: string[] };
+      removed: { toolId: string; callsAfter: number }[];
+      changed: { toolId: string }[];
+      runs: { after: { runs: number } };
+      traces: { href: string }[];
+    }[];
+  }>(await run("get_shipment_watch"));
+  assert.equal(out.count, 2);
+  assert.deepEqual(
+    out.watches.map((watch) => [watch.shipmentId, watch.verdict.status]),
+    [
+      ["ship-2", "regressed"],
+      ["ship-1", "watching"],
+    ],
+  );
+  assert.deepEqual(out.watches[0]!.removed, [
+    { toolId: "lookup_reservation", callsAfter: 2, baselineCalls: 9, flagged: true },
+  ]);
+  assert.equal(out.watches[0]!.changed[0]!.toolId, "find_booking");
+  assert.ok(out.watches[0]!.traces.length <= 5, "a few traces per watch");
+  assert.equal(out.watches[0]!.traces[0]!.href, `/project/${PROJECT}/traces/t0`);
+  assert.deepEqual(calls.watchActors, [`project:${PROJECT}`]);
+});
+
+test("get_shipment_watch with a shipmentId reads that one, or not found", async () => {
+  const { run, calls } = harness();
+  const one = data<{ watches: { shipmentId: string }[] }>(
+    await run("get_shipment_watch", { shipmentId: "ship-1" }),
+  );
+  assert.deepEqual(
+    one.watches.map((watch) => watch.shipmentId),
+    ["ship-1"],
+  );
+  assert.equal(calls.watchOptions[0]!.shipmentId, "ship-1");
+  const missing = await run("get_shipment_watch", { shipmentId: "ship-99" });
+  assert.equal(missing.ok === false && missing.error, "not_found");
+});
+
+test("get_shipment_watch refuses when the ship watch is off for the caller", async () => {
+  const { run, calls } = harness({ shipMonitorEnabled: async () => false });
+  const out = await run("get_shipment_watch");
+  assert.equal(out.ok === false && out.error, "forbidden");
+  assert.deepEqual(calls.watchOptions, []);
 });

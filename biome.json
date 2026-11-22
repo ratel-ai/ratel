@@ -1516,7 +1516,11 @@
         "src/lib/console/onboarding/training-consent.ts",
         "src/components/console/fine-tuning/**",
         "src/app/(console)/project/\\[projectId\\]/fine-tuning/**",
-        "src/app/api/projects/\\[projectId\\]/fine-tuning/**"
+        "src/app/api/projects/\\[projectId\\]/fine-tuning/**",
+        "src/lib/views/ship-monitor/**",
+        "!src/lib/views/ship-monitor/gate.ts",
+        "!src/lib/views/ship-monitor/gate.test.ts",
+        "src/components/console/ship-monitor/**"
       ],
       "linter": {
         "rules": {
@@ -1542,6 +1546,7 @@
         "src/components/console/session-chat/**",
         "src/components/console/traces-sessions/**",
         "src/components/console/lineage/**",
+        "src/components/console/ship-monitor/**",
         "src/components/console/eval-gate/**",
         "src/app/(console)/(eval-gate)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "src/components/console/adaptive-ranking/**",

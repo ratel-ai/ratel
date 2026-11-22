@@ -66,6 +66,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
   (RC-1124), `build_dataset` and `get_dataset` (RC-1129), `list_dataset_rows`, `set_use_case_override` and
   `delete_dataset` (RC-1130, RC-1131; export has no tool), through the Fine-tuning page's own store (`views/fine-tuning`), gated by the core's
   `FF_FINE_TUNING` for the caller and the project; off, every tool refuses as forbidden.
+- `operations/ship.ts` (owned): `get_shipment_watch` (ratel-cloud #507), the Ship page's watch
+  (`views/ship-monitor`), gated by the core's `FF_SHIP_MONITOR` for the caller and the project
+  (`views/ship-monitor/gate.ts`); off, it refuses as forbidden.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a

@@ -296,6 +296,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["FF_CODE_HANDOFF", false],
       ["FF_VARIANT_EXPERIMENTS", false],
       ["FF_FINE_TUNING", false],
+      ["FF_SHIP_MONITOR", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -312,6 +313,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["FF_CODE_HANDOFF", subject],
     ["FF_VARIANT_EXPERIMENTS", subject],
     ["FF_FINE_TUNING", subject],
+    ["FF_SHIP_MONITOR", subject],
   ]);
 });
 

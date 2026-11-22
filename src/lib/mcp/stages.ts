@@ -137,6 +137,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   handoff_fix: "ship",
   review_description_rewrite: "ship",
   list_shipments: "ship",
+  get_shipment_watch: "ship",
   get_lineage: "ship",
 };
 

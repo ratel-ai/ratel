@@ -7,6 +7,7 @@ import { Skeleton } from "@ratel/design-system/states";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useState, useTransition } from "react";
+import { ShipmentWatchCard } from "@/components/console/ship-monitor/ShipmentWatchCard";
 import { formatStamp, relativeTime } from "@/lib/console/settings/format";
 import type { ShipmentRow } from "@/lib/views/lineage/shipments";
 import type { LineageRef } from "@/lib/views/lineage/types";
@@ -32,11 +33,14 @@ export function ShipmentsTable({
   rows,
   now,
   opened = null,
+  watch = false,
 }: {
   projectId: string;
   rows: readonly ShipmentRow[];
   now: string;
   opened?: OpenedShipment | null;
+  /** `FF_SHIP_MONITOR`: the Panel also watches the shipment live. */
+  watch?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -136,6 +140,16 @@ export function ShipmentsTable({
           </section>
         ) : null}
         {showing && opened?.id === showing.ref.id ? opened.commits : null}
+        {showing && watch ? (
+          <section aria-label="Live watch" className="mt-6 flex flex-col gap-3">
+            <h3 className="text-xs font-medium text-fg-subtle">Since it shipped</h3>
+            <ShipmentWatchCard
+              key={showing.ref.id}
+              projectId={projectId}
+              shipmentId={showing.ref.id}
+            />
+          </section>
+        ) : null}
       </Panel>
     </>
   );

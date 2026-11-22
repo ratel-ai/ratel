@@ -345,6 +345,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "FF_PIVOTS",
     "FF_RANKING_CATALOG_DRIFT",
     "FF_SANDBOXES",
+    "FF_SHIP_MONITOR",
     "FF_TOOL_RUN_INSIGHTS",
     "FF_TYPED_STEPS",
     "FF_VARIANT_EXPERIMENTS",
