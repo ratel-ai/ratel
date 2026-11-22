@@ -17,6 +17,7 @@ export const CORE_FLAGS = [
   "FF_TYPED_STEPS",
   "FF_SANDBOXES",
   "FF_PIVOTS",
+  "FF_CUSTOM_DASHBOARDS",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

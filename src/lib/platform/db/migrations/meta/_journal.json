@@ -337,6 +337,13 @@
       "when": 1795327389695,
       "tag": "0047_pivots",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1795329442859,
+      "tag": "0048_custom_dashboards",
+      "breakpoints": true
     }
   ]
 }

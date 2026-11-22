@@ -6,7 +6,9 @@ import { legacyCraftPeek, legacyRewritePeek } from "@/lib/views/fixes/href";
  * (the page-level redirects stay as a fallback, but a `loading.tsx` above them
  * makes them answer 200 first). Pure: a URL in, a path or null out.
  *
- * Only moves that need nothing but the URL live here. Tool craft's `?ask=` and
+ * Only moves that need nothing but the URL live here. Dashboards is not one:
+ * it reads `cloud-custom-dashboards`, and a permanent redirect would stay in
+ * the browser's cache after the flag turns on. Tool craft's `?ask=` and
  * `?peek=` are mapped to the task the ask's tools run as, which takes a
  * database read, so those stay with the page.
  */
@@ -46,8 +48,6 @@ export function movedPageDestination(url: Pick<URL, "pathname" | "searchParams">
       return query.get("view") === "crafts" ? `${root}/improvement/fixes` : `${root}/health/tasks`;
     case "/intents/asks":
       return withParams(`${root}/intents`, { peek: query.get("peek") });
-    case "/dashboards":
-      return `${root}?peek=context`;
     case "/runtime-events":
       return withQuery(`${root}/settings/developer`, query);
   }

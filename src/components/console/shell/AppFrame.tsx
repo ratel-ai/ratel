@@ -94,6 +94,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
     organization && data.entityPagesOrganizations?.includes(organization.id),
   );
   const sandboxes = Boolean(project && data.sandboxesProjects?.includes(project.id));
+  const dashboards = data.customDashboards ?? false;
   const items = useMemo(
     () =>
       consoleNav({
@@ -104,6 +105,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
         projectGroups: data.projectNav,
         entityPages,
         sandboxes,
+        dashboards,
       }),
     [
       project,
@@ -113,6 +115,7 @@ export function AppFrame({ data, children }: { data: ShellData; children: ReactN
       data.projectNav,
       entityPages,
       sandboxes,
+      dashboards,
     ],
   );
   const activeId = activeNavItemId(pathname, items);

@@ -337,6 +337,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
   // Owned: the deployment's FF_* switches, not upstream's flag service.
   assert.deepEqual(keys, [
     "FF_AGENTS_PAGES",
+    "FF_CUSTOM_DASHBOARDS",
     "FF_EVAL_GATE",
     "FF_MCP_APPS",
     "FF_PIVOTS",

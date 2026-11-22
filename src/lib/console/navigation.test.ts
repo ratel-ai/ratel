@@ -737,3 +737,44 @@ test("Sandboxes sits under Improvements after Adaptive ranking and selects itsel
     ),
   );
 });
+
+// — RC-888: custom dashboards (FF_CUSTOM_DASHBOARDS) ————————————————————————————————————
+
+test("with FF_CUSTOM_DASHBOARDS off, Dashboards stays out and its path selects Overview", () => {
+  const items = consoleNav({ projectId: "p1", additions: [] });
+  assert.deepEqual(items, consoleNav({ projectId: "p1", additions: [], dashboards: false }));
+  assert.ok(!flattenNav(items).some((item) => item.id === "dashboards"));
+  assert.equal(activeNavItemId("/project/p1/dashboards", items), "overview");
+});
+
+test("with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects itself on a dashboard", () => {
+  const items = consoleNav({ projectId: "p1", additions: [], dashboards: true });
+  const overview = items.find((item) => item.id === "overview");
+  assert.deepEqual(
+    overview?.children?.map((child) => child.label),
+    ["Summary", "Dashboards"],
+  );
+  assert.equal(
+    overview?.children?.find((child) => child.id === "dashboards")?.href,
+    "/project/p1/dashboards",
+  );
+  assert.equal(activeNavItemId("/project/p1/dashboards", items), "dashboards");
+  assert.equal(activeNavItemId("/project/p1/dashboards/d1", items), "dashboards");
+  assert.equal(activeNavItemId("/project/p1", items), "overview-summary");
+  assert.deepEqual(
+    items.map((item) => item.label),
+    consoleNav({ projectId: "p1", additions: [] }).map((item) => item.label),
+    "no new top-level item: the rail budget holds",
+  );
+  const entries = commandEntries({
+    items,
+    projectId: "p1",
+    projects: [],
+    pathname: "/project/p1",
+  }).filter((entry) => entry.href === "/project/p1/dashboards");
+  assert.deepEqual(
+    entries.map((entry) => entry.label),
+    ["Dashboards"],
+    "the rail item replaces the old Usage and spend entry",
+  );
+});

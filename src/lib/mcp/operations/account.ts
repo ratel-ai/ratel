@@ -76,6 +76,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_PIVOTS",
     note: "pivots: Settings > Pivots, the configured pivot keys kept on span rows at ingest, and each pivot's value (`dims`) on trace summaries",
   },
+  {
+    key: "FF_CUSTOM_DASHBOARDS",
+    note: "custom dashboards: the Dashboards pages under Overview (widgets over trace summaries, shared by link) and the MCP tools list_dashboards and get_dashboard",
+  },
 ];
 
 export interface AccountOperationDeps {

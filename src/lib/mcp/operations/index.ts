@@ -4,6 +4,7 @@ import { agentsOperations } from "@/lib/mcp/operations/agents";
 import { calibrationOperations } from "@/lib/mcp/operations/calibration";
 import { catalogOperations } from "@/lib/mcp/operations/catalog";
 import { clientsOperations } from "@/lib/mcp/operations/clients";
+import { dashboardsOperations } from "@/lib/mcp/operations/dashboards";
 import { developerOperations } from "@/lib/mcp/operations/developer";
 import {
   adaptEditionOperations,
@@ -64,6 +65,7 @@ export function assembleOperations(
     ...runsOperations(),
     ...mcpServersOperations(),
     ...clientsOperations(),
+    ...dashboardsOperations(),
     ...agentsOperations(),
     ...healthOperations(),
     ...intentsOperations(),

@@ -123,6 +123,11 @@ export const SERVER_EVENT_NAMES = [
   "pivot_created",
   "pivot_updated",
   "pivot_deleted",
+  // Custom dashboards (RC-887..RC-889): lib/views/custom-dashboards/service.ts.
+  "dashboard_created",
+  "dashboard_deleted",
+  "dashboard_widget_added",
+  "dashboard_shared",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

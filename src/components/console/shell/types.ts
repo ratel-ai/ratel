@@ -30,6 +30,8 @@ export type ShellData = {
   entityPagesOrganizations?: readonly string[];
   /** RC-1102: the projects whose rail shows Sandboxes (`FF_SANDBOXES` on). */
   sandboxesProjects?: readonly string[];
+  /** `FF_CUSTOM_DASHBOARDS` for the signed-in person (RC-888): the rail shows Dashboards under Overview. */
+  customDashboards?: boolean;
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */
