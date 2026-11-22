@@ -40,7 +40,12 @@ test("every view is built", () => {
  * its floating-ui hooks: about 25 KB more in the one view that renders both (list). The views'
  * own bindings.ts are copied, so the allowance lives here.
  */
-const EDITION_EXTRA_KB: Readonly<Record<string, number>> = { list: 30 };
+const EDITION_EXTRA_KB: Readonly<Record<string, number>> = {
+  list: 30,
+  // Typed steps' view presets (ratel-cloud #578) bring the replay view to 550.0 KB with this
+  // workspace's newer @base-ui/react (563,202 bytes in the Cloud build), just past upstream's 550.
+  replay: 10,
+};
 
 /** A view's own budget from its bindings.ts, or the default, plus this edition's allowance. */
 function budgetOf(view: string): number {

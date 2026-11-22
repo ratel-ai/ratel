@@ -1489,7 +1489,7 @@
     { "from": "apps/web/lib/traces/v2/without-captured-text.ts", "to": "src/lib/views/traces/without-captured-text.ts", "mode": "copy" },
     { "from": "apps/web/lib/traces/v2/trace-view-types.ts", "to": "src/lib/views/traces/trace-view-types.ts", "mode": "owned", "$why": "no upstream counterpart: TraceViewProps and TraceTab, which upstream declares in components/traces/v2/TraceView.tsx, in the layer that builds them so lib/ imports no component (rewrites.json partitions the two names)" },
     { "from": "apps/web/scripts/build-mcp-apps.mts", "to": "src/scripts/build-mcp-apps.mts", "mode": "owned", "$why": "the console-only shim names the What if panel where it lands here, components/console/session-replay" },
-    { "from": "apps/web/mcp-apps/build.test.ts", "to": "src/mcp-apps/build.test.ts", "mode": "owned", "$why": "the design system is packages/design-system/src, not components/ds; the list view may weigh 30 KB more, as this workspace resolves a newer @base-ui/react" },
+    { "from": "apps/web/mcp-apps/build.test.ts", "to": "src/mcp-apps/build.test.ts", "mode": "owned", "$why": "the design system is packages/design-system/src, not components/ds; the list view may weigh 30 KB more and the replay view 10 KB more, as this workspace resolves a newer @base-ui/react" },
     { "from": "apps/web/scripts/mcp-apps-harness.mts", "to": "src/scripts/mcp-apps-harness.mts", "mode": "copy" },
     { "from": "apps/web/scripts/subset-font.d.ts", "to": "src/scripts/subset-font.d.ts", "mode": "copy" },
     { "from": "apps/web/scripts/mcp-apps-local.mts", "mode": "excluded", "$why": "seeds through the excluded health, session-replay and pipeline demo scripts" },
