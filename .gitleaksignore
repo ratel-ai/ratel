@@ -19,3 +19,5 @@
 4b3bcc9df05f21fc618e28b60aca197aad8003ef:scripts/tmp-fake-secret.mjs:github-pat:1
 82d98fe1a97fdaea329ad459e2af546c25c30b19:scripts/tmp-fake-secret.mjs:github-pat:1
 803a912858e8048121c24e8f87801955033bedae:docs/tmp-fake-secret.md:github-pat:1
+# Fake DB password in the sandbox serve e2e test (branch beluga/sandbox-auto-params): it proves user code never sees the value. workflow_dispatch scans --all, so it fails every dispatched run.
+315d793235e97cb8d345cf14a55d5ff860edd0c0:src/sandbox/ts/src/dev/serve-e2e.test.ts:generic-api-key:21
