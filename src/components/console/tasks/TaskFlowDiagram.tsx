@@ -1,3 +1,4 @@
+import { STEP_KIND_ICONS, STEP_KIND_LABELS } from "@ratel/design-system/step-kind";
 import { useId } from "react";
 import type { IntentFlowLayout } from "@/lib/views/tasks/flow-layout";
 import { formatCount, formatSharePercent } from "@/lib/views/tasks/format";
@@ -83,10 +84,16 @@ export function TaskFlowDiagram({
           </g>
         ))}
         {layout.nodes.map((node) => {
+          const Icon = node.kind ? STEP_KIND_ICONS[node.kind] : null;
           const share = runs > 0 ? Math.min(1, node.units / runs) : 0;
           return (
-            <g key={node.id} data-flow-node={node.id} data-flow-column={node.column}>
-              <title>{`${node.label}: called in ${formatCount(node.units)} of ${formatCount(runs)} runs`}</title>
+            <g
+              key={node.id}
+              data-flow-node={node.id}
+              data-flow-column={node.column}
+              data-step-kind={node.kind}
+            >
+              <title>{`${node.kind && node.label !== STEP_KIND_LABELS[node.kind] ? STEP_KIND_LABELS[node.kind] + ": " : ""}${node.label}: called in ${formatCount(node.units)} of ${formatCount(runs)} runs`}</title>
               <rect
                 x={node.x}
                 y={node.y}
@@ -111,8 +118,19 @@ export function TaskFlowDiagram({
                 rx={1.5}
                 className={barClass}
               />
+              {Icon ? (
+                <Icon
+                  aria-hidden
+                  x={node.x + 10}
+                  y={node.y + 6}
+                  width={14}
+                  height={14}
+                  strokeWidth={1.5}
+                  className="stroke-fg-subtle"
+                />
+              ) : null}
               <text
-                x={node.x + node.w / 2}
+                x={node.x + node.w / 2 + (Icon ? 8 : 0)}
                 y={node.y + 17}
                 textAnchor="middle"
                 className="fill-fg font-mono text-xs"

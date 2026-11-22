@@ -1,3 +1,5 @@
+export { STEP_KIND_ICONS } from "@ratel/design-system/step-kind";
+
 import { cn } from "@ratel/design-system/cn";
 import {
   Archive,

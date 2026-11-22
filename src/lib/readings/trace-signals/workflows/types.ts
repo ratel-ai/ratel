@@ -49,6 +49,11 @@ export interface WorkflowConfig {
    * (`agent-tasks.ts`, RC-747). On only with `cloud-tool-run-insights`.
    */
   agentTasks: boolean;
+  /**
+   * Typed steps and skills are items too, as tokens (`units.ts`, RC-1072),
+   * so a run of model calls alone forms a task. On only with `cloud-typed-steps`.
+   */
+  typedSteps: boolean;
 }
 
 export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
@@ -66,6 +71,7 @@ export const DEFAULT_WORKFLOW_CONFIG: Readonly<WorkflowConfig> = Object.freeze({
   coreShare: 0.7,
   optionalShare: 0.2,
   agentTasks: false,
+  typedSteps: false,
 });
 
 /** The step fields mining and health read; a full `StepDraft` satisfies it. */
@@ -132,13 +138,19 @@ export interface WorkflowModelHealth {
   modelShare: number;
 }
 
-/** One turn as mining reads it: its distinct tools and the order each was first called. */
+/**
+ * One turn as mining reads it: its distinct items and the order each was
+ * first seen. Items are tool ids; with `cloud-typed-steps` also step tokens
+ * (`units.ts`).
+ */
 export interface TurnUnit {
   turnId: string;
-  /** Distinct tool ids, sorted. */
+  /** Distinct items (tool ids and step tokens), sorted. */
   tools: readonly string[];
-  /** Distinct tool ids in first-call order. */
+  /** Distinct items in first-occurrence order. */
   path: readonly string[];
+  /** The items that are not tools (step tokens), sorted; empty with the flag off. */
+  nonTools: readonly string[];
 }
 
 /** A tool group and its identity, the part {@link assignTurn} and {@link matchPrevious} need. */

@@ -1,9 +1,12 @@
 import { cn } from "@ratel/design-system/cn";
 import { ToolPin } from "@ratel/design-system/entity";
+import { StepKindPin } from "@ratel/design-system/step-kind";
 import { ArrowRight } from "lucide-react";
 import { Fragment } from "react";
+import type { PublicStepKind } from "@/lib/readings/trace-signals/steps";
 
 export interface StepPin {
+  kind?: PublicStepKind;
   /** Unique within the list (a tool can repeat in a run). */
   key: string;
   label: string;
@@ -65,13 +68,24 @@ export function StepPins({
             )}
             data-step-failed={step.failed ? "true" : undefined}
           >
-            <ToolPin
-              name={step.label}
-              className={cn(
-                "h-5 gap-1 px-1",
-                step.failed && "border-danger/40 bg-danger-subtle text-fg [&_svg]:text-danger",
-              )}
-            />
+            {step.kind ? (
+              <StepKindPin
+                kind={step.kind}
+                name={step.label}
+                className={cn(
+                  "h-5 gap-1 px-1",
+                  step.failed && "border-danger/40 bg-danger-subtle text-fg [&_svg]:text-danger",
+                )}
+              />
+            ) : (
+              <ToolPin
+                name={step.label}
+                className={cn(
+                  "h-5 gap-1 px-1",
+                  step.failed && "border-danger/40 bg-danger-subtle text-fg [&_svg]:text-danger",
+                )}
+              />
+            )}
             {step.count && step.count > 1 ? (
               <span className="ml-1 shrink-0 text-xs text-fg-subtle tabular-nums">
                 <span aria-hidden>×{step.count}</span>

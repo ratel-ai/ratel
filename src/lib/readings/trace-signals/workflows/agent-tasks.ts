@@ -46,7 +46,11 @@ export function agentWorkflows(runs: readonly WorkflowTurn[], minSupport: number
   const workflows = [...byAgent]
     .filter(([, members]) => members.length >= minSupport)
     .map(([id, members]) =>
-      deriveWorkflow({ tools: [id], support: members.length }, members.map(turnUnit), ctx),
+      deriveWorkflow(
+        { tools: [id], support: members.length },
+        members.map((run) => turnUnit(run)),
+        ctx,
+      ),
     )
     .sort((a, b) => b.runs - a.runs || (a.coreTools[0]! < b.coreTools[0]! ? -1 : 1));
   return { workflows, runs: runs.length };

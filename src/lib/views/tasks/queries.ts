@@ -1,9 +1,10 @@
-import { and, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
 import { traceTopics, traceTurnTopics } from "@/lib/readings/topics/schema";
 import {
   type TraceSignalRow,
+  taskSegments,
   traceSelfCorrections,
   traceSignalRuns,
 } from "@/lib/readings/trace-signals/schema";
@@ -13,6 +14,8 @@ import {
   type AskSource,
   loadAskSourcesByTurn,
 } from "@/lib/readings/trace-signals/workflows/label-queries";
+import type { WorkflowStep } from "@/lib/readings/trace-signals/workflows/types";
+import { stepToken } from "@/lib/readings/trace-signals/workflows/units";
 import { toSignalRecord } from "@/lib/views/health/signals/page-view";
 import {
   type ExampleStatus,
@@ -26,6 +29,7 @@ import {
   type CorrectionKind,
   type RecordedCorrections,
   type TaskIssueSource,
+  type TaskSegmentSummary,
   type TaskTopic,
 } from "@/lib/views/tasks/model";
 
@@ -185,6 +189,7 @@ export function issueSources(rows: readonly TraceSignalRow[]): TaskIssueSource[]
 }
 
 export interface ExampleRun {
+  traceCount?: number;
   turnId: string;
   sessionId: string;
   startedAt: Date;
@@ -276,4 +281,160 @@ export function taskOfAskTools(
   const main = tools.filter((tool) => tool.share >= 0.5).map((tool) => tool.toolId);
   if (main.length === 0 || tasks.length === 0) return null;
   return assignTurn(main, tasks)?.workflowId ?? null;
+}
+
+/** Segment counts and recent segment references for the typed task pages. */
+export async function loadTaskSegmentSummaries(
+  projectId: string,
+  since: Date,
+  db: TasksDb,
+): Promise<Map<string, TaskSegmentSummary>> {
+  const rows = await db
+    .select({
+      taskId: taskSegments.workflowId,
+      runs: sql<number>`count(*)::int`,
+      finishedRuns: sql<number>`count(*) filter (where ${traceTurnSteps.outcome} is distinct from 'error')::int`,
+      medianMs: sql<number>`percentile_cont(0.5) within group (order by extract(epoch from (${taskSegments.endedAt}-${taskSegments.startedAt}))*1000)`,
+    })
+    .from(taskSegments)
+    .leftJoin(
+      traceTurnSteps,
+      and(
+        eq(traceTurnSteps.projectId, projectId),
+        eq(traceTurnSteps.turnId, taskSegments.endTurnId),
+        eq(traceTurnSteps.ordinal, taskSegments.endOrdinal),
+      ),
+    )
+    .where(and(eq(taskSegments.projectId, projectId), gte(taskSegments.endedAt, since)))
+    .groupBy(taskSegments.workflowId);
+  const stepRows = await db
+    .select({
+      taskId: taskSegments.workflowId,
+      kind: traceTurnSteps.kind,
+      targetType: traceTurnSteps.targetType,
+      targetId: traceTurnSteps.targetId,
+      runs: sql<number>`count(distinct ${taskSegments.id})::int`,
+    })
+    .from(taskSegments)
+    .innerJoin(
+      traceTurnSteps,
+      and(
+        eq(traceTurnSteps.projectId, projectId),
+        sql`${traceTurnSteps.turnId}=any(${taskSegments.turnIds})`,
+        or(
+          ne(traceTurnSteps.turnId, taskSegments.startTurnId),
+          gte(traceTurnSteps.ordinal, taskSegments.startOrdinal),
+        ),
+        or(
+          ne(traceTurnSteps.turnId, taskSegments.endTurnId),
+          lte(traceTurnSteps.ordinal, taskSegments.endOrdinal),
+        ),
+      ),
+    )
+    .where(and(eq(taskSegments.projectId, projectId), gte(taskSegments.endedAt, since)))
+    .groupBy(
+      taskSegments.workflowId,
+      traceTurnSteps.kind,
+      traceTurnSteps.targetType,
+      traceTurnSteps.targetId,
+    );
+  const byTask = new Map<string, Map<string, number>>();
+  for (const row of stepRows) {
+    const token = stepToken(row as unknown as WorkflowStep);
+    if (!token) continue;
+    const counts = byTask.get(row.taskId) ?? new Map<string, number>();
+    counts.set(token, row.runs);
+    byTask.set(row.taskId, counts);
+  }
+  const recent = db
+    .select({
+      id: taskSegments.id,
+      taskId: taskSegments.workflowId,
+      turnId: taskSegments.startTurnId,
+      rank: sql<number>`row_number() over (partition by ${taskSegments.workflowId} order by ${taskSegments.endedAt} desc,${taskSegments.id})`.as(
+        "rank",
+      ),
+    })
+    .from(taskSegments)
+    .where(and(eq(taskSegments.projectId, projectId), gte(taskSegments.endedAt, since)))
+    .as("recent");
+  const examples = await db
+    .select()
+    .from(recent)
+    .where(lte(recent.rank, 10))
+    .orderBy(asc(recent.rank));
+  return new Map(
+    rows.map((row) => [
+      row.taskId,
+      {
+        runs: row.runs,
+        finishedRuns: row.finishedRuns,
+        medianMs: row.medianMs,
+        stepRuns: byTask.get(row.taskId) ?? new Map(),
+        examples: examples
+          .filter((e) => e.taskId === row.taskId)
+          .map((e) => ({
+            turnId: e.turnId,
+            segmentId: e.id,
+            focusEventId: null,
+            why: "recent" as const,
+          })),
+      },
+    ]),
+  );
+}
+
+/** Read only the calls inside each segment, including every contributing trace. */
+export async function loadSegmentExamples(
+  projectId: string,
+  segmentIds: readonly string[],
+  db: TasksDb,
+  names: ReadonlyMap<string, string> = new Map(),
+): Promise<Map<string, ExampleRun>> {
+  if (!segmentIds.length) return new Map();
+  const segments = await db
+    .select()
+    .from(taskSegments)
+    .where(and(eq(taskSegments.projectId, projectId), inArray(taskSegments.id, [...segmentIds])));
+  const ids = [...new Set(segments.flatMap((s) => s.turnIds))];
+  if (!ids.length) return new Map();
+  const rows = await db
+    .select()
+    .from(traceTurnSteps)
+    .where(and(eq(traceTurnSteps.projectId, projectId), inArray(traceTurnSteps.turnId, ids)))
+    .orderBy(asc(traceTurnSteps.ordinal));
+  const asks = await loadAskSourcesByTurn(
+    projectId,
+    segments.filter((s) => s.startOrdinal === 1).map((s) => s.startTurnId),
+    db,
+  );
+  return new Map(
+    segments.map((segment) => {
+      const kept = segment.turnIds.flatMap((id) =>
+        rows.filter(
+          (step) =>
+            step.turnId === id &&
+            (id !== segment.startTurnId || step.ordinal >= segment.startOrdinal) &&
+            (id !== segment.endTurnId || step.ordinal <= segment.endOrdinal),
+        ),
+      );
+      const steps = exampleSteps(kept, names, { typedSteps: true });
+      const failures = steps.filter((s) => s.failed).length;
+      return [
+        segment.id,
+        {
+          turnId: segment.startTurnId,
+          sessionId: segment.sessionId,
+          startedAt: segment.startedAt,
+          endedAt: segment.endedAt,
+          calls: steps.length,
+          failures,
+          steps,
+          status: exampleStatus(steps, failures),
+          ask: segment.startOrdinal === 1 ? (asks.get(segment.startTurnId) ?? null) : null,
+          traceCount: segment.turnIds.length,
+        },
+      ];
+    }),
+  );
 }

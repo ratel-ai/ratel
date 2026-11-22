@@ -1,6 +1,8 @@
 import type { StepDraft } from "@/lib/ledger/types";
 import { envNumber } from "@/lib/platform/env-number";
 import { MAX_HANDOFF_MS } from "@/lib/readings/tool-explorer/timing";
+import { cutTurn } from "@/lib/readings/trace-signals/segments/pieces";
+import type { SegmentPlacement } from "@/lib/readings/trace-signals/segments/write";
 import { detectInTurn } from "@/lib/readings/trace-signals/self-corrections/detect";
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
 import { linkedRunMs } from "@/lib/readings/trace-signals/signals/linked-runs";
@@ -46,7 +48,12 @@ import type {
   WorkflowTurn,
 } from "@/lib/readings/trace-signals/workflows/types";
 import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/types";
-import { isToolCall, turnUnit } from "@/lib/readings/trace-signals/workflows/units";
+import {
+  isToolCall,
+  stepToken,
+  turnUnit,
+  type UnitOptions,
+} from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * Workflows (tasks, in the product) inside a signal run. Pass one hands every
@@ -68,6 +75,11 @@ import { isToolCall, turnUnit } from "@/lib/readings/trace-signals/workflows/uni
  * no tool but ran as a named agent is kept too, and the runs of one agent form
  * one task (`workflows/agent-tasks.ts`); such runs also lift the "no tool
  * calls" block. Off, they are skipped as before.
+ *
+ * With `typedSteps` on (RC-1072, `cloud-typed-steps`), the compact copy keeps
+ * every step with a token (`workflows/units.ts`), so a run of model calls is
+ * mined, placed and read on its signature; such runs lift the "no tool calls"
+ * block too. Tool-only runs read as before.
  */
 
 /** Compact turns one run keeps for mining at most. */
@@ -93,6 +105,7 @@ export interface WorkflowRunResult {
    * past the cap) belong to no task.
    */
   placement: ReadonlyMap<string, string | null>;
+  segmentPlacement?: SegmentPlacement;
   /**
    * Tool-less agent runs kept (RC-747); always 0 without `agentTasks`. Their
    * tasks are not counted in `stored.turnsWithTools`, so the run stores its
@@ -146,10 +159,14 @@ function correctionsOf(steps: readonly StepDraft[]): TurnCorrection[] {
   }));
 }
 
-/** The turn as mining and the task reading read it, tool calls only; null when it called no tool. */
-export function compactTurn(turn: SignalTurn): WorkflowTurn | null {
+/**
+ * The turn as mining and the task reading read it, tool calls only (with
+ * `typedSteps`, every step with a token); null when it has none.
+ */
+export function compactTurn(turn: SignalTurn, options: UnitOptions = {}): WorkflowTurn | null {
+  const kept = options.typedSteps ? (step: StepDraft) => stepToken(step) !== null : isToolCall;
   const steps: WorkflowStep[] = turn.steps.flatMap((step, index) =>
-    isToolCall(step)
+    kept(step)
       ? [
           {
             kind: step.kind,
@@ -231,6 +248,7 @@ function placedEntries(
   placement: ReadonlyMap<string, string | null>,
   turns: readonly WorkflowTurn[],
   ctx: { ubiquitous: ReadonlySet<string>; turnsWithTools: number },
+  options: UnitOptions = {},
 ): PlacedEntry[] {
   const byId = new Map(turns.map((turn) => [turn.id, turn]));
   const members = membersByTask(placement);
@@ -241,12 +259,17 @@ function placedEntries(
         return turn ? [turn] : [];
       });
       if (runs.length === 0) return [];
-      const shaped = reshapeWorkflow(workflow, runs.map(turnUnit), ctx);
+      const shaped = reshapeWorkflow(
+        workflow,
+        runs.map((run) => turnUnit(run, options)),
+        ctx,
+      );
+      const health = workflowHealth(shaped, byId, undefined, options);
       return [
         {
           workflow: shaped,
-          health: workflowHealth(shaped, byId),
-          reading: readTask(shaped, runs),
+          health,
+          reading: readTask(shaped, runs, options),
           fingerprint: mined[i]!.id,
         },
       ];
@@ -279,23 +302,42 @@ export function createWorkflowCollector(
   const turns: WorkflowTurn[] = [];
   const agentRuns: WorkflowTurn[] = [];
   const counts = emptyRunBasisCounts();
+  const units: UnitOptions = { typedSteps: mining.typedSteps ?? false };
+  const parents = new Map<string, string>();
   let capped = false;
+  let typedRuns = 0;
   return {
     collect(turn) {
-      const compact = compactTurn(turn);
-      countRun(
-        counts,
-        turn,
-        compact ? new Set(compact.steps.map((step) => step.targetId)).size : 0,
-      );
-      const agentRun = !compact && mining.agentTasks ? compactAgentRun(turn) : null;
-      if (capped || !(compact || agentRun)) return;
-      if (turns.length + agentRuns.length >= maxTurns) capped = true;
-      else if (compact) turns.push(compact);
-      else if (agentRun) agentRuns.push(agentRun);
+      const candidates = units.typedSteps
+        ? cutTurn(turn).map((piece) => ({
+            ...turn,
+            id: piece.id,
+            startedAt: piece.startedAt,
+            endedAt: piece.endedAt,
+            steps: [...piece.steps],
+          }))
+        : [turn];
+      for (const candidate of candidates) {
+        const compact = compactTurn(candidate, units);
+        const unit = compact ? turnUnit(compact, units) : null;
+        countRun(counts, candidate, unit ? unit.tools.length : 0);
+        const agentRun = !compact && mining.agentTasks ? compactAgentRun(candidate) : null;
+        if (capped || !(compact || agentRun)) continue;
+        if (turns.length + agentRuns.length >= maxTurns) capped = true;
+        else {
+          parents.set(candidate.id, turn.id);
+          if (compact) {
+            turns.push(compact);
+            if (unit && unit.nonTools.length > 0) typedRuns += 1;
+          } else if (agentRun) agentRuns.push(agentRun);
+        }
+      }
     },
     finish(previous) {
-      const basis = liftedByAgentRuns(fixedBasis ?? chooseRunBasis(counts), agentRuns.length);
+      const basis = liftedByToollessRuns(
+        fixedBasis ?? chooseRunBasis(counts),
+        agentRuns.length + typedRuns,
+      );
       const mined = mineWorkflows(
         turns.filter((turn) => minesRun(basis.basis, turn.turnSource)),
         mining,
@@ -312,18 +354,41 @@ export function createWorkflowCollector(
       }));
       const toolTasks = carried.slice(0, mined.workflows.length);
       const agentTasks = carried.slice(mined.workflows.length);
-      const placement = placeRuns(turns, toolTasks, { weights: mined.idf, basis: basis.basis });
+      const placement = placeRuns(turns, toolTasks, {
+        weights: mined.idf,
+        basis: basis.basis,
+        ...units,
+      });
       placeAgentRuns(placement, agentRuns, agentTasks, basis.basis);
       const entries = [
-        ...placedEntries(toolTasks, mined.workflows, placement, turns, {
-          ubiquitous: new Set(mined.ubiquitousTools),
-          turnsWithTools: mined.turnsWithTools,
-        }),
+        ...placedEntries(
+          toolTasks,
+          mined.workflows,
+          placement,
+          turns,
+          {
+            ubiquitous: new Set(mined.ubiquitousTools),
+            turnsWithTools: mined.turnsWithTools,
+          },
+          units,
+        ),
         ...placedEntries(agentTasks, agents.workflows, placement, agentRuns, {
           ubiquitous: new Set(),
           turnsWithTools: agents.runs,
         }),
       ].sort(mostRunsFirst);
+      if (units.typedSteps) {
+        for (const entry of entries) {
+          for (const examples of [
+            entry.health.failedExamples,
+            entry.health.slowExamples,
+            entry.health.recentExamples,
+          ]) {
+            for (const example of examples)
+              example.turnId = parents.get(example.turnId) ?? example.turnId;
+          }
+        }
+      }
       const byKey = new Map(entries.map((entry) => [entry.workflow.id, entry]));
       const signals = detectWorkflowSignals(entries, workflowThresholds(floors)).map((s) =>
         toDetected(s, byKey.get(s.subjectKey)),
@@ -338,7 +403,10 @@ export function createWorkflowCollector(
         measured: new Set<SignalKind>(
           mined.multiToolTurns > 0 || agents.workflows.length > 0 ? WORKFLOW_SIGNAL_KINDS : [],
         ),
-        placement,
+        placement: units.typedSteps ? firstTaskPerTurn(placement, parents) : placement,
+        ...(units.typedSteps
+          ? { segmentPlacement: { tasks: carried, weights: mined.idf, basis: basis.basis } }
+          : {}),
         agentRuns: agentRuns.length,
       };
     },
@@ -346,11 +414,12 @@ export function createWorkflowCollector(
 }
 
 /**
- * The basis, with the "no tool calls" block lifted when tool-less agent runs
- * were kept (RC-747): they are what the tasks are read from.
+ * The basis, with the "no tool calls" block lifted when runs without a tool
+ * call were kept: tool-less agent runs (RC-747), or runs with a step token
+ * (`typedSteps`, RC-1072). They are what the tasks are read from.
  */
-function liftedByAgentRuns(basis: RunBasis, agentRuns: number): RunBasis {
-  return basis.blocked === "no_tool_calls" && agentRuns > 0
+function liftedByToollessRuns(basis: RunBasis, runs: number): RunBasis {
+  return basis.blocked === "no_tool_calls" && runs > 0
     ? { ...basis, basis: "all", blocked: null }
     : basis;
 }
@@ -370,4 +439,17 @@ function placeAgentRuns(
       step && minesRun(basis, run.turnSource) ? (byStep.get(step) ?? null) : null,
     );
   }
+}
+
+/** Keep the first placed piece as the legacy turn pointer. */
+function firstTaskPerTurn(
+  placement: ReadonlyMap<string, string | null>,
+  parents: ReadonlyMap<string, string>,
+): Map<string, string | null> {
+  const out = new Map<string, string | null>();
+  for (const [id, task] of placement) {
+    const turnId = parents.get(id) ?? id;
+    if (!out.has(turnId) || out.get(turnId) === null) out.set(turnId, task);
+  }
+  return out;
 }

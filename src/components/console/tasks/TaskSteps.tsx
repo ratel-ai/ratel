@@ -2,6 +2,7 @@ import { cn } from "@ratel/design-system/cn";
 import { DotMeter } from "@ratel/design-system/dot-matrix";
 import { ToolPin } from "@ratel/design-system/entity";
 import { PeekLink } from "@ratel/design-system/panel";
+import { StepKindPin } from "@ratel/design-system/step-kind";
 import { TASK_COLOR_CLASSES, type TaskColorSlot } from "@ratel/design-system/task-colors";
 import { ChevronRight, CircleX, Timer } from "lucide-react";
 import { CORRECTION_ICONS, KindIcon } from "@/components/console/tasks/kind-icons";
@@ -118,10 +119,18 @@ function StepNode({
       ) : null}
       <PeekLink peek={stepPeek(step.toolId)} className={PIN_LINK}>
         <span className="sr-only">Step {index + 1}: </span>
-        <ToolPin
-          name={step.label}
-          className={cn("h-8 gap-2 px-2.5 text-ui [&_svg]:size-3.5", mark?.pin)}
-        />
+        {step.kind ? (
+          <StepKindPin
+            kind={step.kind}
+            name={step.label}
+            className={cn("h-8 gap-2 px-2.5 text-ui", mark?.pin)}
+          />
+        ) : (
+          <ToolPin
+            name={step.label}
+            className={cn("h-8 gap-2 px-2.5 text-ui [&_svg]:size-3.5", mark?.pin)}
+          />
+        )}
         {mark ? <span className="sr-only">, {mark.word.toLowerCase()}</span> : null}
       </PeekLink>
       {/* On a phone the line runs down the left gutter, so the numbers sit to its right. */}
@@ -211,10 +220,14 @@ function SideSteps({ steps, hasReading }: { steps: readonly StepView[]; hasReadi
               peek={stepPeek(step.toolId)}
               className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-focus"
             >
-              <ToolPin
-                name={step.label}
-                className={cn("max-w-48", step.mark ? MARK[step.mark].pin : undefined)}
-              />
+              {step.kind ? (
+                <StepKindPin kind={step.kind} name={step.label} className="max-w-48" />
+              ) : (
+                <ToolPin
+                  name={step.label}
+                  className={cn("max-w-48", step.mark ? MARK[step.mark].pin : undefined)}
+                />
+              )}
             </PeekLink>
             {hasReading ? (
               <span className="text-xs text-fg-subtle tabular-nums">

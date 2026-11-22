@@ -256,3 +256,47 @@ test("usage counts SDK runs only, as the live read on Fixes does", () => {
     waitMs: 3_000,
   });
 });
+
+test("typed steps on: a task of model and code steps reads each token as a step", () => {
+  const typedRun = (error: boolean): WorkflowTurn => {
+    const base = run(["search"]);
+    const steps: WorkflowStep[] = [
+      {
+        kind: "model_call",
+        targetType: null,
+        targetId: "plan",
+        outcome: "ok",
+        tookMs: 800,
+        traceEventId: `${base.id}-m`,
+      },
+      {
+        kind: "code",
+        targetType: null,
+        targetId: "fetch",
+        outcome: error ? "error" : "ok",
+        tookMs: 50,
+        traceEventId: `${base.id}-c`,
+      },
+      ...base.steps,
+    ];
+    return { ...base, steps };
+  };
+  const task = {
+    typicalOrder: ["model:plan", "code:fetch", "search"],
+    optionalTools: [],
+    helperTools: [],
+  };
+  const runs = [typedRun(false), typedRun(true)];
+  const off = readTask(task, runs);
+  assert.equal(step(off.steps, "model:plan").calls, 0, "flag off: only tool calls count");
+  const on = readTask(task, runs, { typedSteps: true });
+  assert.equal(on.calls, 6);
+  assert.equal(on.finishedRuns, 2, "each run ends on a search that worked");
+  assert.equal(on.errorRuns, 1);
+  assert.equal(step(on.steps, "model:plan").calls, 2);
+  assert.equal(step(on.steps, "code:fetch").failures, 1);
+  assert.deepEqual(
+    step(on.steps, "model:plan").next.map((n) => n.toolId),
+    ["code:fetch"],
+  );
+});

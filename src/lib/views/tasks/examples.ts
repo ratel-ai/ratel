@@ -1,3 +1,7 @@
+import type { PublicStepKind } from "@/lib/readings/trace-signals/steps";
+import type { WorkflowStep } from "@/lib/readings/trace-signals/workflows/types";
+import { stepToken, type UnitOptions } from "@/lib/readings/trace-signals/workflows/units";
+import { tokenStepKind, tokenStepLabel } from "@/lib/views/tasks/step-kind";
 /**
  * An example run as a task's page draws it: the tools it called in order and
  * how it ended, read the way Self-corrections reads a run
@@ -7,6 +11,7 @@
  */
 
 export interface ExampleStep {
+  kind?: PublicStepKind;
   /** The called tool's catalog id (`skill:<id>` for a skill). */
   toolId: string;
   label: string;
@@ -42,8 +47,22 @@ export function exampleSteps(
     outcome: string | null;
   }[],
   names: ReadonlyMap<string, string>,
+  options: UnitOptions = {},
 ): ExampleStep[] {
   return rows.flatMap((row) => {
+    if (options.typedSteps) {
+      const toolId = stepToken(row as WorkflowStep);
+      return toolId
+        ? [
+            {
+              toolId,
+              label: tokenStepLabel(toolId, names),
+              kind: tokenStepKind(toolId),
+              failed: row.outcome === "error",
+            },
+          ]
+        : [];
+    }
     if (row.kind !== "invoke" || !row.targetId) return [];
     const toolId = row.targetType === "skill" ? `skill:${row.targetId}` : row.targetId;
     return [{ toolId, label: names.get(toolId) ?? toolId, failed: row.outcome === "error" }];

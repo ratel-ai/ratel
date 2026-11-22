@@ -4,7 +4,9 @@ import { PROJECT_ID, setupDb } from "@/lib/readings/trace-signals/signals/integr
 import {
   loadExampleRuns,
   loadLatestTasksRun,
+  loadSegmentExamples,
   loadTaskCorrections,
+  loadTaskSegmentSummaries,
   loadTaskTopics,
   taskOfAskTools,
 } from "@/lib/views/tasks/queries";
@@ -183,4 +185,45 @@ test("an old Tool craft ask lands on the task its main tools run as", () => {
   assert.equal(taskOfAskTools(ask, stored), "task-release");
   assert.equal(taskOfAskTools([{ toolId: "search", share: 0.9 }], stored), null);
   assert.equal(taskOfAskTools(ask, null), null);
+});
+
+test("task counts and examples use segments and only the steps inside their bounds", async () => {
+  const { client, db } = await setupDb();
+  await turns(client, [{ n: 1, task: "task-a" }]);
+  for (const [ordinal, kind, target] of [
+    [1, "model_call", "engine"],
+    [2, "code", "prepare_response"],
+    [3, "model_call", "other"],
+  ] as const) {
+    await client.query(
+      `insert into trace_turn_steps (turn_id,project_id,ordinal,kind,event_type,trace_event_id,occurred_at,received_at,target_id,outcome)
+      values ($1,$2,$3,$4,'otlp_step',$5,'2026-09-10T10:00:00Z','2026-09-10T10:00:00Z',$6,'ok')`,
+      [id(1), PROJECT_ID, ordinal, kind, id(100 + ordinal), target],
+    );
+  }
+  for (const [n, task, start, end] of [
+    [10, "task-a", 1, 2],
+    [11, "task-b", 3, 3],
+  ] as const) {
+    await client.query(
+      `insert into task_segments (id,project_id,session_id,workflow_id,start_turn_id,start_ordinal,end_turn_id,end_ordinal,started_at,ended_at,turn_ids,piece_count)
+      values ($1,$2,'sess-1',$3,$4,$5,$4,$6,'2026-09-10T10:00:00Z','2026-09-10T10:00:05Z',array[$4::uuid],1)`,
+      [id(n), PROJECT_ID, task, id(1), start, end],
+    );
+  }
+  const summaries = await loadTaskSegmentSummaries(PROJECT_ID, SINCE, db);
+  assert.equal(summaries.get("task-a")!.runs, 1);
+  assert.equal(summaries.get("task-b")!.runs, 1);
+  assert.equal(summaries.get("task-a")!.finishedRuns, 1);
+  assert.equal(summaries.get("task-a")!.stepRuns?.get("model:engine"), 1);
+  const examples = await loadSegmentExamples(PROJECT_ID, [id(10)], db);
+  assert.deepEqual(
+    examples.get(id(10))!.steps.map((s) => [s.kind, s.label]),
+    [
+      ["model_call", "Model call"],
+      ["code", "Prepare response"],
+    ],
+  );
+  assert.equal(examples.get(id(10))!.calls, 2);
+  await client.close();
 });

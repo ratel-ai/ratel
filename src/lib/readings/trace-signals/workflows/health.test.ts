@@ -121,3 +121,26 @@ test("an empty workflow has zeros and nulls, not NaN", () => {
   assert.equal(health.failingStep, null);
   assert.equal(health.slowestStep, null);
 });
+
+test("typed steps on: a model-only run's failing and slowest step is its model token", () => {
+  const model = (outcome: "ok" | "error", tookMs: number) => ({
+    tool: "triage",
+    kind: "model_call" as const,
+    outcome,
+    tookMs,
+  });
+  const turns = [
+    wfTurn([model("ok", 900)], { id: "m1", startMs: 0 }),
+    wfTurn([model("ok", 300), model("error", 600)], { id: "m2", startMs: 10_000 }),
+  ];
+  const off = workflowHealth({ id: "wf", memberTurnIds: ["m1", "m2"] }, byIdMap(turns));
+  assert.equal(off.failedRuns, 0, "flag off: a model call is no step");
+  const on = workflowHealth({ id: "wf", memberTurnIds: ["m1", "m2"] }, byIdMap(turns), undefined, {
+    typedSteps: true,
+  });
+  assert.equal(on.failedRuns, 1);
+  assert.deepEqual(on.failingStep, { toolId: "model:triage", count: 1, share: 1 });
+  assert.equal(on.slowestStep?.toolId, "model:triage");
+  assert.equal(on.meanToolCalls, 1.5);
+  assert.equal(on.retryRuns, 1);
+});

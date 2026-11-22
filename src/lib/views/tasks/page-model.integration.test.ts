@@ -1,11 +1,25 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
+import { readMigrationFiles } from "drizzle-orm/migrator";
+import { typedStepFixtures } from "@/lib/ingest/otlp/__fixtures__/typed-steps";
+import { deriveModelCalls } from "@/lib/ingest/otlp/derive-model-calls";
+import { deriveSteps } from "@/lib/ingest/otlp/derive-steps";
+import { buildTurns } from "@/lib/ledger/turns/build-turn";
+import { normalizeEvents } from "@/lib/ledger/turns/normalize";
+import { writeTurnPage } from "@/lib/ledger/turns/queries";
+import type { TurnEventRow } from "@/lib/ledger/types";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import type { Organization } from "@/lib/platform/organizations";
-import { PROJECT_ID, setupDb } from "@/lib/readings/trace-signals/signals/integration-support";
+import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
+import {
+  jobDeps,
+  PROJECT_ID,
+  setupDb,
+} from "@/lib/readings/trace-signals/signals/integration-support";
 import { NO_PRICE } from "@/lib/synthesis/tool-crafter/round-trip";
-import { buildTaskList } from "@/lib/views/tasks/model";
-import { loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
+import { buildTaskDetail, buildTaskList } from "@/lib/views/tasks/model";
+import { loadTaskExamples, loadTaskFixes, loadTasksInputs } from "@/lib/views/tasks/page-model";
 
 async function seedRun(client: Awaited<ReturnType<typeof setupDb>>["client"]) {
   const summary = {
@@ -168,4 +182,90 @@ test("Fixes' open fixes, or null when Fixes could not be read: the task pages th
     ),
     null,
   );
+});
+
+test("typed task inputs read segment counts only when the flag is enabled", async () => {
+  const { client, db } = await setupDb();
+  await seedRun(client);
+  const operations: string[] = [];
+  const read: NonNullable<Parameters<typeof loadTasksInputs>[1]>["read"] = (operation, load) => {
+    operations.push(operation);
+    return load(db as unknown as BoundReadDb);
+  };
+  const on = await loadTasksInputs(PROJECT_ID, { read, readsTypedSteps: async () => true });
+  assert.equal(on.typedSteps, true);
+  assert.equal(on.segments?.size, 0);
+  assert.ok(operations.includes("tasks_segments"));
+  operations.length = 0;
+  const off = await loadTasksInputs(PROJECT_ID, { read, readsTypedSteps: async () => false });
+  assert.equal(off.typedSteps, undefined);
+  assert.ok(!operations.includes("tasks_segments"));
+  await client.close();
+});
+
+// Owned: the core's migrations folder, and its task_segments migration is written with IF NOT EXISTS.
+test("standard migrations include the stored segments required by the task page", () => {
+  const migrations = readMigrationFiles({ migrationsFolder: "lib/platform/db/migrations" });
+  assert.ok(
+    migrations.some((migration) =>
+      migration.sql.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS "task_segments"')),
+    ),
+  );
+});
+
+test("ten stored Stema segments show ten runs with matching calls and examples", async () => {
+  const { client, db } = await setupDb();
+  try {
+    const now = new Date("2026-09-14T00:00:00Z");
+    for (let n = 0; n < 10; n++) {
+      const spans = typedStepFixtures(Date.parse("2026-09-10T12:00:00Z") + n * 60_000).stema.map(
+        (span) => ({ ...span, traceId: (100 + n).toString(16).padStart(32, "0") }),
+      );
+      const rows = [...deriveSteps(spans), ...deriveModelCalls(spans, { typedSteps: true })].map(
+        (row) => ({ ...row, id: randomUUID(), receivedAt: row.occurredAt ?? now, failed: false }),
+      );
+      const events = normalizeEvents(rows as unknown as TurnEventRow[], new Map(), {
+        salt: "test",
+        typedSteps: true,
+      });
+      const { turns } = buildTurns({ stored: [], events, now });
+      await writeTurnPage(
+        { projectId: PROJECT_ID, turns, orphanedTurnIds: [], through: now.toISOString(), now },
+        db,
+      );
+    }
+    const result = await computeProjectTraceSignals(
+      PROJECT_ID,
+      { trigger: "manual" },
+      jobDeps(db, now, [], { workflowMining: async () => ({ typedSteps: true }) }),
+    );
+    assert.equal(result.outcome, "completed");
+    const deps = {
+      read: <T>(_operation: string, load: (db: BoundReadDb) => Promise<T>) =>
+        load(db as unknown as BoundReadDb),
+      readsTypedSteps: async () => true,
+    };
+    const inputs = await loadTasksInputs(PROJECT_ID, deps);
+    const list = buildTaskList(inputs);
+    assert.equal(list.rows.length, 1);
+    const row = list.rows[0];
+    assert.ok(row);
+    const task = buildTaskDetail(inputs, row.id);
+    assert.ok(task);
+    assert.equal(task.runs, 10);
+    assert.equal(task.callsPerRun, 2); // One model call and one code step per segment.
+    assert.equal(task.examples.length, 10);
+    const examples = await loadTaskExamples(PROJECT_ID, task, deps);
+    assert.equal(examples.size, 10);
+    for (const run of examples.values()) {
+      assert.equal(run.calls, 2);
+      assert.equal(run.traceCount, 1);
+      assert.deepEqual(run.steps.map((step) => step.kind).sort(), ["code", "model_call"]);
+    }
+    const off = await loadTasksInputs(PROJECT_ID, { ...deps, readsTypedSteps: async () => false });
+    assert.equal(off.typedSteps, undefined);
+    assert.equal(off.segments, undefined);
+  } finally {
+    await client.close();
+  }
 });

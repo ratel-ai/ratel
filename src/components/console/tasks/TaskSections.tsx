@@ -397,11 +397,11 @@ export function ExampleRuns({
         <ul className={ROWS} data-task-examples={examples.length}>
           {examples.map((example) => (
             <ExampleRow
-              key={example.turnId}
+              key={example.segmentId ?? example.turnId}
               projectId={projectId}
               taskId={taskId}
               example={example}
-              run={runs.get(example.turnId)}
+              run={runs.get(example.segmentId ?? example.turnId)}
               focusTools={focusTools}
               now={now}
               testRuns={testRuns}
@@ -461,6 +461,7 @@ function ExampleRow({
             steps={collapseRepeats(run.steps).map((group, index) => ({
               key: `${index}:${group.toolId}`,
               label: group.label,
+              kind: group.kind,
               failed: group.failed,
               count: group.count,
             }))}
@@ -489,6 +490,9 @@ function ExampleRow({
       </span>
       {run ? (
         <span className="order-2 ml-auto flex shrink-0 items-center gap-3 text-xs whitespace-nowrap text-fg-subtle tabular-nums md:order-3 md:ml-0">
+          {run.traceCount && run.traceCount > 1 ? (
+            <span>{plural(run.traceCount, "trace", "traces")}</span>
+          ) : null}
           <span>{formatMs(run.endedAt.getTime() - run.startedAt.getTime())}</span>
           <time dateTime={run.startedAt.toISOString()} title={formatTimestamp(run.startedAt)}>
             {formatRelativeTime(run.startedAt, now)}

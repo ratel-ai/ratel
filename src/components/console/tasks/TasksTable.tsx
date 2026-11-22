@@ -197,6 +197,7 @@ function TaskCell({ projectId, task }: { projectId: string; task: TaskRow }) {
           steps={steps.map((step, index) => ({
             key: `${index}:${step.toolId}`,
             label: step.label,
+            kind: step.kind,
           }))}
           max={2}
           wideMax={3}

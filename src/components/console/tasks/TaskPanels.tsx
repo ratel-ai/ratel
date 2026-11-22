@@ -5,6 +5,7 @@ import { cn } from "@ratel/design-system/cn";
 import { DotMeter } from "@ratel/design-system/dot-matrix";
 import { NounIcon, TaskPin, ToolPin } from "@ratel/design-system/entity";
 import { Panel, usePeek } from "@ratel/design-system/panel";
+import { StepKindPin } from "@ratel/design-system/step-kind";
 import type { TaskColorSlot } from "@ratel/design-system/task-colors";
 import { Flag, Timer } from "lucide-react";
 import Link from "next/link";
@@ -21,6 +22,7 @@ import {
   selfCorrectionsHref,
   stepPeek,
 } from "@/lib/views/tasks/paths";
+import { tokenStepKind } from "@/lib/views/tasks/token-kind";
 
 /**
  * The task page's one Panel: a step's numbers (`?peek=step:<tool>`) or an
@@ -218,6 +220,12 @@ export function StepPanelBody({
                         <Flag aria-hidden strokeWidth={1.5} className="size-3.5 text-fg-subtle" />
                         {next.label}
                       </span>
+                    ) : step.kind ? (
+                      <StepKindPin
+                        kind={tokenStepKind(next.toolId)}
+                        name={next.label}
+                        className="min-w-0 shrink"
+                      />
                     ) : (
                       <ToolPin name={next.label} className="min-w-0 shrink" />
                     )}
@@ -241,26 +249,28 @@ export function StepPanelBody({
       ) : (
         <p className="text-ui text-fg-muted">Its numbers arrive with the next reading.</p>
       )}
-      <nav
-        aria-label="This step elsewhere"
-        className="flex flex-wrap gap-1 border-t border-line pt-3"
-      >
-        <Link
-          href={selfCorrectionsHref(projectId, { tool: step.toolId, task: taskId })}
-          className={PANEL_LINK}
+      {!step.kind || step.kind === "tool_call" || step.kind === "skill" ? (
+        <nav
+          aria-label="This step elsewhere"
+          className="flex flex-wrap gap-1 border-t border-line pt-3"
         >
-          <NounIcon noun="selfCorrection" />
-          Self-corrections
-        </Link>
-        <Link href={fixesHref(projectId, { tool: step.toolId })} className={PANEL_LINK}>
-          <NounIcon noun="fix" />
-          Fixes
-        </Link>
-        <Link href={catalogToolHref(projectId, step.toolId)} className={PANEL_LINK}>
-          <NounIcon noun={step.toolId.startsWith("skill:") ? "skill" : "tool"} />
-          Catalog
-        </Link>
-      </nav>
+          <Link
+            href={selfCorrectionsHref(projectId, { tool: step.toolId, task: taskId })}
+            className={PANEL_LINK}
+          >
+            <NounIcon noun="selfCorrection" />
+            Self-corrections
+          </Link>
+          <Link href={fixesHref(projectId, { tool: step.toolId })} className={PANEL_LINK}>
+            <NounIcon noun="fix" />
+            Fixes
+          </Link>
+          <Link href={catalogToolHref(projectId, step.toolId)} className={PANEL_LINK}>
+            <NounIcon noun={step.toolId.startsWith("skill:") ? "skill" : "tool"} />
+            Catalog
+          </Link>
+        </nav>
+      ) : null}
     </div>
   );
 }

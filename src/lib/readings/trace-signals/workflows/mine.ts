@@ -14,7 +14,7 @@ import {
   type WorkflowMiningResult,
   type WorkflowTurn,
 } from "@/lib/readings/trace-signals/workflows/types";
-import { turnUnit } from "@/lib/readings/trace-signals/workflows/units";
+import { formsTask, turnUnit } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * Workflow mining (Phase W1): recurring groups of tools, found from telemetry
@@ -23,6 +23,9 @@ import { turnUnit } from "@/lib/readings/trace-signals/workflows/units";
  *
  * - Unit: one turn, as its distinct tools and its first-call path. A turn
  *   with fewer than two distinct tools is a single step, never a workflow.
+ *   With `typedSteps` (`cloud-typed-steps`, RC-1072) the items are step
+ *   tokens (`units.ts`): one non-tool token is enough, and such a token may
+ *   be a workflow alone (a size-1 itemset), so a run of model calls is a task.
  * - IDF: a tool's weight is ln(1 + N / df) over the N multi-tool turns (the
  *   smoothed form, so a tool in every turn still weighs ln 2 rather than 0
  *   and a project with one dominant workflow can still score it); a tool in
@@ -42,6 +45,8 @@ interface Vocabulary {
   toolIds: string[];
   df: number[];
   bits: Bitset[];
+  /** Indices of the non-tool tokens: the items that may be a workflow alone. */
+  singleItems: Set<number>;
 }
 
 function vocabulary(multi: readonly TurnUnit[]): Vocabulary {
@@ -51,10 +56,12 @@ function vocabulary(multi: readonly TurnUnit[]): Vocabulary {
   multi.forEach((unit, turn) => {
     for (const tool of unit.tools) turnsOf[indexOf.get(tool)!]!.push(turn);
   });
+  const nonTools = new Set(multi.flatMap((unit) => unit.nonTools));
   return {
     toolIds,
     df: turnsOf.map((turns) => turns.length),
     bits: turnsOf.map((turns) => bitsetOf(multi.length, turns)),
+    singleItems: new Set(toolIds.flatMap((tool, index) => (nonTools.has(tool) ? [index] : []))),
   };
 }
 
@@ -120,8 +127,10 @@ export function mineWorkflows(
   opts: Partial<WorkflowConfig> = {},
 ): WorkflowMiningResult {
   const config: WorkflowConfig = { ...DEFAULT_WORKFLOW_CONFIG, ...opts };
-  const withTools = turns.map(turnUnit).filter((unit) => unit.tools.length > 0);
-  const multi = withTools.filter((unit) => unit.tools.length >= 2);
+  const withTools = turns
+    .map((turn) => turnUnit(turn, config))
+    .filter((unit) => unit.tools.length > 0);
+  const multi = withTools.filter(formsTask);
   const n = multi.length;
   const floor = Math.max(config.minSupport, Math.ceil(config.minShare * n));
   const singleStepTurns = withTools.length - n;
@@ -141,6 +150,7 @@ export function mineWorkflows(
   const ctx = {
     unitSets: multi.map((unit) => new Set(unit.tools)),
     toolIds: vocab.toolIds,
+    singleItems: vocab.singleItems,
     idf,
     baseRate,
     ubiquitous,

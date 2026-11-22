@@ -575,3 +575,53 @@ test("a model-written label still names an agent task", () => {
   );
   assert.equal(list.rows.find((row) => row.id === "wf-fix")?.name, "Drafting a fix");
 });
+
+test("typed task details show model and code steps with segment run counts", () => {
+  const collector = createWorkflowCollector(undefined, undefined, undefined, { typedSteps: true });
+  for (const turn of many(10, () =>
+    wfTurn(
+      [
+        { tool: "claude-sonnet-5-5", kind: "model_call" },
+        { tool: "prepare_response", kind: "code" },
+      ],
+      { turnSource: "otlp" },
+    ),
+  ))
+    collector.collect(turn);
+  const stored = collector.finish([]).stored;
+  const id = stored.items[0]!.id;
+  const detail = buildTaskDetail(
+    inputs({
+      stored,
+      typedSteps: true,
+      segments: new Map([
+        [
+          id,
+          {
+            runs: 1,
+            finishedRuns: 1,
+            medianMs: 2000,
+            examples: [
+              { turnId: "turn-one", segmentId: "segment-one", focusEventId: null, why: "recent" },
+            ],
+          },
+        ],
+      ]),
+    }),
+    id,
+  )!;
+  assert.equal(detail.runs, 1);
+  assert.equal(detail.finishedRuns, 1);
+  assert.deepEqual(
+    detail.steps.map((s) => s.kind),
+    ["model_call", "code"],
+  );
+  assert.deepEqual(
+    detail.steps.map((s) => s.label),
+    ["Model call", "Prepare response"],
+  );
+  assert.ok(!detail.name.includes("claude"));
+  assert.equal(detail.examples[0]!.segmentId, "segment-one");
+  assert.equal(detail.steps[0]!.runs, 1);
+  assert.equal(detail.flow.tools[0]!.n, 1);
+});
