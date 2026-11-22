@@ -12,7 +12,7 @@
  * next/navigation resolve to the shims in mcp-apps/shell/shims, the only
  * next/* a view can reach.
  *
- * Writes mcp-apps/dist/<view>.html and mcp-apps/dist/views.json, the McpAppView[]
+ * Writes src/mcp-apps/dist/<view>.html and src/mcp-apps/dist/views.json, the McpAppView[]
  * the MCP server serves (lib/mcp/apps). Bindings come from views/<view>/bindings.ts.
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -23,11 +23,12 @@ import { build, type Plugin } from "esbuild";
 import postcss from "postcss";
 import tailwind from "@tailwindcss/postcss";
 import subsetFont from "subset-font";
-import type { McpAppView } from "../lib/mcp/apps/types";
-import type { ViewBindings } from "../mcp-apps/shell/types";
+import type { McpAppView } from "../src/lib/mcp/apps/types";
+import type { ViewBindings } from "../src/mcp-apps/shell/types";
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ROOT = path.join(WEB, "mcp-apps");
+const SRC = path.join(WEB, "src");
+const ROOT = path.join(SRC, "mcp-apps");
 const VIEWS = path.join(ROOT, "views");
 const SHELL = path.join(ROOT, "shell");
 export const DIST = path.join(ROOT, "dist");
@@ -75,14 +76,14 @@ const serverActions: Plugin = {
  */
 const CONSOLE_ONLY: Readonly<Record<string, string>> = {
   // Owned (ADR-0030): the panel lands in components/console here.
-  [path.join(WEB, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
+  [path.join(SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
 };
 
 const consoleOnly: Plugin = {
   name: "console-only-shims",
   setup(build) {
     build.onResolve({ filter: /WhatIfPanel$/ }, (args) => {
-      const target = args.path.startsWith("@/") ? path.join(WEB, args.path.slice(2)) : path.resolve(args.resolveDir, args.path);
+      const target = args.path.startsWith("@/") ? path.join(SRC, args.path.slice(2)) : path.resolve(args.resolveDir, args.path);
       const shim = CONSOLE_ONLY[target];
       return shim ? { path: shim } : undefined;
     });
@@ -151,7 +152,7 @@ export function tailwindSources(inputs: readonly string[]): string[] {
     .filter((input) => !input.includes("node_modules") && /\.(tsx|ts)$/.test(input))
     .map((input) => path.resolve(WEB, input))
     .filter((file) => file.startsWith(WEB + path.sep))
-    .filter((file) => !file.startsWith(path.join(WEB, "mcp-apps") + path.sep) && !file.startsWith(path.join(WEB, "components", "ds") + path.sep))
+    .filter((file) => !file.startsWith(path.join(SRC, "mcp-apps") + path.sep) && !file.startsWith(path.join(SRC, "components", "ds") + path.sep))
     .sort();
 }
 

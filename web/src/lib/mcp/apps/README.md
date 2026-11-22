@@ -9,9 +9,9 @@ resources/list against `../__fixtures__/flag-off-protocol.json`.
 
 ## How it fits
 
-- **Views** are built from `src/mcp-apps/views/<view>/` into one
+- **Views** are built from `web/src/mcp-apps/views/<view>/` into one
   self-contained HTML document each (`pnpm mcp-apps:build`). The build writes
-  `src/mcp-apps/dist/views.json` (gitignored): an array of
+  `web/src/mcp-apps/dist/views.json` (gitignored): an array of
   `McpAppView` (`types.ts`): `{ view, title?, description?, html, bindings[] }`.
 - **Bindings** live next to each view in `views/<view>/bindings.ts`: the tools
   that view renders, each with a view-specific `config` (columns, filters,

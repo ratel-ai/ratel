@@ -9,7 +9,7 @@ The repeatable copy of the open-source parts of `ratel-cloud` into `src`
 | File | What it is |
 |---|---|
 | `map.json` | What moves where. `copy`: mirrored on every sync with imports rewritten. `owned`: bootstrapped once, then maintained here. `excluded`: never lands. The most specific entry wins: a file with its own `copy` or `owned` entry inside an excluded folder lands, and the rest of the folder does not. |
-| `rewrites.json` | Explicit import-specifier rules (`@/components/ds/*` to `@ratel/design-system/*`, `@/lib/utils` to the design-system `cn`). Moves from upstream `apps/web/lib` into `src/lib` are derived from `map.json`. |
+| `rewrites.json` | Explicit import-specifier rules (`@/components/ds/*` to `@ratel/design-system/*`, `@/lib/utils` to the design-system `cn`). Moves from upstream `apps/web/lib` into `web/src/lib` are derived from `map.json`. |
 | `private-strings.txt` | Regexes for Cloud-only code (scoped to `src`) and salted hashes of confidential words (whole tree; the word is never written down). A landed file or upstream path matching one fails or skips the sync; `pnpm check:private` scans the repository with the same list. |
 | `source.json` | The `ratel-cloud` commit last synced. |
 | `sync.mjs` | The driver: plan, format (one biome run over a staged mirror of the plan), private-string guard, write, record. |
@@ -21,7 +21,7 @@ The repeatable copy of the open-source parts of `ratel-cloud` into `src`
 
 ```sh
 pnpm platform:sync                                  # from ../ratel-cloud, everything in map.json
-pnpm platform:sync -- --only src/lib/ingest    # one destination prefix
+pnpm platform:sync -- --only web/src/lib/ingest    # one destination prefix
 pnpm platform:sync -- --check                       # write nothing; exit 1 if a sync would change the tree
 RATEL_CLOUD_DIR=~/Developer/Ratel/ratel-cloud pnpm platform:sync  # another source (or --source); fails if it is not a ratel-cloud checkout
 pnpm platform:undecided                             # upstream files with no decision; exit 1 if there is one

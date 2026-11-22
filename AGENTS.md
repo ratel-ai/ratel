@@ -6,7 +6,7 @@ This file is for AI coding agents (Claude Code, Cursor, Codex, Aider, etc.) **wo
 
 If you're a human, you probably want [README.md](README.md).
 
-This repo holds the platform (`src`, `ee`, `packages/brand`, `packages/design-system`). The SDKs (Rust core, TypeScript and Python SDKs, adapters, rankers, telemetry, protocol and examples) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); work on them there.
+This repo holds the platform (`web`, `ee`, `packages/brand`, `packages/design-system`). The SDKs (Rust core, TypeScript and Python SDKs, adapters, rankers, telemetry, protocol and examples) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); work on them there.
 
 ---
 
@@ -42,7 +42,7 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
 
 ## Code from ratel-cloud
 
-The platform at `src` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
+The platform at `web` comes from `ratel-cloud` (a sibling checkout, `../ratel-cloud` or
 `RATEL_CLOUD_DIR`) through [`scripts/platform-sync/`](scripts/platform-sync/README.md)
 (ADR-0030). It is **moved, not rewritten**: every file taken from upstream is tracked in
 `scripts/platform-sync/map.json` and landed by the sync, so the difference from upstream stays

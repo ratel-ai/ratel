@@ -12,7 +12,7 @@ name: ratel
 x-platform: &platform
   build:
     context: .
-    dockerfile: src/Dockerfile
+    dockerfile: web/Dockerfile
     target: oss
   # Back after a reboot or a daemon restart; `docker compose stop` keeps it down.
   restart: unless-stopped
@@ -69,7 +69,7 @@ services:
     profiles: [demo]
     build:
       context: .
-      dockerfile: src/Dockerfile
+      dockerfile: web/Dockerfile
       target: demo
     # Shares the database's network, so `localhost` is exactly this Postgres and the seeds' guard
     # against any other database stays as it is.

@@ -29,7 +29,7 @@ import {
  */
 
 // Owned (ADR-0030): the fixtures sit with the ingest module; this helper sits with the ledger it replays through.
-export const REAL_FIXTURES_DIR = join(process.cwd(), "lib/ingest/otlp/__fixtures__/real");
+export const REAL_FIXTURES_DIR = join(process.cwd(), "src/lib/ingest/otlp/__fixtures__/real");
 
 export interface FixtureBody {
   file: string;

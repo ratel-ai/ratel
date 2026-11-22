@@ -9,7 +9,7 @@ with the receive time).
 Captured on 2026-10-01, offline: every model was a mock or a local fake
 OpenAI-compatible server, so nothing secret is inside. The capture scripts,
 their pinned dependencies and the shared spec (`SPEC.md`) are in
-`src/scripts/otel-fixtures/`.
+`web/scripts/otel-fixtures/`.
 
 Every capture ran the same agent: one conversation (`sess-<folder>`, user
 `user-42` where the library has a place for them), three requests one second

@@ -7,7 +7,6 @@ import { FixBody } from "@/components/console/self-corrections/Change";
 import { DetailsBody } from "@/components/console/self-corrections/DetailsPanel";
 import { fixAction, fixActions } from "@/components/console/self-corrections/fix-actions";
 import { SelfCorrectionsView } from "@/components/console/self-corrections/SelfCorrectionsView";
-import { findDsViolations } from "@/eslint-rules/ds-tokens.mjs";
 import { unavailableSelfCorrectionsPage } from "@/lib/views/health/self-corrections/page-load";
 import {
   type BuildInput,
@@ -20,6 +19,7 @@ import {
   render as renderWithRouter,
   visibleText,
 } from "@/lib/views/tasks/test-support";
+import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
 
 /**
  * The Self-corrections page, rendered: a calm read top to bottom (the hero,

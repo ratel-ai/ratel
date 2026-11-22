@@ -9,7 +9,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "src");
 
 /** Folders held to the rule; v1 screens are untouched until they are rebuilt. */
 export const SCOPED = ["components/shell", "components/intent-map"];

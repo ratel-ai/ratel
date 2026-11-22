@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build context: repository root.
-#   docker build -f src/Dockerfile --target oss -t ratel-oss:spike .
-#   docker build -f src/Dockerfile --target cloud -t ratel:cloud .
+#   docker build -f web/Dockerfile --target oss -t ratel-oss:spike .
+#   docker build -f web/Dockerfile --target cloud -t ratel:cloud .
 
 # Debian 13 (trixie, glibc 2.41): the @ratel-ai/sdk linux prebuild needs glibc 2.39+, which
 # bookworm (2.36) does not have.
@@ -12,7 +12,7 @@ WORKDIR /app
 # --- deps: workspace manifests only, then filtered install -----------------
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY src/package.json src/
+COPY web/package.json web/
 COPY packages/brand/package.json packages/brand/
 COPY packages/design-system/package.json packages/design-system/
 COPY ee/package.json ee/
@@ -23,11 +23,11 @@ COPY ee/package.json ee/
 # runtime. The lockfile is linker-independent, so the workspace itself stays isolated.
 RUN pnpm install --frozen-lockfile --config.node-linker=hoisted --filter @ratel/platform... --filter @ratel/ee...
 # Fail on native-addon or base-image ABI drift before the slower Next build.
-RUN cd src && node -e 'import("@ratel-ai/sdk")'
+RUN cd web && node -e 'import("@ratel-ai/sdk")'
 
 # --- source: app + shared packages only (ee/ stays out until build-cloud) ---
 FROM deps AS source
-COPY src src
+COPY web web
 COPY packages/brand packages/brand
 COPY packages/design-system packages/design-system
 COPY scripts/link-ee.mjs scripts/
@@ -40,7 +40,7 @@ ENV NEXT_DEPLOYMENT_ID=$NEXT_DEPLOYMENT_ID
 FROM source AS build-oss
 ARG RATEL_COMPOSITION=oss
 ENV RATEL_COMPOSITION=${RATEL_COMPOSITION}
-RUN rm -rf "src/app/(ee)"
+RUN rm -rf "web/src/app/(ee)"
 # NODE_OPTIONS raises the heap to 4 GB, as upstream's image does: the Next type-check worker
 # needs more than the default.
 RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
@@ -48,7 +48,7 @@ RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 # the standalone output only through outputFileTracingIncludes in next.config.ts.
 # Without the file the server runs and serves no views, with only a warning in the
 # log: fail the build instead.
-RUN test -s src/.next/standalone/src/mcp-apps/dist/views.json
+RUN test -s web/.next/standalone/web/src/mcp-apps/dist/views.json
 
 # --- build-cloud: bring in commercial modules -----------------------------
 FROM source AS build-cloud
@@ -61,7 +61,7 @@ COPY ee ee
 # to the edition and deletes them before anything reaches the runtime image.
 RUN BROWSER_SOURCEMAPS=1 NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @ratel/platform build
 # As in build-oss: the MCP Apps views must be in the standalone output.
-RUN test -s src/.next/standalone/src/mcp-apps/dist/views.json
+RUN test -s web/.next/standalone/web/src/mcp-apps/dist/views.json
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
 RUN node ee/src/src/db/bundle-migrator.mjs /app/migrator
 # The edition's source-map step (ee/src/scripts/browser-sourcemaps.sh): it uploads the maps for its
@@ -74,7 +74,7 @@ ARG SOURCEMAP_UPLOAD_RUN=local
 ARG SOURCEMAP_PROJECT_IDS=
 RUN --mount=type=secret,id=sourcemap_upload_key,env=SOURCEMAP_UPLOAD_KEY \
   echo "browser sourcemaps for commit ${SOURCE_COMMIT} run ${SOURCEMAP_UPLOAD_RUN}" \
-  && bash ee/src/scripts/browser-sourcemaps.sh src/.next/static src/.next/standalone
+  && bash ee/src/scripts/browser-sourcemaps.sh web/.next/static web/.next/standalone
 
 # --- runtime base: minimal Node, no toolchain -----------------------------
 FROM node:24-trixie-slim AS runtime
@@ -95,25 +95,25 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 
 # --- final targets --------------------------------------------------------
 FROM runtime AS oss
-COPY --from=build-oss --chown=ratel:ratel /app/src/.next/standalone ./
-COPY --from=build-oss --chown=ratel:ratel /app/src/.next/static ./src/.next/static
-COPY --from=build-oss --chown=ratel:ratel /app/src/public ./src/public
+COPY --from=build-oss --chown=ratel:ratel /app/web/.next/standalone ./
+COPY --from=build-oss --chown=ratel:ratel /app/web/.next/static ./web/.next/static
+COPY --from=build-oss --chown=ratel:ratel /app/web/public ./web/public
 ENV RATEL_COMPOSITION=oss
 USER ratel
-CMD ["node", "src/server.js"]
+CMD ["node", "web/server.js"]
 
 FROM runtime AS cloud
-COPY --from=build-cloud --chown=ratel:ratel /app/src/.next/standalone ./
-COPY --from=build-cloud --chown=ratel:ratel /app/src/.next/static ./src/.next/static
-COPY --from=build-cloud --chown=ratel:ratel /app/src/public ./src/public
+COPY --from=build-cloud --chown=ratel:ratel /app/web/.next/standalone ./
+COPY --from=build-cloud --chown=ratel:ratel /app/web/.next/static ./web/.next/static
+COPY --from=build-cloud --chown=ratel:ratel /app/web/public ./web/public
 COPY --from=build-cloud --chown=ratel:ratel /app/migrator ./migrator
 ENV RATEL_COMPOSITION=cloud
 USER ratel
-CMD ["node", "src/server.js"]
+CMD ["node", "web/server.js"]
 
 # One-shot demo data: the source tree with its dev tools, so the runtime targets stay without them.
 FROM source AS demo
 ENV NODE_ENV=production
 ENV RATEL_COMPOSITION=oss
-WORKDIR /app/src
+WORKDIR /app/web
 USER node

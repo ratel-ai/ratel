@@ -16,21 +16,21 @@ Thumbs.db
 # Node
 node_modules/
 
-# Build output (src/mcp-apps/dist, package builds)
+# Build output (web/src/mcp-apps/dist, package builds)
 dist/
 
 # TypeScript
 *.tsbuildinfo
 
 # Commercial source: the private repository is checked out at ee/src, and
-# scripts/link-ee.mjs copies its route stubs to src/app/(ee)
+# scripts/link-ee.mjs copies its route stubs to web/src/app/(ee)
 ee/src
-src/app/(ee)
-# ...and places its public/ files under src/public, listed in .ee-public.json
-src/public/email/
-src/.ee-public.json
+web/src/app/(ee)
+# ...and places its public/ files under web/public, listed in .ee-public.json
+web/public/email/
+web/.ee-public.json
 
-src/proxy.ts
+web/src/proxy.ts
 # Next.js
 .next/
 out/

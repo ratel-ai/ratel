@@ -13,7 +13,6 @@ import {
 } from "@/components/console/health/v2/SummaryView";
 import { fixLookups } from "@/components/console/health/v2/summary-model";
 import { AskExample } from "@/components/console/health/v2/UnservedSection";
-import { findDsViolations } from "@/eslint-rules/ds-tokens.mjs";
 import { composition } from "@/lib/composition/ports";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import {
@@ -37,6 +36,7 @@ import type { HealthPageState } from "@/lib/views/health/page-state";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import type { TaskListModel, TaskRow } from "@/lib/views/tasks/model";
 import { attributeValues, render, visibleText } from "@/lib/views/tasks/test-support";
+import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
 
 /**
  * Agent health's Summary as a reader sees it, in every state: the reading,

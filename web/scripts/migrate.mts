@@ -7,7 +7,7 @@
  * is for operators who migrate as a separate step. A failure exits non-zero so a deploy never
  * serves against a mismatched schema.
  */
-import { runMigrations } from "../lib/platform/db/migrate";
+import { runMigrations } from "../src/lib/platform/db/migrate";
 
 async function main() {
   const url = process.env.DATABASE_URL;

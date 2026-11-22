@@ -25,7 +25,7 @@ export function getBadgerAssetSource(
   const filename = BADGER_ASSET_FILES[pose];
   const publicDirectories = publicDirectory
     ? [publicDirectory]
-    : [join(process.cwd(), "public"), join(process.cwd(), "src", "public")];
+    : [join(process.cwd(), "public"), join(process.cwd(), "web", "public")];
 
   return publicDirectories.some((directory) => existsSync(join(directory, "badgers", filename)))
     ? `/badgers/${filename}`

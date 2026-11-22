@@ -11,8 +11,8 @@ config({ path: ".env" });
 // The barrel lib/platform/db/tables.ts is deliberately not named schema.ts so it is not read twice.
 export default defineConfig({
   dialect: "postgresql",
-  schema: ["./lib/**/schema.ts"],
-  out: "./lib/platform/db/migrations",
+  schema: ["./src/lib/**/schema.ts"],
+  out: "./src/lib/platform/db/migrations",
   dbCredentials: {
     url: process.env.DATABASE_URL ?? "",
   },

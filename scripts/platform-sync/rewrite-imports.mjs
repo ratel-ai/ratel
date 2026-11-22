@@ -5,7 +5,7 @@
 //      split per symbol into one import per destination module; symbols no partition names go
 //      to the hub's `default` destination and are reported as unmapped;
 //   2. specifiers — every other import specifier is rewritten by the longest matching rule:
-//      explicit rules from `rewrites.json`, then every `apps/web/lib/<from> -> src/lib/<to>`
+//      explicit rules from `rewrites.json`, then every `apps/web/lib/<from> -> web/src/lib/<to>`
 //      pair in `map.json`;
 //   3. identifiers — whole-word renames (`clerkId` -> `externalId`), so the open-source tree
 //      never carries a vendor name in a column or a field.
@@ -15,7 +15,7 @@ import { LAYERS } from "../check-layers.mjs";
 
 // Upstream (ratel-cloud) keeps its app in apps/web; this repository keeps it in src.
 const SOURCE_LIB = "apps/web/lib/";
-const LIB = "src/lib/";
+const LIB = "web/src/lib/";
 
 /** Specifier rules in matching order: explicit rules from rewrites.json, then the map's lib moves. */
 export function buildRules(map, rewrites) {

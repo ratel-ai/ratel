@@ -40,7 +40,7 @@ Upstream's one-command setup (`scripts/mcp-apps-local.mts`) is not here yet: it
 seeds through demo scripts this repo does not carry. By hand:
 
 - put `FF_MCP_APPS=1` (or `RATEL_EXPERIMENTAL_FEATURES=1`) in
-  `src/.env.local` and start the app (`pnpm --filter @ratel/platform dev`);
+  `web/.env.local` and start the app (`pnpm --filter @ratel/platform dev`);
 - seed a project with runs (`pnpm --filter @ratel/platform seed`) and create a
   project API key for it in the console;
 - copy the Claude Desktop entry from the project's Integrations page (it runs

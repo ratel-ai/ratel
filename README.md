@@ -109,7 +109,7 @@ If `docker compose up --wait` fails, read `docker compose logs db web worker`. A
 
 1. In the console, open **Settings > API keys** and create a key. It is shown once.
 2. Send a first trace. The same page shows a TypeScript and a curl snippet with your endpoint; the curl one posts a single span to the traces endpoint and answers `202`. Set `RATEL_API_KEY` to the key.
-3. To let an agent query Ratel, connect it over MCP: `POST <BASE_URL>/api/mcp` with `Authorization: Bearer <project key>`. The console's **Integrations** page has copy-paste setup for Claude Code, Claude Desktop, Cursor and VS Code, for example `claude mcp add --transport http ratel <BASE_URL>/api/mcp --header "Authorization: Bearer $RATEL_API_KEY"`. Details are in [src/lib/mcp/README.md](src/lib/mcp/README.md).
+3. To let an agent query Ratel, connect it over MCP: `POST <BASE_URL>/api/mcp` with `Authorization: Bearer <project key>`. The console's **Integrations** page has copy-paste setup for Claude Code, Claude Desktop, Cursor and VS Code, for example `claude mcp add --transport http ratel <BASE_URL>/api/mcp --header "Authorization: Bearer $RATEL_API_KEY"`. Details are in [web/src/lib/mcp/README.md](web/src/lib/mcp/README.md).
 
 ### Experimental features
 
@@ -188,7 +188,7 @@ An organization holds projects, and each project is one agent's view:
 ## Repo layout
 
 ```
-src/                           # @ratel/platform: the console and APIs
+web/                           # @ratel/platform: the console and APIs
 packages/
 ├── brand/                     # @ratel/brand: palette, fonts and logo assets
 └── design-system/             # @ratel/design-system: semantic tokens and UI primitives
@@ -201,7 +201,7 @@ ee/                            # Manifest for the Enterprise modules
 
 The SDKs (the Rust core, the TypeScript and Python SDKs, adapters, rankers, telemetry and the catalog protocol) live in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk).
 
-The application's own layout and commands are in [src/README.md](src/README.md), and the layers of its core in [src/lib/README.md](src/lib/README.md).
+The application's own layout and commands are in [web/README.md](web/README.md), and the layers of its core in [web/src/lib/README.md](web/src/lib/README.md).
 
 ## Development
 
@@ -209,7 +209,7 @@ The application's own layout and commands are in [src/README.md](src/README.md),
 
 Prerequisites: Node 24+ and pnpm 10.28+, with Docker for the platform's Postgres. 
 
-- [src/README.md](src/README.md)
+- [web/README.md](web/README.md)
 
 ### Ratel SDK
 

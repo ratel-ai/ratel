@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { collectImports, walk } from "../../../scripts/check-ee-boundary.mjs";
+import { collectImports, walk } from "../../../../scripts/check-ee-boundary.mjs";
 
 /**
  * The ledger and the readings are pure core: data in, derived rows out. Nothing under them

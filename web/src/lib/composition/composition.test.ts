@@ -5,7 +5,7 @@ import type { CompositionPorts } from "@/lib/contracts/composition";
 process.env.RATEL_COMPOSITION = "oss";
 const { createComposition } = await import("@/lib/composition");
 const { drainSteps, jobHandlers, liveJobIds } = await import("@/lib/composition/registry");
-const { allowsInward, scanEeBoundary } = await import("../../../scripts/check-ee-boundary.mjs");
+const { allowsInward, scanEeBoundary } = await import("../../../../scripts/check-ee-boundary.mjs");
 
 /** Stand-in commercial ports so tests do not reach into ee/ through the core tree. */
 const cloudPorts: CompositionPorts = {

@@ -12,7 +12,7 @@ const logger = getLogger("mcp/apps");
  * Where the view build writes its output, relative to src. Gitignored:
  * `pnpm build`, `dev`, `typecheck` and `test` run the view build first.
  */
-export const GENERATED_VIEWS_PATH = path.join("mcp-apps", "dist", "views.json");
+export const GENERATED_VIEWS_PATH = path.join("src", "mcp-apps", "dist", "views.json");
 
 export interface McpAppLoadDeps {
   /** The built views, or null when the view build has not run. */

@@ -99,7 +99,9 @@ function sources(dir: string): string[] {
 test("views reuse components/ds rather than copy it, and reach next/* only through the shims", () => {
   // Owned (ADR-0030): the design system is the workspace package here, not components/ds.
   const dsFiles = new Set(
-    readdirSync(path.join(HERE, "..", "..", "packages", "design-system", "src", "components")),
+    readdirSync(
+      path.join(HERE, "..", "..", "..", "packages", "design-system", "src", "components"),
+    ),
   );
   for (const file of sources(HERE)) {
     const text = readFileSync(file, "utf8");
@@ -200,7 +202,9 @@ test("every view makes room for an open DS Panel in an inline frame (shell/view.
 });
 
 test("a server action module a console component imports reaches a view as a stub, never its server code", async () => {
-  const { isServerActionModule, serverActionStub } = await import("@/scripts/build-mcp-apps.mjs");
+  const { isServerActionModule, serverActionStub } = await import(
+    "../../scripts/build-mcp-apps.mjs"
+  );
   const source =
     '"use server";\n\nimport { getDb } from "@/lib/platform/db/client";\nexport async function loadThing(id: string) { return getDb(); }\nexport type Thing = string;\n';
   assert.equal(isServerActionModule(source), true);
@@ -216,7 +220,7 @@ test("a server action module a console component imports reaches a view as a stu
 });
 
 test("the console's stylesheet does not scan mcp-apps/: its compiled CSS is what it is without the views", async () => {
-  const web = path.join(HERE, "..");
+  const web = path.join(HERE, "..", "..");
   const { default: postcss } = await import("postcss");
   const { default: tailwind } = await import("@tailwindcss/postcss");
   const { createRequire } = await import("node:module");
@@ -229,7 +233,7 @@ test("the console's stylesheet does not scan mcp-apps/: its compiled CSS is what
   assert.match(names[0]!, /postcss-console-sources\.cjs$/);
   assert.equal(names[1], "@tailwindcss/postcss");
   const consoleSources = createRequire(import.meta.url)(names[0]!) as () => object;
-  const from = path.join(web, "app", "globals.css");
+  const from = path.join(web, "src", "app", "globals.css");
   const css = (
     await postcss([consoleSources() as never, tailwind({ base: web })]).process(
       readFileSync(from, "utf8"),
@@ -261,7 +265,7 @@ test("no view reaches for Node's process: it runs in a browser frame", () => {
 });
 
 test("an inlined bundle cannot end or derail its <script>: </script and <!-- are escaped, and still read the same", async () => {
-  const { inlineScript } = await import("@/scripts/build-mcp-apps.mjs");
+  const { inlineScript } = await import("../../scripts/build-mcp-apps.mjs");
   const js = `var a="</script><!--<script>",b=/<!--/,c=\`</SCRIPT>\`;globalThis.out=[a,b.test("x<!--y"),c];`;
   const safe = inlineScript(js);
   assert.equal(/<\/script|<!--/i.test(safe), false);

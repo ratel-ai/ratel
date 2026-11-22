@@ -1,4 +1,4 @@
-# `src/lib`
+# `web/src/lib`
 
 The core of the platform application, in layers. A file imports its own layer or a lower one,
 never a higher one; nothing here imports the UI (`@/components`, `@/app`) outside tests.

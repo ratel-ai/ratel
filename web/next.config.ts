@@ -6,11 +6,11 @@ import type { NextConfig } from "next";
 const eeCompositionTarget =
   process.env.RATEL_COMPOSITION === "cloud"
     ? "../ee/src/src/composition.ts"
-    : "./lib/composition/ee-absent.ts";
+    : "./src/lib/composition/ee-absent.ts";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // `next dev` would write src/AGENTS.md (Next 16.3+); the repo's AGENTS.md is the source.
+  // `next dev` would write web/AGENTS.md (Next 16.3+); the repo's AGENTS.md is the source.
   agentRules: false,
   // Telemetry paths end in a slash (/ingest/flags/); without this Next answers them with a 308
   // before the Cloud proxy sees them.
@@ -22,13 +22,13 @@ const nextConfig: NextConfig = {
   deploymentId: process.env.NEXT_DEPLOYMENT_ID || undefined,
   // Browser source maps, for an edition's error tracking only: the image's cloud build sets
   // BROWSER_SOURCEMAPS=1, and its last builder step hands the maps to the edition and then deletes
-  // them (src/Dockerfile), so they are never served. Plain builds emit none.
+  // them (web/Dockerfile), so they are never served. Plain builds emit none.
   productionBrowserSourceMaps: process.env.BROWSER_SOURCEMAPS === "1",
   transpilePackages: ["@ratel/brand", "@ratel/design-system"],
   // Next 16.3 type-checks the whole tsconfig project with `tsc`, tests included; the image has no
   // repo scripts/ for them. Keep the compiler-API checker; `pnpm typecheck` covers the tests.
   experimental: { useTypeScriptCli: false },
-  // A self-contained server bundle for the image: `node src/server.js`, no pnpm at runtime.
+  // A self-contained server bundle for the image: `node web/server.js`, no pnpm at runtime.
   // The tracing root is the monorepo root so the workspace packages and the native
   // `@ratel-ai/sdk` addon are copied into .next/standalone.
   output: "standalone",
@@ -36,7 +36,7 @@ const nextConfig: NextConfig = {
   // The MCP Apps views (scripts/build-mcp-apps.mts) are read from disk by
   // lib/mcp/apps/load.ts, which tracing cannot see: ship them with the route.
   outputFileTracingIncludes: {
-    "/api/mcp": ["./mcp-apps/dist/views.json"],
+    "/api/mcp": ["./src/mcp-apps/dist/views.json"],
   },
   turbopack: {
     resolveAlias: {

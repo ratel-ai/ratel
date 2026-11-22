@@ -154,7 +154,7 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  src:
+  web:
     dependencies:
       '@anthropic-ai/bedrock-sdk':
         specifier: ^0.36.0

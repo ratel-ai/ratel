@@ -24,13 +24,13 @@
     ],
     "paths": {
       "#ee-composition": [
-        "./lib/composition/ee-absent.ts"
+        "./src/lib/composition/ee-absent.ts"
       ],
       "@ee/*": [
         "../ee/src/src/*"
       ],
       "@/*": [
-        "./*"
+        "./src/*"
       ]
     }
   },

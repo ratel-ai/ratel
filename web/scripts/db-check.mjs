@@ -10,7 +10,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MIGRATIONS = join(APP_ROOT, "lib/platform/db/migrations");
+const MIGRATIONS = join(APP_ROOT, "src/lib/platform/db/migrations");
 
 const sqlFiles = (dir) => readdirSync(dir).filter((file) => file.endsWith(".sql"));
 
@@ -29,7 +29,7 @@ try {
       "--out",
       relative(APP_ROOT, tmp),
       "--schema",
-      "./lib/**/schema.ts",
+      "./src/lib/**/schema.ts",
     ],
     { cwd: APP_ROOT, stdio: "ignore" },
   );

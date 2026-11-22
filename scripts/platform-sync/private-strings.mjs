@@ -61,7 +61,7 @@ export function findPrivateStrings(text, patterns) {
 }
 
 const TEXT = /\.(c?m?[jt]sx?|json|css|md|mdx|sql|ya?ml|txt|html|rs|py|toml|sh|tf|example)$/;
-// `(ee)`: the private route stubs link-ee.mjs copies into src/app, gitignored.
+// `(ee)`: the private route stubs link-ee.mjs copies into web/src/app, gitignored.
 const SKIP = ["node_modules", ".next", ".git", "target", "dist", "coverage", ".turbo", ".venv", ".claude", "ee", "(ee)"];
 
 /**
@@ -101,7 +101,7 @@ if (process.argv[1] != null && resolve(process.argv[1]) === fileURLToPath(import
   const positional = argv.filter((a, i) => !a.startsWith("--") && (i === 0 || !argv[i - 1].startsWith("--")));
   const dir = resolve(positional[0] ?? REPO_ROOT);
   const patterns = loadPatterns(resolve(REPO_ROOT, flag("--patterns", "scripts/platform-sync/private-strings.txt")));
-  const codeRoot = resolve(REPO_ROOT, flag("--code-root", "src"));
+  const codeRoot = resolve(REPO_ROOT, flag("--code-root", "web"));
   const hits = scanDir(dir, patterns, { codeRoot });
   for (const h of hits) console.error(`${join(dir, h.path)}:${h.line}  matches ${h.pattern}`);
   if (hits.length > 0) process.exit(1);

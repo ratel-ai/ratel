@@ -103,7 +103,7 @@ test("a pose component finds drop-in art from the standalone Docker app root", (
   const previousDirectory = process.cwd();
 
   try {
-    const badgersDirectory = join(appDirectory, "src", "public", "badgers");
+    const badgersDirectory = join(appDirectory, "web", "public", "badgers");
     mkdirSync(badgersDirectory, { recursive: true });
     writeFileSync(join(badgersDirectory, "searching.png"), "placeholder");
     process.chdir(appDirectory);

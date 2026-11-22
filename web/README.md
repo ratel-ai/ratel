@@ -17,9 +17,14 @@ intelligence that reads them. One Next.js app, two editions
 ## Layout
 
 ```
-app/              routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the old-address redirects (/dashboard, /traces, /explore, /experiments, /settings and /project/_ to the session organization's project, as upstream's proxy answered them; inside a project, the pages the redesign folded into others), the printable Agent health and Quality reports under (report)/, the public pages of an Agent health share link under share/ (the read-only page at /share/health/<token> under its share bar, and its printable /report: a 404 unless the edition supplies share links), the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
-components/       React components; the design system lives in packages/design-system
-lib/              the core, in layers (see lib/README.md)
+src/              the app's code (Next.js src folder)
+  app/            routes: the console pages (Overview, Agent health, Traces, Catalog, Intents, Quality and its calibration pages, Settings), the first-project flow at /onboarding (outside the shell; where a fresh install lands), the old-address redirects (/dashboard, /traces, /explore, /experiments, /settings and /project/_ to the session organization's project, as upstream's proxy answered them; inside a project, the pages the redesign folded into others), the printable Agent health and Quality reports under (report)/, the public pages of an Agent health share link under share/ (the read-only page at /share/health/<token> under its share bar, and its printable /report: a 404 unless the edition supplies share links), the /api/* handlers (ingest, catalogs, the MCP server at /api/mcp, the project-key job status at /api/v1/jobs/[id], the retired 410 prefixes), (ee)/ stubs when ee/src is present (gitignored)
+  components/     React components; the design system lives in packages/design-system
+  lib/            the core, in layers (see src/lib/README.md)
+  mcp-apps/       the MCP Apps views (built into src/mcp-apps/dist)
+  instrumentation.ts, proxy.ts (Cloud, copied from ee/src)  Next.js hooks; they sit beside app/
+public/           static files
+scripts/          dev, seed, migration and build scripts
 Dockerfile        targets `oss` and `cloud`; build context is the repository root
 next.config.ts    the #ee-composition alias, /v1 and /v2 rewrites, standalone output
 ```
@@ -42,14 +47,14 @@ Local development uses Postgres from the root `docker-compose.yml`. From the rep
 ```sh
 pnpm install
 docker compose up db                       # Postgres 16 on localhost:5432
-cp src/.env.example src/.env.local
+cp web/.env.example web/.env.local
 pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on boot, then serves
 docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
 One process does everything by default. `APP_ROLE=api` makes it only queue jobs and
 `APP_ROLE=worker` makes it run them, which is how `docker-compose.yml` runs `web` and `worker`
-([`lib/jobs/README.md`](lib/jobs/README.md)).
+([`lib/jobs/README.md`](src/lib/jobs/README.md)).
 
 `BASE_URL` is where the console's SDK snippets point: this deployment's origin. The console adds
 `/api/v1` when it builds API and ingest URLs. It defaults to `http://localhost:3000`; set it in
@@ -58,7 +63,7 @@ One process does everything by default. `APP_ROLE=api` makes it only queue jobs 
 `RATEL_EXPERIMENTAL_FEATURES=1` turns on the experimental features left in the open-source
 edition: the eval gate, adaptive ranking's catalog drift (the gone-tool warning only for tools a
 published catalog dropped, closable warnings, gone tools pruned on rebuild), MCP Apps, the MCP
-server's interactive `ui://` views ([`lib/mcp/apps`](lib/mcp/apps/README.md)), and tool-run
+server's interactive `ui://` views ([`lib/mcp/apps`](src/lib/mcp/apps/README.md)), and tool-run
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
 confidence). Cloud ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`
@@ -74,7 +79,7 @@ for everyone.
 route stubs when `ee/src` exists and removes them otherwise. It also copies the edition's static
 files (`ee/src/src/public/`) into `public/`, git-ignored and listed in `.ee-public.json`, never
 replacing a file the app ships. They, and `test`, then build the MCP Apps views (`pnpm
-mcp-apps:build`, from [`mcp-apps/`](mcp-apps/README.md) into the git-ignored `mcp-apps/dist/`);
+mcp-apps:build`, from [`mcp-apps/`](src/mcp-apps/README.md) into the git-ignored `src/mcp-apps/dist/`);
 `pnpm mcp-apps:dev` serves them with their fixtures at `http://localhost:4180`.
 
 ## API keys and scopes

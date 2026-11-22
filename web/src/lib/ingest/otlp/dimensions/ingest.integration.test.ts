@@ -24,7 +24,7 @@ import { handleTracesRequest, type TracesHandlerDeps } from "../route-handler";
  * from `otel_spans`, and the MCP server of a tool row from `trace_events.server`.
  */
 
-const FIXTURES = join(process.cwd(), "lib/ingest/otlp/__fixtures__/entity-dimensions");
+const FIXTURES = join(process.cwd(), "src/lib/ingest/otlp/__fixtures__/entity-dimensions");
 const [SUPERVISOR, RESEARCHER, CHAT, TOOL, MCP_CLIENT, MCP_SERVER, SERVER_WORK] = [
   ..."1234567",
 ].map((d) => d.repeat(16));
