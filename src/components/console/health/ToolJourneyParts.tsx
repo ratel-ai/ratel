@@ -1,3 +1,4 @@
+import { STEP_KIND_ICONS } from "@ratel/design-system/step-kind";
 import {
   BookOpen,
   Bot,
@@ -300,6 +301,9 @@ const KIND_ICON: Record<JourneyNodeKind, LucideIcon> = {
   agent: Bot,
   tool: Wrench,
   skill: BookOpen,
+  model_call: STEP_KIND_ICONS.model_call,
+  code: STEP_KIND_ICONS.code,
+  handoff: STEP_KIND_ICONS.handoff,
   other: Layers,
   more: ChevronsRight,
   later: UnfoldHorizontal,

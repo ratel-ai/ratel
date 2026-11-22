@@ -128,6 +128,9 @@ export type JourneyNodeKind =
   | "agent"
   | "tool"
   | "skill"
+  | "model_call"
+  | "code"
+  | "handoff"
   | "other"
   | "more"
   | "ended"
@@ -480,7 +483,7 @@ function draftNode(key: string, turns: number, ended: number, ctx: DraftContext)
   return {
     ...base,
     id,
-    kind: other ? "other" : tool?.kind === "skill" ? "skill" : "tool",
+    kind: other ? "other" : (tool?.kind ?? "tool"),
     column: call,
     call,
     label: other ? otherLabel(otherCount ?? 0) : (tool?.label ?? id),
@@ -1002,7 +1005,15 @@ export function layoutJourney(
   const busiestTool = Math.max(
     1,
     ...drafts
-      .filter((d) => d.kind === "tool" || d.kind === "skill" || d.kind === "other")
+      .filter(
+        (d) =>
+          d.kind === "tool" ||
+          d.kind === "skill" ||
+          d.kind === "model_call" ||
+          d.kind === "code" ||
+          d.kind === "handoff" ||
+          d.kind === "other",
+      )
       .map((d) => d.turns),
   );
   const scale = (G.chipH - 2 * G.bandInset) / busiestTool;

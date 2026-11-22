@@ -278,7 +278,7 @@ export type FlowJourneyFlag = "errors" | "slow";
 /** A tool a journey names, with the flow's tint, signals and problem flags for it. */
 export interface FlowJourneyTool {
   id: string;
-  kind: "tool" | "skill" | "other";
+  kind: "tool" | "skill" | "model_call" | "code" | "handoff" | "other";
   label: string;
   tint: FlowTint;
   signalIds: readonly string[];
@@ -336,6 +336,7 @@ export interface FlowModel {
   totalTools: number;
   /** Turns call by call; absent on older runs. */
   journey?: FlowJourney;
+  stepJourney?: FlowJourney;
 }
 
 /* - Turn shapes ------------------------------------------------------------- */

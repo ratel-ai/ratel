@@ -39,6 +39,7 @@ import type {
 } from "@/lib/contracts/composition";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import type { PartialReading as PartialReadingModel } from "@/lib/readings/trace-signals/partial-reading";
+import { flowForSteps } from "@/lib/readings/trace-signals/signals/flow-model";
 import { stepKindTables, stepPresets } from "@/lib/readings/trace-signals/steps/tables";
 import type { StepsView } from "@/lib/readings/trace-signals/steps/view";
 import {
@@ -350,7 +351,7 @@ function Ready({
         <>
           <CallOrderSection
             projectId={projectId}
-            flow={model.flow}
+            flow={model.steps ? flowForSteps(model.flow, stepsView) : model.flow}
             windowLabel={runLabel}
             turnSourceMix={model.turnSourceMix}
             sourceMode={model.sourceMode}

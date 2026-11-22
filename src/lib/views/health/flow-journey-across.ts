@@ -161,7 +161,7 @@ export function layoutAcross(
     return {
       key: acrossChipKey(relation, side),
       id,
-      kind: tool?.kind === "skill" ? "skill" : "tool",
+      kind: tool?.kind ?? "tool",
       column: at.index,
       call: 0,
       label,
