@@ -36,6 +36,10 @@ import {
   reapStaleSignalRuns,
   startSignalRun,
 } from "@/lib/readings/trace-signals/signals/queries";
+import {
+  loadModelCallFacts,
+  loadStepFinishInputs,
+} from "@/lib/readings/trace-signals/steps/metrics-query";
 import { writeTaskPlacement } from "@/lib/readings/trace-signals/workflows/place-queries";
 import { chooseRunBasis } from "@/lib/readings/trace-signals/workflows/run-basis";
 
@@ -131,7 +135,9 @@ export function jobDeps(
         listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
         loadContext: (p, w) => loadAnalysisContext(p, w, db),
         linkPage: (p, turns) => linkRunsPage(p, turns, db),
+        loadModelCalls: (p, w) => loadModelCallFacts(p, w, db),
       }),
+    loadStepFinishInputs: (p, w) => loadStepFinishInputs(p, w, db),
     loadSetupCounts: (p, w) => loadSetupCounts(p, w, db),
     enqueueLabels: async () => null,
     canLabel: () => false,

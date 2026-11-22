@@ -185,3 +185,19 @@ test("a reading stored before the top-5 count has no top-5 rate, rather than a d
   delete older.top5N;
   assert.equal(byPillar(outcomePillars({ daily: [older] }, WINDOW)).top_5, undefined);
 });
+
+test("typed steps: failed model and code steps count in calls work; top 5 stays tool-only and drops out with no searches", () => {
+  const modelOnly = { ...emptyBucket("2026-11-06"), turns: 40, steps: { calls: 60, failed: 6 } };
+  const modelPillars = byPillar(outcomePillars({ daily: [modelOnly] }, WINDOW));
+  assert.deepEqual(modelPillars.calls, { pillar: "calls", good: 0.9, n: 60 });
+  assert.equal(modelPillars.top_5, undefined);
+
+  const mixed = byPillar(
+    outcomePillars(
+      { daily: [{ ...otelDay("2026-11-06"), steps: { calls: 100, failed: 4 } }] },
+      WINDOW,
+    ),
+  );
+  assert.deepEqual(mixed.calls, { pillar: "calls", good: 1 - 20 / 300, n: 300 });
+  assert.equal(mixed.top_5, undefined);
+});

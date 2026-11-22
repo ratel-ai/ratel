@@ -333,10 +333,13 @@ export async function loadHealthPageModel(
         deps.db,
       )
     : null;
+  // The per-kind readings (RC-1078) show only while `cloud-typed-steps` (FF_TYPED_STEPS) is on.
+  const steps = summary.steps && (await deps.readsTypedSteps(projectId)) ? summary.steps : null;
   return {
     ...model,
     dismissed: dismissedOf(muted, names),
     ...(progress ? { earlyProgress: progress } : {}),
+    ...(steps ? { steps } : {}),
   };
 }
 

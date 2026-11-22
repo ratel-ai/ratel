@@ -702,6 +702,8 @@
         "src/lib/readings/tool-explorer/ledger.ts",
         "src/components/console/health/JourneyInsights.tsx",
         "src/components/console/health/JourneyLinks.tsx",
+        "src/components/console/health/StepKindTables.tsx",
+        "src/lib/views/health/step-kinds-ui.test.ts",
         "src/components/console/health/JourneyReadout.tsx",
         "src/components/console/health/JourneyStartRail.tsx",
         "src/components/console/health/OpenInTraces.tsx",

@@ -1,6 +1,7 @@
 import type { StepDraft, TurnDraft, TurnEndedBy } from "@/lib/ledger/types";
 import type { LinkedRunFact } from "@/lib/readings/trace-signals/signals/linked-runs";
 import type { OtelFacts } from "@/lib/readings/trace-signals/signals/otel-facts";
+import type { ModelCallFact } from "@/lib/readings/trace-signals/steps/metrics";
 import type {
   SignalFixRoute,
   SignalKind,
@@ -102,6 +103,11 @@ export interface AnalysisContext {
    * trace. Absent: every run, and the workflows decide their own basis.
    */
   runBasis?: RunBasis;
+  /**
+   * Model-call facts by `trace_events` id (tokens, cost, finish reason), read
+   * only with `cloud-typed-steps` on for the per-kind readings (RC-1077).
+   */
+  modelCalls?: ReadonlyMap<string, ModelCallFact> | null;
 }
 
 /** The ingest lanes a signal's evidence came from. */

@@ -4,11 +4,13 @@ import {
 } from "@/lib/ledger/closed-turns";
 import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
 import { envNumber } from "@/lib/platform/env-number";
+import { getLogger } from "@/lib/platform/logger";
 import { loadAnalysisContext as loadAnalysisContextFn } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { type AnalysisResult, createAnalysis } from "@/lib/readings/trace-signals/signals/analyze";
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
 import { linkRunsPage as linkRunsPageFn } from "@/lib/readings/trace-signals/signals/linked-runs-query";
 import type { AnalysisContext, SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import { loadModelCallFacts as loadModelCallFactsFn } from "@/lib/readings/trace-signals/steps/metrics-query";
 import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
 
 /**
@@ -19,6 +21,7 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
  */
 
 const DAY_MS = 86_400_000;
+const logger = getLogger("trace-signals/compute");
 
 /** The default detector window. The ledger is durable, so up to 90 is allowed. */
 export const DEFAULT_SIGNAL_WINDOW_DAYS = Math.floor(envNumber("TRACE_SIGNALS_WINDOW_DAYS", 30));
@@ -115,6 +118,8 @@ export interface ComputeDeps {
   floors: Floors;
   /** Workflow mining tunables over the defaults (RC-725, `cloud-tool-run-insights`); absent, the defaults. */
   workflowMining?: Partial<WorkflowConfig>;
+  /** Model-call facts for the per-kind readings, read only with `typedSteps` on (RC-1077). */
+  loadModelCalls: typeof loadModelCallFactsFn;
 }
 
 function defaultDeps(): ComputeDeps {
@@ -122,6 +127,7 @@ function defaultDeps(): ComputeDeps {
     listPage: listClosedTurnsPageFn,
     loadContext: loadAnalysisContextFn,
     linkPage: (projectId, turns) => linkRunsPageFn(projectId, turns),
+    loadModelCalls: (projectId, window) => loadModelCallFactsFn(projectId, window),
     now: () => new Date(),
     timeBudgetMs: SIGNAL_TIME_BUDGET_MS,
     pageSize: TURN_PAGE_SIZE,
@@ -152,10 +158,13 @@ export async function computeSignals(
 ): Promise<ComputeOutcome> {
   const deps = { ...defaultDeps(), ...overrides };
   const startedAt = deps.now().getTime();
-  const { context, fingerprint } = await deps.loadContext(projectId, {
+  const { context: loaded, fingerprint } = await deps.loadContext(projectId, {
     start: window.start,
     end: window.end,
   });
+  const context = deps.workflowMining?.typedSteps
+    ? { ...loaded, modelCalls: await modelCallsFor(projectId, window, deps) }
+    : loaded;
   const analysis = createAnalysis(context, {
     floors: deps.floors,
     scanStart: window.scanStart,
@@ -190,4 +199,18 @@ export async function computeSignals(
   await walk(window.scanStart, (turn) => analysis.feed(turn), link);
   if (analysis.secondPass()) await walk(window.start, (turn) => analysis.feedPairs(turn));
   return { result: analysis.finish(), fingerprint, pages };
+}
+
+/** Best-effort: without the facts the model-call readings show no tokens or cost. */
+async function modelCallsFor(
+  projectId: string,
+  window: SignalWindow,
+  deps: Pick<ComputeDeps, "loadModelCalls">,
+) {
+  try {
+    return await deps.loadModelCalls(projectId, { start: window.start, end: window.end });
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "model call facts unreadable for step readings");
+    return null;
+  }
 }

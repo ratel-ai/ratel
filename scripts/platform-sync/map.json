@@ -705,7 +705,7 @@
     {"from": "apps/web/lib/trace-signals/workflows-view.ts", "to": "src/lib/views/health/workflows-view.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/workflows-view.test.ts", "to": "src/lib/views/health/workflows-view.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/workflows-view-fixtures.ts", "to": "src/lib/views/health/workflows-view-fixtures.ts", "mode": "copy"},
-    {"from": "apps/web/lib/trace-signals/page-model.ts", "to": "src/lib/views/health/page-model.ts", "mode": "owned", "$why": "the limits come from the entitlements port (no plan table); a comment named a confidential word"},
+    {"from": "apps/web/lib/trace-signals/page-model.ts", "to": "src/lib/views/health/page-model.ts", "mode": "owned", "$why": "the limits come from the entitlements port (no plan table); a comment named a confidential word; readsTypedSteps reads FF_TYPED_STEPS (readings/trace-signals/typed-steps.ts) for the project, not the Cloud flag with its organization"},
     {"from": "apps/web/lib/trace-signals/page-state.ts", "to": "src/lib/views/health/page-state.ts", "mode": "owned", "$why": "the plan table is the edition's: planWithWindow asks the entitlements port's plans, and names no plan without them"},
     {"from": "apps/web/lib/trace-signals/page-state-copy.ts", "to": "src/lib/views/health/page-state-copy.ts", "mode": "owned", "$why": "plan names come from the entitlements port (planName); import sources are named by the edition (`sourceLabel` in the copy context), else by their id"},
     {"from": "apps/web/lib/trace-signals/mock-fixture.ts", "to": "src/lib/views/health/mock-fixture.ts", "mode": "owned", "$why": "the development fixture with a neutral tenant and generic ticket names"},
@@ -863,6 +863,8 @@
 
     {"$slice":"health-pages","from":"apps/web/components/health/JourneyInsights.tsx","to":"src/components/console/health/JourneyInsights.tsx","mode":"copy"},
     {"from":"apps/web/components/health/JourneyLinks.tsx","to":"src/components/console/health/JourneyLinks.tsx","mode":"copy"},
+    {"from":"apps/web/components/health/StepKindTables.tsx","to":"src/components/console/health/StepKindTables.tsx","mode":"copy"},
+    {"from":"apps/web/lib/health-step-kinds-ui.test.ts","to":"src/lib/views/health/step-kinds-ui.test.ts","mode":"copy"},
     {"from":"apps/web/components/health/JourneyReadout.tsx","to":"src/components/console/health/JourneyReadout.tsx","mode":"copy"},
     {"from":"apps/web/components/health/JourneyStartRail.tsx","to":"src/components/console/health/JourneyStartRail.tsx","mode":"copy"},
     {"from":"apps/web/components/health/OpenInTraces.tsx","to":"src/components/console/health/OpenInTraces.tsx","mode":"copy"},

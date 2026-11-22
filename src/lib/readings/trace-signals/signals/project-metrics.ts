@@ -81,6 +81,21 @@ export interface DayBucket {
    * their cost and model calls. Absent on days without one.
    */
   linked?: LinkedDay;
+  /**
+   * The day's model and code steps, and how many failed (RC-1077). Set only
+   * with `cloud-typed-steps` on, so "Calls work" counts them; absent otherwise.
+   */
+  steps?: StepCallDay;
+}
+
+export interface StepCallDay {
+  calls: number;
+  failed: number;
+}
+
+export interface BucketOptions {
+  /** Count model and code steps (`cloud-typed-steps`). */
+  typedSteps?: boolean;
 }
 
 function emptyShapes(): ShapeCounts {
@@ -116,6 +131,7 @@ export function turnBucket(
   turn: SignalTurn,
   floors: Floors = DEFAULT_FLOORS,
   extras?: OtelTurnExtras,
+  options: BucketOptions = {},
 ): DayBucket {
   const bucket = emptyBucket(dayOf(turn.endedAt));
   const searches = turn.steps.filter((step) => step.kind === "search");
@@ -151,6 +167,24 @@ export function turnBucket(
     toolDetailTurns: toolDetail ? 1 : 0,
     ...(otel ? { otel: otelDayOf(turn, extras) } : {}),
     ...(turn.linked ? { linked: linkedDayOf(turn.linked) } : {}),
+    ...(options.typedSteps ? { steps: stepCallDayOf(turn) } : {}),
+  };
+}
+
+/** A run's model and code steps: the typed steps that are calls. */
+function stepCallDayOf(turn: Pick<SignalTurn, "steps">): StepCallDay {
+  const calls = turn.steps.filter((step) => step.kind === "model_call" || step.kind === "code");
+  return { calls: calls.length, failed: calls.filter((step) => step.outcome === "error").length };
+}
+
+function addStepCallDays(
+  left: StepCallDay | undefined,
+  right: StepCallDay | undefined,
+): StepCallDay | undefined {
+  if (!left && !right) return undefined;
+  return {
+    calls: (left?.calls ?? 0) + (right?.calls ?? 0),
+    failed: (left?.failed ?? 0) + (right?.failed ?? 0),
   };
 }
 
@@ -161,6 +195,7 @@ export function addBuckets(left: DayBucket, right: DayBucket): DayBucket {
   ) as ShapeCounts;
   const otel = addOtelDays(left.otel, right.otel);
   const linked = addLinkedDays(left.linked, right.linked);
+  const steps = addStepCallDays(left.steps, right.steps);
   return {
     day: left.day,
     turns: left.turns + right.turns,
@@ -189,6 +224,7 @@ export function addBuckets(left: DayBucket, right: DayBucket): DayBucket {
     toolDetailTurns: left.toolDetailTurns + right.toolDetailTurns,
     ...(otel ? { otel } : {}),
     ...(linked ? { linked } : {}),
+    ...(steps ? { steps } : {}),
   };
 }
 
@@ -196,8 +232,10 @@ export function addBuckets(left: DayBucket, right: DayBucket): DayBucket {
 export class DailyBuckets {
   private readonly days = new Map<string, DayBucket>();
 
+  constructor(private readonly options: BucketOptions = {}) {}
+
   add(turn: SignalTurn, floors: Floors = DEFAULT_FLOORS, extras?: OtelTurnExtras): void {
-    const bucket = turnBucket(turn, floors, extras);
+    const bucket = turnBucket(turn, floors, extras, this.options);
     const existing = this.days.get(bucket.day);
     this.days.set(bucket.day, existing ? addBuckets(existing, bucket) : bucket);
   }

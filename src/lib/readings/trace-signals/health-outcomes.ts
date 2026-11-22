@@ -27,6 +27,8 @@ import {
  * - **calls work**: OpenTelemetry calls neither failed nor wasted. The SDK
  *   buckets count wasted calls but not calls, and one run can hold dozens
  *   (an MCP session is one run), so an SDK-only project leaves this out.
+ *   With `cloud-typed-steps` on, model and code steps count too, and a
+ *   failed one is a bad outcome (RC-1077).
  *
  * Each is read over the reading's own window from what the run stored
  * (daily buckets, `selfCorrections`, `workflows`), so the page and the job
@@ -96,8 +98,13 @@ function tasks(raw: unknown): PillarReading | null {
 }
 
 function calls(total: DayBucket): PillarReading | null {
-  const n = num(total.otel?.calls);
-  return rate("calls", Math.min(n, num(total.otel?.failedCalls) + num(total.otel?.wasted)), n);
+  // Model and code steps are stored only with `cloud-typed-steps` on (RC-1077).
+  const n = num(total.otel?.calls) + num(total.steps?.calls);
+  return rate(
+    "calls",
+    Math.min(n, num(total.otel?.failedCalls) + num(total.otel?.wasted) + num(total.steps?.failed)),
+    n,
+  );
 }
 
 /** The rates of one reading, over its own window; the ones without enough evidence are left out. */

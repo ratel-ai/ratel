@@ -3,6 +3,7 @@ import { Callout } from "@ratel/design-system/states";
 import type { ComponentType } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
+import { StepKindTables } from "@/components/console/health/StepKindTables";
 import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
 import { CallOrderSection } from "@/components/console/health/v2/CallOrderSection";
 import { GapBlock } from "@/components/console/health/v2/GapBlock";
@@ -38,6 +39,8 @@ import type {
 } from "@/lib/contracts/composition";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
 import type { PartialReading as PartialReadingModel } from "@/lib/readings/trace-signals/partial-reading";
+import { stepKindTables, stepPresets } from "@/lib/readings/trace-signals/steps/tables";
+import type { StepsView } from "@/lib/readings/trace-signals/steps/view";
 import {
   type HealthPageModel,
   runWindowLabel,
@@ -113,6 +116,8 @@ export interface SummaryViewProps {
    * from the shape of imported spans and no content came with them.
    */
   inferredTools?: boolean;
+  /** The `?steps=` preset of the per-kind tables (`cloud-typed-steps`); absent reads `all`. */
+  stepsView?: StepsView;
   now?: Date;
 }
 
@@ -235,6 +240,7 @@ function Ready({
   lockedPlan = null,
   imports,
   inferredTools = false,
+  stepsView = "all",
 }: SummaryViewProps) {
   const gap = pageGap(model);
   const lane = model.sourceMode === "otel" ? "otel" : "sdk";
@@ -324,6 +330,17 @@ function Ready({
       {gap ? null : <ShapesSection shapes={model.shapes} turns={model.turns} vocabulary={lane} />}
       {score ? null : issues}
       <SelfCorrectionsRow model={corrections} />
+      {model.steps ? (
+        <StepKindTables
+          tables={stepKindTables(
+            model.steps,
+            stepsView,
+            new Map((workflows?.items ?? []).map((item) => [item.id, item.name])),
+          )}
+          view={stepsView}
+          presets={stepPresets(projectId, model.windowDays)}
+        />
+      ) : null}
       {gap ? (
         <GapBlock gap={gap} lane={lane} />
       ) : (
