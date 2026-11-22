@@ -32,6 +32,7 @@ export const JOB_TIER: Record<JobKind, 0 | 1 | 2> = {
   fold_intent_graph: 1,
   match_quality_run: 1,
   run_import: 1,
+  refill_pivot_dims: 1,
   explore_tool_usage: 2,
   craft_tools: 2,
   categorize_queries: 2,
@@ -65,6 +66,7 @@ export const JOB_BUDGET_MS: Record<JobKind, number> = {
   simulate_eval_set: 5 * 60_000,
   refresh_task_eval_set: 2 * 60_000,
   draft_fix: 2 * 60_000,
+  refill_pivot_dims: 5 * 60_000,
 };
 
 /** A kind's tier; an unknown kind (a newer deploy's) waits with the sweeps. */

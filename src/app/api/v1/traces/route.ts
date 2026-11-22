@@ -10,6 +10,7 @@ import { handleTracesRequest } from "@/lib/ingest/otlp/route-handler";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
 import { createGenAiLogStore } from "@/lib/ingest/otlp/semconv/gen-ai-log-store";
 import { createOtlpRawStore } from "@/lib/ingest/otlp-raw/store";
+import { defaultPivotIngestDeps } from "@/lib/ingest/pivots/ingest";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
@@ -84,5 +85,7 @@ async function handlePost(req: Request) {
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
     },
+    // The project's pivot keys, cached, with `FF_PIVOTS` on (RC-883).
+    pivots: defaultPivotIngestDeps,
   });
 }

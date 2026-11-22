@@ -119,6 +119,10 @@ export const SERVER_EVENT_NAMES = [
   "sandbox_fake_unpinned",
   // Sent by the gateway (packages/gateway): lib/views/sandboxes/fakes/adapters/fake-alerts.ts.
   "sandbox_fake_cap_reached",
+  // Settings > Pivots (RC-881): lib/synthesis/pivots/settings.ts.
+  "pivot_created",
+  "pivot_updated",
+  "pivot_deleted",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

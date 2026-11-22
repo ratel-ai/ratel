@@ -72,6 +72,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_SANDBOXES",
     note: "agent sandboxes: the Sandboxes pages and run API, `ratel sandbox dev` runners, sandbox stamps on the label and topic jobs, playground runs kept out of cost and Agent health",
   },
+  {
+    key: "FF_PIVOTS",
+    note: "pivots: Settings > Pivots, the configured pivot keys kept on span rows at ingest, and each pivot's value (`dims`) on trace summaries",
+  },
 ];
 
 export interface AccountOperationDeps {

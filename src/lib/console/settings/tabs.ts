@@ -14,13 +14,17 @@ export function organizationSettingsRoot(slug: string): string {
   return `${organizationRoot(slug)}/settings`;
 }
 
-/** General, API keys, Developer (SDK events) and Danger zone. */
-export function projectSettingsTabs(projectId: string): TabLink[] {
+/** General, API keys, Pivots (only with `cloud-pivots` on), Developer (SDK events) and Danger zone. */
+export function projectSettingsTabs(
+  projectId: string,
+  options: { pivots?: boolean } = {},
+): TabLink[] {
   const root = projectSettingsRoot(projectId);
   return [
     // `exact`: every other tab lives under this path.
     { href: root, label: "General", exact: true },
     { href: `${root}/api-keys`, label: "API keys" },
+    ...(options.pivots ? [{ href: `${root}/pivots`, label: "Pivots" }] : []),
     { href: `${root}/developer`, label: "Developer" },
     { href: `${root}/danger`, label: "Danger zone" },
   ];

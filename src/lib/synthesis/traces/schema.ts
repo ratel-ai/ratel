@@ -4,6 +4,7 @@ import {
   boolean,
   doublePrecision,
   index,
+  jsonb,
   numeric,
   pgTable,
   primaryKey,
@@ -68,6 +69,9 @@ export const otelTraceSummaries = pgTable(
     countries: text("countries").array().notNull().default(sql`'{}'::text[]`),
     // The callers' harnesses (`otel_spans.harness`, RC-778), for the Traces harness filter.
     harnesses: text("harnesses").array().notNull().default(sql`'{}'::text[]`),
+    // The trace's pivot values (RC-884, `FF_PIVOTS`): pivot key to its first
+    // non-empty value, root span first. `{}` for a project with no pivots.
+    dims: jsonb("dims").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -90,6 +94,8 @@ export const otelTraceSummaries = pgTable(
     index("otel_trace_summaries_mcp_servers_idx").using("gin", t.mcpServers),
     index("otel_trace_summaries_countries_idx").using("gin", t.countries),
     index("otel_trace_summaries_harnesses_idx").using("gin", t.harnesses),
+    // The pivot filter (`dims @> $1`).
+    index("otel_trace_summaries_dims_idx").using("gin", sql`${t.dims} jsonb_path_ops`),
   ],
 );
 

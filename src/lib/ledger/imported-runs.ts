@@ -1,8 +1,10 @@
 import type { ImportedRunsPort } from "@/lib/contracts/imported-runs";
+import type { Organization } from "@/lib/contracts/session";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { type PersistSpansContext, persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import { findRuntimeInvokes } from "@/lib/ingest/otlp/runtime-facts-query";
+import { defaultPivotIngestDeps, type PivotIngestDeps } from "@/lib/ingest/pivots/ingest";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { enqueueJob } from "@/lib/jobs/queries";
 import { runsJobsAfterResponse } from "@/lib/jobs/role";
@@ -11,6 +13,7 @@ import { drainProjectJobs } from "@/lib/jobs/store";
 import { registerImportedSourceIds } from "@/lib/ledger/constants";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { getDb } from "@/lib/platform/db/client";
+import { pivotsEnabled } from "@/lib/platform/pivots-flag";
 
 export type ImportedRunsDeps = {
   persistDecodedSpans: typeof persistDecodedSpans;
@@ -23,6 +26,9 @@ export type ImportedRunsDeps = {
   }) => Promise<{ id: string }>;
   scheduleProjectDrain: (projectId: string) => void;
   runsJobsAfterResponse: () => boolean;
+  /** The project's pivot keys for ingest (RC-883), cached; read only with `FF_PIVOTS` on. */
+  pivots: PivotIngestDeps;
+  pivotsEnabled: (projectId: string, organization: Organization) => Promise<boolean>;
 };
 
 const defaultDeps: ImportedRunsDeps = {
@@ -32,6 +38,8 @@ const defaultDeps: ImportedRunsDeps = {
   enqueueJob: (input) => enqueueJob(input),
   scheduleProjectDrain: (projectId) => scheduleProjectDrain(projectId),
   runsJobsAfterResponse: () => runsJobsAfterResponse(),
+  pivots: defaultPivotIngestDeps,
+  pivotsEnabled: (projectId, organization) => pivotsEnabled(projectId, organization),
 };
 
 /**
@@ -72,10 +80,14 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
           agentSpanDedupe: null,
           // The project's own model prices, as live ingest reads them (RC-482).
           modelPricing: { loadOverrides: (id) => loadPriceOverrides(id, getDb()) },
+          // The run's metadata keys a pivot reads stay on its root span (RC-883).
+          pivots: deps.pivots,
           logError: report.logError,
           captureFailure: report.captureFailure,
         },
       ),
+    // The runs' metadata, tags and groups reach the root span with `FF_PIVOTS` on (RC-883).
+    importMetadata: (projectId, organization) => deps.pivotsEnabled(projectId, organization),
     requestReading: async (projectId) => {
       // The run rides on the build: the build enqueues it once it has caught up, so it reads
       // every run the import stored instead of racing the build for them.

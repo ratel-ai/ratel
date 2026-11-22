@@ -1,6 +1,8 @@
 import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { otelSpans } from "@/lib/ingest/otlp/schema";
+import { pivotKeys } from "@/lib/ingest/pivots/model";
 import { getDb } from "@/lib/platform/db/client";
+import { defaultPivotsEnabledLookup, type PivotsEnabledLookup } from "@/lib/platform/pivots-flag";
 import { traceSummaryCursor } from "@/lib/synthesis/traces/schema";
 
 /**
@@ -38,6 +40,17 @@ export interface RefreshTraceSummariesOptions {
   /** How far behind `now()` the cursor stays; see `TRACE_SUMMARY_VISIBILITY_LAG_MS`. */
   visibilityLagMs?: number;
   now?: () => number;
+  /** `FF_PIVOTS` per project (RC-968); absent, the cached process-wide lookup. */
+  pivotsEnabled?: PivotsEnabledLookup;
+}
+
+export interface RecomputeTraceSummariesOptions {
+  /**
+   * `FF_PIVOTS` per project, resolved once per call for each project of the
+   * traces (RC-968). Off, the project's pivot rows are not read and `dims` is
+   * `{}`. Absent, the cached process-wide lookup.
+   */
+  pivotsEnabled?: PivotsEnabledLookup;
 }
 
 export interface TraceSummaryRefreshResult {
@@ -74,6 +87,8 @@ const TOOL_NAME = sql.raw(`btrim(regexp_replace(regexp_replace(
     else coalesce(nullif(btrim(s.attributes ->> 'gen_ai.tool.name'), ''), s.name) end),
   '^(?:chat|text_completion|generate_content|embeddings|execute_tool|invoke_agent|create_agent)\\s+(\\S.*)$', '\\1'),
   '^tool\\.(.+)$', '\\1'))`);
+/** A pivot value longer than this is cut: it names a group, it is not content (RC-884). */
+export const MAX_DIM_VALUE_CHARS = 256;
 const EPOCH = "1970-01-01 00:00:00+00";
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 const MAX_INTERVAL_MS = 2_000_000_000;
@@ -113,7 +128,9 @@ export async function refreshTraceSummaries(
   };
 
   while (now() - startedAt < timeBudgetMs) {
-    const batch = await db.transaction((tx) => sweepOneBatch(tx, batchSize, visibilityLagMs));
+    const batch = await db.transaction((tx) =>
+      sweepOneBatch(tx, batchSize, visibilityLagMs, options.pivotsEnabled),
+    );
     // An overlapping tick owns the stream; duplicating its work would be
     // harmless but wasteful, so stand down until the next minute.
     if (batch === null) {
@@ -141,12 +158,18 @@ export async function refreshTraceSummaries(
 export async function recomputeTraceSummaries(
   db: TraceSummaryExecutor,
   traces: ReadonlyArray<ChangedTrace>,
+  options: RecomputeTraceSummariesOptions = {},
 ): Promise<number> {
   const changed = distinctTraces(traces);
+  const pivotProjects = await projectsWithPivotsOn(
+    changed,
+    options.pivotsEnabled ?? defaultPivotsEnabledLookup,
+  );
   for (let offset = 0; offset < changed.length; offset += TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE) {
     await recomputeSummaries(
       db,
       changed.slice(offset, offset + TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE),
+      pivotProjects,
     );
   }
   return changed.length;
@@ -157,6 +180,7 @@ async function sweepOneBatch(
   tx: SweepTransaction,
   batchSize: number,
   visibilityLagMs: number,
+  pivotsEnabled: PivotsEnabledLookup | undefined,
 ): Promise<BatchOutcome | null> {
   if (!(await tryAdvisoryLock(tx))) return null;
 
@@ -181,7 +205,7 @@ async function sweepOneBatch(
     .limit(batchSize);
   if (spans.length === 0) return { spansScanned: 0, tracesRecomputed: 0 };
 
-  const changed = await recomputeTraceSummaries(tx, spans);
+  const changed = await recomputeTraceSummaries(tx, spans, pivotsEnabled ? { pivotsEnabled } : {});
   const last = spans[spans.length - 1]!;
   await advanceCursor(tx, { receivedAt: last.receivedAt, spanRowId: last.id });
 
@@ -192,14 +216,56 @@ async function sweepOneBatch(
  * Replace each changed trace's summary from scratch in a single statement: the
  * canonical whole-trace representative (riding
  * `otel_spans_project_trace_root_idx`) joined to that trace's own aggregates.
+ *
+ * `dims` (RC-884): for each pivot of the trace's project, the first non-empty
+ * value of its ordered keys on the root span, else on the earliest span that
+ * has one. Only for the projects in `pivotProjects` (`FF_PIVOTS` on): for
+ * the others no pivot row is read and `dims` is `{}`, also when they have
+ * pivots. A chunk with no such project reads no span for it.
  */
-async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace[]): Promise<void> {
+async function recomputeSummaries(
+  tx: TraceSummaryExecutor,
+  traces: ChangedTrace[],
+  pivotProjects: ReadonlySet<string>,
+): Promise<void> {
   const changed = sql.join(
     traces.map((trace) => sql`(${trace.projectId}::uuid, ${trace.traceId}::text)`),
     sql`, `,
   );
+  const keys = await pivotKeyRows(tx, traces, pivotProjects);
+  const dimsCte =
+    keys.length === 0
+      ? sql``
+      : sql`
+    pivot_keys (project_id, pivot_key, attr_key, ord) as (values ${sql.join(
+      keys.map(
+        (key) =>
+          sql`(${key.projectId}::uuid, ${key.pivotKey}::text, ${key.attrKey}::text, ${key.ord}::int)`,
+      ),
+      sql`, `,
+    )}),
+    dim_values as (
+      select distinct on (s.project_id, s.trace_id, k.pivot_key)
+        s.project_id, s.trace_id, k.pivot_key,
+        left(btrim(s.attributes ->> k.attr_key), ${MAX_DIM_VALUE_CHARS}) as value
+      from changed c
+      join pivot_keys k on k.project_id = c.project_id
+      join otel_spans s on s.project_id = c.project_id and s.trace_id = c.trace_id
+      where btrim(s.attributes ->> k.attr_key) <> ''
+      order by s.project_id, s.trace_id, k.pivot_key,
+        (s.parent_span_id is null) desc, s.started_at, s.span_id, k.ord
+    ),
+    dims as (
+      select project_id, trace_id, jsonb_object_agg(pivot_key, value) as dims
+      from dim_values group by project_id, trace_id
+    ),`;
+  const dimsValue = keys.length === 0 ? sql`'{}'::jsonb` : sql`coalesce(d.dims, '{}'::jsonb)`;
+  const dimsJoin =
+    keys.length === 0
+      ? sql``
+      : sql`left join dims d on d.project_id = r.project_id and d.trace_id = r.trace_id`;
   await tx.execute(sql`
-    with changed (project_id, trace_id) as (values ${changed}),
+    with changed (project_id, trace_id) as (values ${changed}),${dimsCte}
     representatives as (
       select distinct on (s.project_id, s.trace_id)
         s.project_id, s.trace_id, s.started_at, s.duration_ms,
@@ -262,7 +328,8 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
     insert into otel_trace_summaries (
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
-      models, tools, service_name, environment, agents, mcp_servers, root_error, countries, harnesses
+      models, tools, service_name, environment, agents, mcp_servers, root_error, countries, harnesses,
+      dims
     )
     select
       r.project_id,
@@ -283,10 +350,12 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       a.mcp_servers,
       r.root_error,
       a.countries,
-      a.harnesses
+      a.harnesses,
+      ${dimsValue}
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
+    ${dimsJoin}
     on conflict (project_id, trace_id) do update set
       started_at = excluded.started_at,
       duration_ms = excluded.duration_ms,
@@ -304,8 +373,63 @@ async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace
       mcp_servers = excluded.mcp_servers,
       root_error = excluded.root_error,
       countries = excluded.countries,
-      harnesses = excluded.harnesses
+      harnesses = excluded.harnesses,
+      dims = excluded.dims
   `);
+}
+
+interface PivotKeyRow {
+  projectId: string;
+  pivotKey: string;
+  attrKey: string;
+  ord: number;
+}
+
+/**
+ * The projects of the traces with `FF_PIVOTS` on (RC-968): one lookup per
+ * project, never one per trace. The lookup is cached and never throws.
+ */
+async function projectsWithPivotsOn(
+  traces: ReadonlyArray<ChangedTrace>,
+  pivotsEnabled: PivotsEnabledLookup,
+): Promise<Set<string>> {
+  const projects = [...new Set(traces.map((trace) => trace.projectId))];
+  const enabled = await Promise.all(projects.map((projectId) => pivotsEnabled(projectId)));
+  return new Set(projects.filter((_, index) => enabled[index]));
+}
+
+/**
+ * The ordered attribute keys of the pivots of the chunk's projects with
+ * `FF_PIVOTS` on: one read of `project_pivots`, none when no project is on.
+ */
+async function pivotKeyRows(
+  tx: TraceSummaryExecutor,
+  traces: ChangedTrace[],
+  pivotProjects: ReadonlySet<string>,
+): Promise<PivotKeyRow[]> {
+  const projects = [...new Set(traces.map((trace) => trace.projectId))].filter((projectId) =>
+    pivotProjects.has(projectId),
+  );
+  if (projects.length === 0) return [];
+  const result = await tx.execute(sql`
+    select project_id, key, preset_id from project_pivots
+    where project_id = any(array[${sql.join(
+      projects.map((id) => sql`${id}`),
+      sql`, `,
+    )}]::uuid[])`);
+  const rows = (
+    result as unknown as {
+      rows: Array<{ project_id: string; key: string; preset_id: string | null }>;
+    }
+  ).rows;
+  return rows.flatMap((row) =>
+    pivotKeys({ key: row.key, presetId: row.preset_id }).map((attrKey, ord) => ({
+      projectId: row.project_id,
+      pivotKey: row.key,
+      attrKey,
+      ord,
+    })),
+  );
 }
 
 /**

@@ -8,6 +8,7 @@ import { queryIntentsRegistration } from "@/lib/readings/query-intents/register"
 import { toolExplorerRegistration } from "@/lib/readings/tool-explorer/register";
 import { topicsRegistration } from "@/lib/readings/topics/register";
 import { traceSignalsRegistration } from "@/lib/readings/trace-signals/register";
+import { pivotsRegistration } from "@/lib/synthesis/pivots/register";
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
@@ -33,6 +34,7 @@ const CORE: Registration[] = [
   toolExplorerRegistration,
   topicsRegistration,
   tracesRegistration,
+  pivotsRegistration,
   qualityRegistration,
   toolCrafterRegistration,
   evalGateRegistration,

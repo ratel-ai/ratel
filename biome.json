@@ -198,6 +198,7 @@
         "!src/lib/ingest/otlp/dimensions/client.ts",
         "!src/lib/ingest/otlp/dimensions/client-facts.integration.test.ts",
         "!src/lib/ingest/otlp/playground.ts",
+        "!src/lib/ingest/otlp/ingest-spans.pivots.test.ts",
         "src/lib/ingest/otlp-raw/**",
         "!src/lib/ingest/otlp-raw/capture.ts",
         "!src/lib/ingest/otlp-raw/reprocess.ts",
@@ -1438,7 +1439,16 @@
         "!packages/gateway/protocol/schema/manifest.schema.json",
         "!packages/gateway/protocol/schema/messages/tool.fake.request.schema.json",
         "!packages/gateway/test/fixtures/valid/messages/manifest.update.revision.json",
-        "!packages/gateway/test/fixtures/invalid/messages/manifest.update.bad-revision.json"
+        "!packages/gateway/test/fixtures/invalid/messages/manifest.update.bad-revision.json",
+        "src/lib/ingest/pivots/**",
+        "!src/lib/ingest/pivots/model.ts",
+        "!src/lib/ingest/pivots/model.test.ts",
+        "!src/lib/ingest/pivots/ingest.ts",
+        "!src/lib/ingest/pivots/schema.ts",
+        "src/lib/synthesis/pivots/refill.ts",
+        "src/lib/synthesis/pivots/dims.integration.test.ts",
+        "src/app/(console)/project/\\[projectId\\]/settings/pivots/page.tsx",
+        "src/components/console/settings/PivotsSettings.tsx"
       ],
       "linter": {
         "rules": {

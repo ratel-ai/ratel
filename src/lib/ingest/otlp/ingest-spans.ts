@@ -4,6 +4,7 @@ import type {
   insertOtelSpans as insertOtelSpansFn,
   OtelSpanConflict,
 } from "@/lib/ingest/otlp/queries";
+import type { PivotIngestDeps } from "@/lib/ingest/pivots/ingest";
 import type { BatchPrices } from "@/lib/ingest/pricing";
 import {
   FOLD_TRIGGER_TYPES,
@@ -124,6 +125,11 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    * them and the current prices. Absent, the current built-in prices.
    */
   modelPricing?: ModelPricingIngestDeps;
+  /**
+   * The project's pivot keys (RC-883), kept on its span rows with
+   * `FF_PIVOTS` on. Absent, or with the switch off, the rows are as before.
+   */
+  pivots?: PivotIngestDeps;
   /**
    * The stored `gen_ai` log records of the batch's spans. Absent, none are read. With `findSpans` and `restateCalls`, a log
    * export stored while the batch was stored joins too.
@@ -338,7 +344,12 @@ export async function persistDecodedSpans(
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
   try {
-    const spanRows = toOtelSpanRows(projectId, spans, dedupe, { prices, dimensions });
+    const pivotKeys = await batchPivotKeys(projectId, organization, deps);
+    const spanRows = toOtelSpanRows(projectId, spans, dedupe, {
+      prices,
+      dimensions,
+      ...(pivotKeys ? { pivotKeys } : {}),
+    });
     if (spanRows.length > 0) {
       if (spanConflict === "update") {
         await deps.insertOtelSpans(projectId, spanRows, undefined, { onConflict: "update" });
@@ -400,6 +411,28 @@ async function fillStoredSessions(
   } catch (err) {
     deps.logError("mcp session client facts fill failed", err, { project_id: projectId });
     deps.captureFailure(err);
+  }
+}
+
+/**
+ * The pivot keys the batch's span rows keep (RC-883): read only with
+ * `FF_PIVOTS` on for the project, from a cached lookup. A failed read
+ * keeps none and logs the error: the spans are still stored.
+ */
+async function batchPivotKeys(
+  projectId: string,
+  organization: Organization | null,
+  deps: PersistSpansDeps,
+): Promise<ReadonlySet<string> | undefined> {
+  if (!deps.pivots) return undefined;
+  try {
+    if (!(await deps.pivots.enabled(projectId, organization))) return undefined;
+    const keys = await deps.pivots.loadKeys(projectId);
+    return keys.size > 0 ? keys : undefined;
+  } catch (err) {
+    deps.logError("pivot keys read failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+    return undefined;
   }
 }
 

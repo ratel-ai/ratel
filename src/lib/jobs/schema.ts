@@ -54,6 +54,10 @@ export const jobs = pgTable(
     uniqueIndex("jobs_draft_fix_pending_idx")
       .on(t.projectId, sql`(${t.payload}->>'fixId')`)
       .where(sql`${t.kind} = 'draft_fix' and ${t.status} in ('queued', 'running')`),
+    // One pivot refill per project, queued or running (RC-884).
+    uniqueIndex("jobs_refill_pivot_dims_pending_idx")
+      .on(t.projectId, t.kind)
+      .where(sql`${t.kind} = 'refill_pivot_dims' and ${t.status} in ('queued', 'running')`),
     uniqueIndex("jobs_fold_intent_graph_queued_idx")
       .on(t.projectId, t.kind)
       .where(sql`${t.status} = 'queued' and ${t.kind} = 'fold_intent_graph'`),

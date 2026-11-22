@@ -270,6 +270,8 @@
         "IntentClusterAssignmentRow": "@/lib/readings/intent-engine/schema",
         "traceSignalRuns": "@/lib/readings/trace-signals/schema",
         "taskSegments": "@/lib/readings/trace-signals/schema",
+        "projectPivots": "@/lib/ingest/pivots/schema",
+        "ProjectPivotRow": "@/lib/ingest/pivots/schema",
         "sandboxRunners": "@/lib/views/sandboxes/schema",
         "sandboxSessions": "@/lib/views/sandboxes/schema",
         "sandboxRuns": "@/lib/views/sandboxes/schema",

@@ -339,6 +339,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "FF_AGENTS_PAGES",
     "FF_EVAL_GATE",
     "FF_MCP_APPS",
+    "FF_PIVOTS",
     "FF_RANKING_CATALOG_DRIFT",
     "FF_SANDBOXES",
     "FF_TOOL_RUN_INSIGHTS",

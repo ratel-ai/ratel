@@ -22,6 +22,23 @@ test("project settings tabs are URLs, with General matching its path exactly", (
   assert.equal(projectSettingsRoot("p 1"), "/project/p%201/settings");
 });
 
+test("project settings show Pivots after API keys only with cloud-pivots on (RC-881)", () => {
+  assert.deepEqual(
+    projectSettingsTabs("p1", { pivots: true }).map((tab) => [tab.label, tab.href]),
+    [
+      ["General", "/project/p1/settings"],
+      ["API keys", "/project/p1/settings/api-keys"],
+      ["Pivots", "/project/p1/settings/pivots"],
+      ["Developer", "/project/p1/settings/developer"],
+      ["Danger zone", "/project/p1/settings/danger"],
+    ],
+  );
+  assert.equal(
+    projectSettingsTabs("p1", { pivots: false }).some((tab) => tab.label === "Pivots"),
+    false,
+  );
+});
+
 test("organization settings show Danger zone only to the admins who can use it", () => {
   assert.deepEqual(
     organizationSettingsTabs("acme", { danger: true }).map((tab) => [tab.label, tab.href]),

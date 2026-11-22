@@ -131,6 +131,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
   modelPricing?: PersistSpansDeps["modelPricing"];
+  /** The project's pivot keys (RC-883); absent, or `FF_PIVOTS` off, the span rows are as before. */
+  pivots?: PersistSpansDeps["pivots"];
   /** Where the Datadog ingest lines go; absent, the app log and the cached project lookup. */
   ingestLog?: IngestLogDeps;
 }

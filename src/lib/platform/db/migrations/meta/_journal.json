@@ -330,6 +330,13 @@
       "when": 1795324242012,
       "tag": "0046_client_facts",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795327389695,
+      "tag": "0047_pivots",
+      "breakpoints": true
     }
   ]
 }

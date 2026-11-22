@@ -20,7 +20,7 @@ import {
   storedSpanEvents,
   storedSpanLinks,
 } from "./span-events";
-import type { AttrMap, DecodedSpan } from "./types";
+import type { AttrMap, AttrValue, DecodedSpan } from "./types";
 
 export type SpanClass = "llm_call" | "tool" | "ratel_search" | "other";
 
@@ -150,7 +150,16 @@ export interface OtelSpanRowOptions {
    * a span they do not hold, the row's dimension columns are null.
    */
   dimensions?: SpanDimensionsById;
+  /**
+   * The attribute keys the project's pivots read (RC-883, `FF_PIVOTS`):
+   * each is kept, the span's value winning over the resource's. Absent or
+   * empty, the rows are as before.
+   */
+  pivotKeys?: ReadonlySet<string>;
 }
+
+/** A pivot value is a group name: longer strings are cut to this many bytes. */
+export const MAX_PIVOT_VALUE_BYTES = 256;
 
 export function toOtelSpanRows(
   projectId: string,
@@ -215,7 +224,11 @@ export function toOtelSpanRows(
           ) ?? emitterCostUsd(span.attributes));
     const retained = retainedAttributes(
       span.attributes,
-      { ...environmentAttributes(span), ...sandboxAttributes(span.attributes) },
+      {
+        ...environmentAttributes(span),
+        ...sandboxAttributes(span.attributes),
+        ...pivotAttributes(span, options.pivotKeys),
+      },
       keptContent(span),
     );
     const experiment = experimentAttributes(span);
@@ -396,6 +409,28 @@ function environmentAttributes(span: DecodedSpan): AttrMap {
   if (legacy !== undefined) out[LEGACY_ENVIRONMENT_KEY] = legacy;
   if (version !== undefined) out[SERVICE_VERSION_KEY] = version;
   return out;
+}
+
+/**
+ * The configured pivot keys of the span (RC-883): scalar values only, the
+ * span's winning over the resource's, strings cut to
+ * {@link MAX_PIVOT_VALUE_BYTES}. They go in `extra`, so the 16KB bound still
+ * holds.
+ */
+function pivotAttributes(span: DecodedSpan, keys: ReadonlySet<string> | undefined): AttrMap {
+  const out: AttrMap = {};
+  if (!keys || keys.size === 0) return out;
+  for (const key of keys) {
+    const value = pivotValue(span.attributes[key]) ?? pivotValue(span.resourceAttributes[key]);
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+function pivotValue(value: AttrValue | undefined): string | number | boolean | undefined {
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (typeof value !== "string" || value.trim() === "") return undefined;
+  return boundedString(value, MAX_PIVOT_VALUE_BYTES).value;
 }
 
 /**
