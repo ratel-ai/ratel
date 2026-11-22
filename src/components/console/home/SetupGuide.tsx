@@ -28,7 +28,7 @@ export function SetupGuide({
   endpoint: string;
   /** Project slug, sent as the OpenTelemetry `service.name`. */
   serviceName: string;
-  /** Ask for `service.version` = the deployed commit sha (`FF_CODE_HANDOFF`, decided on the server). */
+  /** Ask for `service.version` = the deployed commit sha, for the deploy watch. */
   deployVersion?: boolean;
 }) {
   const snippets = buildQuickstartSet({ endpoint, serviceName, deployVersion });

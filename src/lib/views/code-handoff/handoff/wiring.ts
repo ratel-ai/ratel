@@ -10,17 +10,12 @@ import { loadHandoffBrief } from "./load-brief";
 import { requestCodeIndex } from "./request-index";
 
 /**
- * The real dependencies of a handoff (RC-918) in one organization. The caller
- * decides the flag: the console for the signed-in person, MCP for the bearer.
+ * The real dependencies of a handoff (RC-918) in one organization.
  */
-export function handoffFixDeps(input: {
-  organization: Organization;
-  flagEnabled: (projectId: string) => Promise<boolean>;
-}): HandoffFixDeps {
+export function handoffFixDeps(input: { organization: Organization }): HandoffFixDeps {
   const config = readGitHubAppConfig();
   const github = config ? gitHubFor(config) : notConfiguredGitHub;
   return {
-    flagEnabled: input.flagEnabled,
     getRepoLink: (projectId) => getRepoLink(projectId),
     getRepo: (installationId, repo) => github.getRepo(installationId, repo),
     getHandoff: (projectId, fixId, target) => getFixHandoff(projectId, fixId, target),

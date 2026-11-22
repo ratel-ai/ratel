@@ -4,9 +4,9 @@ import { GITHUB_ISSUE_CLAUDE_TARGET } from "./github-issue-claude";
 import type { HandoffError } from "./handoff-fix";
 
 /**
- * What the Hand off button on a fix shows (RC-918): nothing with the flag
- * off; a link to Settings › Repository without a linked repo; the issue once
- * the fix was handed off; else the button. Pure apart from its reads.
+ * What the Hand off button on a fix shows (RC-918): a link to Settings ›
+ * Repository without a linked repo; the issue once the fix was handed off;
+ * else the button. Pure apart from its reads.
  */
 
 export interface HandoffButtonState {
@@ -17,7 +17,6 @@ export interface HandoffButtonState {
 }
 
 export interface HandoffButtonDeps {
-  flagEnabled: () => Promise<boolean>;
   getRepoLink: (projectId: string) => Promise<RepoLinkRow | null>;
   getHandoff: (projectId: string, fixId: string, target: string) => Promise<FixHandoffRow | null>;
 }
@@ -28,7 +27,6 @@ export const PUBLIC_REPO_MESSAGE =
 
 /** What a person reads when a handoff is refused or fails. */
 export const HANDOFF_ERROR_MESSAGES: Record<HandoffError | "forbidden" | "failed", string> = {
-  flag_off: "Handing off fixes is not available for this project.",
   no_repo_linked: "Link a GitHub repository in Settings › Repository first.",
   public_repo: PUBLIC_REPO_MESSAGE,
   fix_not_found: "This fix no longer exists.",
@@ -36,13 +34,12 @@ export const HANDOFF_ERROR_MESSAGES: Record<HandoffError | "forbidden" | "failed
   failed: "GitHub did not open the issue. Try again in a minute.",
 };
 
-/** The button's state, or null when the flag is off (no button). */
+/** The button's state. */
 export async function loadHandoffButtonState(
   projectId: string,
   fixId: string,
   deps: HandoffButtonDeps,
-): Promise<HandoffButtonState | null> {
-  if (!(await deps.flagEnabled())) return null;
+): Promise<HandoffButtonState> {
   const settingsHref = repositorySettingsPath(projectId);
   const link = await deps.getRepoLink(projectId);
   if (!link) return { linked: false, settingsHref, issueUrl: null };

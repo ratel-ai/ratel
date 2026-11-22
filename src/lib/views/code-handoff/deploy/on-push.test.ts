@@ -26,7 +26,7 @@ const LINK: RepoLinkRow = {
 };
 
 /** An in-memory commit table keyed by (link, sha), as the unique index is. */
-function harness(options: { flagOff?: boolean } = {}) {
+function harness() {
   const rows = new Map<string, NewRepoCommit & { repoLinkId: string }>();
   const pushDeps: PushDeps = {
     listRepoLinksByRepo: async (repoId) => (repoId === LINK.repoId ? [LINK] : []),
@@ -47,7 +47,6 @@ function harness(options: { flagOff?: boolean } = {}) {
   };
   const deps: GitHubWebhookDeps = {
     webhookSecret: () => SECRET,
-    flagEnabledForProject: async () => !options.flagOff,
     listRepoLinksByInstallation: async () => [],
     deleteRepoLinks: async () => 0,
   };
@@ -150,13 +149,6 @@ test("a later push continues the sequence", async () => {
     rows().map((row) => row.seq),
     [1, 2, 3, 4],
   );
-});
-
-test("flag off: nothing stored", async () => {
-  const { handler, rows } = harness({ flagOff: true });
-  const response = await handler(delivery(pushPayload()));
-  assert.deepEqual(await response.json(), { removed: 0, stored: 0 });
-  assert.deepEqual(rows(), []);
 });
 
 test("a push from another installation or an unlinked repo stores nothing", async () => {

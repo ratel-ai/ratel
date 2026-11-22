@@ -17,7 +17,6 @@ function deps(overrides: Partial<LinkServiceDeps> = {}): LinkServiceDeps {
     secret: SECRET,
     github,
     projectAccess: async () => ({ organizationId: "org" }),
-    flagEnabled: async () => true,
     isRestricted: async () => false,
     getRepoLink: async () => null,
     linkRepo: async () => {

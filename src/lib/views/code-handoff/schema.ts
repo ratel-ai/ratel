@@ -13,7 +13,7 @@ import {
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * Code handoff (RC-862, switch `FF_CODE_HANDOFF`): the one GitHub repo a
+ * Code handoff (RC-862): the one GitHub repo a
  * project is linked to through the Ratel GitHub App. One link per project.
  */
 export const repoLinks = pgTable(

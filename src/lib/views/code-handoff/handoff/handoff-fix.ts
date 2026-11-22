@@ -7,8 +7,7 @@ import type { HandoffTarget } from "./target";
 
 /**
  * Hand a fix off to a coding agent (RC-918): the one action of code handoff,
- * from Fixes and from MCP (`handoff_fix`). Behind `FF_CODE_HANDOFF`. It
- * needs a linked repo. A fix is handed off once per target: a second call
+ * from Fixes and from MCP (`handoff_fix`). It needs a linked repo. A fix is handed off once per target: a second call
  * returns the first issue, and the unique index on `fix_handoffs` settles a
  * race. `fix_handed_off` is emitted once per new handoff. The brief holds
  * trace data, so the repo must be private: visibility is read live at each
@@ -16,7 +15,7 @@ import type { HandoffTarget } from "./target";
  */
 
 export type HandoffSurface = "fixes" | "mcp";
-export type HandoffError = "flag_off" | "no_repo_linked" | "public_repo" | "fix_not_found";
+export type HandoffError = "no_repo_linked" | "public_repo" | "fix_not_found";
 export type HandoffResult =
   | { ok: true; fixId: string; url: string; externalId: string; target: string; created: boolean }
   | { ok: false; error: HandoffError };
@@ -36,7 +35,6 @@ export interface HandoffFixInput {
 }
 
 export interface HandoffFixDeps {
-  flagEnabled: (projectId: string) => Promise<boolean>;
   getRepoLink: (projectId: string) => Promise<RepoLinkRow | null>;
   /** The linked repo as GitHub sees it now, or null when the installation cannot read it. */
   getRepo: (installationId: number, repo: RepoRef) => Promise<GitHubRepo | null>;
@@ -61,7 +59,6 @@ export async function handoffFix(
   deps: HandoffFixDeps,
 ): Promise<HandoffResult> {
   const { projectId } = input;
-  if (!(await deps.flagEnabled(projectId))) return { ok: false, error: "flag_off" };
   const link = await deps.getRepoLink(projectId);
   if (!link) return { ok: false, error: "no_repo_linked" };
   const target = deps.target.id;

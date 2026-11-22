@@ -3,7 +3,6 @@ import { listRepoLinksByRepo } from "../store";
 import type {
   GitHubEventHandler,
   GitHubEventResult,
-  GitHubWebhookDeps,
   GitHubWebhookPayload,
 } from "../webhook-handler";
 import { type DeployResult, recordDeploy } from "./deployed";
@@ -12,7 +11,7 @@ import { defaultRecordDeployDeps } from "./wiring";
 /**
  * The `deployment_status` webhook (RC-920): a successful deployment of a sha
  * of a linked repo ships the fixes its commits name. Any environment counts
- * in this version. `FF_CODE_HANDOFF` is decided per link's project.
+ * in this version.
  */
 
 export interface DeploymentStatusDeps {
@@ -36,10 +35,7 @@ export const handleDeploymentStatus: GitHubEventHandler =
   createDeploymentStatusHandler(defaultDeps);
 
 export function createDeploymentStatusHandler(own: DeploymentStatusDeps): GitHubEventHandler {
-  return async function onDeploymentStatus(
-    raw: GitHubWebhookPayload,
-    deps: GitHubWebhookDeps,
-  ): Promise<GitHubEventResult> {
+  return async function onDeploymentStatus(raw: GitHubWebhookPayload): Promise<GitHubEventResult> {
     const payload = raw as DeploymentStatusPayload;
     const repoId = payload.repository?.id;
     const installationId = payload.installation?.id;
@@ -53,7 +49,6 @@ export function createDeploymentStatusHandler(own: DeploymentStatusDeps): GitHub
     );
     let shipped = 0;
     for (const link of links) {
-      if (!(await deps.flagEnabledForProject(link.projectId))) continue;
       shipped += (await own.recordDeploy(link, sha)).shipped;
     }
     return { removed: 0, shipped };

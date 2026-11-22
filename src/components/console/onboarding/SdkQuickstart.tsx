@@ -43,7 +43,7 @@ export function SdkQuickstart({
   maxHeight?: number | string;
   /** Include the content-capture switch in the TypeScript snippet. */
   captureContent?: boolean;
-  /** Ask for `service.version` = the deployed commit sha (`FF_CODE_HANDOFF`, decided on the server). */
+  /** Ask for `service.version` = the deployed commit sha, for the deploy watch. */
   deployVersion?: boolean;
   className?: string;
 }) {

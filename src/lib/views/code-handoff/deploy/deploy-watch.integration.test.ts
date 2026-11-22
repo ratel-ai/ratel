@@ -82,7 +82,6 @@ async function setup() {
   const webhook = createGitHubWebhookHandler(
     {
       webhookSecret: () => SECRET,
-      flagEnabledForProject: async () => true,
       listRepoLinksByInstallation: async () => [],
       deleteRepoLinks: async () => 0,
     },
@@ -156,7 +155,6 @@ async function setup() {
   const step = () =>
     detectDeploysByVersion({
       listLinksAwaitingDeploy: () => listLinksAwaitingDeploy(store),
-      flagEnabledForProject: async () => true,
       listPendingCommits: (repoLinkId) =>
         listUndeployedTaggedCommits(repoLinkId, Number.MAX_SAFE_INTEGER, store),
       readMatchingServiceVersions: (projectId, candidates, since) =>

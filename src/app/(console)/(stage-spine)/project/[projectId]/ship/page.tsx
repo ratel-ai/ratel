@@ -81,7 +81,7 @@ export default async function ShipPage({
             );
           },
         }),
-        commits: await shipmentCommitsFor(organization, project.id, opened.ref.id),
+        commits: await shipmentCommitsFor(project.id, opened.ref.id),
       }
     : null;
   const fixes = fixHref(project.id);

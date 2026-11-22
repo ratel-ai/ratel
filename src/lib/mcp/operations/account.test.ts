@@ -293,7 +293,6 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["FF_SANDBOXES", false],
       ["FF_PIVOTS", false],
       ["FF_CUSTOM_DASHBOARDS", false],
-      ["FF_CODE_HANDOFF", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -307,7 +306,6 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["FF_SANDBOXES", subject],
     ["FF_PIVOTS", subject],
     ["FF_CUSTOM_DASHBOARDS", subject],
-    ["FF_CODE_HANDOFF", subject],
   ]);
 });
 

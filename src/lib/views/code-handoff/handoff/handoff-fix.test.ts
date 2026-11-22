@@ -40,7 +40,6 @@ function harness(
   const indexRequests: string[] = [];
   const model = buildFixes(fixesInput());
   const deps: HandoffFixDeps = {
-    flagEnabled: async () => true,
     getRepoLink: async () => LINK,
     getRepo: (installationId, ref) => github.getRepo(installationId, ref),
     getHandoff: async (projectId, fixId, target) =>
@@ -164,23 +163,6 @@ test("a repo the installation can no longer read is refused with public_repo", a
     ok: false,
     error: "public_repo",
   });
-  assert.equal(h.github.issues.length, 0);
-});
-
-test("with the flag off the handoff refuses before any read", async () => {
-  let read = false;
-  const h = harness({
-    flagEnabled: async () => false,
-    getRepoLink: async () => {
-      read = true;
-      return LINK;
-    },
-  });
-  assert.deepEqual(await handoffFix(input("craft:c-merge"), h.deps), {
-    ok: false,
-    error: "flag_off",
-  });
-  assert.equal(read, false);
   assert.equal(h.github.issues.length, 0);
 });
 

@@ -4,7 +4,6 @@ import type { SessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
 import { type GitHubAppConfig, readGitHubAppConfig } from "./config";
-import { codeHandoffEnabledFor } from "./gate";
 import { createInstallationTokens, type InstallationTokens } from "./github/app-auth";
 import { createGitHubClient } from "./github/client";
 import type { LinkServiceDeps } from "./link-service";
@@ -14,12 +13,11 @@ import { getRepoLink, linkRepo, unlinkRepo } from "./store";
 /**
  * The real dependencies of the link service for one signed-in person: the
  * GitHub client from the App's settings, the person's project access, the
- * switch in the project's organization, the store and analytics.
+ * store and analytics.
  *
  * Owned (ADR-0030): the project scope is the console's (the session's membership, so one
- * argument), and the switch is `FF_CODE_HANDOFF` for the person in the project's organization.
- * The GitHub App's settings come from the environment (`config.ts`): a self-hoster registers
- * their own App.
+ * argument). The GitHub App's settings come from the environment (`config.ts`): a self-hoster
+ * registers their own App.
  */
 
 const logger = getLogger("code-handoff/link");
@@ -33,10 +31,6 @@ export function linkServiceDepsFor(session: SessionContext): LinkServiceDeps {
     projectAccess: async (projectId) => {
       const scope = await findProjectScope(projectId);
       return scope ? { organizationId: scope.organization.id } : null;
-    },
-    flagEnabled: async (projectId) => {
-      const scope = await findProjectScope(projectId);
-      return scope ? codeHandoffEnabledFor(scope.organization, {}, session.user.externalId) : false;
     },
     isRestricted: isRestrictedBySupportSession,
     getRepoLink: (projectId) => getRepoLink(projectId),

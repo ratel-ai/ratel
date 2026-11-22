@@ -1,6 +1,5 @@
 import { getLogger } from "@/lib/platform/logger";
 import type { RepoCommitRow, RepoLinkRow } from "@/lib/views/code-handoff/schema";
-import { codeHandoffEnabledForActor } from "../gate";
 import {
   listLinksAwaitingDeploy,
   listUndeployedTaggedCommits,
@@ -23,12 +22,10 @@ import { defaultRecordDeployDeps } from "./wiring";
  * prefix of two commits matches nothing.
  *
  * Usually no link waits for a deploy, and the step stops after one read.
- * `FF_CODE_HANDOFF` is decided per link's project.
  */
 
 export interface DetectByVersionDeps {
   listLinksAwaitingDeploy: () => Promise<RepoLinkRow[]>;
-  flagEnabledForProject: (projectId: string) => Promise<boolean>;
   /** The link's commits that name fixes and are not deployed. */
   listPendingCommits: (repoLinkId: string) => Promise<RepoCommitRow[]>;
   /** The span versions since `since` that are one of `candidates`. */
@@ -42,7 +39,7 @@ export interface DetectByVersionDeps {
 }
 
 export interface DetectByVersionResult {
-  /** Links checked (flag on, waiting for a deploy). */
+  /** Links checked (waiting for a deploy). */
   links: number;
   shipped: number;
 }
@@ -53,14 +50,10 @@ export const VERSION_LOOKBACK_MAX_MS = 3 * 24 * 60 * 60_000;
 /** The shortest `service.version` that may name a commit. */
 export const SHA_PREFIX_MIN = 7;
 
-/** The flag decision of the drain step: no person, so only organization targeting applies. */
-export const DEPLOY_WATCH_ACTOR = "system:deploy-watch";
-
 const logger = getLogger("code-handoff/deploy/version");
 
 const defaultDeps: DetectByVersionDeps = {
   listLinksAwaitingDeploy: () => listLinksAwaitingDeploy(),
-  flagEnabledForProject: (projectId) => codeHandoffEnabledForActor(projectId, DEPLOY_WATCH_ACTOR),
   listPendingCommits: (repoLinkId) =>
     listUndeployedTaggedCommits(repoLinkId, Number.MAX_SAFE_INTEGER),
   readMatchingServiceVersions: (projectId, candidates, since) =>
@@ -76,7 +69,6 @@ export async function detectDeploysByVersion(
   const links = await deps.listLinksAwaitingDeploy();
   if (links.length === 0) return result;
   for (const link of links) {
-    if (!(await deps.flagEnabledForProject(link.projectId))) continue;
     result.links++;
     try {
       const pending = await deps.listPendingCommits(link.id);

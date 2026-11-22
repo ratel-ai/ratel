@@ -10,8 +10,7 @@ import {
 /**
  * Linking a project to a GitHub repo (RC-914, RC-958): Install, GitHub's
  * redirect back, the repo picker, Link and Unlink. Each step checks, before
- * any write, that the signed-in person can reach the project and that
- * `FF_CODE_HANDOFF` is on for it. Install, Link and Unlink are refused in
+ * any write, that the signed-in person can reach the project. Install, Link and Unlink are refused in
  * an admin support session: a link outlives the session.
  *
  * Nothing on GitHub's redirect is trusted as it stands: anyone can put any
@@ -34,7 +33,6 @@ export interface LinkServiceDeps {
   github: GitHubPort;
   /** The project's organization when the signed-in person can reach it, else null. */
   projectAccess: (projectId: string) => Promise<{ organizationId: string } | null>;
-  flagEnabled: (projectId: string) => Promise<boolean>;
   /** True in an admin support session, which must not leave a link behind. */
   isRestricted: () => Promise<boolean>;
   getRepoLink: (projectId: string) => Promise<RepoLinkRow | null>;
@@ -53,7 +51,6 @@ export interface LinkServiceDeps {
 export type LinkError =
   | "not_configured"
   | "forbidden"
-  | "flag_off"
   | "support_session"
   | "invalid_state"
   | "wrong_user"
@@ -197,7 +194,7 @@ export async function unlinkProjectRepo(
   return { ok: true, removed };
 }
 
-/** Access first, then the flag, then (unless asked not to) the App's configuration. */
+/** Access first, then (unless asked not to) the App's configuration. */
 async function checkGate(
   projectId: string,
   deps: LinkServiceDeps,
@@ -205,7 +202,6 @@ async function checkGate(
 ): Promise<{ ok: true; secret: string; organizationId: string } | { ok: false; error: LinkError }> {
   const access = await deps.projectAccess(projectId);
   if (!access) return { ok: false, error: "forbidden" };
-  if (!(await deps.flagEnabled(projectId))) return { ok: false, error: "flag_off" };
   if (options.configured && !deps.secret) return { ok: false, error: "not_configured" };
   return { ok: true, secret: deps.secret ?? "", organizationId: access.organizationId };
 }

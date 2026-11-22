@@ -2,7 +2,6 @@ import { getLogger } from "@/lib/platform/logger";
 import { readGitHubAppConfig } from "./config";
 import { handleDeploymentStatus } from "./deploy/on-deployment-status";
 import { handlePush } from "./deploy/on-push";
-import { codeHandoffEnabledForActor } from "./gate";
 import { verifyWebhookSignature } from "./github/webhook-signature";
 import type { RepoLinkRow } from "./schema";
 import { deleteRepoLinks, listRepoLinksByInstallation } from "./store";
@@ -14,16 +13,14 @@ import { deleteRepoLinks, listRepoLinksByInstallation } from "./store";
  * The signature is checked on the raw body before anything is parsed. Then
  * `X-GitHub-Event` picks a handler from `GITHUB_EVENT_HANDLERS`: the seam the
  * deploy milestone extends. An event without a handler answers 200 and writes
- * nothing. `FF_CODE_HANDOFF` is decided per link's project: a link whose
- * project has it off is left as it is.
+ * nothing.
  *
- * Owned (ADR-0030): a comment named a Cloud vendor's webhook; the switch is the core's.
+ * Owned (ADR-0030): a comment named a Cloud vendor's webhook.
  */
 
 export interface GitHubWebhookDeps {
   /** The webhook secret, or null when the App is not configured. */
   webhookSecret: () => string | null;
-  flagEnabledForProject: (projectId: string) => Promise<boolean>;
   listRepoLinksByInstallation: (installationId: number) => Promise<RepoLinkRow[]>;
   deleteRepoLinks: (linkIds: string[]) => Promise<number>;
 }
@@ -48,9 +45,6 @@ export interface GitHubWebhookPayload {
   repositories_removed?: { id?: number }[];
 }
 
-/** The flag decision of a webhook: no person, so only organization targeting applies. */
-export const WEBHOOK_ACTOR = "system:github-webhook";
-
 const logger = getLogger("code-handoff/webhook");
 
 /** One handler per `X-GitHub-Event`. */
@@ -63,7 +57,6 @@ export const GITHUB_EVENT_HANDLERS: Record<string, GitHubEventHandler> = {
 
 const defaultDeps: GitHubWebhookDeps = {
   webhookSecret: () => readGitHubAppConfig()?.webhookSecret ?? null,
-  flagEnabledForProject: (projectId) => codeHandoffEnabledForActor(projectId, WEBHOOK_ACTOR),
   listRepoLinksByInstallation: (installationId) => listRepoLinksByInstallation(installationId),
   deleteRepoLinks: (linkIds) => deleteRepoLinks(linkIds),
 };
@@ -109,7 +102,7 @@ async function handleInstallation(
   const installationId = payload.installation?.id;
   if (payload.action !== "deleted" || !Number.isSafeInteger(installationId)) return { removed: 0 };
   const links = await deps.listRepoLinksByInstallation(installationId as number);
-  return { removed: await removeFlagged(links, deps) };
+  return { removed: await deps.deleteRepoLinks(links.map((link) => link.id)) };
 }
 
 /** Repos left the installation's access: their links go. */
@@ -123,18 +116,8 @@ async function handleInstallationRepositories(
   if (removedRepoIds.size === 0) return { removed: 0 };
   const links = await deps.listRepoLinksByInstallation(installationId as number);
   return {
-    removed: await removeFlagged(
-      links.filter((link) => removedRepoIds.has(link.repoId)),
-      deps,
+    removed: await deps.deleteRepoLinks(
+      links.filter((link) => removedRepoIds.has(link.repoId)).map((link) => link.id),
     ),
   };
-}
-
-/** Delete the links whose project has the flag on. */
-async function removeFlagged(links: RepoLinkRow[], deps: GitHubWebhookDeps): Promise<number> {
-  const flagged: string[] = [];
-  for (const link of links) {
-    if (await deps.flagEnabledForProject(link.projectId)) flagged.push(link.id);
-  }
-  return deps.deleteRepoLinks(flagged);
 }

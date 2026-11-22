@@ -2,14 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { shipmentCommitsFor } from "@/components/console/code-handoff/deploy/opened-shipment-commits";
-import type { Organization } from "@/lib/platform/organizations";
 import { shipmentCommitsView } from "@/lib/views/code-handoff/deploy/shipment-commits";
 import type { RepoCommitRow } from "@/lib/views/code-handoff/schema";
 
 /** Ship's commits next to a GitHub shipment (RC-921). */
 
 const SHIPMENT = "33333333-3333-4333-8333-333333333333";
-const ORG = { id: "org-1" } as Organization;
 
 function commit(
   seq: number,
@@ -43,10 +41,7 @@ const VIEW = shipmentCommitsView(
 
 test("a GitHub shipment shows its commits, newest first, each linked to github.com, the carrier marked", async () => {
   const html = renderToStaticMarkup(
-    await shipmentCommitsFor(ORG, "p1", SHIPMENT, {
-      flagEnabled: async () => true,
-      load: async () => VIEW,
-    }),
+    await shipmentCommitsFor("p1", SHIPMENT, { load: async () => VIEW }),
   );
   assert.match(
     html,
@@ -61,24 +56,8 @@ test("a GitHub shipment shows its commits, newest first, each linked to github.c
   assert.match(html, /href="https:\/\/github\.com\/acme\/agent"/);
 });
 
-test("flag off: nothing is read and nothing renders", async () => {
-  let loads = 0;
-  const node = await shipmentCommitsFor(ORG, "p1", SHIPMENT, {
-    flagEnabled: async () => false,
-    load: async () => {
-      loads++;
-      return VIEW;
-    },
-  });
-  assert.equal(node, null);
-  assert.equal(loads, 0);
-});
-
 test("a manual shipment (no commit carried it) renders nothing extra", async () => {
-  const node = await shipmentCommitsFor(ORG, "p1", SHIPMENT, {
-    flagEnabled: async () => true,
-    load: async () => null,
-  });
+  const node = await shipmentCommitsFor("p1", SHIPMENT, { load: async () => null });
   assert.equal(node, null);
 });
 

@@ -10,8 +10,8 @@ import { linkServiceDepsFor } from "@/lib/views/code-handoff/wiring";
 
 /**
  * Link and Unlink on Project settings › Repository (RC-914). Every input is
- * checked again by the link service: the person's access to the project, the
- * flag and the grant from GitHub's setup redirect.
+ * checked again by the link service: the person's access to the project and
+ * the grant from GitHub's setup redirect.
  */
 
 export type RepoActionResult = { ok: true } | { ok: false; error: string };

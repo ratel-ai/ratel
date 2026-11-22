@@ -14,7 +14,7 @@ import { linkServiceDepsFor } from "@/lib/views/code-handoff/wiring";
 
 /**
  * GET /api/github/install?project=<id>[&mode=authorize] - the Install link of
- * Project settings › Repository (RC-958). Checks access and the flag, puts the
+ * Project settings › Repository (RC-958). Checks access, puts the
  * signed setup state in an httpOnly cookie (the setup route requires GitHub's
  * `state` to equal it), then sends the person to GitHub: the App's install page, or
  * for an App already installed, its user authorization alone.

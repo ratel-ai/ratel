@@ -5,7 +5,6 @@ import { listRepoLinksByRepo, type NewRepoCommit, recordRepoCommits } from "../s
 import type {
   GitHubEventHandler,
   GitHubEventResult,
-  GitHubWebhookDeps,
   GitHubWebhookPayload,
 } from "../webhook-handler";
 import { nextCommitSeq } from "./commits";
@@ -17,7 +16,6 @@ import { nextCommitSeq } from "./commits";
  *
  * Only the link's default branch counts. A redelivered push changes nothing:
  * a commit already recorded for the link keeps its row and its `seq`.
- * `FF_CODE_HANDOFF` is decided per link's project at dispatch.
  */
 
 export interface PushDeps {
@@ -55,10 +53,7 @@ const defaultPushDeps: PushDeps = {
 export const handlePush: GitHubEventHandler = createPushHandler(defaultPushDeps);
 
 export function createPushHandler(pushDeps: PushDeps): GitHubEventHandler {
-  return async function onPush(
-    raw: GitHubWebhookPayload,
-    deps: GitHubWebhookDeps,
-  ): Promise<GitHubEventResult> {
+  return async function onPush(raw: GitHubWebhookPayload): Promise<GitHubEventResult> {
     const payload = raw as PushPayload;
     const repoId = payload.repository?.id;
     const installationId = payload.installation?.id;
@@ -77,7 +72,6 @@ export function createPushHandler(pushDeps: PushDeps): GitHubEventHandler {
     const commits = Array.isArray(payload.commits) ? payload.commits : [];
     let stored = 0;
     for (const link of links) {
-      if (!(await deps.flagEnabledForProject(link.projectId))) continue;
       logIncomplete(payload, commits, link);
       stored += await pushDeps.recordRepoCommits(
         link.id,

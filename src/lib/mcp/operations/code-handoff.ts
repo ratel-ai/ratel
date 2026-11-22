@@ -1,10 +1,9 @@
 import { z } from "zod";
-import { forbidden, invalidParams, notFound } from "@/lib/mcp/errors";
+import { invalidParams, notFound } from "@/lib/mcp/errors";
 import { mcpActor, mcpEventContext } from "@/lib/mcp/operations/health";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
-import { codeHandoffEnabledForActor } from "@/lib/views/code-handoff/gate";
 import { type HandoffFixDeps, handoffFix } from "@/lib/views/code-handoff/handoff/handoff-fix";
 import { PUBLIC_REPO_MESSAGE } from "@/lib/views/code-handoff/handoff/view";
 import { handoffFixDeps } from "@/lib/views/code-handoff/handoff/wiring";
@@ -12,28 +11,22 @@ import { handoffFixDeps } from "@/lib/views/code-handoff/handoff/wiring";
 /**
  * Code handoff over MCP (RC-918): `handoff_fix` hands a fix to Claude Code
  * through a GitHub issue in the project's linked repo, as Hand off does on a
- * fix's page. Behind `FF_CODE_HANDOFF`, decided for the bearer as the
- * other gated tools do (`codeHandoffEnabledForActor`).
+ * fix's page.
  */
 
 export interface CodeHandoffOperationDeps {
-  /** The handoff's dependencies for this project and bearer; null when the project has no organization. */
-  handoffDeps: (projectId: string, actor: string) => Promise<HandoffFixDeps | null>;
+  /** The handoff's dependencies for this project; null when the project has no organization. */
+  handoffDeps: (projectId: string) => Promise<HandoffFixDeps | null>;
 }
 
 const defaultDeps: CodeHandoffOperationDeps = {
-  handoffDeps: async (projectId, actor) => {
+  handoffDeps: async (projectId) => {
     const organization = await getOrganizationByProjectId(projectId);
     if (!organization) return null;
-    return handoffFixDeps({
-      organization,
-      flagEnabled: (id) => codeHandoffEnabledForActor(id, actor),
-    });
+    return handoffFixDeps({ organization });
   },
 };
 
-const FLAG_OFF =
-  "Handing off fixes is off for this project (FF_CODE_HANDOFF). get_flag_status lists what is on.";
 const NO_REPO =
   "No GitHub repository is linked to this project. Link one in Project settings › Repository, then call handoff_fix again.";
 
@@ -69,7 +62,7 @@ export function codeHandoffOperations(
       }),
       async execute(ctx, params) {
         const actor = mcpActor(ctx.auth, ctx.projectId);
-        const handoffDeps = await deps.handoffDeps(ctx.projectId, actor);
+        const handoffDeps = await deps.handoffDeps(ctx.projectId);
         if (!handoffDeps) throw notFound("project");
         const result = await handoffFix(
           {
@@ -82,7 +75,6 @@ export function codeHandoffOperations(
           handoffDeps,
         );
         if (!result.ok) {
-          if (result.error === "flag_off") throw forbidden(FLAG_OFF);
           if (result.error === "no_repo_linked") throw invalidParams(NO_REPO);
           if (result.error === "public_repo") throw invalidParams(PUBLIC_REPO_MESSAGE);
           throw notFound("fix");

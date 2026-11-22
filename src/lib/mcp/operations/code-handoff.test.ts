@@ -14,7 +14,6 @@ function fakeDeps(over: Partial<HandoffFixDeps> = {}) {
   const issues: string[] = [];
   const events: Record<string, unknown>[] = [];
   const deps: HandoffFixDeps = {
-    flagEnabled: async () => true,
     getRepoLink: async () => LINK,
     getRepo: async () => ({
       id: 1,
@@ -78,15 +77,6 @@ test("handoff_fix opens one issue, then returns it again without opening another
   assert.equal(fake.issues.length, 1);
   assert.equal(fake.events.length, 1);
   assert.equal(fake.events[0]!.surface, "mcp");
-});
-
-test("with the flag off handoff_fix answers forbidden", async () => {
-  const fake = fakeDeps({ flagEnabled: async () => false });
-  await assert.rejects(
-    tool(fake.deps).execute(ctx, params),
-    (error: unknown) => error instanceof McpOperationError && error.code === "forbidden",
-  );
-  assert.equal(fake.issues.length, 0);
 });
 
 test("without a linked repo handoff_fix answers invalid_params", async () => {

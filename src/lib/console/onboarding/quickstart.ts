@@ -51,8 +51,8 @@ export interface QuickstartTarget {
   captureContent?: boolean;
   /**
    * Tell the reader to set `service.version` to the commit sha of the deploy,
-   * so the deploy watch (`FF_CODE_HANDOFF`, RC-921) sees which commit is
-   * live. Off by default, and when off the snippet is unchanged.
+   * so the deploy watch (RC-921) sees which commit is live. Off by default,
+   * and when off the snippet is unchanged.
    */
   deployVersion?: boolean;
 }

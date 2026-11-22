@@ -16,6 +16,7 @@ test("project settings tabs are URLs, with General matching its path exactly", (
       ["General", "/project/p%201/settings", true],
       ["API keys", "/project/p%201/settings/api-keys", false],
       ["Developer", "/project/p%201/settings/developer", false],
+      ["Repository", "/project/p%201/settings/repository", false],
       ["Danger zone", "/project/p%201/settings/danger", false],
     ],
   );
@@ -30,27 +31,13 @@ test("project settings show Pivots after API keys only with cloud-pivots on (RC-
       ["API keys", "/project/p1/settings/api-keys"],
       ["Pivots", "/project/p1/settings/pivots"],
       ["Developer", "/project/p1/settings/developer"],
+      ["Repository", "/project/p1/settings/repository"],
       ["Danger zone", "/project/p1/settings/danger"],
     ],
   );
   assert.equal(
     projectSettingsTabs("p1", { pivots: false }).some((tab) => tab.label === "Pivots"),
     false,
-  );
-});
-
-test("the Repository tab shows only when code handoff is on", () => {
-  assert.equal(
-    projectSettingsTabs("p1", { repository: false }).some((tab) => tab.label === "Repository"),
-    false,
-  );
-  assert.deepEqual(
-    projectSettingsTabs("p1", { repository: true }).map((tab) => tab.label),
-    ["General", "API keys", "Developer", "Repository", "Danger zone"],
-  );
-  assert.equal(
-    projectSettingsTabs("p1", { repository: true })[3].href,
-    "/project/p1/settings/repository",
   );
 });
 

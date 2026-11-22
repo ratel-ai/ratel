@@ -43,7 +43,6 @@ export function setupRedirectPath(result: SetupResult): string {
 export const LINK_ERROR_MESSAGES: Record<LinkError, string> = {
   not_configured: "The GitHub App is not configured for this deployment.",
   forbidden: "You do not have access to this project.",
-  flag_off: "Repository links are not enabled for this organization.",
   support_session: SUPPORT_SESSION_RESTRICTED_MESSAGE,
   invalid_state: "The install link expired or was not made for you. Start again from Install.",
   wrong_user: "The install link was made for another person. Start again from Install.",

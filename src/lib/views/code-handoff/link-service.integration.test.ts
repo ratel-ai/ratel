@@ -76,7 +76,6 @@ async function setup(): Promise<Harness> {
     secret: SECRET,
     github,
     projectAccess: async () => ({ organizationId: ORG }),
-    flagEnabled: async () => true,
     isRestricted: async () => false,
     getRepoLink: (projectId) => getRepoLink(projectId, db),
     linkRepo: (link) => linkRepo(link, db),
@@ -506,19 +505,9 @@ test("a support session cannot install, link or unlink: the link outlives the se
   }
 });
 
-test("with the flag off, or the App (client id or secret included) not configured, nothing is written", async () => {
+test("with the App (client id or secret included) not configured, nothing is written", async () => {
   const h = await setup();
   try {
-    const grant = await installAndReturn(h);
-    const off = h.deps({ flagEnabled: async () => false });
-    assert.deepEqual(await startInstall({ projectId: P1, externalId: USER }, off), {
-      ok: false,
-      error: "flag_off",
-    });
-    assert.deepEqual(
-      await linkProjectRepo({ projectId: P1, externalId: USER }, { grant, repoId: 501 }, off),
-      { ok: false, error: "flag_off" },
-    );
     const notConfigured = h.deps({ secret: null });
     assert.deepEqual(await startInstall({ projectId: P1, externalId: USER }, notConfigured), {
       ok: false,

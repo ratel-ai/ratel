@@ -5,8 +5,8 @@ import { signWebhookBody } from "./github/webhook-signature";
 import { createGitHubWebhookHandler, type GitHubWebhookDeps } from "./webhook-handler";
 
 const SECRET = "test-webhook-secret";
-const FLAGGED = "11111111-1111-4111-8111-111111111111";
-const UNFLAGGED = "11111111-1111-4111-8111-111111111112";
+const P1 = "11111111-1111-4111-8111-111111111111";
+const P2 = "11111111-1111-4111-8111-111111111112";
 
 function link(id: string, projectId: string, installationId: number, repoId: number): RepoLinkRow {
   return {
@@ -23,16 +23,11 @@ function link(id: string, projectId: string, installationId: number, repoId: num
 }
 
 /** An in-memory link table; every write is recorded. */
-function harness(options: { secret?: string | null; flagOff?: boolean } = {}) {
-  let links = [
-    link("l1", FLAGGED, 9, 501),
-    link("l2", UNFLAGGED, 9, 502),
-    link("l3", FLAGGED, 10, 503),
-  ];
+function harness(options: { secret?: string | null } = {}) {
+  let links = [link("l1", P1, 9, 501), link("l2", P2, 9, 502), link("l3", P1, 10, 503)];
   const writes: string[][] = [];
   const deps: GitHubWebhookDeps = {
     webhookSecret: () => (options.secret === undefined ? SECRET : options.secret),
-    flagEnabledForProject: async (projectId) => !options.flagOff && projectId === FLAGGED,
     listRepoLinksByInstallation: async (installationId) =>
       links.filter((row) => row.installationId === installationId),
     deleteRepoLinks: async (ids) => {
@@ -68,14 +63,14 @@ test("a bad or missing signature gets 401 and writes nothing", async () => {
   assert.deepEqual(writes, []);
 });
 
-test("signed installation deleted removes the installation's links where the flag is on", async () => {
+test("signed installation deleted removes the installation's links", async () => {
   const { handler, links } = harness();
   const response = await handler(
     delivery("installation", { action: "deleted", installation: { id: 9 } }),
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { removed: 1 });
-  assert.deepEqual(links(), ["l2", "l3"]);
+  assert.deepEqual(await response.json(), { removed: 2 });
+  assert.deepEqual(links(), ["l3"]);
 });
 
 test("signed installation_repositories removed removes only those repos' links", async () => {
@@ -102,22 +97,6 @@ test("an unknown event, or another action, answers 200 and writes nothing", asyn
     200,
   );
   assert.deepEqual(writes.flat(), []);
-});
-
-test("with the flag off the handler writes nothing", async () => {
-  const { handler, links } = harness({ flagOff: true });
-  const deleted = await handler(
-    delivery("installation", { action: "deleted", installation: { id: 9 } }),
-  );
-  assert.deepEqual(await deleted.json(), { removed: 0 });
-  await handler(
-    delivery("installation_repositories", {
-      action: "removed",
-      installation: { id: 10 },
-      repositories_removed: [{ id: 503 }],
-    }),
-  );
-  assert.deepEqual(links(), ["l1", "l2", "l3"]);
 });
 
 test("without a configured secret the webhook answers 503 and writes nothing", async () => {

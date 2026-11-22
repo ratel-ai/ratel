@@ -32,11 +32,10 @@ const LINK: RepoLinkRow = {
   createdAt: new Date(0),
 };
 
-function webhook(options: { flagOff?: boolean } = {}) {
+function webhook() {
   const deploys: [string, string][] = [];
   const deps: GitHubWebhookDeps = {
     webhookSecret: () => SECRET,
-    flagEnabledForProject: async () => !options.flagOff,
     listRepoLinksByInstallation: async () => [],
     deleteRepoLinks: async () => 0,
   };
@@ -91,15 +90,6 @@ test("deployment_status with another state records nothing", async () => {
   assert.deepEqual(deploys, []);
 });
 
-test("deployment_status: flag off records nothing", async () => {
-  const { handler, deploys } = webhook({ flagOff: true });
-  assert.deepEqual(await (await handler(deploymentStatus("success"))).json(), {
-    removed: 0,
-    shipped: 0,
-  });
-  assert.deepEqual(deploys, []);
-});
-
 test("deployment_status from another installation records nothing", async () => {
   const { handler, deploys } = webhook();
   await handler(deploymentStatus("success", { installation: { id: 10 } }));
@@ -109,7 +99,7 @@ test("deployment_status from another installation records nothing", async () => 
 const PUSHED = new Date("2026-11-18T09:00:00Z");
 
 function versionStep(
-  options: { links?: RepoLinkRow[]; flagOff?: boolean; versions?: string[]; pushedAt?: Date } = {},
+  options: { links?: RepoLinkRow[]; versions?: string[]; pushedAt?: Date } = {},
 ) {
   const reads: { projectId: string; candidates: readonly string[]; since: Date }[] = [];
   const deploys: string[] = [];
@@ -119,7 +109,6 @@ function versionStep(
   ];
   const deps: DetectByVersionDeps = {
     listLinksAwaitingDeploy: async () => options.links ?? [LINK],
-    flagEnabledForProject: async () => !options.flagOff,
     listPendingCommits: async () => pending,
     readMatchingServiceVersions: async (projectId, candidates, since) => {
       reads.push({ projectId, candidates, since });
@@ -163,13 +152,6 @@ test("the version step reads at most VERSION_LOOKBACK_MAX_MS back, however old t
   const { deps, reads, now } = versionStep({ pushedAt: new Date("2026-01-01T00:00:00Z") });
   await detectDeploysByVersion(deps);
   assert.deepEqual(reads[0].since, new Date(now.getTime() - VERSION_LOOKBACK_MAX_MS));
-});
-
-test("the version step: flag off reads no span and records nothing", async () => {
-  const { deps, reads, deploys } = versionStep({ flagOff: true, versions: [SHA] });
-  assert.deepEqual(await detectDeploysByVersion(deps), { links: 0, shipped: 0 });
-  assert.deepEqual(reads, []);
-  assert.deepEqual(deploys, []);
 });
 
 test("shaCandidates lowercases and keeps each prefix once", () => {

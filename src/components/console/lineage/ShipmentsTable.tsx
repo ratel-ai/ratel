@@ -16,7 +16,7 @@ import { LineageSteps, SourceLink } from "./SourceLink";
 export interface OpenedShipment {
   id: string;
   trail: readonly LineageRef[];
-  /** The repo commits that carried it (`FF_CODE_HANDOFF`), rendered on the server. */
+  /** The repo commits that carried it, rendered on the server. */
   commits?: ReactNode;
 }
 

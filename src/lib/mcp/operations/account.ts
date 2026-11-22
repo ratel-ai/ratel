@@ -80,10 +80,6 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_CUSTOM_DASHBOARDS",
     note: "custom dashboards: the Dashboards pages under Overview (widgets over trace summaries, shared by link) and the MCP tools list_dashboards and get_dashboard",
   },
-  {
-    key: "FF_CODE_HANDOFF",
-    note: "code handoff: Settings > Repository (link a GitHub repo through the deployment's GitHub App) and the App's webhook",
-  },
 ];
 
 export interface AccountOperationDeps {
