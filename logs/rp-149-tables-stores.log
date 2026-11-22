@@ -1,0 +1,38 @@
+$ cd src && tsx --test lib/views/evals/tests/store.integration.test.ts lib/views/evals/tests/tables.integration.test.ts lib/views/scorers/adapters/store.integration.test.ts lib/views/scorers/domain/engine.test.ts
+# ratel 2e67857e 2026-11-22T12:02:26Z
+✔ creates an eval with its tasks and reads it back (2956.992625ms)
+✔ links tasks many-to-many and lists evals by task and status (481.67075ms)
+✔ records a run and its results, upserting a retried result (369.305625ms)
+✔ a simulation run needs a fix and a manual run refuses one (323.107916ms)
+✔ recent results come from completed runs only, newest first, capped per eval (574.236708ms)
+✔ prune clears transcripts older than 30 days and keeps the numbers (423.223333ms)
+✔ RC-318: prune clears each turn's message after 30 days, keeps the turn verdicts and numbers, and also prunes a result with turns but no transcript (417.36375ms)
+✔ deleting an eval removes its links and results (426.152084ms)
+✔ suite run settings: empty without a row, set, replaced, and kept per project (2960.567917ms)
+✔ nightly settings: one row per project, off by default, removed with the project (467.900667ms)
+✔ run scores: live and eval readings, a re-read replaces, daily rates skip skips (302.342167ms)
+✔ migration 0055 is a no-op on a database that already has the Evals tables (371.588583ms)
+✔ two scorers of one kind on a task, a suite scorer, and one eval's switch (2935.664666ms)
+✔ updates validate and bump the version only when the reading changes (408.764834ms)
+✔ check reads latency, cost and tokens (2.466875ms)
+✔ check reads per-step latency over every step (0.42875ms)
+✔ check reads tool called and not called (0.553166ms)
+✔ check matches tool arguments and results (0.992041ms)
+✔ check reads message text by substring and by pattern (7.053ms)
+✔ check skips an unknown value and reads exists (1.745ms)
+✔ expression evaluates JSONLogic over the run view (1.087958ms)
+✔ judge reads the whole transcript through its port (0.778208ms)
+✔ decision asks a closed-set question through its port (0.627708ms)
+✔ two scorers of one kind both score (0.452833ms)
+✔ applicableScorers adds suite scorers and applies the eval's switches (0.458875ms)
+✔ the view derives tool names, counts and how the run ended (0.282292ms)
+✔ parseDefinition rejects an invalid JSONLogic expression with a clear message (1.263667ms)
+✔ parseDefinition validates check, judge and decision configs (0.913625ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7551.584708

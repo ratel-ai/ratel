@@ -1,0 +1,531 @@
+▶ createComposition
+  ✔ assembles the OSS edition with the five ports (1.394166ms)
+  ✔ assembles the Cloud edition from the seam (0.249083ms)
+  ✔ hands the edition's UI loader over, and the open-source edition has none (0.1565ms)
+  ✔ hands the edition's connect over, and the open-source edition has none (0.179042ms)
+  ✔ hands the edition's MCP sign-in verifier over, and the open-source edition has none (0.102542ms)
+  ✔ throws when a port is missing or the edition key is unknown (0.614625ms)
+  ✔ adds no rail destination in either edition: Cloud's admin console is in the account menu (0.204375ms)
+  ✔ throws when cloud is requested but the seam is null (0.121916ms)
+  ✔ reports zero ee boundary violations on the real tree (643.342125ms)
+  ✔ lets every ee route stub and the proxy stub import ee, and nothing else (0.235458ms)
+✔ createComposition (647.565583ms)
+▶ registry root
+  ✔ merges core and port registrations, before steps first (0.308167ms)
+  ✔ the core modules landed so far register their jobs and steps in layer order (0.243667ms)
+  ✔ loading the registry adds the Evals reader to the eval gate's daily budget (0.970375ms)
+  ✔ loading the registry adds What-if's reader to the eval gate's daily budget (0.592542ms)
+  ✔ refuses a job kind or drain step registered twice (0.171583ms)
+✔ registry root (2.456708ms)
+✔ live job ids are the union of what registrations vouch for; a failed read vouches for none (0.171833ms)
+✔ before steps run, then the drain, then after steps; results land in the summary (2.035209ms)
+✔ retention-only steps are skipped, and reported as skipped, when retention is off (0.340875ms)
+✔ one failing step is recorded under its name and the tick stays ok (0.438291ms)
+✔ the heartbeat event always fires, flat numbers included, and a drain failure marks it not ok (0.365791ms)
+✔ the heartbeat carries upstream's per-area error lists; a step upstream did not isolate is under otherErrors (0.434917ms)
+✔ data retention is opt-in (0.116583ms)
+✔ a simulate_task_eval job asks in words, with only its allowed ids and settings (2.071708ms)
+✔ a label_workflows job asks in words, with only its allowed ids and settings (0.322917ms)
+✔ a assign_topics job asks in words, with only its allowed ids and settings (0.106834ms)
+✔ a match_quality_run job asks in words, with only its allowed ids and settings (0.346958ms)
+✔ a cluster_intents job asks in words, with only its allowed ids and settings (0.185208ms)
+✔ a draft_fix job asks in words, with only its allowed ids and settings (0.113583ms)
+✔ a what_if_step job asks in words, with only its allowed ids and settings (0.10025ms)
+✔ a run_eval_set job asks in words, with only its allowed ids and settings (0.067834ms)
+✔ a simulate_eval_set job asks in words, with only its allowed ids and settings (0.452625ms)
+✔ a payload key not on the kind's allowlist never reaches the ask (0.727208ms)
+✔ an allowed key whose value is free text, an object or too long is left out (0.289625ms)
+✔ a list of more than ten ids shows the first ten and how many more (0.217958ms)
+✔ a job whose payload is not an object asks by its words alone (0.117209ms)
+✔ a table entry is checked against its kind's payload: every key needs a decision (0.084542ms)
+✔ every kind's ask, with or without ids, reads back as its job kind (0.406416ms)
+✔ a stored run's old machine ask still reads as its job kind (0.136209ms)
+✔ an ask that is not a job's reads as no job kind (0.11875ms)
+✔ every kind has a tier and a budget, and an unknown kind waits with the sweeps (1.236ms)
+✔ flag off: every registered tool runs without forView and answers exactly as on main (1251.261084ms)
+✔ the Integrations page's tool count is the flag-off tools/list, as main's (208.470584ms)
+✔ the demo project does not count toward the project limit, as in the console (70.236791ms)
+✔ Enterprise limits say unlimited rather than serializing as null (9.599958ms)
+✔ plan and subscription state come from the same helpers as the Billing page (33.539834ms)
+✔ match quality not on the plan says so (5.841708ms)
+✔ without an edition's plans: no plan block, and every limit is unlimited (6.555375ms)
+✔ get_job_status refuses a job id that is not a UUID as the other id params do (3.277167ms)
+✔ get_flag_status reports each switch as the flags port decides it for this project and caller (4.708666ms)
+✔ get_flag_status reports MCP Apps as the real gate decides it for an OAuth connection (3.201292ms)
+✔ get_flag_status reports MCP Apps for a project key with that project, as the gate does (4.089625ms)
+✔ ids are unique, snake_case, and stable-looking (0.783917ms)
+✔ every operation is discoverable: title, description, known domain (0.248584ms)
+✔ project- and organization-scoped operations accept an explicit projectId (0.70525ms)
+✔ every params schema converts to JSON Schema for discovery (48.07375ms)
+✔ write operations are exactly those declaring mutates (0.688208ms)
+✔ read-only assembly drops every mutating operation (66.462959ms)
+✔ the operation contract matches the reviewed snapshot (21.837208ms)
+{"level":30,"time":1795346991454,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"0cc5ccba-e4d8-4c25-9018-a17aa9bf14f9","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-614: an agent creates a JSONLogic scorer, adds an eval by text, switches the scorer off on it, runs it and reads the result (6866.687167ms)
+{"level":30,"time":1795346992541,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"24df1731-92b4-4d77-ad01-2ea538177820","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-641: an agent edits the spec, sets a step's answer, runs the eval, reads the replay steps and continues from step 2 (1471.399583ms)
+{"level":30,"time":1795346992603,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"ab5c3d95-ae05-4831-9337-11854ec62aa4","run_id":"24df1731-92b4-4d77-ad01-2ea538177820","step":1,"tool":"select_seat","actor":"project:11111111-1111-4111-8111-111111111111","msg":"eval step answer set"}
+{"level":30,"time":1795346992761,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ae2cfcb5-bedc-4021-96d9-5bf6694d0535","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795346992809,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"ab5c3d95-ae05-4831-9337-11854ec62aa4","copy_id":"e7f0d0fa-3ad7-4417-8d86-850b13100d09","run_id":"b6e882a9-0da7-47ed-a5ab-359694aa64ef","step":2,"actor":"project:11111111-1111-4111-8111-111111111111","msg":"eval continued from step"}
+{"level":30,"time":1795346992929,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"b6e882a9-0da7-47ed-a5ab-359694aa64ef","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795346994232,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4be3a229-804f-40ee-9891-6a5b3db7df54","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-653: an agent sets the suite's and an eval's run settings, a bad model is refused, and get_eval_run returns the settings used (1293.202042ms)
+{"level":30,"time":1795346995104,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ed0192ee-fd4e-47b5-a876-08f9f0b0923f","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-654: an agent edits the agent reply at step 2 of a run, on a copy, and the copy's run starts with that reply (987.026292ms)
+{"level":30,"time":1795346995150,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"948436c1-d332-4a84-b771-e3651c618e5e","target_id":"77325aec-5f01-4c79-ae17-9a1f33fc766c","target":"copy","run_id":"86cb5d52-81ed-4d7c-bd9c-e31a1e903e22","step":2,"calls":1,"actor":"project:11111111-1111-4111-8111-111111111111","msg":"eval reply edited"}
+{"level":30,"time":1795346995206,"pid":64649,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"86cb5d52-81ed-4d7c-bd9c-e31a1e903e22","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ FF_EVALS off: each of the six Evals tools refuses as forbidden and writes nothing (717.050334ms)
+✔ RC-626: the fix's newest eval-set simulation, each result with its stand-in answers and the generated inputs it used (5775.04475ms)
+{"level":50,"time":1795346988050,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp/loop","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1020:70)\n    at readProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:255:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:699:11)\n    at <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1022:45)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"fix shipments read failed"}
+{"level":50,"time":1795346988057,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1020:70)\n    at readProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:255:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:699:11)\n    at <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1022:45)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","operation":"mcp_fix_shipments","msg":"exception"}
+✔ list_insights returns insights with their trace as source (101.026208ms)
+✔ list_insights' view gets Agent health's rows; the agent's result does not change (22.927208ms)
+✔ list_insights filters by kind (3.062875ms)
+✔ list_fixes names the insight each fix resolves as its source (6.713584ms)
+✔ get_fix by insightId returns the change and the chain trace → insight → fix (oldest first) (4.155125ms)
+✔ get_fix needs fixId or insightId, and an unknown fix is not found (5.705625ms)
+✔ run_eval goes through the eval gate as mcp in the background, reports before → after, chains the eval last, and emits fix_eval_run (3.740041ms)
+✔ run_eval asks the eval gate for the caller in the project before simulating (10.986792ms)
+✔ run_eval refuses cleanly when the eval gate is off for the caller, and simulates nothing (9.988417ms)
+✔ run_eval refuses a fix with nothing to simulate with why, and records no run (RC-77) (12.5565ms)
+✔ run_eval says plainly when nothing was simulated (12.643291ms)
+✔ run_eval returns at once while the simulation is queued, and tells the agent to poll get_eval, not to call run_eval again (3.068958ms)
+✔ get_eval reads the fix's latest simulation without starting one (1.890416ms)
+✔ get_eval says when the fix was never simulated, and refuses when the eval gate is off (3.072208ms)
+✔ an unreliable replay reports no before and after, and is not a simulation (1.677084ms)
+✔ run_eval turns the eval gate's not-found into the tool's not_found (1.418416ms)
+✔ create_experiment stores the fix and insight, records its lineage, returns the span attributes, and emits (4.926167ms)
+✔ create_experiment refuses a taken name and identical arms (4.860792ms)
+✔ mark_fix_shipped stores the version linked to fix, insight and experiment, with the full chain (3.3835ms)
+✔ mark_fix_shipped without an experiment has the fix as source (3.282291ms)
+✔ a fix that names no insight, intent or task records no source of its own, so the spine can still derive its insight (7.55625ms)
+✔ mark_fix_shipped refuses an experiment of another fix (2.919625ms)
+✔ the default experiment name is a slug of the fix (0.141083ms)
+✔ list_fixes and get_fix report a fix's shipped state once mark_fix_shipped recorded it (RC-72) (22.998ms)
+✔ list_fixes and get_fix return the latest draft, and a ready draft supplies the change (5.023083ms)
+✔ a draft that is not ready is shown, but the fix's own change stays (2.299ms)
+✔ fix drafts remain unread when the eval gate is off (3.579791ms)
+✔ list_tasks returns project tasks with a bounded page and task links (24.515333ms)
+✔ get_task returns its scorers, score series and eval set within the project (44.455333ms)
+✔ get_task does not read scorers or evals when the eval gate is off (6.108042ms)
+✔ run_eval queues task simulations for a fix with tasks and preserves task result links (4.976709ms)
+✔ run_eval returns drafting without reporting a completed task simulation (2.36375ms)
+✔ get_eval reads task results without queuing a simulation (1.79825ms)
+✔ run_eval with tasks refuses before queuing when the eval gate is off (2.450084ms)
+✔ run_eval refuses an unsupported task fix with its reason before queuing (2.4945ms)
+✔ get_eval hides task comparisons when the replay is unreliable (3.454208ms)
+{"level":50,"time":1795346988059,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp/loop","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1020:70)\n    at readProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:255:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:767:11)\n    at async traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1027:41)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"fix shipments read failed"}
+{"level":50,"time":1795346988059,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1020:70)\n    at readProjectShipments (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:255:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:767:11)\n    at async traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1027:41)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","operation":"mcp_fix_shipments","msg":"exception"}
+{"level":30,"time":1795346996357,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/post-ship","project_id":"11111111-1111-4111-8111-111111111111","task_id":"book-flight","fix_id":"issue:22222222-2222-4222-8222-222222222222","shipment_id":"79f1ad1f-508d-48de-b854-07a31ab256b9","n_runs":0,"waited_days":0,"msg":"post_ship_measure_queued"}
+{"level":50,"time":1795346996510,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listEvalBadges (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1758:50)\n    at readEvalBadges (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:276:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:718:39)\n    at async traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1757:5)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"distinct_id":"project:11111111-1111-4111-8111-111111111111","project_id":"11111111-1111-4111-8111-111111111111","operation":"mcp_fix_eval_badges","msg":"exception"}
+✔ MCP task reads, simulations and shipments use the existing stores without mixing post-ship results (8288.498959ms)
+✔ run_eval refuses an unsupported task fix with its reason before queuing (2.295875ms)
+✔ get_eval hides task comparisons when the replay is unreliable (2.461791ms)
+✔ list_tasks returns the Tasks page's state, totals and unserved asks beside the rows (2.815083ms)
+✔ get_task returns the Task page's detail: steps, flow, order, corrections, issues, cost and example runs, keeping the row's counts (3.713792ms)
+✔ get_task reads shipments with post-ship results only when the eval gate is on (7.888458ms)
+✔ list_fixes filters by kind, tool and intent as Fixes does, reading intents only when filtered on (21.29075ms)
+✔ list_fixes returns the Fixes page's savings scaled to the period, and each fix's eval badge when the gate is on (14.091584ms)
+✔ RC-626: get_eval names each eval result's generated inputs and stand-in answers; a result without a spec has no generated key (2.772ms)
+✔ RC-626: get_eval of a fix with no eval-set simulation is unchanged: no evalSet key (3.258792ms)
+{"level":30,"time":1795346996436,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-evals/post-ship","project_id":"11111111-1111-4111-8111-111111111111","task_id":"cancel-flight","fix_id":"issue:22222222-2222-4222-8222-222222222222","shipment_id":"79f1ad1f-508d-48de-b854-07a31ab256b9","n_runs":0,"waited_days":0,"msg":"post_ship_measure_queued"}
+{"level":50,"time":1795346996510,"pid":65191,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp/loop","err":{"type":"Error","message":"timeout","stack":"Error: timeout\n    at Object.listEvalBadges (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1758:50)\n    at readEvalBadges (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:276:23)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/index.ts:718:39)\n    at async traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:20)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/loop/loop.test.ts:1757:5)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"project_id":"11111111-1111-4111-8111-111111111111","msg":"fix eval badges read failed"}
+{"level":50,"time":1795346991524,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:91:15)\n    at handleMcpRequest (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:95:26)\n    at async Test.run (node:internal/test_runner/test:1113:7)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+✔ initialize negotiates and advertises the tools capability (216.484375ms)
+✔ an edition's product name introduces the server, names it and its 401 realm (65.857167ms)
+✔ without an edition's name the 401 realm stays ratel (5.495ms)
+✔ an older protocol version still negotiates (82.55925ms)
+✔ tools/list exposes every operation as its own tool, plus whoami (225.395208ms)
+✔ every tool the console offers is listed for anyone with app access, loop tools included (142.34825ms)
+✔ a signed-in person without app access is refused at the door with 403 (2.612667ms)
+✔ every tool definition is exactly what the fixture pins (125.031708ms)
+✔ each staged tool publishes its stage, and only that, as _meta (148.452375ms)
+✔ each tool publishes a schema and a read-only or mutating annotation (58.501ms)
+✔ each tool carries the annotations the Claude directory reviews (38.972667ms)
+✔ no tool description tells the model what to do first (41.539791ms)
+✔ calling a tool runs its operation and reports failures in-band (83.062166ms)
+✔ an unregistered tool name is refused by the transport (77.324375ms)
+✔ a notification is accepted with no body (22.444667ms)
+✔ a missing credential is rejected before any protocol work (0.51225ms)
+✔ every authenticated caller reaches the endpoint, with no flag to switch it on (204.362125ms)
+✔ get_flag_status lists every live flag, and still answers when one cannot be decided (19.438459ms)
+✔ an exhausted rate limit returns 429 with Retry-After (138.325959ms)
+✔ malformed JSON gets the reserved parse-error code (2.595541ms)
+✔ an oversized batch is refused rather than amplified (0.682375ms)
+✔ GET and DELETE explain that this endpoint is stateless (0.339042ms)
+✔ an exception while verifying a credential is a 401, never a 500 (1.292084ms)
+✔ the 401 from a failed verification still advertises where to authenticate (1.021625ms)
+✔ repeated bad credentials stop reaching the authenticator at all (1.471625ms)
+✔ the failure budget is per address, so one attacker cannot lock others out (0.607125ms)
+✔ successful calls are never charged to the failure budget (278.173041ms)
+✔ a refusal before dispatch is still counted, not just the ones after it (100.465417ms)
+✔ an unconfigured database does not spend the caller's failure budget (1.644333ms)
+{"level":50,"time":1795346991527,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:103:15)\n    at handleMcpRequest (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:107:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795346991984,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"forbidden","stage":"transport","reason":"no_launch_access","msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795346992469,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"DATABASE_URL is not set: provision a Postgres database and add it to the environment.","stack":"Error: DATABASE_URL is not set: provision a Postgres database and add it to the environment.\n    at getDb (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/platform/db/client.ts:74:13)\n    at Object.getSkillById (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/catalog/queries.ts:305:18)\n    at Object.execute (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/operations/catalog.ts:410:34)\n    at <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:184:17)\n    at traceMcpToolCall (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/telemetry/trace-tool-call.ts:83:26)\n    at async dispatchOperation (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/dispatch.ts:183:37)\n    at async <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/server.ts:277:24)\n    at async McpServer.executeToolHandler (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:420:20)\n    at async <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/mcp.ts:272:32)\n    at async wrappedHandler (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/node_modules/.pnpm/@modelcontextprotocol+sdk@1.32.2_zod@4.4.3/node_modules/@modelcontextprotocol/sdk/src/server/index.ts:243:32)"},"operation_id":"get_skill","msg":"mcp operation failed"}
+{"level":30,"time":1795346992479,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_skill","outcome":"internal","duration_ms":60,"mutates":false,"truncated":false,"loop":false,"stage":"improve","msg":"mcp operation executed"}
+{"level":40,"time":1795346992581,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"unknown","msg":"mcp credential rejected"}
+{"level":30,"time":1795346992804,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","operation_id":"get_flag_status","outcome":"ok","duration_ms":1,"mutates":false,"truncated":false,"loop":false,"stage":null,"msg":"mcp operation executed"}
+{"level":40,"time":1795346992943,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795346992947,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"invalid_params","stage":"transport","reason":"batch_too_large","batch_size":6,"msg":"mcp request denied before dispatch"}
+{"level":50,"time":1795346992948,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"auth() was called but the provider can't detect its middleware()","stack":"Error: auth() was called but the provider can't detect its middleware()\n    at Object.authenticate (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:420:15)\n    at handleMcpRequest (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:424:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":50,"time":1795346992949,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.authenticate (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:436:15)\n    at handleMcpRequest (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.ts:216:25)\n    at TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/mcp/route-handler.test.ts:440:26)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"client_address":"unknown","msg":"mcp authentication failed unexpectedly"}
+{"level":40,"time":1795346992951,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795346992951,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795346992951,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795346992951,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795346992952,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"credential_attempts","client_address":"203.0.113.9","retry_after_seconds":1,"msg":"mcp credential attempts rate limited"}
+{"level":40,"time":1795346992952,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unauthorized","stage":"transport","client_address":"198.51.100.4","msg":"mcp credential rejected"}
+{"level":40,"time":1795346993330,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"rate_limited","stage":"transport","scope":"per_credential","retry_after_seconds":60,"msg":"mcp request denied before dispatch"}
+{"level":40,"time":1795346993331,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+{"level":40,"time":1795346993331,"pid":65313,"hostname":"rstagis-MacBook-Pro-3.local","module":"mcp","outcome":"unavailable","stage":"transport","client_address":"203.0.113.9","msg":"mcp credential rejected"}
+✔ the shim answers from the composed edition: unlimited, plan oss (1.853083ms)
+✔ the event quota shim allows and records through the composed edition (0.29ms)
+✔ agent health limits are the three window fields (0.2125ms)
+✔ limit overrides merge per editable field and collapse to null when empty (0.214083ms)
+✔ the demo project never counts against the project cap (0.135917ms)
+✔ without an edition's plans: no summary, no plan named, billing never self-serve (0.237459ms)
+✔ with an edition's plans, the shim answers from them (0.83925ms)
+✔ with no key and no mock there is no agent, no tool stand-in and no judge (4.615667ms)
+✔ EVAL_GATE_MOCK_MODEL=1 gives the local stand-ins, and only outside production (1.2055ms)
+✔ with no key and no mock there is no fix-draft model, and nothing to queue a draft for (0.222292ms)
+✔ the Claude backend decides, not the key alone: Bedrock needs no key, a typo is no model (3.222583ms)
+{"level":40,"time":1795346992377,"pid":67533,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/fill","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at Object.fill (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/fill/spec.test.ts:103:13)\n    at completeSpec (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/fill/spec.ts:50:27)\n    at TestContext.<anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/fill/spec.test.ts:106:21)\n    at Test.runInAsyncScope (node:async_hooks:214:14)\n    at Test.run (node:internal/test_runner/test:1106:25)\n    at Test.processPendingSubtests (node:internal/test_runner/test:788:18)\n    at Test.postRun (node:internal/test_runner/test:1235:19)\n    at Test.run (node:internal/test_runner/test:1163:12)\n    at async Test.processPendingSubtests (node:internal/test_runner/test:788:7)"},"model":"test","missing":["tools","context"],"msg":"eval spec fill failed"}
+✔ RC-608: with no recording, the filler writes every field and generated lists them (2.488041ms)
+✔ RC-608: captured values win: the filler writes only the missing ones (0.374625ms)
+✔ RC-608: a complete spec calls no model (0.148209ms)
+✔ RC-608: a field the filler leaves out or gives empty is not counted as generated (0.117708ms)
+✔ RC-608: when the filler fails, the captured spec stays and generated is empty (2.890667ms)
+✔ RC-608: no filler (no model key) keeps the captured spec (0.149542ms)
+✔ RC-608: parseFilled keeps only well-formed values (2.848458ms)
+✔ RC-608: the scripted stand-in writes a complete spec from the draft (0.38625ms)
+✔ RC-608: the captured spec is the recording's prompt, tools and the IDs its first call passes unseen (1.192417ms)
+✔ Evals follow FF_EVALS, per organization (1.512959ms)
+✔ a decision that throws is off (0.394792ms)
+✔ without a flag service, FF_EVALS in the environment decides, off by default (0.349208ms)
+✔ candidates rank by how far under the threshold they are, then by how recent (2.009ms)
+✔ the reason is the reading furthest under its threshold (0.199875ms)
+✔ two runs with the same failing scorers, the same tool path and a near-identical ask give one suggestion (0.192917ms)
+✔ a near-identical ask is not a duplicate when the tool path or the failing scorers differ (10.216542ms)
+✔ a different ask on the same path and scorers is not a duplicate (0.304041ms)
+✔ a candidate that is a near-duplicate of an existing eval is not suggested (0.255125ms)
+✔ picks stop at the cap, keeping the worst (0.278125ms)
+✔ a candidate with no low reading is never picked (0.134458ms)
+✔ ask similarity ignores case, punctuation and the digits of IDs (0.427ms)
+{"level":30,"time":1795346997465,"pid":68336,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/edit","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"81377632-1d74-44a4-b221-cb2b6911f5ef","actor":"user_1","run_id":null,"msg":"eval_updated"}
+✔ RC-297: Save validates, replaces the fields and task links, and tracks eval_updated once (5707.684ms)
+{"level":30,"time":1795346998072,"pid":68336,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/edit","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"7d1322f0-5a53-456a-b9ad-2718ea6642e7","actor":"user_1","run_id":"3a81c59b-86a1-43e4-8927-7cb92ea88a0e","msg":"eval_updated"}
+✔ RC-297: Save and run queues a manual run of this eval only (601.58975ms)
+✔ RC-297: an invalid form, the flag off or another project's eval saves nothing (759.169375ms)
+{"level":30,"time":1795346999463,"pid":68336,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/edit","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"bf5d0d53-b129-40cc-a8b9-f66d03229468","actor":"user_1","run_id":null,"msg":"eval_updated"}
+✔ RC-641: Save sets the spec fields the person changed; only those leave the generated list (630.875291ms)
+{"level":30,"time":1795346999468,"pid":68336,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/edit","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"bf5d0d53-b129-40cc-a8b9-f66d03229468","actor":"user_1","run_id":null,"msg":"eval_updated"}
+✔ RC-642: Simulate again after a system prompt edit saves only that field and queues a run of the eval (891.844458ms)
+✔ RC-297: the form of a saved eval reads back to the same eval (3.140166ms)
+✔ RC-297: a name is required and kept short (0.292917ms)
+✔ RC-297: earlier messages and turns need words; a tool call needs a tool and JSON arguments (0.18675ms)
+✔ RC-297: limits are positive numbers in the editor's unit; self-corrections may be 0 (0.714792ms)
+✔ RC-297: an expected tool or criteria check that is on needs its value (2.459958ms)
+✔ RC-297: a fixed answer has a tool, an answer, and JSON or nothing for when; text answers stay text (7.502375ms)
+✔ RC-297: tasks are deduped and sorted (0.335583ms)
+✔ RC-297: "Set a fixed answer for this tool" fills the tool, its arguments as the condition and what it returned (0.250666ms)
+✔ RC-297: the limit hint shows the task's stricter limit in the editor's unit (0.406458ms)
+{"level":30,"time":1795347003070,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","enabled":true,"actor":"user_1","msg":"eval_nightly_changed"}
+✔ toggle: an admin on a paid plan turns nightly runs on and off, and each change is tracked (6231.580625ms)
+{"level":30,"time":1795347003076,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","enabled":false,"actor":"user_1","msg":"eval_nightly_changed"}
+✔ toggle: a member, a free plan and a flag-off organization are refused and nothing is stored (2199.15525ms)
+{"level":30,"time":1795347005991,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","run_id":"0bf720dc-a968-45d6-a342-cb3d4ffc1ee9","eval_count":3,"msg":"eval_nightly_queued"}
+✔ sweep: queues one nightly run per project per UTC day, and none when the setting is off (749.183084ms)
+{"level":30,"time":1795347006027,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4e76a18a-ffba-4e8b-a8fc-8026ee0d9a99","eval_count":3,"msg":"eval_nightly_queued"}
+✔ sweep: a project that left the paid plan, or whose organization has Evals off, gets no nightly run (755.681417ms)
+{"level":30,"time":1795347007549,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","run_id":"32add64c-aa02-4f39-9fd0-6e3259cf1016","eval_count":3,"msg":"eval_nightly_queued"}
+✔ job: a nightly run with no daily cap left stops before any model call and records why (814.209833ms)
+{"level":30,"time":1795347007597,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"32add64c-aa02-4f39-9fd0-6e3259cf1016","msg":"eval_nightly_capped"}
+{"level":30,"time":1795347008450,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","run_id":"57e43871-141b-4fc7-b02f-93aa1310f9fe","eval_count":3,"msg":"eval_nightly_queued"}
+✔ job: a nightly run never holds more than the project's nightly cap for the day (985.881708ms)
+{"level":30,"time":1795347008583,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"57e43871-141b-4fc7-b02f-93aa1310f9fe","n_evals":3,"n_failed":0,"spend_usd":0,"reserved_usd":0.25,"msg":"eval_run_finished"}
+{"level":30,"time":1795347009364,"pid":68676,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/nightly","project_id":"11111111-1111-4111-8111-111111111111","run_id":"82c93117-ede1-48be-9f4c-f2618f412545","eval_count":3,"msg":"eval_nightly_queued"}
+✔ job: a queued nightly run of a project that left the paid plan does not run (788.831541ms)
+✔ RC-295: earlier messages become history; a tool message is the agent's call and its answer (4.514542ms)
+✔ RC-295: a fixed answer becomes a mock: JSON or text, failing on an error field, with its condition and reason (0.359666ms)
+✔ RC-295: an eval with neither gives empty extras (0.165417ms)
+{"level":30,"time":1795347004580,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"c724175a-30f0-4aca-8176-25c661f578bd","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-653: an eval runs with its agent model, temperature and step limit, and the result records them (6746.74175ms)
+{"level":30,"time":1795347005563,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"a340fb2d-bce2-4812-92f5-9773a8ca28aa","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-653: an eval without settings runs with today's defaults, and a cleared setting falls back to the suite (997.9285ms)
+{"level":30,"time":1795347006153,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"983d82c8-8476-4bf1-9041-2c74b9ebbb38","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":0.0001,"msg":"eval_run_finished"}
+✔ RC-653: the eval's cost budget caps its run (592.201959ms)
+{"level":30,"time":1795347006929,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"9deaa959-b1c0-4ebb-80b4-230ce48e1452","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-653: a chosen model that Bedrock has not enabled does not run, and the result names model_not_enabled (756.631625ms)
+✔ RC-653: an unknown or not-enabled model is refused at save time with a clear message (673.626833ms)
+✔ RC-653: the agent call sends the eval's temperature and max tokens, and a 5.x model gets no temperature (2.003209ms)
+✔ RC-653: resolveEvalModels uses the settings' agent, stand-in and judge models; with the stand-ins on, nothing changes but max tokens (24.648041ms)
+{"level":30,"time":1795347008375,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run-settings","project_id":"11111111-1111-4111-8111-111111111111","eval_id":null,"level":"suite","settings":["maxSteps"],"actor":"user_1","msg":"eval_run_settings_set"}
+✔ RC-653: the form saves an eval's and the suite's settings only with the flag on, and lists only enabled models (755.116083ms)
+{"level":30,"time":1795347008384,"pid":69297,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run-settings","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"0778d974-53ab-4fbe-aa82-eb932b496d08","level":"eval","settings":["agentModel","temperature"],"actor":"user_1","msg":"eval_run_settings_set"}
+✔ RC-653: agentModel comes from the eval, then the suite default, then today's default (2.13025ms)
+✔ RC-653: temperature comes from the eval, then the suite default, then today's default (0.282042ms)
+✔ RC-653: maxTokens comes from the eval, then the suite default, then today's default (0.064125ms)
+✔ RC-653: maxSteps comes from the eval, then the suite default, then today's default (0.05025ms)
+✔ RC-653: budgetUsd comes from the eval, then the suite default, then today's default (0.078ms)
+✔ RC-653: toolModel comes from the eval, then the suite default, then today's default (0.088208ms)
+✔ RC-653: judgeModel comes from the eval, then the suite default, then today's default (0.090375ms)
+✔ RC-653: each setting resolves on its own: an eval that sets one keeps the suite's others (0.754333ms)
+✔ RC-653: no settings anywhere gives today's defaults exactly (0.173333ms)
+✔ RC-653: valid settings parse, and an empty object clears them (1.387ms)
+✔ RC-653: a model the backend does not serve is refused with its name and the served list (0.45925ms)
+✔ RC-653: a model that Bedrock has not enabled is refused with model_not_enabled (0.580042ms)
+✔ RC-653: limits out of range are refused (0.453125ms)
+✔ RC-653: a temperature with an agent model that refuses sampling is refused (0.252375ms)
+✔ RC-653: the 4.x models take a temperature, the 5.x models do not (0.083875ms)
+✔ RC-653: the replay header lists each setting a result used and where it came from (16.755292ms)
+{"level":30,"time":1795347005337,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"8dbe9a47-d0fa-4d81-9d60-7cccdf63285a","eval_count":4,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ a manual run queues one run and its job, tracks it once, and a second click gets the same run (6784.305792ms)
+✔ flag off: the action refuses and no run or job is queued (690.710917ms)
+{"level":30,"time":1795347006791,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"f1fc116e-7768-471d-ad22-28941d64b3b3","eval_count":4,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ the job replays each eval as recorded, scores it with the stricter task limit and its override, and records the change (1005.092875ms)
+{"level":30,"time":1795347006936,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"f1fc116e-7768-471d-ad22-28941d64b3b3","n_evals":4,"n_failed":2,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347006988,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ae47ae39-9bb1-466d-8625-40d50c7f7a93","eval_count":4,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+{"level":30,"time":1795347007027,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ae47ae39-9bb1-466d-8625-40d50c7f7a93","n_evals":4,"n_failed":3,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347007878,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"690fc398-2883-419a-92aa-df2575e40570","eval_count":4,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ spend never passes the reservation, and the reservation never passes what the organization has left today (945.772583ms)
+{"level":30,"time":1795347008005,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"690fc398-2883-419a-92aa-df2575e40570","n_evals":4,"n_failed":0,"spend_usd":0,"reserved_usd":0.02999999999999936,"msg":"eval_run_finished"}
+{"level":30,"time":1795347008790,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"c5bd3d72-052c-4566-8934-cfbb4697e5e3","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-295: the job gives the eval's earlier messages as history and its fixed answers win over the recording (837.162916ms)
+{"level":30,"time":1795347008835,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"c5bd3d72-052c-4566-8934-cfbb4697e5e3","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347009362,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"c7f4d6e1-7d4b-4577-b185-5cec8a8df084","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-296: an eval with a simulated person runs 3 times, and its turns and pass rate are kept (557.586083ms)
+{"level":30,"time":1795347009399,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"c7f4d6e1-7d4b-4577-b185-5cec8a8df084","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347010155,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"184f7359-4ba4-49c1-ba89-927641f52117","eval_count":6,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-609: an eval with a spec reaches a verdict with no captured prompts, unseen first-call IDs or no source run; without a spec each keeps its refusal (892.318916ms)
+{"level":30,"time":1795347010274,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"184f7359-4ba4-49c1-ba89-927641f52117","n_evals":6,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347010899,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"a575fb78-f008-48aa-8496-de51088b75e4","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-641: with the gate on and the content opt-in off, a run keeps its steps, and the prune clears them after 30 days (652.222625ms)
+{"level":30,"time":1795347010939,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"a575fb78-f008-48aa-8496-de51088b75e4","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347011531,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4e6903ac-24ce-4cd0-9146-3d8c1224e932","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-641: Simulate again at a tool step saves its answer as a fixed answer, and the new run answers that call with it (794.986041ms)
+{"level":30,"time":1795347011596,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4e6903ac-24ce-4cd0-9146-3d8c1224e932","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347011621,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"25c6ecc0-a3be-4ecf-9cfe-92c91d81429a","run_id":"4e6903ac-24ce-4cd0-9146-3d8c1224e932","step":3,"tool":"select_seat","actor":"user_1","msg":"eval step answer set"}
+{"level":30,"time":1795347011715,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"07e99fa4-908d-4803-b8f0-39b38cfc9e62","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347012261,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"0a787b00-c537-4932-a439-684e804d2125","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-641: Continue from step 2 saves a copy whose earlier messages are steps 0..2, and runs it (638.057583ms)
+{"level":30,"time":1795347012329,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"0a787b00-c537-4932-a439-684e804d2125","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347012348,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"70112bb7-fd3c-459e-97f3-70171461d4ca","copy_id":"c5713b14-2346-4423-96e8-da99a1bf1d53","run_id":"4a897854-c795-4618-aba6-abbf40f7b377","step":2,"actor":"user_1","msg":"eval continued from step"}
+{"level":30,"time":1795347012378,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"4a897854-c795-4618-aba6-abbf40f7b377","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347013040,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"dd3cd113-6bb9-4424-8fde-45bd6db3bba6","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-654: Edit reply at step 2 runs this eval from the edited reply, and the agent's first turn after it follows that reply (728.867583ms)
+{"level":30,"time":1795347013080,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"dd3cd113-6bb9-4424-8fde-45bd6db3bba6","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347013091,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"59e60d57-f973-49e2-9860-d107a09eb8ad","target_id":"59e60d57-f973-49e2-9860-d107a09eb8ad","target":"this","run_id":"ba78d4c8-12a7-46b7-ae65-36a896bcdc6f","step":2,"calls":1,"actor":"user_1","msg":"eval reply edited"}
+{"level":30,"time":1795347013109,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ba78d4c8-12a7-46b7-ae65-36a896bcdc6f","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347013665,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/run","project_id":"11111111-1111-4111-8111-111111111111","run_id":"baba2943-aa03-47b7-9744-b5cce77fd489","eval_count":1,"workflow_id":null,"actor":"user_1","msg":"eval_run_queued"}
+✔ RC-654: Edit reply on a copy keeps the eval as it was; a reply with no call ends the run; a tool step or the flag off is refused (666.521167ms)
+{"level":30,"time":1795347013730,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"baba2943-aa03-47b7-9744-b5cce77fd489","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+{"level":30,"time":1795347013743,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/steps","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"20cb0c72-9d41-4c98-ae47-a491f7e8f90e","target_id":"1dfdfd49-ba3c-4288-aed1-e523c84eba51","target":"copy","run_id":"ec9ff756-ff3f-44bb-8c89-ea34811f6a2e","step":2,"calls":0,"actor":"user_1","msg":"eval reply edited"}
+{"level":30,"time":1795347013771,"pid":69494,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"ec9ff756-ff3f-44bb-8c89-ea34811f6a2e","n_evals":1,"n_failed":0,"spend_usd":0,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ an eval with two tasks gets every scorer of both, and the stricter limit wins (1.587875ms)
+✔ an eval override wins over the task limit, even a looser one, and a check can be off (0.323458ms)
+✔ an eval can turn on a check its tasks lack when it has the limit (0.285333ms)
+✔ verdicts: measured value and limit per scorer; one fail fails the eval; a scorer that does not apply is a skip (0.615375ms)
+✔ change from the run before: now fails, fixed, same, new (0.174334ms)
+✔ related tasks (the default) are the evals linked to any task of the fix (2.017833ms)
+✔ all is every eval, failing today is those that failed in the latest manual or nightly run (0.604541ms)
+✔ one task is that task's evals, and a list keeps only evals of the set, in set order (0.21825ms)
+✔ a fix with no tasks has no related evals (0.111792ms)
+✔ a suite parses from the action's input and refuses what it does not know (0.256041ms)
+✔ fails today and passes with the fix: fixed; passes today and fails with the fix: broke (0.191ms)
+✔ the same verdict on both sides is same, and so is an eval the fix does not touch (no after side) (0.12025ms)
+✔ Q5: a pass with the fix that rests on a stand-in answer is unverified, not fixed (0.094875ms)
+✔ RC-609: a pass with the fix that rests on a model-written input is unverified, not fixed (0.122208ms)
+✔ a side with no verdict gives no outcome (0.155708ms)
+✔ a simulation's line counts passes with the fix (today's verdict when untouched), passes today, fixed, broke and unverified (0.471708ms)
+✔ RC-641: the form of an eval reads back to the same spec, and an unchanged spec changes no field (2.809ms)
+✔ RC-641: each spec field edit changes only that field (0.476542ms)
+✔ RC-641: empty text clears the system prompt, the tools and the context (0.151625ms)
+✔ RC-641: the same JSON in another key order is no change (0.173167ms)
+✔ RC-641: a bad spec says what is wrong (0.415833ms)
+✔ RC-641: an edited spec field leaves the generated list, the others stay (0.295709ms)
+✔ RC-641: a form without the spec parses as before (0.184208ms)
+✔ RC-642: an eval whose recorded ask was not captured has no spec in its form, so Save still works (0.113875ms)
+✔ RC-609: a run with no captured payloads runs from the eval spec; without a spec it still refuses (6.037291ms)
+✔ RC-609: a first call with IDs the recording never shows runs with the eval context; without a spec it still refuses (1.983333ms)
+✔ RC-609: an eval with no source run runs from its spec alone (0.367917ms)
+✔ RC-609: the recording's values win; the spec fills the rest, and the context reaches the model and the stand-in (1.181ms)
+✔ RC-609: the generated inputs a replay used are the filled ones the model wrote (0.585667ms)
+✔ RC-642: a spec field a person edited wins over the recording; another one only fills what the recording lacks (0.715041ms)
+✔ RC-641: a tool step's call is the call in the same position of the assistant step before it (4.115042ms)
+✔ RC-641: a step answer is a fixed answer for that tool when called with the step's arguments, and replaces the same one (9.8765ms)
+✔ RC-641: steps 0..2 become earlier messages: the assistant's text and each answered call (0.204583ms)
+✔ RC-641: the replay steps pair each tool step with its source (0.251125ms)
+✔ RC-642: two runs differ at the first step whose call or answer is not the same (0.202208ms)
+✔ RC-654: the opening of an edited reply is the run's steps before it, then the edited reply (4.750083ms)
+✔ RC-654: an edited reply needs text or a call, and each call a tool name and object arguments (0.63175ms)
+✔ creates an eval with its tasks and reads it back (6193.804625ms)
+✔ links tasks many-to-many and lists evals by task and status (778.388ms)
+✔ records a run and its results, upserting a retried result (674.620125ms)
+✔ a simulation run needs a fix and a manual run refuses one (709.136208ms)
+✔ recent results come from completed runs only, newest first, capped per eval (644.179583ms)
+✔ prune clears transcripts older than 30 days and keeps the numbers (620.860292ms)
+✔ RC-318: prune clears each turn's message after 30 days, keeps the turn verdicts and numbers, and also prunes a result with turns but no transcript (751.453666ms)
+✔ deleting an eval removes its links and results (681.291ms)
+{"level":30,"time":1795347007060,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"f87347c7-30b3-43fe-82b8-166202a72711","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+✔ only runs under the good threshold become suggestions, near-duplicates give one, and each names its scorer and score (6420.398834ms)
+{"level":30,"time":1795347007060,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"fd17b4f4-59f9-41cb-ba30-b4a047590d5d","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347007103,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":2,"candidates":4,"msg":"eval_suggestions_added_from_scores"}
+{"level":30,"time":1795347007988,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"01dd009a-a264-4ad9-8f6f-25eac4c00631","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+✔ the worst runs fill the free slots first (869.010125ms)
+{"level":30,"time":1795347007988,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"cea09747-14b5-4da3-9bd9-733b4b93e8b6","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347007988,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"0deb32a1-5081-4593-a8a5-ea726fee1e66","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347007988,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"c722e0bc-ede7-4f3c-a821-afa67e3afcee","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347007988,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"68b4110f-fbbe-4a22-9ca5-2e9ce7ba0a53","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347008041,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":5,"candidates":7,"msg":"eval_suggestions_added_from_scores"}
+✔ with the gate on, a task with no low readings gets no suggestion from its cases (691.992125ms)
+{"level":40,"time":1795347009304,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","skipped":1,"reason":"foreign_project","msg":"skipped runs of another organization as eval suggestions"}
+✔ a low run whose ask names a project of another organization is not suggested (RC-853) (577.812ms)
+{"level":30,"time":1795347009304,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"463194fd-ae64-463f-b982-30cf4ae8a7df","generated":["systemPrompt","tools","context"],"msg":"eval spec filled"}
+{"level":30,"time":1795347009313,"pid":71338,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":1,"candidates":2,"msg":"eval_suggestions_added_from_scores"}
+{"level":30,"time":1795347008002,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":5,"msg":"eval_suggestions_added"}
+✔ a task suggests at most 5 evals, linked to it, and a second pass adds none (6351.7525ms)
+{"level":30,"time":1795347008812,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":5,"msg":"eval_suggestions_added"}
+✔ suggestions skip cases already imported or dismissed, and free slots refill (803.846541ms)
+{"level":30,"time":1795347008847,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":1,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347009378,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","added":3,"msg":"eval_cases_imported"}
+✔ pinned and user cases import once as approved evals; auto, excluded and fix cases do not (534.501084ms)
+{"level":30,"time":1795347010182,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":5,"msg":"eval_suggestions_added"}
+✔ RC-322: no project cap: every task suggests up to 5, and a manual run archives no suggested eval (1036.728833ms)
+{"level":30,"time":1795347010208,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-2","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010237,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-3","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010253,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-4","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010264,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-5","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010275,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-6","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010299,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-7","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010315,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-8","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347010341,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-9","added":5,"msg":"eval_suggestions_added"}
+{"level":30,"time":1795347011022,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","workflow_id":"wf-1","added":1,"msg":"eval_suggestions_added"}
+✔ remove archives any eval, suggested or not, and is tracked; an archived eval or the flag off refuses (668.85925ms)
+{"level":30,"time":1795347011084,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"6326874f-921d-47f8-a375-0e8d298c6410","actor":"user_1","msg":"eval_removed"}
+{"level":30,"time":1795347011090,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","eval_id":"94ee4341-5de8-4910-a24c-982a29b07d62","actor":"user_1","msg":"eval_removed"}
+{"level":30,"time":1795347011765,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","source_turn_id":"1d566d2f-8027-4f10-a10c-e84b1161864d","generated":["systemPrompt","message","tools","context"],"msg":"eval spec filled"}
+✔ RC-608: with the gate on, a new eval gets a complete spec; captured values win and generated lists what the filler wrote (682.588584ms)
+{"level":30,"time":1795347011771,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","added":2,"msg":"eval_cases_imported"}
+{"level":40,"time":1795347012283,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/fill","err":{"type":"Error","message":"model down","stack":"Error: model down\n    at Object.fill (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/tests/suggest.integration.test.ts:284:15)\n    at completeSpec (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/fill/spec.ts:50:27)\n    at <anonymous> (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/suggest.ts:342:26)\n    at Array.map (<anonymous>)\n    at withSpecs (/Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src/lib/views/evals/suggest.ts:341:12)"},"model":"test","missing":["systemPrompt","tools","context"],"msg":"eval spec fill failed"}
+✔ RC-608: a failing filler still saves the eval, with generated empty (537.813583ms)
+{"level":30,"time":1795347012307,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","added":1,"msg":"eval_cases_imported"}
+{"level":30,"time":1795347012961,"pid":71687,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/suggest","project_id":"11111111-1111-4111-8111-111111111111","added":1,"msg":"eval_cases_imported"}
+✔ RC-608: with the gate off, eval creation writes the same rows as before (652.674209ms)
+✔ suite run settings: empty without a row, set, replaced, and kept per project (6446.18675ms)
+✔ nightly settings: one row per project, off by default, removed with the project (722.519667ms)
+✔ run scores: live and eval readings, a re-read replaces, daily rates skip skips (702.811125ms)
+✔ migration 0055 is a no-op on a database that already has the Evals tables (681.000208ms)
+✔ a task reads as its label (0.5585ms)
+✔ a task without a label reads as Untitled task and the first words of its most common ask, never its id (0.76725ms)
+✔ a tag the names miss, and a task suite, never show the id (0.639667ms)
+✔ RC-296: an eval without turns runs once, as today: no turns, no attempts (94.939125ms)
+✔ RC-296: two fixed turns replay in order, each with the conversation so far, and each is scored (1.676667ms)
+✔ RC-296: without the content opt-in the turns keep no words (0.763125ms)
+✔ RC-296: a simulated turn is written from the description and the conversation; the eval runs 3 times and reports a pass rate (8.316958ms)
+✔ RC-296: the simulated person's spend counts against the reservation, and a refused call stops the eval (1.258916ms)
+✔ RC-296: a simulated turn with no model to play the person says so (2.507459ms)
+{"level":30,"time":1795347012611,"pid":71733,"hostname":"rstagis-MacBook-Pro-3.local","module":"evals/job","project_id":"11111111-1111-4111-8111-111111111111","run_id":"afe6dcec-2c1e-44a7-a203-b9dd91ba637f","n_evals":2,"n_failed":0,"spend_usd":0.00054,"reserved_usd":1,"msg":"eval_run_finished"}
+✔ RC-613: an eval run applies task and suite scorers, skips the one switched off for one eval, and judges the task criteria (5712.713041ms)
+✔ old scorers read through the adapter give the same pass, fail and skip (16.161333ms)
+✔ computed defaults read through the adapter give the same results (1.0995ms)
+✔ an adapted scorer keeps its switch, version and a stable id (0.146334ms)
+{"level":30,"time":1795347007957,"pid":71748,"hostname":"rstagis-MacBook-Pro-3.local","module":"scorers/models","engine":"d","options":2,"msg":"decision scorer got no choice"}
+✔ judgePortOf reads a pass as 1 and reports the usage (12.042542ms)
+✔ decisionPortOf asks the engine with the question and the options (1.039ms)
+✔ two scorers of one kind on a task, a suite scorer, and one eval's switch (4147.808333ms)
+✔ updates validate and bump the version only when the reading changes (530.851083ms)
+✔ check reads latency, cost and tokens (1.491084ms)
+✔ check reads per-step latency over every step (0.243333ms)
+✔ check reads tool called and not called (0.2825ms)
+✔ check matches tool arguments and results (0.398917ms)
+✔ check reads message text by substring and by pattern (8.934916ms)
+✔ check skips an unknown value and reads exists (1.091917ms)
+✔ expression evaluates JSONLogic over the run view (0.911333ms)
+✔ judge reads the whole transcript through its port (0.754334ms)
+✔ decision asks a closed-set question through its port (0.66725ms)
+✔ two scorers of one kind both score (0.323417ms)
+✔ applicableScorers adds suite scorers and applies the eval's switches (0.313416ms)
+✔ the view derives tool names, counts and how the run ended (0.257625ms)
+✔ parseDefinition rejects an invalid JSONLogic expression with a clear message (1.023167ms)
+✔ parseDefinition validates check, judge and decision configs (0.776333ms)
+{"level":30,"time":1795347018953,"pid":71775,"hostname":"rstagis-MacBook-Pro-3.local","module":"scorers/live","project_id":"11111111-1111-4111-8111-111111111111","day":"2026-11-01","runs":2,"readings":5,"msg":"user scorers read live runs"}
+✔ the score job reads live runs with two user scorers of one kind and a judge, and keeps the daily counts (5300.5895ms)
+{"level":30,"time":1795347018969,"pid":71775,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":2,"truncated":false,"user_readings":5,"duration_ms":132,"msg":"task_scores_written"}
+{"level":30,"time":1795347019086,"pid":71775,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":2,"truncated":false,"duration_ms":46,"msg":"task_scores_written"}
+{"level":30,"time":1795347019205,"pid":71775,"hostname":"rstagis-MacBook-Pro-3.local","module":"scorers/live","project_id":"11111111-1111-4111-8111-111111111111","day":"2026-11-01","runs":2,"readings":2,"msg":"user scorers read live runs"}
+{"level":30,"time":1795347019206,"pid":71775,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":2,"truncated":false,"user_readings":2,"duration_ms":62,"msg":"task_scores_written"}
+✔ invalid scorer edits cannot write an override (2.629209ms)
+✔ both save and reset require a session, project membership and the project flag (0.304333ms)
+✔ a member can save each scorer and reset its override with audit events (1.5075ms)
+✔ a failed write emits no success event (1.006416ms)
+✔ criteria edits preserve the text and refuse empty or oversized criteria (0.582791ms)
+✔ task defaults give cost and latency a quarter of room (1.398708ms)
+{"level":30,"time":1795347024168,"pid":71780,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":2,"rows":16,"runs":3,"truncated":false,"duration_ms":53,"msg":"task_scores_written"}
+✔ one cron drain writes task_scores_daily rows, overall included, for each task with runs (5907.63225ms)
+{"level":30,"time":1795347024189,"pid":71780,"hostname":"rstagis-MacBook-Pro-3.local","module":"jobs/runner","project_id":"11111111-1111-4111-8111-111111111111","kind":"score_tasks","job_id":"07f1575f-55e8-4cb3-b347-b742aa5ac3e0","outcome":"done","duration_ms":75,"wait_ms":1812624114,"msg":"job_finished"}
+{"level":30,"time":1795347024565,"pid":71780,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","reason":"gate_off","trigger":"daily_sweep","msg":"skipped task scoring"}
+✔ with the gate off, the drain records the refusal and scores nothing (369.4375ms)
+✔ the task scorers register the sweep as a before-step of the drain (26.912042ms)
+✔ each drain tick queues one score_tasks job per project per UTC day, before it drains, with no signal run (5831.907667ms)
+✔ a failing task scoring sweep costs the drain nothing and is named (0.549708ms)
+✔ scores each configured scorer with its measured result (2.120042ms)
+✔ unknown measurements skip every scorer (0.278333ms)
+✔ zero measurements pass zero limits and an absent tool fails (0.322333ms)
+✔ outcomes preserve the recorded definitions of ending well and self-corrections (0.402875ms)
+✔ recorded outcome defaults retain rounding and unknown budgets (0.938083ms)
+{"level":30,"time":1795347021432,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","reason":"gate_off","trigger":"job","msg":"skipped task scoring"}
+{"level":30,"time":1795347021434,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","name":"telemetry","event":"task_scores_skipped","distinctId":"system:task-scorers","object_action":"task_scores_skipped","project_id":"11111111-1111-4111-8111-111111111111","reason":"gate_off","trigger":"job","msg":"event"}
+✔ the score job writes nothing when the eval gate is off (6100.765958ms)
+{"level":30,"time":1795347022042,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":2,"rows":19,"runs":4,"truncated":false,"duration_ms":114,"msg":"task_scores_written"}
+✔ closed fixture runs produce daily counts, fill missed days and remain stable on retry (756.225084ms)
+{"level":30,"time":1795347022178,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":2,"rows":9,"runs":2,"truncated":false,"duration_ms":89,"msg":"task_scores_written"}
+{"level":30,"time":1795347022805,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":34,"msg":"task_scores_written"}
+✔ a threshold change affects the next day and the job completes the last partial day (643.198625ms)
+{"level":30,"time":1795347022853,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":8,"runs":3,"truncated":false,"duration_ms":25,"msg":"task_scores_written"}
+{"level":40,"time":1795347023485,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","task_ids":["task-gone","task-old"],"msg":"task_identity_orphaned"}
+✔ the job reports task identities with scorers and no run in seven days (637.262042ms)
+{"level":30,"time":1795347023485,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":2,"rows":56,"runs":2,"truncated":false,"duration_ms":109,"msg":"task_scores_written"}
+{"level":30,"time":1795347024134,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":2,"rows":12,"runs":502,"truncated":true,"duration_ms":144,"msg":"task_scores_written"}
+✔ each task day keeps its newest 500 closed runs and reports truncation (646.367542ms)
+{"level":30,"time":1795347024582,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/judge","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","judged":20,"refused_budget":0,"cost_usd":0.009000000000000001,"msg":"task_judge_sampled"}
+✔ the live judge samples at most 20 runs across retries and keeps a separate series (468.642458ms)
+{"level":30,"time":1795347024586,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":25,"truncated":false,"duration_ms":55,"msg":"task_scores_written"}
+{"level":30,"time":1795347024608,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":25,"truncated":false,"duration_ms":18,"msg":"task_scores_written"}
+{"level":30,"time":1795347024880,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/judge","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","judged":0,"refused_budget":1,"cost_usd":0,"msg":"task_judge_sampled"}
+{"level":30,"time":1795347024881,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":18,"msg":"task_scores_written"}
+{"level":30,"time":1795347025121,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/judge","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","judged":0,"refused_budget":1,"cost_usd":0,"msg":"task_judge_sampled"}
+✔ the live judge refuses the organization judge cap and shared daily cap (515.978875ms)
+{"level":30,"time":1795347025123,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":16,"msg":"task_scores_written"}
+{"level":30,"time":1795347025374,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/judge","project_id":"33333333-3333-4333-8333-333333333333","task_id":"task-a","judged":0,"refused_budget":1,"cost_usd":0,"msg":"task_judge_sampled"}
+✔ live judge reservations protect other projects and settle actual organization spend (258.471208ms)
+{"level":30,"time":1795347025376,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"33333333-3333-4333-8333-333333333333","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":11,"msg":"task_scores_written"}
+{"level":30,"time":1795347025380,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/judge","project_id":"11111111-1111-4111-8111-111111111111","task_id":"task-a","judged":1,"refused_budget":0,"cost_usd":0.00045,"msg":"task_judge_sampled"}
+{"level":30,"time":1795347025381,"pid":71783,"hostname":"rstagis-MacBook-Pro-3.local","module":"task-scorers/job","project_id":"11111111-1111-4111-8111-111111111111","tasks":1,"rows":4,"runs":1,"truncated":false,"duration_ms":37,"msg":"task_scores_written"}
+✔ scoreRun matches checkSide on the scoring fixtures (3.190958ms)
+✔ the gate retains fix mapping, extra checks and judge results in order (0.903667ms)
+✔ doesTheWork is not read where the replay side carries no coverage (1.054166ms)
+✔ doesTheWork passes a side that made every recorded call (1.0135ms)
+✔ doesTheWork fails a side that stopped short or that only a stand-in answered (0.166667ms)
+✔ sideScore is the mean of the measured scores (0.145583ms)
+✔ sideScore is 0 for a side short of the run's work, whatever its other scores (0.124042ms)
+✔ replayLimits gives the baseline the drafted room and rounding (0.230042ms)
+✔ rebaseScorers moves drafted cost and time limits to the baseline and keeps the rest (0.399166ms)
+✔ rebaseScorers keeps a limit a person set, and a limit the baseline can't measure (0.205375ms)
+✔ scoreReplaySide fails every measured scorer of a side short of the run's work, and keeps a skip a skip (0.582ms)
+✔ scoreReplaySide is scoreRun where the side carries no coverage (0.24575ms)
+✔ user scorers override task defaults until reset and remain scoped to the task (5874.134625ms)
+✔ same-day scores replace the overall row and preserve other tasks and projects (848.146958ms)
+✔ the daily sweep queues one score job per project with task runs, with no signal run (5611.926667ms)
+✔ the daily sweep skips a project whose signal run already queued scoring today (300.958ms)
+✔ a gate refusal in the sweep writes a log line and a task_scores_skipped event once a day (238.018959ms)
+✔ a gate refusal after a signal run writes a log line and the event (205.591459ms)
+✔ a queued job the gate refuses at run time writes a log line and the event (212.442292ms)
+ℹ tests 367
+ℹ suites 2
+ℹ pass 367
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50614.652709

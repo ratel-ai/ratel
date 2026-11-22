@@ -1,0 +1,4 @@
+$ pnpm check:boundary && pnpm check:layers && pnpm check:private  # with ee/src
+ee boundary clean: 0 violations
+layers clean: 0 violations
+no private strings under .

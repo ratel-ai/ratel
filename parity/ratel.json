@@ -1,0 +1,714 @@
+[
+  {
+    "tool": "change_scorer",
+    "params": {
+      "action": "create",
+      "scope": "task",
+      "taskId": "book-seat",
+      "name": "X",
+      "kind": "expression",
+      "config": {
+        "logic": {
+          "regex": [
+            1
+          ]
+        }
+      }
+    },
+    "answer": {
+      "ok": false,
+      "error": "invalid_params",
+      "message": "Unknown JSONLogic operator \"regex\". Use one of: var, missing, missing_some, if, ?:, ==, ===, !=, !==, !, !!, or, and, >, >=, <, <=, max, min, +, -, *, /, %, map, filter, reduce, all, none, some, merge, in, cat, substr."
+    }
+  },
+  {
+    "tool": "change_scorer",
+    "params": {
+      "action": "create",
+      "scope": "task",
+      "taskId": "book-seat",
+      "name": "Quick",
+      "kind": "expression",
+      "config": {
+        "logic": {
+          "<=": [
+            {
+              "var": "toolCallCount"
+            },
+            5
+          ]
+        }
+      }
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_scorer",
+      "data": {
+        "action": "create",
+        "scorer": {
+          "id": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6",
+          "name": "Quick",
+          "kind": "expression",
+          "scope": "task",
+          "taskId": "book-seat",
+          "enabled": true,
+          "goodThreshold": 0.5,
+          "version": 1,
+          "config": {
+            "logic": {
+              "<=": [
+                {
+                  "var": "toolCallCount"
+                },
+                5
+              ]
+            }
+          }
+        }
+      },
+      "hint": "run_evals runs the suite with the scorers. The daily score job reads live runs."
+    }
+  },
+  {
+    "tool": "change_scorer",
+    "params": {
+      "action": "create",
+      "scope": "suite",
+      "name": "Answers",
+      "kind": "check",
+      "config": {
+        "path": "finalAnswer",
+        "op": "exists"
+      }
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_scorer",
+      "data": {
+        "action": "create",
+        "scorer": {
+          "id": "33c0ae79-6bf2-492a-b7b4-60f40a5930fa",
+          "name": "Answers",
+          "kind": "check",
+          "scope": "suite",
+          "taskId": null,
+          "enabled": true,
+          "goodThreshold": 0.5,
+          "version": 1,
+          "config": {
+            "path": "finalAnswer",
+            "op": "exists"
+          }
+        }
+      },
+      "hint": "run_evals runs the suite with the scorers. The daily score job reads live runs."
+    }
+  },
+  {
+    "tool": "change_scorer",
+    "params": {
+      "action": "update",
+      "scorerId": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6",
+      "goodThreshold": 0.7
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_scorer",
+      "data": {
+        "action": "update",
+        "scorer": {
+          "id": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6",
+          "name": "Quick",
+          "kind": "expression",
+          "scope": "task",
+          "taskId": "book-seat",
+          "enabled": true,
+          "goodThreshold": 0.7,
+          "version": 2,
+          "config": {
+            "logic": {
+              "<=": [
+                {
+                  "var": "toolCallCount"
+                },
+                5
+              ]
+            }
+          }
+        }
+      },
+      "hint": "run_evals runs the suite with the scorers. The daily score job reads live runs."
+    }
+  },
+  {
+    "tool": "list_scorers",
+    "params": {
+      "taskId": "book-seat"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "list_scorers",
+      "data": {
+        "scope": "task",
+        "taskId": "book-seat",
+        "scorers": [
+          {
+            "id": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6",
+            "name": "Quick",
+            "kind": "expression",
+            "scope": "task",
+            "taskId": "book-seat",
+            "enabled": true,
+            "goodThreshold": 0.7,
+            "version": 2,
+            "config": {
+              "logic": {
+                "<=": [
+                  {
+                    "var": "toolCallCount"
+                  },
+                  5
+                ]
+              }
+            },
+            "builtIn": false,
+            "passRate": null
+          },
+          {
+            "id": "legacy:book-seat:ends_well",
+            "name": "Finishes cleanly",
+            "kind": "check",
+            "scope": "task",
+            "taskId": "book-seat",
+            "enabled": true,
+            "goodThreshold": 1,
+            "version": 1,
+            "config": {
+              "path": "endsWell",
+              "op": "eq",
+              "value": true
+            },
+            "builtIn": true,
+            "passRate": null
+          }
+        ]
+      },
+      "hint": "change_scorer adds, edits, removes or switches a scorer. change_eval switches one scorer off for one eval."
+    }
+  },
+  {
+    "tool": "list_scorers",
+    "params": {},
+    "answer": {
+      "ok": true,
+      "operation_id": "list_scorers",
+      "data": {
+        "scope": "suite",
+        "scorers": [
+          {
+            "id": "33c0ae79-6bf2-492a-b7b4-60f40a5930fa",
+            "name": "Answers",
+            "kind": "check",
+            "scope": "suite",
+            "taskId": null,
+            "enabled": true,
+            "goodThreshold": 0.5,
+            "version": 1,
+            "config": {
+              "path": "finalAnswer",
+              "op": "exists"
+            },
+            "builtIn": false,
+            "passRate": null
+          }
+        ]
+      },
+      "hint": "change_scorer adds, edits, removes or switches a scorer. change_eval switches one scorer off for one eval."
+    }
+  },
+  {
+    "tool": "change_eval",
+    "params": {
+      "action": "create",
+      "name": "Book seat 23A",
+      "message": "Book me seat 23A on flight R1.",
+      "tasks": [
+        "book-seat"
+      ]
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_eval",
+      "data": {
+        "action": "create",
+        "eval": {
+          "id": "c831fd8a-2b38-4ee0-ac62-fd1686c6048b",
+          "name": "Book seat 23A",
+          "status": "approved",
+          "tasks": [
+            "book-seat"
+          ],
+          "message": "Book me seat 23A on flight R1.",
+          "criteria": "",
+          "expectedTool": null,
+          "generated": [
+            "systemPrompt",
+            "tools",
+            "context"
+          ],
+          "suggestedBecause": null,
+          "scorersOff": [],
+          "scorersOn": []
+        }
+      },
+      "hint": "run_evals with this evalId runs it."
+    }
+  },
+  {
+    "tool": "change_eval",
+    "params": {
+      "action": "scorer_off",
+      "evalId": "c831fd8a-2b38-4ee0-ac62-fd1686c6048b",
+      "scorerId": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_eval",
+      "data": {
+        "action": "scorer_off",
+        "evalId": "c831fd8a-2b38-4ee0-ac62-fd1686c6048b",
+        "scorerId": "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6",
+        "enabled": false
+      },
+      "hint": "The next run of this eval reads the change."
+    }
+  },
+  {
+    "tool": "change_eval",
+    "params": {
+      "action": "update",
+      "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+      "tools": [
+        {
+          "name": "select_seat",
+          "description": "Selects a seat."
+        }
+      ]
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_eval",
+      "data": {
+        "action": "update",
+        "eval": {
+          "id": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+          "name": "Seat",
+          "status": "approved",
+          "tasks": [],
+          "message": "Pick seat 23A on R1",
+          "criteria": "",
+          "expectedTool": null,
+          "generated": [
+            "systemPrompt"
+          ],
+          "suggestedBecause": null,
+          "scorersOff": [],
+          "scorersOn": []
+        }
+      },
+      "hint": "run_evals with this evalId runs it."
+    }
+  },
+  {
+    "tool": "change_eval",
+    "params": {
+      "action": "set_suite_run_settings",
+      "runSettings": {
+        "judgeModel": "claude-haiku-4-5",
+        "maxSteps": 4
+      }
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "change_eval",
+      "data": {
+        "action": "set_suite_run_settings",
+        "runSettings": {
+          "judgeModel": "claude-haiku-4-5",
+          "maxSteps": 4
+        }
+      },
+      "hint": "The next run of each eval without its own setting uses these."
+    }
+  },
+  {
+    "tool": "change_eval",
+    "params": {
+      "action": "set_run_settings",
+      "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+      "runSettings": {
+        "toolModel": "gpt-5"
+      }
+    },
+    "answer": {
+      "ok": false,
+      "error": "invalid_params",
+      "message": "gpt-5 is not a Claude model that this backend serves. Choose one of: claude-sonnet-4-6, claude-haiku-4-5."
+    }
+  },
+  {
+    "tool": "list_evals",
+    "params": {},
+    "answer": {
+      "ok": true,
+      "operation_id": "list_evals",
+      "data": {
+        "count": 2,
+        "evals": [
+          {
+            "id": "c831fd8a-2b38-4ee0-ac62-fd1686c6048b",
+            "name": "Book seat 23A",
+            "status": "approved",
+            "tasks": [
+              "book-seat"
+            ],
+            "message": "Book me seat 23A on flight R1.",
+            "criteria": "",
+            "expectedTool": null,
+            "generated": [
+              "systemPrompt",
+              "tools",
+              "context"
+            ],
+            "suggestedBecause": null,
+            "scorersOff": [
+              "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6"
+            ],
+            "scorersOn": []
+          },
+          {
+            "id": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+            "name": "Seat",
+            "status": "approved",
+            "tasks": [],
+            "message": "Pick seat 23A on R1",
+            "criteria": "",
+            "expectedTool": null,
+            "generated": [
+              "systemPrompt"
+            ],
+            "suggestedBecause": null,
+            "scorersOff": [],
+            "scorersOn": []
+          }
+        ]
+      },
+      "hint": "change_eval adds or edits an eval. run_evals runs the suite or one eval."
+    }
+  },
+  {
+    "tool": "list_evals",
+    "params": {
+      "taskId": "book-seat"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "list_evals",
+      "data": {
+        "count": 1,
+        "evals": [
+          {
+            "id": "c831fd8a-2b38-4ee0-ac62-fd1686c6048b",
+            "name": "Book seat 23A",
+            "status": "approved",
+            "tasks": [
+              "book-seat"
+            ],
+            "message": "Book me seat 23A on flight R1.",
+            "criteria": "",
+            "expectedTool": null,
+            "generated": [
+              "systemPrompt",
+              "tools",
+              "context"
+            ],
+            "suggestedBecause": null,
+            "scorersOff": [
+              "2d11fd4b-5f49-4325-a05d-6d927a7cfeb6"
+            ],
+            "scorersOn": []
+          }
+        ]
+      },
+      "hint": "change_eval adds or edits an eval. run_evals runs the suite or one eval."
+    }
+  },
+  {
+    "tool": "run_evals",
+    "params": {
+      "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "run_evals",
+      "data": {
+        "runId": "5feae761-0733-450e-8788-2af84e2d75d4",
+        "status": "queued",
+        "evalCount": 1,
+        "created": true
+      },
+      "hint": "Call get_eval_run with this runId. A queued run starts within a minute."
+    }
+  },
+  {
+    "tool": "run_evals",
+    "params": {
+      "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "run_evals",
+      "data": {
+        "runId": "5feae761-0733-450e-8788-2af84e2d75d4",
+        "status": "queued",
+        "evalCount": 1,
+        "created": false
+      },
+      "hint": "Call get_eval_run with this runId. A queued run starts within a minute."
+    }
+  },
+  {
+    "tool": "get_eval_run",
+    "params": {
+      "runId": "5feae761-0733-450e-8788-2af84e2d75d4"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "get_eval_run",
+      "data": {
+        "runId": "5feae761-0733-450e-8788-2af84e2d75d4",
+        "status": "completed",
+        "kind": "manual",
+        "suite": "Eval Seat",
+        "error": null,
+        "createdAt": "2026-11-22T11:26:24.178Z",
+        "finishedAt": "2026-11-22T11:26:24.214Z",
+        "results": [
+          {
+            "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+            "name": "Seat",
+            "side": "before",
+            "passed": true,
+            "change": "new",
+            "error": null,
+            "verdicts": [],
+            "standIns": {
+              "count": 0,
+              "tools": []
+            },
+            "runSettings": {
+              "sources": {
+                "maxSteps": "suite",
+                "budgetUsd": "default",
+                "maxTokens": "default",
+                "toolModel": "default",
+                "agentModel": "default",
+                "judgeModel": "suite",
+                "temperature": "default"
+              },
+              "maxSteps": 4,
+              "budgetUsd": 1,
+              "maxTokens": 4096,
+              "toolModel": "claude-haiku-5-5",
+              "agentModel": null,
+              "judgeModel": "claude-haiku-4-5",
+              "temperature": null
+            },
+            "replay": {
+              "systemPrompt": "You are a travel agent.",
+              "message": "Pick seat 23A on R1",
+              "toolsOffered": [
+                "select_seat"
+              ],
+              "steps": [
+                {
+                  "index": 0,
+                  "role": "assistant",
+                  "text": "",
+                  "calls": [
+                    {
+                      "args": {
+                        "ref": "R1",
+                        "seat": "23A"
+                      },
+                      "name": "select_seat"
+                    }
+                  ]
+                },
+                {
+                  "index": 1,
+                  "role": "tool",
+                  "tool": "select_seat",
+                  "args": {
+                    "ref": "R1",
+                    "seat": "23A"
+                  },
+                  "content": "{\"seat\":\"23A\"}",
+                  "isError": false,
+                  "source": "recorded",
+                  "reason": "matched_recording"
+                },
+                {
+                  "index": 2,
+                  "role": "assistant",
+                  "text": "Done.",
+                  "calls": []
+                }
+              ]
+            },
+            "scores": [
+              {
+                "scorerId": "33c0ae79-6bf2-492a-b7b4-60f40a5930fa",
+                "name": "Answers",
+                "status": "pass",
+                "value": 1,
+                "detail": "finalAnswer is set"
+              }
+            ]
+          }
+        ]
+      },
+      "hint": "change_eval with set_step_answer changes the answer of a tool step. change_eval with edit_reply changes the agent reply of an assistant step and runs from it. change_eval with continue_from_step copies the eval from a step and runs the copy."
+    }
+  },
+  {
+    "tool": "run_evals",
+    "params": {},
+    "answer": {
+      "ok": true,
+      "operation_id": "run_evals",
+      "data": {
+        "runId": "75568933-f111-4f1d-8021-8779235befd2",
+        "status": "queued",
+        "evalCount": 2,
+        "created": true
+      },
+      "hint": "Call get_eval_run with this runId. A queued run starts within a minute."
+    }
+  },
+  {
+    "tool": "get_eval_run",
+    "params": {
+      "runId": "75568933-f111-4f1d-8021-8779235befd2"
+    },
+    "answer": {
+      "ok": true,
+      "operation_id": "get_eval_run",
+      "data": {
+        "runId": "75568933-f111-4f1d-8021-8779235befd2",
+        "status": "completed",
+        "kind": "manual",
+        "suite": "All evals",
+        "error": null,
+        "createdAt": "2026-11-22T11:26:24.222Z",
+        "finishedAt": "2026-11-22T11:26:24.236Z",
+        "results": [
+          {
+            "evalId": "d71093ca-04d5-46ce-8b01-4f98cb20a4a5",
+            "name": "Seat",
+            "side": "before",
+            "passed": true,
+            "change": "same",
+            "error": null,
+            "verdicts": [],
+            "standIns": {
+              "count": 0,
+              "tools": []
+            },
+            "runSettings": {
+              "sources": {
+                "maxSteps": "suite",
+                "budgetUsd": "default",
+                "maxTokens": "default",
+                "toolModel": "default",
+                "agentModel": "default",
+                "judgeModel": "suite",
+                "temperature": "default"
+              },
+              "maxSteps": 4,
+              "budgetUsd": 1,
+              "maxTokens": 4096,
+              "toolModel": "claude-haiku-5-5",
+              "agentModel": null,
+              "judgeModel": "claude-haiku-4-5",
+              "temperature": null
+            },
+            "replay": {
+              "systemPrompt": "You are a travel agent.",
+              "message": "Pick seat 23A on R1",
+              "toolsOffered": [
+                "select_seat"
+              ],
+              "steps": [
+                {
+                  "index": 0,
+                  "role": "assistant",
+                  "text": "",
+                  "calls": [
+                    {
+                      "args": {
+                        "ref": "R1",
+                        "seat": "23A"
+                      },
+                      "name": "select_seat"
+                    }
+                  ]
+                },
+                {
+                  "index": 1,
+                  "role": "tool",
+                  "tool": "select_seat",
+                  "args": {
+                    "ref": "R1",
+                    "seat": "23A"
+                  },
+                  "content": "{\"seat\":\"23A\"}",
+                  "isError": false,
+                  "source": "recorded",
+                  "reason": "matched_recording"
+                },
+                {
+                  "index": 2,
+                  "role": "assistant",
+                  "text": "Done.",
+                  "calls": []
+                }
+              ]
+            },
+            "scores": [
+              {
+                "scorerId": "33c0ae79-6bf2-492a-b7b4-60f40a5930fa",
+                "name": "Answers",
+                "status": "pass",
+                "value": 1,
+                "detail": "finalAnswer is set"
+              }
+            ]
+          }
+        ]
+      },
+      "hint": "change_eval with set_step_answer changes the answer of a tool step. change_eval with edit_reply changes the agent reply of an assistant step and runs from it. change_eval with continue_from_step copies the eval from a step and runs the copy."
+    }
+  },
+  {
+    "tool": "get_eval_run",
+    "params": {
+      "runId": "44444444-4444-4444-8444-444444444444"
+    },
+    "answer": {
+      "ok": false,
+      "error": "not_found",
+      "message": "No eval run found."
+    }
+  }
+]

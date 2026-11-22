@@ -1,0 +1,17 @@
+$ cd src && pnpm typecheck   # Cloud: ee/src = ratel-platform beluga/rp-123-embeddings-notice d7a6cd1 (#135)
+
+> @ratel/platform@0.1.0 typecheck /Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src
+> node ../scripts/link-ee.mjs --auto && pnpm mcp-apps:build && tsc --noEmit
+
+
+> @ratel/platform@0.1.0 mcp-apps:build /Users/rstagi/Dev/ratel-ai/ratel-wt-rp-149/src
+> tsx scripts/build-mcp-apps.mts
+
+mcp-apps: detail 424 KB, 6 bindings
+mcp-apps: health 572 KB, 1 bindings
+mcp-apps: list 657 KB, 13 bindings
+mcp-apps: replay 550 KB, 3 bindings
+mcp-apps: series 436 KB, 2 bindings
+mcp-apps: trace 610 KB, 1 bindings
+mcp-apps: built 6 views in 3441 ms
+exit=0

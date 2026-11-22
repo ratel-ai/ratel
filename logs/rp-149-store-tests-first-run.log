@@ -1,0 +1,32 @@
+✔ creates an eval with its tasks and reads it back (2509.320375ms)
+✔ links tasks many-to-many and lists evals by task and status (268.945542ms)
+✔ records a run and its results, upserting a retried result (251.270541ms)
+✔ a simulation run needs a fix and a manual run refuses one (221.049917ms)
+✔ recent results come from completed runs only, newest first, capped per eval (236.048833ms)
+✔ prune clears transcripts older than 30 days and keeps the numbers (215.592125ms)
+✔ RC-318: prune clears each turn's message after 30 days, keeps the turn verdicts and numbers, and also prunes a result with turns but no transcript (194.312083ms)
+✔ deleting an eval removes its links and results (210.266792ms)
+✔ two scorers of one kind on a task, a suite scorer, and one eval's switch (2501.577375ms)
+✔ updates validate and bump the version only when the reading changes (260.3015ms)
+✔ check reads latency, cost and tokens (1.583208ms)
+✔ check reads per-step latency over every step (0.431875ms)
+✔ check reads tool called and not called (0.564459ms)
+✔ check matches tool arguments and results (0.644917ms)
+✔ check reads message text by substring and by pattern (1.153208ms)
+✔ check skips an unknown value and reads exists (1.06825ms)
+✔ expression evaluates JSONLogic over the run view (0.938667ms)
+✔ judge reads the whole transcript through its port (0.699208ms)
+✔ decision asks a closed-set question through its port (0.509708ms)
+✔ two scorers of one kind both score (0.244292ms)
+✔ applicableScorers adds suite scorers and applies the eval's switches (0.181416ms)
+✔ the view derives tool names, counts and how the run ended (0.164ms)
+✔ parseDefinition rejects an invalid JSONLogic expression with a clear message (0.653542ms)
+✔ parseDefinition validates check, judge and decision configs (0.431667ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5641.125583
