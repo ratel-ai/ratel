@@ -1,7 +1,7 @@
 import { numeric, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** Per-project model prices. Owned fragment of the upstream schema (ADR-0030). */
+/** Per-project model prices. Owned fragment of the upstream schema (ADR-0004). */
 
 /**
  * A project's own token prices (RC-482), in USD per 1M tokens. They win over the

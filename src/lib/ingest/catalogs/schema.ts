@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** Catalog snapshots a runtime pushes, and their tool definitions. Owned fragment of the upstream schema (ADR-0030). */
+/** Catalog snapshots a runtime pushes, and their tool definitions. Owned fragment of the upstream schema (ADR-0004). */
 
 /** Content-addressed receipt metadata for each source's latest full catalog. */
 export const catalogSnapshots = pgTable(

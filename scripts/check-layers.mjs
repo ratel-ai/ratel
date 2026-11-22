@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Layer check for src/lib (ADR-0030): a file in a layer may import its own layer or a lower
+// Layer check for src/lib (ADR-0004): a file in a layer may import its own layer or a lower
 // one, never a higher one, and nothing under lib/ may import the UI (`@/components`, `@/app`).
 // Usage (from repo root): node scripts/check-layers.mjs [--lib src/lib] [--allow scripts/layers-allow.json]
 //

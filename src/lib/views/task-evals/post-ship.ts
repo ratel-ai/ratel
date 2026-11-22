@@ -201,7 +201,7 @@ export async function measurePostShip(
     let cap = 0;
     let organizationId: string | undefined;
     if (criteria && records.length) {
-      // Owned (ADR-0030): the core has no organizations table; the advisory lock stands in.
+      // Owned (ADR-0004): the core has no organizations table; the advisory lock stands in.
       const [org] = await tx
         .select({ id: projects.organizationId })
         .from(projects)

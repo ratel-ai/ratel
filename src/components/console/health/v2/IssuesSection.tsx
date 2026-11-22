@@ -367,7 +367,7 @@ function ActionCell({ row, onTurns }: { row: IssueRow; onTurns: () => void }) {
 
 /**
  * What the plan hides, as one quiet line; the map scrolls here when it names a hidden issue.
- * Owned (ADR-0030): the plan is named only with an edition's plans; otherwise the limits are.
+ * Owned (ADR-0004): the plan is named only with an edition's plans; otherwise the limits are.
  */
 function Locked({
   count,

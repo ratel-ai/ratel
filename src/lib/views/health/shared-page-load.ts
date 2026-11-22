@@ -13,7 +13,7 @@ const logger = getLogger("health/share-page");
 
 /**
  * One read per request for a shared page and its metadata (upstream's `share/page-load.ts`).
- * Owned (ADR-0030): share links are the edition's, so an edition without `EditionUi.HealthShare`
+ * Owned (ADR-0004): share links are the edition's, so an edition without `EditionUi.HealthShare`
  * (the open-source one) answers every token like an unknown link. A failure is logged and
  * reported, then answered the same way, so an outage never says whether a token exists.
  */

@@ -23,7 +23,7 @@ export interface DraftFixJobPayload {
   requestedBy: string;
 }
 
-/** Owned (ADR-0030): the gate reads `env` (`FF_EVAL_GATE`) where upstream takes flag deps. */
+/** Owned (ADR-0004): the gate reads `env` (`FF_EVAL_GATE`) where upstream takes flag deps. */
 export interface ResolveDraftDeps {
   db?: EvalDb;
   actor?: string;
@@ -48,7 +48,7 @@ export async function resolveFixChange(
   if (hasEffect(fallback)) return { status: "ready", change: fallback };
   if (fix.kind !== "rewrite" && fix.kind !== "tell-apart")
     return { status: "unsupported", change: fallback };
-  // Owned (ADR-0030): with no model there is nothing to draft, so nothing is queued.
+  // Owned (ADR-0004): with no model there is nothing to draft, so nothing is queued.
   if (!draftModelAvailable(env, deps.environment))
     return {
       status: "unsupported",

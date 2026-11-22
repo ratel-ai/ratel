@@ -14,7 +14,7 @@ import {
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * Session replay's What-if tables. Owned fragment of the upstream schema (ADR-0030):
+ * Session replay's What-if tables. Owned fragment of the upstream schema (ADR-0004):
  * `session_replay_settings` and `session_replay_runs`, the session-replay partition of the
  * upstream schema hub, column for column.
  */

@@ -20,7 +20,7 @@ const logger = getLogger("freshness/route");
  * GET /api/projects/:projectId/freshness: when the project's analysis last
  * updated and whether more is on the way, polled by a page's header
  * (`?section=`) while the tab is visible. A read; no product event. A slow
- * read answers 204 and the page keeps what it showed. Owned (ADR-0030): the
+ * read answers 204 and the page keeps what it showed. Owned (ADR-0004): the
  * project comes from the console scope.
  */
 export const GET = withRequestLog(handleGet);

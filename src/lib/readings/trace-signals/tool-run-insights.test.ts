@@ -18,7 +18,7 @@ import { wfTurn } from "./workflows/test-fixtures";
  * 2026-11-17 (list_traces, distinct tools per run, in order): 40 runs, 18 of
  * them with two tools or more, 0 tasks.
  *
- * Owned (ADR-0030): the flag cases are the `FF_TOOL_RUN_INSIGHTS` env
+ * Owned (ADR-0004): the flag cases are the `FF_TOOL_RUN_INSIGHTS` env
  * switch's, not the flag service's.
  */
 

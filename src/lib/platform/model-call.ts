@@ -23,7 +23,7 @@ import { reportServerException } from "@/lib/platform/telemetry";
 
 /**
  * The model-call seam: where a module says "a model was called" (or refused, or skipped for want
- * of a key), with what it cost in tokens and time. Owned (ADR-0030): upstream's module of the same
+ * of a key), with what it cost in tokens and time. Owned (ADR-0004): upstream's module of the same
  * names writes a spend line per call and prices it; here the open-source edition writes nothing,
  * so a tracked call only runs. An edition that tracks spend takes each record through the
  * telemetry port (`recordModelCall` in `lib/contracts/telemetry.ts`) and writes and prices the

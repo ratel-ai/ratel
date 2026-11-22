@@ -16,7 +16,7 @@ type LookupProjectLabels = Parameters<typeof withProjectLogContext>[2];
  * the job in words with only allowlisted ids (ratel-cloud #517, `job-ask.ts`):
  * the project and the payload belong to another organization.
  *
- * Owned (ADR-0030): upstream keeps this in its job hub (`lib/jobs/handlers.ts`);
+ * Owned (ADR-0004): upstream keeps this in its job hub (`lib/jobs/handlers.ts`);
  * here each module's `register.ts` wraps the same jobs with it, and passes its
  * kind's ask spec.
  */

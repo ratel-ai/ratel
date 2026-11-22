@@ -355,7 +355,7 @@ async function setup() {
   };
   const deps: TaskSimulationDeps = {
     db,
-    // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value.
+    // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value.
     flagDeps: { FF_EVAL_GATE: "1" },
     loadFix: async () => ({ projectId: PROJECT, fix }),
     observability: { trackSystemEvent: async () => undefined },

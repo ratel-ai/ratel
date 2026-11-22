@@ -15,7 +15,7 @@ import { type AccountOperationDeps, accountOperations } from "./account";
  * console counts it (the demo project is free), limits that say "unlimited" rather than null,
  * the plan and its subscription state, and the match quality run budget.
  *
- * Owned (ADR-0030): upstream's quota cases. Its plan table is the edition's, so the cases that
+ * Owned (ADR-0004): upstream's quota cases. Its plan table is the edition's, so the cases that
  * need one install a stand-in for it (`withPlans`); the open-source edition has none.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";

@@ -19,7 +19,7 @@ import { resolveTraceListView, type TraceListSearchParams } from "@/lib/synthesi
 
 export const metadata = { title: "Calibration mismatches" };
 
-/** Owned (ADR-0030): the project comes from the guarded route, a 404 outside the organization. */
+/** Owned (ADR-0004): the project comes from the guarded route, a 404 outside the organization. */
 export default async function CalibrationMismatchesPage({
   params,
   searchParams,

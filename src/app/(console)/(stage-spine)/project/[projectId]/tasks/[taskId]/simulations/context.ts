@@ -7,7 +7,7 @@ import { buildTaskDetail } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
 
 /**
- * Resolve page access before reading any simulation data. Owned (ADR-0030): the project comes
+ * Resolve page access before reading any simulation data. Owned (ADR-0004): the project comes
  * from the console scope; the stage spine is the env flag.
  */
 export async function simulationPageContext(projectId: string, taskId: string) {

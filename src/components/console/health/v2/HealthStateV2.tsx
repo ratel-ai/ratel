@@ -42,7 +42,7 @@ export interface HealthStateV2Props {
  * block in the place the reading would take, saying what is true for the selected window and
  * the one thing to do about it (DESIGN.md, Empty states). The words come from `healthStateCopy`.
  *
- * Owned (ADR-0030): the importer is the edition's, and without it the one action besides a
+ * Owned (ADR-0004): the importer is the edition's, and without it the one action besides a
  * wider window is the API key; the edition's source names reach the copy.
  */
 export function HealthStateV2({

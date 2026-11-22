@@ -30,7 +30,7 @@ export const metadata = { title: "Self-corrections" };
 /**
  * Agent health, Self-corrections: how often the agent goes back on itself, where, what it said,
  * and what to change. Fixes are read beside the page so each fix opens where it is made; a
- * failed read of Fixes costs only those links. Owned (ADR-0030): the project comes from the
+ * failed read of Fixes costs only those links. Owned (ADR-0004): the project comes from the
  * console scope.
  */
 export default async function SelfCorrectionsPage({

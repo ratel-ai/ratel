@@ -22,7 +22,7 @@ import { queryIntents } from "@/lib/readings/query-intents/schema";
 /**
  * The intent engine: the lexical clustering of every ask a project's agents received,
  * at three levels, with its cursor and the assignment of each ask to a cluster. Owned
- * fragment of the upstream schema (ADR-0030). The engine keeps its own cursor, separate
+ * fragment of the upstream schema (ADR-0004). The engine keeps its own cursor, separate
  * from the intent-graph fold's, so it runs beside the fold without moving it.
  */
 export const intentEngineState = pgTable("intent_engine_state", {

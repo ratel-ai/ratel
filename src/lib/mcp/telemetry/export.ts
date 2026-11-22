@@ -22,7 +22,7 @@ import {
  * The pattern of lib/platform/otel/ratel-export.ts with a key of its own, so the backend model
  * calls and the MCP calls land in two projects. It rides on the self-telemetry provider.
  *
- * Owned (ADR-0030): upstream defaults the endpoint to its own deployment. Here there is no default
+ * Owned (ADR-0004): upstream defaults the endpoint to its own deployment. Here there is no default
  * destination: the export is off unless both `RATEL_SELF_TELEMETRY_MCP_API_KEY` (a project key;
  * the `REPLACE_ME` seed counts as unset) and `RATEL_SELF_TELEMETRY_ENDPOINT` are set.
  */

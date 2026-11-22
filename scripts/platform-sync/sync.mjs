@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copies the open-source parts of ratel-cloud into this tree (ADR-0030), repeatably.
+// Copies the open-source parts of ratel-cloud into this tree (ADR-0004), repeatably.
 //
 //   node scripts/platform-sync/sync.mjs [--source ../ratel-cloud] [--only src/lib/ingest] [--check] [--no-format]
 //

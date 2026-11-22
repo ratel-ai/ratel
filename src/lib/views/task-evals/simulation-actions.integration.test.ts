@@ -128,7 +128,7 @@ test("members save user drafts, add and edit fix tests, and rerun through the si
     );
     deps.ship = (input) =>
       createFixShipment(input, db, {
-        // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value.
+        // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value.
         flagDeps: { FF_EVAL_GATE: "1" },
         loadFix: deps.loadFix,
       });

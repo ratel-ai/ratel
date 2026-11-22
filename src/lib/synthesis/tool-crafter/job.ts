@@ -55,7 +55,7 @@ import type { JsonSchemaObject, SourceTool } from "@/lib/synthesis/tool-crafter/
  * and rethrows so the job runner records it. No model is called; the
  * proposals are rule-drafted suggestions.
  *
- * Owned (ADR-0030): the crafter drafts for every project here, as the explorer
+ * Owned (ADR-0004): the crafter drafts for every project here, as the explorer
  * runs for every project, so there is no flag gate (upstream's `flag.ts` and
  * `flags-ingest` are gone and `isEnabled` with them). The explorer it reads
  * is the L4 module; its registration fills `exploreSeams.enqueueCraft`.

@@ -14,7 +14,7 @@ import { toolExplorerRuns } from "@/lib/readings/tool-explorer/schema";
 
 /**
  * The tool crafter's tables: one run per crafting pass and the proposals it drafted. Owned
- * fragment of the upstream schema (ADR-0030): `tool_craft_runs` and `tool_craft_proposals`,
+ * fragment of the upstream schema (ADR-0004): `tool_craft_runs` and `tool_craft_proposals`,
  * the tool-crafter partition of the upstream schema hub. The `craft_tools` queued-job index
  * lives with the `jobs` table (`lib/jobs/schema.ts`).
  *

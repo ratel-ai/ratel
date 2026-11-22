@@ -12,7 +12,7 @@ import type { StepDraft, TurnDraft, TurnEndedBy } from "./types";
  * (is there one, how far back does it reach, did anything arrive). Every function takes
  * an injectable `db` so the jobs test against PGlite.
  *
- * Owned (ADR-0030): the reader half of upstream's `signals/ledger.ts`. The loaders of a
+ * Owned (ADR-0004): the reader half of upstream's `signals/ledger.ts`. The loaders of a
  * signal run's analysis context (catalog, usage, intent-graph clusters, previous runs)
  * read L4 tables and live with the readings.
  */

@@ -7,7 +7,7 @@ import { ossTelemetry } from "@/lib/adapters/oss/telemetry";
 import { type CompositionPorts, PORT_NAMES } from "@/lib/contracts/composition";
 
 /**
- * The composition root for the ports (ADR-0030). It imports the contracts, the OSS adapters and
+ * The composition root for the ports (ADR-0004). It imports the contracts, the OSS adapters and
  * the `#ee-composition` seam, and nothing else, so any module may read it without a cycle. The
  * other root, `registry.ts`, collects every module's `register.ts` and is the one file allowed
  * to import upward.

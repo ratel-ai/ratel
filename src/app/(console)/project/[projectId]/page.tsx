@@ -14,7 +14,7 @@ export const metadata = { title: "Project home" };
 /**
  * A project's home: the Overview.
  *
- * Owned (ADR-0030): the project comes from the console scope (the session's
+ * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise). How a person left the guided tour is the
  * edition's to keep (`SessionPort.tourStatus`; upstream reads the user row), or
  * a cookie without one.

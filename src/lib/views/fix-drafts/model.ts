@@ -28,7 +28,7 @@ export interface DraftModel {
 export const STAND_IN_SUFFIX = "Use it when the request names what this tool does.";
 
 /**
- * Owned (ADR-0030): with `EVAL_GATE_MOCK_MODEL=1` outside production, a deterministic
+ * Owned (ADR-0004): with `EVAL_GATE_MOCK_MODEL=1` outside production, a deterministic
  * stand-in that proposes each tool's own text plus a fixed sentence, with no network.
  */
 export function standInDraftModel(
@@ -63,7 +63,7 @@ export function draftModelAvailable(
 }
 
 /**
- * The draft model this deployment has. Owned (ADR-0030): upstream fails only at the request when
+ * The draft model this deployment has. Owned (ADR-0004): upstream fails only at the request when
  * no Claude backend is configured; here no backend is no model (`null`), so nothing is reserved
  * or sent. The placeholder key is no key.
  */

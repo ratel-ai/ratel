@@ -2,8 +2,8 @@
 
 The platform application: the console, the ingest and catalog APIs, the background jobs and the
 intelligence that reads them. One Next.js app, two editions
-([ADR-0029](../docs/adr/0029-platform-cloud-modules-private-repository.md),
-[ADR-0030](../docs/adr/0030-platform-oss-layered-core-and-cloud-sync.md)):
+([ADR-0003](../docs/adr/0003-two-editions-one-application.md),
+[ADR-0004](../docs/adr/0004-layered-core-and-module-ownership.md)):
 
 - **Ratel OSS** (`RATEL_COMPOSITION=oss`, the default): what this repository builds on its own.
   Needs a Postgres `DATABASE_URL` and nothing else; model keys are optional.

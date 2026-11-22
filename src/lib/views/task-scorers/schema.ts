@@ -15,7 +15,7 @@ import { projects } from "@/lib/platform/projects/schema";
 import type { ScorerKind } from "./types";
 
 /**
- * A task's scorers and its daily scores. Owned fragment of the upstream schema (ADR-0030):
+ * A task's scorers and its daily scores. Owned fragment of the upstream schema (ADR-0004):
  * `task_scorers` and `task_scores_daily`, the task-scorers partition of the upstream schema hub,
  * column for column, because production already has these tables.
  */

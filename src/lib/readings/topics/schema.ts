@@ -4,7 +4,7 @@ import { projects } from "@/lib/platform/projects/schema";
 
 /**
  * Topics: what people ask the agent about, grouped and named by the `assign_topics` job.
- * Owned fragment of the upstream schema (ADR-0030). The tables land before the job so the
+ * Owned fragment of the upstream schema (ADR-0004). The tables land before the job so the
  * self-corrections reading, which joins each turn's topic, has them to read.
  */
 

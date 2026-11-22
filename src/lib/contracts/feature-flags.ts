@@ -1,6 +1,6 @@
 /**
  * The core's feature switches, and the optional port through which an edition decides them
- * (ADR-0030). Without the port each switch is its `FF_*` environment variable for the whole
+ * (ADR-0004). Without the port each switch is its `FF_*` environment variable for the whole
  * deployment (in the open-source edition also `RATEL_EXPERIMENTAL_FEATURES`). With it, the
  * edition decides each switch for whoever asks, and an `FF_*` value set in the environment
  * still comes first. The core reads them through `featureEnabled`

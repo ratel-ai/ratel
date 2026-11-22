@@ -14,7 +14,7 @@ import {
 import { publicHealthModel, publicWorkflowLabels } from "@/lib/views/health/public-model";
 
 /**
- * The model behind a public share link (upstream's `share/load.ts`). Owned (ADR-0030): the link,
+ * The model behind a public share link (upstream's `share/load.ts`). Owned (ADR-0004): the link,
  * its token and its table are the edition's, so the token is resolved by `EditionUi.HealthShare`
  * and passed in; there is no feature flag to check. The model, its redaction and the cache are
  * upstream's.

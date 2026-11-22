@@ -18,7 +18,7 @@ import { boostExperimentName } from "./boost-view";
 /**
  * The Boost reads Adaptive ranking compares a graph with: what a runtime reported, or the fold's
  * shadow turns, and the outcomes around the moment a graph went live. They read the quality
- * selections, so they sit above the graph's own queries. Owned (ADR-0030): cut from upstream's
+ * selections, so they sit above the graph's own queries. Owned (ADR-0004): cut from upstream's
  * `intent-graph/queries.ts`.
  */
 

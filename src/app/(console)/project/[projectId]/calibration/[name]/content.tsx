@@ -52,7 +52,7 @@ export const metadata = { title: "Experiment comparison" };
  * shadow reliability, conversion and the capability rank diff. The calibration
  * detail renders it for experiments without comparison records.
  *
- * Owned (ADR-0030): the project comes from the guarded route, a 404 outside the
+ * Owned (ADR-0004): the project comes from the guarded route, a 404 outside the
  * organization. Upstream also mounts this under its organization-wide
  * Experiments page, which is not part of this edition, so a project is always
  * given.

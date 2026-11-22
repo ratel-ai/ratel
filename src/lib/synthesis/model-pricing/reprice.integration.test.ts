@@ -18,7 +18,7 @@ import { repriceProjectModel, repriceStored, repriceUnpriced } from "./reprice";
 
 const ORG = "22222222-2222-4222-8222-222222222221";
 const OTHER_ORG = "22222222-2222-4222-8222-222222222222";
-// Owned (ADR-0030): organizations are the edition's, so a change names its organization by id.
+// Owned (ADR-0004): organizations are the edition's, so a change names its organization by id.
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER = "11111111-1111-4111-8111-111111111112";
 const ELSEWHERE = "11111111-1111-4111-8111-111111111113";

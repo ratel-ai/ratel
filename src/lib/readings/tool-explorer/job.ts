@@ -35,7 +35,7 @@ import { STALE_RUN_MS } from "@/lib/readings/trace-signals/signals/queries";
  *
  * Logs and events carry counts only: no query text, no end-user ids.
  *
- * Owned (ADR-0030): the explorer runs for every project here, as the signal run does, so
+ * Owned (ADR-0004): the explorer runs for every project here, as the signal run does, so
  * there is no flag gate. The crafter (L5) is a reading of this reading: its registration
  * fills `enqueueCraft` when it lands, and a run with the seam unset simply queues nothing.
  */

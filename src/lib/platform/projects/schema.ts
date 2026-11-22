@@ -12,7 +12,7 @@ import {
 
 /**
  * A project is one agent: the unit telemetry is ingested under, catalogs are published for,
- * and API keys authenticate to (ADR-0030, owned fragment of the upstream schema). The cursor
+ * and API keys authenticate to (ADR-0004, owned fragment of the upstream schema). The cursor
  * columns are advanced by the reading jobs of higher layers; they live on the project row so
  * one row locks one project's folds.
  */

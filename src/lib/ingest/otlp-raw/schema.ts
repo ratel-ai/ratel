@@ -11,7 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** Raw OTLP request bodies. Owned fragment of the upstream schema (ADR-0030). */
+/** Raw OTLP request bodies. Owned fragment of the upstream schema (ADR-0004). */
 
 /** Postgres `bytea`, read and written as bytes. */
 const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({

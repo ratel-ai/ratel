@@ -45,7 +45,7 @@ import { attributeValues, render, visibleText } from "@/lib/views/tasks/test-sup
  * or SDK runs. Each checks the house rules (DESIGN.md), the product's nouns
  * (never "topic"), and that what users wrote never sits in an attribute.
  *
- * Owned (ADR-0030): no importer, share link or plan link on the Summary.
+ * Owned (ADR-0004): no importer, share link or plan link on the Summary.
  */
 
 const PROJECT = "6b64f504-f84f-447a-afe4-fb84054735fb";

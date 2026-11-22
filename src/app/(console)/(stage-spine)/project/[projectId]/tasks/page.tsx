@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Tasks" };
 
 /**
- * Tasks at the project level; live scores with `FF_EVAL_GATE`. Owned (ADR-0030): the project
+ * Tasks at the project level; live scores with `FF_EVAL_GATE`. Owned (ADR-0004): the project
  * comes from the console scope.
  */
 export default async function TasksPage({ params }: { params: Promise<{ projectId: string }> }) {

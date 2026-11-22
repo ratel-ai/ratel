@@ -2,7 +2,7 @@ import { lastProjectCookie, parseLastProjectCookie } from "@/lib/console/scope/c
 
 /**
  * Remembering the project a reader is in. Upstream's proxy writes the last-project cookie as it
- * serves a project page; this edition has no proxy (ADR-0029) and a layout cannot set a cookie,
+ * serves a project page; this edition has no proxy (ADR-0003) and a layout cannot set a cookie,
  * so the project layout renders a client component that calls a server action, and the action
  * calls this. Upstream's rule is kept: the cookie is written only when it changes, because a
  * cookie set in a server action makes Next render the page again.

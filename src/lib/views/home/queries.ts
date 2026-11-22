@@ -4,7 +4,7 @@ import { otelSpans } from "@/lib/ingest/otlp/schema";
 import { getDb } from "@/lib/platform/db/client";
 
 /**
- * The home recap's counts (owned fragment of the upstream queries hub, ADR-0030): what the
+ * The home recap's counts (owned fragment of the upstream queries hub, ADR-0004): what the
  * project overview and the MCP `get_project_overview` tool show first.
  */
 

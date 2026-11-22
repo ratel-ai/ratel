@@ -14,7 +14,7 @@ import type { TaskSimulationDeps } from "@/lib/views/task-evals/simulation";
  * A shipment as the task loop records it: upstream's `createFixShipment` (`lib/fixes/loop-queries.ts`)
  * past its gate check. With the eval gate on, the fix is marked live and its tasks are queued for
  * post-ship measuring in the same transaction; with it off, the shipment is one inserted row.
- * Owned (ADR-0030): the Fixes module stays below the task loop, so the branch arrives through
+ * Owned (ADR-0004): the Fixes module stays below the task loop, so the branch arrives through
  * `fixSeams.recordShipment`, filled when this module loads. The task loop's registration, the MCP
  * loop tools and the simulations page load it, so the web process has it as well as the worker.
  */

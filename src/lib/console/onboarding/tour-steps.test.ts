@@ -16,7 +16,7 @@ import { consoleNav, flattenNav } from "@/lib/console/navigation";
 import { isSpotlightable, resolveTourSteps, TOUR_STEPS } from "@/lib/console/onboarding/tour-steps";
 
 /**
- * Owned (ADR-0030): upstream's cases, with the project rail read from `consoleNav` (stage spine
+ * Owned (ADR-0004): upstream's cases, with the project rail read from `consoleNav` (stage spine
  * off and on), and one more that renders the sidebar and looks for each step's anchor.
  */
 

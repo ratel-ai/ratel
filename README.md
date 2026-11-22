@@ -223,4 +223,4 @@ The SDKs are developed in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel
 
 ## License
 
-The `ratel-ai-core` engine, now in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0009](docs/adr/0009-licensing.md) for the rationale.
+The `ratel-ai-core` engine, now in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), is licensed under [Apache-2.0](LICENSE-APACHE), an explicit patent grant for the engine others embed. Everything else (the platform application, SDKs, telemetry helpers, examples) is [MIT](LICENSE.md). See [ADR-0006](docs/adr/0006-licensing.md) for the rationale.

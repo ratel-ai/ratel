@@ -9,7 +9,7 @@ import type { LineageRef } from "@/lib/views/lineage/types";
  * "From insight …" above an experiment (RC-45).
  * An experiment is named by the SDK, so its insight is only what someone
  * recorded when they started it from one (RC-43's `create_experiment`);
- * otherwise it says it has none. A failed read shows nothing. Owned (ADR-0030):
+ * otherwise it says it has none. A failed read shows nothing. Owned (ADR-0004):
  * the flag is read from the environment.
  */
 export async function ExperimentSource({ projectId, name }: { projectId: string; name: string }) {

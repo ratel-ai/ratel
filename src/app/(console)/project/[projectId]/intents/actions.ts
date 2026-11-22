@@ -36,7 +36,7 @@ import { type IntentStepsRead, loadIntentSteps } from "@/lib/views/intents/topic
  * intent's asks are for and the ways people ask it: they are read from the
  * asks, so they come with the panel or the row that shows them.
  *
- * Owned (ADR-0030): the project comes from the console scope and the actor is
+ * Owned (ADR-0004): the project comes from the console scope and the actor is
  * the session user.
  */
 

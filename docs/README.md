@@ -12,12 +12,12 @@ baseline-capture-distributed.md   Collecting seeding evidence from a multi-insta
 
 ## Guides
 
-[Baseline capture in a distributed host](baseline-capture-distributed.md) — how to collect the evidence for [ADR-0014](adr/0014-adaptive-usage-ranking.md) when the search and the invocation that follows land in different processes. The single-process path is [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository.
+[Baseline capture in a distributed host](baseline-capture-distributed.md) — how to collect the evidence for [adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/97282f939824622e652322b31e10a865fa6c6764/docs/adr/0014-adaptive-usage-ranking.md) (an SDK decision; the record is in this repository's history) when the search and the invocation that follows land in different processes. The single-process path is [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository.
 
 ## `adr/` — Architecture decision records
 
 The record of cross-cutting choices, kept **minimal and current**. Nygard format (`Status` / `Context` / `Decision` / `Consequences`), numbered sequentially (`NNNN-kebab-title.md`).
 
-Amend in place for small drift; write a superseding ADR for real decision reversals; compact periodically — git history is the archive.
+Each ADR states the current decision: amend it in place for small drift, rewrite or delete it when the decision changes — git history is the archive. [`adr/README.md`](adr/README.md) lists them.
 
-[ADR 0001](adr/0001-record-architecture-decisions.md) is the meta-ADR that carries the full convention. The `.adr-dir` file at the repo root points [adr-tools](https://github.com/npryce/adr-tools) here.
+[ADR 0001](adr/0001-record-architecture-decisions.md) carries the full convention. The `.adr-dir` file at the repo root points [adr-tools](https://github.com/npryce/adr-tools) here.

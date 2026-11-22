@@ -26,7 +26,7 @@ import { evalHref } from "@/lib/views/eval-gate/view";
  * add runs (by id, or more from history), change a run's expected outcome and
  * criteria, remove a run. Any member of the project may; membership is
  * re-resolved here and the client posts only ids and the edited fields.
- * Owned (ADR-0030): the project comes from the console scope.
+ * Owned (ADR-0004): the project comes from the console scope.
  */
 
 const logger = getLogger("fixes/eval-actions");

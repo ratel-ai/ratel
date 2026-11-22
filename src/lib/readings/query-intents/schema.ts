@@ -5,7 +5,7 @@ import { projects } from "@/lib/platform/projects/schema";
 /**
  * Recurring asks: the canonical query intents a project's search queries are categorized
  * into, and the per-occurrence ledger behind them. Owned fragment of the upstream schema
- * (ADR-0030).
+ * (ADR-0004).
  *
  * `occurrences` and `last_seen_at` are recomputed from the ledger by
  * `recordQueryIntentOccurrences`, never incremented, so a retried or overlapping run

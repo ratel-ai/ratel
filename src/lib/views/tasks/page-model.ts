@@ -32,7 +32,7 @@ import { tasksSeams } from "@/lib/views/tasks/seams";
  * still shows its tasks, with those parts marked as not measured. Every
  * failure is logged and reported before its fallback is used.
  *
- * Owned (ADR-0030): the tool crafter's drafted changes and its round-trip
+ * Owned (ADR-0004): the tool crafter's drafted changes and its round-trip
  * price come through `tasksSeams` and `fixSeams` once it lands.
  */
 

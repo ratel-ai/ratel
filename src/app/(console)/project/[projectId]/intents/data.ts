@@ -22,7 +22,7 @@ import { buildTopicsView, type IntentsReading } from "@/lib/views/intents/topics
  * bounded read (`withStatementTimeout` inside `loadOrFallback`): when it fails
  * or runs long the page says so in place and the rest of the shell works.
  *
- * Owned (ADR-0030): the project comes from the console scope (the session's
+ * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise).
  */
 

@@ -17,7 +17,7 @@ import { projects } from "@/lib/platform/projects/schema";
  * `trace_event_hits` by the `build_trace_turns` job (`lib/ledger/turns/`). Durable on
  * purpose: raw runtime events are pruned after 30 days, and this table is what every
  * reading above it works from, so a 90-day window survives the prune. Owned fragment
- * of the upstream schema (ADR-0030).
+ * of the upstream schema (ADR-0004).
  *
  * A turn is either host-declared (`turn_source = 'declared'`, keyed on the envelope's
  * `turn_id`), inferred from timing within one session (`'inferred'`, keyed on its first

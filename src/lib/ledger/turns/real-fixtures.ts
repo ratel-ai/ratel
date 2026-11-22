@@ -28,7 +28,7 @@ import {
  * builder over the derived rows as the ledger would read them back.
  */
 
-// Owned (ADR-0030): the fixtures sit with the ingest module; this helper sits with the ledger it replays through.
+// Owned (ADR-0004): the fixtures sit with the ingest module; this helper sits with the ledger it replays through.
 export const REAL_FIXTURES_DIR = join(process.cwd(), "lib/ingest/otlp/__fixtures__/real");
 
 export interface FixtureBody {

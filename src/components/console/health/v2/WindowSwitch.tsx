@@ -12,7 +12,7 @@ import {
 /**
  * 7, 30 or 90 days, as links (the window is URL state, `?days=`), in the segmented look every
  * page uses. A window the organization's limits exclude is not a link: it says which plan has
- * it. Owned (ADR-0030): the plan comes from the edition's plans; without them, the window is
+ * it. Owned (ADR-0004): the plan comes from the edition's plans; without them, the window is
  * said to be outside the limits.
  */
 export function WindowSwitch({

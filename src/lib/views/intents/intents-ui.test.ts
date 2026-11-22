@@ -1,5 +1,5 @@
 // The runner only picks up `.ts`, so components are built with createElement.
-// Owned (ADR-0030): the Adaptive ranking cases land with match quality; the Intents cases are upstream's.
+// Owned (ADR-0004): the Adaptive ranking cases land with match quality; the Intents cases are upstream's.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hierarchy, pack } from "d3-hierarchy";

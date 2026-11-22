@@ -8,7 +8,7 @@ import { type FeatureFlagDeps, featureEnabled } from "@/lib/platform/experimenta
  * a turn, tool-less agent runs form one task per agent, and Agent health shows a reading from 10
  * turns marked low confidence. Off, everything reads as before.
  *
- * A core switch (ADR-0030), off by default. Without the edition's flags port it is one switch for
+ * A core switch (ADR-0004), off by default. Without the edition's flags port it is one switch for
  * the deployment, read from the environment (or `RATEL_EXPERIMENTAL_FEATURES` in the open-source
  * edition); with it, the edition decides it for the project (`featureEnabled`). It lives in the
  * platform layer because ingest and the turn ledger read it too; the readings call it through

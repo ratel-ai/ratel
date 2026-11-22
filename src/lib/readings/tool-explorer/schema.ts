@@ -18,7 +18,7 @@ import { traceSignalRuns } from "@/lib/readings/trace-signals/schema";
 /**
  * The tool explorer's tables: one run per pass over a project's closed turns, and the
  * edges, co-used sets and intent-to-tool shares it stores. Owned fragment of the upstream
- * schema (ADR-0030). Everything here is derived from the turn ledger and replaced by the
+ * schema (ADR-0004). Everything here is derived from the turn ledger and replaced by the
  * next run; nothing stores query text or an end-user id. The `explore_tool_usage` queued-job
  * index lives with the `jobs` table (`lib/jobs/schema.ts`).
  */

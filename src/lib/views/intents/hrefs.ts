@@ -1,6 +1,6 @@
 /**
  * Where a tool or a skill on the Intents pages opens: its row on the Catalog. Owned
- * (ADR-0030): upstream keeps this beside the adaptive-ranking page view, which lands with
+ * (ADR-0004): upstream keeps this beside the adaptive-ranking page view, which lands with
  * match quality.
  */
 export type CapabilityKind = "tool" | "skill";

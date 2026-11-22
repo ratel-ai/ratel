@@ -8,7 +8,7 @@ import { mergeMemberText } from "./member-text";
 import { type NewQueryIntentOccurrence, queryIntentOccurrences, queryIntents } from "./schema";
 
 /**
- * The recurring-asks queries (owned fragment of the upstream queries hub, ADR-0030): the
+ * The recurring-asks queries (owned fragment of the upstream queries hub, ADR-0004): the
  * project's categorization watermark, the new search events a run reads, the canonical
  * lookups the pipeline matches against, the occurrence ledger write, and the drain's
  * count-based enqueue of `categorize_queries` runs.

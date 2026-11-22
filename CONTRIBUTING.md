@@ -44,7 +44,7 @@ Avoid breaking changes wherever avoidable. Ship new capabilities as additive, cl
 
 ## Architecture decisions
 
-For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. The set is kept minimal and current: amend in place for small drift (paths, names, counts), supersede for real decision reversals, compact periodically (git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
+For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. The set is kept minimal and current: each ADR states the current decision, amended in place for small drift and rewritten or deleted when the decision changes (git history is the archive). List it in `docs/adr/README.md`. See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
 
 ## Commit messages
 
@@ -64,4 +64,4 @@ The SDK packages release from [ratel-ai/ratel-sdk](https://github.com/ratel-ai/r
 
 ## License
 
-The engine (`ratel-ai-core`) is licensed under [Apache-2.0](LICENSE-APACHE); every other component (SDKs, telemetry helpers, examples) is [MIT](LICENSE.md) — see [ADR-0009](docs/adr/0009-licensing.md). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.
+This repository is [MIT](LICENSE.md) — see [ADR-0006](docs/adr/0006-licensing.md). The engine (`ratel-ai-core`, Apache-2.0) lives in [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk). By submitting a PR you agree your contribution is licensed under the terms governing the component it touches.

@@ -1,4 +1,4 @@
-// Codemod for the platform sync (ADR-0030). Pure: `rewriteSource` takes source text and the
+// Codemod for the platform sync (ADR-0004). Pure: `rewriteSource` takes source text and the
 // rules and returns the rewritten text plus what it could not map. Three passes:
 //
 //   1. partitions — a named import from a hub module (`@/lib/db/schema`, `@/lib/db/queries`) is
