@@ -127,9 +127,12 @@ test("flag off: every registered tool runs without forView and answers exactly a
       `${operation.id}: no view data, no _meta, the text main wrote`,
     );
   }
+  // A sanity floor that the calls really ran, not a quota: the ported ratel-cloud tools (sandboxes,
+  // pivots, code handoff, variants, fine-tuning) mostly need more than a project, so about half
+  // of all tools now refuse before they run.
   assert.ok(
-    seen.size > callable.length / 2,
-    `most tools ran with just a project (${seen.size} of ${callable.length})`,
+    seen.size >= callable.length * 0.4,
+    `at least 40% of tools ran with just a project (${seen.size} of ${callable.length})`,
   );
 });
 
