@@ -543,7 +543,7 @@ async def test_auto_rebuild_stops_once_the_graph_is_recovered() -> None:
 
 @pytest.mark.asyncio
 async def test_skill_catalog_auto_rebuild_recovers_a_paused_graph() -> None:
-    # The skill twin runs the same trigger code.
+    # The skill counterpart runs the same trigger code.
     catalog = SkillCatalog(method="semantic", embedding={"local": "/missing/ratel-model"})
     reg = catalog._registry
     reg._native = _FakeNative("paused: model mismatch")
@@ -575,7 +575,7 @@ async def test_disable_adaptive_ranking_raises_the_typed_busy_error_mid_build() 
 
 @pytest.mark.asyncio
 async def test_skill_enable_adaptive_ranking_raises_the_typed_busy_error_mid_build() -> None:
-    # The skill twin runs the same guard.
+    # The skill counterpart runs the same guard.
     catalog = SkillCatalog()
     await catalog.register(
         Skill(id="s", name="s", description="a skill", tags=[], tools=[], metadata={}, body="# s")

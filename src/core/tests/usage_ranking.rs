@@ -472,7 +472,7 @@ fn a_tool_the_base_ranker_never_retrieved_is_not_promoted() {
     );
 }
 
-// ---- the skill-side twin ---------------------------------------------------
+// ---- the skill-side counterpart ---------------------------------------------------
 
 fn skill(id: &str, description: &str) -> ratel_ai_core::Skill {
     ratel_ai_core::Skill {

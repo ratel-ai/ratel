@@ -312,7 +312,7 @@ async def test_replace_all_on_semantic_embeds_the_new_skills(
 async def test_replace_all_refuses_a_second_reload_while_the_first_embeds(
     controlled_embedding_endpoint: tuple[str, threading.Event, threading.Event],
 ) -> None:
-    # The TS twin can fire both reloads in one tick, because napi takes the
+    # The TS counterpart can fire both reloads in one tick, because napi takes the
     # dense permit synchronously. Here `_dense_pending` only rises once the
     # embedding request is actually in flight, so the endpoint holds the first
     # reload open to create the overlap.

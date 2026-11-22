@@ -864,7 +864,7 @@ impl CandleEmbedder {
         Ok(l2_normalize(vec))
     }
 
-    /// Batched twin of [`Self::embed_inner`]: one padded forward pass per chunk of
+    /// Batched counterpart of [`Self::embed_inner`]: one padded forward pass per chunk of
     /// documents instead of one per document. A padded (masked) key contributes
     /// exactly zero to every real token's attention (candle adds `f32::MIN` before
     /// softmax), and right-padding never leaks into real tokens, so each vector is
@@ -941,7 +941,7 @@ fn mean_pool(sequence_output: &Tensor, attention_mask: &Tensor) -> candle_core::
     summed.broadcast_div(&counts)?.i(0) // (hidden,)
 }
 
-/// Masked mean over tokens for a whole batch — the row-wise twin of [`mean_pool`].
+/// Masked mean over tokens for a whole batch — the row-wise counterpart of [`mean_pool`].
 /// `sequence_output` is `(n, seq, hidden)`, `attention_mask` is `(n, seq)`; returns
 /// `(n, hidden)`. Padded tokens (mask 0) contribute nothing and don't count.
 fn mean_pool_batch(

@@ -111,7 +111,7 @@ type SkillBatchItem = (
     HashMap<String, Vec<String>>,
     String,
 );
-// The fact-side twin of `SkillBatchItem`: a fact has no `tools` Vec and adds a
+// The fact-side counterpart of `SkillBatchItem`: a fact has no `tools` Vec and adds a
 // `pin` string (parsed into `core::PinMode`), so the shape is
 // (id, name, description, tags, metadata, body, pin).
 type FactBatchItem = (
@@ -517,7 +517,7 @@ impl ToolStageOne {
     }
 }
 
-/// The skill twin of [`ToolStageOne`].
+/// The skill counterpart of [`ToolStageOne`].
 #[pyclass(frozen)]
 pub struct SkillStageOne {
     inner: Mutex<Option<core::StageOne<core::SkillHit>>>,
@@ -774,7 +774,7 @@ impl SkillHit {
 }
 
 /// A single fact search result: the matched fact id and its relevance score.
-/// The fact analogue of [`SearchHit`] (`tool_id` → `fact_id`), twin of
+/// The fact analogue of [`SearchHit`] (`tool_id` → `fact_id`), counterpart of
 /// [`SkillHit`].
 #[pyclass(frozen)]
 pub struct FactHit {
@@ -2351,7 +2351,7 @@ impl SkillRegistry {
     }
 }
 
-/// Metadata registry over the fact corpus — the grounding-side twin of
+/// Metadata registry over the fact corpus — the grounding-side counterpart of
 /// [`SkillRegistry`]. A separate index keeps fact ranking independent of tools
 /// and skills. Unlike a skill, a fact has no `tools` field and carries a `pin`
 /// (`"always"` / `"retrieved"`) parsed into `core::PinMode` at registration.

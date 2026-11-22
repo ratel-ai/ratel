@@ -14,7 +14,7 @@ use crate::search::{Bm25Cache, Bm25Params};
 use crate::trace::{ChurnKind, FactHitTrace, NoopSink, Origin, SearchStage, TraceEvent, TraceSink};
 
 /// One ranked match from a [`FactRegistry`] search, best-first in the returned
-/// `Vec` — the fact-side twin of [`crate::SkillHit`].
+/// `Vec` — the fact-side counterpart of [`crate::SkillHit`].
 pub struct FactHit {
     /// Id of the matching fact ([`Fact::id`]).
     pub fact_id: String,
@@ -38,7 +38,7 @@ impl Embeddable for Fact {
 /// parallel type keeps the skill path untouched and lets fact telemetry
 /// (`fact_search` / `fact_churn` / `fact_inject`) stand on its own.
 pub struct FactRegistry {
-    /// Corpus keyed by fact id, in insertion order — the fact-side twin of
+    /// Corpus keyed by fact id, in insertion order — the fact-side counterpart of
     /// [`crate::SkillRegistry`]'s field. `register` replaces an existing id in
     /// place, never duplicating it. Insertion order is also the order
     /// [`Self::pinned`] injects always-on facts in.
@@ -188,7 +188,7 @@ impl FactRegistry {
         self.facts.get(fact_id)
     }
 
-    /// Lexical BM25 retrieval — the fact-side twin of
+    /// Lexical BM25 retrieval — the fact-side counterpart of
     /// [`crate::SkillRegistry::search`]: no model, never fails. Returns at most
     /// `top_k` hits, best-first. Ranks both tiers (a pinned fact can still be a
     /// query hit). Traced as [`Origin::Direct`].
@@ -503,7 +503,7 @@ mod tests {
     }
 
     /// A builder that must never run — proof the search path already populated
-    /// the cache (the skill-side twin explains why the public seam can't pin this).
+    /// the cache (the skill-side counterpart explains why the public seam can't pin this).
     fn no_build() -> Vec<(String, String)> {
         unreachable!("cache should already be populated by the search path")
     }
@@ -514,7 +514,7 @@ mod tests {
         // the registry's only mutator — drops it. Results are byte-identical
         // either way, so only this test fails if `register` stops invalidating;
         // a stale index means `ground()` ranks against the old corpus and an
-        // edited fact never surfaces in the retrieved tier. Twin of
+        // edited fact never surfaces in the retrieved tier. Counterpart of
         // `SkillRegistry::bm25_cache_is_warmed_by_search_and_dropped_by_every_mutator`.
         let mut reg = catalog();
         let _ = reg.search("how do I cancel", 5);

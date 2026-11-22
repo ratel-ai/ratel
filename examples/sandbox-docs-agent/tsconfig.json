@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    // @ratel-ai/sandbox is workspace-linked, so its d.ts would otherwise resolve
+    // the sandbox's own dev `ai` (v7) next to this example's v6. A published
+    // install resolves the peer once; this mapping does the same here.
+    "paths": {
+      "ai": ["./node_modules/ai"],
+      "ai/*": ["./node_modules/ai/*"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "docs-agent.sandbox.ts"]
+}

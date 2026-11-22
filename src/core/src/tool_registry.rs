@@ -202,7 +202,7 @@ impl Embeddable for Tool {
 ///
 /// Every register and search emits a [`TraceEvent`] on the registry's
 /// [`TraceSink`] ([`NoopSink`] by default). [`SkillRegistry`] is the
-/// skill-side twin with the same shape.
+/// skill-side counterpart with the same shape.
 ///
 /// [`SkillRegistry`]: crate::SkillRegistry
 pub struct ToolRegistry {
@@ -1684,7 +1684,7 @@ mod tests {
 
     #[test]
     fn bm25_cache_is_warmed_by_search_and_dropped_by_register() {
-        // Lifecycle pin (see the skill-side twin): a public search populates
+        // Lifecycle pin (see the skill-side counterpart): a public search populates
         // the cache, register — the sole corpus mutator — drops it. Results
         // are byte-identical either way (pinned in tests/tool_search.rs), so
         // a per-call rebuild would pass every test there; this is the one
@@ -3174,7 +3174,7 @@ mod tests {
 
     #[test]
     fn seeding_embeds_queries_as_queries_not_documents() {
-        // The seeding twin of `rebuild_embeds_graph_members_as_queries_not_documents`:
+        // The seeding counterpart of `rebuild_embeds_graph_members_as_queries_not_documents`:
         // a replayed log's queries must land in the same query-side manifold live
         // learning would put them in, not the document-side one.
         let reg = catalog(Arc::new(SidedEmbedder));

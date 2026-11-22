@@ -120,7 +120,7 @@ test("mixed SDKs: undeclared events join the preceding declared turn within the 
   assert.equal(turns[0].endedBy, "gap");
 });
 
-test("gateway rows within 2 s of a native twin are dropped, others stand in", () => {
+test("gateway rows within 2 s of a native counterpart are dropped, others stand in", () => {
   const both = turn().gatewaySearch(3).search(["a", "b", "c"]).invoke("a").gatewayInvoke("a");
   const alone = turn({ after: both, gapMs: 5 * 60_000 })
     .gatewaySearch(4)
@@ -145,7 +145,7 @@ test("gateway rows within 2 s of a native twin are dropped, others stand in", ()
   assert.equal(turns[1].hitsTotal, 4, "a standing-in gateway search counts its hits");
 });
 
-test("a gateway invocation of a different tool is not a twin", () => {
+test("a gateway invocation of a different tool is not a counterpart", () => {
   const events = orderTimeline(fixtureEvents([turn().invoke("a").gatewayInvoke("b")]));
 
   assert.equal(dedupeGateway(events, CONFIG.gatewayDedupeMs).gatewayInvocationsDropped, 0);

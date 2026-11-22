@@ -273,7 +273,7 @@ export class FactCatalog {
   }
 
   /**
-   * The stateless twin of {@link FactCatalog.ground}: the full grounding set
+   * The stateless counterpart of {@link FactCatalog.ground}: the full grounding set
    * for **one model call** — always-on facts plus the retrieval-gated facts
    * `query` ranks in — recomputed fresh every call. No freshness gate, no
    * transcript, nothing persisted: render the items into the call's message

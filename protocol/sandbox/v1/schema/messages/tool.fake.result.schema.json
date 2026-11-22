@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/tool.fake.result.schema.json",
+  "title": "tool.fake.result",
+  "description": "From the controller. The fake value for a tool.fake.request.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload",
+    "runId"
+  ],
+  "properties": {
+    "type": {
+      "const": "tool.fake.result"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "callId",
+        "result",
+        "isError",
+        "source"
+      ],
+      "properties": {
+        "callId": {
+          "$ref": "../envelope.schema.json#/$defs/callId"
+        },
+        "result": true,
+        "isError": {
+          "type": "boolean"
+        },
+        "source": {
+          "$ref": "../envelope.schema.json#/$defs/fakeSource"
+        }
+      }
+    }
+  }
+}

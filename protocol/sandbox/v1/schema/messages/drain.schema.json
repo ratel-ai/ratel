@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/drain.schema.json",
+  "title": "drain",
+  "description": "From the controller. Open a new connection, then close this one (make-before-break). Runs in flight continue on the new connection.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "const": "drain"
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "deadlineMs": {
+          "description": "Close this connection within this time.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

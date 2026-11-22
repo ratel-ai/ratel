@@ -717,7 +717,7 @@ class SkillRegistry:
 class FactHit:
     """A single fact search result: the matched fact id and its relevance score.
 
-    The fact analogue of `SearchHit` (`tool_id` → `fact_id`), twin of `SkillHit`.
+    The fact analogue of `SearchHit` (`tool_id` → `fact_id`), counterpart of `SkillHit`.
     """
 
     @property
@@ -735,7 +735,7 @@ class FactHit:
 class FactRegistry:
     """Private native metadata registry over the fact corpus.
 
-    The grounding-side twin of `SkillRegistry`: a separate index, so facts are
+    The grounding-side counterpart of `SkillRegistry`: a separate index, so facts are
     ranked independently of tools and skills. Unlike a skill, a fact has no
     `tools` field and carries a `pin` (`"always"` / `"retrieved"`).
     """

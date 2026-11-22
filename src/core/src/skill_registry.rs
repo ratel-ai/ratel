@@ -29,7 +29,7 @@ use crate::trace::{
 use crate::usage::{ArmOutcome, Capability, IntentGraph, UsageArm};
 
 /// One ranked match from a [`SkillRegistry`] search, best-first in the
-/// returned `Vec` — the skill-side twin of [`crate::SearchHit`].
+/// returned `Vec` — the skill-side counterpart of [`crate::SearchHit`].
 pub struct SkillHit {
     /// Id of the matching skill ([`Skill::id`]).
     pub skill_id: String,
@@ -42,13 +42,13 @@ pub struct SkillHit {
     pub score: f32,
     /// 0-based position in this result list (best is `0`) — the scale-invariant
     /// signal to order or threshold on, in place of [`score`](Self::score). The
-    /// skill-side twin of [`crate::SearchHit::rank`].
+    /// skill-side counterpart of [`crate::SearchHit::rank`].
     pub rank: u32,
     /// Whether [`score`](Self::score) is an RRF score (ordering-only) rather than
-    /// the raw method score — the skill-side twin of [`crate::SearchHit::fused`].
+    /// the raw method score — the skill-side counterpart of [`crate::SearchHit::fused`].
     pub fused: bool,
     /// [`score`](Self::score) mapped onto `[0, 1]` for display — the skill-side
-    /// twin of [`crate::SearchHit::relevance`], by the same three rules and
+    /// counterpart of [`crate::SearchHit::relevance`], by the same three rules and
     /// with the same caveats. See it for what each rule means and why this is
     /// not a confidence.
     pub relevance: f32,
@@ -64,7 +64,7 @@ fn candidate(skill: &Skill) -> RankCandidate {
 }
 
 /// Build hits from an already-ranked, best-first `(id, score)` list — the
-/// skill-side twin of [`crate::tool_registry`]'s `to_search_hits`.
+/// skill-side counterpart of [`crate::tool_registry`]'s `to_search_hits`.
 fn to_skill_hits(ranked: Vec<(String, f32)>, scale: Scale) -> Vec<SkillHit> {
     let relevance = normalize(&ranked, scale);
     ranked
@@ -112,18 +112,18 @@ pub struct ReplaceOutcome {
 /// parallel type keeps the tool path untouched and lets skill telemetry stand on
 /// its own.
 pub struct SkillRegistry {
-    /// Corpus keyed by skill id, in insertion order — the skill-side twin of
+    /// Corpus keyed by skill id, in insertion order — the skill-side counterpart of
     /// [`crate::ToolRegistry`]'s field. `register` replaces an existing id in
     /// place, never duplicating it (RAT-378).
     skills: IndexMap<String, Skill>,
     sink: Arc<dyn TraceSink>,
     experimental_catalog_definitions: bool,
-    /// Prebuilt BM25 index over `skills` — the skill-side twin of
+    /// Prebuilt BM25 index over `skills` — the skill-side counterpart of
     /// [`crate::ToolRegistry`]'s field: built lazily by the first search,
     /// reused until [`Self::register`] or [`Self::replace_all`] invalidates it.
     bm25: Bm25Cache,
     /// Dense embeddings for `skills`, keyed by id and built on demand — the
-    /// skill-side twin of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
+    /// skill-side counterpart of [`crate::ToolRegistry`]'s field (see [`DenseCache`]).
     dense: DenseCache,
     /// Optional usage-ranking read model (ADR-0014). `None` — the default — is
     /// today's behavior exactly. Shared behind a lock because the learner writes
@@ -211,7 +211,7 @@ impl SkillRegistry {
     }
 
     /// Attach (or with `None`, detach) the usage-ranking read model — the
-    /// skill-side twin of [`crate::ToolRegistry::set_intent_graph`], reading the
+    /// skill-side counterpart of [`crate::ToolRegistry::set_intent_graph`], reading the
     /// same graph's `skills` edges (ADR-0014).
     ///
     /// Opt-in for the same reason: with an arm in play [`SkillHit::score`]
@@ -310,7 +310,7 @@ impl SkillRegistry {
     }
 
     /// Re-embed the attached intent graph's members under the current model and
-    /// replace its centroids — the skill-side twin of
+    /// replace its centroids — the skill-side counterpart of
     /// [`crate::ToolRegistry::rebuild_intent_graph`]. Preserves members, support,
     /// and edges.
     ///
@@ -454,7 +454,7 @@ impl SkillRegistry {
         // Ordering-only RRF scores. Normalize across the WHOLE candidate set,
         // then cut — after the cut, min-max would pin the last hit a caller
         // asked for to 0.00 however good it was, and the same hit would read
-        // differently at a different `top_k`. Twin of `ToolRegistry::fuse_arms`.
+        // differently at a different `top_k`. Counterpart of `ToolRegistry::fuse_arms`.
         let mut hits = to_skill_hits(fused, Scale::Rrf);
         hits.truncate(top_k);
         (hits, stage)
@@ -640,7 +640,7 @@ impl SkillRegistry {
         self.skills.is_empty()
     }
 
-    /// Lexical BM25 retrieval — the skill-side twin of
+    /// Lexical BM25 retrieval — the skill-side counterpart of
     /// [`crate::ToolRegistry::search`]: no model, never fails. Returns at most
     /// `top_k` hits, best-first (see [`SkillHit::score`]). Traced as
     /// [`Origin::Direct`].
@@ -718,7 +718,7 @@ impl SkillRegistry {
     }
 
     /// Search with a first-stage method and an optional [`Reranker`] — the
-    /// skill twin of [`crate::ToolRegistry::search_with_options`], with the
+    /// skill counterpart of [`crate::ToolRegistry::search_with_options`], with the
     /// same semantics and errors (ADR-0027).
     ///
     /// # Errors
@@ -779,14 +779,14 @@ impl SkillRegistry {
         ))
     }
 
-    /// Every skill as a [`RankCandidate`] — the skill twin of
+    /// Every skill as a [`RankCandidate`] — the skill counterpart of
     /// [`crate::ToolRegistry::rank_candidates`].
     #[must_use]
     pub fn rank_candidates(&self) -> Vec<RankCandidate> {
         self.skills.values().map(candidate).collect()
     }
 
-    /// Complete a search a caller-supplied function ranked — the skill twin of
+    /// Complete a search a caller-supplied function ranked — the skill counterpart of
     /// [`crate::ToolRegistry::complete_custom_search`].
     pub fn complete_custom_search(
         &self,
@@ -818,7 +818,7 @@ impl SkillRegistry {
     }
 
     /// Run the first stage of a search whose reranker the caller supplies —
-    /// the skill twin of [`crate::ToolRegistry::stage_one`].
+    /// the skill counterpart of [`crate::ToolRegistry::stage_one`].
     ///
     /// # Errors
     /// The same [`SearchError`] cases as [`crate::ToolRegistry::stage_one`].
@@ -857,7 +857,7 @@ impl SkillRegistry {
         })
     }
 
-    /// Complete a search started by [`Self::stage_one`] — the skill twin of
+    /// Complete a search started by [`Self::stage_one`] — the skill counterpart of
     /// [`crate::ToolRegistry::complete_rerank`].
     pub fn complete_rerank(
         &self,
@@ -914,7 +914,7 @@ impl SkillRegistry {
         hits
     }
 
-    /// Re-score stage-1 candidates — the skill twin of the tool registry's
+    /// Re-score stage-1 candidates — the skill counterpart of the tool registry's
     /// `rescore`: every candidate is returned (unmatched scores `0`), BM25
     /// keeps corpus-wide IDF, and no usage arm runs.
     fn rescore(
@@ -1292,7 +1292,7 @@ impl SkillRegistry {
         let arm = self.usage_arm(turn_key, query, Some(&query_vec));
         let usage_ms = t.elapsed().as_millis() as u64;
 
-        // Score fusion, the twin of `ToolRegistry::hybrid_search_traced`: the
+        // Score fusion, the counterpart of `ToolRegistry::hybrid_search_traced`: the
         // arms are normalised onto one absolute scale and added rather than
         // fused on rank position.
         let t = Instant::now();
@@ -1519,7 +1519,7 @@ mod tests {
     }
 
     /// A builder that must never run — proof the search path already
-    /// populated the cache (the tool-side twin explains why the public seam
+    /// populated the cache (the tool-side counterpart explains why the public seam
     /// can't pin this).
     fn no_build() -> Vec<(String, String)> {
         unreachable!("cache should already be populated by the search path")
@@ -2072,7 +2072,7 @@ mod tests {
 
     #[test]
     fn the_dense_weight_defaults_to_the_shipped_value_and_only_hybrid_reads_it() {
-        // Skill twin of the tool-side test: an untouched registry ranks exactly
+        // Skill counterpart of the tool-side test: an untouched registry ranks exactly
         // as before the knob existed, and the split cannot leak into the
         // single-arm methods.
         let mut reg = with_embedder(Arc::new(StubEmbedder));
@@ -2231,7 +2231,7 @@ mod tests {
 
     /// Regression: the query was stemmed twice, so a word whose stem is not
     /// stable under a second pass ("codebase", "database") never matched. The
-    /// skill-side twin of the tool registry's test; `a-mail` wins the id
+    /// skill-side counterpart of the tool registry's test; `a-mail` wins the id
     /// tiebreak in hybrid unless BM25 lifts the target.
     #[test]
     fn a_stem_unstable_word_matches_skills_in_bm25_and_hybrid() {
@@ -2260,7 +2260,7 @@ mod tests {
     }
 
     // ---- usage ranking on the dense paths (ADR-0014) -----------------------
-    // Twins of the ToolRegistry battery: the skill registry runs its own copy of
+    // Counterparts of the ToolRegistry battery: the skill registry runs its own copy of
     // `usage_arm`/`semantic_search_traced`/`rebuild_intent_graph`, so the
     // model-mismatch, poison, and rebuild guarantees need their own coverage.
 
@@ -2374,7 +2374,7 @@ mod tests {
             );
             let base_hits = base_hits.expect("the arm fired");
             assert!(!base_hits.is_empty(), "{method:?}");
-            // See the tool-side twin: hybrid's score fusion may not reorder.
+            // See the tool-side counterpart: hybrid's score fusion may not reorder.
             if method != SearchMethod::Hybrid {
                 assert_ne!(hits, base_hits, "{method:?}: the arm should reorder");
             }
@@ -2410,7 +2410,7 @@ mod tests {
     #[test]
     fn skill_base_hits_are_present_when_the_arm_fires_on_an_empty_base_ranking() {
         // No BM25 term in common with the skill, but a lexical and ("rest"
-        // inside "prestige") dense match on the cluster: see the tool-side twin.
+        // inside "prestige") dense match on the cluster: see the tool-side counterpart.
         let graph = || {
             let json = r#"{"v":1,"built_from_ts":1,
                  "intents":[{"id":"i0","label":"l","terms":[],
@@ -2776,7 +2776,7 @@ mod tests {
             .expect("search")
     }
 
-    /// The skill twin of `bm25_normalizes_against_the_query_ceiling_not_the_list`:
+    /// The skill counterpart of `bm25_normalizes_against_the_query_ceiling_not_the_list`:
     /// divided by the query's own ceiling, so the top is not pinned to 1.0.
     #[test]
     fn a_skill_bm25_hit_normalizes_against_the_query_ceiling() {
@@ -2853,7 +2853,7 @@ mod tests {
         }
     }
 
-    // ---- Two-stage reranking (ADR-0027), the skill twin ----
+    // ---- Two-stage reranking (ADR-0027), the skill counterpart ----
 
     use crate::rerank::{Reranker, SearchError, SearchOptions};
 
@@ -2958,7 +2958,7 @@ mod tests {
         );
     }
 
-    // ---- Caller-supplied ranking functions (ADR-0027), the skill twin ----
+    // ---- Caller-supplied ranking functions (ADR-0027), the skill counterpart ----
 
     use crate::rerank::RerankOutcome;
 

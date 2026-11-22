@@ -806,7 +806,7 @@ pub struct Intent {
     /// nothing to the arm, and cannot be promoted.
     ///
     /// Paired with [`Self::tools`], the edge map it is the denominator for.
-    /// [`Self::surfaced_skills`] is the skill-side twin — two maps rather than
+    /// [`Self::surfaced_skills`] is the skill-side counterpart — two maps rather than
     /// one, because tool and skill ids are different id spaces and would collide.
     ///
     /// Absent on the wire means none were recorded, which is what every graph
@@ -814,7 +814,7 @@ pub struct Intent {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub surfaced_tools: BTreeMap<String, u32>,
     /// Skill id → how many of this cluster's searches put it in front of the
-    /// caller. The skill-side twin of [`Self::surfaced_tools`]; see it for what
+    /// caller. The skill-side counterpart of [`Self::surfaced_tools`]; see it for what
     /// the count means and why nothing in ranking treats it as an edge.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub surfaced_skills: BTreeMap<String, u32>,
@@ -976,7 +976,7 @@ impl Intent {
         ((invoked + IMPRESSION_PRIOR) / (considered + IMPRESSION_PRIOR)).min(1.0)
     }
 
-    /// The impression map for `kind` — the denominator twin of [`Self::edges`].
+    /// The impression map for `kind` — the denominator counterpart of [`Self::edges`].
     fn surfaced(&self, kind: Capability) -> &BTreeMap<String, u32> {
         match kind {
             Capability::Tool => &self.surfaced_tools,
@@ -4874,7 +4874,7 @@ mod tests {
 
     #[test]
     fn a_dense_rejected_cluster_is_not_joined_by_word_overlap_while_learning() {
-        // The learning twin of a_dense_rejected_cluster_is_not_rescued_by_word_
+        // The learning counterpart of a_dense_rejected_cluster_is_not_rescued_by_word_
         // overlap. Learning needs the guard more than serving does: a bad serve is
         // one bad ranking, but a bad admission is written into the graph, and
         // every later query is then matched against a cluster that has drifted.

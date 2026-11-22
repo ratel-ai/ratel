@@ -802,7 +802,7 @@ describe("rebuildOnModelChange", () => {
     expect(rebuild).toHaveBeenCalledOnce();
   });
 
-  it("also drives the skill registry twin", async () => {
+  it("also drives the skill registry counterpart", async () => {
     const reg = new SkillRegistry();
     (reg as unknown as { native: unknown }).native = fakeNative({
       status: "paused: model mismatch",

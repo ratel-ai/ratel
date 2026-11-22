@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/envelope.schema.json",
+  "title": "Envelope",
+  "description": "The frame around every sandbox/v1 message, in both directions. A frame is one JSON text of at most 65536 UTF-8 bytes. A receiver ignores fields it does not recognise.",
+  "type": "object",
+  "required": ["v", "type", "id", "ts", "payload"],
+  "properties": {
+    "v": {
+      "description": "The protocol major version. Always 1 in sandbox/v1.",
+      "const": 1
+    },
+    "type": {
+      "description": "The message type. message.schema.json lists the known types.",
+      "type": "string",
+      "minLength": 1
+    },
+    "id": {
+      "description": "A unique ID of this frame, chosen by its sender.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "ts": {
+      "description": "The time the sender made the frame, RFC 3339 in UTC.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "runId": {
+      "description": "The run this frame belongs to. Required on every run.*, tool.* and events.ack message. Idempotent: a controller that resends run.start uses the same runId.",
+      "$ref": "#/$defs/runId"
+    },
+    "seq": {
+      "description": "The per-run sequence number of a run.event or run.end frame. Starts at 1 and grows by 1.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "description": "The body of the message. Its shape depends on type.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "sandboxId": {
+      "description": "A sandbox ID: lowercase letters, digits, '.', '_' and '-'.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "callId": {
+      "description": "The ID of one tool call inside a run.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "configHash": {
+      "description": "SHA-256 (lowercase hex) of the canonical JSON of all resolved param values. Tool modes are not in it.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "traceId": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "spanId": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "toolMode": {
+      "description": "real runs the production execute. fake returns a supplied value. confirm pauses for a reviewer decision.",
+      "enum": ["real", "fake", "confirm"]
+    },
+    "fakeSource": {
+      "description": "Where a fake value came from: pinned by the reviewer, recorded from a matching call, or generated.",
+      "enum": ["pinned", "recorded", "generated"]
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

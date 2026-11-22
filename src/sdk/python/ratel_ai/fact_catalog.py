@@ -109,7 +109,7 @@ def _clamp_facts_top_k(value: int | None) -> int:
     """Clamp a facts top-K to [1, 50], falling back to the default for junk.
 
     Delegates to the shared `capabilities._clamp_top_k` so the cap can't drift
-    between the pull path and the push path (the TS twin imports `clampTopK`).
+    between the pull path and the push path (the TS counterpart imports `clampTopK`).
     """
     return _clamp_top_k(value, _DEFAULT_FACTS_TOP_K)
 
@@ -118,7 +118,7 @@ def _clamp_facts_top_k(value: int | None) -> int:
 class Fact:
     """Fact metadata plus the grounding content the freshness gate injects.
 
-    The push-path twin of `Skill`: `name`, `description`, and `tags` drive
+    The push-path counterpart of `Skill`: `name`, `description`, and `tags` drive
     ranking exactly as on a skill, so the retrieval-gated tier is discoverable by
     query; `body` is the injected content (not indexed), and `pin` splits the
     always-on tier from the retrieval-gated one. A fact has no `tools` field (it
@@ -555,7 +555,7 @@ class FactCatalog:
     ) -> list[FactHit]:
         """Rank registered facts synchronously with BM25 — ranks both tiers.
 
-        A pinned fact can still be a query hit. The fact twin of
+        A pinned fact can still be a query hit. The fact counterpart of
         `SkillCatalog.search`: a dense resolved method raises immediately with
         guidance to use `search_async`.
 
@@ -675,7 +675,7 @@ class FactCatalog:
     ) -> list[GroundingSnapshotItem]:
         """Return the full grounding set for one model call — the stateless mode.
 
-        The per-call twin of `ground`: always-on facts plus the retrieval-gated
+        The per-call counterpart of `ground`: always-on facts plus the retrieval-gated
         facts `query` ranks in, recomputed fresh every call. No freshness gate,
         no transcript, nothing persisted — render the items into the call's
         message override and discard them with it. The persist/per-call split

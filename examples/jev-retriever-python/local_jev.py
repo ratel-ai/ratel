@@ -5,7 +5,7 @@ TypeSafe key. It speaks Jev's wire format::
     response {"model", "answers": {"tool": {"type": "choice", "probabilities": {"t0": 0.9}}}}
 
 Its "judge" is a hard-coded intent table: it shows the plumbing, not ranking
-quality. Set TYPESAFE_API_KEY to call Jev itself. The TypeScript twin is
+quality. Set TYPESAFE_API_KEY to call Jev itself. The TypeScript counterpart is
 ``examples/jev-retriever-ts/src/local-jev.ts``.
 """
 

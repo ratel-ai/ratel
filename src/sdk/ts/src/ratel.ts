@@ -338,7 +338,7 @@ export interface AdaptedBase<TTool, TMessage> {
     opts?: GroundOptions,
   ): Promise<GroundingResult>;
   /**
-   * ⚠️ Experimental (facts, ADR-0017). Stateless per-call twin of
+   * ⚠️ Experimental (facts, ADR-0017). Stateless per-call counterpart of
    * {@link AdaptedBase.ground}: the full grounding set for one model call,
    * nothing persisted. See `experimental.FactCatalog.groundSnapshot`.
    */
@@ -439,7 +439,7 @@ export interface Ratel {
     opts?: GroundOptions,
   ): Promise<GroundingResult>;
   /**
-   * ⚠️ Experimental (facts, ADR-0017). Stateless per-call twin of
+   * ⚠️ Experimental (facts, ADR-0017). Stateless per-call counterpart of
    * {@link Ratel.ground}: the full grounding set (always-on plus query-matched
    * facts) for one model call — no freshness gate, no transcript, nothing persisted.
    * Render into a per-call message override (e.g. a `prepareStep`) and discard.

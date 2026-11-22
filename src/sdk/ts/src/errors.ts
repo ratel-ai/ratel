@@ -1,5 +1,5 @@
 /**
- * Typed embedding errors — the TypeScript twin of the Python SDK's
+ * Typed embedding errors — the TypeScript counterpart of the Python SDK's
  * `EmbedderError` / `DimensionMismatchError` (`ratel_ai/exceptions.py`).
  *
  * The native binding surfaces every failure as a plain {@link Error} whose

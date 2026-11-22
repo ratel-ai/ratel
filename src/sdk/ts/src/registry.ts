@@ -711,7 +711,7 @@ export class ToolRegistry {
 }
 
 /**
- * Typed facade over the native skill registry — the skill twin of
+ * Typed facade over the native skill registry — the skill counterpart of
  * {@link ToolRegistry}. {@link SkillCatalog} is the higher-level surface;
  * reach for this directly only when bare metadata is enough.
  */
@@ -1203,7 +1203,7 @@ export class SkillRegistry {
 }
 
 /**
- * Typed facade over the native fact registry — the fact twin of
+ * Typed facade over the native fact registry — the fact counterpart of
  * {@link SkillRegistry}. {@link FactCatalog} is the higher-level surface;
  * reach for this directly only when bare metadata is enough.
  */

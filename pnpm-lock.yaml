@@ -466,6 +466,55 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  examples/sandbox-docs-agent:
+    dependencies:
+      '@ai-sdk/amazon-bedrock':
+        specifier: ^4.0.217
+        version: 4.0.217(zod@4.4.3)
+      '@aws-sdk/credential-providers':
+        specifier: ^3.1175.0
+        version: 3.1175.0
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/exporter-trace-otlp-proto':
+        specifier: ^0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@ratel-ai/sandbox':
+        specifier: workspace:*
+        version: link:../../src/sandbox/ts
+      '@ratel-ai/telemetry':
+        specifier: workspace:*
+        version: link:../../src/telemetry/ts
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.172(zod@4.4.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      tsx:
+        specifier: ^4.20.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
+
   examples/telemetry-ts:
     dependencies:
       '@opentelemetry/api':
@@ -508,55 +557,6 @@ importers:
       typescript:
         specifier: ^5.6.0
         version: 5.9.3
-
-  examples/twin-docs-agent:
-    dependencies:
-      '@ai-sdk/amazon-bedrock':
-        specifier: ^4.0.217
-        version: 4.0.217(zod@4.4.3)
-      '@aws-sdk/credential-providers':
-        specifier: ^3.1175.0
-        version: 3.1175.0
-      '@opentelemetry/api':
-        specifier: ^1.9.1
-        version: 1.9.1
-      '@opentelemetry/exporter-trace-otlp-proto':
-        specifier: ^0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-node':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@ratel-ai/telemetry':
-        specifier: workspace:*
-        version: link:../../src/telemetry/ts
-      '@ratel-ai/twin':
-        specifier: workspace:*
-        version: link:../../src/twin/ts
-      ai:
-        specifier: ^6.0.0
-        version: 6.0.172(zod@4.4.3)
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@opentelemetry/sdk-trace-base':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.2
-      tsx:
-        specifier: ^4.20.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.5
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
   packages/brand: {}
 
@@ -606,7 +606,7 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  protocol/twin/v1:
+  protocol/sandbox/v1:
     devDependencies:
       ajv:
         specifier: ^8.20.0
@@ -710,6 +710,67 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
+  src/sandbox/ts:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.0 || ^4.0.0
+        version: 4.0.107(zod@4.4.3)
+      '@ai-sdk/google':
+        specifier: ^3.0.0 || ^4.0.0
+        version: 4.0.124(zod@4.4.3)
+      '@ai-sdk/openai':
+        specifier: ^3.0.0 || ^4.0.0
+        version: 3.0.144(zod@4.4.3)
+      '@opentelemetry/exporter-trace-otlp-http':
+        specifier: ^0.220.0
+        version: 0.220.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/resources':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      ws:
+        specifier: ^8.21.1
+        version: 8.21.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.4.13
+        version: 2.4.13
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@opentelemetry/sdk-trace-base':
+        specifier: ^2.9.0
+        version: 2.9.0(@opentelemetry/api@1.9.1)
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.2
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      ai:
+        specifier: 7.0.37
+        version: 7.0.37(zod@4.4.3)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   src/sdk/ts:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -788,67 +849,6 @@ importers:
       vitest:
         specifier: ^4.1.5
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
-
-  src/twin/ts:
-    dependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^3.0.0 || ^4.0.0
-        version: 4.0.107(zod@4.4.3)
-      '@ai-sdk/google':
-        specifier: ^3.0.0 || ^4.0.0
-        version: 4.0.124(zod@4.4.3)
-      '@ai-sdk/openai':
-        specifier: ^3.0.0 || ^4.0.0
-        version: 3.0.55(zod@4.4.3)
-      '@opentelemetry/exporter-trace-otlp-http':
-        specifier: ^0.220.0
-        version: 0.220.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-trace-node':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.21.0
-      ws:
-        specifier: ^8.21.1
-        version: 8.21.1
-    devDependencies:
-      '@biomejs/biome':
-        specifier: ^2.4.13
-        version: 2.4.13
-      '@opentelemetry/api':
-        specifier: ^1.9.1
-        version: 1.9.1
-      '@opentelemetry/sdk-trace-base':
-        specifier: ^2.9.0
-        version: 2.9.0(@opentelemetry/api@1.9.1)
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.2
-      '@types/ws':
-        specifier: ^8.18.2
-        version: 8.18.2
-      ai:
-        specifier: 7.0.37
-        version: 7.0.37(zod@4.4.3)
-      ajv:
-        specifier: ^8.20.0
-        version: 8.20.0
-      ajv-formats:
-        specifier: ^3.0.1
-        version: 3.0.1(ajv@8.20.0)
-      typescript:
-        specifier: ^5.6.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.1.5
-        version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(vite@8.0.10(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
 
 packages:
 

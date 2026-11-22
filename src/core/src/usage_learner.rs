@@ -1103,7 +1103,7 @@ mod tests {
         );
     }
 
-    /// The skill twin of `a_surfaced_tool_that_is_never_invoked_gets_no_edge`.
+    /// The skill counterpart of `a_surfaced_tool_that_is_never_invoked_gets_no_edge`.
     /// A skill catalog learns from its own searches or the penalty is tool-only
     /// in everything but name.
     #[test]
@@ -1581,7 +1581,7 @@ mod tests {
 
     #[test]
     fn replay_interleaved_fanout_halves_of_one_question_share_its_window() {
-        // The replay twin: the rule is written twice and must move together.
+        // The replay counterpart: the rule is written twice and must move together.
         let mut graph = IntentGraph::empty();
         let log = vec![
             envelope(
@@ -2029,7 +2029,7 @@ mod tests {
 
     #[test]
     fn replay_credits_the_search_that_offered_the_tool() {
-        // The replay twin of
+        // The replay counterpart of
         // `an_invoke_is_credited_to_the_search_that_offered_it_not_the_latest`.
         // The rule is written twice, live and replay, and nothing but this
         // keeps them in step: the replay path holds its own pending state, so
@@ -2080,7 +2080,7 @@ mod tests {
 
     #[test]
     fn replay_does_not_let_a_ranked_window_shadow_an_earlier_unranked_one() {
-        // The replay twin of
+        // The replay counterpart of
         // `a_window_with_hits_does_not_shadow_an_earlier_unranked_one`, pinning
         // the second clause of the rule, which the test above never reaches.
         // A baseline capture serves no retrieval (`top_k: 0, hits: []`), so it

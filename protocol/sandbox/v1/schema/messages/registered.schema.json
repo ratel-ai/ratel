@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/registered.schema.json",
+  "title": "registered",
+  "description": "From the controller. The controller accepts a register and states the limits of the connection.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "const": "registered"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "connectionId",
+        "limits"
+      ],
+      "properties": {
+        "connectionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "limits": {
+          "type": "object",
+          "required": [
+            "maxFrameBytes",
+            "ackTimeoutMs",
+            "leaseIntervalMs",
+            "leaseTimeoutMs",
+            "confirmTimeoutMs"
+          ],
+          "properties": {
+            "maxFrameBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536
+            },
+            "ackTimeoutMs": {
+              "description": "A run.start without run.ack or run.reject in this time fails.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "leaseIntervalMs": {
+              "description": "The worker sends run.lease this often.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "leaseTimeoutMs": {
+              "description": "A run without run.lease for this long is lost.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "confirmTimeoutMs": {
+              "description": "A tool.confirm.request without a decision for this long is rejected.",
+              "type": "integer",
+              "minimum": 1
+            },
+            "maxConcurrentRuns": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

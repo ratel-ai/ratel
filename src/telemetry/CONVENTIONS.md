@@ -355,27 +355,27 @@ Experiment baggage propagates only when the host registers a `ContextManager`, w
 independently of exporter setup. The SDK registers neither providers nor exporters; hosts need
 both span and log-record processors to deliver the complete experiment signal.
 
-### `ratel.twin.*`: agent twins and playground runs
+### `ratel.sandbox.*`: agent sandboxes and playground runs
 
-`@ratel-ai/twin` stamps these keys. In production, `resolveLocal(defaults, { twin })` stamps the
-twin ID and config hash on the active span (the agent's root, for example `invoke_agent <job>`),
-and `stampTwinInput(input)` stamps one structured item. The `ratel dev` runner stamps the same
+`@ratel-ai/sandbox` stamps these keys. In production, `resolveLocal(defaults, { sandbox })` stamps the
+sandbox ID and config hash on the active span (the agent's root, for example `invoke_agent <job>`),
+and `stampSandboxInput(input)` stamps one structured item. The `ratel sandbox dev` runner stamps the same
 keys on the root span of a playground run, so a baseline run with no overrides has the same
 config hash as production.
 
 | Attribute | Type | On | Contract |
 |---|---|---|---|
-| `ratel.twin.id` | string | production agent root, playground root | The twin ID (`^[a-z0-9][a-z0-9._-]{0,127}$`). |
-| `ratel.twin.config_hash` | string | production agent root, playground root | Lowercase hex SHA-256 of the canonical JSON of all resolved param values (models as `provider/model`). Tool modes are not in it. |
-| `ratel.twin.input` | string | the span of one structured item; playground root | The input JSON, cut at 8000 characters. |
-| `ratel.twin.run_id` | string | playground root | The run ID of protocol `twin/v1` `run.start`. |
-| `ratel.twin.overrides` | string[] | playground root | The names of params whose value differs from the default, in declaration order. Never their values. |
+| `ratel.sandbox.id` | string | production agent root, playground root | The sandbox ID (`^[a-z0-9][a-z0-9._-]{0,127}$`). |
+| `ratel.sandbox.config_hash` | string | production agent root, playground root | Lowercase hex SHA-256 of the canonical JSON of all resolved param values (models as `provider/model`). Tool modes are not in it. |
+| `ratel.sandbox.input` | string | the span of one structured item; playground root | The input JSON, cut at 8000 characters. |
+| `ratel.sandbox.run_id` | string | playground root | The run ID of protocol `sandbox/v1` `run.start`. |
+| `ratel.sandbox.overrides` | string[] | playground root | The names of params whose value differs from the default, in declaration order. Never their values. |
 | `ratel.replay.source_trace_id` | string | playground root | The recorded trace a replay run started from. |
 | `ratel.replay.source_session_id` | string | playground root | The recorded session a chat replay started from. |
 | `ratel.replay.arm` | enum | playground root | `baseline \| candidate` |
 
-A playground root span is `invoke_agent <twin id>` for a twin with an agent loop, or
-`invoke_workflow <twin id>` (`gen_ai.operation.name` = `invoke_workflow`) for a structured twin.
+A playground root span is `invoke_agent <sandbox id>` for a sandbox with an agent loop, or
+`invoke_workflow <sandbox id>` (`gen_ai.operation.name` = `invoke_workflow`) for a structured sandbox.
 It carries `gen_ai.conversation.id` = the playground session ID.
 
 Resource attributes of a playground run. The runner merges them into the resource of the spans it
@@ -388,7 +388,7 @@ exports, also when the project registered its own tracer provider:
 | `ratel.build.dirty` | boolean | True when the checkout has uncommitted changes. |
 | `ratel.runner.instance_id` | string | The runner instance of `register`: stable per machine and project. |
 | `ratel.runner.host` | string | The host name of the runner. |
-| `ratel.runner.sdk.name`, `ratel.runner.sdk.version` | string | The runner SDK, for example `@ratel-ai/twin` `0.1.0`. |
+| `ratel.runner.sdk.name`, `ratel.runner.sdk.version` | string | The runner SDK, for example `@ratel-ai/sandbox` `0.1.0`. |
 
 The runner exports only the traces of playground runs, to `/api/v1/traces` with the project key.
 It adds its exporter to the tracer provider the project registered. It registers a provider only

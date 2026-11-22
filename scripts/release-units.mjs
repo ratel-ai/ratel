@@ -92,16 +92,16 @@ export const UNITS = {
       includePaths: ["src/telemetry/ts/**", "src/telemetry/CONVENTIONS.md", "src/telemetry/conformance/**"],
     },
   },
-  "twin-ts": {
-    tagPrefix: "twin-ts-v",
-    label: "@ratel-ai/twin → npm",
-    versionManifest: { path: "src/twin/ts/package.json", kind: "json" },
-    manifests: [{ path: "src/twin/ts/package.json", kind: "json" }],
-    changelogs: ["src/twin/ts/CHANGELOG.md"],
-    srcPaths: ["src/twin/ts", "protocol/twin/v1"],
+  "sandbox-ts": {
+    tagPrefix: "sandbox-ts-v",
+    label: "@ratel-ai/sandbox → npm",
+    versionManifest: { path: "src/sandbox/ts/package.json", kind: "json" },
+    manifests: [{ path: "src/sandbox/ts/package.json", kind: "json" }],
+    changelogs: ["src/sandbox/ts/CHANGELOG.md"],
+    srcPaths: ["src/sandbox/ts", "protocol/sandbox/v1"],
     changelog: {
-      name: "@ratel-ai/twin",
-      includePaths: ["src/twin/ts/**", "protocol/twin/v1/**"],
+      name: "@ratel-ai/sandbox",
+      includePaths: ["src/sandbox/ts/**", "protocol/sandbox/v1/**"],
     },
   },
   "telemetry-py": {

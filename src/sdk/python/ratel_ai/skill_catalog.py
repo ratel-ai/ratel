@@ -1041,7 +1041,7 @@ class SkillCatalog:
     ) -> list[SkillHit]:
         """Rank registered skills synchronously with BM25.
 
-        The skill twin of `ToolCatalog.search`: a dense resolved method raises
+        The skill counterpart of `ToolCatalog.search`: a dense resolved method raises
         immediately with guidance to use `search_async`. `turn_id` correlates
         this search with the invoke(s) that follow it for adaptive ranking's
         pairing (ADR-0014); see `ToolCatalog.search`.

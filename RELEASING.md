@@ -15,7 +15,7 @@ each unit carries its own version in its own manifest and ships on its own caden
 | `sdk-py` | `sdk-py-v*` | `ratel-ai` on PyPI | `src/sdk/python/pyproject.toml` |
 | `telemetry-core` | `telemetry-core-v*` | `ratel-ai-telemetry` on crates.io | `src/telemetry/core/Cargo.toml` |
 | `telemetry-ts` | `telemetry-ts-v*` | `@ratel-ai/telemetry` on npm | `src/telemetry/ts/package.json` |
-| `twin-ts` | `twin-ts-v*` | `@ratel-ai/twin` on npm | `src/twin/ts/package.json` |
+| `sandbox-ts` | `sandbox-ts-v*` | `@ratel-ai/sandbox` on npm | `src/sandbox/ts/package.json` |
 | `telemetry-py` | `telemetry-py-v*` | `ratel-ai-telemetry` on PyPI | `src/telemetry/python/pyproject.toml` |
 | `vercel-ai-sdk` | `vercel-ai-sdk-v*` | `@ratel-ai/vercel-ai-sdk` on npm | `src/adapters/ts-vercel-ai-sdk/package.json` |
 | `mastra` | `mastra-v*` | `@ratel-ai/mastra` on npm | `src/adapters/ts-mastra/package.json` |
@@ -35,10 +35,10 @@ bootstrapped by a manual first-publish (`scripts/publish-rc.sh --unit vercel-ai-
 the Trusted Publisher could exist. The `release` environment's tag policy must allow
 `vercel-ai-sdk-v*`, or the publish job hangs at the deploy gate.
 
-The `twin-ts` unit (`@ratel-ai/twin`, experimental) is registered for the tag gate and the
+The `sandbox-ts` unit (`@ratel-ai/sandbox`, experimental) is registered for the tag gate and the
 `releasable` helper only. It has no `release.yml` trigger, no publish job and no step in
 `scripts/publish-rc.sh` yet: add them, following `telemetry-ts`, before its first release. Its
-releasable paths include `protocol/twin/v1`, because the package emits that manifest shape.
+releasable paths include `protocol/sandbox/v1`, because the package emits that manifest shape.
 
 The `sdk-ts` unit is internally lockstep: the loader `@ratel-ai/sdk`, its five per-OS native
 packages (`@ratel-ai/sdk-darwin-arm64`, `-darwin-x64`, `-linux-x64-gnu`, `-linux-arm64-gnu`,

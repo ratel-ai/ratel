@@ -346,7 +346,7 @@ describe("execute_tool span", () => {
     });
 
     const [event] = logEventsNamed("ratel.catalog.definition");
-    // Pinned via the Python twin's canonicalization, which the Rust core reproduces
+    // Pinned via the Python counterpart's canonicalization, which the Rust core reproduces
     // byte-identically; byte order puts "B" before "a", locale collation does not.
     expect(event?.attributes["ratel.catalog.content_hash"]).toBe(
       "03542abe36f96c27db84a086337f7b66737c2480848193fde046e770b63231b8",

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/tool.confirm.request.schema.json",
+  "title": "tool.confirm.request",
+  "description": "From the worker. A confirm-mode tool call waits for a reviewer.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload",
+    "runId"
+  ],
+  "properties": {
+    "type": {
+      "const": "tool.confirm.request"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "callId",
+        "tool",
+        "args"
+      ],
+      "properties": {
+        "callId": {
+          "$ref": "../envelope.schema.json#/$defs/callId"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": true
+      }
+    }
+  }
+}

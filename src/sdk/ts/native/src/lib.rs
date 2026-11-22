@@ -306,7 +306,7 @@ impl ToolStageOne {
     }
 }
 
-/// The skill twin of [`ToolStageOne`].
+/// The skill counterpart of [`ToolStageOne`].
 #[napi]
 pub struct SkillStageOne {
     inner: Mutex<Option<core::StageOne<core::SkillHit>>>,
@@ -2378,7 +2378,7 @@ impl Task for FactSearchTask {
 }
 
 /// Constant grounding content the agent should have on hand — a barbershop's
-/// address and hours, a brand's voice. The push-path twin of `Skill`: name,
+/// address and hours, a brand's voice. The push-path counterpart of `Skill`: name,
 /// description, and tags are indexed for ranking (the retrieval-gated tier);
 /// the `body` is the injected content, never indexed. `pin` splits the tiers.
 #[napi(object)]
@@ -2408,7 +2408,7 @@ pub struct Fact {
     pub pin: Option<String>,
 }
 
-/// One ranked fact from a registry search, best-first — the fact twin of
+/// One ranked fact from a registry search, best-first — the fact counterpart of
 /// `SkillHit`, with the same score semantics per method.
 #[napi(object)]
 pub struct FactHit {
@@ -2440,7 +2440,7 @@ fn core_fact(fact: Fact) -> napi::Result<core::Fact> {
     })
 }
 
-/// Node binding over the `ratel-ai-core` fact registry — the fact twin of
+/// Node binding over the `ratel-ai-core` fact registry — the fact counterpart of
 /// `SkillRegistry`, ranking registered facts against a natural-language query.
 /// Fact bodies are stored but never indexed; the SDK's `FactCatalog` injects
 /// them on the grounding path.
@@ -2692,7 +2692,7 @@ pub struct Skill {
     pub body: Option<String>,
 }
 
-/// One ranked skill from a registry search, best-first — the skill twin of
+/// One ranked skill from a registry search, best-first — the skill counterpart of
 /// `SearchHit`, with the same score semantics per method.
 #[napi(object)]
 pub struct SkillHit {
@@ -2725,7 +2725,7 @@ pub struct ReplaceOutcome {
     pub unchanged: u32,
 }
 
-/// Node binding over the `ratel-ai-core` skill registry — the skill twin of
+/// Node binding over the `ratel-ai-core` skill registry — the skill counterpart of
 /// `ToolRegistry`, ranking registered skills against a natural-language query.
 /// Skill bodies are stored but never indexed; fetch them a layer up (the SDK's
 /// `SkillCatalog.invoke`).

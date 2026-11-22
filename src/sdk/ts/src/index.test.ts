@@ -257,7 +257,7 @@ describe("SkillRegistry removed methods", () => {
 /**
  * The facts + grounding surface is experimental: quarantined out of the stable
  * root export into the opt-in `experimental` namespace, so any dependence on it
- * is explicit at the import site. Twin of Python's `test_index.py` checks.
+ * is explicit at the import site. Counterpart of Python's `test_index.py` checks.
  */
 describe("experimental facts quarantine (public surface)", () => {
   const surface = sdk as unknown as Record<string, unknown>;

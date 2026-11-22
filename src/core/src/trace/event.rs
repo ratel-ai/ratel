@@ -147,7 +147,7 @@ pub struct SearchStage {
 }
 
 /// One ranked skill hit inside a [`TraceEvent::SkillSearch`] event — the
-/// skill-side twin of [`SearchHitTrace`].
+/// skill-side counterpart of [`SearchHitTrace`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkillHitTrace {
     /// Id of the matching skill.
@@ -158,7 +158,7 @@ pub struct SkillHitTrace {
 }
 
 /// One ranked fact hit inside a [`TraceEvent::FactSearch`] event — the
-/// fact-side twin of [`SkillHitTrace`].
+/// fact-side counterpart of [`SkillHitTrace`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FactHitTrace {
     /// Id of the matching fact.
@@ -293,7 +293,7 @@ pub enum TraceEvent {
         /// Id of the affected tool.
         tool_id: String,
     },
-    /// A [`crate::SkillRegistry`] search completed — the skill-side twin of
+    /// A [`crate::SkillRegistry`] search completed — the skill-side counterpart of
     /// [`TraceEvent::Search`], with the same shape.
     SkillSearch {
         /// The search text.
@@ -312,7 +312,7 @@ pub enum TraceEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         base_hits: Option<Vec<SkillHitTrace>>,
     },
-    /// The skill corpus changed — the skill-side twin of
+    /// The skill corpus changed — the skill-side counterpart of
     /// [`TraceEvent::IndexChurn`]. [`crate::SkillRegistry::register`] emits
     /// [`ChurnKind::Add`] only; [`crate::SkillRegistry::replace_all`] emits
     /// either kind, and is the only source of [`ChurnKind::Remove`] for skills.
@@ -331,7 +331,7 @@ pub enum TraceEvent {
         /// Load wall time, in milliseconds.
         took_ms: u64,
     },
-    /// A [`crate::FactRegistry`] search completed — the fact-side twin of
+    /// A [`crate::FactRegistry`] search completed — the fact-side counterpart of
     /// [`TraceEvent::SkillSearch`], with the same shape.
     FactSearch {
         /// The search text.
@@ -347,7 +347,7 @@ pub enum TraceEvent {
         /// Total search wall time, in milliseconds.
         took_ms: u64,
     },
-    /// The fact corpus changed — the fact-side twin of
+    /// The fact corpus changed — the fact-side counterpart of
     /// [`TraceEvent::SkillChurn`], emitted by [`crate::FactRegistry::register`].
     FactChurn {
         /// Whether the id was added or removed.
@@ -374,7 +374,7 @@ pub enum TraceEvent {
     },
     /// A fact rode along in a per-call grounding snapshot — the stateless
     /// `groundSnapshot` path: recomputed each call, nothing persisted, no
-    /// freshness gate. The per-call twin of [`TraceEvent::FactInject`], emitted
+    /// freshness gate. The per-call counterpart of [`TraceEvent::FactInject`], emitted
     /// by the SDK via [`crate::FactRegistry::record_event`] once per fact per
     /// snapshot.
     FactSnapshot {

@@ -7,7 +7,7 @@ with no OpenAI key. It speaks the Decisions wire format::
               "probabilities": [{"value": "t0", "probability": 0.01}], "confidence"}]}
 
 Its "judge" is a hard-coded intent table: it shows the plumbing, not ranking
-quality. Set OPENAI_API_KEY to call OpenAI itself. The TypeScript twin is
+quality. Set OPENAI_API_KEY to call OpenAI itself. The TypeScript counterpart is
 ``examples/openai-decision-retriever-ts/src/local-openai-decision.ts``.
 """
 

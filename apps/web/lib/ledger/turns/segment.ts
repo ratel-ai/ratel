@@ -123,7 +123,7 @@ export interface GatewayDedupe {
  * Drop gateway rows that restate a native one (rule 6): a `gateway_search`
  * within the window of a native `search`/`skill_search`, and a
  * `gateway_invoke`/`gateway_error` within the window of an inner invocation
- * event of the same tool. A gateway row with no native twin stands in for it
+ * event of the same tool. A gateway row with no native counterpart stands in for it
  * (count only, no hits), so a fact is never counted twice and never lost.
  * Input is one session's events.
  */
