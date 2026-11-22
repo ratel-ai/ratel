@@ -24,8 +24,8 @@ import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadLatestTasksRun } from "@/lib/views/tasks/queries";
 
 /**
- * RC-805, the shape of "Ratel Cloud - prod": seven closed agent runs of
- * Ratel Cloud's own backend jobs (three `label_workflows`, three
+ * RC-805, the shape of Ratel's own prod project: seven closed agent runs of
+ * Ratel's own backend jobs (three `label_workflows`, three
  * `assign_topics`, one `cluster_intents`), model calls only, no tool span.
  * Ingest, the turn build, the signal job and the Tasks model run as in
  * production, on a real schema. With `cloud-tool-run-insights` on, Tasks

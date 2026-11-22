@@ -662,7 +662,7 @@
     }
   ],
   "graph": {
-    "note": "Conformance fixtures for the intent-graph read model (ADR-0014, schema/intent-graph.schema.json). Unlike the catalog vectors these pin STRUCTURE, not ETags: the graph is not a synced wire artifact in v2. Both producers — the in-process local learner and the Ratel Cloud builder — MUST emit graphs that validate, and every consumer MUST reject the `invalid` set.",
+    "note": "Conformance fixtures for the intent-graph read model (ADR-0014, schema/intent-graph.schema.json). Unlike the catalog vectors these pin STRUCTURE, not ETags: the graph is not a synced wire artifact in v2. Both producers — the in-process local learner and the Ratel builder — MUST emit graphs that validate, and every consumer MUST reject the `invalid` set.",
     "consumerRules": [
       "An edge naming a capability absent from the consumer's registry MUST be dropped, never ranked — the catalog may have changed since the graph was grown.",
       "`centroid` MAY be absent; a consumer without an embedder matches lexically over `members`, and one with an embedder MAY derive a centroid from `members`.",
@@ -710,7 +710,7 @@
       },
       {
         "name": "lexical-no-centroid",
-        "why": "A lexically-clustered producer (the Bm25 tier, or Ratel Cloud's Jaccard clusterer) emits no centroid. `members` is the match key, so the graph is still fully usable — a consumer with an embedder may derive a centroid from the members.",
+        "why": "A lexically-clustered producer (the Bm25 tier, or Ratel's Jaccard clusterer) emits no centroid. `members` is the match key, so the graph is still fully usable — a consumer with an embedder may derive a centroid from the members.",
         "doc": {
           "v": 1,
           "built_from_ts": 1753000000000,

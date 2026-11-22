@@ -17,7 +17,7 @@ application in `src` (`@ratel/platform`), the shared UI packages `packages/brand
 (ADR-0029, ADR-0030). The root `LICENSE.md` is MIT and the application and both packages already
 declare `"license": "MIT"`, but no decision covered them.
 
-The platform is the open-source edition people install and run themselves. Ratel Cloud adds its
+The platform is the open-source edition people install and run themselves. Ratel adds its
 modules from the private repository; they are never in this repository or in the open-source image
 (`check:boundary`, `check:private`).
 
@@ -55,4 +55,4 @@ terms they shipped under.
 - Self-hosters, contributors and downstream forks get the same terms as the SDKs.
 - The MIT SDK and the Apache-2.0 engine the platform depends on are compatible with an MIT
   application; nothing in the dependency tree is more restrictive for a consumer.
-- Anyone may host the open-source server; Ratel Cloud's private modules are not part of it.
+- Anyone may host the open-source server; Ratel's private modules are not part of it.

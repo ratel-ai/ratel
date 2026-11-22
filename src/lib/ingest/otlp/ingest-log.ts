@@ -11,7 +11,7 @@ import { toolSpanDialect } from "./span-facts";
 import type { DecodedSpan } from "./types";
 
 /**
- * Log lines for the "Ratel Cloud: traces ingested" Datadog dashboard
+ * Log lines for the "Ratel App (<env>): Traces ingested" Datadog dashboard
  * (infra/dashboards/traces_ingested.tf), written after an export is stored:
  *
  *   - `otlp_batch_ingested`: one per stored `/v1/traces` export, with exact

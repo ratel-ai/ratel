@@ -36,7 +36,7 @@ import { loadExampleAsks } from "@/lib/views/intents/topics-examples";
  * `<job kind> for project <uuid>` plus the JSON payload (`jobAsk`). The uuid
  * differs per customer project, so the asks of one job kind are distinct asks
  * that share too few words to group, and none reaches the floor of a new
- * intent: "Ratel Cloud - prod" read 14 turns with asks, all unplaced. With
+ * intent: Ratel's own prod project read 14 turns with asks, all unplaced. With
  * the flag on, such an ask reads as the job in words ("Cluster intents"), a
  * derived ask, so the runs of one job kind are one ask and make one intent,
  * and no project id shows in an intent or its examples.
@@ -45,7 +45,7 @@ import { loadExampleAsks } from "@/lib/views/intents/topics-examples";
 const NOW = new Date("2026-11-17T23:08:42Z");
 const MINUTE = 60_000;
 
-/** The runs "Ratel Cloud - prod" held on 2026-11-17 (list_traces): job kind, the project the job ran for, payload. */
+/** The runs Ratel's own prod project held on 2026-11-17 (list_traces): job kind, the project the job ran for, payload. */
 const RUNS: readonly (readonly [kind: string, project: string, payload: string])[] = [
   ["cluster_intents", "9bedca48-de2b-4d50-9560-e3da19eec4c9", ""],
   ["label_workflows", "9dcf386e-4178-49bd-91ba-d6d76df2003f", "\n{}"],

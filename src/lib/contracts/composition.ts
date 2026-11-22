@@ -273,8 +273,8 @@ export type CompositionPorts = {
   apiKeySecrets?: ApiKeySecretsPort;
   /**
    * How the edition names the product in copy. `full` opens the MCP server's instructions and,
-   * as a slug, names the server and its 401 realm ("Ratel Cloud", `ratel-cloud`); `short` is the
-   * service doing the work in a sentence ("Cloud builds one once searches arrive", "Cloud
+   * as a slug, names the server and its 401 realm ("Ratel", `ratel`); `short` is the
+   * service doing the work in a sentence ("Ratel builds one once searches arrive", "Ratel
    * override"). Absent in the open-source edition, whose copy keeps its neutral words ("Ratel",
    * `APP_NAME`).
    */

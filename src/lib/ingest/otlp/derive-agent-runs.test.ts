@@ -4,7 +4,7 @@ import { AGENT_RUN_EVENT_TYPE, deriveAgentRuns } from "./derive-agent-runs";
 import type { DecodedSpan } from "./types";
 
 /**
- * RC-742: an `invoke_agent` root span (Ratel Cloud's own backend jobs, RC-722)
+ * RC-742: an `invoke_agent` root span (Ratel's own backend jobs, RC-722)
  * is one agent run: one `agent_run` ledger row that carries the run's ask, so
  * a run of `chat` spans with no tool span still makes a turn.
  */

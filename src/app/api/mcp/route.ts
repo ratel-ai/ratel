@@ -2,7 +2,7 @@ import { createMcpRouteHandler, methodNotAllowed } from "@/lib/mcp/route-handler
 import { withRequestLog } from "@/lib/platform/request-log";
 
 /**
- * The Ratel Cloud MCP endpoint: `POST https://cloud.ratel.sh/api/mcp`.
+ * The Ratel MCP endpoint: `POST https://cloud.ratel.sh/api/mcp`.
  *
  * Stateless Streamable HTTP. One POST carries one JSON-RPC message (or a small
  * batch) and gets one JSON response back; no session id is issued and no SSE

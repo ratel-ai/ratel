@@ -17,7 +17,7 @@ until that repository is retired.
 
 ## Context
 
-Ratel Cloud and a self-hostable Ratel OSS are to run on one core: the same application, the same
+Ratel and a self-hostable Ratel OSS are to run on one core: the same application, the same
 design system, one build. The editions differ in identity, workspaces, billing, admin and support,
 which Cloud has and OSS does not. Two copies of the application would drift from the first day;
 the core has to stay unaware of which edition it is running as.

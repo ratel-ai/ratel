@@ -21,7 +21,7 @@ function cloudPort(answer: boolean | Error) {
 
 const cloud = (env: Record<string, string>, port: ReturnType<typeof cloudPort>["port"]) => ({
   env,
-  edition: "Ratel Cloud",
+  edition: "Ratel",
   port,
 });
 

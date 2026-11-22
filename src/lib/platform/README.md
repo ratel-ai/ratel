@@ -10,7 +10,7 @@ npm packages.
 | `db/migrate.ts`, `scripts/migrate.mts` | the migrator; `DATABASE_MIGRATE_ON_BOOT=1` runs it at startup |
 | `db/migrations/` | the migrations: one baseline file per schema fragment, then one file per change (`pnpm db:generate`, checked by `pnpm db:check`) |
 | `app-config.ts` | `APP_NAME` and `BASE_URL` (origin), from the environment; `apiUrl()` builds `/api/v1` URLs; `serviceName()` is the edition's short name ("Cloud", set at startup from `productName` and handed to the browser), else `APP_NAME` |
-| `product-name.ts` | `productName()` and `productSlug()`: the edition's full name for the MCP server ("Ratel Cloud", `ratel-cloud`), else "Ratel" (server-only) |
+| `product-name.ts` | `productName()` and `productSlug()`: the edition's full name for the MCP server ("Ratel", `ratel`), else "Ratel" (server-only) |
 | `site-metadata.ts` | the root layout's metadata: title template, icon, and the link preview (`metadataBase`, OpenGraph, Twitter card) from the edition's `linkPreview` or this deployment's name and origin; an origin without a scheme is read as https, and one that does not parse leaves the preview without an origin |
 | `db/tables.ts`, `db/queries.ts` | barrels over the L1 fragments; higher layers export their own |
 | `db/top-queries.ts` | the statements that cost the database most since the last reset (`pg_stat_statements`; null where it is not installed or not preloaded), which the worker logs once a day |

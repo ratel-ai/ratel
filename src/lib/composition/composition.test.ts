@@ -89,7 +89,7 @@ describe("createComposition", () => {
 
   it("assembles the Cloud edition from the seam", async () => {
     const composition = createComposition("cloud", { eeComposition: cloudPorts });
-    assert.equal(composition.edition, "Ratel Cloud");
+    assert.equal(composition.edition, "Ratel");
     assert.deepEqual(composition.organizationNav, [
       {
         path: "team",

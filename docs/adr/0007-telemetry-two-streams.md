@@ -29,13 +29,13 @@ EventRecord. Amended 2026-08-19 to recognize the independently consented
 
 Two telemetry projections exist for different consumers. A core-owned runtime stream feeds the
 offline inspector, statusline / savings reporting, rerankers, suggestion analyzers, and public
-subscribers. An **OTel path** feeds Ratel Cloud and any observability backend the customer
+subscribers. An **OTel path** feeds Ratel and any observability backend the customer
 already runs. [ADR-0020](0020-runtime-events-lane.md) additionally permits an explicit Cloud
 adapter to publish the runtime stream as authoritative product facts; that path is not general
 observability.
 The industry standardized the remote payload (OpenTelemetry's `gen_ai.*` semantic
 conventions) after Ratel's first bespoke design; building our own schema and transport would
-make Ratel Cloud an island.
+make Ratel an island.
 
 ## Decision
 
@@ -97,7 +97,7 @@ make Ratel Cloud an island.
   `RATEL_EXPERIMENTAL_CATALOG_DEFINITIONS=true`. These are Events in the Logs data model, not SpanEvents. The
   `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` gate controls only this OTel projection;
   it does not filter explicitly attached runtime-event publishers.
-- **Ratel Cloud ingests stock OTLP** (`http/protobuf` + `Bearer`). No custom wire format or
+- **Ratel ingests stock OTLP** (`http/protobuf` + `Bearer`). No custom wire format or
   auth: a customer who already runs OTel dual-exports to Ratel by adding a second exporter.
 - **Three thin vocabulary helpers**, with stock OTel transport: `ratel-ai-telemetry`
   (crates.io; the `ratel.*` constants), `@ratel-ai/telemetry` (npm; constants + the
@@ -117,7 +117,7 @@ facts publisher, but explicitly does not converge or rebase the OTel producer on
 ## Consequences
 
 - Interoperable by construction: Ratel-emitted traces land in any OTel backend; existing
-  traces reach Ratel Cloud as a config change. Guaranteed as far as the *provider*, not as far
+  traces reach Ratel as a config change. Guaranteed as far as the *provider*, not as far
   as the backend's UI — a vendor span processor applies its own filter after the span has
   arrived, and a filter keyed on `gen_ai.*` drops the whole `ratel.*` tier silently. So the
   tier's visibility is a property of the host's per-processor config, which the docs must state

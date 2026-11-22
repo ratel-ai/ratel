@@ -11,7 +11,7 @@ Extends [ADR-0020](0020-runtime-events-lane.md) (one additive event type, `turn_
 
 ## Context
 
-Ratel Cloud groups runtime events into runs per `(session_id, turn_id)`. Three gaps kept real
+Ratel groups runtime events into runs per `(session_id, turn_id)`. Three gaps kept real
 deployments from producing usable runs:
 
 - `session_id` is one value per process, so a server handling many users at once looks like one

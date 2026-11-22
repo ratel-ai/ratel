@@ -190,7 +190,7 @@ const LISTED_PERSON_PATTERN = new RegExp(
 
 /**
  * Everything the options say, lowercased, so a capitalised phrase the catalog
- * itself uses ("Ratel Cloud", "Due Date", "Pull Request") is known not to be a
+ * itself uses ("Acme Cloud", "Due Date", "Pull Request") is known not to be a
  * person. A person's name does not appear in a tool's text.
  */
 export function catalogText(options: readonly DecisionOption[]): string {

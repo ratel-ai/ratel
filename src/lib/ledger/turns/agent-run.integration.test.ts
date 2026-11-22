@@ -30,7 +30,7 @@ import { loadLedgerFacts } from "@/lib/views/health/ledger-facts-query";
 import { healthPageState } from "@/lib/views/health/page-state";
 
 /**
- * RC-742, end to end on a real schema: Ratel Cloud's own backend job exports
+ * RC-742, end to end on a real schema: Ratel's own backend job exports
  * an `invoke_agent` root with its ask and `chat` children, no tool span. With
  * `cloud-tool-run-insights` on, ingest stores an `agent_run` row and the build
  * makes exactly one turn whose ask is the root's ask. Off, nothing changes:

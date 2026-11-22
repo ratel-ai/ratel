@@ -580,7 +580,7 @@ export function CatalogInventoryPanel({
           </dd>
         </div>
         <div className="q-stat-row">
-          <dt>Carrying a Cloud override</dt>
+          <dt>Carrying a Ratel override</dt>
           <dd>{fmtInt(inventory.overriddenCount)}</dd>
         </div>
         {fingerprintChanges !== undefined && (

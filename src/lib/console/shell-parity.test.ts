@@ -39,7 +39,7 @@ test("the organization rail's landmark is Organization, a project's Project", ()
 });
 
 test("the mobile bar falls back to the edition's product name", () => {
-  assert.equal(mobileTitle(undefined, null, "Ratel Cloud"), "Ratel Cloud");
+  assert.equal(mobileTitle(undefined, null, "Ratel"), "Ratel");
   assert.equal(mobileTitle(undefined, null, "Ratel"), "Ratel");
   assert.equal(mobileTitle(undefined, "Acme", "Ratel"), "Acme");
   assert.equal(mobileTitle({ name: "Bot" }, "Acme", "Ratel"), "Bot");

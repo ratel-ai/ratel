@@ -55,7 +55,7 @@ On a server, run `cp .env.example .env` first, then set these before the first s
 - **Model keys are optional.** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` go in `.env`. With no key, Ratel makes no outbound model call, and the readings that need a model report themselves skipped.
 - **One operator, one organization.** There are no local accounts, invitations or roles to configure.
 - **Build from source.** Do not point users at a published image.
-- **Ratel Cloud is not public.** Do not point users at a hosted endpoint.
+- **Hosted Ratel is not public.** Do not point users at a hosted endpoint.
 
 ## What it holds
 

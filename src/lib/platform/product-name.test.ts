@@ -10,10 +10,10 @@ test("without an edition's name, the copy keeps its neutral words", () => {
 });
 
 test("an edition's name: the full one and its slug", (t) => {
-  composition.productName = { full: "Ratel Cloud", short: "Cloud" };
+  composition.productName = { full: "Acme Edition", short: "Acme" };
   t.after(() => {
     composition.productName = undefined;
   });
-  assert.equal(productName(), "Ratel Cloud");
-  assert.equal(productSlug(), "ratel-cloud");
+  assert.equal(productName(), "Acme Edition");
+  assert.equal(productSlug(), "acme-edition");
 });
