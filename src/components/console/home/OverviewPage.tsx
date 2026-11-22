@@ -35,10 +35,10 @@ export async function OverviewPage({
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
-  // RC-886: one `FF_PIVOTS` check. Off, or with no pivot, Overview is as before.
+  // RC-886: with no pivot configured, Overview has no group-by.
   const [data, pivots] = await Promise.all([
     loadOverview({ project, organization, window, now }),
-    loadPivotFilterOptions(project.id, organization),
+    loadPivotFilterOptions(project.id),
   ]);
   const pivot = pickGroupPivot(pivots, pivotParam);
   return (

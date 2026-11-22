@@ -88,7 +88,7 @@ export interface TraceFilterOptions {
   /** `cloud-project-entities`: the Agent and MCP server filters exist. */
   entities?: boolean;
   /**
-   * `cloud-pivots` (RC-885): the project's configured pivots, each a filter
+   * RC-885: the project's configured pivots, each a filter
    * read from `pivot.<key>`. Absent or empty, no `pivot.*` parameter is a
    * filter, and a key that is not configured never is.
    */
@@ -99,7 +99,7 @@ export interface TraceFilterOptions {
 export type TraceFilterBarFacets = Pick<TraceFacets, "model" | "tool" | "service" | "environment"> &
   Partial<Pick<TraceFacets, "experiment" | "arm" | "name">> &
   Partial<Record<"agent" | "server" | "harness" | "country", readonly TraceFacetValue[]>> & {
-    /** Values per pivot key (RC-885), present with `cloud-pivots` on. */
+    /** Values per pivot key (RC-885), present with a pivot configured. */
     pivots?: Readonly<Record<string, readonly TraceFacetValue[]>>;
   };
 

@@ -43,7 +43,7 @@ export async function SessionListPage({
 }) {
   if (!isDbConfigured()) return <TracesUnavailable />;
   // Checked here too, as upstream does: the list shows each session's ask.
-  const { project, organization } = await requireProjectScope(projectId);
+  const { project } = await requireProjectScope(projectId);
 
   const filter = parseSessionsFilter(searchParams[SESSIONS_FILTER_PARAM]);
   const now = new Date();
@@ -51,8 +51,8 @@ export async function SessionListPage({
   const search = searchFromParams(searchParams);
   // RC-790: the Agent and MCP server filters. Always on here: the core has no
   // `cloud-project-entities` flag.
-  // RC-885: the "pivot is" filters exist only with `FF_PIVOTS` on and a pivot configured.
-  const pivots = await loadPivotFilterOptions(project.id, organization);
+  // RC-885: one "pivot is" filter per configured pivot; none with no pivot.
+  const pivots = await loadPivotFilterOptions(project.id);
   const filterOptions = { entities: true, pivots };
   const facetOptions = { entities: true, pivots: pivots.map((pivot) => pivot.key) };
   const traces = traceFilterFromSearch(search, filterOptions);

@@ -11,7 +11,6 @@ import { addPivot, type PivotSettingsDeps, removePivot } from "@/lib/synthesis/p
 import {
   MAX_DIM_VALUE_CHARS,
   recomputeTraceSummaries,
-  refreshTraceSummaries,
 } from "@/lib/synthesis/traces/summary-refresh";
 
 /** RC-884: trace summaries carry the pivot values in `dims`; a pivot change refills them once per project. */
@@ -71,15 +70,10 @@ async function dims(client: PGlite, project = PROJECT): Promise<Record<string, u
   return Object.fromEntries(result.rows.map((row) => [row.trace_id, row.dims]));
 }
 
-/** `cloud-pivots` per project, as the sweep and the refill resolve it (RC-968). */
-const ON = async () => true;
-const OFF = async () => false;
-
-const recompute = (db: Db, traces: string[], project = PROJECT, pivotsEnabled = ON) =>
+const recompute = (db: Db, traces: string[], project = PROJECT) =>
   recomputeTraceSummaries(
     db,
     traces.map((traceId) => ({ projectId: project, traceId })),
-    { pivotsEnabled },
   );
 
 /** Every summary column but `updated_at`, by trace. */
@@ -108,7 +102,7 @@ async function seedTenantSpans(client: PGlite, project = PROJECT): Promise<void>
   await span(client, { project, trace: "f2", attributes: { "tenant.id": "globex" } });
 }
 
-test("with cloud-pivots on, the sweep fills dims: root span first, the preset's key order, then the earliest span, values capped", async () => {
+test("the sweep fills dims: root span first, the preset's key order, then the earliest span, values capped", async () => {
   const { client, db } = await setup();
   await insertPivot(
     PROJECT,
@@ -169,15 +163,11 @@ test("a project with no pivots gets {} and every summary column the no-pivot pat
   await seedTenantSpans(client, BARE);
   await span(client, { project: PROJECT, trace: "a1", attributes: { "tenant.id": "acme" } });
   // A chunk that holds both projects.
-  await recomputeTraceSummaries(
-    db,
-    [
-      { projectId: BARE, traceId: "f1" },
-      { projectId: BARE, traceId: "f2" },
-      { projectId: PROJECT, traceId: "a1" },
-    ],
-    { pivotsEnabled: ON },
-  );
+  await recomputeTraceSummaries(db, [
+    { projectId: BARE, traceId: "f1" },
+    { projectId: BARE, traceId: "f2" },
+    { projectId: PROJECT, traceId: "a1" },
+  ]);
   assert.deepEqual(await dims(client, PROJECT), { a1: { client: "acme" } });
 
   const baseline = await setup();
@@ -187,62 +177,6 @@ test("a project with no pivots gets {} and every summary column the no-pivot pat
   assert.equal(rows.length, 2);
   assert.deepEqual(rows, await summaryRows(baseline.client, BARE));
   assert.deepEqual(await dims(client, BARE), { f1: {}, f2: {} });
-});
-
-test("with cloud-pivots off, the sweep writes dims {} and the no-pivot row, though pivots and tenant.id are stored", async () => {
-  const { client, db } = await setup();
-  await insertPivot(
-    PROJECT,
-    { key: "client", label: "Client", presetId: "client", position: 0 },
-    db,
-  );
-  await seedTenantSpans(client);
-  const looked: string[] = [];
-  const result = await refreshTraceSummaries(
-    {
-      visibilityLagMs: 0,
-      pivotsEnabled: async (projectId: string) => (looked.push(projectId), false),
-    },
-    db,
-  );
-  assert.equal(result.tracesRecomputed, 2);
-  assert.deepEqual(looked, [PROJECT], "one flag lookup per project per batch, not per trace");
-
-  const baseline = await setup();
-  await seedTenantSpans(baseline.client);
-  await refreshTraceSummaries({ visibilityLagMs: 0, pivotsEnabled: ON }, baseline.db);
-  assert.deepEqual(await dims(client), { f1: {}, f2: {} });
-  assert.deepEqual(await summaryRows(client), await summaryRows(baseline.client));
-});
-
-test("with cloud-pivots off, the refill ends at once and changes no summary row", async () => {
-  const { client, db } = await setup();
-  await insertPivot(
-    PROJECT,
-    { key: "client", label: "Client", presetId: "client", position: 0 },
-    db,
-  );
-  await seedTenantSpans(client);
-  await recompute(db, ["f1", "f2"], PROJECT, OFF);
-  const before = (await client.query(`select * from otel_trace_summaries order by trace_id`)).rows;
-
-  const job = (await enqueuePivotRefill(PROJECT, db))!;
-  const result = await refillPivotDims(PROJECT, job.id, db, { pivotsEnabled: OFF });
-  assert.deepEqual(result, {
-    traces: 0,
-    batches: 0,
-    walks: 0,
-    resumed: false,
-    skipped: "flag_off",
-  });
-  assert.deepEqual(
-    (await client.query(`select * from otel_trace_summaries order by trace_id`)).rows,
-    before,
-  );
-  const payload = (
-    await client.query<{ payload: unknown }>(`select payload from jobs where id = $1`, [job.id])
-  ).rows[0]?.payload;
-  assert.equal(payload, null, "no checkpoint written");
 });
 
 test("a pivot change queues one refill; the refill fills dims in the retention window, idempotent", async () => {
@@ -260,8 +194,7 @@ test("a pivot change queues one refill; the refill fills dims in the retention w
   const deps: PivotSettingsDeps = {
     db,
     getActor: async () => ({ userId: "u1", externalId: "user_1" }),
-    findScope: async () => ({ organizationId: ORG, flagOrganization: null }),
-    isEnabled: async () => true,
+    findScope: async () => ({ organizationId: ORG }),
     refill: (projectId) => enqueuePivotRefill(projectId, db),
   };
   assert.ok((await addPivot(PROJECT, { presetId: "client" }, deps)).ok);
@@ -280,7 +213,7 @@ test("a pivot change queues one refill; the refill fills dims in the retention w
     "nor while one runs",
   );
 
-  const first = await refillPivotDims(PROJECT, jobId, db, { pivotsEnabled: ON });
+  const first = await refillPivotDims(PROJECT, jobId, db);
   assert.deepEqual(
     { traces: first.traces, walks: first.walks, resumed: first.resumed },
     { traces: 2, walks: 1, resumed: false },
@@ -294,7 +227,7 @@ test("a pivot change queues one refill; the refill fills dims in the retention w
   await client.query(`update jobs set status = 'done' where id = $1`, [jobId]);
   const again = await enqueuePivotRefill(PROJECT, db);
   assert.ok(again);
-  await refillPivotDims(PROJECT, again.id, db, { pivotsEnabled: ON });
+  await refillPivotDims(PROJECT, again.id, db);
   assert.deepEqual(await dims(client), {
     old: {},
     r1: { client: "acme" },
@@ -319,7 +252,6 @@ test("the refill resumes where a dead job stopped, and walks again when pivots c
   const dead = (await enqueuePivotRefill(PROJECT, db))!;
   await assert.rejects(
     refillPivotDims(PROJECT, dead.id, db, {
-      pivotsEnabled: ON,
       batchSize: 1,
       onBatch: (progress) => {
         if (progress.batches === 1) throw new Error("worker died");
@@ -334,7 +266,6 @@ test("the refill resumes where a dead job stopped, and walks again when pivots c
   let batches = 0;
   await assert.rejects(
     refillPivotDims(PROJECT, stopped.id, db, {
-      pivotsEnabled: ON,
       batchSize: 1,
       onBatch: () => {
         batches += 1;
@@ -345,10 +276,7 @@ test("the refill resumes where a dead job stopped, and walks again when pivots c
   await client.query(`update jobs set status = 'error' where id = $1`, [stopped.id]);
 
   const resumed = (await enqueuePivotRefill(PROJECT, db))!;
-  const result = await refillPivotDims(PROJECT, resumed.id, db, {
-    pivotsEnabled: ON,
-    batchSize: 1,
-  });
+  const result = await refillPivotDims(PROJECT, resumed.id, db, { batchSize: 1 });
   assert.equal(result.resumed, true);
   assert.equal(result.traces, 1, "only the trace after the saved position");
   assert.deepEqual(await dims(client), {
@@ -362,7 +290,6 @@ test("the refill resumes where a dead job stopped, and walks again when pivots c
   const changing = (await enqueuePivotRefill(PROJECT, db))!;
   let added = false;
   const rewalk = await refillPivotDims(PROJECT, changing.id, db, {
-    pivotsEnabled: ON,
     batchSize: 1,
     onBatch: () => {
       if (added) return;

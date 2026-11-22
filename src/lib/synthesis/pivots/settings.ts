@@ -16,13 +16,12 @@ import {
 } from "@/lib/ingest/pivots/store";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import type { PivotsFlagOrganization } from "@/lib/platform/pivots-flag";
 
 /**
  * Settings > Pivots (RC-881): a member of the project's organization lists,
- * adds, renames, moves and removes the project's pivots, with `FF_PIVOTS`
- * on. Each write is scoped to the project the person belongs to and sends
- * `pivot_created`, `pivot_updated` or `pivot_deleted`.
+ * adds, renames, moves and removes the project's pivots. Each write is
+ * scoped to the project the person belongs to and sends `pivot_created`,
+ * `pivot_updated` or `pivot_deleted`.
  */
 
 export type PivotEvent = "pivot_created" | "pivot_updated" | "pivot_deleted";
@@ -36,8 +35,6 @@ export interface PivotEventProperties {
 
 export interface PivotScope {
   organizationId: string;
-  /** The identity the flag targets. */
-  flagOrganization: PivotsFlagOrganization;
 }
 
 export interface PivotSettingsDeps {
@@ -46,7 +43,6 @@ export interface PivotSettingsDeps {
   getActor: () => Promise<{ userId: string; externalId: string } | null>;
   /** The project's organization when the person is a member of it, else null. */
   findScope: (projectId: string, userId: string) => Promise<PivotScope | null>;
-  isEnabled: (projectId: string, organization: PivotsFlagOrganization) => Promise<boolean>;
   /** An admin support session may look but not change settings. */
   isRestricted?: () => Promise<boolean>;
   /**
@@ -200,9 +196,7 @@ async function authorize(
   const actor = await deps.getActor();
   if (!actor) return refuse("signed_out", projectId);
   const scope = await deps.findScope(projectId, actor.userId);
-  // Flag off reads as not found: the page and its writes do not exist.
-  if (!scope || !(await deps.isEnabled(projectId, scope.flagOrganization)))
-    return refuse("not_found", projectId);
+  if (!scope) return refuse("not_found", projectId);
   if (options.write && (await deps.isRestricted?.())) return refuse("restricted", projectId);
   return { externalId: actor.externalId, orgId: scope.organizationId };
 }

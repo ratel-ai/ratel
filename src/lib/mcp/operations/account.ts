@@ -73,10 +73,6 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     note: "agent sandboxes: the Sandboxes pages and run API, `ratel sandbox dev` runners, sandbox stamps on the label and topic jobs, playground runs kept out of cost and Agent health",
   },
   {
-    key: "FF_PIVOTS",
-    note: "pivots: Settings > Pivots, the configured pivot keys kept on span rows at ingest, and each pivot's value (`dims`) on trace summaries",
-  },
-  {
     key: "FF_CUSTOM_DASHBOARDS",
     note: "custom dashboards: the Dashboards pages under Overview (widgets over trace summaries, shared by link) and the MCP tools list_dashboards and get_dashboard",
   },

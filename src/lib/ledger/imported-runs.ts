@@ -1,5 +1,4 @@
 import type { ImportedRunsPort } from "@/lib/contracts/imported-runs";
-import type { Organization } from "@/lib/contracts/session";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { type PersistSpansContext, persistDecodedSpans } from "@/lib/ingest/otlp/ingest-spans";
 import { insertEventsWithMetrics, insertOtelSpans } from "@/lib/ingest/otlp/queries";
@@ -13,7 +12,6 @@ import { drainProjectJobs } from "@/lib/jobs/store";
 import { registerImportedSourceIds } from "@/lib/ledger/constants";
 import { enqueueBuildTraceTurnsJob } from "@/lib/ledger/turns/queries";
 import { getDb } from "@/lib/platform/db/client";
-import { pivotsEnabled } from "@/lib/platform/pivots-flag";
 
 export type ImportedRunsDeps = {
   persistDecodedSpans: typeof persistDecodedSpans;
@@ -26,9 +24,8 @@ export type ImportedRunsDeps = {
   }) => Promise<{ id: string }>;
   scheduleProjectDrain: (projectId: string) => void;
   runsJobsAfterResponse: () => boolean;
-  /** The project's pivot keys for ingest (RC-883), cached; read only with `FF_PIVOTS` on. */
+  /** The project's pivot keys for ingest (RC-883), cached. */
   pivots: PivotIngestDeps;
-  pivotsEnabled: (projectId: string, organization: Organization) => Promise<boolean>;
 };
 
 const defaultDeps: ImportedRunsDeps = {
@@ -39,7 +36,6 @@ const defaultDeps: ImportedRunsDeps = {
   scheduleProjectDrain: (projectId) => scheduleProjectDrain(projectId),
   runsJobsAfterResponse: () => runsJobsAfterResponse(),
   pivots: defaultPivotIngestDeps,
-  pivotsEnabled: (projectId, organization) => pivotsEnabled(projectId, organization),
 };
 
 /**
@@ -86,8 +82,6 @@ export function createImportedRuns(deps: ImportedRunsDeps = defaultDeps): Import
           captureFailure: report.captureFailure,
         },
       ),
-    // The runs' metadata, tags and groups reach the root span with `FF_PIVOTS` on (RC-883).
-    importMetadata: (projectId, organization) => deps.pivotsEnabled(projectId, organization),
     requestReading: async (projectId) => {
       // The run rides on the build: the build enqueues it once it has caught up, so it reads
       // every run the import stored instead of racing the build for them.

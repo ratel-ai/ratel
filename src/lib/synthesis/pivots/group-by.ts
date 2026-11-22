@@ -2,7 +2,7 @@ import { type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 
 /**
- * The Overview group-by of one pivot (RC-886, flag `cloud-pivots`): per
+ * The Overview group-by of one pivot (RC-886): per
  * value of the pivot in a window, the runs, the error rate, the p50 duration
  * and the cost, read from `otel_trace_summaries.dims`. The top values by runs
  * have a row each; the rest fold into one "Other" row, and runs with no value

@@ -367,7 +367,7 @@ test("with the entity filters off, facetAgent and facetServer are ignored and no
   }
 });
 
-// — RC-885: the "pivot is" filters, behind cloud-pivots —
+// — RC-885: the "pivot is" filters —
 
 const PIVOTS = {
   pivots: [

@@ -5,8 +5,7 @@ import { refillPivotDims } from "./refill";
 /**
  * The pivots' registration (RC-884): the `refill_pivot_dims` job, which refills `dims` on the
  * project's trace summaries after a pivot is added or removed. Settings > Pivots queues it; the
- * cron drain runs it. With `FF_PIVOTS` off for the project the job ends at once and writes
- * nothing. Upstream lists the handler in its job hub (`lib/jobs/handlers.ts`).
+ * cron drain runs it. Upstream lists the handler in its job hub (`lib/jobs/handlers.ts`).
  */
 export const pivotsRegistration: Registration = {
   jobs: {

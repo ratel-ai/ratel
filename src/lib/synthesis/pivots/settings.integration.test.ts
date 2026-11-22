@@ -16,7 +16,7 @@ import {
   reorderPivot,
 } from "@/lib/synthesis/pivots/settings";
 
-/** RC-881: a member manages the project's pivots with `FF_PIVOTS` on; each write is scoped and tracked. */
+/** RC-881: a member manages the project's pivots; each write is scoped and tracked. */
 
 const ORG = "22222222-2222-4222-8222-222222222221";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -33,17 +33,14 @@ async function setup(): Promise<Db> {
   return drizzle(client, { schema }) as unknown as Db;
 }
 
-function deps(db: Db, options: { member?: boolean; enabled?: boolean; restricted?: boolean } = {}) {
+function deps(db: Db, options: { member?: boolean; restricted?: boolean } = {}) {
   const tracked: { event: PivotEvent; context: unknown; properties: Record<string, unknown> }[] =
     [];
   const value: PivotSettingsDeps = {
     db,
     getActor: async () => ({ userId: "u1", externalId: "user_1" }),
     findScope: async (projectId) =>
-      (options.member ?? true) && projectId === PROJECT
-        ? { organizationId: ORG, flagOrganization: { id: ORG, slug: "org", effectivePlan: "free" } }
-        : null,
-    isEnabled: async () => options.enabled ?? true,
+      (options.member ?? true) && projectId === PROJECT ? { organizationId: ORG } : null,
     isRestricted: async () => options.restricted ?? false,
     track: async (event, context, properties) => {
       tracked.push({ event, context, properties: { ...properties } });
@@ -182,7 +179,7 @@ test("the store keeps the limit when two adds race past the domain check", async
   );
 });
 
-test("scoped to the person's project: another project, a non-member, the flag off and a support session are refused", async () => {
+test("scoped to the person's project: another project, a non-member and a support session are refused", async () => {
   const db = await setup();
   await insertPivot(OTHER, { key: "theirs", label: "theirs", presetId: null, position: 0 }, db);
 
@@ -206,16 +203,6 @@ test("scoped to the person's project: another project, a non-member, the flag of
     error: PIVOT_SETTINGS_ERRORS.not_found,
   });
 
-  const off = deps(db, { enabled: false });
-  assert.deepEqual(await addPivot(PROJECT, { key: "x" }, off.value), {
-    ok: false,
-    error: PIVOT_SETTINGS_ERRORS.not_found,
-  });
-  assert.deepEqual(await readPivots(PROJECT, off.value), {
-    ok: false,
-    error: PIVOT_SETTINGS_ERRORS.not_found,
-  });
-
   const support = deps(db, { restricted: true });
   assert.deepEqual(await addPivot(PROJECT, { key: "x" }, support.value), {
     ok: false,
@@ -228,7 +215,7 @@ test("scoped to the person's project: another project, a non-member, the flag of
     (await listPivots(OTHER, db)).map((pivot) => pivot.key),
     ["theirs"],
   );
-  for (const entry of [member, outsider, off, support]) assert.deepEqual(entry.tracked, []);
+  for (const entry of [member, outsider, support]) assert.deepEqual(entry.tracked, []);
 });
 
 test("invalid input is refused with its message", async () => {

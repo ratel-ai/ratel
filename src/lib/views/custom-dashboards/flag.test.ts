@@ -37,7 +37,7 @@ test("OSS: off with nothing set; FF_CUSTOM_DASHBOARDS or RATEL_EXPERIMENTAL_FEAT
     await customDashboardsEnabledFor({}, oss({ RATEL_EXPERIMENTAL_FEATURES: "1" })),
     true,
   );
-  assert.equal(await customDashboardsEnabledFor({}, oss({ FF_PIVOTS: "1" })), false);
+  assert.equal(await customDashboardsEnabledFor({}, oss({ FF_SANDBOXES: "1" })), false);
 });
 
 test("Cloud: the port decides for the person, and for an MCP caller with the project", async () => {

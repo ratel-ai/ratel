@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { SettingsFrame } from "@/components/console/settings/SettingsFrame";
-import { pivotsVisible } from "@/lib/console/pivots/reader";
 import { projectSettingsTabs } from "@/lib/console/settings/tabs";
 import { isDbConfigured } from "@/lib/platform/db/client";
 
@@ -18,10 +17,8 @@ export default async function ProjectSettingsLayout({
 }) {
   if (!isDbConfigured()) return children;
   const { projectId } = await params;
-  // Pivots (RC-881) has a tab only with `cloud-pivots` on for the project.
-  const pivots = await pivotsVisible(projectId);
   return (
-    <SettingsFrame label="Project settings" tabs={projectSettingsTabs(projectId, { pivots })}>
+    <SettingsFrame label="Project settings" tabs={projectSettingsTabs(projectId)}>
       {children}
     </SettingsFrame>
   );

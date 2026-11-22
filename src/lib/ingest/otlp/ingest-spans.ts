@@ -126,8 +126,8 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    */
   modelPricing?: ModelPricingIngestDeps;
   /**
-   * The project's pivot keys (RC-883), kept on its span rows with
-   * `FF_PIVOTS` on. Absent, or with the switch off, the rows are as before.
+   * The project's pivot keys (RC-883), kept on its span rows. Absent, or
+   * with no pivot configured, the rows are as without pivots.
    */
   pivots?: PivotIngestDeps;
   /**
@@ -344,7 +344,7 @@ export async function persistDecodedSpans(
   // Raw spans are an additive observability tap. They do not count toward the
   // event quota and must never change the established ingest result.
   try {
-    const pivotKeys = await batchPivotKeys(projectId, organization, deps);
+    const pivotKeys = await batchPivotKeys(projectId, deps);
     const spanRows = toOtelSpanRows(projectId, spans, dedupe, {
       prices,
       dimensions,
@@ -415,18 +415,15 @@ async function fillStoredSessions(
 }
 
 /**
- * The pivot keys the batch's span rows keep (RC-883): read only with
- * `FF_PIVOTS` on for the project, from a cached lookup. A failed read
- * keeps none and logs the error: the spans are still stored.
+ * The pivot keys the batch's span rows keep (RC-883), from a cached lookup.
+ * A failed read keeps none and logs the error: the spans are still stored.
  */
 async function batchPivotKeys(
   projectId: string,
-  organization: Organization | null,
   deps: PersistSpansDeps,
 ): Promise<ReadonlySet<string> | undefined> {
   if (!deps.pivots) return undefined;
   try {
-    if (!(await deps.pivots.enabled(projectId, organization))) return undefined;
     const keys = await deps.pivots.loadKeys(projectId);
     return keys.size > 0 ? keys : undefined;
   } catch (err) {

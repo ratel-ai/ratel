@@ -28,7 +28,7 @@ async function handleGet(
   const cursor = params.get("cursor");
   // RC-506: the next page keeps the property filters. RC-790: the Agent and MCP
   // server filters too, always on here: the core has no `cloud-project-entities` flag.
-  // RC-885: the pivot filters only with `FF_PIVOTS` on, and only configured pivot keys.
+  // RC-885: the pivot filters, only for configured pivot keys.
   let pivots: readonly PivotFilterOption[] = [];
   const load = (id: string) =>
     loadSessionListPage(id, {
@@ -45,7 +45,7 @@ async function handleGet(
     // One organization per session: the project must be one of its projects.
     findProject: async (id) => {
       const scope = await findProjectScope(id);
-      if (scope) pivots = await loadPivotFilterOptions(scope.project.id, scope.organization);
+      if (scope) pivots = await loadPivotFilterOptions(scope.project.id);
       return scope ? { projectId: scope.project.id, organizationId: scope.organization.id } : null;
     },
     setLogContext: (fields) => setRequestLogContext(request, fields),

@@ -69,7 +69,7 @@ export const otelTraceSummaries = pgTable(
     countries: text("countries").array().notNull().default(sql`'{}'::text[]`),
     // The callers' harnesses (`otel_spans.harness`, RC-778), for the Traces harness filter.
     harnesses: text("harnesses").array().notNull().default(sql`'{}'::text[]`),
-    // The trace's pivot values (RC-884, `FF_PIVOTS`): pivot key to its first
+    // The trace's pivot values (RC-884): pivot key to its first
     // non-empty value, root span first. `{}` for a project with no pivots.
     dims: jsonb("dims").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     // Retention key. Span retention prunes by server receipt time, so the

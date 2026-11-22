@@ -5,9 +5,9 @@ import { createImportedRuns, type ImportedRunsDeps } from "@/lib/ledger/imported
 
 const ORG = { id: "o", name: "Acme", slug: "acme" };
 
-const PIVOTS = { enabled: async () => true, loadKeys: async () => new Set(["tenant.id"]) };
+const PIVOTS = { loadKeys: async () => new Set(["tenant.id"]) };
 
-function fakes(runsJobs: boolean, pivotsOn = false) {
+function fakes(runsJobs: boolean) {
   const calls: unknown[][] = [];
   const deps: ImportedRunsDeps = {
     persistDecodedSpans: async (spans, context, persistDeps) => {
@@ -29,26 +29,16 @@ function fakes(runsJobs: boolean, pivotsOn = false) {
     scheduleProjectDrain: (projectId) => calls.push(["schedule", projectId]),
     runsJobsAfterResponse: () => runsJobs,
     pivots: PIVOTS,
-    pivotsEnabled: async (projectId, organization) => {
-      calls.push(["pivots", projectId, organization.id]);
-      return pivotsOn;
-    },
   };
   return { calls, port: createImportedRuns(deps) };
 }
 
 describe("createImportedRuns", () => {
-  it("hands the pivot keys to ingest, and the runs' metadata follows FF_PIVOTS for the project (RC-883)", async () => {
-    const off = fakes(true);
-    const report = { logError: () => {}, captureFailure: () => {} };
-    await off.port.persist("p", ORG, [], report);
-    const [, , , persistDeps] = off.calls[0] as [string, unknown, unknown, { pivots: unknown }];
+  it("hands the pivot keys to ingest (RC-883)", async () => {
+    const { calls, port } = fakes(true);
+    await port.persist("p", ORG, [], { logError: () => {}, captureFailure: () => {} });
+    const [, , , persistDeps] = calls[0] as [string, unknown, unknown, { pivots: unknown }];
     assert.equal(persistDeps.pivots, PIVOTS);
-    assert.equal(await off.port.importMetadata?.("p", ORG), false);
-    assert.deepEqual(off.calls.slice(1), [["pivots", "p", "o"]]);
-
-    const on = fakes(true, true);
-    assert.equal(await on.port.importMetadata?.("p", ORG), true);
   });
 
   it("stores spans as an import: no allowance spent, no fold kick, the build queued without a drain", async () => {

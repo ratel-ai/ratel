@@ -85,7 +85,7 @@ export interface SessionListViewProps {
   filterFacets?: TraceFilterFacets | null;
   /** `cloud-project-entities`: the bar has the Agent and MCP server filters (RC-790). */
   entities?: boolean;
-  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each (RC-885). */
+  /** The configured pivots, one "pivot is" filter each (RC-885). */
   pivots?: readonly PivotFilterOption[];
   loadPage?: LoadSessionListPage;
   loadChat?: LoadSessionPanelChat;

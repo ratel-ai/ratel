@@ -151,7 +151,7 @@ export interface OtelSpanRowOptions {
    */
   dimensions?: SpanDimensionsById;
   /**
-   * The attribute keys the project's pivots read (RC-883, `FF_PIVOTS`):
+   * The attribute keys the project's pivots read (RC-883):
    * each is kept, the span's value winning over the resource's. Absent or
    * empty, the rows are as before.
    */

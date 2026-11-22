@@ -1,7 +1,7 @@
 import { SESSION_KEYS, USER_KEYS } from "@/lib/ingest/otlp/attr-resolve";
 
 /**
- * Pivots (RC-881, switch `FF_PIVOTS`): the attributes a project slices its
+ * Pivots (RC-881): the attributes a project slices its
  * traces by. Pure rules: the presets, key and label checks, the limit of 5
  * and the order. The table is `project_pivots` (lib/db/schema.ts).
  *

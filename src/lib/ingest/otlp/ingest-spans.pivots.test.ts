@@ -7,8 +7,8 @@ import type { OtelSpanRow } from "./span-rows";
 import type { DecodedSpan } from "./types";
 
 /**
- * RC-883: with `FF_PIVOTS` on, a batch's span rows keep the project's pivot
- * keys, also from the resource. Off, or with no pivots, the rows are as on main.
+ * RC-883: a batch's span rows keep the project's pivot keys, also from the
+ * resource. With no pivots, the rows are as without pivots.
  * Owned (ADR-0030): the Client company preset reads no vendor group key here
  * (ingest/pivots/model.ts), so the lookup case lists two preset keys.
  */
@@ -47,22 +47,12 @@ async function persist(deps: PersistSpansDeps) {
   assert.ok(result.ok);
 }
 
-function pivotDeps(options: {
-  enabled: boolean;
-  keys?: string[];
-  reads?: { count: number };
-}): PivotIngestDeps {
-  return {
-    enabled: async () => options.enabled,
-    loadKeys: async () => {
-      if (options.reads) options.reads.count += 1;
-      return new Set(options.keys ?? []);
-    },
-  };
+function pivotDeps(keys: string[]): PivotIngestDeps {
+  return { loadKeys: async () => new Set(keys) };
 }
 
-test("flag on, tenant.id configured: the resource value is kept, a span-level value wins", async () => {
-  const { h, deps } = harness(pivotDeps({ enabled: true, keys: ["tenant.id"] }));
+test("tenant.id configured: the resource value is kept, a span-level value wins", async () => {
+  const { h, deps } = harness(pivotDeps(["tenant.id"]));
   await persist(deps);
   const values = h.spanRows.map((row) => row.attributes["tenant.id"]);
   assert.ok(values.length > 2);
@@ -70,28 +60,20 @@ test("flag on, tenant.id configured: the resource value is kept, a span-level va
   assert.ok(values.every((value, index) => value === (index === 1 ? "globex" : "acme")));
 });
 
-test("flag off, no pivots configured, or no pivot deps: the rows equal the rows without pivots", async () => {
+test("no pivots configured, or no pivot deps: the rows equal the rows without pivots", async () => {
   const baseline = harness();
   await persist(baseline.deps);
   assert.ok(baseline.h.spanRows.every((row) => !("tenant.id" in row.attributes)));
 
-  const reads = { count: 0 };
-  for (const pivots of [
-    pivotDeps({ enabled: false, keys: ["tenant.id"], reads }),
-    pivotDeps({ enabled: true, keys: [] }),
-  ]) {
-    const { h, deps } = harness(pivots);
-    await persist(deps);
-    assert.deepEqual(h.spanRows, baseline.h.spanRows);
-  }
-  assert.equal(reads.count, 0, "flag off reads no pivot keys");
+  const { h, deps } = harness(pivotDeps([]));
+  await persist(deps);
+  assert.deepEqual(h.spanRows, baseline.h.spanRows);
 });
 
 test("a failed pivot read stores the rows as before and logs the error", async () => {
   const baseline = harness();
   await persist(baseline.deps);
   const { h, deps } = harness({
-    enabled: async () => true,
     loadKeys: async () => {
       throw new Error("db down");
     },

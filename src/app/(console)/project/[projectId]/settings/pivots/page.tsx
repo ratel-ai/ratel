@@ -18,8 +18,8 @@ export const metadata = { title: "Pivots" };
 
 /**
  * Settings > Pivots (RC-881): the attributes the project slices its traces
- * by, with candidate keys from recent root spans (RC-882). Only with
- * `cloud-pivots` on for the project; off, the page does not exist.
+ * by, with candidate keys from recent root spans (RC-882). Only for a member
+ * of the project's organization; for anyone else, the page does not exist.
  */
 export default async function PivotsSettingsPage({
   params,

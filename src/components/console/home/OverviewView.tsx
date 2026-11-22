@@ -43,7 +43,7 @@ export function OverviewView({
   setup: ReactNode;
   /** The `?peek=context` panel, rendered by the page. */
   contextPanel?: ReactNode;
-  /** The pivot group-by (RC-886), only with `cloud-pivots` on and a pivot configured. */
+  /** The pivot group-by (RC-886), only with a pivot configured. */
   pivotBreakdown?: ReactNode;
 }) {
   const { project, root, hasTelemetry } = data;

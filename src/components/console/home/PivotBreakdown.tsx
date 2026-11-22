@@ -14,7 +14,7 @@ import { type OverviewWindow, overviewRangeParam } from "@/lib/views/home/overvi
 import { PivotBreakdownTable } from "./PivotBreakdownTable";
 
 /**
- * Overview's group-by of one pivot (RC-886, `cloud-pivots`): which values of
+ * Overview's group-by of one pivot (RC-886): which values of
  * the picked pivot drive runs, errors, latency and cost in the window. The page
  * renders it inside a Suspense boundary, so the rest of Overview never waits
  * for it. A slow or failed read degrades to a notice, never the page.

@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import type { PivotInput } from "@/lib/ingest/pivots/model";
-import { pivotsEnabled } from "@/lib/platform/pivots-flag";
 import { getSessionContext } from "@/lib/platform/session";
 import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 import { trackServerEvent } from "@/lib/platform/telemetry";
@@ -20,8 +19,8 @@ import {
 /**
  * Server actions for Settings > Pivots (RC-881). The checks live in
  * `./settings`; this file binds the signed-in session to them. Owned
- * (ADR-0030): the console's project scope checks the membership, the switch
- * is `FF_PIVOTS` for the project, and the support session is the core's port.
+ * (ADR-0030): the console's project scope checks the membership, and the
+ * support session is the core's port.
  */
 
 export async function addPivotAction(
@@ -70,14 +69,8 @@ function deps(): PivotSettingsDeps {
     },
     findScope: async (projectId) => {
       const scope = await findProjectScope(projectId);
-      return scope
-        ? {
-            organizationId: scope.organization.id,
-            flagOrganization: scope.organization,
-          }
-        : null;
+      return scope ? { organizationId: scope.organization.id } : null;
     },
-    isEnabled: pivotsEnabled,
     isRestricted: isRestrictedBySupportSession,
     // The cron drain runs it within a minute (RC-884).
     refill: (projectId) => enqueuePivotRefill(projectId),

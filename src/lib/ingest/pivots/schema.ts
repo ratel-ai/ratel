@@ -2,7 +2,7 @@ import { integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-or
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * The attributes a project slices its traces by (RC-881, switch `FF_PIVOTS`), at most 5
+ * The attributes a project slices its traces by (RC-881), at most 5
  * (`./model.ts`). A preset pivot (`presetId` set) reads its preset's ordered keys and stores the
  * preset id as `key`. A custom pivot reads the one attribute key in `key`. `position` orders them
  * on every surface.

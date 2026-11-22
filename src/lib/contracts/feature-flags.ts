@@ -16,7 +16,6 @@ export const CORE_FLAGS = [
   "FF_TOOL_RUN_INSIGHTS",
   "FF_TYPED_STEPS",
   "FF_SANDBOXES",
-  "FF_PIVOTS",
   "FF_CUSTOM_DASHBOARDS",
 ] as const;
 

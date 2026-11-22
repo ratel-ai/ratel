@@ -57,12 +57,6 @@ export type ImportedRunsPort = {
     spans: ImportedSpan[],
     report: ImportReport,
   ): Promise<ImportedSpansResult>;
-  /**
-   * Whether the runs' metadata, tags and groups go on their root spans (RC-883): the core's
-   * `FF_PIVOTS` for the project. Optional in the type so an edition's stand-ins keep compiling;
-   * absent, they do not. The core always supplies it.
-   */
-  importMetadata?(projectId: string, organization: Organization): Promise<boolean>;
   /** Ask for a reading once the turn build catches up; drains now when this process runs jobs. */
   requestReading(projectId: string): Promise<void>;
   enqueueJob(projectId: string, kind: string, payload: unknown): Promise<{ id: string }>;

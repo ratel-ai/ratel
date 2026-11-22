@@ -2,7 +2,6 @@ import { and, asc, eq, lt, sql } from "drizzle-orm";
 import { otelSpans } from "@/lib/ingest/otlp/schema";
 import { pivotKeys } from "@/lib/ingest/pivots/model";
 import { getDb } from "@/lib/platform/db/client";
-import { defaultPivotsEnabledLookup, type PivotsEnabledLookup } from "@/lib/platform/pivots-flag";
 import { traceSummaryCursor } from "@/lib/synthesis/traces/schema";
 
 /**
@@ -40,17 +39,6 @@ export interface RefreshTraceSummariesOptions {
   /** How far behind `now()` the cursor stays; see `TRACE_SUMMARY_VISIBILITY_LAG_MS`. */
   visibilityLagMs?: number;
   now?: () => number;
-  /** `FF_PIVOTS` per project (RC-968); absent, the cached process-wide lookup. */
-  pivotsEnabled?: PivotsEnabledLookup;
-}
-
-export interface RecomputeTraceSummariesOptions {
-  /**
-   * `FF_PIVOTS` per project, resolved once per call for each project of the
-   * traces (RC-968). Off, the project's pivot rows are not read and `dims` is
-   * `{}`. Absent, the cached process-wide lookup.
-   */
-  pivotsEnabled?: PivotsEnabledLookup;
 }
 
 export interface TraceSummaryRefreshResult {
@@ -128,9 +116,7 @@ export async function refreshTraceSummaries(
   };
 
   while (now() - startedAt < timeBudgetMs) {
-    const batch = await db.transaction((tx) =>
-      sweepOneBatch(tx, batchSize, visibilityLagMs, options.pivotsEnabled),
-    );
+    const batch = await db.transaction((tx) => sweepOneBatch(tx, batchSize, visibilityLagMs));
     // An overlapping tick owns the stream; duplicating its work would be
     // harmless but wasteful, so stand down until the next minute.
     if (batch === null) {
@@ -158,18 +144,12 @@ export async function refreshTraceSummaries(
 export async function recomputeTraceSummaries(
   db: TraceSummaryExecutor,
   traces: ReadonlyArray<ChangedTrace>,
-  options: RecomputeTraceSummariesOptions = {},
 ): Promise<number> {
   const changed = distinctTraces(traces);
-  const pivotProjects = await projectsWithPivotsOn(
-    changed,
-    options.pivotsEnabled ?? defaultPivotsEnabledLookup,
-  );
   for (let offset = 0; offset < changed.length; offset += TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE) {
     await recomputeSummaries(
       db,
       changed.slice(offset, offset + TRACE_SUMMARY_RECOMPUTE_CHUNK_SIZE),
-      pivotProjects,
     );
   }
   return changed.length;
@@ -180,7 +160,6 @@ async function sweepOneBatch(
   tx: SweepTransaction,
   batchSize: number,
   visibilityLagMs: number,
-  pivotsEnabled: PivotsEnabledLookup | undefined,
 ): Promise<BatchOutcome | null> {
   if (!(await tryAdvisoryLock(tx))) return null;
 
@@ -205,7 +184,7 @@ async function sweepOneBatch(
     .limit(batchSize);
   if (spans.length === 0) return { spansScanned: 0, tracesRecomputed: 0 };
 
-  const changed = await recomputeTraceSummaries(tx, spans, pivotsEnabled ? { pivotsEnabled } : {});
+  const changed = await recomputeTraceSummaries(tx, spans);
   const last = spans[spans.length - 1]!;
   await advanceCursor(tx, { receivedAt: last.receivedAt, spanRowId: last.id });
 
@@ -219,20 +198,15 @@ async function sweepOneBatch(
  *
  * `dims` (RC-884): for each pivot of the trace's project, the first non-empty
  * value of its ordered keys on the root span, else on the earliest span that
- * has one. Only for the projects in `pivotProjects` (`FF_PIVOTS` on): for
- * the others no pivot row is read and `dims` is `{}`, also when they have
- * pivots. A chunk with no such project reads no span for it.
+ * has one. A project with no pivot gets `dims` `{}`, and a chunk with no
+ * pivot reads no span for it.
  */
-async function recomputeSummaries(
-  tx: TraceSummaryExecutor,
-  traces: ChangedTrace[],
-  pivotProjects: ReadonlySet<string>,
-): Promise<void> {
+async function recomputeSummaries(tx: TraceSummaryExecutor, traces: ChangedTrace[]): Promise<void> {
   const changed = sql.join(
     traces.map((trace) => sql`(${trace.projectId}::uuid, ${trace.traceId}::text)`),
     sql`, `,
   );
-  const keys = await pivotKeyRows(tx, traces, pivotProjects);
+  const keys = await pivotKeyRows(tx, traces);
   const dimsCte =
     keys.length === 0
       ? sql``
@@ -385,32 +359,12 @@ interface PivotKeyRow {
   ord: number;
 }
 
-/**
- * The projects of the traces with `FF_PIVOTS` on (RC-968): one lookup per
- * project, never one per trace. The lookup is cached and never throws.
- */
-async function projectsWithPivotsOn(
-  traces: ReadonlyArray<ChangedTrace>,
-  pivotsEnabled: PivotsEnabledLookup,
-): Promise<Set<string>> {
-  const projects = [...new Set(traces.map((trace) => trace.projectId))];
-  const enabled = await Promise.all(projects.map((projectId) => pivotsEnabled(projectId)));
-  return new Set(projects.filter((_, index) => enabled[index]));
-}
-
-/**
- * The ordered attribute keys of the pivots of the chunk's projects with
- * `FF_PIVOTS` on: one read of `project_pivots`, none when no project is on.
- */
+/** The ordered attribute keys of the pivots of the chunk's projects: one read of `project_pivots`. */
 async function pivotKeyRows(
   tx: TraceSummaryExecutor,
   traces: ChangedTrace[],
-  pivotProjects: ReadonlySet<string>,
 ): Promise<PivotKeyRow[]> {
-  const projects = [...new Set(traces.map((trace) => trace.projectId))].filter((projectId) =>
-    pivotProjects.has(projectId),
-  );
-  if (projects.length === 0) return [];
+  const projects = [...new Set(traces.map((trace) => trace.projectId))];
   const result = await tx.execute(sql`
     select project_id, key, preset_id from project_pivots
     where project_id = any(array[${sql.join(

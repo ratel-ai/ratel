@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { REFILL_PIVOT_DIMS_JOB } from "@/lib/jobs/kinds";
 import { getDb } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
-import { defaultPivotsEnabledLookup, type PivotsEnabledLookup } from "@/lib/platform/pivots-flag";
 import { recomputeTraceSummaries } from "@/lib/synthesis/traces/summary-refresh";
 
 /**
@@ -36,8 +35,6 @@ export interface RefillPivotDimsResult {
   batches: number;
   walks: number;
   resumed: boolean;
-  /** Set when the job ended at once: `cloud-pivots` is off for the project (RC-968). */
-  skipped?: "flag_off";
 }
 
 export interface RefillPivotDimsOptions {
@@ -46,8 +43,6 @@ export interface RefillPivotDimsOptions {
   now?: () => Date;
   /** After each batch, before the checkpoint is saved. A test throws here to stop a walk. */
   onBatch?: (progress: RefillPivotDimsResult) => void;
-  /** `cloud-pivots` per project (RC-968); absent, the cached process-wide lookup. */
-  pivotsEnabled?: PivotsEnabledLookup;
 }
 
 export type RefillDb = Pick<ReturnType<typeof getDb>, "execute">;
@@ -83,12 +78,6 @@ export async function refillPivotDims(
   const now = options.now ?? (() => new Date());
   const batchSize = options.batchSize ?? REFILL_BATCH_SIZE;
   const result: RefillPivotDimsResult = { traces: 0, batches: 0, walks: 0, resumed: false };
-  const pivotsEnabled = options.pivotsEnabled ?? defaultPivotsEnabledLookup;
-  // Flag off: the job ends as done and writes nothing, not even a checkpoint.
-  if (!(await pivotsEnabled(projectId))) {
-    logger.info({ project_id: projectId, outcome: "flag_off" }, "pivot dims refill skipped");
-    return { ...result, skipped: "flag_off" };
-  }
   let fingerprint = await pivotFingerprint(projectId, db);
   const resumed = await resumableCheckpoint(projectId, jobId, fingerprint, db);
   let checkpoint: RefillCheckpoint = resumed ?? {
@@ -109,7 +98,6 @@ export async function refillPivotDims(
       await recomputeTraceSummaries(
         db,
         batch.map((traceId) => ({ projectId, traceId })),
-        { pivotsEnabled },
       );
       result.traces += batch.length;
       result.batches += 1;

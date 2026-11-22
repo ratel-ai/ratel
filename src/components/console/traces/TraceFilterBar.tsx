@@ -74,7 +74,7 @@ export function TraceFilterBar({
   searchable?: boolean;
   /** `cloud-project-entities`: the rollup bar has the Agent and MCP server filters (RC-790). Off, their parameters are not filters. */
   entities?: boolean;
-  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
+  /** The configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
   pivots?: readonly PivotFilterOption[];
   /** The list the bar narrows, for the `pivot_filter_applied` event. */
   surface?: "sessions" | "turns";

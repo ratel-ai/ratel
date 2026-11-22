@@ -70,7 +70,7 @@ export interface RunsViewProps {
   filterTab?: "runs" | "rollup";
   /** `cloud-project-entities`: the rollup bar offers the Agent and MCP server filters (RC-790). */
   entities?: boolean;
-  /** `cloud-pivots`: the configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
+  /** The configured pivots, one "pivot is" filter each on the rollup bar (RC-885). */
   pivots?: readonly PivotFilterOption[];
   sort: { id: RunSort; direction: SortDirection };
   /** The next page's cursor, or null on the last page. */

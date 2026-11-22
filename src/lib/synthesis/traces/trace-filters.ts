@@ -28,7 +28,7 @@ export interface TraceFilter {
   /** Countries of those callers (`geo_country`), behind `cloud-project-entities` (RC-778). */
   countries?: readonly string[];
   /**
-   * Pivot values by pivot key, behind `cloud-pivots` (RC-885): matched on the
+   * Pivot values by pivot key (RC-885): matched on the
    * rollup's `dims`. Values of one pivot are alternatives; pivots combine (AND).
    */
   pivots?: Readonly<Record<string, readonly string[]>>;
@@ -53,7 +53,7 @@ export type TraceFilterFacets = Record<TraceFilterFacetKey, TraceFacetValue[]> &
 export interface TraceFilterFacetOptions {
   /** `cloud-project-entities`: also read the agent and MCP server values. Off, the query is as before. */
   entities?: boolean;
-  /** `cloud-pivots` (RC-885): the configured pivot keys whose values to read. None, the query is as before. */
+  /** RC-885: the configured pivot keys whose values to read. None, the query is as before. */
   pivots?: readonly string[];
 }
 

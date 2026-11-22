@@ -108,7 +108,7 @@ test("with cloud-project-entities off, facetAgent and facetServer in the URL sho
   }
 });
 
-// — RC-885: the "pivot is" filters, behind cloud-pivots —
+// — RC-885: the "pivot is" filters —
 
 function renderPivots(pivots: readonly { key: string; label: string }[] | undefined): string {
   const view = createElement(SessionListView, {
@@ -127,14 +127,14 @@ function renderPivots(pivots: readonly { key: string; label: string }[] | undefi
   return renderToStaticMarkup(inRouter("?pivot.client=acme&pivot.secret=x", view));
 }
 
-test("with cloud-pivots on, the bar shows a configured pivot's chip with its label and raw value", () => {
+test("the bar shows a configured pivot's chip with its label and raw value", () => {
   const html = renderPivots([{ key: "client", label: "Client company" }]);
   assert.match(html, /Client company is<\/span><span class="font-medium text-fg">acme</);
   // A key that is not configured is no filter: one chip only.
   assert.equal(html.match(/aria-label="Remove /g)?.length, 1);
 });
 
-test("with cloud-pivots off, pivot parameters in the URL show no chip", () => {
+test("with no pivot configured, pivot parameters in the URL show no chip", () => {
   for (const pivots of [undefined, []]) {
     const html = renderPivots(pivots);
     assert.doesNotMatch(html, /Client company is/);

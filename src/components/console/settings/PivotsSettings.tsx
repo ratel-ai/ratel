@@ -27,7 +27,7 @@ import {
 import type { PivotSettingsResult } from "@/lib/synthesis/pivots/settings";
 
 /**
- * Settings > Pivots (RC-881, flag `cloud-pivots`): the attributes the project
+ * Settings > Pivots (RC-881): the attributes the project
  * slices its traces by, at most five. A member adds a preset or a custom
  * attribute key, renames, moves and removes them. The first pivot leads every
  * view that reads them. Suggestions are keys found on recent root spans

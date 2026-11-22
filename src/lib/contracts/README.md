@@ -11,7 +11,7 @@ edition names the product in copy (`full` for the MCP server, `short` for the se
 sentence); without it the copy keeps its neutral words.
 
 `feature-flags.ts` names the core's switches (`CORE_FLAGS`: `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`, `FF_CUSTOM_DASHBOARDS`) and the optional `featureFlags` port. Without it each
+`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_CUSTOM_DASHBOARDS`) and the optional `featureFlags` port. Without it each
 switch is its environment variable for the deployment (in the open-source edition also
 `RATEL_EXPERIMENTAL_FEATURES`). With it, the edition decides each switch per organization,
 project and person; an `FF_*` value in the environment still comes first, and a failed read is

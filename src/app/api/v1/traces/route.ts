@@ -85,7 +85,7 @@ async function handlePost(req: Request) {
     modelPricing: {
       loadOverrides: (projectId) => loadPriceOverrides(projectId, getDb()),
     },
-    // The project's pivot keys, cached, with `FF_PIVOTS` on (RC-883).
+    // The project's pivot keys, cached (RC-883).
     pivots: defaultPivotIngestDeps,
   });
 }

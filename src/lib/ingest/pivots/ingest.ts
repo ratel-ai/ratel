@@ -1,19 +1,15 @@
-import { type Pivot, pivotKeys } from "@/lib/ingest/pivots/model";
-import { listPivots } from "@/lib/ingest/pivots/store";
 import { getDb } from "@/lib/platform/db/client";
-import { type PivotsFlagOrganization, pivotsEnabled } from "@/lib/platform/pivots-flag";
+import { type Pivot, pivotKeys } from "./model";
+import { listPivots } from "./store";
 
 /**
  * What OTLP ingest reads of a project's pivots (RC-883): the attribute keys
  * its pivots read, so a span row keeps them. Cached per process like the
- * switch (`lib/platform/pivots-flag.ts`): at most one read per project a
- * minute, never one per span. `lib/ingest/otlp/ingest-spans.ts` checks the
- * switch, `FF_PIVOTS`. Owned (ADR-0030): the switch takes the project and,
- * when ingest holds it, its organization, not an ingest flag organization.
+ * ingest flags (`lib/flags-ingest.ts`): at most one read per project a
+ * minute, never one per span.
  */
 
 export interface PivotIngestDeps {
-  enabled: (projectId: string, organization: PivotsFlagOrganization) => Promise<boolean>;
   /** The keys the project's pivots read. May throw: ingest then keeps none. */
   loadKeys: (projectId: string) => Promise<ReadonlySet<string>>;
 }
@@ -46,6 +42,5 @@ export function createPivotKeysLookup(
 }
 
 export const defaultPivotIngestDeps: PivotIngestDeps = {
-  enabled: (projectId, organization) => pivotsEnabled(projectId, organization),
   loadKeys: createPivotKeysLookup((projectId) => listPivots(projectId, getDb())),
 };
