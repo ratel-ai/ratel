@@ -265,18 +265,26 @@ export async function markJobDone(
   id: string,
   result: unknown,
   db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(jobs)
     .set({ status: "done", result: result ?? null, finishedAt: new Date() })
-    .where(eq(jobs.id, id));
+    .where(and(eq(jobs.id, id), eq(jobs.status, "running")))
+    .returning({ id: jobs.id });
+  return rows.length > 0;
 }
 
-export async function markJobError(id: string, error: string): Promise<void> {
-  await getDb()
+export async function markJobError(
+  id: string,
+  error: string,
+  db: Pick<ReturnType<typeof getDb>, "update"> = getDb(),
+): Promise<boolean> {
+  const rows = await db
     .update(jobs)
     .set({ status: "error", error, finishedAt: new Date() })
-    .where(eq(jobs.id, id));
+    .where(and(eq(jobs.id, id), eq(jobs.status, "running")))
+    .returning({ id: jobs.id });
+  return rows.length > 0;
 }
 
 /** One job scoped to the project that owns it, so an API-key caller can poll it. */

@@ -42,8 +42,10 @@ export interface JobStore {
   ): Promise<JobRecord | null>;
   /** The instant a drain starts, on the clock the queue stamps `created_at` with. */
   queueClock?(): Promise<Date>;
-  markDone(id: string, result: unknown): Promise<void>;
-  markError(id: string, error: string): Promise<void>;
+  /** True only when the running job was transitioned to done. */
+  markDone(id: string, result: unknown): Promise<boolean>;
+  /** True only when the running job was transitioned to error. */
+  markError(id: string, error: string): Promise<boolean>;
 }
 
 export interface DrainJobsOptions {
@@ -104,33 +106,40 @@ export async function drainJobs(
       const handler = handlers[job.kind];
       if (!handler) throw new Error(`no handler for job kind: ${job.kind}`);
       const result = await handler(job);
-      await store.markDone(job.id, result ?? null);
-      const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
-      await observability?.trackProjectEvent("job_completed", job.projectId, {
-        kind: job.kind,
-        job_id: job.id,
-        duration_ms: durationMs,
-      });
-      logJobFinished(job, "done", durationMs, waitMs);
-      done++;
+      const transitioned = await store.markDone(job.id, result ?? null);
+      if (transitioned) {
+        const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
+        await observability?.trackProjectEvent("job_completed", job.projectId, {
+          kind: job.kind,
+          job_id: job.id,
+          duration_ms: durationMs,
+        });
+        logJobFinished(job, "done", durationMs, waitMs);
+        done++;
+      }
     } catch (err) {
       const durationMs = Math.max(0, (observability?.now() ?? Date.now()) - startedAt);
       const eventProperties = { kind: job.kind, job_id: job.id, duration_ms: durationMs };
       const captureProperties = { ...eventProperties, project_id: job.projectId };
-      if (observability) {
-        observability.reportException(
-          "job_failed",
-          err,
-          `project:${job.projectId}`,
-          captureProperties,
-        );
-        await observability.trackProjectEvent("job_failed", job.projectId, eventProperties);
-      } else {
-        logger.error({ ...captureProperties, err }, "job_failed");
+      const transitioned = await store.markError(
+        job.id,
+        err instanceof Error ? err.message : String(err),
+      );
+      if (transitioned) {
+        if (observability) {
+          observability.reportException(
+            "job_failed",
+            err,
+            `project:${job.projectId}`,
+            captureProperties,
+          );
+          await observability.trackProjectEvent("job_failed", job.projectId, eventProperties);
+        } else {
+          logger.error({ ...captureProperties, err }, "job_failed");
+        }
+        logJobFinished(job, "error", durationMs, waitMs);
+        failed++;
       }
-      await store.markError(job.id, err instanceof Error ? err.message : String(err));
-      logJobFinished(job, "error", durationMs, waitMs);
-      failed++;
     }
     opts.onJobFinished?.();
   }
