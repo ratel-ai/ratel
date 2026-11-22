@@ -136,9 +136,11 @@ ratel sandbox push --dry-run [--out bundle.tar.gz]   # lists the bundle files, u
 ratel sandbox push [<id>] [--url <ratel url>]        # every discovered sandbox when no id
 ```
 
-Push bundles the project as a tar.gz: in a git checkout, the files git lists (tracked and
-untracked, minus `.gitignore`), else every file. `.env*` files, `node_modules`, `.git` and build
-output are never in it. A bundle over 50 MB fails with the size and the file count. Per sandbox,
+Push bundles the project as a tar.gz: in a git work tree, the files git lists (tracked and
+untracked, minus `.gitignore`). Outside one, a walk that applies the `.gitignore` files (root and
+nested, with negations) as git does. When git fails inside a work tree, push is refused: it never
+falls back to a walk. `.env*` files, `node_modules`, `.git` (a folder or a file) and build output
+are never in it. `--dry-run` prints which rules it used. A bundle over 50 MB fails with the size and the file count. Per sandbox,
 push creates a version with the manifest and the git SHA and dirty flag, uploads the bundle and
 finalizes it, then prints the version id and its playground URL. It reads `RATEL_API_KEY` and
 `RATEL_URL` like `ratel sandbox dev`. The contract is in

@@ -60,6 +60,7 @@ describe("ratel sandbox push --dry-run", () => {
     expect(r.stdout).not.toMatch(/\.env|node_modules|\.git\//);
     expect(r.stdout).toMatch(/bundle\s+3 files, [\d.]+ (B|KB) \(tar\.gz of/);
     expect(r.stdout).toMatch(/would push sum-numbers \(dry run: nothing uploaded\)/);
+    expect(r.stdout).toMatch(/rules\s+git \(tracked and untracked files, minus \.gitignore\)/);
     expect(existsSync(out)).toBe(true);
   }, 30_000);
 });
@@ -114,6 +115,33 @@ describe("ratel sandbox push", () => {
     },
     30_000,
   );
+
+  it("refuses to push and uploads nothing when git cannot list the files", async () => {
+    stub = await startPushStub({ apiKey: KEY });
+    // A git that knows the work tree but fails to list it, as with a corrupt index.
+    const bin = mkdtempSync(join(tmpdir(), "ratel-fake-git-"));
+    writeFileSync(
+      join(bin, "git"),
+      '#!/bin/sh\ncase "$1" in rev-parse) echo true ;; ls-files) echo "fatal: index file corrupt" >&2; exit 128 ;; *) exit 1 ;; esac\n',
+      { mode: 0o755 },
+    );
+    try {
+      const r = await ratel(
+        { RATEL_API_KEY: KEY, PATH: `${bin}:${process.env.PATH}` },
+        "sandbox",
+        "push",
+        "--url",
+        stub.url,
+      );
+      expect(r.code).toBe(1);
+      expect(r.stderr).toMatch(
+        /git cannot list the project files \(fatal: index file corrupt\): push refused/,
+      );
+      expect(stub.calls).toEqual([]);
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it("exits 1 when the version build failed, and still prints its URL", async () => {
     stub = await startPushStub({ apiKey: KEY, status: "failed" });

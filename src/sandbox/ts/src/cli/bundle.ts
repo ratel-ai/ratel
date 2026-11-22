@@ -1,23 +1,35 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import ignore, { type Ignore } from "ignore";
 import { CliError } from "./args.js";
 import { IGNORED_DIRS } from "./discover.js";
 
 // The bundle of `ratel sandbox push`: the project files as a tar.gz. In a git
-// checkout the file list is git's (tracked and untracked, minus .gitignore).
-// Outside git it is a walk of the project. Both always drop .env files,
-// dependencies, .git and build output. The archive is deterministic: the same
-// files give the same bytes and the same SHA-256.
+// work tree the file list is git's (tracked and untracked, minus .gitignore).
+// Outside one it is a walk that applies the project's .gitignore files as git
+// does. When git fails inside a work tree, push is refused: it never falls back
+// to a walk that could upload ignored files. Every path always drops .env
+// files, dependencies, .git (a folder or a file) and build output. The archive
+// is deterministic: the same files give the same bytes and the same SHA-256.
 
 /** The largest bundle push uploads: 50 MB of tar.gz. */
 export const MAX_BUNDLE_BYTES = 50 * 1024 * 1024;
 
+/** Where the ignore rules came from: git itself, or the .gitignore files outside a work tree. */
+export type BundleSource = "git" | "gitignore";
+
+export const SOURCE_LABELS: Readonly<Record<BundleSource, string>> = {
+  git: "git (tracked and untracked files, minus .gitignore)",
+  gitignore: ".gitignore files (not a git work tree)",
+};
+
 export interface Bundle {
   /** POSIX paths relative to the project root, sorted. */
   readonly files: readonly string[];
+  readonly source: BundleSource;
   /** The tar.gz bytes. */
   readonly data: Buffer;
   /** Lowercase hex SHA-256 of `data`. */
@@ -26,14 +38,24 @@ export interface Bundle {
   readonly rawBytes: number;
 }
 
-export interface BuildBundleOptions {
+/**
+ * Runs git with `args` in `cwd` and returns its stdout. Throws as execFileSync
+ * does: `code` ENOENT when git is not installed, else `status` and `stderr`.
+ */
+export type GitRunner = (args: readonly string[], cwd: string) => string;
+
+export interface BundleFilesOptions {
+  readonly git?: GitRunner;
+}
+
+export interface BuildBundleOptions extends BundleFilesOptions {
   readonly maxBytes?: number;
 }
 
-/** Collects the project files and packs them. Throws a CliError over the size limit. */
+/** Collects the project files and packs them. Throws a CliError over the size limit or when git fails. */
 export function buildBundle(root: string, options: BuildBundleOptions = {}): Bundle {
   const maxBytes = options.maxBytes ?? MAX_BUNDLE_BYTES;
-  const files = bundleFiles(root);
+  const { files, source } = bundleFiles(root, options);
   const entries = files.map((file) => ({ path: file, ...readEntry(join(root, file)) }));
   const rawBytes = entries.reduce((sum, entry) => sum + entry.data.length, 0);
   const data = gzipSync(tar(entries), { level: 9 });
@@ -41,13 +63,25 @@ export function buildBundle(root: string, options: BuildBundleOptions = {}): Bun
     throw new CliError(
       `the bundle is ${formatBytes(data.length)} (${files.length} files), over the limit of ${formatBytes(maxBytes)}: add the large files to .gitignore`,
     );
-  return { files, data, sha256: createHash("sha256").update(data).digest("hex"), rawBytes };
+  return {
+    files,
+    source,
+    data,
+    sha256: createHash("sha256").update(data).digest("hex"),
+    rawBytes,
+  };
 }
 
-/** The files of the bundle: POSIX paths relative to root, sorted. */
-export function bundleFiles(root: string): string[] {
-  const listed = gitFiles(root) ?? walkFiles(root);
-  return [...new Set(listed)].filter((file) => keep(file) && isFile(join(root, file))).sort();
+/** The files of the bundle (POSIX paths relative to root, sorted) and where the ignore rules came from. */
+export function bundleFiles(
+  root: string,
+  options: BundleFilesOptions = {},
+): { files: string[]; source: BundleSource } {
+  const git = options.git ?? runGit;
+  const source: BundleSource = insideWorkTree(root, git) ? "git" : "gitignore";
+  const listed = source === "git" ? gitFiles(root, git) : walkFiles(root);
+  const files = [...new Set(listed)].filter((file) => keep(file) && isFile(join(root, file)));
+  return { files: files.sort(), source };
 }
 
 /** A size such as `1.3 MB`. */
@@ -62,37 +96,104 @@ function keep(file: string): boolean {
   const parts = file.split("/");
   const name = parts[parts.length - 1] ?? "";
   if (name === ".env" || name.startsWith(".env.")) return false;
+  if (parts.includes(".git")) return false;
   return !parts.slice(0, -1).some((dir) => IGNORED_DIRS.has(dir));
 }
 
-/** Tracked and untracked files under root that .gitignore keeps, or null outside git. */
-function gitFiles(root: string): string[] | null {
+/**
+ * True inside a git work tree. False when git says this is no repository, or
+ * when git is not installed. Any other failure refuses the push: the ignore
+ * rules git would apply are unknown.
+ */
+function insideWorkTree(root: string, git: GitRunner): boolean {
   try {
-    const out = execFileSync(
-      "git",
-      ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."],
-      { cwd: root, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 256 * 1024 * 1024 },
+    return git(["rev-parse", "--is-inside-work-tree"], root).trim() === "true";
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    const why = gitFailure(err);
+    if (/not a git repository/i.test(why)) return false;
+    throw new CliError(
+      `git cannot tell if the project is a work tree (${why}): push refused, so no file outside the .gitignore rules is uploaded`,
     );
-    return out.toString("utf8").split("\0").filter(Boolean);
-  } catch {
-    return null;
   }
 }
 
+/** Tracked and untracked files under root that .gitignore keeps. Throws a CliError when git fails. */
+function gitFiles(root: string, git: GitRunner): string[] {
+  try {
+    const out = git(
+      ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."],
+      root,
+    );
+    return out.split("\0").filter(Boolean);
+  } catch (err) {
+    throw new CliError(
+      `git cannot list the project files (${gitFailure(err)}): push refused, so no file outside the .gitignore rules is uploaded`,
+    );
+  }
+}
+
+/** Every file under root that the .gitignore files keep, read as git reads them (root and nested, with negations). */
 function walkFiles(root: string): string[] {
   const found: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
+  const walk = (dir: string, rules: readonly IgnoreLayer[]): void => {
+    const own = readIgnoreFile(root, dir);
+    const layers = own ? [...rules, own] : rules;
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (!IGNORED_DIRS.has(entry.name)) walk(path);
-      } else if (entry.isFile()) {
-        found.push(relative(root, path).split(sep).join("/"));
+        if (entry.name === ".git" || IGNORED_DIRS.has(entry.name)) continue;
+        // As in git, a file inside an ignored folder cannot be re-included.
+        if (!ignored(`${path}/`, layers)) walk(path, layers);
+      } else if (entry.isFile() && !ignored(path, layers)) {
+        found.push(path);
       }
     }
   };
-  walk(root);
+  walk("", []);
   return found;
+}
+
+interface IgnoreLayer {
+  /** The folder of the .gitignore file, relative to root: "" for the root. */
+  readonly base: string;
+  readonly rules: Ignore;
+}
+
+function readIgnoreFile(root: string, dir: string): IgnoreLayer | undefined {
+  const file = join(root, dir, ".gitignore");
+  if (!existsSync(file) || !lstatSync(file).isFile()) return undefined;
+  return { base: dir, rules: ignore().add(readFileSync(file, "utf8")) };
+}
+
+/** The last .gitignore with a matching rule decides, as in git: a deeper file overrides a parent one. */
+function ignored(path: string, layers: readonly IgnoreLayer[]): boolean {
+  let result = false;
+  for (const layer of layers) {
+    const relativePath = layer.base === "" ? path : path.slice(layer.base.length + 1);
+    const verdict = layer.rules.test(relativePath);
+    if (verdict.ignored) result = true;
+    else if (verdict.unignored) result = false;
+  }
+  return result;
+}
+
+function runGit(args: readonly string[], cwd: string): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 256 * 1024 * 1024,
+  });
+}
+
+/** The first line git wrote to stderr, else the error message. */
+function gitFailure(err: unknown): string {
+  const stderr = (err as { stderr?: unknown }).stderr;
+  const text =
+    typeof stderr === "string" ? stderr : Buffer.isBuffer(stderr) ? stderr.toString() : "";
+  const line = text.split("\n").find((l) => l.trim() !== "");
+  return line?.trim() ?? (err instanceof Error ? err.message : String(err));
 }
 
 /** A regular file: no symlink, no deleted path that git still tracks. */

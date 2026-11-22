@@ -46,11 +46,13 @@ describe("@ratel-ai/sandbox entry stays network-free", () => {
     const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
     // CLI only, never reached from the entry: tsx loads user sandboxes in the child
     // worker, ws holds the `ratel sandbox dev` socket, and the OpenTelemetry SDK and
-    // OTLP exporter send playground traces from the `ratel sandbox dev` child.
+    // OTLP exporter send playground traces from the `ratel sandbox dev` child, and
+    // ignore applies the .gitignore files of a `ratel sandbox push` outside git.
     expect(pkg.dependencies ?? {}).toEqual({
       "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
       "@opentelemetry/resources": "^2.9.0",
       "@opentelemetry/sdk-trace-node": "^2.9.0",
+      ignore: "^7.0.6",
       tsx: "^4.21.0",
       ws: "^8.21.1",
     });

@@ -8,7 +8,7 @@ import { parseEnv } from "node:util";
 import { DEFAULT_BASE_URL, startDev, startInstance } from "../dev/runtime.js";
 import { CliError, type Command, parseArgs, USAGE } from "./args.js";
 import { buildInfo } from "./build-info.js";
-import { type Bundle, buildBundle, formatBytes } from "./bundle.js";
+import { type Bundle, buildBundle, formatBytes, SOURCE_LABELS } from "./bundle.js";
 import { discoverSandboxFiles } from "./discover.js";
 import { formatManifest, formatRun, formatVerify } from "./format.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
@@ -110,7 +110,7 @@ async function pushCommand(
     writeFileSync(out, bundle.data);
     process.stdout.write(`${bundle.files.join("\n")}\n\n`);
     process.stdout.write(
-      `bundle   ${summary}\nsha256   ${bundle.sha256}\nwritten  ${out}\nwould push ${ids.join(", ")} (dry run: nothing uploaded)\n`,
+      `bundle   ${summary}\nrules    ${SOURCE_LABELS[bundle.source]}\nsha256   ${bundle.sha256}\nwritten  ${out}\nwould push ${ids.join(", ")} (dry run: nothing uploaded)\n`,
     );
     return 0;
   }

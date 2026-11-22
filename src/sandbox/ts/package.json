@@ -1,7 +1,7 @@
 {
   "name": "@ratel-ai/sandbox",
   "version": "0.1.0",
-  "description": "Ratel agent sandboxes \u2014 declare the params of your agent (model, prompt, scalars) next to its code and run it with overrides from the Ratel playground or the local `ratel` CLI.",
+  "description": "Ratel agent sandboxes — declare the params of your agent (model, prompt, scalars) next to its code and run it with overrides from the Ratel playground or the local `ratel` CLI.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -88,6 +88,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
     "@opentelemetry/resources": "^2.9.0",
     "@opentelemetry/sdk-trace-node": "^2.9.0",
+    "ignore": "^7.0.6",
     "tsx": "^4.21.0",
     "ws": "^8.21.1"
   },
