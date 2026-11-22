@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/push/create-version.request.schema.json",
+  "title": "Create a sandbox version: request",
+  "description": "POST /api/v1/sandboxes/versions with Authorization: Bearer <project key>. Step 1 of `ratel sandbox push`: registers one version of one sandbox and asks where to upload its bundle.",
+  "type": "object",
+  "required": ["sandboxId", "manifest", "bundle"],
+  "properties": {
+    "sandboxId": { "$ref": "../envelope.schema.json#/$defs/sandboxId" },
+    "manifest": {
+      "description": "The manifest of the pushed code. Its sandboxes list holds the pushed sandbox only.",
+      "$ref": "../manifest.schema.json"
+    },
+    "bundle": {
+      "description": "The tar.gz of the project files that step 2 uploads.",
+      "type": "object",
+      "required": ["sha256", "bytes", "files"],
+      "properties": {
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "bytes": { "description": "The size of the tar.gz.", "type": "integer", "minimum": 1 },
+        "files": { "description": "The number of files in it.", "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "description": "Lowercase hex SHA-256.", "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

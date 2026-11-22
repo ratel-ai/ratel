@@ -1,7 +1,7 @@
 {
   "name": "@ratel-ai/sandbox",
   "version": "0.1.0",
-  "description": "Ratel agent sandboxes — declare the params of your agent (model, prompt, scalars) next to its code and run it with overrides from the Ratel playground or the local `ratel` CLI.",
+  "description": "Ratel agent sandboxes \u2014 declare the params of your agent (model, prompt, scalars) next to its code and run it with overrides from the Ratel playground or the local `ratel` CLI.",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -57,7 +57,8 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json && tsc -p tsconfig.type-tests.json",
     "lint": "biome check src",
     "test": "vitest run",
-    "controller": "node --import tsx src/test-support/start-controller.ts"
+    "controller": "node --import tsx src/test-support/start-controller.ts",
+    "push-stub": "node --import tsx src/test-support/start-push-stub.ts"
   },
   "publishConfig": {
     "access": "public",

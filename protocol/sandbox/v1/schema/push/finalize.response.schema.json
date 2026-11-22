@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/push/finalize.response.schema.json",
+  "title": "Finalize a sandbox version: response",
+  "description": "200 to step 3. building: the image build started. ready: the version can start instances. failed: see error. Errors: 409 when the uploaded bundle does not match the SHA-256, with a JSON body { error }.",
+  "type": "object",
+  "required": ["status", "playgroundUrl"],
+  "properties": {
+    "status": { "enum": ["building", "ready", "failed"] },
+    "playgroundUrl": { "description": "The playground of this version.", "type": "string", "format": "uri", "pattern": "^https?://" },
+    "error": { "description": "Why the version failed. Set with status failed.", "type": "string" }
+  }
+}

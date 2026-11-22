@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/push/finalize.request.schema.json",
+  "title": "Finalize a sandbox version: request",
+  "description": "POST /api/v1/sandboxes/versions/{versionId}/finalize with the project key. Step 3: the server checks the uploaded bundle against this SHA-256 and starts the image build.",
+  "type": "object",
+  "required": ["sha256"],
+  "properties": {
+    "sha256": { "$ref": "create-version.request.schema.json#/$defs/sha256" }
+  }
+}

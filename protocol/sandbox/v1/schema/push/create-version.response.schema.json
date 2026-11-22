@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/push/create-version.response.schema.json",
+  "title": "Create a sandbox version: response",
+  "description": "201 to step 1. The CLI PUTs the bundle to uploadUrl with uploadHeaders (step 2). No uploadUrl: the server already has a bundle with that SHA-256, so step 2 is skipped. Errors: 400 bad manifest, 401/403 bad key, 404 sandboxes off for the project, 413 bundle over the limit; each with a JSON body { error }.",
+  "type": "object",
+  "required": ["versionId"],
+  "properties": {
+    "versionId": { "description": "The new version. Immutable.", "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+    "uploadUrl": { "description": "Where to PUT the tar.gz, e.g. a presigned storage URL. Absolute http(s).", "type": "string", "format": "uri", "pattern": "^https?://" },
+    "uploadHeaders": {
+      "description": "Headers the PUT must send as they are, e.g. content-type.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

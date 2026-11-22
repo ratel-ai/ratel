@@ -81,6 +81,20 @@ A sandbox can also declare, all optional so phase-1 manifests stay valid:
 The **config hash** is the lowercase hex SHA-256 of the canonical JSON of all resolved param
 values. Tool modes, `output`, `state` and `image` are not in it.
 
+## Push contract
+
+[`schema/push/`](schema/push): the HTTP calls of `ratel sandbox push`, per sandbox, with
+`Authorization: Bearer <project key>` on the Ratel API calls only:
+
+1. `POST /api/v1/sandboxes/versions` with `{ sandboxId, manifest, bundle: { sha256, bytes, files } }`
+   → `201 { versionId, uploadUrl?, uploadHeaders? }`. No `uploadUrl`: the server already has that bundle.
+2. `PUT <uploadUrl>` with the tar.gz and the `uploadHeaders`.
+3. `POST /api/v1/sandboxes/versions/{versionId}/finalize` with `{ sha256 }`
+   → `200 { status: building | ready | failed, playgroundUrl, error? }`.
+
+Errors carry a JSON body `{ error }`: 400 bad manifest, 401/403 bad key, 404 sandboxes off,
+409 bundle mismatch, 413 bundle too large.
+
 ## Compatibility
 
 A receiver ignores fields it does not recognise, and drops a frame whose `type` it does not know.
@@ -95,6 +109,7 @@ Ratel Cloud gateway) copy them and check their own validator against them:
 - `valid/messages/<type>[.<variant>].json` — at least one per message type. Each MUST validate.
 - `valid/manifest/*.json` — each MUST validate against the manifest schema.
 - `invalid/messages/*.json`, `invalid/manifest/*.json` — each MUST fail.
+- `valid/push/<schema>/*.json` MUST pass `schema/push/<schema>.schema.json`; `invalid/push/<schema>/*.json` MUST fail it.
 
 ```bash
 pnpm --filter @ratel-ai/sandbox-protocol test

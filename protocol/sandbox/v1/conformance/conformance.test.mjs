@@ -4,6 +4,8 @@
 //   valid/manifest/*.json    MUST pass manifest.schema.json
 //   invalid/messages/*.json  MUST fail message.schema.json
 //   invalid/manifest/*.json  MUST fail manifest.schema.json
+//   valid/push/<name>/*.json    MUST pass schema/push/<name>.schema.json
+//   invalid/push/<name>/*.json  MUST fail schema/push/<name>.schema.json
 //
 // Each valid message fixture is named <type>[.<variant>].json, and every message
 // type that message.schema.json knows has at least one valid fixture.
@@ -72,6 +74,31 @@ describe("invalid manifest fixtures", () => {
     it(`${name} fails manifest.schema.json`, () => {
       assert.equal(validateManifest(manifest), false);
     });
+  }
+});
+
+describe("push contract fixtures", () => {
+  const names = readdirSync(join(SCHEMA_DIR, "push"))
+    .filter((f) => f.endsWith(".schema.json"))
+    .map((f) => f.slice(0, -".schema.json".length))
+    .sort();
+  for (const name of names) {
+    const validate = ajv.getSchema(`https://ratel.sh/protocol/sandbox/v1/push/${name}.schema.json`);
+    it(`${name} has valid and invalid fixtures`, () => {
+      assert.ok(validate, `no schema ${name}`);
+      assert.ok(fixtures(`valid/push/${name}`).length > 0, `no valid fixture for ${name}`);
+      assert.ok(fixtures(`invalid/push/${name}`).length > 0, `no invalid fixture for ${name}`);
+    });
+    for (const [file, body] of fixtures(`valid/push/${name}`)) {
+      it(`valid/push/${name}/${file} passes`, () => {
+        assert.ok(validate(body), explain(validate));
+      });
+    }
+    for (const [file, body] of fixtures(`invalid/push/${name}`)) {
+      it(`invalid/push/${name}/${file} fails`, () => {
+        assert.equal(validate(body), false);
+      });
+    }
   }
 });
 

@@ -129,6 +129,22 @@ three fields go into the manifest. The config hash stays the hash of the resolve
 `ratel sandbox verify` on a sandbox with only scalar params and no model call reports each param as
 skipped with the reason, not as failed.
 
+### Register a version: `ratel sandbox push`
+
+```bash
+ratel sandbox push --dry-run [--out bundle.tar.gz]   # lists the bundle files, uploads nothing
+ratel sandbox push [<id>] [--url <ratel url>]        # every discovered sandbox when no id
+```
+
+Push bundles the project as a tar.gz: in a git checkout, the files git lists (tracked and
+untracked, minus `.gitignore`), else every file. `.env*` files, `node_modules`, `.git` and build
+output are never in it. A bundle over 50 MB fails with the size and the file count. Per sandbox,
+push creates a version with the manifest and the git SHA and dirty flag, uploads the bundle and
+finalizes it, then prints the version id and its playground URL. It reads `RATEL_API_KEY` and
+`RATEL_URL` like `ratel sandbox dev`. The contract is in
+[`protocol/sandbox/v1/schema/push`](../../../protocol/sandbox/v1/schema/push).
+`pnpm push-stub -- --port 4200` starts a local stub of it for demos.
+
 ## Local runs: the `ratel` CLI
 
 ```bash

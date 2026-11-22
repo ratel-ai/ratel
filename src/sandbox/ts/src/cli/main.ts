@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 import { fork } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import { DEFAULT_BASE_URL, startDev } from "../dev/runtime.js";
 import { CliError, type Command, parseArgs, USAGE } from "./args.js";
 import { buildInfo } from "./build-info.js";
+import { type Bundle, buildBundle, formatBytes } from "./bundle.js";
 import { discoverSandboxFiles } from "./discover.js";
 import { formatManifest, formatRun, formatVerify } from "./format.js";
 import type { WorkerReply, WorkerRequest } from "./messages.js";
+import { pushSandbox } from "./push.js";
 
 // The `ratel` CLI parent. It never loads user code: discovery reads file names
 // only, and a child worker (worker.ts, or dev/child.ts for `ratel sandbox dev`, under
@@ -47,6 +50,7 @@ async function main(argv: readonly string[]): Promise<number> {
     return 0;
   }
   if (command.command === "verify") return verifyCommand(command, root, files);
+  if (command.command === "push") return pushCommand(command, root, files);
   return runCommand(command, root, files);
 }
 
@@ -73,6 +77,80 @@ async function verifyCommand(
   if (reply.kind !== "verify") throw new Error("the sandbox worker answered the wrong request");
   process.stdout.write(formatVerify(reply.report));
   return reply.report.ok ? 0 : 1;
+}
+
+/**
+ * `ratel sandbox push`: one version per sandbox, all sharing one bundle of the
+ * project. --dry-run writes the bundle to a file and lists it, with no key and
+ * no network.
+ */
+async function pushCommand(
+  command: Extract<Command, { command: "push" }>,
+  root: string,
+  files: string[],
+): Promise<number> {
+  const reply = await askWorker({ kind: "list", root, files, build: buildInfo(root, files) });
+  if (reply.kind !== "list") throw new Error("the sandbox worker answered the wrong request");
+  const manifest = reply.manifest;
+  const known = manifest.sandboxes.map((s) => s.id);
+  if (known.length === 0) throw new CliError(`no sandbox file (*.sandbox.ts) under ${root}`);
+  if (command.sandboxId !== undefined && !known.includes(command.sandboxId))
+    throw new CliError(
+      `unknown sandbox "${command.sandboxId}": the project has ${known.join(", ")}`,
+    );
+  const ids = command.sandboxId !== undefined ? [command.sandboxId] : known;
+
+  const bundle = buildBundle(root);
+  const summary = `${bundle.files.length} files, ${formatBytes(bundle.data.length)} (tar.gz of ${formatBytes(bundle.rawBytes)})`;
+  if (command.dryRun) {
+    const out = resolve(
+      command.out ?? join(tmpdir(), `ratel-sandbox-${bundle.sha256.slice(0, 12)}.tar.gz`),
+    );
+    writeFileSync(out, bundle.data);
+    process.stdout.write(`${bundle.files.join("\n")}\n\n`);
+    process.stdout.write(
+      `bundle   ${summary}\nsha256   ${bundle.sha256}\nwritten  ${out}\nwould push ${ids.join(", ")} (dry run: nothing uploaded)\n`,
+    );
+    return 0;
+  }
+
+  const env = { ...readRatelEnv(root), ...pickRatelEnv(process.env) };
+  const apiKey = env.RATEL_API_KEY;
+  if (!apiKey) throw new CliError("set RATEL_API_KEY to a Ratel project key (rtl_...)");
+  const baseUrl = command.url ?? env.RATEL_URL ?? DEFAULT_BASE_URL;
+  const build = manifest.build;
+  const git = build?.id ? ` (git ${build.id.slice(0, 8)}${build.dirty ? ", dirty" : ""})` : "";
+  process.stdout.write(`bundle   ${summary}${git}\n`);
+  let failed = false;
+  for (const sandboxId of ids) {
+    const result = await pushSandbox({
+      baseUrl,
+      apiKey,
+      manifest,
+      sandboxId,
+      bundle,
+      onUpload: uploadProgress(sandboxId, bundle),
+    });
+    if (result.uploaded) process.stderr.write("\n");
+    failed ||= result.status === "failed";
+    process.stdout.write(
+      `${sandboxId}  version ${result.versionId}  ${result.status}${result.error ? `: ${result.error}` : ""}\n  playground  ${result.playgroundUrl}\n`,
+    );
+  }
+  return failed ? 1 : 0;
+}
+
+/** One stderr line per sandbox, rewritten in place on a TTY: `uploading 1.2 MB / 3.4 MB (35%)`. */
+function uploadProgress(sandboxId: string, bundle: Bundle): (sent: number, total: number) => void {
+  let shown = -1;
+  return (sent, total) => {
+    const percent = Math.floor((sent / total) * 100);
+    if (percent === shown || (percent < 100 && percent - shown < 10 && !process.stderr.isTTY))
+      return;
+    shown = percent;
+    const line = `${sandboxId}  uploading ${formatBytes(sent)} / ${formatBytes(bundle.data.length)} (${percent}%)`;
+    process.stderr.write(process.stderr.isTTY ? `\r${line}` : `${line}\n`);
+  };
 }
 
 /** `ratel sandbox dev`: runs until Ctrl-C. Exits 1 on a fatal connection error (bad key, sandboxes off). */

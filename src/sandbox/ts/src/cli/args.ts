@@ -27,6 +27,16 @@ export type Command =
       readonly model?: string;
       /** A stand-in model instead of real model calls (AI SDK sandboxes). */
       readonly dry: boolean;
+    }
+  | {
+      readonly command: "push";
+      /** Absent: every discovered sandbox. */
+      readonly sandboxId?: string;
+      /** Write the bundle to a file and list it, without an upload. */
+      readonly dryRun: boolean;
+      /** Where --dry-run writes the bundle. */
+      readonly out?: string;
+      readonly url?: string;
     };
 
 /** A usage error: printed as one line, no stack. */
@@ -39,6 +49,7 @@ export const USAGE = `Usage:
   ratel sandbox run <id> --input <file> [--set name=value]... [--tool name=real|fake|confirm]...
                        [--fake name=<file.json>]...
   ratel sandbox verify <id> [--input <file>] [--model <provider/model>] [--dry]
+  ratel sandbox push [<id>] [--dry-run [--out <file.tar.gz>]] [--url <ratel url>]
   ratel sandbox dev [--url <ratel url>]`;
 
 const TOOL_MODES: readonly ToolMode[] = ["real", "fake", "confirm"];
@@ -54,6 +65,7 @@ export function parseArgs(argv: readonly string[]): Command {
   if (group === "sandbox" && sub === "list") return parseList(rest);
   if (group === "sandbox" && sub === "run") return parseRun(rest);
   if (group === "sandbox" && sub === "verify") return parseVerify(rest);
+  if (group === "sandbox" && sub === "push") return parsePush(rest);
   throw new CliError(`unknown command "${[group, sub].filter(Boolean).join(" ")}"\n${USAGE}`);
 }
 
@@ -138,6 +150,37 @@ function parseVerify(rest: readonly string[]): Command {
     dry,
     ...(input !== undefined ? { input } : {}),
     ...(model !== undefined ? { model } : {}),
+  };
+}
+
+function parsePush(rest: readonly string[]): Command {
+  let sandboxId: string | undefined;
+  let out: string | undefined;
+  let url: string | undefined;
+  let dryRun = false;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i] as string;
+    if (arg === "--dry-run") dryRun = true;
+    else if (arg === "--out" || arg === "--url") {
+      const value = rest[++i];
+      if (value === undefined) throw new CliError(`${arg} needs a value`);
+      if (arg === "--out") out = value;
+      else url = value;
+    } else if (arg.startsWith("--")) {
+      throw new CliError(`unknown option ${arg} for "sandbox push"`);
+    } else if (sandboxId === undefined) {
+      sandboxId = arg;
+    } else {
+      throw new CliError(`unexpected argument "${arg}"`);
+    }
+  }
+  if (out !== undefined && !dryRun) throw new CliError("--out works with --dry-run only");
+  return {
+    command: "push",
+    dryRun,
+    ...(sandboxId !== undefined ? { sandboxId } : {}),
+    ...(out !== undefined ? { out } : {}),
+    ...(url !== undefined ? { url } : {}),
   };
 }
 

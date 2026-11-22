@@ -1,0 +1,5 @@
+{
+  "status": "failed",
+  "playgroundUrl": "https://cloud.ratel.sh/sandboxes/workflow-label/versions/sv_01JD7Q8M2K",
+  "error": "the image build failed at install step 1"
+}
