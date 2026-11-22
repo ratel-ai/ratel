@@ -20,6 +20,7 @@ export const CORE_FLAGS = [
   "FF_CUSTOM_DASHBOARDS",
   "FF_CODE_HANDOFF",
   "FF_VARIANT_EXPERIMENTS",
+  "FF_FINE_TUNING",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

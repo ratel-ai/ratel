@@ -68,6 +68,7 @@
     { "from": "@/components/session-chat/", "to": "@/components/console/session-chat/" },
     { "from": "@/components/sandboxes/", "to": "@/components/console/sandboxes/" },
     { "from": "@/components/variants/", "to": "@/components/console/variants/" },
+    { "from": "@/components/fine-tuning/", "to": "@/components/console/fine-tuning/" },
     { "from": "@/app/(app)/project/[projectId]/settings/variant-actions", "to": "@/app/(console)/project/[projectId]/settings/variant-actions", "exact": true },
     { "from": "@/components/custom-dashboards/", "to": "@/components/console/custom-dashboards/" },
     { "from": "@/components/code-handoff/", "to": "@/components/console/code-handoff/" },
@@ -280,6 +281,10 @@
         "ProjectPivotRow": "@/lib/ingest/pivots/schema",
         "variantAttributeMappings": "@/lib/ingest/variants/schema",
         "VariantAttributeMapping": "@/lib/ingest/variants/schema",
+        "fineTuningConsents": "@/lib/views/fine-tuning/schema",
+        "FineTuningConsentRow": "@/lib/views/fine-tuning/schema",
+        "fineTuningUseCases": "@/lib/views/fine-tuning/schema",
+        "FineTuningUseCaseRow": "@/lib/views/fine-tuning/schema",
         "repoLinks": "@/lib/views/code-handoff/schema",
         "repoCommits": "@/lib/views/code-handoff/schema",
         "repoCodePointers": "@/lib/views/code-handoff/schema",
@@ -603,6 +608,6 @@
     "clerkUserId": "externalUserId",
     "JevFraming": "JudgeFraming",
     "__dirname": "import.meta.dirname",
-    "cloud-mcp-apps": "FF_MCP_APPS", "cloud-code-handoff": "FF_CODE_HANDOFF"
+    "cloud-mcp-apps": "FF_MCP_APPS", "cloud-code-handoff": "FF_CODE_HANDOFF", "cloud-fine-tuning": "FF_FINE_TUNING"
   }
 }

@@ -1155,6 +1155,7 @@
         "!src/lib/mcp/operations/dashboards.ts",
         "!src/lib/mcp/operations/dashboards.test.ts",
         "!src/lib/mcp/operations/variants.ts",
+        "!src/lib/mcp/operations/fine-tuning.ts",
         "src/mcp-apps/**",
         "!src/mcp-apps/README.md",
         "!src/mcp-apps/build.test.ts",
@@ -1501,7 +1502,17 @@
         "src/components/console/settings/VariantMappingsForm.tsx",
         "src/app/(console)/project/\\[projectId\\]/variants/**",
         "!src/app/(console)/project/\\[projectId\\]/variants/context.ts",
-        "src/components/console/variants/**"
+        "src/components/console/variants/**",
+        "src/lib/views/fine-tuning/**",
+        "!src/lib/views/fine-tuning/flag.ts",
+        "!src/lib/views/fine-tuning/tests/flag.test.ts",
+        "!src/lib/views/fine-tuning/schema.ts",
+        "!src/lib/views/fine-tuning/tests/drizzle-store.integration.test.ts",
+        "!src/lib/views/fine-tuning/tests/resolve.integration.test.ts",
+        "src/lib/console/onboarding/training-consent.ts",
+        "src/components/console/fine-tuning/**",
+        "src/app/(console)/project/\\[projectId\\]/fine-tuning/**",
+        "src/app/api/projects/\\[projectId\\]/fine-tuning/**"
       ],
       "linter": {
         "rules": {

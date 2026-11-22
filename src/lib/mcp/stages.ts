@@ -120,6 +120,10 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   change_task_simulation: "improve",
   change_fix_eval_set: "improve",
   dismiss_fix: "improve",
+  // Fine-tuning (RC-1124): use cases over the project's model calls.
+  list_use_cases: "improve",
+  get_use_case: "improve",
+  create_use_case: "improve",
 
   // Ship: changes that go live, and the record that they did.
   set_catalog_override: "ship",

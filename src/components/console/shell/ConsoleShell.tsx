@@ -10,6 +10,7 @@ import {
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
 import { customDashboardsEnabled } from "@/lib/views/custom-dashboards/session";
+import { fineTuningOrganizationIds } from "@/lib/views/fine-tuning/flag";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 import { sandboxesProjectIds } from "@/lib/views/sandboxes/navigation";
 import { variantsProjectIds } from "@/lib/views/variants/navigation";
@@ -29,16 +30,23 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const [entityPagesOrganizations, sandboxesProjects, customDashboards, variantsProjects] =
-    await Promise.all([
-      entityPagesOrganizationIds(organizations),
-      // RC-1102: Sandboxes shows for a project with FF_SANDBOXES on (decided per project, as its pages decide it).
-      sandboxesProjectIds(organizations, projects).catch(() => []),
-      // RC-888: Dashboards shows under Overview with FF_CUSTOM_DASHBOARDS on; a failed read keeps it out.
-      customDashboardsEnabled().catch(() => false),
-      // RC-871: Variants shows for a project with FF_VARIANT_EXPERIMENTS on and tagged traces.
-      variantsProjectIds(organizations, projects).catch(() => []),
-    ]);
+  const [
+    entityPagesOrganizations,
+    sandboxesProjects,
+    customDashboards,
+    variantsProjects,
+    fineTuningOrganizations,
+  ] = await Promise.all([
+    entityPagesOrganizationIds(organizations),
+    // RC-1102: Sandboxes shows for a project with FF_SANDBOXES on (decided per project, as its pages decide it).
+    sandboxesProjectIds(organizations, projects).catch(() => []),
+    // RC-888: Dashboards shows under Overview with FF_CUSTOM_DASHBOARDS on; a failed read keeps it out.
+    customDashboardsEnabled().catch(() => false),
+    // RC-871: Variants shows for a project with FF_VARIANT_EXPERIMENTS on and tagged traces.
+    variantsProjectIds(organizations, projects).catch(() => []),
+    // RC-1123: Fine-tuning shows in an organization with FF_FINE_TUNING on.
+    fineTuningOrganizationIds(organizations).catch(() => []),
+  ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -70,6 +78,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           sandboxesProjects,
           customDashboards,
           variantsProjects,
+          fineTuningOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

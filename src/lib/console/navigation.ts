@@ -87,6 +87,7 @@ export function consoleNav({
   sandboxes = false,
   dashboards = false,
   variants = false,
+  fineTuning = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -116,6 +117,8 @@ export function consoleNav({
    * under Traces.
    */
   variants?: boolean;
+  /** `FF_FINE_TUNING` on in the shown project's organization (RC-1123): a Fine-tuning page under Improvements. */
+  fineTuning?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -395,7 +398,9 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxes, variants) : core),
+    ...(root
+      ? stageRailNav(root, core, setupRows, entityPages, sandboxes, variants, fineTuning)
+      : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -420,6 +425,7 @@ function stageRailNav(
   entityPages: boolean,
   sandboxes = false,
   variants = false,
+  fineTuning = false,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -517,18 +523,17 @@ function stageRailNav(
           ],
         }
       : classicTraces;
-  // Upstream's Sandboxes (RC-1102) folds under Improvements, so the rail keeps its budget.
+  // Upstream's Sandboxes (RC-1102) and Fine-tuning (RC-1123) fold under Improvements, so the rail
+  // keeps its budget.
   const classicImprovements = pick("improvements");
-  const improvements: NavItem = sandboxes
-    ? {
-        ...classicImprovements,
-        children: [
-          ...(classicImprovements.children ?? []),
+  const improveExtras: NavItem[] = [
+    ...(sandboxes
+      ? [
           {
             id: "sandboxes",
             label: "Sandboxes",
             href: `${root}/sandboxes`,
-            icon: "improvements",
+            icon: "improvements" as const,
             keywords: [
               "sandboxes",
               "agent sandbox",
@@ -540,9 +545,27 @@ function stageRailNav(
               "replay",
             ],
           },
-        ],
-      }
-    : classicImprovements;
+        ]
+      : []),
+    ...(fineTuning
+      ? [
+          {
+            id: "fine-tuning",
+            label: "Fine-tuning",
+            href: `${root}/fine-tuning`,
+            icon: "improvements" as const,
+            keywords: ["fine-tuning", "training", "datasets", "use cases", "small model", "opt-in"],
+          },
+        ]
+      : []),
+  ];
+  const improvements: NavItem =
+    improveExtras.length > 0
+      ? {
+          ...classicImprovements,
+          children: [...(classicImprovements.children ?? []), ...improveExtras],
+        }
+      : classicImprovements;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
     ...stage("insights", "Insights", [tasks, pick("intents")]),

@@ -18,7 +18,7 @@ identical.
 | `operations/catalog.ts`, `writes.ts`, `writes-runtime.ts` | skills and tools as declared and as observed; the skill writes, imports and runtime overrides |
 | `operations/observability.ts`, `calibration.ts` | traces, spans, cost by day and by tool, ingest diagnostics; experiments and their mismatches |
 | `operations/improvement.ts`, `joins.ts`, `tool-explorer.ts`, `tool-crafter.ts` | match quality runs and proposals, the improvement signals, tool co-usage and transitions, the drafted fixes and `generate_tool_crafts` |
-| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`, `FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF` and `FF_VARIANT_EXPERIMENTS`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
+| `operations/account.ts` | `get_flag_status` (the deployment's `FF_*` switches: `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES`, `FF_PIVOTS`, `FF_CUSTOM_DASHBOARDS`, `FF_CODE_HANDOFF`, `FF_VARIANT_EXPERIMENTS` and `FF_FINE_TUNING`), `get_quota_status` (the entitlements port: limits with `"unlimited"` for no cap, the match quality run budget, and a `plan` block when the edition has plans; the demo project is free; its hint names `get_embedding_usage` only when the edition lists it), `get_job_status` (owned) |
 | `operations/runs.ts`, `health.ts`, `intents.ts`, `quality.ts`, `ranking.ts`, `experiments.ts`, `developer.ts`, `ship.ts` | the console's other pages as tools (upstream RC-234): runs, spans, logs, turns, sessions and trace comparisons; Agent health, issue examples and self-corrections; intents; Quality and its description rewrites; the adaptive-ranking graphs; experiments and selections; SDK events, API keys and setup; shipments and lineage |
 | `operations/content-access.ts` | which tools may show captured content, and the marker for what is withheld |
 | `telemetry/` | each tool call as an `execute_tool` span with its arguments and result (`trace-tool-call.ts`, owned for one comment; `session.ts`: the client, credential and session ids), sent only to a Ratel project of its own (`export.ts`, owned: off unless `RATEL_SELF_TELEMETRY_MCP_API_KEY` and `RATEL_SELF_TELEMETRY_ENDPOINT` are both set, no default destination; ratel-cloud #482) |
@@ -62,6 +62,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/variants.ts`: `list_variant_experiments` and `get_variant_experiment` (RC-870), the
   same read model as the Variants pages (`views/variants/compare-service.ts`), gated by the core's
   `FF_VARIANT_EXPERIMENTS` for the project and its organization; off, both refuse as forbidden.
+- `operations/fine-tuning.ts` (owned): `list_use_cases`, `get_use_case` and `create_use_case`
+  (RC-1124), through the Fine-tuning page's own store (`views/fine-tuning`), gated by the core's
+  `FF_FINE_TUNING` for the caller and the project; off, every tool refuses as forbidden.
 - `apps/flag.ts`, `apps/apps.test.ts`, `apps/README.md`, `route-handler.apps.test.ts` and
   `__fixtures__/flag-off-protocol.json`: MCP Apps are one switch for the deployment,
   `FF_MCP_APPS`; upstream asks its flag service per project key or person, with timeouts and a

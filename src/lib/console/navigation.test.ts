@@ -738,6 +738,43 @@ test("Sandboxes sits under Improvements after Adaptive ranking and selects itsel
   );
 });
 
+// — RC-1123: Fine-tuning (FF_FINE_TUNING) —————————————————————————————————————————————————
+
+test("Fine-tuning is not in the rail or ⌘K unless the switch is on", () => {
+  const off = consoleNav({ projectId: "p1", additions: [] });
+  assert.deepEqual(off, consoleNav({ projectId: "p1", additions: [], fineTuning: false }));
+  assert.ok(!flattenNav(off).some((item) => item.id === "fine-tuning"));
+  assert.ok(
+    !flattenNav(consoleNav({ projectId: "p1", additions: [], sandboxes: true })).some(
+      (item) => item.id === "fine-tuning",
+    ),
+  );
+  assert.ok(
+    !commandEntries({ items: off, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/fine-tuning",
+    ),
+  );
+});
+
+test("Fine-tuning sits under Improvements after Sandboxes, keeps the top level, and selects itself on its pages", () => {
+  const items = consoleNav({ projectId: "p1", additions: [], sandboxes: true, fineTuning: true });
+  const improvements = items.find((item) => item.id === "improvements");
+  assert.deepEqual(
+    improvements?.children?.slice(-2).map((child) => child.label),
+    ["Sandboxes", "Fine-tuning"],
+  );
+  assert.equal(activeNavItemId("/project/p1/fine-tuning", items), "fine-tuning");
+  assert.equal(activeNavItemId("/project/p1/fine-tuning/some-use-case", items), "fine-tuning");
+  assert.ok(
+    commandEntries({ items, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/fine-tuning",
+    ),
+  );
+  const top = (options: { sandboxes?: boolean; fineTuning?: boolean }) =>
+    consoleNav({ projectId: "p1", additions: [], ...options }).map((item) => item.label);
+  assert.deepEqual(top({ sandboxes: true, fineTuning: true }), top({}));
+});
+
 // — RC-888: custom dashboards (FF_CUSTOM_DASHBOARDS) ————————————————————————————————————
 
 test("with FF_CUSTOM_DASHBOARDS off, Dashboards stays out and its path selects Overview", () => {

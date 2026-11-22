@@ -13,6 +13,7 @@ import {
   placeEditionOperations,
 } from "@/lib/mcp/operations/edition";
 import { experimentOperations } from "@/lib/mcp/operations/experiments";
+import { fineTuningOperations } from "@/lib/mcp/operations/fine-tuning";
 import { healthOperations } from "@/lib/mcp/operations/health";
 import { improvementOperations } from "@/lib/mcp/operations/improvement";
 import { intentsOperations } from "@/lib/mcp/operations/intents";
@@ -87,6 +88,7 @@ export function assembleOperations(
     ...loopReadOperations(),
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
+    ...fineTuningOperations(),
     ...writeOperations(),
     ...runtimeWriteOperations(),
     ...toolCrafterWriteOperations(),

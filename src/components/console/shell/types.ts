@@ -34,6 +34,8 @@ export type ShellData = {
   customDashboards?: boolean;
   /** RC-871: the projects whose rail shows Variants (`FF_VARIANT_EXPERIMENTS` on, tagged traces seen). */
   variantsProjects?: readonly string[];
+  /** RC-1123: the organizations whose projects show Fine-tuning under Improvements (`FF_FINE_TUNING` on). */
+  fineTuningOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */

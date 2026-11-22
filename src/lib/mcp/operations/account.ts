@@ -88,6 +88,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_VARIANT_EXPERIMENTS",
     note: "variant experiments: ingest keeps each span's ratel.variant.* tags (or a mapped attribute from Settings > General) and a per-trace rollup; the Variants pages under Traces and the MCP tools list_variant_experiments and get_variant_experiment",
   },
+  {
+    key: "FF_FINE_TUNING",
+    note: "fine-tuning: the Fine-tuning page under Improvements (the training opt-in, use cases and their stats), its API routes and the MCP tools list_use_cases, get_use_case and create_use_case",
+  },
 ];
 
 export interface AccountOperationDeps {

@@ -175,6 +175,10 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   // The Agents page (RC-775).
   ["list_agents", false],
   ["get_agent", false],
+  // The Fine-tuning page (RC-1124).
+  ["list_use_cases", false],
+  ["get_use_case", false],
+  ["create_use_case", true],
   // Writes the console offers: hide a slow signal, ask for a reading, review a
   // description rewrite, start a metered quality analysis.
   ["set_health_signal_hidden", true],

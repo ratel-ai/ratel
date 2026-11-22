@@ -136,6 +136,12 @@ export const SERVER_EVENT_NAMES = [
   "repo_unlinked",
   // A fix handed off to Claude Code (RC-918): lib/views/code-handoff/handoff/handoff-fix.ts.
   "fix_handed_off",
+  // Fine-tuning (RC-1123, RC-1124): lib/views/fine-tuning/consent-api.ts, use-cases-api.ts.
+  "training_consent_given",
+  "training_consent_withdrawn",
+  "use_case_created",
+  "use_case_updated",
+  "use_case_archived",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
