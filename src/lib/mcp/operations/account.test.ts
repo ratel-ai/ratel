@@ -288,6 +288,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["FF_RANKING_CATALOG_DRIFT", false],
       ["FF_MCP_APPS", false],
       ["FF_AGENTS_PAGES", false],
+      ["FF_TOOL_RUN_INSIGHTS", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -296,6 +297,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["FF_RANKING_CATALOG_DRIFT", subject],
     ["FF_MCP_APPS", subject],
     ["FF_AGENTS_PAGES", subject],
+    ["FF_TOOL_RUN_INSIGHTS", subject],
   ]);
 });
 

@@ -1,4 +1,5 @@
-import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features";
+import type { FlagSubject } from "@/lib/contracts/feature-flags";
+import { type FeatureFlagDeps, featureEnabled } from "@/lib/platform/experimental-features";
 
 /**
  * `FF_TOOL_RUN_INSIGHTS`: tool-run insights (ratel-cloud RC-725 and its follow-ups, upstream's
@@ -7,17 +8,18 @@ import { experimentalFeatureEnabled } from "@/lib/platform/experimental-features
  * a turn, tool-less agent runs form one task per agent, and Agent health shows a reading from 10
  * turns marked low confidence. Off, everything reads as before.
  *
- * One switch for the deployment (or `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition),
- * read from the environment and off by default. Upstream decides it per project and organization
- * through its flag service. It lives in the platform layer because ingest and the turn ledger read
- * it too; the readings call it through `readings/trace-signals/tool-run-insights.ts`, which keeps
- * upstream's names.
+ * A core switch (ADR-0030), off by default. Without the edition's flags port it is one switch for
+ * the deployment, read from the environment (or `RATEL_EXPERIMENTAL_FEATURES` in the open-source
+ * edition); with it, the edition decides it for the project (`featureEnabled`). It lives in the
+ * platform layer because ingest and the turn ledger read it too; the readings call it through
+ * `readings/trace-signals/tool-run-insights.ts`, which keeps upstream's names.
  */
 export const TOOL_RUN_INSIGHTS_FLAG = "FF_TOOL_RUN_INSIGHTS" as const;
 
-type Env = Record<string, string | undefined>;
-
-/** Whether tool-run insights are on for this deployment. Reads the environment; never throws. */
-export function toolRunInsightsOn(env: Env = process.env): boolean {
-  return experimentalFeatureEnabled(TOOL_RUN_INSIGHTS_FLAG, env);
+/** Whether tool-run insights are on for this subject (a project, at least). Never throws: a failed decision is off. */
+export function toolRunInsightsOn(
+  subject: FlagSubject,
+  deps: Partial<FeatureFlagDeps> = {},
+): Promise<boolean> {
+  return featureEnabled(TOOL_RUN_INSIGHTS_FLAG, subject, deps);
 }
