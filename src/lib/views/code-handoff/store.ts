@@ -19,7 +19,7 @@ import {
 
 export type CodeHandoffDb = Pick<
   ReturnType<typeof getDb>,
-  "select" | "insert" | "update" | "delete"
+  "select" | "selectDistinct" | "insert" | "update" | "delete"
 >;
 
 export interface NewRepoLink {
@@ -195,6 +195,51 @@ export async function replaceCodePointers(
   await db.delete(repoCodePointers).where(eq(repoCodePointers.repoLinkId, repoLinkId));
   if (pointers.length === 0) return;
   await db.insert(repoCodePointers).values(pointers.map((pointer) => ({ repoLinkId, ...pointer })));
+}
+
+/** Replace the pointers of one symbol of a link: a re-index never duplicates them. */
+export async function replaceSymbolPointers(
+  repoLinkId: string,
+  symbol: Pick<NewCodePointer, "kind" | "symbol">,
+  pointers: NewCodePointer[],
+  db: CodeHandoffDb = getDb(),
+): Promise<void> {
+  const own = and(
+    eq(repoCodePointers.repoLinkId, repoLinkId),
+    eq(repoCodePointers.kind, symbol.kind),
+    eq(repoCodePointers.symbol, symbol.symbol),
+  );
+  await db.delete(repoCodePointers).where(own);
+  const rows = pointers.filter(
+    (pointer) => pointer.kind === symbol.kind && pointer.symbol === symbol.symbol,
+  );
+  if (rows.length === 0) return;
+  await db.insert(repoCodePointers).values(rows.map((pointer) => ({ repoLinkId, ...pointer })));
+}
+
+/** Drop a link's pointers of every symbol not in `keep` (a tool or a model that is gone). */
+export async function pruneCodePointers(
+  repoLinkId: string,
+  keep: readonly Pick<NewCodePointer, "kind" | "symbol">[],
+  db: CodeHandoffDb = getDb(),
+): Promise<void> {
+  const stored = await db
+    .selectDistinct({ kind: repoCodePointers.kind, symbol: repoCodePointers.symbol })
+    .from(repoCodePointers)
+    .where(eq(repoCodePointers.repoLinkId, repoLinkId));
+  const kept = new Set(keep.map((symbol) => `${symbol.kind}:${symbol.symbol}`));
+  for (const symbol of stored) {
+    if (kept.has(`${symbol.kind}:${symbol.symbol}`)) continue;
+    await db
+      .delete(repoCodePointers)
+      .where(
+        and(
+          eq(repoCodePointers.repoLinkId, repoLinkId),
+          eq(repoCodePointers.kind, symbol.kind),
+          eq(repoCodePointers.symbol, symbol.symbol),
+        ),
+      );
+  }
 }
 
 export function listCodePointers(

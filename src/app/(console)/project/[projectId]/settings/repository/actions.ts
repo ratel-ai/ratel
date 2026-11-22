@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
+import { requestCodeIndex } from "@/lib/views/code-handoff/handoff/request-index";
 import { linkProjectRepo, unlinkProjectRepo } from "@/lib/views/code-handoff/link-service";
 import { LINK_ERROR_MESSAGES, repositorySettingsPath } from "@/lib/views/code-handoff/paths";
 import { linkServiceDepsFor } from "@/lib/views/code-handoff/wiring";
@@ -28,6 +29,8 @@ export async function linkRepoAction(
     linkServiceDepsFor(session),
   );
   if (!result.ok) return { ok: false, error: LINK_ERROR_MESSAGES[result.error] };
+  // Where the tools, prompts and models are in the repo, for handoff briefs (RC-917).
+  await requestCodeIndex(projectId);
   revalidatePath(repositorySettingsPath(projectId));
   return { ok: true };
 }

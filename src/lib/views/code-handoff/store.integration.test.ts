@@ -16,9 +16,11 @@ import {
   listRepoLinksByRepo,
   MESSAGE_HEAD_MAX,
   markCommitsDeployed,
+  pruneCodePointers,
   recordFixHandoff,
   recordRepoCommits,
   replaceCodePointers,
+  replaceSymbolPointers,
   unlinkRepo,
 } from "./store";
 
@@ -147,6 +149,32 @@ test("repo_code_pointers: replaced as a whole; an unknown kind is refused", asyn
       client.exec(
         `insert into repo_code_pointers (repo_link_id, kind, symbol, path) values ('${row.id}', 'skill', 's', 'p')`,
       ),
+    );
+  } finally {
+    await client.close();
+  }
+});
+
+test("repo_code_pointers: a symbol's pointers are replaced, never duplicated; gone symbols are pruned", async () => {
+  const { client, db } = await setup();
+  try {
+    const row = await linkRepo(link(P1), db);
+    const tool = { kind: "tool" as const, symbol: "search_flights" };
+    const model = { kind: "model" as const, symbol: "planner" };
+    await replaceSymbolPointers(row.id, tool, [{ ...tool, path: "src/tools.ts", line: 12 }], db);
+    await replaceSymbolPointers(row.id, model, [{ ...model, path: "src/agent.ts", line: 40 }], db);
+    await replaceSymbolPointers(row.id, tool, [{ ...tool, path: "src/tools.ts", line: 14 }], db);
+    assert.deepEqual(
+      (await listCodePointers(row.id, db)).map((p) => [p.kind, p.symbol, p.path, p.line]),
+      [
+        ["model", "planner", "src/agent.ts", 40],
+        ["tool", "search_flights", "src/tools.ts", 14],
+      ],
+    );
+    await pruneCodePointers(row.id, [tool], db);
+    assert.deepEqual(
+      (await listCodePointers(row.id, db)).map((p) => p.symbol),
+      ["search_flights"],
     );
   } finally {
     await client.close();

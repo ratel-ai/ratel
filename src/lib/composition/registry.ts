@@ -12,6 +12,7 @@ import { pivotsRegistration } from "@/lib/synthesis/pivots/register";
 import { qualityRegistration } from "@/lib/synthesis/quality/register";
 import { toolCrafterRegistration } from "@/lib/synthesis/tool-crafter/register";
 import { tracesRegistration } from "@/lib/synthesis/traces/register";
+import { codeHandoffRegistration } from "@/lib/views/code-handoff/register";
 import { evalGateRegistration } from "@/lib/views/eval-gate/register";
 import { fixDraftsRegistration } from "@/lib/views/fix-drafts/register";
 import { sandboxesRegistration } from "@/lib/views/sandboxes/register";
@@ -43,6 +44,7 @@ const CORE: Registration[] = [
   taskScorersRegistration,
   taskEvalsRegistration,
   sandboxesRegistration,
+  codeHandoffRegistration,
 ];
 
 export function collectRegistrations(

@@ -94,8 +94,10 @@ export function createFakeGitHub(): FakeGitHub {
     async searchCode(installationId, ref, query): Promise<CodeSearchHit[]> {
       const entry = find(installationId, ref);
       if (!entry) return [];
+      // A quoted query is one exact phrase, as on GitHub.
+      const needle = query.replace(/^"(.*)"$/, "$1");
       return Object.entries(entry.files)
-        .filter(([path, text]) => path.includes(query) || text.includes(query))
+        .filter(([path, text]) => path.includes(needle) || text.includes(needle))
         .map(([path]) => ({
           path,
           url: `https://github.com/${entry.repo.fullName}/blob/${entry.repo.defaultBranch}/${path}`,

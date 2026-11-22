@@ -67,7 +67,8 @@ const notConfigured = async (): Promise<never> => {
   throw new Error("github app is not configured");
 };
 
-const notConfiguredGitHub: GitHubPort = {
+/** A GitHub that refuses every call: the App is not configured here. */
+export const notConfiguredGitHub: GitHubPort = {
   exchangeUserCode: notConfigured,
   listUserInstallations: notConfigured,
   listInstallationRepos: notConfigured,

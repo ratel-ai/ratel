@@ -4,6 +4,7 @@ import { agentsOperations } from "@/lib/mcp/operations/agents";
 import { calibrationOperations } from "@/lib/mcp/operations/calibration";
 import { catalogOperations } from "@/lib/mcp/operations/catalog";
 import { clientsOperations } from "@/lib/mcp/operations/clients";
+import { codeHandoffOperations } from "@/lib/mcp/operations/code-handoff";
 import { dashboardsOperations } from "@/lib/mcp/operations/dashboards";
 import { developerOperations } from "@/lib/mcp/operations/developer";
 import {
@@ -90,6 +91,7 @@ export function assembleOperations(
     ...loopWriteOperations(),
     ...loopTaskWriteOperations(),
     ...loopEvalSetWriteOperations(),
+    ...codeHandoffOperations(),
   ];
   const operations = placeEditionOperations(core, adaptEditionOperations(registrations, core));
   return includeWrites ? operations : operations.filter((operation) => !operation.mutates);

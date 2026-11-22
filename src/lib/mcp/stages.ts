@@ -123,6 +123,7 @@ export const TOOL_STAGES: Readonly<Record<string, LineageStage | null>> = {
   set_catalog_override: "ship",
   publish_skill: "ship",
   mark_fix_shipped: "ship",
+  handoff_fix: "ship",
   review_description_rewrite: "ship",
   list_shipments: "ship",
   get_lineage: "ship",

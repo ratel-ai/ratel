@@ -53,6 +53,9 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `operations/agents.ts`, `operations/mcp-servers.ts` and `operations/clients.ts`: the default gate
   is the core's `FF_AGENTS_PAGES` (`views/project-entities/flag.ts`), not upstream's flag service;
   off, the five tools (`list_clients` with them, RC-778) refuse as forbidden. `operations/entities-gate.test.ts` (no upstream counterpart) pins it.
+- `operations/code-handoff.ts` (copied): `handoff_fix` (RC-918), gated by the core's
+  `FF_CODE_HANDOFF` for the caller and the project (`views/code-handoff/gate.ts`); off, it refuses
+  as forbidden.
 - `operations/dashboards.ts`: `list_dashboards` and `get_dashboard` (RC-889), gated by the core's
   `FF_CUSTOM_DASHBOARDS` for the caller and the project (`views/custom-dashboards/flag.ts`), not
   upstream's flag service; off, both refuse as forbidden. A project API key reads only the shared dashboards.

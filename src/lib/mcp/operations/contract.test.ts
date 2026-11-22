@@ -199,6 +199,8 @@ const EXPECTED_CONTRACT: ReadonlyArray<[string, boolean]> = [
   ["change_task_simulation", true],
   ["change_fix_eval_set", true],
   ["dismiss_fix", true],
+  // Code handoff (RC-918): opens a GitHub issue for Claude Code.
+  ["handoff_fix", true],
 ];
 
 test("the operation contract matches the reviewed snapshot", () => {

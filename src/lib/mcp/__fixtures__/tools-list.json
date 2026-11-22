@@ -5526,5 +5526,43 @@
     "_meta": {
       "sh.ratel/stage": "improve"
     }
+  },
+  {
+    "name": "handoff_fix",
+    "title": "Hand off a fix to Claude Code",
+    "description": "Hand a fix to Claude Code. This tool changes something: it opens a GitHub issue that mentions @claude in the project's linked repository, with the fix's brief and its ratel-fix marker. A second call returns the first issue. Needs a linked private repository: a public one is refused, because the brief holds trace data. Get the fixId from list_fixes or get_fix.",
+    "inputSchema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "description": "Project id. Optional with a project API key, which implies it.",
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36
+        },
+        "fixId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "A fix id from list_fixes or get_fix, e.g. issue:<uuid>, craft:<uuid>, rewrite:<uuid>."
+        }
+      },
+      "required": [
+        "fixId"
+      ]
+    },
+    "annotations": {
+      "title": "Hand off a fix to Claude Code",
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": false
+    },
+    "execution": {
+      "taskSupport": "forbidden"
+    },
+    "_meta": {
+      "sh.ratel/stage": "ship"
+    }
   }
 ]

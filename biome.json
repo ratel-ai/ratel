@@ -1472,10 +1472,15 @@
         "!src/lib/views/code-handoff/webhook-handler.ts",
         "!src/lib/views/code-handoff/store.integration.test.ts",
         "!src/lib/views/code-handoff/link-service.integration.test.ts",
+        "!src/lib/views/code-handoff/handoff/load-brief.ts",
+        "!src/lib/views/code-handoff/register.ts",
+        "!src/lib/views/code-handoff/handoff/load-brief.test.ts",
         "src/components/console/code-handoff/**",
         "src/app/(console)/project/\\[projectId\\]/settings/repository/**",
         "!src/app/(console)/project/\\[projectId\\]/settings/repository/page.tsx",
-        "src/app/api/github/**"
+        "src/app/api/github/**",
+        "src/lib/mcp/operations/code-handoff.ts",
+        "src/lib/mcp/operations/code-handoff.test.ts"
       ],
       "linter": {
         "rules": {

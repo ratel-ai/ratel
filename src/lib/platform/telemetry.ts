@@ -131,6 +131,8 @@ export const SERVER_EVENT_NAMES = [
   // Code handoff (RC-914): lib/views/code-handoff/link-service.ts.
   "repo_linked",
   "repo_unlinked",
+  // A fix handed off to Claude Code (RC-918): lib/views/code-handoff/handoff/handoff-fix.ts.
+  "fix_handed_off",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
