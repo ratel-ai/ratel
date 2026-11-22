@@ -346,6 +346,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
     "FF_SANDBOXES",
     "FF_TOOL_RUN_INSIGHTS",
     "FF_TYPED_STEPS",
+    "FF_VARIANT_EXPERIMENTS",
   ]);
 });
 

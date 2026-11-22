@@ -72,6 +72,14 @@ export const otelTraceSummaries = pgTable(
     // The trace's pivot values (RC-884, `FF_PIVOTS`): pivot key to its first
     // non-empty value, root span first. `{}` for a project with no pivots.
     dims: jsonb("dims").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    // The trace's variant (RC-868, `FF_VARIANT_EXPERIMENTS`): the root span's
+    // tags, else the first tagged span's (`otel_spans.variant_*`).
+    variantExperiment: text("variant_experiment"),
+    variantName: text("variant_name"),
+    variantAttrs: jsonb("variant_attrs")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {

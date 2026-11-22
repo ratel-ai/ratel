@@ -19,6 +19,7 @@ export const CORE_FLAGS = [
   "FF_PIVOTS",
   "FF_CUSTOM_DASHBOARDS",
   "FF_CODE_HANDOFF",
+  "FF_VARIANT_EXPERIMENTS",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

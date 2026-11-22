@@ -67,6 +67,8 @@ export const SERVER_EVENT_NAMES = [
   "health_import_needs_attention",
   "health_signal_dismissed",
   "health_signal_restored",
+  "variant_mapping_saved",
+  "variant_mapping_removed",
   "trace_turns_built",
   "typed_steps_turn_built",
   "trace_turns_backlog_lost",
@@ -231,6 +233,9 @@ export type ProductEventProperties = {
   health_import_started: { source: string; window_days: number; relay?: boolean };
   health_signal_dismissed: { kind: string; reason: "slow_by_design" };
   health_signal_restored: { kind: string };
+  /** RC-869: a member saved or removed a variant attribute mapping in Settings > General. */
+  variant_mapping_saved: Record<string, never>;
+  variant_mapping_removed: Record<string, never>;
   demo_project_seeded: {
     project_slug: string;
     skills: number;

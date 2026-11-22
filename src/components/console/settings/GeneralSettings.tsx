@@ -4,8 +4,12 @@ import { ContentOptInSection } from "@/components/console/session-replay/Content
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { ModelPricingSection } from "./ModelPricingSection";
 import { ProjectNameForm } from "./ProjectNameForm";
+import { VariantMappingsSection } from "./VariantMappingsSection";
 
-/** Settings > General: the project's name, its model prices and the session replay content opt-in. */
+/**
+ * Settings > General: the project's name, its model prices, the session replay content opt-in
+ * and, with `FF_VARIANT_EXPERIMENTS` on, the variant attributes (RC-869).
+ */
 export async function GeneralSettings({ projectId }: { projectId: string }) {
   // Any organization the reader belongs to, with their role there.
   const scope = await requireProjectScope(projectId);
@@ -21,6 +25,7 @@ export async function GeneralSettings({ projectId }: { projectId: string }) {
       </Section>
       <ModelPricingSection projectId={project.id} role={scope.role} />
       <ContentOptInSection projectId={project.id} role={scope.role} />
+      <VariantMappingsSection projectId={project.id} organization={scope.organization} />
     </PageBody>
   );
 }

@@ -494,6 +494,100 @@ test("refresh releases its advisory lock and yields to a contending tick", async
   await client.close();
 });
 
+test("refresh rolls the variant up from the root span, else from the first tagged span", async () => {
+  const { client, db } = await setup();
+  const variant = (experiment: string, name: string, attrs: Record<string, unknown> = {}) => ({
+    variantExperiment: experiment,
+    variantName: name,
+    variantAttrs: attrs,
+  });
+  await insertOtelSpans(
+    PROJECT_ID,
+    [
+      // Tagged root, untagged child: the root's tags.
+      span({
+        id: uuid(10),
+        traceId: traceId(10),
+        spanId: spanId(10),
+        ...variant("checkout-model", "b", { model: "m" }),
+      }),
+      span({
+        id: uuid(11),
+        traceId: traceId(10),
+        spanId: spanId(11),
+        parentSpanId: spanId(10),
+        startedAt: at("10:00:00.100"),
+      }),
+      // Untagged root: the earliest tagged child wins over a later one.
+      span({ id: uuid(20), traceId: traceId(20), spanId: spanId(20) }),
+      span({
+        id: uuid(21),
+        traceId: traceId(20),
+        spanId: spanId(21),
+        parentSpanId: spanId(20),
+        startedAt: at("10:00:00.300"),
+        ...variant("checkout-model", "late"),
+      }),
+      span({
+        id: uuid(22),
+        traceId: traceId(20),
+        spanId: spanId(22),
+        parentSpanId: spanId(20),
+        startedAt: at("10:00:00.200"),
+        ...variant("checkout-model", "a"),
+      }),
+      // Tagged root and a child tagged otherwise: the root wins.
+      span({
+        id: uuid(30),
+        traceId: traceId(30),
+        spanId: spanId(30),
+        startedAt: at("10:00:00.500"),
+        ...variant("x", "root"),
+      }),
+      span({
+        id: uuid(31),
+        traceId: traceId(30),
+        spanId: spanId(31),
+        parentSpanId: spanId(30),
+        startedAt: at("10:00:00.000"),
+        ...variant("x", "child"),
+      }),
+      // No tag anywhere.
+      span({ id: uuid(40), traceId: traceId(40), spanId: spanId(40) }),
+    ],
+    db,
+  );
+
+  await refreshTraceSummaries({ visibilityLagMs: 0 }, db);
+
+  const rows = await db
+    .select({
+      traceId: otelTraceSummaries.traceId,
+      variantExperiment: otelTraceSummaries.variantExperiment,
+      variantName: otelTraceSummaries.variantName,
+      variantAttrs: otelTraceSummaries.variantAttrs,
+    })
+    .from(otelTraceSummaries)
+    .orderBy(asc(otelTraceSummaries.traceId));
+  assert.deepEqual(rows, [
+    {
+      traceId: traceId(10),
+      variantExperiment: "checkout-model",
+      variantName: "b",
+      variantAttrs: { model: "m" },
+    },
+    {
+      traceId: traceId(20),
+      variantExperiment: "checkout-model",
+      variantName: "a",
+      variantAttrs: {},
+    },
+    { traceId: traceId(30), variantExperiment: "x", variantName: "root", variantAttrs: {} },
+    { traceId: traceId(40), variantExperiment: null, variantName: null, variantAttrs: {} },
+  ]);
+  await client.close();
+});
+
 async function setup(): Promise<{ client: PGlite; db: TestDb }> {
   const client = await createMigratedPGlite();
   await client.exec(`

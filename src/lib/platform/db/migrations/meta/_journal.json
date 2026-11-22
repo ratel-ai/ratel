@@ -351,6 +351,13 @@
       "when": 1795331546167,
       "tag": "0049_code_handoff",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795333796044,
+      "tag": "0050_variant_experiments",
+      "breakpoints": true
     }
   ]
 }

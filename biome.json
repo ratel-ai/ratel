@@ -1484,7 +1484,16 @@
         "!src/app/(console)/project/\\[projectId\\]/settings/repository/page.tsx",
         "src/app/api/github/**",
         "src/lib/mcp/operations/code-handoff.ts",
-        "src/lib/mcp/operations/code-handoff.test.ts"
+        "src/lib/mcp/operations/code-handoff.test.ts",
+        "src/lib/views/variants",
+        "src/lib/ingest/variants/domain/tags.ts",
+        "src/lib/ingest/variants/domain/tags.test.ts",
+        "src/lib/ingest/variants/domain/mappings.ts",
+        "src/lib/ingest/variants/domain/mappings.test.ts",
+        "src/lib/ingest/variants/mappings-store.ts",
+        "src/lib/ingest/variants/ingest.integration.test.ts",
+        "src/lib/console/variants/mappings.integration.test.ts",
+        "src/components/console/settings/VariantMappingsForm.tsx"
       ],
       "linter": {
         "rules": {

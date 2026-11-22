@@ -212,6 +212,139 @@ test("promotes experiment identity and preserves namespaced attributes", () => {
   });
 });
 
+const VARIANT_TAGS = {
+  "ratel.variant.experiment": "checkout-model",
+  "ratel.variant.name": "b",
+  "ratel.variant.model": "claude-haiku-5-5",
+};
+
+test("variants on: a tagged span keeps its experiment, its name and its descriptors", () => {
+  const [row] = toOtelSpanRows("project-1", [span({ attributes: VARIANT_TAGS })], undefined, {
+    variants: true,
+  });
+
+  assert.equal(row.variantExperiment, "checkout-model");
+  assert.equal(row.variantName, "b");
+  assert.deepEqual(row.variantAttrs, { model: "claude-haiku-5-5" });
+  assert.equal(row.attrsTruncated, false);
+});
+
+test("variants on: an untagged child of a tagged root gets no variant values", () => {
+  const rows = toOtelSpanRows(
+    "project-1",
+    [
+      span({ attributes: VARIANT_TAGS }),
+      span({ spanId: "1111111111111111", parentSpanId: "0123456789abcdef" }),
+    ],
+    undefined,
+    { variants: true },
+  );
+
+  assert.equal(rows[1].variantExperiment, null);
+  assert.equal(rows[1].variantName, null);
+  assert.deepEqual(rows[1].variantAttrs, {});
+});
+
+test("variants off: a tagged span writes no variant column", () => {
+  const [row] = toOtelSpanRows("project-1", [span({ attributes: VARIANT_TAGS })]);
+
+  assert.equal("variantExperiment" in row, false);
+  assert.equal("variantName" in row, false);
+  assert.equal("variantAttrs" in row, false);
+});
+
+test("variants on: descriptors are bounded and set the truncated marker", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [
+      span({
+        attributes: {
+          "ratel.variant.name": "b",
+          "ratel.variant.small": "kept",
+          "ratel.variant.huge": "x".repeat(20 * 1024),
+        },
+      }),
+    ],
+    undefined,
+    { variants: true },
+  );
+
+  assert.deepEqual(row.variantAttrs, { small: "kept" });
+  assert.equal(row.attrsTruncated, true);
+});
+
+test("variants on: an oversized name is cut and sets the truncated marker", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { "ratel.variant.name": "n".repeat(2_000) } })],
+    undefined,
+    { variants: true },
+  );
+
+  assert.equal(row.variantName?.length, 1024);
+  assert.equal(row.attrsTruncated, true);
+});
+
+const MAPPINGS = [{ attributeKey: "app.variant", experiment: "checkout-model" }];
+
+test("variants on: a mapped key is the variant name of the mapped experiment, and the raw key is not kept", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { "app.variant": "b" } })],
+    undefined,
+    {
+      variants: true,
+      variantMappings: MAPPINGS,
+    },
+  );
+
+  assert.equal(row.variantExperiment, "checkout-model");
+  assert.equal(row.variantName, "b");
+  assert.equal("app.variant" in row.attributes, false);
+});
+
+test("variants on: an explicit ratel.variant.name wins over a mapping", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { ...VARIANT_TAGS, "app.variant": "z" } })],
+    undefined,
+    {
+      variants: true,
+      variantMappings: MAPPINGS,
+    },
+  );
+
+  assert.equal(row.variantName, "b");
+});
+
+test("variants on: an unmapped customer key is dropped as before", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { "other.variant": "b" } })],
+    undefined,
+    {
+      variants: true,
+      variantMappings: MAPPINGS,
+    },
+  );
+
+  assert.equal(row.variantName, null);
+  assert.equal("other.variant" in row.attributes, false);
+});
+
+test("variants off: a mapping changes nothing", () => {
+  const [row] = toOtelSpanRows(
+    "project-1",
+    [span({ attributes: { "app.variant": "b" } })],
+    undefined,
+    {
+      variantMappings: MAPPINGS,
+    },
+  );
+
+  assert.equal("variantName" in row, false);
+});
+
 test("strips content-bearing fields from retained attributes", () => {
   const [row] = toOtelSpanRows("project-1", [
     span({

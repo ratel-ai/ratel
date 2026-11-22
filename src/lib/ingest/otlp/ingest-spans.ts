@@ -17,8 +17,15 @@ import {
   scheduleTraceTurnBuild,
   type TraceTurnsIngestDeps,
 } from "@/lib/ingest/trace-events/turns-schedule";
+import type { VariantMapping } from "@/lib/ingest/variants/domain/mappings";
+import { listVariantMappings } from "@/lib/ingest/variants/mappings-store";
+import { getDb } from "@/lib/platform/db/client";
 import type { LogError } from "@/lib/platform/logger";
 import type { Organization } from "@/lib/platform/organizations";
+import {
+  type VariantExperimentsFlag,
+  variantExperimentsEnabled,
+} from "@/lib/platform/variants-flag";
 import { type AgentHealthBridgeDeps, agentHealthToolRows } from "./agent-health-bridge";
 import { type AgentSpanDedupeDeps, resolveAgentSpanDedupe } from "./agent-span-dedupe";
 import { attrString } from "./anyvalue";
@@ -130,6 +137,10 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
    * `FF_PIVOTS` on. Absent, or with the switch off, the rows are as before.
    */
   pivots?: PivotIngestDeps;
+  /** `FF_VARIANT_EXPERIMENTS` for the span rows' variant columns (RC-868). Absent, the switch is read. */
+  variantsEnabled?: VariantExperimentsFlag;
+  /** The project's variant attribute mappings (RC-869), read only with the switch on. Absent, read from the database. */
+  loadVariantMappings?: (projectId: string) => Promise<ReadonlyArray<VariantMapping>>;
   /**
    * The stored `gen_ai` log records of the batch's spans. Absent, none are read. With `findSpans` and `restateCalls`, a log
    * export stored while the batch was stored joins too.
@@ -345,10 +356,16 @@ export async function persistDecodedSpans(
   // event quota and must never change the established ingest result.
   try {
     const pivotKeys = await batchPivotKeys(projectId, organization, deps);
+    const variants = await (deps.variantsEnabled ?? variantExperimentsEnabled)(
+      projectId,
+      organization,
+    );
+    const variantMappings = variants ? await readVariantMappings(projectId, deps) : [];
     const spanRows = toOtelSpanRows(projectId, spans, dedupe, {
       prices,
       dimensions,
       ...(pivotKeys ? { pivotKeys } : {}),
+      ...(variants ? { variants, variantMappings } : {}),
     });
     if (spanRows.length > 0) {
       if (spanConflict === "update") {
@@ -433,6 +450,25 @@ async function batchPivotKeys(
     deps.logError("pivot keys read failed", err, { project_id: projectId });
     deps.captureFailure(err);
     return undefined;
+  }
+}
+
+/**
+ * The project's variant attribute mappings. Fail open: a failed read stores
+ * the batch with the spans' own `ratel.variant.*` tags only.
+ */
+async function readVariantMappings(
+  projectId: string,
+  deps: PersistSpansDeps,
+): Promise<ReadonlyArray<VariantMapping>> {
+  try {
+    return await (deps.loadVariantMappings ?? ((id: string) => listVariantMappings(id, getDb())))(
+      projectId,
+    );
+  } catch (err) {
+    deps.logError("variant mapping read failed", err, { project_id: projectId });
+    deps.captureFailure(err);
+    return [];
   }
 }
 

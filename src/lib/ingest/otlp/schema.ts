@@ -172,6 +172,15 @@ export const otelSpans = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    // Variant tags (RC-868): `ratel.variant.experiment`, `.name`, and the other
+    // `ratel.variant.*` descriptors keyed without the prefix. Written only with
+    // `FF_VARIANT_EXPERIMENTS` on.
+    variantExperiment: text("variant_experiment"),
+    variantName: text("variant_name"),
+    variantAttrs: jsonb("variant_attrs")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     attributes: jsonb("attributes").$type<Record<string, unknown>>().notNull(),
     attrsTruncated: boolean("attrs_truncated").notNull().default(false),
     // Entity dimensions (RC-772), derived at ingest by `lib/ingest/otlp/dimensions`:
@@ -238,6 +247,9 @@ export const otelSpans = pgTable(
     index("otel_spans_project_experiment_started_idx")
       .on(t.projectId, t.experimentName, t.experimentArm, t.startedAt)
       .where(sql`${t.experimentName} is not null`),
+    index("otel_spans_project_variant_started_idx")
+      .on(t.projectId, t.variantExperiment, t.variantName, t.startedAt)
+      .where(sql`${t.variantExperiment} is not null or ${t.variantName} is not null`),
     // Orders spans within a trace by the canonical-root key so experiment
     // detection's DISTINCT ON representative pick is index-only (no Sort). With
     // project_id and trace_id fixed the index order equals the `reps` ORDER BY.

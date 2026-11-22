@@ -1,6 +1,7 @@
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
 import { type BatchPrices, costFor, PRICES_UNKNOWN } from "@/lib/ingest/pricing";
 import { deterministicEventId, MAX_QUERY } from "@/lib/ingest/trace-events/parse";
+import { resolveSpanVariant, type VariantMapping } from "@/lib/ingest/variants/domain/mappings";
 import { attrNumber, attrString } from "./anyvalue";
 import { AGENT_DIMENSION, GEN_AI, RATEL, RATEL_EXPERIMENT, RATEL_SEARCH } from "./constants";
 import {
@@ -68,6 +69,10 @@ export interface OtelSpanRow {
   mcpServerSource: DetectSource | null;
   mcpRole: McpRole | null;
   mcpSessionId: string | null;
+  /** The variant tags (RC-868), present only with `FF_VARIANT_EXPERIMENTS` on. */
+  variantExperiment?: string | null;
+  variantName?: string | null;
+  variantAttrs?: Record<string, unknown>;
   /** The span's events and links (AOBS-7); null when it has none or they are not stored. */
   events: StoredSpanEvent[] | null;
   links: StoredSpanLink[] | null;
@@ -156,6 +161,17 @@ export interface OtelSpanRowOptions {
    * empty, the rows are as before.
    */
   pivotKeys?: ReadonlySet<string>;
+  /**
+   * `FF_VARIANT_EXPERIMENTS` (RC-868): keep each span's `ratel.variant.*`
+   * tags in the variant columns. Off, the row has no variant key, as before.
+   */
+  variants?: boolean;
+  /**
+   * The project's attribute mappings (RC-869), read only with `variants` on: a
+   * span with a mapped key and no `ratel.variant.name` takes the mapped
+   * experiment and the key's value as its variant name.
+   */
+  variantMappings?: ReadonlyArray<VariantMapping>;
 }
 
 /** A pivot value is a group name: longer strings are cut to this many bytes. */
@@ -232,6 +248,9 @@ export function toOtelSpanRows(
       keptContent(span),
     );
     const experiment = experimentAttributes(span);
+    const variant = options.variants
+      ? variantColumns(span, options.variantMappings ?? [], text)
+      : null;
     const entity = dimensions.get(span.spanId) ?? NO_DIMENSIONS;
     // Each span's events and links (AOBS-7).
     const events = storedSpanEvents(span);
@@ -277,7 +296,8 @@ export function toOtelSpanRows(
         retained.truncated ||
         experiment.truncated ||
         events.truncated ||
-        links.truncated,
+        links.truncated ||
+        (variant?.truncated ?? false),
       agentKey: entity.agentKey,
       agentSource: entity.agentSource,
       callerAgentKey: entity.callerAgentKey,
@@ -294,6 +314,7 @@ export function toOtelSpanRows(
       geoCountry: entity.client.geoCountry,
       mcpTransport: entity.client.mcpTransport,
       mcpProtocolVersion: text(entity.client.mcpProtocolVersion),
+      ...(variant?.columns ?? {}),
     } satisfies NewOtelSpan;
   });
 }
@@ -379,6 +400,31 @@ function experimentAttributes(span: DecodedSpan): {
       Object.entries(span.attributes).filter(([key]) => key.startsWith(RATEL_EXPERIMENT.prefix)),
     ),
   );
+}
+
+/**
+ * A span's variant columns: its own `ratel.variant.*` tags or mapped key, never its
+ * parent's (the trace summary rolls them up). `text` bounds the experiment and
+ * the name; the descriptors are bounded like `experiment_attrs`.
+ */
+function variantColumns(
+  span: DecodedSpan,
+  mappings: ReadonlyArray<VariantMapping>,
+  text: (value: string | null) => string | null,
+): {
+  columns: Pick<OtelSpanRow, "variantExperiment" | "variantName" | "variantAttrs">;
+  truncated: boolean;
+} {
+  const tags = resolveSpanVariant(span.attributes, mappings);
+  const descriptors = boundedAttributes((tags?.descriptors ?? {}) as AttrMap);
+  return {
+    columns: {
+      variantExperiment: text(tags?.experiment ?? null),
+      variantName: text(tags?.name ?? null),
+      variantAttrs: descriptors.attributes,
+    },
+    truncated: descriptors.truncated,
+  };
 }
 
 /** A key `otel_spans` keeps: a safe key, or a `gen_ai.*` / `ratel.*` key that carries no content. */

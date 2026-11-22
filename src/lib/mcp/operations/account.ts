@@ -84,6 +84,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_CODE_HANDOFF",
     note: "code handoff: Settings > Repository (link a GitHub repo through the deployment's GitHub App) and the App's webhook",
   },
+  {
+    key: "FF_VARIANT_EXPERIMENTS",
+    note: "variant experiments: ingest keeps each span's ratel.variant.* tags (or a mapped attribute from Settings > General) and a per-trace rollup",
+  },
 ];
 
 export interface AccountOperationDeps {

@@ -285,6 +285,25 @@ async function recomputeSummaries(
         s.started_at,
         s.span_id
     ),
+    -- The trace's variant (RC-868): the root span's tags, else the first
+    -- tagged span's, in the representative's order. Spans carry them only
+    -- with FF_VARIANT_EXPERIMENTS on.
+    variants as (
+      select distinct on (s.project_id, s.trace_id)
+        s.project_id, s.trace_id, s.variant_experiment, s.variant_name, s.variant_attrs
+      from otel_spans s
+      join changed c
+        on c.project_id = s.project_id and c.trace_id = s.trace_id
+      where s.variant_experiment is not null
+        or s.variant_name is not null
+        or s.variant_attrs <> '{}'::jsonb
+      order by
+        s.project_id,
+        s.trace_id,
+        (s.parent_span_id is null) desc,
+        s.started_at,
+        s.span_id
+    ),
     aggregates as (
       select
         s.project_id,
@@ -329,7 +348,7 @@ async function recomputeSummaries(
       project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at,
       models, tools, service_name, environment, agents, mcp_servers, root_error, countries, harnesses,
-      dims
+      dims, variant_experiment, variant_name, variant_attrs
     )
     select
       r.project_id,
@@ -351,10 +370,15 @@ async function recomputeSummaries(
       r.root_error,
       a.countries,
       a.harnesses,
-      ${dimsValue}
+      ${dimsValue},
+      v.variant_experiment,
+      v.variant_name,
+      coalesce(v.variant_attrs, '{}'::jsonb)
     from representatives r
     join aggregates a
       on a.project_id = r.project_id and a.trace_id = r.trace_id
+    left join variants v
+      on v.project_id = r.project_id and v.trace_id = r.trace_id
     ${dimsJoin}
     on conflict (project_id, trace_id) do update set
       started_at = excluded.started_at,
@@ -374,7 +398,10 @@ async function recomputeSummaries(
       root_error = excluded.root_error,
       countries = excluded.countries,
       harnesses = excluded.harnesses,
-      dims = excluded.dims
+      dims = excluded.dims,
+      variant_experiment = excluded.variant_experiment,
+      variant_name = excluded.variant_name,
+      variant_attrs = excluded.variant_attrs
   `);
 }
 
