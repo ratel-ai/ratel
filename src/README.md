@@ -72,7 +72,7 @@ for everyone.
 
 `dev`, `build` and `typecheck` run `scripts/link-ee.mjs --auto` first, which installs the private
 route stubs when `ee/src` exists and removes them otherwise. It also copies the edition's static
-files (`ee/src/public/`) into `public/`, git-ignored and listed in `.ee-public.json`, never
+files (`ee/src/src/public/`) into `public/`, git-ignored and listed in `.ee-public.json`, never
 replacing a file the app ships. They, and `test`, then build the MCP Apps views (`pnpm
 mcp-apps:build`, from [`mcp-apps/`](mcp-apps/README.md) into the git-ignored `mcp-apps/dist/`);
 `pnpm mcp-apps:dev` serves them with their fixtures at `http://localhost:4180`.

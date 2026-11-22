@@ -22,9 +22,9 @@ const proxy = () => join(root, "src/proxy.ts");
 const route = () => join(root, "src/app/(ee)/admin/page.tsx");
 
 function checkout() {
-  mkdirSync(join(root, "ee/src/routes/admin"), { recursive: true });
-  writeFileSync(join(root, "ee/src/routes/admin/page.tsx"), "export {};\n");
-  writeFileSync(join(root, "ee/src/proxy.ts"), "// the stub\n");
+  mkdirSync(join(root, "ee/src/src/routes/admin"), { recursive: true });
+  writeFileSync(join(root, "ee/src/src/routes/admin/page.tsx"), "export {};\n");
+  writeFileSync(join(root, "ee/src/src/proxy.ts"), "// the stub\n");
 }
 
 beforeEach(() => {
@@ -61,7 +61,7 @@ test("--unlink removes the proxy stub", () => {
 
 test("a checkout with no proxy stub installs none", () => {
   checkout();
-  rmSync(join(root, "ee/src/proxy.ts"));
+  rmSync(join(root, "ee/src/src/proxy.ts"));
   link("--auto");
   assert.ok(existsSync(route()));
   assert.equal(existsSync(proxy()), false);
@@ -71,8 +71,8 @@ const placed = () => join(root, "src/public/email/mark.png");
 const corePublic = () => join(root, "src/public/icon.png");
 
 function publicFiles() {
-  mkdirSync(join(root, "ee/src/public/email"), { recursive: true });
-  writeFileSync(join(root, "ee/src/public/email/mark.png"), "edition mark");
+  mkdirSync(join(root, "ee/src/src/public/email"), { recursive: true });
+  writeFileSync(join(root, "ee/src/src/public/email/mark.png"), "edition mark");
   mkdirSync(join(root, "src/public"), { recursive: true });
   writeFileSync(corePublic(), "core icon");
 }
@@ -91,7 +91,7 @@ test("an edition file removed from the checkout goes from the app at the next ru
   checkout();
   publicFiles();
   link("--auto");
-  rmSync(join(root, "ee/src/public/email/mark.png"));
+  rmSync(join(root, "ee/src/src/public/email/mark.png"));
   link("--auto");
   assert.equal(existsSync(placed()), false);
   assert.equal(existsSync(join(root, "src/public/email")), false);
@@ -123,7 +123,7 @@ test("--unlink removes the placed files and keeps the app's own", () => {
 test("an edition file never replaces one the app ships", () => {
   checkout();
   publicFiles();
-  writeFileSync(join(root, "ee/src/public/icon.png"), "edition icon");
+  writeFileSync(join(root, "ee/src/src/public/icon.png"), "edition icon");
   link("--auto");
   assert.equal(readFileSync(corePublic(), "utf8"), "core icon");
   assert.equal(readFileSync(placed(), "utf8"), "edition mark");

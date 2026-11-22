@@ -63,7 +63,7 @@ RUN BROWSER_SOURCEMAPS=1 NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @r
 # As in build-oss: the MCP Apps views must be in the standalone output.
 RUN test -s src/.next/standalone/src/mcp-apps/dist/views.json
 # The deploy step: bundled runners and their SQL, because the runtime image has no tsx or source.
-RUN node ee/src/db/bundle-migrator.mjs /app/migrator
+RUN node ee/src/src/db/bundle-migrator.mjs /app/migrator
 # The edition's source-map step (ee/src/scripts/browser-sourcemaps.sh): it uploads the maps for its
 # error tracking when its key is present, then deletes every .map either way, so none is served or
 # shipped. Last on purpose: SOURCEMAP_UPLOAD_RUN is unique per CI run attempt, so only this cheap

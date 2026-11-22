@@ -5,7 +5,7 @@ import type { NextConfig } from "next";
 // private composition only when the Cloud edition is built; the open-source build never sees ee/.
 const eeCompositionTarget =
   process.env.RATEL_COMPOSITION === "cloud"
-    ? "../ee/src/composition.ts"
+    ? "../ee/src/src/composition.ts"
     : "./lib/composition/ee-absent.ts";
 
 const nextConfig: NextConfig = {

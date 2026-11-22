@@ -46,7 +46,7 @@ The rest mirror upstream (`scripts/platform-sync/map.json`).
 - `naming.ts`: one entry of `INTERNAL_PRODUCT_NAMES` is a confidential word and is left out, and
   no routing keyword points at `get_embedding_usage`, which only an edition lists.
 - `operations/account.ts`: no `get_embedding_usage`; the Embedding API and its credit ledger are
-  the edition's, which adds the tool through `operations/edition.ts` (Cloud: `ee/src/apis/mcp`),
+  the edition's, which adds the tool through `operations/edition.ts` (Cloud: `ee/src/src/apis/mcp`),
   and `get_quota_status` gives upstream's hint pointing at it only then.
   `operations/contract.test.ts` and `compatibility.test.ts` pin the core's surface, without it.
 - `operations/index.ts`: also places the edition's tools (`operations/edition.ts`).
