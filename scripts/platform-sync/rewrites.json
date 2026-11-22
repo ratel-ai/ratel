@@ -265,6 +265,7 @@
         "IntentClusterRow": "@/lib/readings/intent-engine/schema",
         "IntentClusterAssignmentRow": "@/lib/readings/intent-engine/schema",
         "traceSignalRuns": "@/lib/readings/trace-signals/schema",
+        "taskSegments": "@/lib/readings/trace-signals/schema",
         "traceSignals": "@/lib/readings/trace-signals/schema",
         "traceWorkflowLabels": "@/lib/readings/trace-signals/schema",
         "traceWorkflowVerdicts": "@/lib/readings/trace-signals/schema",

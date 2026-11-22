@@ -1,8 +1,10 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull } from "drizzle-orm";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import { projects } from "@/lib/platform/projects/schema";
 import type { CarriedRow } from "@/lib/readings/labelling/carry";
 import { traceWorkflowInsights, traceWorkflowVerdicts } from "@/lib/readings/trace-signals/schema";
+import { typedStepsEnabled } from "@/lib/readings/trace-signals/typed-steps";
 import { agentStepId } from "@/lib/readings/trace-signals/workflows/agent-tasks";
 import {
   type AskGroup,
@@ -15,6 +17,8 @@ import {
   loadAskSourcesByTurn,
   type TurnAsk,
 } from "@/lib/readings/trace-signals/workflows/label-queries";
+import type { WorkflowStep } from "@/lib/readings/trace-signals/workflows/types";
+import { stepsUnit, type UnitOptions } from "@/lib/readings/trace-signals/workflows/units";
 
 /**
  * Reads and writes of the decision step. Asks come only from what the customer
@@ -64,9 +68,16 @@ export async function loadRecentAskGroups(
       : [];
   });
   const kept = preferUserAsks(sourced);
+  const [project] = await db
+    .select({ organizationId: projects.organizationId })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  const typedSteps = project ? await typedStepsEnabled(projectId, project.organizationId) : false;
   const tools = await loadTurnTools(
     kept.map((k) => k.turn.id),
     db,
+    { typedSteps },
   );
   const groups = new Map<string, AskGroup>();
   for (const { turn, text, source } of kept) {
@@ -85,33 +96,42 @@ export async function loadRecentAskGroups(
  * agent task's one step, `agent:<name>`, so a tool-less agent run counts as
  * inside its agent's task, not as an ask that called no tool.
  */
-async function loadTurnTools(
+export async function loadTurnTools(
   turnIds: readonly string[],
   db: LabelDb,
+  options: UnitOptions = {},
 ): Promise<Map<string, string[]>> {
-  const out = new Map<string, Set<string>>();
+  const out = new Map<string, string[]>();
   const CHUNK = 500;
   for (let i = 0; i < turnIds.length; i += CHUNK) {
     const rows = await db
-      .select({
-        turnId: traceTurnSteps.turnId,
-        kind: traceTurnSteps.kind,
-        tool: traceTurnSteps.targetId,
-      })
+      .select()
       .from(traceTurnSteps)
       .where(
         and(
           inArray(traceTurnSteps.turnId, turnIds.slice(i, i + CHUNK)),
-          inArray(traceTurnSteps.kind, ["invoke", "agent"]),
+          ...(options.typedSteps ? [] : [inArray(traceTurnSteps.kind, ["invoke", "agent"])]),
         ),
-      );
-    for (const row of rows) {
-      if (!row.tool) continue;
-      const tool = row.kind === "agent" ? agentStepId(row.tool) : row.tool;
-      out.set(row.turnId, (out.get(row.turnId) ?? new Set()).add(tool));
+      )
+      .orderBy(asc(traceTurnSteps.ordinal));
+    const grouped = new Map<string, typeof rows>();
+    for (const row of rows) grouped.set(row.turnId, [...(grouped.get(row.turnId) ?? []), row]);
+    for (const [id, steps] of grouped) {
+      const tokens = options.typedSteps
+        ? stepsUnit(id, steps as WorkflowStep[], options).path
+        : [
+            ...new Set(
+              steps.flatMap((step) =>
+                step.targetId
+                  ? [step.kind === "agent" ? agentStepId(step.targetId) : step.targetId]
+                  : [],
+              ),
+            ),
+          ];
+      if (tokens.length) out.set(id, [...tokens]);
     }
   }
-  return new Map([...out].map(([id, set]) => [id, [...set]]));
+  return out;
 }
 
 /** Asks by turn id, reusing the label step's per-turn reads in chunks. */

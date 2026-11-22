@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -250,6 +251,41 @@ export const traceSelfCorrections = pgTable(
   (t) => [
     index("trace_self_corrections_project_time_idx").on(t.projectId, t.occurredAt),
     index("trace_self_corrections_turn_idx").on(t.turnId),
+  ],
+);
+
+/**
+ * One contiguous task within a session, bounded by inclusive step ordinals (RC-1073, upstream
+ * migration 0111, core 0044). The signal run rewrites a session's segments with
+ * `FF_TYPED_STEPS` on; a delete trigger on `trace_turns` removes a segment with any of its turns.
+ */
+export const taskSegments = pgTable(
+  "task_segments",
+  {
+    id: uuid("id").primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    workflowId: text("workflow_id").notNull(),
+    startTurnId: uuid("start_turn_id")
+      .notNull()
+      .references(() => traceTurns.id, { onDelete: "cascade" }),
+    startOrdinal: integer("start_ordinal").notNull(),
+    endTurnId: uuid("end_turn_id")
+      .notNull()
+      .references(() => traceTurns.id, { onDelete: "cascade" }),
+    endOrdinal: integer("end_ordinal").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    turnIds: uuid("turn_ids").array().notNull(),
+    pieceCount: integer("piece_count").notNull(),
+  },
+  (t) => [
+    index("task_segments_project_workflow_ended_idx").on(t.projectId, t.workflowId, t.endedAt),
+    index("task_segments_project_session_idx").on(t.projectId, t.sessionId),
+    index("task_segments_turn_ids_idx").using("gin", t.turnIds),
+    check("task_segments_piece_count_check", sql`${t.pieceCount} > 0`),
   ],
 );
 

@@ -607,3 +607,38 @@ test("run conversion controls require eval data and identify existing cases", ()
   assert.match(existing, /In the eval set/);
   assert.doesNotMatch(existing, /Turn into a test/);
 });
+
+test("a model-only task renders its typed step, flow, and segment run count without an engine label", () => {
+  const collector = createWorkflowCollector(undefined, undefined, undefined, { typedSteps: true });
+  for (const turn of many(10, () =>
+    wfTurn([{ tool: "claude-sonnet-5-5", kind: "model_call" }], { turnSource: "otlp" }),
+  ))
+    collector.collect(turn);
+  const stored = collector.finish([]).stored;
+  const id = stored.items[0]!.id;
+  const detail = buildTaskDetail(
+    inputs({
+      stored,
+      typedSteps: true,
+      segments: new Map([[id, { runs: 1, finishedRuns: 1, medianMs: 1500, examples: [] }]]),
+    }),
+    id,
+  )!;
+  const html = render(
+    createElement(TaskView, { projectId: PROJECT_ID, task: detail, examples: new Map(), now: NOW }),
+  );
+  assert.match(html, /data-step-kind="model_call"/);
+  assert.match(html, /data-task-flow=""/);
+  assert.ok(visibleText(html).includes("Model call"));
+  assert.ok(!visibleText(html).includes("claude"));
+  const panel = render(
+    createElement(StepPanelBody, {
+      projectId: PROJECT_ID,
+      taskId: id,
+      step: detail.steps[0]!,
+      task: "Sample task",
+      hasReading: true,
+    }),
+  );
+  assert.ok(!visibleText(panel).includes("Catalog"));
+});

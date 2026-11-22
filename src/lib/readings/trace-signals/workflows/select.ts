@@ -22,6 +22,7 @@ import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/type
  *    p + (1 - p) * headroom. A helper that runs in most turns of every kind
  *    sits near its base rate inside any group and is kept out; a tool that
  *    really belongs to a group runs in nearly all of its turns and stays in.
+ *    An itemset of one item is admissible: nothing else predicts it.
  * 2. Closed: an itemset is absorbed by an admissible superset one tool larger
  *    whose support is at least `closedRatio` of its own, so A,B never wins
  *    over A,B,C when C nearly always comes along.
@@ -41,6 +42,8 @@ export interface SelectionContext {
   unitSets: readonly ReadonlySet<string>[];
   /** Tool id by index (index order is id order). */
   toolIds: readonly string[];
+  /** Items that may be a workflow alone: step tokens (RC-1072). Empty with `typedSteps` off. */
+  singleItems: ReadonlySet<number>;
   idf: Readonly<Record<string, number>>;
   /** Share of multi-tool turns each tool ran in, by index. */
   baseRate: readonly number[];
@@ -57,6 +60,7 @@ export interface SeedPick {
 }
 
 function admissible(set: Itemset, ctx: SelectionContext): boolean {
+  if (set.items.length === 1) return true;
   for (const item of set.items) {
     if (!ctx.ubiquitous.has(item)) continue;
     const parent = ctx.lattice.byKey.get(itemsetKey(set.items.filter((other) => other !== item)));
@@ -70,7 +74,7 @@ function admissible(set: Itemset, ctx: SelectionContext): boolean {
 function absorbedKeys(admitted: readonly Itemset[], ctx: SelectionContext): Set<string> {
   const absorbed = new Set<string>();
   for (const superset of admitted) {
-    if (superset.items.length <= ctx.config.minSize) continue;
+    if (superset.items.length <= smallestSize(ctx)) continue;
     for (const drop of superset.items) {
       const key = itemsetKey(superset.items.filter((item) => item !== drop));
       const subset = ctx.lattice.byKey.get(key);
@@ -80,12 +84,24 @@ function absorbedKeys(admitted: readonly Itemset[], ctx: SelectionContext): Set<
   return absorbed;
 }
 
-/** Admissible, closed itemsets of the configured sizes. */
+/** Admissible, closed itemsets of the configured sizes, and the single items that may stand alone. */
 export function seedCandidates(ctx: SelectionContext): Itemset[] {
-  const sized = ctx.lattice.levels.slice(ctx.config.minSize, ctx.config.maxSize + 1).flat();
+  const singles =
+    ctx.config.minSize > 1
+      ? (ctx.lattice.levels[1] ?? []).filter((set) => ctx.singleItems.has(set.items[0]!))
+      : [];
+  const sized = [
+    ...singles,
+    ...ctx.lattice.levels.slice(ctx.config.minSize, ctx.config.maxSize + 1).flat(),
+  ];
   const admitted = sized.filter((set) => admissible(set, ctx));
   const absorbed = absorbedKeys(admitted, ctx);
   return admitted.filter((set) => !absorbed.has(set.key));
+}
+
+/** The smallest candidate size: 1 when a single item may stand alone. */
+function smallestSize(ctx: SelectionContext): number {
+  return ctx.singleItems.size > 0 ? 1 : ctx.config.minSize;
 }
 
 interface Ranked {

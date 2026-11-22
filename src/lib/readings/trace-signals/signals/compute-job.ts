@@ -23,6 +23,7 @@ import {
   scoredIssues,
 } from "@/lib/readings/trace-signals/health-score";
 import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
+import type { SegmentPlacement } from "@/lib/readings/trace-signals/segments/write";
 import type {
   SelfCorrectionRunInput,
   SelfCorrectionRunResult,
@@ -387,7 +388,13 @@ export async function computeProjectTraceSignals(
     );
     // Each run's task first: the self-corrections read it from the runs, and the jobs this
     // run queues (names, the tool reading) read every run's task.
-    const placement = await writePlacementFor(projectId, window, result.placement, deps);
+    const placement = await writePlacementFor(
+      projectId,
+      window,
+      result.placement,
+      deps,
+      result.segmentPlacement,
+    );
     const corrections = await selfCorrectionsFor(
       projectId,
       window,
@@ -575,11 +582,13 @@ async function writePlacementFor(
   window: { start: Date; end: Date },
   placement: ReadonlyMap<string, string | null>,
   deps: Pick<ComputeJobDeps, "writePlacement">,
+  segments?: SegmentPlacement,
 ): Promise<PlacementWriteResult | null> {
   try {
     return await deps.writePlacement(projectId, {
       window: { start: window.start, end: window.end },
       placement,
+      ...(segments ? { segments } : {}),
     });
   } catch (err) {
     logger.error(

@@ -183,3 +183,62 @@ test("the candidate cap truncates a dense lattice without failing", () => {
     "tools in every turn of it are core, seed or not",
   );
 });
+
+const model = (token: string, outcome?: "error"): Call => ({
+  tool: token,
+  kind: "model_call",
+  ...(outcome ? { outcome } : {}),
+});
+const typed = { typedSteps: true };
+
+test("typed steps on: runs of model calls alone form a task on their signature", () => {
+  const turns = [
+    ...many(12, () => wfTurn([model("triage"), model("triage")])),
+    ...many(3, (i) => wfTurn([model(`rare${i}`)])),
+  ];
+  const off = mineWorkflows(turns);
+  assert.equal(off.workflows.length, 0, "flag off: no tool, no task");
+  assert.equal(off.turnsWithTools, 0);
+  const on = mineWorkflows(turns, typed);
+  assert.deepEqual(cores(on), ["model:triage"]);
+  assert.equal(on.workflows[0]!.id, workflowFingerprint(["model:triage"]));
+  assert.equal(on.workflows[0]!.runs, 12);
+  assert.equal(on.multiToolTurns, 15, "one model token is enough to be a candidate");
+  assert.equal(on.singleStepTurns, 0);
+});
+
+test("typed steps on: a mixed signature (model + code + tool) is one task in step order", () => {
+  const mixed = (): Call[] => [
+    { tool: "", kind: "user_message" },
+    model("plan"),
+    { tool: "fetch", kind: "code" },
+    "search",
+    model("plan"),
+  ];
+  const turns = [...many(30, () => wfTurn(mixed())), ...noise(20, "n")];
+  const workflow = find(mineWorkflows(turns, typed), "search")!;
+  assert.deepEqual(workflow.coreTools, ["code:fetch", "model:plan", "search"]);
+  assert.deepEqual(workflow.typicalOrder, ["model:plan", "code:fetch", "search"]);
+  assert.equal(workflow.entryTool, "model:plan");
+  assert.equal(workflow.runs, 30);
+});
+
+test("typed steps on: a single tool still forms no task", () => {
+  const result = mineWorkflows(
+    many(20, () => wfTurn(["a", "a"])),
+    typed,
+  );
+  assert.equal(result.workflows.length, 0);
+  assert.equal(result.singleStepTurns, 20);
+});
+
+test("typed steps on: tool-only runs give the same workflows and ids as with the flag off", () => {
+  const turns = [
+    ...many(60, () => wfTurn(["find", "assign", "notify", "log"])),
+    ...many(60, () => wfTurn(["find", "assign", "close", "archive"])),
+    ...many(40, (i) => wfTurn(i % 2 === 0 ? ["a", "b", "c"] : ["a", "b"])),
+    ...many(20, () => wfTurn(["solo"])),
+    ...noise(40, "n"),
+  ];
+  assert.deepEqual(mineWorkflows(turns, typed), mineWorkflows(turns));
+});

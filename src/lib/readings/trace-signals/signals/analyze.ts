@@ -1,4 +1,5 @@
 import { RUN_BOUND_KINDS } from "@/lib/readings/trace-signals/run-bound";
+import type { SegmentPlacement } from "@/lib/readings/trace-signals/segments/write";
 import type { StoredSelfCorrections } from "@/lib/readings/trace-signals/self-corrections/run";
 import type { StoredSetup } from "@/lib/readings/trace-signals/setup-facts";
 import type { SignalKind, TurnSourceMix } from "@/lib/readings/trace-signals/view";
@@ -150,6 +151,7 @@ export interface AnalysisResult {
    * Runs absent from it belong to no task.
    */
   placement: ReadonlyMap<string, string | null>;
+  segmentPlacement?: SegmentPlacement;
 }
 
 export interface LinkingCounts {
@@ -302,6 +304,7 @@ export function createAnalysis(context: AnalysisContext, options: AnalysisOption
         queriesEvicted: stats.queriesEvicted,
         linking: { ...linking },
         placement: mined.placement,
+        ...(mined.segmentPlacement ? { segmentPlacement: mined.segmentPlacement } : {}),
       };
     },
   };

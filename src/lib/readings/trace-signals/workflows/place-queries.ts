@@ -1,6 +1,10 @@
 import { and, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import {
+  type SegmentPlacement,
+  writeTaskSegments,
+} from "@/lib/readings/trace-signals/segments/write";
 
 /**
  * Writes a signal run's placement (`placeRuns`) to `trace_turns.workflow_id`,
@@ -18,6 +22,8 @@ import { getDb } from "@/lib/platform/db/client";
 export type PlacementDb = Pick<ReturnType<typeof getDb>, "transaction">;
 
 export interface PlacementWrite {
+  /** Present only with cloud-typed-steps. Rebuild the affected sessions. */
+  segments?: SegmentPlacement;
   window: { start: Date; end: Date };
   /** Each read run's task, or null; runs absent from it belong to none. */
   placement: ReadonlyMap<string, string | null>;
@@ -44,6 +50,7 @@ export async function writeTaskPlacement(
   input: PlacementWrite,
   db: PlacementDb = getDb(),
 ): Promise<PlacementWriteResult> {
+  if (input.segments) return writeTaskSegments(projectId, input.window, input.segments, db);
   return db.transaction(async (tx) => {
     const current = await tx
       .select({ id: traceTurns.id, workflowId: traceTurns.workflowId })

@@ -13,13 +13,18 @@ const T0 = Date.parse("2026-09-01T09:00:00Z");
 let serial = 0;
 
 export interface CallSpec {
+  /** The tool id, or a typed step's name (a model call's signature token). */
   tool: string;
+  /** A typed step (RC-1069) instead of a tool call. */
+  kind?: TypedStepKind;
   outcome?: InvokeOutcome;
   tookMs?: number | null;
   targetType?: TargetType;
 }
 
 export type Call = string | CallSpec;
+
+type TypedStepKind = "model_call" | "code" | "handoff" | "user_message";
 
 export interface WfTurnOptions {
   id?: string;
@@ -31,6 +36,12 @@ export interface WfTurnOptions {
 
 function step(call: Call, ordinal: number, at: Date, turnId: string): StepDraft {
   const spec: CallSpec = typeof call === "string" ? { tool: call } : call;
+  return spec.kind
+    ? typedStep(spec, spec.kind, invokeStep(spec, ordinal, at, turnId))
+    : invokeStep(spec, ordinal, at, turnId);
+}
+
+function invokeStep(spec: CallSpec, ordinal: number, at: Date, turnId: string): StepDraft {
   return {
     ordinal,
     kind: "invoke",
@@ -62,6 +73,17 @@ function step(call: Call, ordinal: number, at: Date, turnId: string): StepDraft 
   };
 }
 
+/** A typed step as the turn build stores it: no target type, its name in `targetId`. */
+function typedStep(spec: CallSpec, kind: TypedStepKind, base: StepDraft): StepDraft {
+  return {
+    ...base,
+    kind,
+    eventType: kind === "model_call" ? "otlp_model_call" : "otlp_step",
+    targetType: null,
+    targetId: kind === "user_message" ? null : spec.tool,
+  };
+}
+
 /** One closed turn whose steps are the given tool calls, in order. */
 export function wfTurn(calls: readonly Call[], opts: WfTurnOptions = {}): SignalTurn {
   serial += 1;
@@ -77,7 +99,7 @@ export function wfTurn(calls: readonly Call[], opts: WfTurnOptions = {}): Signal
     startedAt: new Date(start),
     endedAt: new Date(start + duration),
     searchCount: 0,
-    invokeCount: calls.length,
+    invokeCount: calls.filter((c) => typeof c === "string" || !c.kind).length,
     errorCount: calls.filter((c) => typeof c !== "string" && c.outcome === "error").length,
     reSearchCount: 0,
     abandoned: null,

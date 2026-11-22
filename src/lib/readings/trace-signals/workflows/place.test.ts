@@ -98,10 +98,11 @@ test("a task's shape is read again from the runs placed in it, its core unchange
     seedTools: ["a", "b"],
     seedSupport: 99,
   };
-  const reshaped = reshapeWorkflow(mined, runs.map(turnUnit), {
-    ubiquitous: new Set(["helper"]),
-    turnsWithTools: 80,
-  });
+  const reshaped = reshapeWorkflow(
+    mined,
+    runs.map((run) => turnUnit(run)),
+    { ubiquitous: new Set(["helper"]), turnsWithTools: 80 },
+  );
   assert.equal(reshaped.id, "kept-id");
   assert.deepEqual(reshaped.coreTools, ["a", "b"]);
   assert.equal(reshaped.runs, 40);
@@ -140,4 +141,54 @@ test("placement agrees with mining on a clean project", () => {
     workflowFingerprint(["a", "b", "c"]),
     mining.workflows.find((w) => w.coreTools.includes("a"))?.id,
   );
+});
+
+test("typed steps on: model-only and mixed runs are placed on their tokens; a lone tool still is not", () => {
+  const tasks = [
+    core("triage", "model:triage"),
+    core("mixed", "model:plan", "code:fetch", "search"),
+  ];
+  const runs = [
+    wfTurn([{ tool: "triage", kind: "model_call" }], { id: "model-only" }),
+    wfTurn(
+      [
+        { tool: "", kind: "user_message" },
+        { tool: "plan", kind: "model_call" },
+        { tool: "fetch", kind: "code" },
+        "search",
+      ],
+      { id: "mixed" },
+    ),
+    wfTurn(["search"], { id: "one-tool" }),
+  ];
+  const on = placeRuns(runs, tasks, { weights: {}, basis: "all", typedSteps: true });
+  assert.deepEqual(Object.fromEntries(on), {
+    "model-only": "triage",
+    mixed: "mixed",
+    "one-tool": null,
+  });
+  const off = placeRuns(runs, tasks, { weights: {}, basis: "all" });
+  assert.ok(
+    [...off.values()].every((id) => id === null),
+    "flag off: no tokens, no placement",
+  );
+});
+
+test("typed steps on: placement agrees with mining on model-only and mixed runs", () => {
+  const turns = [
+    ...many(20, () => wfTurn([{ tool: "triage", kind: "model_call" }])),
+    ...many(20, () =>
+      wfTurn([{ tool: "plan", kind: "model_call" }, { tool: "fetch", kind: "code" }, "search"]),
+    ),
+  ];
+  const mining = mineWorkflows(turns, { typedSteps: true });
+  assert.equal(mining.workflows.length, 2);
+  const placed = placeRuns(turns, mining.workflows, {
+    weights: mining.idf,
+    basis: "all",
+    typedSteps: true,
+  });
+  for (const workflow of mining.workflows) {
+    assert.deepEqual(membersByTask(placed).get(workflow.id), [...workflow.memberTurnIds]);
+  }
 });

@@ -1,4 +1,6 @@
 import { wilsonLow } from "@/lib/readings/trace-signals/signals/severity";
+import type { PublicStepKind } from "@/lib/readings/trace-signals/steps";
+import { tokenStepKind, tokenStepLabel } from "@/lib/views/tasks/step-kind";
 
 /**
  * A task's steps as a layered graph (first drawn by Tool craft for one ask,
@@ -37,6 +39,7 @@ const LOOP_BASE = 26;
 const LOOP_STEP = 20;
 
 export interface FlowNode {
+  kind?: PublicStepKind;
   id: string;
   label: string;
   x: number;
@@ -200,7 +203,7 @@ const LABEL_H = 18;
 
 export function buildIntentFlow(
   { edges, tools, names }: FlowInput,
-  opts: { maxTools?: number; minP?: number; units?: number } = {},
+  opts: { maxTools?: number; minP?: number; units?: number; typedSteps?: boolean } = {},
 ): IntentFlowLayout {
   const maxTools = opts.maxTools ?? FLOW_MAX_TOOLS;
   const minP = opts.minP ?? SURE_HOP_P;
@@ -240,12 +243,16 @@ export function buildIntentFlow(
 
   // One node width for the whole diagram, from the longest name.
   const labelOf = (id: string) => {
-    const label = names[id] ?? id;
+    const label = opts.typedSteps
+      ? tokenStepLabel(id, new Map(Object.entries(names)))
+      : (names[id] ?? id);
     return label.length > NODE_MAX_CHARS ? `${label.slice(0, NODE_MAX_CHARS - 1)}…` : label;
   };
   const nodeW = Math.max(
     NODE_MIN_W,
-    ...kept.map((id) => Math.ceil(labelOf(id).length * CHAR_PX + NODE_PAD * 2)),
+    ...kept.map((id) =>
+      Math.ceil(labelOf(id).length * CHAR_PX + NODE_PAD * 2 + (opts.typedSteps ? 24 : 0)),
+    ),
   );
   const byColumn: string[][] = Array.from({ length: columns }, () => []);
   for (const id of kept) byColumn[column.get(id)!]!.push(id);
@@ -353,6 +360,7 @@ export function buildIntentFlow(
     for (const id of col)
       nodes.push({
         id,
+        ...(opts.typedSteps ? { kind: tokenStepKind(id) } : {}),
         label: labelOf(id),
         x: MARGIN + c * (nodeW + COLUMN_GAP),
         y: MARGIN + (row.get(id)! - minRow),

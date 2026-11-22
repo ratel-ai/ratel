@@ -1,5 +1,6 @@
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
+import { typedStepsEnabled } from "./typed-steps";
 import type { WorkflowConfig } from "./workflows/types";
 
 /**
@@ -59,7 +60,11 @@ export async function toolRunInsightsForProject(
   return toolRunInsightsEnabled(projectId, undefined, env);
 }
 
-/** The mining config for the project's signal run: {@link TOOL_RUN_MINING} with the flag on, else null (the defaults). */
+/**
+ * The mining config for the project's signal run: {@link TOOL_RUN_MINING} with
+ * the flag on, plus `typedSteps` with `cloud-typed-steps` (`FF_TYPED_STEPS`) on
+ * (RC-1072); null (the defaults) with both off.
+ */
 export async function workflowMiningFor(
   projectId: string,
   organization?: unknown,
@@ -69,9 +74,13 @@ export async function workflowMiningFor(
     "tool_run_insights",
     "mining_config",
     async (span) => {
-      const enabled = await toolRunInsightsEnabled(projectId, organization, env);
+      const [enabled, typedSteps] = await Promise.all([
+        toolRunInsightsEnabled(projectId, organization, env),
+        typedStepsEnabled(projectId, organization, env),
+      ]);
       span.setAttribute("tool_run_insights.enabled", enabled);
-      return enabled ? TOOL_RUN_MINING : null;
+      if (!typedSteps) return enabled ? TOOL_RUN_MINING : null;
+      return { ...(enabled ? TOOL_RUN_MINING : {}), typedSteps: true };
     },
     { attributes: { "project.id": projectId } },
   );

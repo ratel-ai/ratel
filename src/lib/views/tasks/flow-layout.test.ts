@@ -251,3 +251,28 @@ test("layerGraph cuts a surviving cycle at its weakest edge, so every tool gets 
     "the cut edge is gone from the arrows that order the columns",
   );
 });
+
+test("typed flow keeps model and code kinds, including a model-only node", () => {
+  const input = {
+    edges: [{ a: "model:engine", b: "code:prepare_response", n: 10, na: 10 }],
+    tools: [
+      { toolId: "model:engine", n: 10 },
+      { toolId: "code:prepare_response", n: 10 },
+    ],
+    names: {},
+  };
+  const flow = buildIntentFlow(input, { typedSteps: true });
+  assert.deepEqual(
+    flow.nodes.map((n) => [n.kind, n.label]),
+    [
+      ["model_call", "Model call"],
+      ["code", "Prepare response"],
+    ],
+  );
+  const single = buildIntentFlow(
+    { edges: [], tools: [{ toolId: "model:engine", n: 10 }], names: {} },
+    { typedSteps: true },
+  );
+  assert.equal(single.nodes.length, 1);
+  assert.equal(single.nodes[0]!.kind, "model_call");
+});

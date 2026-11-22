@@ -60,7 +60,7 @@ export function TaskView({
   );
   const flow = buildIntentFlow(
     { edges: task.flow.edges, tools: task.flow.tools, names },
-    { minP: FLOW_MIN_P },
+    { minP: FLOW_MIN_P, typedSteps: task.typedSteps },
   );
   // The drawing earns its place only when runs leave the straight line of steps.
   const branches =
@@ -89,8 +89,9 @@ export function TaskView({
             hasReading={task.hasReading}
             color={task.color}
           />
-          {branches ? (
+          {branches || task.typedSteps ? (
             <Disclosure
+              defaultOpen={task.typedSteps}
               title="How runs move between steps"
               hint={plural(flow.arrows.length, "hop", "hops")}
             >

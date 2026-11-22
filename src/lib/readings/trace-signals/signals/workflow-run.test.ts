@@ -350,3 +350,71 @@ test("flag on: a basis decided before the reading as 'no tool calls' is lifted b
   assert.equal(stored.basis?.blocked, null);
   assert.equal(stored.items.length, 1);
 });
+
+const modelRun = (token: string, outcome: "ok" | "error" = "ok"): SignalTurn =>
+  wfTurn(
+    [
+      { tool: "", kind: "user_message" },
+      { tool: token, kind: "model_call", outcome },
+    ],
+    { turnSource: "otlp" },
+  );
+
+test("typed steps on: model-only runs form a task on their signature and are placed in it", () => {
+  const runs = many(12, (i) => modelRun("triage", i === 0 ? "error" : "ok"));
+  const off = collectWith(runs, {}).finish([]);
+  assert.deepEqual(off.stored.items, [], "flag off: a run of model calls is no task");
+  const blocked = {
+    basis: "none",
+    blocked: "no_tool_calls",
+    excludedRuns: 0,
+    since: null,
+    mixed: false,
+  } as const;
+  const collector = createWorkflowCollector(undefined, undefined, blocked, { typedSteps: true });
+  for (const run of runs) collector.collect(run);
+  const { stored, placement } = collector.finish([]);
+  assert.equal(stored.basis?.blocked, null, "model-only runs lift the 'no tool calls' block");
+  assert.equal(stored.items.length, 1);
+  const task = stored.items[0]!;
+  assert.deepEqual(task.coreTools, ["model:triage"]);
+  assert.equal(task.runs, 12);
+  assert.equal(task.health.failedRuns, 1);
+  assert.deepEqual(
+    task.reading?.steps.map((step) => step.toolId),
+    ["model:triage"],
+  );
+  assert.equal([...placement.values()].filter((id) => id === task.id).length, 12);
+});
+
+test("typed steps on: tool-only runs give the same tasks and ids as with the flag off", () => {
+  const off = collect(failingWorld()).finish([]).stored;
+  const on = collectWith(failingWorld(), { typedSteps: true }).finish([]).stored;
+  assert.deepEqual(
+    on.items.map((item) => [item.id, item.runs]),
+    off.items.map((item) => [item.id, item.runs]),
+  );
+});
+
+test("typed user-message pieces mine separate tasks from one trace", () => {
+  const runs = many(10, () =>
+    wfTurn(
+      [
+        { tool: "", kind: "user_message" },
+        { tool: "first", kind: "model_call" },
+        { tool: "", kind: "user_message" },
+        { tool: "second", kind: "model_call" },
+      ],
+      { turnSource: "otlp" },
+    ),
+  );
+  const on = collectWith(runs, { typedSteps: true }).finish([]);
+  assert.deepEqual(on.stored.items.map((item) => item.coreTools).sort(), [
+    ["model:first"],
+    ["model:second"],
+  ]);
+  assert.deepEqual(
+    on.stored.items.map((item) => item.runs),
+    [10, 10],
+  );
+});
