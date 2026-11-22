@@ -32,7 +32,7 @@ type Db = ReturnType<typeof getDb>;
 type Person = "alice" | "bob" | "mallory";
 
 interface Harness {
-  as: (person: Person, options?: { enabled?: boolean; restricted?: boolean }) => DashboardsDeps;
+  as: (person: Person, options?: { restricted?: boolean }) => DashboardsDeps;
   events: Array<{ event: DashboardEvent; properties: Record<string, unknown> }>;
 }
 
@@ -49,12 +49,11 @@ async function setup(): Promise<Harness> {
   const events: Harness["events"] = [];
   return {
     events,
-    as: (person, { enabled = true, restricted = false } = {}) => ({
+    as: (person, { restricted = false } = {}) => ({
       db,
       getActor: async () => ({ userId: `id_${person}`, externalId: `user_${person}` }),
       findScope: async (projectId) =>
         members[person] === projectId ? { organizationId: ORG } : null,
-      isEnabled: async () => enabled,
       isRestricted: async () => restricted,
       track: async (event, _context, properties) => {
         events.push({ event, properties });
@@ -265,14 +264,6 @@ test("a sharing change that is not permitted is refused and sends no event", asy
     ).code,
     "restricted",
   );
-  assert.equal(
-    (
-      (await shareDashboard(PROJECT, id, "project", harness.as("alice", { enabled: false }))) as {
-        code?: string;
-      }
-    ).code,
-    "not_found",
-  );
   assert.equal(harness.events.filter((entry) => entry.event === "dashboard_shared").length, 0);
 });
 
@@ -296,7 +287,7 @@ test("a user of another project gets not-found for a private and a project dashb
   }
 });
 
-test("a user outside the project, the flag off and a support session are refused", async () => {
+test("a user outside the project and a support session are refused", async () => {
   const harness = await setup();
   const id = await created(harness);
   await shareDashboard(PROJECT, id, "project", harness.as("alice"));
@@ -310,22 +301,6 @@ test("a user outside the project, the flag off and a support session are refused
   );
   assert.equal(
     ((await readDashboards(PROJECT, harness.as("mallory"))) as { code?: string }).code,
-    "not_found",
-  );
-  assert.equal(
-    (
-      (await readDashboard(PROJECT, id, harness.as("alice", { enabled: false }))) as {
-        code?: string;
-      }
-    ).code,
-    "not_found",
-  );
-  assert.equal(
-    (
-      (await createDashboard(PROJECT, "x", harness.as("alice", { enabled: false }))) as {
-        code?: string;
-      }
-    ).code,
     "not_found",
   );
   assert.equal(

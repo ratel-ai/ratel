@@ -401,7 +401,8 @@ test("Settings sits in a section of its own in both rails, the edition's items i
 
 test("the active item matches exact index pages and nested paths", () => {
   const items = consoleNav({ projectId: P1, additions: [{ href: "/admin", label: "Admin" }] });
-  assert.equal(activeNavItemId(`/project/${P1}`, items), "overview");
+  // Overview's first child, Summary (RC-888).
+  assert.equal(activeNavItemId(`/project/${P1}`, items), "overview-summary");
   assert.equal(activeNavItemId(`/project/${P1}/settings`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/settings/general`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/traces/abc`, items), "traces");
@@ -421,8 +422,8 @@ test("the active item matches exact index pages and nested paths", () => {
 test("an item is lit on every path it has absorbed, old URLs included", () => {
   const items = consoleNav({ projectId: P1, additions: [] });
   const active = (path: string) => activeNavItemId(`/project/${P1}${path}`, items);
-  assert.equal(active("/dashboards"), "overview");
-  assert.equal(active("/insights"), "overview");
+  assert.equal(active("/dashboards"), "dashboards");
+  assert.equal(active("/insights"), "overview-summary");
   assert.equal(active("/improvement/health"), "health");
   assert.equal(active("/improvement/tool-explorer"), "tasks");
   // The longer absorbed path wins over the shorter one above it.
@@ -476,6 +477,7 @@ test("the command menu lists the project's pages, the organization's, then every
     entries.map(({ label, group, href }) => `${group}|${label}|${href}`),
     [
       `Project|Overview|/project/${P1}`,
+      `Project|Dashboards|/project/${P1}/dashboards`,
       `Project|Agent health|/project/${P1}/health`,
       `Project|Self-corrections|/project/${P1}/health/self-corrections`,
       `Project|Traces|/project/${P1}/traces`,
@@ -494,7 +496,6 @@ test("the command menu lists the project's pages, the organization's, then every
       `Project|Test a search|/project/${P1}/playground`,
       `Project|Settings|/project/${P1}/settings`,
       `Pages|Admin|/admin`,
-      `Overview|Usage and spend|/project/${P1}/dashboards`,
       `Settings|API keys|/project/${P1}/settings/api-keys`,
       `Settings|Danger zone|/project/${P1}/settings/danger`,
       `Quality|Experiments|/project/${P1}/calibration`,
@@ -547,7 +548,7 @@ test("the command menu finds a page by its keywords, not only its name", () => {
   });
   const first = (query: string) => searchCommands(entries, query)[0]?.label;
   assert.equal(first("delete project"), "Danger zone");
-  assert.equal(first("spend"), "Usage and spend");
+  assert.equal(first("custom dashboards"), "Dashboards");
   assert.equal(first("api keys"), "API keys");
   assert.equal(first("experiments"), "Experiments");
   assert.equal(first("sdk events"), "SDK events");
@@ -738,17 +739,10 @@ test("Sandboxes sits under Improvements after Adaptive ranking and selects itsel
   );
 });
 
-// — RC-888: custom dashboards (FF_CUSTOM_DASHBOARDS) ————————————————————————————————————
+// — RC-888: custom dashboards ————————————————————————————————————————————————————————
 
-test("with FF_CUSTOM_DASHBOARDS off, Dashboards stays out and its path selects Overview", () => {
+test("Dashboards sits under Overview and selects itself on a dashboard", () => {
   const items = consoleNav({ projectId: "p1", additions: [] });
-  assert.deepEqual(items, consoleNav({ projectId: "p1", additions: [], dashboards: false }));
-  assert.ok(!flattenNav(items).some((item) => item.id === "dashboards"));
-  assert.equal(activeNavItemId("/project/p1/dashboards", items), "overview");
-});
-
-test("with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects itself on a dashboard", () => {
-  const items = consoleNav({ projectId: "p1", additions: [], dashboards: true });
   const overview = items.find((item) => item.id === "overview");
   assert.deepEqual(
     overview?.children?.map((child) => child.label),
@@ -761,11 +755,6 @@ test("with FF_CUSTOM_DASHBOARDS on, Dashboards sits under Overview and selects i
   assert.equal(activeNavItemId("/project/p1/dashboards", items), "dashboards");
   assert.equal(activeNavItemId("/project/p1/dashboards/d1", items), "dashboards");
   assert.equal(activeNavItemId("/project/p1", items), "overview-summary");
-  assert.deepEqual(
-    items.map((item) => item.label),
-    consoleNav({ projectId: "p1", additions: [] }).map((item) => item.label),
-    "no new top-level item: the rail budget holds",
-  );
   const entries = commandEntries({
     items,
     projectId: "p1",

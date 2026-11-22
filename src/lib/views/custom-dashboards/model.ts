@@ -1,5 +1,5 @@
 /**
- * Custom dashboards (RC-888, `cloud-custom-dashboards`): the pure rules. Who
+ * Custom dashboards (RC-888): the pure rules. Who
  * opens and edits a dashboard, its name, and the widget limit. The tables are
  * `dashboards` and `dashboard_widgets` (lib/db/schema.ts).
  */

@@ -16,7 +16,7 @@ import { createDashboardAction } from "@/lib/views/custom-dashboards/actions";
 import { type DashboardSharing, MAX_NAME_LENGTH } from "@/lib/views/custom-dashboards/model";
 
 /**
- * Dashboards (RC-888, flag `cloud-custom-dashboards`): the project's
+ * Dashboards (RC-888): the project's
  * dashboards this member opens, theirs and those shared with the project.
  */
 

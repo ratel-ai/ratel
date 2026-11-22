@@ -1,10 +1,9 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { DashboardSharing } from "@/components/console/custom-dashboards/DashboardSharing";
 import { DashboardView } from "@/components/console/custom-dashboards/DashboardView";
 import type { EditorFacets } from "@/components/console/custom-dashboards/WidgetEditor";
 import { requireProjectScope } from "@/components/console/settings/project-scope";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { projectRoot } from "@/lib/console/navigation";
 import { listPivots } from "@/lib/ingest/pivots/store";
 import { getDb, isDbConfigured } from "@/lib/platform/db/client";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
@@ -13,10 +12,7 @@ import {
   getTraceFilterFacets,
 } from "@/lib/synthesis/traces/trace-filters";
 import { readDashboard } from "@/lib/views/custom-dashboards/service";
-import {
-  customDashboardsEnabled,
-  sessionDashboardsDeps,
-} from "@/lib/views/custom-dashboards/session";
+import { sessionDashboardsDeps } from "@/lib/views/custom-dashboards/session";
 import { parseWidgetSpec } from "@/lib/views/custom-dashboards/spec";
 import { loadWidgetData } from "@/lib/views/custom-dashboards/widget-data";
 
@@ -26,8 +22,7 @@ const NO_FACETS: EditorFacets = { model: [], service: [], environment: [] };
 const FACETS_PER_FIELD = 10;
 
 /**
- * One dashboard (RC-888). With `cloud-custom-dashboards` off it redirects to
- * Overview like the list. A dashboard the member may not open is not found:
+ * One dashboard (RC-888). A dashboard the member may not open is not found:
  * a private one opens for its creator only, a project one for every member
  * (RC-889). The link asks for sign-in and project membership first.
  * Every widget's query runs at the same time; one that fails shows its own
@@ -39,7 +34,6 @@ export default async function DashboardPage({
   params: Promise<{ projectId: string; dashboardId: string }>;
 }) {
   const { projectId, dashboardId } = await params;
-  if (!(await customDashboardsEnabled())) redirect(`${projectRoot(projectId)}?peek=context`);
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Dashboards">
@@ -48,11 +42,7 @@ export default async function DashboardPage({
     );
   }
   const { project } = await requireProjectScope(projectId);
-  const read = await readDashboard(
-    project.id,
-    dashboardId,
-    sessionDashboardsDeps({ flagChecked: true }),
-  );
+  const read = await readDashboard(project.id, dashboardId, sessionDashboardsDeps());
   if (!read.ok) notFound();
 
   const pivots = await listPivots(project.id, getDb());

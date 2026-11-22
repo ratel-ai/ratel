@@ -39,7 +39,7 @@ import { WidgetBody } from "./WidgetBody";
 import { type EditorFacets, type EditorPivot, WidgetEditor } from "./WidgetEditor";
 
 /**
- * One dashboard (RC-888, flag `cloud-custom-dashboards`): its widgets in
+ * One dashboard (RC-888): its widgets in
  * order, each drawn from its own query. A member who may edit it adds, edits,
  * moves and removes widgets, renames it and deletes it.
  */

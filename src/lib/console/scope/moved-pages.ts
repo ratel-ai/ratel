@@ -6,10 +6,8 @@ import { legacyCraftPeek, legacyRewritePeek } from "@/lib/views/fixes/href";
  * (the page-level redirects stay as a fallback, but a `loading.tsx` above them
  * makes them answer 200 first). Pure: a URL in, a path or null out.
  *
- * Only moves that need nothing but the URL live here. Dashboards is not one:
- * it reads `cloud-custom-dashboards`, and a permanent redirect would stay in
- * the browser's cache after the flag turns on. Tool craft's `?ask=` and
- * `?peek=` are mapped to the task the ask's tools run as, which takes a
+ * Only moves that need nothing but the URL live here. Tool craft's `?ask=`
+ * and `?peek=` are mapped to the task the ask's tools run as, which takes a
  * database read, so those stay with the page.
  */
 

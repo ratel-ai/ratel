@@ -3,13 +3,11 @@ import { projectRoot } from "@/lib/console/navigation";
 import type { Pivot } from "@/lib/ingest/pivots/model";
 import { listPivots } from "@/lib/ingest/pivots/store";
 import type { McpAuthContext } from "@/lib/mcp/auth";
-import { McpOperationError, notFound } from "@/lib/mcp/errors";
-import { mcpActor } from "@/lib/mcp/operations/health";
+import { notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
 import { getDb } from "@/lib/platform/db/client";
-import { customDashboardsEnabledForActor } from "@/lib/views/custom-dashboards/flag";
 import {
   canOpenDashboard,
   type Dashboard,
@@ -29,16 +27,12 @@ import { loadWidgetData, type WidgetData } from "@/lib/views/custom-dashboards/w
  * Custom dashboards over MCP (RC-889): `list_dashboards` and `get_dashboard`.
  * They read with the rule of the pages (`canOpenDashboard`): a person over
  * OAuth reads their own dashboards and those shared with the project. A
- * project API key has no person, so it reads only the shared ones. Behind
- * `FF_CUSTOM_DASHBOARDS`: off, both refuse as forbidden, as the pages are
- * not found.
+ * project API key has no person, so it reads only the shared ones.
  */
 
 export type DashboardPivot = Pick<Pivot, "key" | "label" | "presetId">;
 
 export interface DashboardsOperationDeps {
-  /** `FF_CUSTOM_DASHBOARDS` for the caller (`project:<id>` for a key, the identity-provider id for a person) and the project. */
-  customDashboardsEnabled: (projectId: string, actor: string) => Promise<boolean>;
   /** The dashboards the viewer opens; null viewer: the shared ones only. */
   listDashboards: (projectId: string, viewer: string | null) => Promise<Dashboard[]>;
   findDashboard: (projectId: string, dashboardId: string) => Promise<Dashboard | null>;
@@ -53,8 +47,6 @@ export interface DashboardsOperationDeps {
 }
 
 export const defaultDashboardsDeps: DashboardsOperationDeps = {
-  // Owned (ADR-0030): the core's FF_CUSTOM_DASHBOARDS switch, not upstream's flag service.
-  customDashboardsEnabled: (projectId, actor) => customDashboardsEnabledForActor(projectId, actor),
   listDashboards: (projectId, viewer) => listOpenDashboards(projectId, viewer, getDb()),
   findDashboard: (projectId, dashboardId) => findDashboard(projectId, dashboardId, getDb()),
   listWidgets: (dashboardId) => listWidgets(dashboardId, getDb()),
@@ -77,7 +69,6 @@ export function dashboardsOperations(
       mutates: false,
       params: z.object({ ...projectScoped }),
       async execute(ctx) {
-        await requireCustomDashboards(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const dashboards = await deps.listDashboards(ctx.projectId, viewerOf(ctx.auth));
         return {
           data: { dashboards: dashboards.map(dashboardView) },
@@ -107,7 +98,6 @@ export function dashboardsOperations(
           .describe("The dashboard id, as list_dashboards returns it."),
       }),
       async execute(ctx, params) {
-        await requireCustomDashboards(deps, ctx.projectId, mcpActor(ctx.auth, ctx.projectId));
         const dashboard = await deps.findDashboard(ctx.projectId, params.dashboardId);
         // A dashboard the caller may not open reads as not found, as on the page.
         if (!dashboard || !canOpenDashboard(dashboard, viewerOf(ctx.auth)))
@@ -126,20 +116,6 @@ export function dashboardsOperations(
       },
     }),
   ];
-}
-
-async function requireCustomDashboards(
-  deps: DashboardsOperationDeps,
-  projectId: string,
-  actor: string,
-): Promise<void> {
-  if (!(await deps.customDashboardsEnabled(projectId, actor))) {
-    throw new McpOperationError(
-      "forbidden",
-      "Custom dashboards are not available for this project.",
-      { reason: "custom_dashboards_off" },
-    );
-  }
 }
 
 /** The person who reads, as `canOpenDashboard` takes it: null for a project API key. */

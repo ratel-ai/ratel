@@ -3,7 +3,7 @@ import { check, index, integer, jsonb, pgTable, text, timestamp, uuid } from "dr
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * Custom dashboards (RC-887, switch `FF_CUSTOM_DASHBOARDS`): a project's dashboards of
+ * Custom dashboards (RC-887): a project's dashboards of
  * whitelisted widgets over `otel_trace_summaries` (`./`). `sharing`: `private` opens for its
  * creator only, `project` for every project member by link.
  */

@@ -1,23 +1,16 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { DashboardList } from "@/components/console/custom-dashboards/DashboardList";
 import { requireProjectScope } from "@/components/console/settings/project-scope";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { projectRoot } from "@/lib/console/navigation";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getSessionContext } from "@/lib/platform/session";
 import { readDashboards } from "@/lib/views/custom-dashboards/service";
-import {
-  customDashboardsEnabled,
-  sessionDashboardsDeps,
-} from "@/lib/views/custom-dashboards/session";
+import { sessionDashboardsDeps } from "@/lib/views/custom-dashboards/session";
 
 export const metadata = { title: "Dashboards" };
 
 /**
- * Dashboards (RC-888). With `cloud-custom-dashboards` on: the project's
- * dashboards this member opens. Off, Overview carries the numbers, and its
- * Spend opens the context split this page used to show. The redirect is
- * temporary (307), so a browser does not keep it once the flag turns on.
+ * Dashboards (RC-888): the project's dashboards this member opens.
  */
 export default async function ScopedDashboardsPage({
   params,
@@ -25,7 +18,6 @@ export default async function ScopedDashboardsPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  if (!(await customDashboardsEnabled())) redirect(`${projectRoot(projectId)}?peek=context`);
   if (!isDbConfigured()) {
     return (
       <DatabaseUnavailable title="Dashboards">
@@ -35,7 +27,7 @@ export default async function ScopedDashboardsPage({
   }
   const { project } = await requireProjectScope(projectId);
   const [result, session] = await Promise.all([
-    readDashboards(project.id, sessionDashboardsDeps({ flagChecked: true })),
+    readDashboards(project.id, sessionDashboardsDeps()),
     getSessionContext(),
   ]);
   if (!result.ok) notFound();

@@ -31,9 +31,9 @@ import {
 
 /**
  * Custom dashboards (RC-888): a project member lists, creates, renames and
- * deletes dashboards, and adds, edits, moves and removes their widgets, with
- * `cloud-custom-dashboards` on. Each call checks project membership, then the
- * rule of `./model`: a dashboard the person may not open reads not-found.
+ * deletes dashboards, and adds, edits, moves and removes their widgets. Each
+ * call checks project membership, then the rule of `./model`: a dashboard the
+ * person may not open reads not-found.
  */
 
 export type DashboardEvent =
@@ -48,7 +48,6 @@ export interface DashboardsDeps {
   getActor: () => Promise<{ userId: string; externalId: string } | null>;
   /** The project's organization id when the person is a member of the project, else null. */
   findScope: (projectId: string, userId: string) => Promise<{ organizationId: string } | null>;
-  isEnabled: () => Promise<boolean>;
   /** An admin support session may look but not change dashboards. */
   isRestricted?: () => Promise<boolean>;
   track?: (
@@ -292,8 +291,6 @@ async function authorize(
 ): Promise<Actor | Refusal> {
   const actor = await deps.getActor();
   if (!actor) return refuse("signed_out", projectId);
-  // Flag off reads as not found: the pages and their writes do not exist.
-  if (!(await deps.isEnabled())) return refuse("not_found", projectId);
   const scope = await deps.findScope(projectId, actor.userId);
   if (!scope) return refuse("not_found", projectId);
   if (options.write && (await deps.isRestricted?.())) return refuse("restricted", projectId);

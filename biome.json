@@ -1153,8 +1153,6 @@
         "!src/lib/mcp/operations/mcp-servers.ts",
         "!src/lib/mcp/operations/entities-gate.test.ts",
         "!src/lib/mcp/operations/clients.ts",
-        "!src/lib/mcp/operations/dashboards.ts",
-        "!src/lib/mcp/operations/dashboards.test.ts",
         "src/mcp-apps/**",
         "!src/mcp-apps/README.md",
         "!src/mcp-apps/build.test.ts",
@@ -1461,12 +1459,12 @@
         "src/lib/synthesis/pivots/group-by-ui.test.ts",
         "src/lib/synthesis/pivots/filter-options.test.ts",
         "src/lib/views/custom-dashboards/**",
-        "!src/lib/views/custom-dashboards/flag.ts",
-        "!src/lib/views/custom-dashboards/flag.test.ts",
         "!src/lib/views/custom-dashboards/session.ts",
         "!src/lib/views/custom-dashboards/schema.ts",
         "src/components/console/custom-dashboards/**",
-        "src/app/(console)/project/\\[projectId\\]/dashboards/\\[dashboardId\\]/page.tsx"
+        "src/app/(console)/project/\\[projectId\\]/dashboards/\\[dashboardId\\]/page.tsx",
+        "src/lib/mcp/operations/dashboards.ts",
+        "src/lib/mcp/operations/dashboards.test.ts"
       ],
       "linter": {
         "rules": {

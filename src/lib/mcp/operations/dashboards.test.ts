@@ -25,9 +25,8 @@ import { loadWidgetData } from "@/lib/views/custom-dashboards/widget-data";
 
 /**
  * Custom dashboards over MCP (RC-889): `list_dashboards` and `get_dashboard`
- * read the project's dashboards and each widget's rows, behind
- * `FF_CUSTOM_DASHBOARDS`. A project API key has no person, so it reads only
- * the dashboards shared with the project.
+ * read the project's dashboards and each widget's rows. A project API key has
+ * no person, so it reads only the dashboards shared with the project.
  */
 
 const ORG = "22222222-2222-4222-8222-222222222221";
@@ -86,14 +85,9 @@ async function seed(): Promise<Seeded> {
   return { db, shared, privateId, widgets };
 }
 
-function harness(seeded: Seeded, options: { enabled?: boolean; auth?: McpAuthContext } = {}) {
+function harness(seeded: Seeded, options: { auth?: McpAuthContext } = {}) {
   const { db } = seeded;
-  const actors: string[] = [];
   const deps: DashboardsOperationDeps = {
-    customDashboardsEnabled: async (_projectId, actor) => {
-      actors.push(actor);
-      return options.enabled ?? true;
-    },
     listDashboards: (projectId, viewer) => listOpenDashboards(projectId, viewer, db),
     findDashboard: (projectId, dashboardId) => findDashboard(projectId, dashboardId, db),
     listWidgets: (dashboardId) => listWidgets(dashboardId, db),
@@ -112,7 +106,7 @@ function harness(seeded: Seeded, options: { enabled?: boolean; auth?: McpAuthCon
       auth,
       ...(auth.kind === "oauth" ? { projectOwner: async () => ({ organizationId: ORG }) } : {}),
     });
-  return { run, actors };
+  return { run };
 }
 
 function data<T>(result: Awaited<ReturnType<ReturnType<typeof harness>["run"]>>): T {
@@ -157,7 +151,7 @@ test("get_dashboard returns the dashboard, its widgets, their specs and their ro
 
 test("a project API key never reads a private dashboard, in the list or by id", async () => {
   const seeded = await seed();
-  const { run, actors } = harness(seeded);
+  const { run } = harness(seeded);
   const listed = data<{ dashboards: Array<{ id: string; sharing: string }> }>(
     await run("list_dashboards", {}),
   );
@@ -167,10 +161,6 @@ test("a project API key never reads a private dashboard, in the list or by id", 
   );
   const result = await run("get_dashboard", { dashboardId: seeded.privateId });
   assert.equal(result.ok === false && result.error, "not_found");
-  assert.ok(
-    actors.every((actor) => actor === `project:${PROJECT}`),
-    "a key is decided as its project",
-  );
 });
 
 test("a person over OAuth reads their own private dashboard too", async () => {
@@ -201,17 +191,4 @@ test("a person over OAuth reads their own private dashboard too", async () => {
     ).name,
     "Mine",
   );
-});
-
-test("both tools refuse as forbidden with FF_CUSTOM_DASHBOARDS off", async () => {
-  const seeded = await seed();
-  const { run } = harness(seeded, { enabled: false });
-  for (const [id, params] of [
-    ["list_dashboards", {}],
-    ["get_dashboard", { dashboardId: seeded.shared }],
-  ] as const) {
-    const result = await run(id, params);
-    assert.equal(result.ok === false && result.error, "forbidden", id);
-    assert.equal(result.ok === false && result.reason, "custom_dashboards_off", id);
-  }
 });

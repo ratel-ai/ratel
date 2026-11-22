@@ -85,7 +85,6 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   sandboxes = false,
-  dashboards = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -108,8 +107,6 @@ export function consoleNav({
    * playground of the caller's `ratel sandbox dev` runner.
    */
   sandboxes?: boolean;
-  /** `FF_CUSTOM_DASHBOARDS` on (RC-888): a Dashboards page under Overview. */
-  dashboards?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -166,11 +163,10 @@ export function consoleNav({
           href: root,
           icon: "overview",
           exact: true,
-          // Switch off, `/dashboards` sends the reader to Overview, so Overview owns its path.
-          also: dashboards ? [`${root}/insights`] : [`${root}/dashboards`, `${root}/insights`],
+          also: [`${root}/insights`],
           shortcut: "o",
           keywords: ["home", "summary", "dashboard", "needs attention"],
-          ...(dashboards ? { children: dashboardsChildren(root) } : {}),
+          children: overviewChildren(root),
         },
         {
           id: "health",
@@ -566,7 +562,6 @@ export function commandEntries({
     const below = (path: string, label: string, group: string, keywords: string[]) =>
       pages.push({ id: `${root}/${path}`, label, group, href: `${root}/${path}`, keywords });
     add("Project", items);
-    below("dashboards", "Usage and spend", "Overview", ["dashboards", "cost", "tokens", "context"]);
     below("settings/api-keys", "API keys", "Settings", ["sdk", "token", "credentials", "connect"]);
     below("settings/danger", "Danger zone", "Settings", ["delete project"]);
     below("calibration", "Experiments", "Quality", ["calibration", "comparison", "shadow"]);
@@ -709,8 +704,8 @@ export function visibleOrganizationNav(
   return nav.filter((item) => !hidden.includes(item.path));
 }
 
-/** RC-888: Overview's group with `FF_CUSTOM_DASHBOARDS` on, the summary first. */
-function dashboardsChildren(root: string): NavItem[] {
+/** RC-888: Overview's group, the summary first, then Dashboards. */
+function overviewChildren(root: string): NavItem[] {
   return [
     {
       id: "overview-summary",

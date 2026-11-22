@@ -63,14 +63,15 @@ insights (tasks from small projects, a derived ask for a tool-only run, an OTel 
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
 confidence), and typed steps (OTel model calls, code steps, handoffs and user messages as turn
 steps, so a trace with model calls only makes a turn), and agent sandboxes (the Sandboxes pages,
-the run API and `ratel sandbox dev` runners through the gateway in `packages/gateway`), and custom dashboards
-(widgets over trace summaries, shared by link, and their MCP tools). Cloud
+the run API and `ratel sandbox dev` runners through the gateway in `packages/gateway`). Cloud
 ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
-`FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS`, `FF_SANDBOXES` and `FF_CUSTOM_DASHBOARDS`. The eval gate's pages live in the
+`FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS` and `FF_SANDBOXES`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags: pivots (Settings > Pivots,
 pivot keys kept at ingest, `dims` on trace summaries, the "pivot is" filters and the Overview
-group-by; upstream retired `cloud-pivots` in #539),
+group-by; upstream retired `cloud-pivots` in #539), custom dashboards (Dashboards under Overview,
+widgets over trace summaries, shared by link, and their MCP tools; upstream retired
+`cloud-custom-dashboards` in #543),
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,
 Traces Sessions, adaptive labelling, the Health score and the quick and import first readings. The
 session pages keep their route group `(session-replay)`, and `(stage-spine)` (Tasks and Ship) is on

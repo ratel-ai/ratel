@@ -3,7 +3,7 @@ import type { Pivot } from "@/lib/ingest/pivots/model";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 
 /**
- * The widget spec of a custom dashboard (RC-887, `cloud-custom-dashboards`).
+ * The widget spec of a custom dashboard (RC-887).
  * Pure domain: what a widget may ask of `otel_trace_summaries`. Every field is
  * a value from a fixed whitelist, except the filter values and the pivot key,
  * which the query only ever binds as parameters (./query.ts).

@@ -9,7 +9,6 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
-import { customDashboardsEnabled } from "@/lib/views/custom-dashboards/session";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 import { sandboxesProjectIds } from "@/lib/views/sandboxes/navigation";
 
@@ -28,12 +27,10 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const [entityPagesOrganizations, sandboxesProjects, customDashboards] = await Promise.all([
+  const [entityPagesOrganizations, sandboxesProjects] = await Promise.all([
     entityPagesOrganizationIds(organizations),
     // RC-1102: Sandboxes shows for a project with FF_SANDBOXES on (decided per project, as its pages decide it).
     sandboxesProjectIds(organizations, projects).catch(() => []),
-    // RC-888: Dashboards shows under Overview with FF_CUSTOM_DASHBOARDS on; a failed read keeps it out.
-    customDashboardsEnabled().catch(() => false),
   ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
@@ -64,7 +61,6 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           projectNav: composition.projectNav,
           entityPagesOrganizations,
           sandboxesProjects,
-          customDashboards,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {
