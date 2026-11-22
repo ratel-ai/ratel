@@ -32,7 +32,17 @@ export interface RunResult {
   readonly status: "ok" | "error" | "canceled";
   readonly output?: unknown;
   readonly error?: { readonly code: string; readonly message: string };
-  readonly usage?: { readonly inputTokens?: number; readonly outputTokens?: number };
+  readonly usage?: {
+    readonly inputTokens?: number;
+    readonly outputTokens?: number;
+    /** Each model call of the run, as the worker measured it (RC-1234). */
+    readonly calls?: readonly {
+      readonly model: string;
+      readonly provider?: string;
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+    }[];
+  };
   readonly traceId?: string;
   readonly overrides?: readonly string[];
 }

@@ -42,8 +42,38 @@
             "outputTokens": {
               "type": "integer",
               "minimum": 0
+            },
+            "calls": {
+              "description": "Each model call of the run, in end order, as the worker measured it.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "model",
+                  "inputTokens",
+                  "outputTokens"
+                ],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "inputTokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "outputTokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
             }
-          }
+          },
+          "description": "The tokens the worker measured on the run's model-call spans."
         },
         "traceId": {
           "$ref": "../envelope.schema.json#/$defs/traceId"

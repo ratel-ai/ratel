@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "type": "run.end",
+  "id": "msg_0017",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "seq": 6,
+  "payload": {
+    "status": "ok",
+    "usage": {
+      "inputTokens": 10,
+      "outputTokens": 2,
+      "calls": [
+        {
+          "inputTokens": 10,
+          "outputTokens": 2
+        }
+      ]
+    }
+  }
+}

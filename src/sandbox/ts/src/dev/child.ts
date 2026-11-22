@@ -7,6 +7,7 @@ import type { Sandbox, TwinEventPayload } from "../sandbox.js";
 import { prepareTools } from "../tools.js";
 import type { ChildReply, ChildRequest } from "./child-messages.js";
 import { executeRun } from "./execute.js";
+import { finishRun, flushWithin, RUN_END_FLUSH_TIMEOUT_MS } from "./run-finish.js";
 import type { RunResult, RunStartPayload, ToolAnswerType } from "./runs.js";
 import { IpcToolChannel } from "./tool-channel.js";
 import {
@@ -51,9 +52,15 @@ process.on("message", (request: ChildRequest) => {
       return;
   }
 });
-process.on("disconnect", () => {
-  void (exporter?.flush() ?? Promise.resolve()).finally(() => process.exit(0));
-});
+// Drain, stop and exit flush the export first (bounded), so the last run's spans are not lost.
+process.on("disconnect", () => void flushAndExit());
+process.once("SIGTERM", () => void flushAndExit());
+
+async function flushAndExit(): Promise<void> {
+  const current = exporter;
+  if (current) await flushWithin(() => current.flush(), RUN_END_FLUSH_TIMEOUT_MS, warn);
+  process.exit(0);
+}
 
 async function manifest(request: Extract<ChildRequest, { kind: "manifest" }>): Promise<ChildReply> {
   loadEnvOnce(request.root);
@@ -105,10 +112,18 @@ async function execute(runId: string, start: RunStartPayload): Promise<void> {
     toolChannel: channel,
     ...(loaded ? { sandboxFile: join(projectRoot, loaded.file) } : {}),
   });
-  end(runId, sandbox, result);
-  await playground?.flush().catch((err: unknown) => {
-    process.stderr.write(`ratel sandbox dev: trace export failed: ${messageOf(err)}\n`);
+  // The controller stops a run-state instance once it has run.end: the spans go first (RC-1234).
+  await finishRun(result, {
+    ...(playground
+      ? { flush: () => playground.flush(), usage: (traceId: string) => playground.usage(traceId) }
+      : {}),
+    send: (final) => end(runId, sandbox, final),
+    warn,
   });
+}
+
+function warn(message: string): void {
+  process.stderr.write(`ratel sandbox dev: ${message}\n`);
 }
 
 function attachOnce(): PlaygroundExport | undefined {

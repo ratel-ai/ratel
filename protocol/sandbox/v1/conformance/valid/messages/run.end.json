@@ -14,7 +14,20 @@
     },
     "usage": {
       "inputTokens": 812,
-      "outputTokens": 64
+      "outputTokens": 64,
+      "calls": [
+        {
+          "model": "claude-sonnet-5-5",
+          "provider": "anthropic",
+          "inputTokens": 600,
+          "outputTokens": 40
+        },
+        {
+          "model": "claude-haiku-5-5",
+          "inputTokens": 212,
+          "outputTokens": 24
+        }
+      ]
     },
     "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
     "overrides": [

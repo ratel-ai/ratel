@@ -8,6 +8,7 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-node";
+import { type RunUsage, UsageMeter } from "./usage-meter.js";
 
 // Playground trace export (spec §10) in the `ratel sandbox dev` child. The runner adds
 // one OTLP exporter to the tracer provider the project already has. It
@@ -34,6 +35,8 @@ export interface PlaygroundExport {
   /** Marks a trace as a playground run, so its spans are exported. */
   track(traceId: string): void;
   flush(): Promise<void>;
+  /** The model-call usage measured on the trace's spans, once (RC-1234). */
+  usage(traceId: string): RunUsage | undefined;
 }
 
 /** The resource attributes of spec §10 for one runner. */
@@ -71,7 +74,8 @@ export function attachPlaygroundExport(
     tracked,
   );
   const processor = new BatchSpanProcessor(filtered, { scheduledDelayMillis: 500 });
-  const mode = addProcessor(processor, config.resource);
+  const meter = new UsageMeter();
+  const mode = addProcessors([processor, meter], config.resource);
   return {
     mode,
     track: (traceId) => {
@@ -80,6 +84,7 @@ export function attachPlaygroundExport(
       if (tracked.size > 10_000) tracked.delete(tracked.values().next().value as string);
     },
     flush: () => processor.forceFlush(),
+    usage: (traceId) => meter.take(traceId),
   };
 }
 
@@ -112,29 +117,29 @@ class PlaygroundExporter implements SpanExporter {
   }
 }
 
-/** The project's provider gets the processor. With none, the runner registers the only one. */
-function addProcessor(
-  processor: SpanProcessor,
+/** The project's provider gets the processors. With none, the runner registers the only one. */
+function addProcessors(
+  processors: readonly SpanProcessor[],
   resource: ResourceAttributes,
 ): PlaygroundExport["mode"] {
   const provider = sdkProvider(trace.getTracerProvider());
   if (!provider) {
     new NodeTracerProvider({
       resource: defaultResource().merge(resourceFromAttributes(resource)),
-      spanProcessors: [processor],
+      spanProcessors: [...processors],
     }).register();
     return "registered";
   }
   if (typeof provider.addSpanProcessor === "function") {
     // OpenTelemetry JS SDK 1.x.
-    provider.addSpanProcessor(processor);
+    for (const processor of processors) provider.addSpanProcessor(processor);
     return "attached";
   }
   // SDK 2.x takes processors in its constructor only. Its tracers share one
   // MultiSpanProcessor, so adding to its list reaches spans of existing tracers too.
   const list = provider._activeSpanProcessor?._spanProcessors;
   if (Array.isArray(list)) {
-    list.push(processor);
+    list.push(...processors);
     return "attached";
   }
   return "unsupported";
