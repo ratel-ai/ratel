@@ -1,6 +1,7 @@
 import { sandbox } from "@ratel-ai/sandbox";
 import { aiSdkChat, aiSdkModels } from "@ratel-ai/sandbox/ai-sdk";
 import { docsDefaults, reply } from "./src/agent.js";
+import { standinOr } from "./src/standin-model.js";
 
 // The docs agent's sandbox: Ratel can change its model, system prompt, max steps
 // and tools per run, and runs the real `reply` with them. One run per user turn.
@@ -14,7 +15,8 @@ export default sandbox("docs-agent", {
     tools: sandbox.tools(docsDefaults.tools, {
       searchDocs: { readOnly: true },
       readDoc: { readOnly: true },
-      createTicket: { sideEffect: true }, // faked unless allowReal: true
+      // DEMO ONLY (proof/rc-1200): allowReal so the hosted proof run writes to the sidecar.
+      createTicket: { sideEffect: true, allowReal: true },
     }),
   },
   input: aiSdkChat(),
@@ -27,9 +29,11 @@ export default sandbox("docs-agent", {
     install: ["corepack enable", "pnpm install --frozen-lockfile"],
     copy: ["."],
     sidecars: [sandbox.postgres({ version: "16", seed: "db/seed.sql" })],
-    env: ["AI_GATEWAY_API_KEY", "AWS_REGION"],
+    // DEMO ONLY (proof/rc-1200): no model key exists; AWS_* names are reserved by Ratel Cloud.
+    env: ["DOCS_AGENT_STANDIN_MODEL", "DEMO_CANARY_TOKEN"],
   }),
-  resolve: aiSdkModels(),
+  // DEMO ONLY (proof/rc-1200): the scripted stand-in model when DOCS_AGENT_STANDIN_MODEL=1.
+  resolve: standinOr(aiSdkModels()),
   // What production passes to resolveLocal, and the input of `ratel sandbox verify`.
   defaults: docsDefaults,
   example: {
