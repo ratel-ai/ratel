@@ -1388,7 +1388,7 @@
     { "from": "apps/web/app/(app)/project/[projectId]/catalogs/tools/loading.tsx", "to": "src/app/(console)/project/[projectId]/catalogs/tools/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/catalogs/skills/loading.tsx", "to": "src/app/(console)/project/[projectId]/catalogs/skills/loading.tsx", "mode": "copy" },
     { "from": "apps/web/app/(app)/project/[projectId]/catalogs/catalog-pages.test.ts", "mode": "excluded", "$why": "asserts the upstream route files and their scope resolver" },
-    { "from": "apps/web/app/(app)/project/[projectId]/playground/page.tsx", "to": "src/app/(console)/project/[projectId]/playground/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route and the embeddings from the port; the page renders upstream's workbench on the design system" },
+    { "from": "apps/web/app/(app)/project/[projectId]/playground/page.tsx", "to": "src/app/(console)/project/[projectId]/playground/page.tsx", "mode": "owned", "$why": "the project comes from the guarded route and the embeddings from the port; the page renders upstream's workbench on the design system; the embeddings region notice (upstream's cloud-embeddings-region-notice) is the edition's EditionUi.embeddingsRegionNotice, not a flag" },
     { "from": "apps/web/app/(app)/project/[projectId]/playground/loading.tsx", "to": "src/app/(console)/project/[projectId]/playground/loading.tsx", "mode": "copy" },
     { "from": "apps/web/public/badgers", "to": "src/public/badgers", "mode": "owned", "$why": "compressed with pngquant and oxipng, same dimensions; the originals are upstream's" },
     { "from": "apps/web/components/badgers", "to": "src/components/console/badgers", "mode": "copy" },
@@ -2362,6 +2362,7 @@
     {"from": "apps/web/components/ship-monitor", "to": "src/components/console/ship-monitor", "mode": "copy"},
     {"from": "apps/web/app/api/projects/[projectId]/ship/watch/route.ts", "to": "src/app/api/projects/[projectId]/ship/watch/route.ts", "mode": "owned", "$why": "the project comes from the console scope, which takes the project id only; failures go through the telemetry port"},
     {"from": "apps/web/scripts/meridian-traffic.mts", "mode": "excluded", "$why": "the Meridian live-traffic demo of ratel-cloud #507; pairs with the excluded Meridian seed"},
-    {"from": "apps/web/scripts/demo-project-key.mts", "mode": "excluded", "$why": "issues an API key for the excluded Meridian ship-monitor demo (ratel-cloud #507) and stores its plaintext, which the core's key table does not keep"}
+    {"from": "apps/web/scripts/demo-project-key.mts", "mode": "excluded", "$why": "issues an API key for the excluded Meridian ship-monitor demo (ratel-cloud #507) and stores its plaintext, which the core's key table does not keep"},
+    {"from": "apps/web/components/embeddings/RegionNotice.tsx", "to": "src/components/console/embeddings/RegionNotice.tsx", "mode": "copy"}
   ]
 }

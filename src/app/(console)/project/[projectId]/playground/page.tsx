@@ -58,7 +58,7 @@ export default async function TestSearchPage({
 
   const selectionId = first(query.selection);
   // The picker is a convenience; a failing telemetry read must not stop a typed prompt.
-  const [bench, suggestions, selection] = await Promise.all([
+  const [bench, suggestions, selection, ui] = await Promise.all([
     loadBench(project.id, { includeSyncedTools: true }),
     loadOrFallback({
       operation: "playground_suggested_prompts",
@@ -77,6 +77,7 @@ export default async function TestSearchPage({
           load: () => withStatementTimeout((db) => getSelectionDetail(project.id, selectionId, db)),
         })
       : Promise.resolve(null),
+    composition.ui?.(),
   ]);
 
   const ranking = selection ? buildSelectionRankingView(selection.records) : null;
@@ -127,6 +128,7 @@ export default async function TestSearchPage({
         initialView={view === "list" ? "list" : view === "compare" ? "compare" : null}
         suggestions={suggestions}
         embeddingsEnabled={embeddingsConfigured(composition.embeddingProvider)}
+        embeddingsRegionNotice={ui?.embeddingsRegionNotice === true}
         canSaveSearchableDescription
         selectionContext={
           selection && selectionId

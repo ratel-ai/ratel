@@ -18,6 +18,7 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
+import { EmbeddingsRegionNotice } from "@/components/console/embeddings/RegionNotice";
 import { CapabilityPanel } from "@/components/console/playground/CapabilityPanel";
 import { ChangesBar } from "@/components/console/playground/ChangesBar";
 import {
@@ -115,6 +116,8 @@ type PlaygroundWorkbenchProps = {
   initialView: ResultView | null;
   suggestions: SuggestedPrompt[];
   embeddingsEnabled: boolean;
+  /** RC-601, `cloud-embeddings-region-notice`: say semantic matching sends the ask to a US provider. */
+  embeddingsRegionNotice?: boolean;
   /** Whether a managed tool's searchable description can be saved here. The endpoint re-checks. */
   canSaveSearchableDescription: boolean;
   selectionContext: SelectionContext | null;
@@ -137,6 +140,7 @@ export function PlaygroundWorkbench({
   initialView,
   suggestions,
   embeddingsEnabled,
+  embeddingsRegionNotice = false,
   canSaveSearchableDescription,
   selectionContext,
 }: PlaygroundWorkbenchProps) {
@@ -379,6 +383,9 @@ export function PlaygroundWorkbench({
           kindById={kindById}
           backHref={calibrationBackHref}
         />
+      ) : embeddingsRegionNotice && options.mode !== "bm25" ? (
+        // One Callout per page: with an experiment open, the match hint says it.
+        <EmbeddingsRegionNotice />
       ) : null}
 
       <div className="flex flex-col gap-3">
@@ -392,6 +399,7 @@ export function PlaygroundWorkbench({
           options={options}
           onOptionsChange={setOptions}
           embeddingsEnabled={embeddingsEnabled}
+          embeddingsRegionNotice={embeddingsRegionNotice}
           inputRef={inputRef}
           compact={result !== null}
         />

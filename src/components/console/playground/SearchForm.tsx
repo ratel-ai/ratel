@@ -32,6 +32,7 @@ export function SearchForm({
   options,
   onOptionsChange,
   embeddingsEnabled,
+  embeddingsRegionNotice = false,
   inputRef,
   compact,
 }: {
@@ -44,6 +45,8 @@ export function SearchForm({
   options: RankOptions;
   onOptionsChange: (next: RankOptions) => void;
   embeddingsEnabled: boolean;
+  /** RC-601: the semantic modes say they run on a US provider. */
+  embeddingsRegionNotice?: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   /** Results are on screen: the asks fold into a menu. */
   compact: boolean;
@@ -99,6 +102,7 @@ export function SearchForm({
             options={options}
             onChange={onOptionsChange}
             embeddingsEnabled={embeddingsEnabled}
+            embeddingsRegionNotice={embeddingsRegionNotice}
           />
           {compact && menuItems.length > 0 ? (
             <AsksMenu

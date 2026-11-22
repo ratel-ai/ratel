@@ -121,6 +121,11 @@ project id and showing its own loading state; any other key is a 404. `ProjectPa
 what the route shows while such a page loads, so the project Overview's skeleton never flashes
 first. Its rail entries come from `composition.projectNav`. The open-source edition has none of them.
 
+`embeddingsRegionNotice` makes Test a search say that semantic and hybrid matching send the ask to
+a US provider (a Callout and a line in each semantic mode's hint; Cloud's hosted embeddings run on
+one for now). Absent, the page says nothing: the open-source edition's operator chooses the
+embedding provider.
+
 `linkPreview` gives the root layout the canonical origin and the words a shared link unfurls into
 (`metadataBase`, OpenGraph, Twitter card); without it they name this deployment (`APP_NAME`,
 `BASE_URL`). `OnboardingArt` replaces the first-run screen's backdrop and card emblem; without it

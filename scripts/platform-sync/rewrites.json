@@ -70,6 +70,7 @@
     { "from": "@/components/variants/", "to": "@/components/console/variants/" },
     { "from": "@/components/fine-tuning/", "to": "@/components/console/fine-tuning/" },
     { "from": "@/components/ship-monitor/", "to": "@/components/console/ship-monitor/" },
+    { "from": "@/components/embeddings/RegionNotice", "to": "@/components/console/embeddings/RegionNotice", "exact": true },
     { "from": "@/app/(app)/project/[projectId]/settings/variant-actions", "to": "@/app/(console)/project/[projectId]/settings/variant-actions", "exact": true },
     { "from": "@/components/custom-dashboards/", "to": "@/components/console/custom-dashboards/" },
     { "from": "@/components/code-handoff/", "to": "@/components/console/code-handoff/" },

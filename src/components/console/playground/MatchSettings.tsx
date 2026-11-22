@@ -5,6 +5,7 @@ import { cn } from "@ratel/design-system/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "@ratel/design-system/popover";
 import { SegmentedControl } from "@ratel/design-system/tabs";
 import { Check, ChevronDown } from "lucide-react";
+import { EMBEDDINGS_REGION_SHORT } from "@/components/console/embeddings/RegionNotice";
 import { MixSlider } from "@/components/console/playground/MixSlider";
 import type { RankMode, RankOptions } from "@/lib/synthesis/playground/types";
 import { modeHint, modeLabel } from "@/lib/synthesis/playground/view";
@@ -22,10 +23,13 @@ export function MatchSettings({
   options,
   onChange,
   embeddingsEnabled,
+  embeddingsRegionNotice = false,
 }: {
   options: RankOptions;
   onChange: (next: RankOptions) => void;
   embeddingsEnabled: boolean;
+  /** RC-601, `cloud-embeddings-region-notice`: the semantic modes say where they run. */
+  embeddingsRegionNotice?: boolean;
 }) {
   return (
     <Popover>
@@ -69,7 +73,9 @@ export function MatchSettings({
                   <span className="block text-xs text-fg-subtle">
                     {unavailable
                       ? "Not set up here: it needs an embedding provider."
-                      : modeHint(mode)}
+                      : embeddingsRegionNotice && mode !== "bm25"
+                        ? `${modeHint(mode)} ${EMBEDDINGS_REGION_SHORT}`
+                        : modeHint(mode)}
                   </span>
                 </span>
               </button>

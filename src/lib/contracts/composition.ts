@@ -163,6 +163,13 @@ export type EditionUi = {
    * project Overview's skeleton (the nearest loading state otherwise). Nothing without it.
    */
   ProjectPageSkeleton?: ComponentType;
+  /**
+   * Test a search says that semantic and hybrid matching send the ask to a US provider: a Callout
+   * and a line in each semantic mode's hint (ratel-cloud #447; Cloud's hosted embeddings run on a
+   * US provider for now). Absent or false, it says nothing: the open-source edition's operator
+   * chooses the embedding provider.
+   */
+  embeddingsRegionNotice?: boolean;
   /** Organization settings > General, read-only otherwise. */
   OrganizationGeneralSettings?: ComponentType<{ slug: string }>;
   /** Organization settings > Danger zone, absent otherwise. */

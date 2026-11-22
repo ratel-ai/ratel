@@ -1520,7 +1520,8 @@
         "src/lib/views/ship-monitor/**",
         "!src/lib/views/ship-monitor/gate.ts",
         "!src/lib/views/ship-monitor/gate.test.ts",
-        "src/components/console/ship-monitor/**"
+        "src/components/console/ship-monitor/**",
+        "src/components/console/embeddings/RegionNotice.tsx"
       ],
       "linter": {
         "rules": {
