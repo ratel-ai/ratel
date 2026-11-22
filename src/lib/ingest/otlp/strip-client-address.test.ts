@@ -82,7 +82,10 @@ function logsExport() {
 function keysOf(value: unknown): string[] {
   const keys: string[] = [];
   const walk = (node: unknown): void => {
-    if (Array.isArray(node)) return node.forEach(walk);
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
     if (node === null || typeof node !== "object") return;
     for (const [field, child] of Object.entries(node)) {
       if (field === "attributes" && Array.isArray(child)) {
