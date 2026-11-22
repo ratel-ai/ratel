@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/register.schema.json",
+  "title": "register",
+  "description": "From the worker. The first frame on a connection. The worker says who it is and what it can run.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload"
+  ],
+  "properties": {
+    "type": {
+      "const": "register"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "runner",
+        "manifest"
+      ],
+      "properties": {
+        "runner": {
+          "type": "object",
+          "required": [
+            "instanceId"
+          ],
+          "properties": {
+            "instanceId": {
+              "description": "Stable across restarts, unique per machine.",
+              "type": "string",
+              "minLength": 1
+            },
+            "owner": {
+              "description": "The developer who started the runner, if known.",
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            }
+          }
+        },
+        "capabilities": {
+          "description": "Optional features the worker supports.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "manifest": {
+          "$ref": "../manifest.schema.json"
+        }
+      }
+    }
+  }
+}

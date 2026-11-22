@@ -62,8 +62,10 @@ server's interactive `ui://` views ([`lib/mcp/apps`](lib/mcp/apps/README.md)), a
 insights (tasks from small projects, a derived ask for a tool-only run, an OTel `invoke_agent` root
 as an agent run with its own turn and task, and an Agent health reading from 10 turns marked low
 confidence), and typed steps (OTel model calls, code steps, handoffs and user messages as turn
-steps, so a trace with model calls only makes a turn). Cloud ignores it and reads `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_TOOL_RUN_INSIGHTS` and `FF_TYPED_STEPS`. The eval gate's pages live in the
+steps, so a trace with model calls only makes a turn), and agent sandboxes (the Sandboxes pages,
+the run API and `ratel sandbox dev` runners through the gateway in `packages/gateway`). Cloud
+ignores it and reads `FF_EVAL_GATE`, `FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`,
+`FF_TOOL_RUN_INSIGHTS`, `FF_TYPED_STEPS` and `FF_SANDBOXES`. The eval gate's pages live in the
 route group `app/(console)/(eval-gate)`, whose layout answers a real 404 with the feature off, above
 the project's loading boundary. Everything else is on for everyone, as upstream retired its flags:
 session replay (with What-if and the session chat), the redesigned trace views, raw OTLP capture,

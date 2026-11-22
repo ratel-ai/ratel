@@ -15,6 +15,7 @@ export const CORE_FLAGS = [
   "FF_AGENTS_PAGES",
   "FF_TOOL_RUN_INSIGHTS",
   "FF_TYPED_STEPS",
+  "FF_SANDBOXES",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

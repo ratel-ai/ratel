@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/tool.fake.request.schema.json",
+  "title": "tool.fake.request",
+  "description": "From the worker. A fake-mode tool call needs a value from the controller.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload",
+    "runId"
+  ],
+  "properties": {
+    "type": {
+      "const": "tool.fake.request"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "callId",
+        "tool",
+        "args"
+      ],
+      "properties": {
+        "callId": {
+          "$ref": "../envelope.schema.json#/$defs/callId"
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "args": true,
+        "messages": {
+          "description": "Optional. Up to the last 6 messages of the conversation before the call.",
+          "type": "array",
+          "maxItems": 6
+        }
+      }
+    }
+  }
+}

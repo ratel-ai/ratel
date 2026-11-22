@@ -47,6 +47,7 @@ const KEY: ApiKey = {
   expiresAt: null,
   scopes: ["*"],
   rateLimitPerMinute: null,
+  createdBy: null,
 };
 
 function routeDeps(db: Db): TracesHandlerDeps {

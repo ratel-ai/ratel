@@ -22,7 +22,7 @@ export type SavedByCategory = Record<ContextSource, number>;
 
 /**
  * Estimated tokens Ratel *could* have saved this run if its selection engine were
- * enabled, per source — the "potential" twin of {@link SavedByCategory}. Emitted
+ * enabled, per source — the "potential" sandbox of {@link SavedByCategory}. Emitted
  * when the SDK is only observing (not selecting): it shadow-ranks the tools it can
  * already see and reports the would-be reduction, so a not-yet-Ratel user sees
  * "you could save ~N" without any behavior change. Realized savings take

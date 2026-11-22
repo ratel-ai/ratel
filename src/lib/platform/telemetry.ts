@@ -110,6 +110,14 @@ export const SERVER_EVENT_NAMES = [
   "agent_override_updated",
   "mcp_servers_viewed",
   "agents_viewed",
+  "sandbox_runner_connected",
+  "sandbox_run_started",
+  "sandbox_run_cancelled",
+  "sandbox_tool_confirmed",
+  "sandbox_fake_pinned",
+  "sandbox_fake_unpinned",
+  // Sent by the gateway (packages/gateway): lib/views/sandboxes/fakes/adapters/fake-alerts.ts.
+  "sandbox_fake_cap_reached",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

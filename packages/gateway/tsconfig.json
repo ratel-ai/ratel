@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // ES2024: String#toWellFormed (Node 22). DOM: shared app modules (src/lib/platform/environment.ts) test `typeof window`.
+    "lib": [
+      "ES2024",
+      "DOM"
+    ],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": [
+      "node"
+    ],
+    // The edition seam resolves to the open-source edition (ee-absent): the gateway runs with
+    // the core's ports. The app's composition is never loaded here.
+    "paths": {
+      "#ee-composition": [
+        "../../src/lib/composition/ee-absent.ts"
+      ],
+      "@/*": [
+        "../../src/*"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

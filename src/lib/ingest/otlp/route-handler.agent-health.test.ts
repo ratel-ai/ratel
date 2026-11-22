@@ -27,6 +27,7 @@ const KEY: ApiKey = {
   expiresAt: null,
   scopes: ["*"],
   rateLimitPerMinute: null,
+  createdBy: null,
 };
 
 const START_NS = "1759233600000000000";

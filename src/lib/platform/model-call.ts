@@ -135,14 +135,18 @@ export function recordModelCall(record: ModelCallRecord): void {
  * tokens (the providers don't bill a failed request).
  */
 export async function trackModelCall<T>(
-  meta: ModelCallMeta & { content?: ModelCallContent<NoInfer<T>> },
+  meta: ModelCallMeta & {
+    content?: ModelCallContent<NoInfer<T>>;
+    /** Extra attributes for the call's span only, never the log line (the sandbox input, RC-1091). */
+    spanAttributes?: Attributes;
+  },
   call: () => Promise<T>,
   usageOf: (result: T) => ModelCallUsage = () => ({}),
   now: () => number = Date.now,
 ): Promise<T> {
-  const { content, ...lineMeta } = meta;
+  const { content, spanAttributes, ...lineMeta } = meta;
   const startedAt = now();
-  const span = startModelCallSpan(lineMeta);
+  const span = startModelCallSpan(lineMeta, undefined, spanAttributes);
   let result: T;
   try {
     result = await call();
@@ -170,9 +174,13 @@ export async function trackModelCall<T>(
  * `trackModelCall` (the Jev judge times its own retries): the line, and the
  * span from `startedAt` to now.
  */
-export function recordTracedModelCall(record: ModelCallRecord, startedAt: number): void {
+export function recordTracedModelCall(
+  record: ModelCallRecord,
+  startedAt: number,
+  spanAttributes?: Attributes,
+): void {
   recordModelCall(record);
-  const span = startModelCallSpan(record, startedAt);
+  const span = startModelCallSpan(record, startedAt, spanAttributes);
   endModelCallSpan(
     span,
     record,
@@ -269,7 +277,11 @@ function operationOf(_provider: ModelProvider): "chat" | "embeddings" {
 }
 
 /** `startTime`: when the call began, for a call traced after the fact. Inside an agent run, the run's root is its parent. */
-function startModelCallSpan(meta: ModelCallMeta, startTime?: number): Span | undefined {
+function startModelCallSpan(
+  meta: ModelCallMeta,
+  startTime?: number,
+  extra?: Attributes,
+): Span | undefined {
   try {
     if (meta.payer !== "ratel") return undefined;
     const projectId = meta.projectId ?? currentLogContext().project_id ?? null;
@@ -287,6 +299,7 @@ function startModelCallSpan(meta: ModelCallMeta, startTime?: number): Span | und
           "gen_ai.provider.name": meta.provider,
           "gen_ai.request.model": meta.model,
           "gen_ai.agent.name": meta.feature,
+          ...extra,
         },
       },
       agentRunParent(tracer),

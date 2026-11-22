@@ -2,9 +2,10 @@
 
 import { StatusDot } from "@ratel/design-system/badge";
 import { Button } from "@ratel/design-system/button";
+import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { CopyButton } from "@ratel/design-system/code";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, SquarePlay } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
@@ -40,6 +41,7 @@ export function SpanInspector({
   onShowDetails,
   events,
   showWait = false,
+  openInSandboxHref = null,
   children,
 }: {
   span: TraceSpanView;
@@ -50,6 +52,8 @@ export function SpanInspector({
   events?: readonly RunEvent[];
   /** Say in words that the step waited for a person (AOBS-7). */
   showWait?: boolean;
+  /** A recorded sandbox item opens in its sandbox's playground (RC-1103, `cloud-sandboxes`). */
+  openInSandboxHref?: string | null;
   /** The span's content pane: input, output and raw attributes (RC-412). */
   children: ReactNode;
 }) {
@@ -149,6 +153,15 @@ export function SpanInspector({
         <Button size="sm" variant="secondary" onClick={onShowDetails}>
           All attributes
         </Button>
+        {openInSandboxHref ? (
+          <Link
+            href={openInSandboxHref}
+            className={buttonVariants({ variant: "secondary", size: "sm" })}
+          >
+            <SquarePlay aria-hidden className="size-3.5" />
+            Open in sandbox
+          </Link>
+        ) : null}
         {runtimeEventsRoot && span.eventId ? (
           <Link
             href={`${runtimeEventsRoot}?event=${encodeURIComponent(span.eventId)}`}

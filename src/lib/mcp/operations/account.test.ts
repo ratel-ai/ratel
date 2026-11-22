@@ -290,6 +290,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["FF_AGENTS_PAGES", false],
       ["FF_TOOL_RUN_INSIGHTS", false],
       ["FF_TYPED_STEPS", false],
+      ["FF_SANDBOXES", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -300,6 +301,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["FF_AGENTS_PAGES", subject],
     ["FF_TOOL_RUN_INSIGHTS", subject],
     ["FF_TYPED_STEPS", subject],
+    ["FF_SANDBOXES", subject],
   ]);
 });
 

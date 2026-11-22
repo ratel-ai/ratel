@@ -35,6 +35,9 @@ export const BEARER_ROUTE_SCOPES = {
   "POST /api/v1/embeddings": "embeddings",
   "POST /api/v1/pick": "tool_picker",
   "POST /api/v1/tools/pick": "tool_picker",
+  // `ratel sandbox dev` sends its traces with the same key, so the ingest scope is the
+  // one it already has. The route also refuses publishable keys (RC-1097).
+  "POST /api/v1/runner/connect": "ingest:traces",
 } as const satisfies Record<string, ApiKeyScope>;
 
 export type BearerRoute = keyof typeof BEARER_ROUTE_SCOPES;

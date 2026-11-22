@@ -80,6 +80,9 @@ export const apiKeys = pgTable(
     // Optional requests-a-minute ceiling for an ingest-only key shared by many
     // clients. Null = the default for its kind (lib/ingest/ingest-limits.ts).
     rateLimitPerMinute: integer("rate_limit_per_minute"),
+    // The identity-provider id of the person who created the key (RC-1097, migration 0045): the
+    // owner of a `ratel sandbox dev` runner that connects with it. Null on keys created before.
+    createdBy: text("created_by"),
   },
   (t) => [
     uniqueIndex("api_keys_key_hash_idx").on(t.keyHash),

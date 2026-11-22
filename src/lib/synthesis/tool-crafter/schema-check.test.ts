@@ -80,8 +80,8 @@ test("validateInputSchema caps size and depth and refuses $ref", () => {
 
 test("checkProposal refuses two crafted tools of one name and a searchable text past the cap", () => {
   assert.equal(checkProposal([source], rewrite([crafted()]), catalog).ok, true);
-  const twins = checkProposal([source], rewrite([crafted(), crafted()]), catalog);
-  assert.match(problems(twins), /two crafted tools are both named find_task/);
+  const sandboxes = checkProposal([source], rewrite([crafted(), crafted()]), catalog);
+  assert.match(problems(sandboxes), /two crafted tools are both named find_task/);
   const long = checkProposal(
     [source],
     rewrite([crafted({ searchableDescription: "w ".repeat(MAX_SEARCHABLE_CHARS) })]),

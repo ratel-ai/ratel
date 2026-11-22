@@ -40,6 +40,15 @@ export interface WorkflowLabel {
   icon: WorkflowIconKey;
 }
 
+/** One resolved label config: the defaults, or a sandbox run's values. */
+export type LabelConfig = {
+  readonly model: string;
+  readonly system: string;
+  readonly maxTokens: number;
+};
+
+/** The id of the `workflow-label` sandbox (label.sandbox.ts) and of its production stamps. */
+export const LABEL_SANDBOX_ID = "workflow-label";
 export const MAX_LABEL_ASKS = 5;
 /** Bump when the prompt changes, so every workflow is named again under it. */
 const LABEL_PROMPT_VERSION = 4;
@@ -68,6 +77,17 @@ const SYSTEM = [
   'icon: the one key from the icon list below that best suits the request; "workflow" when none fits.',
   "Never use em dashes.",
 ].join("\n");
+
+/**
+ * The config the code owns: the label model (`provider/model`), the system
+ * prompt and the output budget. The job reads these; the `workflow-label`
+ * sandbox changes them per run.
+ */
+export const labelDefaults: LabelConfig = {
+  model: "anthropic/claude-sonnet-5-5",
+  system: SYSTEM,
+  maxTokens: 400,
+};
 
 function clip(text: string, max: number): string {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -117,7 +137,7 @@ export function buildLabelPrompt(input: LabelInput): { system: string; user: str
     "Icons:",
     ...Object.entries(WORKFLOW_ICONS).map(([key, use]) => `- ${key}: ${use}`),
   );
-  return { system: SYSTEM, user: lines.join("\n") };
+  return { system: labelDefaults.system, user: lines.join("\n") };
 }
 
 /**
@@ -127,16 +147,22 @@ export function buildLabelPrompt(input: LabelInput): { system: string; user: str
  * every task on every run (and, through the names, voided every cached
  * placement verdict, `decide.ts`). A task first named from its tools alone is
  * named once more when requests first arrive.
+ *
+ * With `cloud-sandboxes` on, the sandbox's config hash joins the material (RC-1091),
+ * so a changed prompt, model or budget names the workflow again. Without it the
+ * key is the same as before the flag existed.
  */
-export function labelInputHash(input: LabelInput): string {
+export function labelInputHash(input: LabelInput, configHash: string | null = null): string {
   const tools = [...input.tools].sort((a, b) => a.id.localeCompare(b.id));
-  const material = JSON.stringify([
+  const parts: unknown[] = [
     LABEL_PROMPT_VERSION,
     input.typicalOrder,
     input.optionalTools,
     tools,
     input.asks.length > 0,
-  ]);
+  ];
+  if (configHash !== null) parts.push(configHash);
+  const material = JSON.stringify(parts);
   return createHash("sha256").update(material).digest("hex").slice(0, 32);
 }
 

@@ -1,0 +1,16 @@
+{
+  "workflowId": "wf-synthetic-release",
+  "typicalOrder": ["find_pr", "merge_pr", "update_task"],
+  "optionalTools": ["notify_channel"],
+  "tools": [
+    { "id": "find_pr", "name": "find_pr", "description": "Find the pull request for a branch or a task." },
+    { "id": "merge_pr", "name": "merge_pr", "description": "Merge an approved pull request." },
+    { "id": "update_task", "name": "update_task", "description": "Move a task to a new status and add a comment." },
+    { "id": "notify_channel", "name": "notify_channel", "description": "Post a short message to a team channel." }
+  ],
+  "asks": [
+    "Ship the login fix and close its ticket",
+    "Merge the release branch and tell the team",
+    "Land the approved PR for the billing page"
+  ]
+}

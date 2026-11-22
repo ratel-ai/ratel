@@ -280,6 +280,7 @@ describe("registry root", () => {
     // task-score sweep, as upstream orders them. After-steps are
     // the retention passes, ingest first, then the signal sweep and the trace-summary refresh.
     // What-if's prune runs with retention off: a timed-out run must free its budget hold.
+    // The sandbox run events prune does too: they are a replay buffer, not telemetry (RC-1096).
     assert.deepEqual(
       drainSteps().map((s) => `${s.phase}:${s.name}${s.retentionOnly ? ":retention" : ""}`),
       [
@@ -301,6 +302,7 @@ describe("registry root", () => {
         "after:quality_snapshot_refresh",
         "after:match_quality_sweep",
         "after:what_if_prune",
+        "after:sandbox_run_events_prune",
       ],
     );
   });

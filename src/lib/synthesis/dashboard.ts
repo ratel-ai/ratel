@@ -81,7 +81,7 @@ export type DashboardModel = {
   hasData: boolean;
   /** Per-source trend over the window: did this source grow, hold, or shrink? */
   trend: Record<ContextSource, "up" | "flat" | "down">;
-  /** Per-category trend — split-aware twin of {@link trend}, for the table. */
+  /** Per-category trend — split-aware sandbox of {@link trend}, for the table. */
   categoryTrend: Record<ChartCategory, "up" | "flat" | "down">;
   /** Daily token series per category — for the table sparklines. */
   categorySeries: Record<ChartCategory, number[]>;

@@ -1,0 +1,113 @@
+{
+  "v": 1,
+  "type": "manifest.update",
+  "id": "msg_0003",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "payload": {
+    "manifest": {
+      "sdk": {
+        "language": "python",
+        "name": "ratel-sandbox",
+        "version": "0.1.0"
+      },
+      "providers": [
+        {
+          "provider": "openai",
+          "keys": [
+            "OPENAI_API_KEY"
+          ]
+        },
+        {
+          "provider": "anthropic",
+          "keys": [
+            "ANTHROPIC_API_KEY"
+          ]
+        }
+      ],
+      "sandboxes": [
+        {
+          "id": "docs-agent",
+          "input": {
+            "kind": "chat"
+          },
+          "params": [
+            {
+              "name": "model",
+              "kind": "model",
+              "default": "openai/gpt-5.6-terra"
+            },
+            {
+              "name": "temperature",
+              "kind": "scalar",
+              "type": "number",
+              "default": 0.2,
+              "min": 0,
+              "max": 2
+            },
+            {
+              "name": "verbose",
+              "kind": "scalar",
+              "type": "bool",
+              "default": false
+            },
+            {
+              "name": "tone",
+              "kind": "scalar",
+              "type": "enum",
+              "default": "friendly",
+              "values": [
+                "friendly",
+                "terse"
+              ]
+            },
+            {
+              "name": "signature",
+              "kind": "scalar",
+              "type": "string",
+              "default": "— Docs bot",
+              "maxLength": 80
+            },
+            {
+              "name": "tools",
+              "kind": "tools",
+              "default": [
+                {
+                  "name": "searchDocs",
+                  "description": "Search the docs.",
+                  "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                      "query": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "hint": "readOnly"
+                },
+                {
+                  "name": "createTicket",
+                  "description": "Open a support ticket.",
+                  "hint": "sideEffect",
+                  "allowReal": false
+                },
+                {
+                  "name": "askExpert",
+                  "description": "Ask a sub-agent.",
+                  "hint": "none",
+                  "opaque": true
+                }
+              ]
+            }
+          ],
+          "context": [
+            {
+              "name": "orgId",
+              "description": "The tenant.",
+              "default": "org_demo"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -68,6 +68,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "FF_TYPED_STEPS",
     note: "typed steps: model calls, code steps, handoffs and user messages are turn steps, so a trace with model calls only makes a turn and reaches Agent health",
   },
+  {
+    key: "FF_SANDBOXES",
+    note: "agent sandboxes: the Sandboxes pages and run API, `ratel sandbox dev` runners, sandbox stamps on the label and topic jobs, playground runs kept out of cost and Agent health",
+  },
 ];
 
 export interface AccountOperationDeps {

@@ -60,6 +60,8 @@ export type CreateFirstProjectDeps = {
     name: string;
     keyHash: string;
     keyPrefix: string;
+    /** The creator's identity-provider id: the owner of a `ratel sandbox dev` runner (RC-1097). */
+    createdBy: string;
   }) => Promise<{ id: string }>;
   generateApiKey: () => GeneratedApiKey;
   /**
@@ -142,6 +144,7 @@ export async function createFirstProject(
     name: "Default",
     keyHash: key.hash,
     keyPrefix: key.prefix,
+    createdBy: session.user.externalId,
   });
   const keyRevealable = (await deps.keepApiKeySecret?.(stored.id, key.plaintext)) ?? false;
   await deps.track(

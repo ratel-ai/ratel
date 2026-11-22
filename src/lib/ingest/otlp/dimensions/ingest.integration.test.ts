@@ -41,6 +41,7 @@ const KEY: ApiKey = {
   expiresAt: null,
   scopes: ["*"],
   rateLimitPerMinute: null,
+  createdBy: null,
 };
 
 type RouteDeps = TracesHandlerDeps & Pick<PersistSpansDeps, "deriveSpanDimensions">;

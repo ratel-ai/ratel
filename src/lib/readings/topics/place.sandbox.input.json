@@ -1,0 +1,8 @@
+{
+  "ask": "Can you move my flight to Friday morning?",
+  "topics": [
+    { "topicId": "t-booking-changes", "name": "Change a booking", "description": "Move, cancel or rebook a flight or a hotel." },
+    { "topicId": "t-refunds", "name": "Get a refund", "description": "Ask for money back for a cancelled or changed trip." },
+    { "topicId": "t-baggage", "name": "Baggage questions", "description": "Allowances, lost bags and extra luggage." }
+  ]
+}

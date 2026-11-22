@@ -18,6 +18,8 @@ export type AuthenticatedApiKey = {
   keyPrefix: string;
   scopes: string[];
   rateLimitPerMinute: number | null;
+  /** The Clerk id of the person who created the key; null on keys older than migration 0112. */
+  createdBy?: string | null;
 };
 
 export interface ApiKeyAuthDeps<Key extends AuthenticatedApiKey = AuthenticatedApiKey> {

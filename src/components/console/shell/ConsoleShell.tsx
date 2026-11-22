@@ -10,6 +10,7 @@ import {
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
+import { sandboxesProjectIds } from "@/lib/views/sandboxes/navigation";
 
 /** The console's rail and page, with its data resolved on the server. */
 export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children: ReactNode }) {
@@ -26,7 +27,11 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const entityPagesOrganizations = await entityPagesOrganizationIds(organizations);
+  const [entityPagesOrganizations, sandboxesProjects] = await Promise.all([
+    entityPagesOrganizationIds(organizations),
+    // RC-1102: Sandboxes shows for a project with FF_SANDBOXES on (decided per project, as its pages decide it).
+    sandboxesProjectIds(organizations, projects).catch(() => []),
+  ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -55,6 +60,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           hiddenOrganizationNav: hidden,
           projectNav: composition.projectNav,
           entityPagesOrganizations,
+          sandboxesProjects,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

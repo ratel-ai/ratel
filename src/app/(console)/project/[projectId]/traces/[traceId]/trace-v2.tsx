@@ -4,6 +4,7 @@ import { TraceView } from "@/components/console/traces/TraceView";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
+import { sandboxesEnabledForProject } from "@/lib/platform/sandboxes-flag";
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath } from "@/lib/synthesis/traces/v2/run-noun";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
@@ -59,7 +60,9 @@ export async function TracePageV2({
         { operation: "trace_session" },
       ),
   });
-  return <TraceView {...props} session={traceSession} />;
+  // RC-1103: a recorded sandbox item's step links to its sandbox.
+  const sandboxesEnabled = await sandboxesEnabledForProject(project.id);
+  return <TraceView {...props} session={traceSession} sandboxesEnabled={sandboxesEnabled} />;
 }
 
 // Moved to lib so get_trace's MCP view reads a run the same way; the session replay page imports it from here.

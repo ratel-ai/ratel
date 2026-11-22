@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { Attributes } from "@opentelemetry/api";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -16,13 +17,20 @@ import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { configured, resolveDecisionEngine } from "@/lib/readings/decisions/engine";
 import type {
   CorpusEntry,
+  JudgeCase,
   JudgeEngine,
   JudgeFraming,
   JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
-import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { OPENAI_DECISIONS_MODEL } from "@/lib/readings/decisions/openai";
+import {
+  OPENAI_MIN_CONFIDENCE,
+  type OpenAIJudgeConfig,
+  openaiJudgeEngine,
+} from "@/lib/readings/decisions/openai-judge";
 import { decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
+import { sandboxInputAttributes, stampSandboxConfig } from "@/lib/readings/sandboxes/stamps";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import { agentRunAsks } from "@/lib/readings/topics/agent-asks";
@@ -45,6 +53,9 @@ import {
   placeAsks,
   SENTIMENT_OPTIONS_PREFIX,
   TOPIC_FRAMING,
+  TOPIC_SANDBOX_ID,
+  type TopicConfig,
+  topicDefaults,
   topicOptions,
   topicOptionsHash,
 } from "@/lib/readings/topics/place";
@@ -155,6 +166,11 @@ const ASK_CHUNK = 200;
 const NAME_MAX_TOKENS = 16_000;
 
 export interface AssignTopicsDeps {
+  /**
+   * `FF_SANDBOXES` for the project (RC-1092): stamp the `topic-place` sandbox on
+   * the run's root and each placement question's span. Off when absent.
+   */
+  sandbox?: boolean;
   now: () => Date;
   maxTurns: number;
   timeBudgetMs: number;
@@ -217,22 +233,64 @@ export interface AssignTopicsResult {
 /** Bound on the helper read: one row's JSON path, so a slow one is cut rather than holding the reading. */
 const HELPER_READ_TIMEOUT_MS = 5_000;
 
+/** Values a caller resolved itself (the `topic-place` sandbox, RC-1092); absent ones come from the env as before. */
+export interface TopicJudgeValues {
+  /** The engine's model, bare (`gpt-6-luna`). */
+  model?: string;
+  minConfidence?: number;
+  /** Extra attributes for each question's model-call span (the sandbox input stamp). */
+  caseAttributes?: OpenAIJudgeConfig["caseAttributes"];
+}
+
 /** The decision engine (`readings/decisions/engine.ts`, OpenAI here), asking `framing`; null without a usable key. `feature` names its questions on `model_call` lines. */
 export function topicJudgeFromEnv(
   framing: JudgeFraming,
   env: Record<string, string | undefined> = process.env,
   feature = "topics_place",
+  values: TopicJudgeValues = {},
 ): JudgeEngine | null {
   const resolved = resolveDecisionEngine(env);
   if (!resolved) return null;
   return openaiJudgeEngine({
     apiKey: resolved.apiKey,
     baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
+    model: values.model ?? configured(env.OPENAI_DECISIONS_MODEL),
+    ...(values.minConfidence !== undefined ? { minConfidence: values.minConfidence } : {}),
+    ...(values.caseAttributes ? { caseAttributes: values.caseAttributes } : {}),
     framing,
     feature,
     maxInputTokens: TOPICS_MAX_JUDGE_TOKENS,
   });
+}
+
+/**
+ * The placement config production runs with, as the `topic-place` sandbox sees
+ * it: {@link topicDefaults} on the engine `DECISION_ENGINE` selects, with that
+ * engine's model and threshold. OpenAI's model is its decisions model
+ * (`OPENAI_DECISIONS_MODEL`, RC-1139). Null without a usable engine: no sandbox to stamp.
+ * Owned: OpenAI is the one decision engine here.
+ */
+export function topicConfigFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): TopicConfig | null {
+  const resolved = resolveDecisionEngine(env);
+  if (!resolved) return null;
+  return {
+    ...topicDefaults,
+    model: `openai/${configured(env.OPENAI_DECISIONS_MODEL) ?? OPENAI_DECISIONS_MODEL}`,
+    minConfidence: OPENAI_MIN_CONFIDENCE,
+  };
+}
+
+/** `ratel.sandbox.input` for one placement question: the ask and the topics it chooses between, as the sandbox takes them. */
+export function topicCaseAttributes(
+  row: Pick<JudgeCase, "query">,
+  corpus: readonly CorpusEntry[],
+): Attributes {
+  const topics = corpus
+    .filter((entry) => entry.entryId !== NONE_OPTION_ID)
+    .map((entry) => ({ topicId: entry.entryId, name: entry.name, description: entry.description }));
+  return sandboxInputAttributes({ ask: row.query, topics });
 }
 
 /** One structured-output Anthropic call that names topics; null without a Claude backend. */
@@ -317,7 +375,15 @@ function defaultDeps(overrides: Partial<AssignTopicsDeps>): AssignTopicsDeps {
     saveReading: saveTopicReadingFn,
     toolRunInsights: toolRunInsightsForProject,
     loadTaskLabels: (projectId) => loadWorkflowLabels(projectId),
-    judge: "judge" in overrides ? null : topicJudgeFromEnv(TOPIC_FRAMING),
+    judge:
+      "judge" in overrides
+        ? null
+        : topicJudgeFromEnv(
+            TOPIC_FRAMING,
+            process.env,
+            "topics_place",
+            overrides.sandbox ? { caseAttributes: topicCaseAttributes } : {},
+          ),
     sentimentJudge:
       "sentimentJudge" in overrides
         ? null
@@ -575,6 +641,10 @@ export async function assignProjectTopics(
   overrides: Partial<AssignTopicsDeps> = {},
 ): Promise<AssignTopicsResult> {
   const deps = { ...defaultDeps(overrides), ...overrides };
+  if (deps.sandbox) {
+    const config = topicConfigFromEnv();
+    if (config) stampSandboxConfig(config, { sandbox: TOPIC_SANDBOX_ID });
+  }
   const startedAt = deps.now();
   const window = topicWindow(startedAt);
   try {

@@ -88,6 +88,8 @@ export type ApiKeyActionDeps = {
     keyPrefix: string;
     expiresAt: Date | null;
     scopes: string[];
+    /** The creator's identity-provider id: the owner of a `ratel sandbox dev` runner that connects with the key (RC-1097). */
+    createdBy: string;
   }): Promise<ApiKeyRecord>;
   revokeApiKey(keyId: string): Promise<void>;
   /**
@@ -188,6 +190,7 @@ export async function createApiKeyHandler(
     keyPrefix: generated.prefix,
     expiresAt: expiration.expiresAt,
     scopes: choice.scopes,
+    createdBy: ctx.user.externalId,
   });
   await deps.keepApiKeySecret?.(created.id, generated.plaintext);
 

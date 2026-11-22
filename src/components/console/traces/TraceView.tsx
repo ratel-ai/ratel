@@ -31,6 +31,7 @@ import {
   withQueryUpdates,
 } from "@/lib/synthesis/traces/v2/url-writer";
 import type { TraceWaterfallView } from "@/lib/synthesis/traces/waterfall";
+import { openInSandboxHref } from "@/lib/views/sandboxes/replay";
 import type { TraceSession } from "@/lib/views/session-chat/trace-session";
 import { KIND_ORDER } from "./kind";
 import { SpanDetails, SpanInspector } from "./SpanInspector";
@@ -79,6 +80,8 @@ export interface TraceViewProps {
    * stored spans, as when the read fails.
    */
   fetchRaw?: boolean;
+  /** `cloud-sandboxes` (RC-1103): a recorded sandbox item's step offers "Open in sandbox". */
+  sandboxesEnabled?: boolean;
 }
 
 /**
@@ -298,6 +301,15 @@ export function TraceView(props: TraceViewProps) {
                       onShowDetails={() => changeTab("details")}
                       events={runMetrics ? eventsBySpan.get(selectedRow.span.spanId) : undefined}
                       showWait={runMetrics !== null}
+                      openInSandboxHref={
+                        props.sandboxesEnabled
+                          ? openInSandboxHref(
+                              props.projectId,
+                              selectedRow.span.spanId,
+                              selectedRow.span.attributes,
+                            )
+                          : null
+                      }
                     >
                       <SpanIOPanel
                         key={selectedRow.span.spanId}

@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ratel.sh/protocol/sandbox/v1/messages/run.event.schema.json",
+  "title": "run.event",
+  "description": "From the worker. One streamed event of a run, ordered by seq. The worker resends events the controller has not acked.",
+  "$ref": "../envelope.schema.json",
+  "required": [
+    "payload",
+    "runId",
+    "seq"
+  ],
+  "properties": {
+    "type": {
+      "const": "run.event"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "text.delta",
+            "tool.call",
+            "tool.result",
+            "log",
+            "span.ref"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "text.delta"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "text"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "tool.call"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "callId",
+              "tool",
+              "args",
+              "mode"
+            ],
+            "properties": {
+              "callId": {
+                "$ref": "../envelope.schema.json#/$defs/callId"
+              },
+              "tool": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": true,
+              "mode": {
+                "$ref": "../envelope.schema.json#/$defs/toolMode"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "tool.result"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "callId",
+              "result",
+              "isError",
+              "mode"
+            ],
+            "properties": {
+              "callId": {
+                "$ref": "../envelope.schema.json#/$defs/callId"
+              },
+              "result": true,
+              "isError": {
+                "type": "boolean"
+              },
+              "mode": {
+                "$ref": "../envelope.schema.json#/$defs/toolMode"
+              },
+              "fakeSource": {
+                "$ref": "../envelope.schema.json#/$defs/fakeSource"
+              },
+              "confirmDecision": {
+                "enum": [
+                  "approve",
+                  "edit",
+                  "fake",
+                  "reject"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "log"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "level",
+              "message"
+            ],
+            "properties": {
+              "level": {
+                "enum": [
+                  "debug",
+                  "info",
+                  "warn",
+                  "error"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "span.ref"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "traceId",
+              "spanId"
+            ],
+            "properties": {
+              "traceId": {
+                "$ref": "../envelope.schema.json#/$defs/traceId"
+              },
+              "spanId": {
+                "$ref": "../envelope.schema.json#/$defs/spanId"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

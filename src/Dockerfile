@@ -12,9 +12,12 @@ WORKDIR /app
 # --- deps: workspace manifests only, then filtered install -----------------
 FROM base AS deps
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+# @ratel-ai/sandbox until its first rc is on npm (RC-1091): src depends on file:../vendor/.
+COPY vendor vendor
 COPY src/package.json src/
 COPY packages/brand/package.json packages/brand/
 COPY packages/design-system/package.json packages/design-system/
+COPY packages/gateway/package.json packages/gateway/
 COPY ee/package.json ee/
 
 # Hoisted node_modules, in the image only: `next build` with `output: "standalone"` traces real

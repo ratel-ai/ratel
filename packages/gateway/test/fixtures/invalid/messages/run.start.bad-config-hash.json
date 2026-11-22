@@ -1,0 +1,29 @@
+{
+  "v": 1,
+  "type": "run.start",
+  "id": "msg_0030",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "runId": "run_01JH6Z8Q2W4K7M9P3R5T8V1X2Y",
+  "payload": {
+    "sandboxId": "workflow-label",
+    "sessionId": "pgs_41c9",
+    "input": {
+      "workflowId": "wf_12",
+      "toolOrder": [
+        "search",
+        "read"
+      ],
+      "asks": [
+        "find the refund policy"
+      ]
+    },
+    "params": {
+      "model": "anthropic/claude-haiku-5-5",
+      "system": "You name agent workflows.",
+      "maxTokens": 100
+    },
+    "toolModes": {},
+    "context": {},
+    "configHash": "abc"
+  }
+}

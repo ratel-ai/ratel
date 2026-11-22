@@ -3,6 +3,7 @@ import { JOB_ASKS, jobAskFor, type NoPayload } from "@/lib/jobs/job-ask";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { inProjectLogContext } from "@/lib/jobs/project-context";
 import { ledgerSeams } from "@/lib/ledger/turns/build-job";
+import { sandboxesEnabledForProject } from "@/lib/platform/sandboxes-flag";
 import {
   computeProjectTraceSignals,
   enqueueEarlyFirstReading,
@@ -70,8 +71,13 @@ export const traceSignalsRegistration: Registration = {
     compute_trace_signals: (job) =>
       computeProjectTraceSignals(job.projectId, parseComputePayload(job.payload)),
     // In the project's log context, so `model_call` lines carry the project and organization.
-    label_workflows: inProjectLogContext(jobAskFor<NoPayload>(JOB_ASKS.label_workflows), (job) =>
-      labelProjectWorkflows(job.projectId),
+    // RC-1091: with FF_SANDBOXES on, the job stamps its `workflow-label` sandbox.
+    label_workflows: inProjectLogContext(
+      jobAskFor<NoPayload>(JOB_ASKS.label_workflows),
+      async (job) =>
+        labelProjectWorkflows(job.projectId, {
+          sandbox: await sandboxesEnabledForProject(job.projectId),
+        }),
     ),
   },
   drainSteps: [sweepStep()],

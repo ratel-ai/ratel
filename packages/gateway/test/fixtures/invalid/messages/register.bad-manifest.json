@@ -1,0 +1,19 @@
+{
+  "v": 1,
+  "type": "register",
+  "id": "msg_0034",
+  "ts": "2026-11-20T10:15:30.120Z",
+  "payload": {
+    "runner": {
+      "instanceId": "r"
+    },
+    "manifest": {
+      "sdk": {
+        "language": "typescript",
+        "name": "@ratel-ai/sandbox",
+        "version": "0.1.0"
+      },
+      "providers": []
+    }
+  }
+}

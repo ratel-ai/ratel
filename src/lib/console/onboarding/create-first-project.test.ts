@@ -82,6 +82,7 @@ test("the first project lands with a Default key, revealed once", async () => {
       name: "Default",
       keyHash: "h",
       keyPrefix: "rtl_secret-v",
+      createdBy: "user_1",
     },
   ]);
   assert.deepEqual(

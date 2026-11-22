@@ -28,6 +28,7 @@
  * name replaced by a role. `decideChoice` walks that chain, least invasive
  * first, and only then reports a refusal.
  */
+import type { Attributes } from "@opentelemetry/api";
 import { type ModelCallPayer, trackModelCall } from "@/lib/platform/model-call";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
@@ -257,10 +258,16 @@ export function decisionClient(config: DecisionClientConfig) {
     payer: config.payer ?? "ratel",
   };
 
-  /** One question, retries included, logged as one `model_call` (a refusal is billed, so it logs ok). */
-  function ask(request: ChoiceRequest): Promise<{ answer: RawAnswer; inputTokens: number }> {
+  /**
+   * One question, retries included, logged as one `model_call` (a refusal is
+   * billed, so it logs ok). `spanAttributes` ride its span only (the sandbox input).
+   */
+  function ask(
+    request: ChoiceRequest,
+    spanAttributes?: Attributes,
+  ): Promise<{ answer: RawAnswer; inputTokens: number }> {
     return trackModelCall(
-      meta,
+      { ...meta, spanAttributes },
       () => askOnce(request),
       (asked) => ({ inputTokens: asked.inputTokens }),
     );
@@ -336,13 +343,14 @@ export function decisionClient(config: DecisionClientConfig) {
     query: string,
     options: readonly DecisionOption[],
     framing: DecisionFraming,
+    spanAttributes?: Attributes,
   ): Promise<DecisionResult> {
     let inputTokens = 0;
     let first: DecisionAnswer | null = null;
     let wording: ChoiceRequest | null = null;
     for (const candidate of refusalChain(query, framing, options)) {
       const request = { ...candidate, options };
-      const asked = await ask(request);
+      const asked = await ask(request, spanAttributes);
       inputTokens += asked.inputTokens;
       if (asked.answer !== "refusal") {
         first = asked.answer;
@@ -359,10 +367,13 @@ export function decisionClient(config: DecisionClientConfig) {
     // one-option question cannot change anything.
     if (top.size < 2) return { answer: first, inputTokens };
     // Same neutral order as the first pass, only fewer options.
-    const second = await ask({
-      ...wording,
-      options: options.filter((option) => top.has(option.id)),
-    });
+    const second = await ask(
+      {
+        ...wording,
+        options: options.filter((option) => top.has(option.id)),
+      },
+      spanAttributes,
+    );
     inputTokens += second.inputTokens;
     if (second.answer === "refusal") return { answer: first, inputTokens };
     assertOffered(second.answer, options);

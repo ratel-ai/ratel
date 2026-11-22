@@ -1,0 +1,31 @@
+{
+  "name": "@ratel/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "The sandbox runner gateway: holds `ratel sandbox dev` websockets and moves frames between them and the sandbox tables (Postgres LISTEN/NOTIFY).",
+  "scripts": {
+    "dev": "tsx watch --tsconfig tsconfig.json src/main.ts",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --tsconfig=tsconfig.json --external:pg-native --outfile=dist/gateway.cjs",
+    "start": "node dist/gateway.cjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "NODE_ENV=test tsx --tsconfig tsconfig.json --test --test-force-exit --test-concurrency=1 test/*.test.ts",
+    "lint": "biome check src test"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.13.1",
+    "pino": "^9.14.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.11.10",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

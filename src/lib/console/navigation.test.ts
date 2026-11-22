@@ -7,6 +7,7 @@ import {
   consoleNav,
   entryHref,
   findProject,
+  flattenNav,
   ONBOARDING_ROUTE,
   organizationRoot,
   organizationSlugFromPath,
@@ -705,4 +706,34 @@ test("the shell's organization: the project's own, else the route's, else the ac
   assert.equal(pick("/project/99999999-9999-4999-8999-999999999999", "beta"), "beta");
   assert.equal(pick("/organizations"), "acme", "with nothing else, the first");
   assert.equal(shellOrganization([], projects, "/org/acme", "acme"), undefined);
+});
+
+// — RC-1102: Sandboxes (FF_SANDBOXES) ————————————————————————————————————————————————
+
+test("Sandboxes is not in the rail or ⌘K unless the switch is on", () => {
+  const off = consoleNav({ projectId: "p1", additions: [] });
+  assert.deepEqual(off, consoleNav({ projectId: "p1", additions: [], sandboxes: false }));
+  assert.ok(!flattenNav(off).some((item) => item.id === "sandboxes"));
+  assert.ok(
+    !commandEntries({ items: off, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/sandboxes",
+    ),
+  );
+});
+
+test("Sandboxes sits under Improvements after Adaptive ranking and selects itself on a sandbox's playground", () => {
+  const items = consoleNav({ projectId: "p1", additions: [], sandboxes: true });
+  const improvements = items.find((item) => item.id === "improvements");
+  assert.deepEqual(
+    improvements?.children?.map((child) => child.label),
+    ["Fixes", "Quality", "Adaptive ranking", "Sandboxes"],
+  );
+  const sandboxes = improvements?.children?.find((child) => child.id === "sandboxes");
+  assert.equal(sandboxes?.href, "/project/p1/sandboxes");
+  assert.equal(activeNavItemId("/project/p1/sandboxes/workflow-label", items), "sandboxes");
+  assert.ok(
+    commandEntries({ items, projectId: "p1", projects: [], pathname: "/project/p1" }).some(
+      (entry) => entry.href === "/project/p1/sandboxes",
+    ),
+  );
 });

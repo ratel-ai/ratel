@@ -28,6 +28,7 @@ import { deriveGatewaySearches, deriveRatelSearches } from "./derive-search";
 import { deriveSpanDimensions, NO_SPAN_DIMENSIONS, type SpanDimensionsById } from "./dimensions";
 import { groupSpans } from "./group";
 import { normalizeAiSdkSpans } from "./normalize-ai-sdk";
+import { playgroundExclusion, type SandboxesFlag } from "./playground";
 import { toRows } from "./reconstruct";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import { normalizeSemconvAliases } from "./semconv/aliases";
@@ -87,6 +88,8 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   agentRunsEnabled?: AgentHealthBridgeDeps["agentRunsEnabled"];
   /** `FF_TYPED_STEPS` for code, handoff and typed model-call rows (RC-1067). Absent, the switch is read. */
   typedStepsEnabled?: AgentHealthBridgeDeps["typedStepsEnabled"];
+  /** `FF_SANDBOXES` for the project: on, playground spans skip cost and Agent health. Absent, the switch is read. */
+  sandboxesEnabled?: SandboxesFlag;
   /**
    * The agent-span dedupe's storage lookup: an agent wrapper with the run's
    * summed usage is not one more model call. `null` turns the dedupe off; only
@@ -188,8 +191,18 @@ export async function persistDecodedSpans(
       })
     : undefined;
 
+  // With `FF_SANDBOXES` on, playground runs stay in `otel_spans` only: no cost
+  // rows and no Agent health rows (spec §10).
+  const isPlayground = await playgroundExclusion(
+    spans,
+    projectId,
+    organization,
+    deps.sandboxesEnabled,
+  );
+
   // Group into LLM calls, reconstruct rows, and persist under the project.
-  const calls = groupSpans(spans, dedupe);
+  const allCalls = groupSpans(spans, dedupe);
+  const calls = allCalls.filter((call) => !isPlayground(call.anchor));
   // RC-280: each call's payload keeps its own reply and settings for the session chat.
   const prices = await batchPrices(spans, projectId, deps);
   const rows = toRows(projectId, calls, { captureReply: true }, prices);
@@ -233,7 +246,7 @@ export async function persistDecodedSpans(
     ...ratelDerived,
     // Agent health: the host's own tool-call spans as ledger invocations.
     ...(await agentHealthToolRows(
-      spans,
+      spans.filter((span) => !isPlayground(span)),
       projectId,
       {
         traceTurns: deps.traceTurns,
@@ -311,7 +324,7 @@ export async function persistDecodedSpans(
 
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
-  return { ok: true, accepted, calls: calls.length, rows };
+  return { ok: true, accepted, calls: allCalls.length, rows };
 }
 
 /**

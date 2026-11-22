@@ -112,6 +112,7 @@ const SAFE_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
 const ENVIRONMENT_KEY = "deployment.environment.name";
 const LEGACY_ENVIRONMENT_KEY = "deployment.environment";
 const SERVICE_VERSION_KEY = "service.version";
+const SANDBOX_ATTRIBUTE_PREFIXES = ["ratel.sandbox.", "ratel.replay."] as const;
 const LEGACY_INDEXED_CONTENT_ATTRIBUTE_PATTERN = /^gen_ai\.(?:prompt|completion)\.\d+(?:\.|$)/;
 
 export interface OtelSpanRowOptions {
@@ -188,7 +189,7 @@ export function toOtelSpanRows(
           ) ?? emitterCostUsd(span.attributes));
     const retained = retainedAttributes(
       span.attributes,
-      environmentAttributes(span),
+      { ...environmentAttributes(span), ...sandboxAttributes(span.attributes) },
       keptContent(span),
     );
     const experiment = experimentAttributes(span);
@@ -362,6 +363,18 @@ function environmentAttributes(span: DecodedSpan): AttrMap {
   if (legacy !== undefined) out[LEGACY_ENVIRONMENT_KEY] = legacy;
   if (version !== undefined) out[SERVICE_VERSION_KEY] = version;
   return out;
+}
+
+/**
+ * The sandbox and replay keys (spec §10): the playground and Open in sandbox query
+ * them, so the size bound keeps them before other span attributes.
+ */
+function sandboxAttributes(attributes: AttrMap): AttrMap {
+  return Object.fromEntries(
+    Object.entries(attributes).filter(([key]) =>
+      SANDBOX_ATTRIBUTE_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    ),
+  );
 }
 
 /**

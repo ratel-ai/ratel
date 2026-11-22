@@ -4,6 +4,8 @@ import type {
   JudgeFraming,
   JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
+import { OPENAI_DECISIONS_MODEL } from "@/lib/readings/decisions/openai";
+import { OPENAI_MIN_CONFIDENCE } from "@/lib/readings/decisions/openai-judge";
 import { JACCARD_THRESHOLD, tokenize } from "@/lib/readings/text/cluster";
 import type { DistinctAsk } from "@/lib/readings/topics/asks";
 import { bestOverlap } from "@/lib/readings/topics/group";
@@ -24,6 +26,32 @@ export const TOPIC_FRAMING: JudgeFraming = {
     "A message a person sent to an AI agent, or a search the agent made for a tool on their behalf. The options are the topics people ask this agent about.",
   question: "Which topic is this message about? Pick none if it fits no topic.",
 };
+
+/** The config one placement runs with: the defaults, or a sandbox run's values. */
+export type TopicConfig = {
+  /** `engine/model`: `openai/<decisions model>`. */
+  readonly model: string;
+  readonly about: string;
+  readonly question: string;
+  readonly minConfidence: number;
+};
+
+/**
+ * The config the code owns (RC-1092): the decision engine and its model, the
+ * framing and the abstain threshold. The `topic-place` sandbox changes them per run.
+ *
+ * Owned (ADR-0030): OpenAI is the one decision engine here, so the defaults are its decisions
+ * model and threshold; upstream's are a private engine's.
+ */
+export const topicDefaults: TopicConfig = {
+  model: `openai/${OPENAI_DECISIONS_MODEL}`,
+  about: TOPIC_FRAMING.about,
+  question: TOPIC_FRAMING.question,
+  minConfidence: OPENAI_MIN_CONFIDENCE,
+};
+
+/** The id of the `topic-place` sandbox (place.sandbox.ts) and of its production stamps. */
+export const TOPIC_SANDBOX_ID = "topic-place";
 
 /** Bump with the framing, so cached verdicts are asked again under the new wording. */
 const TOPIC_FRAMING_VERSION = 1;

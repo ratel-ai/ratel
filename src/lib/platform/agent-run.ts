@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
+  type Attributes,
   type Context,
   context,
   type Span,
@@ -40,6 +41,8 @@ interface AgentRunState {
   meta: AgentRunMeta;
   startedAt: number;
   root?: Span;
+  /** Attributes set before the root exists, applied when it starts. */
+  attributes?: Attributes;
 }
 
 const runs = new AsyncLocalStorage<AgentRunState>();
@@ -67,6 +70,23 @@ export function agentRunParent(tracer: Tracer): Context | undefined {
   return trace.setSpan(context.active(), state.root);
 }
 
+/**
+ * Set attributes on the current run's root (the agent sandbox stamps, RC-1091).
+ * The root is made lazily, so attributes set before the first model call wait
+ * for it. Returns false outside a run. Never throws.
+ */
+export function setAgentRunAttributes(attributes: Attributes): boolean {
+  const state = runs.getStore();
+  if (!state) return false;
+  try {
+    if (state.root) state.root.setAttributes(attributes);
+    else state.attributes = { ...state.attributes, ...attributes };
+  } catch {
+    // A tracing failure is not the job's failure.
+  }
+  return true;
+}
+
 function startRoot(tracer: Tracer, state: AgentRunState): Span {
   const { name, conversationId, ask } = state.meta;
   return tracer.startSpan(`invoke_agent ${name}`, {
@@ -80,6 +100,7 @@ function startRoot(tracer: Tracer, state: AgentRunState): Span {
       ...(ask
         ? contentAttributes({ input: [{ role: "user", parts: [{ type: "text", content: ask }] }] })
         : {}),
+      ...state.attributes,
     },
   });
 }

@@ -4,6 +4,7 @@ import { ChartGantt, MessagesSquare } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadTraceViewProps } from "@/app/(console)/project/[projectId]/traces/[traceId]/trace-v2";
+import { ReplayInSandbox } from "@/components/console/sandboxes/ReplayInSandbox";
 import { SessionChatView } from "@/components/console/session-chat/SessionChatView";
 import { SessionTraceView } from "@/components/console/session-chat/SessionTraceView";
 import { StepsViewControl } from "@/components/console/tasks/StepsViewControl";
@@ -63,7 +64,7 @@ export default async function SessionReplayPage({
 }) {
   const { projectId, sessionId } = await params;
   if (!isDbConfigured()) notFound();
-  const { project, organization } = await requireProjectScope(projectId);
+  const { project, organization, user } = await requireProjectScope(projectId);
   // RC-413: titled by the first ask.
   const header = (asks: readonly (string | null)[]) => ({
     title: sessionPageTitle(sessionId, asks),
@@ -184,6 +185,12 @@ export default async function SessionReplayPage({
               {toCheck > 0 ? `${toCheck} to check` : "Nothing to check"}
             </span>
             {stepsView ? <StepsViewControl value={stepsView} /> : null}
+            {/* RC-1110: with FF_SANDBOXES on, a link to the matching sandbox, or why replay is not possible. */}
+            <ReplayInSandbox
+              projectId={project.id}
+              sessionId={sessionId}
+              externalId={user.externalId}
+            />
             <ViewLinks
               current="chat"
               sessionHref={sessionHref}

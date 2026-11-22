@@ -84,6 +84,7 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
+  sandboxes = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -101,6 +102,11 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
+  /**
+   * `FF_SANDBOXES` on for the shown project (RC-1102): a Sandboxes item under Improvements, the
+   * playground of the caller's `ratel sandbox dev` runner.
+   */
+  sandboxes?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -378,7 +384,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, sandboxes) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -401,6 +407,7 @@ function stageRailNav(
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
   entityPages: boolean,
+  sandboxes = false,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -467,10 +474,36 @@ function stageRailNav(
         ],
       }
     : classicTraces;
+  // Upstream's Sandboxes (RC-1102) folds under Improvements, so the rail keeps its budget.
+  const classicImprovements = pick("improvements");
+  const improvements: NavItem = sandboxes
+    ? {
+        ...classicImprovements,
+        children: [
+          ...(classicImprovements.children ?? []),
+          {
+            id: "sandboxes",
+            label: "Sandboxes",
+            href: `${root}/sandboxes`,
+            icon: "improvements",
+            keywords: [
+              "sandboxes",
+              "agent sandbox",
+              "ratel sandbox dev",
+              "run locally",
+              "params",
+              "prompt",
+              "model",
+              "replay",
+            ],
+          },
+        ],
+      }
+    : classicImprovements;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
     ...stage("insights", "Insights", [tasks, pick("intents")]),
-    ...stage("improve", "Improve", [pick("improvements")]),
+    ...stage("improve", "Improve", [improvements]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),
     { ...pick("catalog"), section: "settings" },

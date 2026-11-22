@@ -36,6 +36,8 @@ export type ResolvedApiKeyProject =
       /** What the key may do beyond this route (limits, append-only ingest). */
       policy: ApiKeyPolicy;
       rateLimitPerMinute: number | null;
+      /** The Clerk id of the key's creator, or null for a key from before it was recorded. */
+      createdBy?: string | null;
     }
   | { ok: false; response: Response };
 
@@ -78,5 +80,6 @@ export async function resolveProjectFromBearer(
     apiKeyId: auth.apiKey.id,
     policy: auth.policy,
     rateLimitPerMinute: auth.apiKey.rateLimitPerMinute,
+    createdBy: auth.apiKey.createdBy ?? null,
   };
 }

@@ -190,6 +190,7 @@
         "!src/lib/ingest/otlp/agent-span-dedupe.ts",
         "!src/lib/ingest/otlp/route-handler.real-fixtures.integration.test.ts",
         "!src/lib/ingest/otlp/queries.integration.test.ts",
+        "!src/lib/ingest/otlp/playground.ts",
         "src/lib/ingest/otlp-raw/**",
         "!src/lib/ingest/otlp-raw/capture.ts",
         "!src/lib/ingest/otlp-raw/reprocess.ts",
@@ -525,7 +526,6 @@
         "src/lib/readings/topics/name.ts",
         "src/lib/readings/topics/name.test.ts",
         "src/lib/readings/topics/patterns.ts",
-        "src/lib/readings/topics/place.ts",
         "src/lib/readings/topics/place.test.ts",
         "src/lib/readings/topics/place-turns.test.ts",
         "src/lib/readings/topics/queries.ts",
@@ -1379,7 +1379,37 @@
         "!src/lib/views/agents/schema.ts",
         "src/lib/views/mcp-servers/**",
         "!src/lib/views/mcp-servers/queries.integration.test.ts",
-        "src/app/api/projects/\\[projectId\\]/agents/overrides/route.ts"
+        "src/app/api/projects/\\[projectId\\]/agents/overrides/route.ts",
+        "src/lib/views/sandboxes/**",
+        "!src/lib/views/sandboxes/navigation.ts",
+        "!src/lib/views/sandboxes/tests/navigation.test.ts",
+        "!src/lib/views/sandboxes/schema.ts",
+        "!src/lib/views/sandboxes/fakes/adapters/fake-alerts.ts",
+        "!src/lib/views/sandboxes/tests/pg-store.integration.test.ts",
+        "!src/lib/views/sandboxes/register.ts",
+        "!src/lib/views/sandboxes/tests/domain.test.ts",
+        "!src/lib/views/sandboxes/fakes/tests/adapters.test.ts",
+        "!src/lib/views/sandboxes/tests/run-api.integration.test.ts",
+        "src/lib/readings/sandboxes/stamps.ts",
+        "src/components/console/sandboxes/**",
+        "src/app/(console)/project/\\[projectId\\]/sandboxes/**",
+        "!src/app/(console)/project/\\[projectId\\]/sandboxes/page.tsx",
+        "!src/app/(console)/project/\\[projectId\\]/sandboxes/\\[sandboxId\\]/page.tsx",
+        "src/app/api/projects/\\[projectId\\]/sandboxes/**",
+        "src/app/api/v1/runner/connect/route.ts",
+        "src/lib/readings/topics/place.sandbox.input.json",
+        "src/lib/readings/trace-signals/workflows/label.sandbox.ts",
+        "src/lib/readings/trace-signals/workflows/label.sandbox.input.json",
+        "packages/gateway/**",
+        "!packages/gateway/package.json",
+        "!packages/gateway/tsconfig.json",
+        "!packages/gateway/Dockerfile",
+        "!packages/gateway/src/main.ts",
+        "!packages/gateway/test/support.ts",
+        "!packages/gateway/protocol/schema/manifest.schema.json",
+        "!packages/gateway/protocol/schema/messages/tool.fake.request.schema.json",
+        "!packages/gateway/test/fixtures/valid/messages/manifest.update.revision.json",
+        "!packages/gateway/test/fixtures/invalid/messages/manifest.update.bad-revision.json"
       ],
       "linter": {
         "rules": {
@@ -1399,6 +1429,7 @@
         "src/components/console/health/**",
         "src/components/console/tasks/**",
         "src/components/console/playground/**",
+        "src/components/console/sandboxes/**",
         "src/components/console/self-corrections/**",
         "src/components/console/session-replay/**",
         "src/components/console/session-chat/**",
@@ -1475,7 +1506,8 @@
     {
       "includes": [
         "src/components/console/health/share/SharedPageActions.tsx",
-        "src/components/console/health/workflow-icons.ts"
+        "src/components/console/health/workflow-icons.ts",
+        "src/components/console/sandboxes/ParamsPanel.tsx"
       ],
       "linter": {
         "rules": {
@@ -1494,6 +1526,16 @@
         "rules": {
           "a11y": {
             "useValidAnchor": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/gateway/src/gateway.ts", "src/lib/views/sandboxes/fakes/service.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noImplicitAnyLet": "off"
           }
         }
       }

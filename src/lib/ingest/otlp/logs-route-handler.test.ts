@@ -32,6 +32,7 @@ const FAKE_KEY: ApiKey = {
   expiresAt: null,
   scopes: ["*"],
   rateLimitPerMinute: null,
+  createdBy: null,
 };
 
 const protoRoot = protobuf.Root.fromJSON(descriptor as protobuf.INamespace);

@@ -1,3 +1,4 @@
+import type { Attributes } from "@opentelemetry/api";
 import { getLogger } from "@/lib/platform/logger";
 import {
   bm25Order,
@@ -66,6 +67,8 @@ export interface OpenAIJudgeConfig {
   now?: () => number;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** Extra attributes for one search's model-call spans only (the sandbox input stamp, RC-1139). */
+  caseAttributes?: (row: JudgeCase, corpus: readonly CorpusEntry[]) => Attributes;
 }
 
 /** Raised on a rejected key. Fatal to the whole run. */
@@ -137,7 +140,12 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
       async function judgeOne(row: JudgeCase): Promise<void> {
         const options = judgeOptions(row, corpus, bm25).map(decisionOption);
         try {
-          const result = await client.decideChoice(row.query, options, framing);
+          const result = await client.decideChoice(
+            row.query,
+            options,
+            framing,
+            config.caseAttributes?.(row, corpus),
+          );
           inputTokens += result.inputTokens;
           consecutiveFailures = 0;
           if (!result.answer) {
