@@ -30,10 +30,12 @@ test("an unknown or missing project slug leaves the sentinel to pick the project
   assert.equal(await legacyRouteHref("/traces", {}, null), "/project/_/traces");
 });
 
-test("/dashboard follows the same rule: the named project's context peek, else the sentinel with the query kept", async () => {
+test("/dashboard follows the same rule: the named project's Dashboards page, else the sentinel, with the query kept", async () => {
+  // Dashboards reads FF_CUSTOM_DASHBOARDS (ratel-cloud #542), so it is no longer a moved page:
+  // the page itself redirects to Overview when the switch is off.
   assert.equal(
     await legacyRouteHref("/dashboard", { project: "acme", range: "7d" }, scope),
-    `/project/${PROJECT}?peek=context`,
+    `/project/${PROJECT}/dashboards?range=7d`,
   );
   assert.equal(
     await legacyRouteHref("/dashboard", { project: "ghost", range: "7d" }, scope),
