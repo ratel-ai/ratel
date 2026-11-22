@@ -9,6 +9,8 @@ import { TasksNoDatabase } from "@/components/console/tasks/TasksView";
 import { TaskView } from "@/components/console/tasks/TaskView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
+import { parseStepsView } from "@/lib/readings/trace-signals/steps";
+import { firstParam } from "@/lib/synthesis/traces/v2/filters";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { buildTaskDetail, taskNames } from "@/lib/views/tasks/model";
@@ -24,11 +26,13 @@ export const metadata = { title: "Task" };
  */
 export default async function TaskPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; taskId: string }>;
+  searchParams: Promise<{ steps?: string | string[] }>;
 }) {
   if (!isDbConfigured()) return <TasksNoDatabase />;
-  const { projectId, taskId } = await params;
+  const [{ projectId, taskId }, query] = await Promise.all([params, searchParams]);
   const { project, organization } = await requireProjectScope(projectId);
   const [inputs, fixes] = await Promise.all([
     loadTasksInputs(project.id),
@@ -53,11 +57,14 @@ export default async function TaskPage({
         .map((row) => row.turnId)
     : undefined;
   const now = new Date();
+  // cloud-typed-steps (FF_TYPED_STEPS): the `?steps=` preset; off, the page has no presets.
+  const stepsView = task.typedSteps ? parseStepsView(firstParam(query.steps)) : undefined;
   return (
     <TaskView
       projectId={project.id}
       task={task}
       examples={examples}
+      stepsView={stepsView}
       testRuns={testRuns}
       now={now}
       listHref={listHref}

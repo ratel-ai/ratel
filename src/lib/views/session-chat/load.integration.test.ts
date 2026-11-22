@@ -170,3 +170,73 @@ test("a session with no closed turn in the project is null", async () => {
     await client.close();
   }
 });
+
+const CODE_EVENT = "44444444-4444-4444-8444-444444444443";
+const MESSAGE_EVENT = "44444444-4444-4444-8444-444444444444";
+
+/** Turn 2 gets a user message and a code step; one task runs from turn 1 into turn 2, a second one inside turn 2. */
+async function typedSetup() {
+  const fixture = await setup();
+  await fixture.client.exec(`
+    insert into trace_turn_steps (turn_id, project_id, ordinal, kind, event_type, trace_event_id, occurred_at, received_at, target_id, outcome, took_ms) values
+      ('${TURN_2}', '${PROJECT}', 1, 'user_message', 'otlp_model_call', '${MESSAGE_EVENT}', '2026-10-20T10:05:00.100Z', '2026-10-20T10:05:00.100Z', null, null, null),
+      ('${TURN_2}', '${PROJECT}', 2, 'code', 'otlp_step', '${CODE_EVENT}', '2026-10-20T10:05:01Z', '2026-10-20T10:05:01Z', 'load_cart', 'ok', 300);
+    insert into task_segments (id, project_id, session_id, workflow_id, start_turn_id, start_ordinal, end_turn_id, end_ordinal, started_at, ended_at, turn_ids, piece_count) values
+      ('66666666-6666-4666-8666-666666666661', '${PROJECT}', 's1', 'booking', '${TURN_1}', 1, '${TURN_2}', 1, '2026-10-20T10:00:00Z', '2026-10-20T10:05:00.100Z', '{${TURN_1},${TURN_2}}', 2),
+      ('66666666-6666-4666-8666-666666666662', '${PROJECT}', 's1', 'carts', '${TURN_2}', 2, '${TURN_2}', 2, '2026-10-20T10:05:01Z', '2026-10-20T10:05:02Z', '{${TURN_2}}', 1);
+    insert into trace_workflow_labels (project_id, workflow_id, input_hash, name) values ('${PROJECT}', 'booking', 'h', 'Book a flight');
+    insert into trace_topics (project_id, topic_id, name, input_hash) values ('${PROJECT}', 'tp1', 'Flight changes', 'h');
+    insert into trace_turn_topics (turn_id, project_id, topic_id, verdict, sentiment, started_at) values ('${TURN_2}', '${PROJECT}', 'tp1', 'topic', 'negative', '2026-10-20T10:05:00Z');
+  `);
+  return fixture;
+}
+
+test("typed steps on: user messages and code are steps, task bands cross turns, and each turn says its intent", async () => {
+  const { client, db } = await typedSetup();
+  try {
+    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false, typedSteps: true }, db);
+    assert.ok(chat);
+    assert.deepEqual(
+      chat.segments
+        .filter((s) => s.kind === "user_message" || s.kind === "code")
+        .map((s) => [s.kind, s.label]),
+      [
+        ["user_message", "User message"],
+        ["code", "Load cart"],
+      ],
+    );
+    assert.deepEqual(
+      chat.bands?.map((band) => [band.workflowId, band.label]),
+      [
+        ["booking", "Book a flight"],
+        ["carts", "Task"],
+      ],
+    );
+    const stepOf = (kind: string) => chat.segments.find((s) => s.kind === kind)?.stepIndex;
+    const booking = chat.bands?.[0];
+    assert.ok(booking);
+    assert.deepEqual(
+      [booking.firstStep, booking.lastStep],
+      [stepOf("search"), stepOf("user_message")],
+    );
+    assert.deepEqual(chat.intents, { 2: { topic: "Flight changes", sentiment: "negative" } });
+  } finally {
+    await client.close();
+  }
+});
+
+test("typed steps off: the same rows read as today, with no bands", async () => {
+  const { client, db } = await typedSetup();
+  try {
+    const chat = await loadSessionChat(PROJECT, "s1", { readContent: false }, db);
+    assert.ok(chat);
+    assert.equal(
+      chat.segments.some((s) => s.kind === "user_message" || s.kind === "code"),
+      false,
+    );
+    assert.equal(chat.bands, undefined);
+    assert.equal(chat.intents, undefined);
+  } finally {
+    await client.close();
+  }
+});

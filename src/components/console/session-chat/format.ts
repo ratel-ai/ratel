@@ -22,6 +22,12 @@ export function stepWords(segment: TrackSegment): string {
       return "Their message";
     case "wait":
       return `Waited, ${segment.label}`;
+    case "user_message":
+      return "Their message";
+    case "code":
+      return `Ran ${segment.label}`;
+    case "handoff":
+      return segment.label;
   }
 }
 

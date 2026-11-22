@@ -58,7 +58,7 @@ export interface LatestTasksRun {
 
 export async function loadLatestTasksRun(
   projectId: string,
-  db: TasksDb,
+  db: Pick<TasksDb, "select">,
 ): Promise<LatestTasksRun | null> {
   const [row] = await db
     .select({

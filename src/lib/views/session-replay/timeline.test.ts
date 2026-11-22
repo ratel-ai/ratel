@@ -255,3 +255,69 @@ test("an empty session has no steps", () => {
     coverage: { content: 0, tokens_only: 0, expired: 0 },
   });
 });
+
+function typed(
+  ordinal: number,
+  s: number,
+  kind: "user_message" | "model_call" | "code" | "handoff",
+  targetId: string | null = null,
+): TimelineLedgerStep {
+  return {
+    ordinal,
+    kind,
+    traceEventId: `ev-${ordinal}-${s}`,
+    occurredAt: at(s),
+    eventPresent: true,
+    targetType: null,
+    targetId,
+    outcome: "ok",
+    tookMs: kind === "user_message" ? null : 20,
+    searchType: null,
+    hitCount: null,
+    hitIds: null,
+  };
+}
+
+test("typed steps: user messages, code and handoffs are steps; a stored model call gives its ordinal to the joined call", () => {
+  const timeline = buildSessionTimeline(
+    input(
+      [
+        turn("t1", 0, [
+          typed(1, 1, "user_message"),
+          typed(2, 1, "model_call", "triage"),
+          invoke(3, 3, "find"),
+          typed(4, 4, "code", "load_cart"),
+          typed(5, 6, "handoff", "billing"),
+          typed(6, 8, "model_call", "triage"),
+        ]),
+      ],
+      [call("e1", "t1", 1), call("e2", "t1", 8.2)],
+    ),
+  );
+  assert.deepEqual(
+    timeline.steps.map((step) => [
+      step.kind,
+      "ordinal" in step ? step.ordinal : null,
+      step.kind === "step" ? step.stepKind : null,
+    ]),
+    [
+      ["turn", null, null],
+      ["step", 1, "user_message"],
+      ["model_call", 2, null],
+      ["tool_call", 3, null],
+      ["step", 4, "code"],
+      ["step", 5, "handoff"],
+      ["model_call", 6, null],
+    ],
+  );
+  const code = timeline.steps.find((step) => step.kind === "step" && step.stepKind === "code");
+  assert.equal(code?.kind === "step" ? code.name : null, "load_cart");
+});
+
+test("legacy ledgers keep their steps and joined calls without ordinals", () => {
+  const timeline = buildSessionTimeline(
+    input([turn("t1", 0, [invoke(1, 5, "get_trace")])], [call("e1", "t1", 5)]),
+  );
+  const model = timeline.steps.find((step) => step.kind === "model_call");
+  assert.equal(model && "ordinal" in model, false);
+});

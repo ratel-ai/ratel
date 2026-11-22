@@ -2,8 +2,10 @@
 
 import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
+import { TASK_COLOR_CLASSES } from "@ratel/design-system/task-colors";
 import { ArrowRight, Pause, Play, ScanSearch, TriangleAlert } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import { bandColors } from "@/lib/views/session-chat/bands";
 import {
   formatStepTime,
   type SessionChat,
@@ -46,6 +48,8 @@ export interface SessionTrackProps {
   onInspect: () => void;
   /** A line at one step, with its words (an eval run: where it differs from the last run). */
   marker?: TrackMarker;
+  /** Steps the chosen steps view leaves out: drawn faint, in place, so the time stays true. */
+  dimmed?: (segment: TrackSegment) => boolean;
 }
 
 export interface TrackMarker {
@@ -63,6 +67,9 @@ const SEGMENT_CLASS: Record<TrackSegment["kind"], string> = {
   tool_call: "bg-fg-faint",
   search: "bg-line-strong",
   ask: "bg-success",
+  user_message: "bg-success/60",
+  code: "bg-info/50",
+  handoff: "bg-warning/50",
   wait: "bg-[repeating-linear-gradient(-45deg,var(--color-line-strong)_0_2px,transparent_2px_6px)]",
 };
 
@@ -72,6 +79,14 @@ const LEGEND = [
   { label: "Tool search", className: SEGMENT_CLASS.search },
   { label: "Their message", className: SEGMENT_CLASS.ask },
   { label: "Waiting for them, shortened", className: SEGMENT_CLASS.wait },
+];
+
+/** With typed steps the track also draws code and handoffs. */
+const TYPED_LEGEND = [
+  ...LEGEND.slice(0, 2),
+  { label: "Code", className: SEGMENT_CLASS.code },
+  { label: "Handoff", className: SEGMENT_CLASS.handoff },
+  ...LEGEND.slice(2),
 ];
 
 export function SessionTrack({
@@ -87,6 +102,7 @@ export function SessionTrack({
   onOpenStep,
   onInspect,
   marker,
+  dimmed,
 }: SessionTrackProps) {
   const total = chat.trackTotalMs;
   const view = zoomWindow(total, zoom, t);
@@ -149,6 +165,9 @@ export function SessionTrack({
   const markerAt = marker
     ? chat.segments.find((s) => s.stepIndex === marker.stepIndex)?.trackStartMs
     : undefined;
+  const bands = chat.bands ?? [];
+  const colors = bandColors(bands);
+  const typed = chat.segments.some((segment) => segment.publicKind !== undefined);
 
   return (
     <div data-session-track className="shrink-0 border-t border-line bg-raised px-4 pt-3 pb-2">
@@ -237,6 +256,37 @@ export function SessionTrack({
           </Button>
         </div>
       </div>
+      {bands.length > 0 ? (
+        <div
+          data-task-bands
+          aria-label="Tasks in this session"
+          role="list"
+          className="relative mb-1 h-5 overflow-hidden"
+        >
+          {bands.map((band) => {
+            const left = percent(band.trackStartMs);
+            const w = width > 0 ? ((band.trackEndMs - band.trackStartMs) / width) * 100 : 0;
+            if (left + w < 0 || left > 100) return null;
+            const color = TASK_COLOR_CLASSES[colors.get(band.workflowId) ?? "neutral"];
+            return (
+              <div
+                key={band.segmentId}
+                role="listitem"
+                data-task-band={band.workflowId}
+                title={band.label}
+                className={cn(
+                  "absolute inset-y-0 flex min-w-1 items-center gap-1.5 overflow-hidden rounded-sm border-l-2 px-1.5 text-[11px] text-fg",
+                  color.bgSubtle,
+                  color.border,
+                )}
+                style={{ left: `${left}%`, width: `${w}%` }}
+              >
+                <span className="truncate">{band.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <div
         ref={viewport}
         role="slider"
@@ -278,6 +328,7 @@ export function SessionTrack({
                 segment.problem && "ring-1 ring-warning ring-inset",
                 segment.kind === "wait" ? "text-fg-subtle" : "text-fg",
                 !segment.measured && "opacity-60",
+                dimmed?.(segment) && "opacity-25",
               )}
               style={{ left: `${left}%`, width: `${w}%` }}
             >
@@ -312,7 +363,7 @@ export function SessionTrack({
         ))}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-subtle">
-        {LEGEND.map((item) => (
+        {(typed ? TYPED_LEGEND : LEGEND).map((item) => (
           <span key={item.label} className="inline-flex items-center gap-1.5">
             <span aria-hidden className={cn("size-2.5 rounded-sm", item.className)} />
             {item.label}

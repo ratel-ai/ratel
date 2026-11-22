@@ -3,15 +3,28 @@ import { cn } from "@ratel/design-system/cn";
 import { type Crumb, Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { EmptyState } from "@ratel/design-system/states";
+import {
+  TASK_COLOR_CLASSES,
+  TASK_COLOR_SLOTS,
+  type TaskColorSlot,
+} from "@ratel/design-system/task-colors";
 import { ArrowLeft, CircleX, Search } from "lucide-react";
 import Link from "next/link";
 import type { TraceTurnRow, TraceTurnStepRow } from "@/lib/ledger/schema";
 import { turnTracesHref } from "@/lib/readings/trace-signals/view";
 import { formatClock } from "@/lib/synthesis/traces/v2/format";
 import { formatCount } from "@/lib/views/tasks/format";
-import { sessionStep } from "@/lib/views/tasks/session";
+import {
+  type BandSegment,
+  type SegmentBand,
+  segmentBands,
+  sessionStep,
+} from "@/lib/views/tasks/session";
 
 export type SessionTurns = readonly { turn: TraceTurnRow; steps: readonly TraceTurnStepRow[] }[];
+
+/** A task segment of the session with its task's name (typed steps). */
+export type SessionBand = BandSegment & { label: string };
 
 /**
  * One session, turn by turn (Tool craft's drill-down, now opened from a
@@ -28,6 +41,8 @@ export function SessionView({
   backHref,
   backLabel,
   projectId,
+  typedSteps = false,
+  bands = [],
 }: {
   projectId: string;
   sessionId: string;
@@ -35,6 +50,9 @@ export function SessionView({
   names: Record<string, string>;
   highlight?: readonly string[];
   crumbs: readonly Crumb[];
+  /** `cloud-typed-steps`: steps read by kind, under one band per task segment. */
+  typedSteps?: boolean;
+  bands?: readonly SessionBand[];
   /** The task the reader came from, or Tasks. */
   backHref: string;
   backLabel: string;
@@ -59,6 +77,8 @@ export function SessionView({
           highlight={highlight}
           backHref={backHref}
           backLabel={backLabel}
+          typedSteps={typedSteps}
+          bands={bands}
         />
       </PageBody>
     </Page>
@@ -73,6 +93,8 @@ export function SessionTimeline({
   highlight = [],
   backHref,
   backLabel,
+  typedSteps = false,
+  bands = [],
 }: {
   projectId: string;
   sessionId: string;
@@ -81,8 +103,11 @@ export function SessionTimeline({
   highlight?: readonly string[];
   backHref: string;
   backLabel: string;
+  typedSteps?: boolean;
+  bands?: readonly SessionBand[];
 }) {
   const marked = new Set(highlight);
+  const tasks = taskBands(turns, bands);
   return (
     <Section
       title={
@@ -131,49 +156,123 @@ export function SessionTimeline({
                     Open in Traces
                   </Link>
                 </div>
-                <ol
-                  className="flex flex-wrap items-center gap-1.5"
-                  aria-label={`Turn ${index + 1} steps`}
-                >
-                  {steps.map((row, position) => {
-                    const step = sessionStep(row, names);
-                    const isMarked = step.toolId !== null && marked.has(step.toolId);
-                    return (
-                      <li key={step.key} className="flex items-center gap-1.5">
-                        {position > 0 ? (
-                          <span aria-hidden className="h-px w-2 bg-line-strong" />
-                        ) : null}
-                        <span
-                          title={step.title}
-                          data-step-kind={row.kind}
-                          data-step-outcome={row.outcome ?? undefined}
-                          data-step-marked={isMarked ? "true" : undefined}
-                          className={cn(
-                            "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-xs",
-                            step.kind === "search"
-                              ? "border-dashed border-line-strong text-fg-muted"
-                              : step.failed
-                                ? "border-danger/40 bg-danger-subtle font-mono text-danger"
-                                : "border-line bg-raised font-mono text-fg",
-                            isMarked && "border-accent-mark bg-accent-subtle",
-                          )}
-                        >
-                          {step.kind === "search" ? (
-                            <Search aria-hidden className="size-3" />
+                <div className="flex min-w-0 flex-col gap-2">
+                  {tasks.bands.length > 0 ? <TurnTasks turnId={turn.id} tasks={tasks} /> : null}
+                  <ol
+                    className="flex flex-wrap items-center gap-1.5"
+                    aria-label={`Turn ${index + 1} steps`}
+                  >
+                    {steps.map((row, position) => {
+                      const step = sessionStep(row, names, { typedSteps });
+                      const isMarked = step.toolId !== null && marked.has(step.toolId);
+                      const band = tasks.byStep.get(`${turn.id}:${row.ordinal}`);
+                      return (
+                        <li key={step.key} className="flex items-center gap-1.5">
+                          {position > 0 ? (
+                            <span aria-hidden className="h-px w-2 bg-line-strong" />
                           ) : null}
-                          {step.failed ? <CircleX aria-hidden className="size-3" /> : null}
-                          {step.label}
-                          {step.failed ? <span className="sr-only">, failed</span> : null}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ol>
+                          <span
+                            title={step.title}
+                            data-step-kind={row.kind}
+                            data-step-outcome={row.outcome ?? undefined}
+                            data-step-marked={isMarked ? "true" : undefined}
+                            data-step-task={band?.workflowId}
+                            className={cn(
+                              "inline-flex h-6 items-center gap-1 rounded-md border px-1.5 text-xs",
+                              band &&
+                                cn(
+                                  "border-b-2",
+                                  TASK_COLOR_CLASSES[tasks.colors.get(band.workflowId) ?? "neutral"]
+                                    .border,
+                                ),
+                              step.kind === "search"
+                                ? "border-dashed border-line-strong text-fg-muted"
+                                : step.failed
+                                  ? "border-danger/40 bg-danger-subtle font-mono text-danger"
+                                  : "border-line bg-raised font-mono text-fg",
+                              isMarked && "border-accent-mark bg-accent-subtle",
+                            )}
+                          >
+                            {step.kind === "search" ? (
+                              <Search aria-hidden className="size-3" />
+                            ) : null}
+                            {step.failed ? <CircleX aria-hidden className="size-3" /> : null}
+                            {step.label}
+                            {step.failed ? <span className="sr-only">, failed</span> : null}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                </div>
               </li>
             ))}
           </ol>
         )}
       </div>
     </Section>
+  );
+}
+
+interface TaskBands {
+  bands: readonly (SegmentBand & { label: string; turnIds: readonly string[] })[];
+  /** The band of each step, by `<turn id>:<ordinal>`. */
+  byStep: ReadonlyMap<string, SegmentBand>;
+  colors: ReadonlyMap<string, TaskColorSlot>;
+}
+
+/** The session's task bands over its steps, the band of each step and one color per task in the order the session meets them. */
+function taskBands(turns: SessionTurns, segments: readonly SessionBand[]): TaskBands {
+  const positions = turns.flatMap(({ turn, steps }) =>
+    steps.map((step) => ({ turnId: turn.id, ordinal: step.ordinal })),
+  );
+  const labels = new Map(segments.map((segment) => [segment.id, segment.label]));
+  const bands = segmentBands(positions, segments).map((band) => ({
+    ...band,
+    label: labels.get(band.segmentId) ?? "Task",
+    turnIds: [
+      ...new Set(positions.slice(band.first, band.last + 1).map((position) => position.turnId)),
+    ],
+  }));
+  const byStep = new Map<string, SegmentBand>();
+  const colors = new Map<string, TaskColorSlot>();
+  for (const band of bands) {
+    for (const position of positions.slice(band.first, band.last + 1))
+      byStep.set(`${position.turnId}:${position.ordinal}`, band);
+    if (!colors.has(band.workflowId) && colors.size < TASK_COLOR_SLOTS.length)
+      colors.set(band.workflowId, TASK_COLOR_SLOTS[colors.size]!);
+  }
+  return { bands, byStep, colors };
+}
+
+/** The tasks a turn takes part in, each saying when it began in an earlier turn or goes on in a later one. */
+function TurnTasks({ turnId, tasks }: { turnId: string; tasks: TaskBands }) {
+  const here = tasks.bands.filter((band) => band.turnIds.includes(turnId));
+  if (here.length === 0) return null;
+  return (
+    <ul aria-label="Tasks in this turn" className="flex flex-wrap items-center gap-1.5">
+      {here.map((band) => {
+        const color = TASK_COLOR_CLASSES[tasks.colors.get(band.workflowId) ?? "neutral"];
+        return (
+          <li
+            key={band.segmentId}
+            data-turn-task={band.workflowId}
+            className={cn(
+              "inline-flex h-6 items-center gap-1.5 rounded-md border-l-2 px-2 text-xs text-fg",
+              color.bgSubtle,
+              color.border,
+            )}
+          >
+            <span className="truncate">{band.label}</span>
+            {band.turnIds[0] !== turnId ? (
+              <span className="text-fg-subtle">· from an earlier turn</span>
+            ) : null}
+            {band.turnIds.at(-1) !== turnId ? (
+              <span className="text-fg-subtle">· goes on in the next turn</span>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
