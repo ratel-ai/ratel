@@ -365,7 +365,7 @@ const isNegative = (reaction: TurnAnswers["reaction"]): boolean =>
  * whatever the satisfaction question says: moving on says nothing against
  * the turn before. A "no" with no reaction decided is `unknown`, not
  * unsatisfied. Chosen on held-out turns of a real project and of a
- * chat mock (`.beluga/scratch/sat-study/`, 2026-11-19): it halves the turns
+ * chat mock (2026-11-19): it halves the turns
  * read as unsatisfied that were not.
  */
 export function satisfactionOf(

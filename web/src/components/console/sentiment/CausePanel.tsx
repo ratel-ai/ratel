@@ -2,49 +2,67 @@
 
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { Panel, usePeek } from "@ratel/design-system/panel";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import {
-  NO_CAUSE_LABEL,
-  NO_CAUSE_PEEK,
-  percent,
-  plural,
-} from "@/components/console/sentiment/copy";
+import { NO_CAUSE_LABEL, percent, plural } from "@/components/console/sentiment/copy";
+import { type PanelTurn, useTurnPanel } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
+import { turnTracesHref } from "@/lib/readings/trace-signals/view";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import { CAUSE_PEEK, openProblem, problemPeekId } from "@/lib/views/traces/sentiment/cause-peek";
 import type { DissatisfactionProblem } from "@/lib/views/traces/sentiment/overview";
+import { CAUSE_LABEL, CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
 
 /**
- * The unsatisfied turns no cause was named for, opened from What drives
- * dissatisfaction: what that means, how often, and where it happened (each
- * turn's date and the way to it in Traces), so the turns can be read by eye.
+ * One cause of dissatisfaction, opened from its row: what it means, how often
+ * it is behind a turn someone was unsatisfied with, and those turns only
+ * (never a turn nobody complained about), each opening in this same Panel.
+ * `j` and `k` step through the causes.
  */
-export function NoCausePanel({
+export function CausePanel({
   projectId,
-  problem,
+  problems,
   now,
+  turn,
 }: {
   projectId: string;
-  problem: DissatisfactionProblem | null;
+  problems: readonly DissatisfactionProblem[];
   now: string;
+  turn: PanelTurn | null;
 }) {
-  const peek = usePeek(NO_CAUSE_PEEK.param);
-  const open = problem !== null && peek.id === NO_CAUSE_PEEK.id;
+  const peek = usePeek(CAUSE_PEEK);
+  const problem = openProblem(problems, peek.id);
+  const label = problem?.cause ? CAUSE_LABEL[problem.cause] : NO_CAUSE_LABEL;
+  const panel = useTurnPanel({ turn, openId: peek.id, backLabel: label });
+  const index = problem ? problems.indexOf(problem) : -1;
+  const step = (by: 1 | -1) => {
+    const next = problems[index + by];
+    if (next) peek.open(problemPeekId(next));
+  };
   return (
     <Panel
-      open={open}
+      open={problem !== null}
       onOpenChange={(next) => {
-        if (!next) peek.close();
+        if (!next) panel.close(CAUSE_PEEK);
       }}
-      title={NO_CAUSE_LABEL}
-      subtitle="Unsatisfied turns"
+      size={panel.inTurn ? "wide" : "default"}
+      title={panel.inTurn ? panel.title : label}
+      subtitle={panel.inTurn ? undefined : "Unsatisfied turns"}
+      actions={panel.actions}
+      onPrevious={!panel.inTurn && index > 0 ? () => step(-1) : undefined}
+      onNext={
+        !panel.inTurn && index >= 0 && index < problems.length - 1 ? () => step(1) : undefined
+      }
     >
-      {problem ? (
-        <div className="flex flex-col gap-6" data-no-cause-panel="">
+      {panel.inTurn ? (
+        panel.body
+      ) : problem ? (
+        <div className="flex flex-col gap-6" data-cause-panel={problemPeekId(problem)}>
           <section className="flex flex-col gap-3" aria-label="What it is">
             <p className="text-sm text-fg">
-              The person was not satisfied, and nothing named why: every call worked, or the trace
-              showed nothing that went wrong. Open a turn to read what happened.
+              {problem.cause
+                ? CAUSE_MEANING[problem.cause]
+                : "The person was not satisfied, and nothing named why: every call worked, or the trace showed nothing that went wrong. Open a turn to read what happened."}
             </p>
             <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 text-ui">
               <dt className="text-fg-subtle">How often</dt>
@@ -63,7 +81,7 @@ export function NoCausePanel({
                   : plural(problem.examples.length, "turn")}
               </span>
             </div>
-            <ul className="flex flex-col border-t border-line" data-no-cause-where="">
+            <ul className="flex flex-col border-t border-line" data-cause-where="">
               {problem.examples.map((example) => (
                 <li
                   key={example.turnId}
@@ -81,12 +99,13 @@ export function NoCausePanel({
                     <span className="text-ui text-fg-subtle">No time sent</span>
                   )}
                   <Link
-                    href={`/project/${encodeURIComponent(projectId)}/traces/turns/${encodeURIComponent(example.turnId)}`}
+                    href={turnTracesHref(projectId, example.turnId)}
                     className={buttonVariants({ variant: "secondary", size: "sm" })}
-                    data-no-cause-open-trace=""
+                    data-cause-open-trace={example.turnId}
+                    onClick={panel.onOpen({ turnId: example.turnId, eventId: null })}
                   >
                     Open in Traces
-                    <ArrowUpRight aria-hidden />
+                    <ArrowRight aria-hidden />
                   </Link>
                 </li>
               ))}

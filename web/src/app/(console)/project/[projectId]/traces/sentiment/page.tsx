@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { SentimentView } from "@/components/console/sentiment/SentimentView";
+import { loadPanelTurn } from "@/components/console/turn-panel/load";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
@@ -63,5 +64,12 @@ export default async function SentimentAnalysisPage({
       active: option.days === windowDays,
     }));
 
-  return <SentimentView model={model} windows={windows} now={now.toISOString()} />;
+  const turn = await loadPanelTurn({
+    projectId: project.id,
+    organization,
+    search,
+    operation: "sentiment_turn",
+  });
+
+  return <SentimentView model={model} windows={windows} now={now.toISOString()} turn={turn} />;
 }

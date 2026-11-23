@@ -56,12 +56,5 @@ export function moodOf(score: number): Mood {
   return score >= 0.7 ? "satisfied" : score >= 0.4 ? "mixed" : "unsatisfied";
 }
 
-/**
- * The URL parameter and value that open the panel of unsatisfied turns no
- * cause was named for: `?open=no-cause`. Here, not in the panel's client
- * module, so the server-rendered link can read it.
- */
-export const NO_CAUSE_PEEK = { param: "open", id: "no-cause" } as const;
-
 /** What stands where no cause was found: written as a state, not a cause, and shown grey. */
 export const NO_CAUSE_LABEL = "No cause found";

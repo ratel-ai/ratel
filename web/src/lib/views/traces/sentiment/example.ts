@@ -2,7 +2,10 @@ import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import { loadErrorMessages } from "@/lib/readings/trace-signals/outcomes/run-queries";
-import { loadNextScopeReplies } from "@/lib/readings/trace-signals/outcomes/text-queries";
+import {
+  loadNextScopeReplies,
+  loadOtlpSessionPrompts,
+} from "@/lib/readings/trace-signals/outcomes/text-queries";
 import { replyTextOf } from "@/lib/readings/trace-signals/self-corrections/replies";
 import {
   loadReplyRows,
@@ -95,6 +98,27 @@ async function nextMessage(
 }
 
 /** The person's next message after any other turn: the ask of the session's next turn, when it is the person's own words. */
+/**
+ * An OTel turn's next message: the person's next prompt in the session, as
+ * the reading pairs them. It may have started no turn (no call after it), so
+ * the next turn's request is not it. Null when the turn's own prompt is not
+ * among them.
+ */
+async function nextPrompt(
+  db: BoundReadDb,
+  projectId: string,
+  turn: { sessionId: string; turnKey: string; startedAt: Date },
+): Promise<string | null> {
+  const prompts = await loadOtlpSessionPrompts(
+    projectId,
+    [turn.sessionId],
+    { from: turn.startedAt, to: new Date(turn.startedAt.getTime() + DAY_MS) },
+    db,
+  );
+  const own = prompts.findIndex((prompt) => prompt.turnId === turn.turnKey);
+  return own < 0 ? null : (prompts[own + 1]?.text ?? null);
+}
+
 async function nextTurnAsk(
   db: BoundReadDb,
   projectId: string,
@@ -258,7 +282,7 @@ export async function loadTurnExample(
   const reply = await replyOfTurn(db, projectId, turn);
   const next = turn.turnKey.startsWith(DECLARED)
     ? await nextMessage(db, projectId, turn)
-    : await nextTurnAsk(db, projectId, turn);
+    : ((await nextPrompt(db, projectId, turn)) ?? (await nextTurnAsk(db, projectId, turn)));
 
   const example: TurnExample = {
     turnId: turn.id,

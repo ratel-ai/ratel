@@ -162,7 +162,7 @@ export interface DissatisfactionGroupTotal {
 }
 
 /** Unsatisfied turns kept per cause, to open in Traces. */
-export const PARETO_EXAMPLES = 10;
+export const PARETO_EXAMPLES = 50;
 
 /** Days the satisfaction line averages over, the day itself and the ones before it. */
 export const SMOOTHING_DAYS = 7;
@@ -594,9 +594,22 @@ export function buildOverview(input: {
 }
 
 /**
+ * Whether an occurrence can explain that someone was unsatisfied: not a failed
+ * call the agent made up for (every streak of that tool and cause recovered),
+ * which the person need not have noticed.
+ */
+function explains(occurrence: Pick<Occurrence, "turn" | "cause" | "tool">): boolean {
+  if (occurrence.tool === null) return true;
+  const streaks = (occurrence.turn.failures ?? []).filter(
+    (streak) => streak.tool === occurrence.tool && (streak.cause ?? "unread") === occurrence.cause,
+  );
+  return streaks.length === 0 || streaks.some((streak) => !streak.recovered);
+}
+
+/**
  * Each unsatisfied turn under one problem, its cause: the first thing that
- * went wrong in that turn (`occurrencesOf` order), else in another turn of its
- * task, else none named. A cause counts across every tool it happened on.
+ * went wrong in that turn (`occurrencesOf` order) and can explain it
+ * (`explains`), else in another turn of its task, else none named. A cause counts across every tool it happened on.
  * Problems most turns first; the vital few are the fewest whose shares reach
  * `PARETO_CUT`.
  */
@@ -607,7 +620,8 @@ function paretoOf(
 ): Overview["dissatisfaction"] {
   const firstOf = new Map<string, Pick<Occurrence, "cause" | "tool">>();
   for (const occurrence of occurrences)
-    if (!firstOf.has(occurrence.turn.turnId)) firstOf.set(occurrence.turn.turnId, occurrence);
+    if (!firstOf.has(occurrence.turn.turnId) && explains(occurrence))
+      firstOf.set(occurrence.turn.turnId, occurrence);
   const counts = new Map<
     string,
     { cause: RootCause | null; tools: Map<string, number>; turns: number; answers: PageAnswer[] }

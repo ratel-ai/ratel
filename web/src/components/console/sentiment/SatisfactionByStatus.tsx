@@ -21,10 +21,7 @@ const HEAD = "py-2 font-medium";
 export function SatisfactionByStatus({ overview }: { overview: Overview }) {
   if (overview.satisfaction.answers === 0) return null;
   return (
-    <Section
-      title={<NounTitle icon={ListChecks}>Satisfaction by task status</NounTitle>}
-      description="Turns people did not push back on, of those they reacted to, in tasks with each status."
-    >
+    <Section title={<NounTitle icon={ListChecks}>Satisfaction by task status</NounTitle>}>
       <table className="w-full table-fixed text-left text-ui" data-sentiment-by-status="">
         <caption className="sr-only">Satisfaction by task status</caption>
         <thead className="border-b border-line text-xs text-fg-subtle">

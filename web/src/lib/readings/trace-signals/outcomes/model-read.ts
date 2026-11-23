@@ -4,6 +4,7 @@ import {
   type AskDeps,
   askQuestions,
   type OutcomeVerdict,
+  UNKNOWN_ANSWER,
 } from "@/lib/readings/trace-signals/outcomes/ask";
 import { OUTCOME_QUESTION_VERSION } from "@/lib/readings/trace-signals/outcomes/kinds";
 import { replyToSend } from "@/lib/readings/trace-signals/outcomes/question-content";
@@ -21,6 +22,7 @@ import {
   type TurnAnswerRow,
   type TurnAnswers,
   turnAsks,
+  wentWrong,
 } from "@/lib/readings/trace-signals/outcomes/questions";
 import {
   type ReplyReaction,
@@ -226,7 +228,7 @@ const openingOf = (text: string): string | null => {
     : null;
 };
 
-/** A message that opens with a bracketed tag ("[beluga] a teammate's agent replied …") is a tool's notice. */
+/** A message that opens with a bracketed tag ("[relay] a teammate's agent replied …") is a tool's notice. */
 const TAGGED_NOTICE = /^\s*\[[\p{L}\p{N}_ .-]{1,40}\]/u;
 
 /**
@@ -234,7 +236,7 @@ const TAGGED_NOTICE = /^\s*\[[\p{L}\p{N}_ .-]{1,40}\]/u;
  * the person is waiting, not pushing back on the reply before.
  */
 const STATUS_CHECK =
-  /^(?:(?:so|ok|okay|and|hey)[,\s]+)?(?:how(?:'s| is| are)\s+(?:it|the|things|training|progress|results)(?:\s+\w+){0,2}\s*going|how are the results|what(?:'s| is)\s+the\s+(?:status|situation|progress)|(?:is|are)\s+(?:it|they|training|the \w+)\s+(?:done|finished|ready|promising|completed)|when (?:is|will) it\s+(?:be\s+)?(?:gonna\s+)?(?:be\s+)?(?:done|finished|ready)|did (?:the )?progress stop|any (?:update|news|progress)|status|continue|keep going|go on|go ahead)\s*[?.!]*\s*$/i;
+  /^(?:(?:so|ok|okay|and|hey)[,\s]+)?(?:how(?:'s| is| are)\s+(?:it|the|things|training|progress|results)(?:\s+\w+){0,2}\s*going|how are the results|what(?:'s| is)\s+the\s+(?:status|situation|progress)|(?:is|are)\s+(?:it|they|training|the \w+|\w+ \d+)\s+(?:done|finished|ready|promising|completed)|when (?:is|will) it\s+(?:be\s+)?(?:gonna\s+)?(?:be\s+)?(?:done|finished|ready)|did (?:the )?progress stop|any (?:update|news|progress)|status|continue|keep going|go on|go ahead)\s*[?.!]*\s*$/i;
 
 export function isStatusCheck(text: string): boolean {
   const flat = text
@@ -242,6 +244,55 @@ export function isStatusCheck(text: string): boolean {
     .replace(/[\u2018\u2019\u02bc]/g, "'")
     .trim();
   return flat.split(/\s+/).length <= 9 && STATUS_CHECK.test(flat);
+}
+
+/**
+ * A turn's answers with a status check read as one (pure). The person asking
+ * how it is going after a turn is waiting: what the questions read in that
+ * message as a complaint (the reaction, a misunderstanding) is dropped. And
+ * a turn that was itself a status check was answered in the reply, so without
+ * a captured reply whether it was answered cannot be told. A cause is kept
+ * only while something else says the turn went wrong.
+ */
+export function statusCheckAnswers(
+  answers: TurnAnswers,
+  turn: Pick<QuestionTurn, "request" | "reply" | "next">,
+): TurnAnswers {
+  const waiting = turn.next !== null && isStatusCheck(turn.next);
+  const asked = turn.request !== null && turn.reply === null && isStatusCheck(turn.request);
+  if (!waiting && !asked) return answers;
+  const read: TurnAnswers = {
+    ...answers,
+    misunderstood: null,
+    ...(waiting
+      ? { satisfied: null, reaction: answers.reaction === null ? null : UNKNOWN_ANSWER }
+      : {}),
+    ...(asked ? { completed: null } : {}),
+  };
+  return wentWrong(read) ? read : { ...read, cause: null };
+}
+
+/** Causes about what the agent said: that it can't, that it is done, what it asked, that it may not. */
+const REPLY_CAUSES: ReadonlySet<string> = new Set([
+  "missing_capability",
+  "false_success",
+  "over_asking",
+  "correct_refusal",
+]);
+
+/**
+ * A turn's answers without a cause nothing shows (pure): a cause about what
+ * the agent said is a guess where no reply was captured. A search run for one
+ * tool that was not found is evidence of its own for a missing tool.
+ */
+export function causeWithEvidence(
+  answers: TurnAnswers,
+  turn: Pick<QuestionTurn, "reply">,
+): TurnAnswers {
+  if (turn.reply !== null || answers.cause === null || !REPLY_CAUSES.has(answers.cause))
+    return answers;
+  if (answers.cause === "missing_capability" && answers.searchRun === "one_need") return answers;
+  return { ...answers, cause: null };
 }
 
 /**
@@ -277,9 +328,14 @@ export function templateMessages(
  * thanks reads satisfied, a complaint unsatisfied; a plain message is no
  * reading at all (a new request says nothing about the last reply).
  */
-export function satisfactionByLexicon(next: string | null): "satisfied" | "unsatisfied" | null {
+export function satisfactionByLexicon(
+  next: string | null,
+  reaction: string | null = null,
+): "satisfied" | "unsatisfied" | null {
   if (next === null) return null;
   const sentiment = lexiconSentiment(next, { weak: false });
+  // Complaint words in a new request are about the work it asks for ("fix what is broken"), not the last reply.
+  if (sentiment === "negative" && reaction === "new_request") return null;
   return sentiment === "positive" ? "satisfied" : sentiment === "negative" ? "unsatisfied" : null;
 }
 
@@ -501,7 +557,11 @@ export async function readModelLayer(
   // every question the first pass sent counts, answered or not (a question the server could not answer was still asked).
   const causes = read.flatMap(
     (turn) =>
-      causeAsk(turn, ruleOf.get(turn.turnId) ?? none, readAnswers(turn.turnId, verdicts)) ?? [],
+      causeAsk(
+        turn,
+        ruleOf.get(turn.turnId) ?? none,
+        statusCheckAnswers(readAnswers(turn.turnId, verdicts), turn),
+      ) ?? [],
   );
   const second =
     causes.length > 0 && first.stopped === null
@@ -543,11 +603,16 @@ export async function readModelLayer(
   const rows: TurnAnswerRow[] = [];
   let byLexicon = 0;
   for (const turn of read) {
-    const turnAnswers = readAnswers(turn.turnId, verdicts);
+    const turnAnswers = causeWithEvidence(
+      statusCheckAnswers(readAnswers(turn.turnId, verdicts), turn),
+      turn,
+    );
     if (answered(turnAnswers)) answers.set(turn.turnId, turnAnswers);
     const bySage = satisfactionOf(turnAnswers);
     const lexicon =
-      bySage !== "satisfied" && bySage !== "unsatisfied" ? satisfactionByLexicon(turn.next) : null;
+      bySage !== "satisfied" && bySage !== "unsatisfied"
+        ? satisfactionByLexicon(turn.next, turnAnswers.reaction)
+        : null;
     if (turn.next !== null && isStatusCheck(turn.next)) {
       // Asking how it is going is waiting, not pushing back, whatever the reaction question read in it.
       rows.push({ ...answerRow(turn.turnId, turnAnswers), satisfaction: "neutral" });

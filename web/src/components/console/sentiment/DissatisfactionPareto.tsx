@@ -3,23 +3,14 @@ import { PeekLink } from "@ratel/design-system/panel";
 import { Section } from "@ratel/design-system/section";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ChartBarDecreasing, ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
-import {
-  NO_CAUSE_LABEL,
-  NO_CAUSE_PEEK,
-  percent,
-  plural,
-} from "@/components/console/sentiment/copy";
+import { CausePanel } from "@/components/console/sentiment/CausePanel";
+import { NO_CAUSE_LABEL, percent, plural } from "@/components/console/sentiment/copy";
 import { FoldGroup } from "@/components/console/sentiment/FoldGroup";
-import { NoCausePanel } from "@/components/console/sentiment/NoCausePanel";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
-import type { WindowDays } from "@/lib/readings/trace-signals/view";
-import {
-  type DissatisfactionProblem,
-  type Overview,
-  PARETO_CUT,
-} from "@/lib/views/traces/sentiment/overview";
+import { CAUSE_PEEK, problemPeekId } from "@/lib/views/traces/sentiment/cause-peek";
+import type { DissatisfactionProblem, Overview } from "@/lib/views/traces/sentiment/overview";
 import {
   CAUSE_LABEL,
   CAUSE_MEANING,
@@ -28,27 +19,27 @@ import {
   type DissatisfactionGroup,
   dissatisfactionGroupOf,
 } from "@/lib/views/traces/sentiment/page-kinds";
-import { rootCausesHref } from "@/lib/views/traces/sentiment/page-paths";
 
 /**
  * What drives dissatisfaction: the unsatisfied turns in three groups (the
  * agent, the system it runs on, other), each with its share, folded; opened,
  * a group lists its causes as a Pareto list (across every tool, most first,
  * ranked across all groups, with the running total). The causes outside the
- * fewest that add up to 80% are quieter. A cause opens Root cause analysis
- * narrowed to it, where its tasks and their traces are.
+ * fewest that add up to 80% are quieter. A cause opens its own
+ * unsatisfied turns in the Panel.
  */
 export function DissatisfactionPareto({
   projectId,
-  windowDays,
   dissatisfaction,
   now,
+  turn,
 }: {
   projectId: string;
-  windowDays: WindowDays;
   dissatisfaction: Overview["dissatisfaction"];
   /** The request's time, so relative times match between server and client. */
   now: string;
+  /** The turn the address opens in the Panel. */
+  turn: PanelTurn | null;
 }) {
   const { turns, problems, vital, groups } = dissatisfaction;
   if (turns === 0) return null;
@@ -56,10 +47,7 @@ export function DissatisfactionPareto({
   const reached = lead.at(-1)?.cumulative ?? 0;
   const most = Math.max(1, ...problems.map((problem) => problem.turns));
   return (
-    <Section
-      title={<NounTitle icon={ChartBarDecreasing}>What drives dissatisfaction</NounTitle>}
-      description="Unsatisfied turns by whose problem it was: the agent, the system it runs on, or other. Each turn counts once, for what went wrong in it. Open a group for its causes; pick a cause to see its tasks in Root cause analysis."
-    >
+    <Section title={<NounTitle icon={ChartBarDecreasing}>What drives dissatisfaction</NounTitle>}>
       <p className="text-ui text-fg-muted" data-sentiment-pareto-summary="">
         <span className="font-semibold text-fg tabular-nums">
           {formatCount(vital)} of {plural(problems.length, "cause")}
@@ -138,7 +126,6 @@ export function DissatisfactionPareto({
                         rank={problems.indexOf(problem) + 1}
                         problem={problem}
                         most={most}
-                        href={hrefOf(projectId, windowDays, problem)}
                         quiet={!problem.vital}
                       />
                     ))}
@@ -148,12 +135,7 @@ export function DissatisfactionPareto({
             );
           })}
       </ul>
-      <p className="text-xs text-fg-subtle">{`The leading causes are the fewest that add up to ${percent(PARETO_CUT)} of dissatisfaction.`}</p>
-      <NoCausePanel
-        projectId={projectId}
-        problem={problems.find((problem) => problem.cause === null) ?? null}
-        now={now}
-      />
+      <CausePanel projectId={projectId} problems={problems} now={now} turn={turn} />
     </Section>
   );
 }
@@ -169,26 +151,15 @@ function problemLabel(problem: DissatisfactionProblem): string {
   return problem.cause ? CAUSE_LABEL[problem.cause] : NO_CAUSE_LABEL;
 }
 
-function hrefOf(
-  projectId: string,
-  windowDays: WindowDays,
-  problem: DissatisfactionProblem,
-): string | null {
-  if (!problem.cause) return null;
-  return rootCausesHref(projectId, { days: windowDays, filters: { cause: problem.cause } });
-}
-
 function Row({
   rank,
   problem,
   most,
-  href,
   quiet = false,
 }: {
   rank: number;
   problem: DissatisfactionProblem;
   most: number;
-  href: string | null;
   quiet?: boolean;
 }) {
   const label = (
@@ -216,23 +187,14 @@ function Row({
             : "Unsatisfied turns where nothing in the trace or a model named what went wrong."
         }
       >
-        {href ? (
-          <Link
-            href={href}
-            className="min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            {label}
-          </Link>
-        ) : (
-          // No cause to filter Root cause analysis by: its turns open in a panel instead.
-          <PeekLink
-            peek={NO_CAUSE_PEEK.id}
-            param={NO_CAUSE_PEEK.param}
-            className="min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            {label}
-          </PeekLink>
-        )}
+        {/* The cause's own unsatisfied turns, beside the list. */}
+        <PeekLink
+          peek={problemPeekId(problem)}
+          param={CAUSE_PEEK}
+          className="min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-focus"
+        >
+          {label}
+        </PeekLink>
       </Tooltip>
       <span className="h-2.5 w-full rounded-[3px] bg-raised max-sm:hidden" aria-hidden>
         <span

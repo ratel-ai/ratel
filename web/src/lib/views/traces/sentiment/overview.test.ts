@@ -409,6 +409,32 @@ test("dissatisfaction as a Pareto list: each unsatisfied turn under its cause, a
   );
 });
 
+test("a failed call the agent made up for does not explain why someone was unsatisfied", () => {
+  const recovered = task();
+  const open = task();
+  const streak = (made: boolean) => ({
+    tool: "Bash",
+    cause: "other",
+    followed: made ? "fixed_next_try" : "nothing_followed",
+    recovered: made,
+  });
+  const failing = (of: PageTask, made: boolean): ReturnType<typeof hit> => {
+    const found = hit(of, "other", "Bash");
+    return { ...found, turn: { ...found.turn, failures: [streak(made)] as never } };
+  };
+  const page = overview([recovered, open], {
+    occurrences: [failing(recovered, true), failing(open, false)],
+    answers: [answer(recovered, false), answer(open, false)],
+  });
+  assert.deepEqual(
+    page.dissatisfaction.problems.map((problem) => [problem.cause, problem.turns]).sort(),
+    [
+      [null, 1],
+      ["other", 1],
+    ].sort(),
+  );
+});
+
 test("tokens: failure counts a task's whole, friction only its own", () => {
   const failed = task({ result: "not_completed", reason: "failed_call", tokens: 1_000 });
   const bumpy = task({

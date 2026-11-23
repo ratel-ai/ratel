@@ -145,3 +145,20 @@ test("a turn's conversation: the person's next message when one was sent; nothin
   });
   assert.equal(await read("44444444-4444-4444-8444-444444444444"), null);
 });
+
+test("an OTel turn's next message is the person's next prompt, also when it started no turn", async () => {
+  const { client, db } = await seeded();
+  const turnId = await turnOf(client, "s-plain");
+  const prompt = (trace: string, at: number, text: string) =>
+    client.query(
+      `insert into trace_events (id, project_id, type, session_id, trace_id, occurred_at, received_at, client_event_id, payload)
+       values (gen_random_uuid(), $1, 'otlp_model_call', 's-plain', $2, $3, $3, $2, jsonb_build_object('prompt', $4::text))`,
+      [PROJECT_ID, trace, new Date(at).toISOString(), text],
+    );
+  await prompt("trace-own", BASE + 60_000, "how is the import going?");
+  await prompt("trace-next", BASE + 90_000, "is it done?");
+  await prompt("trace-later", BASE + 120_000, "a pasted log");
+  await client.query(`update trace_turns set turn_key = 'otlp:trace-own' where id = $1`, [turnId]);
+  const example = await loadTurnExample(db as unknown as BoundReadDb, PROJECT_ID, turnId);
+  assert.equal(example?.next, "is it done?");
+});

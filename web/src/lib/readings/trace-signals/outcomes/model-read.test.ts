@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  type ClosedQuestionClient,
-  type ClosedQuestionRequest,
-} from "@/lib/contracts/closed-questions";
+import type { ClosedQuestionClient, ClosedQuestionRequest } from "@/lib/contracts/closed-questions";
 import type { AskDeps, StoredVerdict } from "@/lib/readings/trace-signals/outcomes/ask";
 import {
+  causeWithEvidence,
   isStatusCheck,
   type ModelReadDeps,
   type ModelTurn,
@@ -15,8 +13,10 @@ import {
   readModelLayer,
   type SessionMessage,
   satisfactionByLexicon,
+  statusCheckAnswers,
   templateMessages,
 } from "@/lib/readings/trace-signals/outcomes/model-read";
+import { NO_ANSWERS } from "@/lib/readings/trace-signals/outcomes/questions";
 
 /** The model a fake client answers as; the answer cache keeps it beside each answer. */
 const SAGE2_MODEL = "closed-question-model";
@@ -657,7 +657,7 @@ test("tool notices and templates with changing names and ids are machine-written
       "s1",
       "a",
       0,
-      "[beluga] a teammate's agent replied (task t_79, which you sent earlier in this conversation)",
+      "[relay] a teammate's agent replied (task t_79, which you sent earlier in this conversation)",
     ),
     message(
       "s1",
@@ -697,6 +697,7 @@ test("a short check on progress is waiting, not pushing back", () => {
     "is training promising?",
     "did progress stop?",
     "How are the results?",
+    "is phase 1 completed?",
   ]) {
     assert.equal(isStatusCheck(text), true, text);
   }
@@ -704,7 +705,97 @@ test("a short check on progress is waiting, not pushing back", () => {
     "you wasted my 10 hours",
     "did you commit the changes?",
     "how is it going to work on production with the old flags?",
+    "is the bug still not finished",
+    "is it really done?? you said so yesterday",
   ]) {
     assert.equal(isStatusCheck(text), false, text);
   }
+});
+
+test("a status check is no complaint in the results either: the turn before it did not go wrong by it", () => {
+  const read = {
+    ...NO_ANSWERS,
+    satisfied: "no",
+    reaction: "repeats",
+    misunderstood: "yes",
+    cause: "misread_request",
+  } as const;
+  const waiting = statusCheckAnswers(read, {
+    request: "add the export button",
+    reply: null,
+    next: "How is it going?",
+  });
+  assert.deepEqual(
+    [waiting.satisfied, waiting.reaction, waiting.misunderstood, waiting.cause],
+    [null, "unknown", null, null],
+  );
+  // What the work itself says still counts, with its cause.
+  const failed = statusCheckAnswers(
+    { ...read, completed: "no" },
+    { request: "add the export button", reply: null, next: "How is it going?" },
+  );
+  assert.deepEqual([failed.completed, failed.cause], ["no", "misread_request"]);
+});
+
+test("whether a status check was answered cannot be told without the reply", () => {
+  const read = {
+    ...NO_ANSWERS,
+    completed: "no",
+    misunderstood: "yes",
+    cause: "misread_request",
+  } as const;
+  const ask = { request: "how is training going?", next: "thanks" };
+  const blind = statusCheckAnswers(read, { ...ask, reply: null });
+  assert.deepEqual([blind.completed, blind.misunderstood, blind.cause], [null, null, null]);
+  assert.deepEqual(statusCheckAnswers(read, { ...ask, reply: "I can't see the run" }), read);
+});
+
+test("a message that is no status check changes nothing", () => {
+  const read = {
+    ...NO_ANSWERS,
+    satisfied: "no",
+    reaction: "corrects",
+    cause: "misread_request",
+  } as const;
+  assert.deepEqual(
+    statusCheckAnswers(read, { request: "fix the name", reply: null, next: "no, the other one" }),
+    read,
+  );
+});
+
+test("complaint words in a message that is a new request are no complaint about the turn before", () => {
+  const ask = "Run the import again and fix whatever is broken or failed.";
+  assert.equal(satisfactionByLexicon(ask), "unsatisfied");
+  assert.equal(satisfactionByLexicon(ask, "new_request"), null);
+  assert.equal(
+    satisfactionByLexicon("thanks, perfect. now archive them", "new_request"),
+    "satisfied",
+  );
+  assert.equal(satisfactionByLexicon("that's wrong, still not working", "unknown"), "unsatisfied");
+});
+
+test("a cause about what the agent said needs the agent's reply", () => {
+  for (const cause of [
+    "missing_capability",
+    "false_success",
+    "over_asking",
+    "correct_refusal",
+  ] as const) {
+    assert.equal(causeWithEvidence({ ...NO_ANSWERS, cause }, { reply: null }).cause, null, cause);
+    assert.equal(
+      causeWithEvidence({ ...NO_ANSWERS, cause }, { reply: "I can't do that here." }).cause,
+      cause,
+    );
+  }
+  // What the request, the calls and the next message can show stands without it.
+  for (const cause of ["misread_request", "unhelpful_answer", "incomplete"] as const)
+    assert.equal(causeWithEvidence({ ...NO_ANSWERS, cause }, { reply: null }).cause, cause);
+  // A search run for one tool that was not found is its own evidence.
+  assert.equal(
+    causeWithEvidence(
+      { ...NO_ANSWERS, cause: "missing_capability", searchRun: "one_need" },
+      { reply: null },
+    ).cause,
+    "missing_capability",
+  );
 });
