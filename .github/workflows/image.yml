@@ -76,6 +76,11 @@ jobs:
           annotations: |
             org.opencontainers.image.title=${{ matrix.title }}
             org.opencontainers.image.description=${{ matrix.description }}
+      # Next refuses a deployment id with a dot (0.3.1 becomes 0-3-1).
+      - id: deployment
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: echo "id=${VERSION//./-}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -86,7 +91,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
-          build-args: NEXT_DEPLOYMENT_ID=${{ steps.meta.outputs.version }}
+          build-args: NEXT_DEPLOYMENT_ID=${{ steps.deployment.outputs.id }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha,scope=image-${{ matrix.target }}

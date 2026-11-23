@@ -32,8 +32,8 @@ Every deploy path runs them at a pinned version (see [README.md](README.md)):
   release notes. A `Release-As: X.Y.Z` footer on a commit to `main` forces a version.
 - Merge the release PR to release. release-please then tags `vX.Y.Z` on the merge commit and
   creates the GitHub Release.
-- The config is `release-please-config.json`. Its `release-as: 0.3.0` makes the first release
-  `v0.3.0`, above the old SDK tags: remove it in the PR after that release, or every later release PR stays at 0.3.0.
+- The config is `release-please-config.json`. The first release is `v0.3.0`, above the old SDK tags.
+  It has no app image (its build failed), so the first published version is 0.3.1.
 
 `install.sh` and `deploy.sh` take the highest `X.Y.Z` tag of `ratelai/ratel` on Docker Hub as the
 latest release. They do not read git tags or GitHub releases: this repo has SDK releases named
