@@ -105,6 +105,18 @@ If port 3000 or 5432 is taken, set `RATEL_PORT` and `RATEL_DB_PORT` in `.env` (c
 
 If `docker compose up --wait` fails, read `docker compose logs db web worker`. A full Docker disk shows up only in the `db` log (`No space left on device`). On a small machine the worker can report unhealthy for the first minutes after a restart, while it catches up on queued jobs; it usually settles by itself.
 
+### From the published image
+
+Each release publishes the image `docker.io/ratelai/ratel` for linux/amd64 and linux/arm64, tagged with its version (`0.1.0`), its minor (`0.1`) and `latest`. `edge` follows `main`. The image needs a Postgres 16 database:
+
+```sh
+docker run -d -p 127.0.0.1:3000:3000 \
+  -e DATABASE_URL=postgres://ratel:ratel@<db-host>:5432/ratel -e DATABASE_SSL=disable \
+  -e DATABASE_MIGRATE_ON_BOOT=1 ratelai/ratel:0.1
+```
+
+Without `APP_ROLE`, the one container serves the console and runs the jobs. `GET /api/health` answers `200` when it is ready. [RELEASING.md](RELEASING.md) tells how releases and images are made.
+
 ### First steps
 
 1. In the console, open **Settings > API keys** and create a key. It is shown once.
