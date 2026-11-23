@@ -37,7 +37,7 @@ export interface McpServersOperationDeps {
 }
 
 export const defaultMcpServersDeps: McpServersOperationDeps = {
-  // Owned (ADR-0030): the core's FF_AGENTS_PAGES switch, not upstream's flag service.
+  // Owned (ADR-0004): the core's FF_AGENTS_PAGES switch, not upstream's flag service.
   projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   listMcpServers: (projectId, window) =>
     withStatementTimeout((db) => listMcpServers(projectId, window, db), {

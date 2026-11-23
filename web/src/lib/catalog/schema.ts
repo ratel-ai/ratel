@@ -11,11 +11,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** The skills catalog and the tool definitions it publishes. Owned fragment of the upstream schema (ADR-0030). */
+/** The skills catalog and the tool definitions it publishes. Owned fragment of the upstream schema (ADR-0004). */
 
 /**
  * A project's managed skill catalog — the source of truth the `protocol/v1`
- * pull-sync (`GET /v1/catalog`, ADR-0003) serves. One row per skill; `name` is the
+ * pull-sync (`GET /v1/catalog`, ADR-0007) serves. One row per skill; `name` is the
  * kebab-case id, unique among a project's non-archived rows (the wire's uniqueness
  * invariant). `tools` and `metadata` carry the wire shape directly. On top of the
  * wire fields Cloud owns a lifecycle: `status` (draft → published → archived) and

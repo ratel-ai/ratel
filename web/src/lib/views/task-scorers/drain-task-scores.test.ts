@@ -16,7 +16,7 @@ import { taskScorersRegistration, taskScoresEnqueueStep } from "@/lib/views/task
 /**
  * RC-611: the drain's daily task scoring sweep, independent of the signal run.
  *
- * Owned (ADR-0030): upstream's drain took the sweep as a named dependency; here it is the task
+ * Owned (ADR-0004): upstream's drain took the sweep as a named dependency; here it is the task
  * scorers' registered `before` step, so the tick runs it through the drain-step registry. The
  * heartbeat keeps upstream's `taskScoresEnqueued`; a failure is reported under the step's name,
  * as for every registered step, where upstream kept a `taskScoreErrors` list.

@@ -14,7 +14,7 @@ import type { LineageStage } from "@/lib/views/lineage/types";
  * `null` marks tools that sit outside the loop (identity, account, catalog
  * authoring). `stages.test.ts` fails when a tool is missing from the map.
  *
- * Owned (ADR-0030): the map names the core's tools. A tool an edition adds
+ * Owned (ADR-0004): the map names the core's tools. A tool an edition adds
  * (upstream's embedding and Tool Picker usage) carries its own stage, which
  * `toolStage` reads.
  */

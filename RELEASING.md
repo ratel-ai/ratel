@@ -18,4 +18,4 @@ packages from npm: to take a new SDK version, bump `@ratel-ai/sdk` and `@ratel-a
 in `web/package.json` and `ee/package.json`.
 
 Every change to `main` goes through the single required `ci-gate` check in
-`.github/workflows/ci.yml` ([ADR-0016](docs/adr/0016-single-ci-gate.md)).
+`.github/workflows/ci.yml` ([ADR-0008](docs/adr/0008-single-ci-gate.md)).

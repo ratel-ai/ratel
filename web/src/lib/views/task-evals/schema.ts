@@ -18,7 +18,7 @@ import { projects } from "@/lib/platform/projects/schema";
 import { fixShipments } from "@/lib/views/fixes/schema";
 
 /**
- * A task's eval set, the runs over it and the drafted tests. Owned fragment of the upstream schema (ADR-0030):
+ * A task's eval set, the runs over it and the drafted tests. Owned fragment of the upstream schema (ADR-0004):
  * `task_eval_sets`, `task_eval_cases`, `task_eval_runs` and `task_test_drafts`, the task-evals partition of the
  * upstream schema hub, column for column, because production already has these tables.
  */

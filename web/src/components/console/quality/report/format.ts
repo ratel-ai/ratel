@@ -1,6 +1,6 @@
 /**
  * The formatters the printed report, its panels and the operator Quality pages share, as
- * upstream's admin console has them (locale-stable, en-IE). Owned (ADR-0030): the admin console
+ * upstream's admin console has them (locale-stable, en-IE). Owned (ADR-0004): the admin console
  * is excluded as a folder, so the four they use are kept here.
  */
 

@@ -166,7 +166,7 @@ test("every project page has one stage, or none when it is setup", () => {
     assert.ok(STAGE_ROUTES[stage].length > 0, `${stage} has pages`);
 });
 
-// Owned (ADR-0030): this edition has one plan, with example turns; only an override closes runs.
+// Owned (ADR-0004): this edition has one plan, with example turns; only an override closes runs.
 test("lineageShowsTraces: an insight names its run unless the organization has no example turns", () => {
   const org = (over: Partial<Parameters<typeof lineageShowsTraces>[0]> = {}) => ({
     id: "org-1",

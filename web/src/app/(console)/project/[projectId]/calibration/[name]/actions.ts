@@ -27,7 +27,7 @@ export interface ComparisonPageRequest {
  * caller's project scope, flags and window bounds are authoritative here, not
  * whatever the client posted.
  *
- * Owned (ADR-0030): the project comes from the console scope; null when it is not the
+ * Owned (ADR-0004): the project comes from the console scope; null when it is not the
  * caller's.
  */
 export async function loadComparisonPageAction(

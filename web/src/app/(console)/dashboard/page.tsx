@@ -5,7 +5,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 
 export const dynamic = "force-dynamic";
 
-/** `/dashboard`. Owned (ADR-0030): upstream's proxy redirects it; here the route does. */
+/** `/dashboard`. Owned (ADR-0004): upstream's proxy redirects it; here the route does. */
 export default async function DashboardPage({
   searchParams,
 }: {

@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
  * reads like the rest of the product without importing the customer dashboard's data-coupled
  * components.
  *
- * Owned (ADR-0030): upstream's admin console is excluded as a folder; the three primitives the
+ * Owned (ADR-0004): upstream's admin console is excluded as a folder; the three primitives the
  * operator Quality pages use are kept here as upstream has them.
  */
 

@@ -2,7 +2,7 @@ import { pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
  * Which organizations have had their sample project, once. Upstream keeps this mark as a column
- * of the organizations table; identity is the edition's here (ADR-0030), so the core keeps it in
+ * of the organizations table; identity is the edition's here (ADR-0004), so the core keeps it in
  * a table of its own, keyed on the organization id with no foreign key.
  *
  * The mark is on the organization, not on the project: deleting the sample must not bring it

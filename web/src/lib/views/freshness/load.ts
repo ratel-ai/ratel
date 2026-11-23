@@ -32,7 +32,7 @@ export type RunningImportRead = CompositionPorts["runningImport"];
  * A project's analysis freshness: its latest finished job, whether any are
  * queued or running (and not stuck), and an import in progress. Two small
  * reads on the project's slice of jobs_project_status_idx, and the edition's
- * running import. Owned (ADR-0030): imports are the edition's, so upstream's
+ * running import. Owned (ADR-0004): imports are the edition's, so upstream's
  * `health_imports` read is the `runningImport` port. Without it (the
  * open-source edition) `importing` is null; a port that throws answers null
  * too, so the freshness line never breaks.

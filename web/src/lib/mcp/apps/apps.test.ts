@@ -9,7 +9,7 @@ import { MCP_APPS_FLAG, mcpAppsEnabled } from "./flag";
 import { loadMcpAppCatalog, memoizedCatalog, readGeneratedViews } from "./load";
 import type { McpAppView } from "./types";
 
-// Owned (ADR-0030): upstream's catalog and load cases. The flag cases are the FF_MCP_APPS env
+// Owned (ADR-0004): upstream's catalog and load cases. The flag cases are the FF_MCP_APPS env
 // switch's: upstream asks its flag service per caller, which this edition does not have.
 
 const TOOLS = new Set(["whoami", "list_traces", "get_trace"]);

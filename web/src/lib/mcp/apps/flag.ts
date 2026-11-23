@@ -6,7 +6,7 @@ import { featureEnabled } from "@/lib/platform/experimental-features";
  * `FF_MCP_APPS`: whether the MCP server publishes its `ui://` views and links
  * tools to them (MCP Apps).
  *
- * Owned (ADR-0030): off by default. Without the edition's flags port it is one
+ * Owned (ADR-0004): off by default. Without the edition's flags port it is one
  * switch for the deployment, `FF_MCP_APPS` (or `RATEL_EXPERIMENTAL_FEATURES` in
  * the open-source edition), read from the environment; with it, the edition
  * decides it for the project key or the person (`featureEnabled`), and a failed

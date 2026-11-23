@@ -8,7 +8,7 @@ import type { ContextSource } from "@/lib/ingest/context";
 import { INVOKE_TOOL_ID, innerToolId } from "@/lib/ingest/gateway-tools";
 
 /**
- * Derive the dashboard's context categories from a raw ADR-0013 agent event. The
+ * Derive the dashboard's context categories from a raw ADR-0007 agent event. The
  * SDK no longer sends a pre-computed split; it sends the raw call, and we
  * attribute its input tokens across the five sources here.
  *

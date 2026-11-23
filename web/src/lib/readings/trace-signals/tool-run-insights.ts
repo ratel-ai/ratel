@@ -22,7 +22,7 @@ import type { WorkflowConfig } from "./workflows/types";
  *   agent ("draft_fix" reads "Draft fix") until the labeller names it from
  *   its asks.
  *
- * Owned (ADR-0030): the switch is the core's `FF_TOOL_RUN_INSIGHTS`
+ * Owned (ADR-0004): the switch is the core's `FF_TOOL_RUN_INSIGHTS`
  * (`lib/platform/tool-run-insights-flag.ts`), off by default: the environment
  * without the edition's flags port, else the edition decides it for the
  * project and organization, after any `FF_*` value the operator set.

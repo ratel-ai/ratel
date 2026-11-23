@@ -47,7 +47,7 @@ export interface AssembleOptions {
  * them. A module may mix reads and writes; `includeWrites: false` drops every
  * operation that declares `mutates`, which the contract test pins.
  *
- * Owned (ADR-0030): an edition's tools (`registrations`, read through the
+ * Owned (ADR-0004): an edition's tools (`registrations`, read through the
  * composition) are listed after the core tool each names; `edition.ts` refuses
  * a bad one. The open-source edition has none, so the list is the core's.
  */

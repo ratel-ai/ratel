@@ -28,7 +28,7 @@ import {
  * window's runs were cut. Every function takes an injectable `db` so the job tests
  * against PGlite.
  *
- * Owned (ADR-0030): the L4 half of upstream's signals ledger module. The closed-turn
+ * Owned (ADR-0004): the L4 half of upstream's signals ledger module. The closed-turn
  * readers it shares a file with upstream are `lib/ledger/closed-turns.ts`, so the ledger
  * never imports a reading.
  */

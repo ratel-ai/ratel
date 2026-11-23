@@ -3,7 +3,7 @@ import type { FoldableEventRow, FoldableHit, FoldLane } from "@/lib/readings/int
 
 /**
  * Fold stored runtime events into an intent graph with the open-source SDK's own
- * learner (ADR-0014). Cloud never reimplements clustering: a scratch catalog
+ * learner (ADR-0007). Cloud never reimplements clustering: a scratch catalog
  * with no tools hosts the learner, and each event goes through `recordEvent`
  * in the order it was received, exactly as it would have inside the runtime.
  *

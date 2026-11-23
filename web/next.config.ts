@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { NextConfig } from "next";
 
-// The Cloud adapters are reached through one build-time alias (ADR-0029). It resolves to the
+// The Cloud adapters are reached through one build-time alias (ADR-0003). It resolves to the
 // private composition only when the Cloud edition is built; the open-source build never sees ee/.
 const eeCompositionTarget =
   process.env.RATEL_COMPOSITION === "cloud"
@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
       "#ee-composition": eeCompositionTarget,
     },
   },
-  // The public SDK paths (ADR-0003, ADR-0007): the SDK posts traces and lifecycle logs, pulls the
+  // The public SDK paths (ADR-0007): the SDK posts traces and lifecycle logs, pulls the
   // catalog, and syncs the intent graph under /v1 and /v2; the handlers live under /api.
   async rewrites() {
     return [

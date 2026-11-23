@@ -5,7 +5,7 @@ import { getDb } from "@/lib/platform/db/client";
 import type { EvalDb } from "./runs";
 
 /**
- * A run's model calls (RC-61): the `events` rows (ADR-0013 raw LLM calls) of
+ * A run's model calls (RC-61): the `events` rows (ADR-0007 raw LLM calls) of
  * the run's traces, inside its time window. Each one is a decision point: what
  * the model was given (`payload.messages` but the last, `payload.system`,
  * `payload.tools`) and what it did (the last message). Cost, tokens and

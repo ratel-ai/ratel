@@ -18,7 +18,7 @@ import { projects } from "@/lib/platform/projects/schema";
 /**
  * The Agent health reading's tables: signal runs and the signals they open, the workflow
  * names and decisions, and the self-corrections read from each window. Owned fragment of
- * the upstream schema (ADR-0030). Everything here is derived from the turn ledger and is
+ * the upstream schema (ADR-0004). Everything here is derived from the turn ledger and is
  * rewritten by the next run; nothing stores query text, error text or an end-user id.
  */
 

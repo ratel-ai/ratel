@@ -19,7 +19,7 @@ const logger = getLogger("onboarding/tour");
 /**
  * Record that the signed-in user finished (or skipped) the guided tour.
  *
- * Owned (ADR-0030): upstream writes `users.onboarding_tour_status`; the users table is the
+ * Owned (ADR-0004): upstream writes `users.onboarding_tour_status`; the users table is the
  * private edition's, so the edition keeps the status (`SessionPort.tourStatus`) and decides when
  * it writes nothing. Without one it is a cookie (`tour-cookie.ts`), written only when it changes,
  * `Secure` when this deployment's origin is https, as the last-project cookie is.

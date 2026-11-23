@@ -8,7 +8,7 @@ import type { QuotaKey } from "@/lib/platform/entitlements";
  * the SDK contract is the opposite: `error` is a machine code (it becomes
  * `CloudSdkError.code` in `@ratel-ai/cloud-sdk`) and `reason` an optional
  * finer-grained code appended to the thrown message. The shapes here mirror
- * the SDK's mock server (mock-cloud.ts), which ADR-0014 makes the
+ * the SDK's mock server (mock-cloud.ts), which ADR-0007 makes the
  * authoritative wire contract — keep the two in lockstep.
  */
 

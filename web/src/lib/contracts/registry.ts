@@ -4,7 +4,7 @@ import type { z } from "zod";
  * What a module contributes to the background machinery: job handlers by kind, and steps the
  * cron drain runs before or after it claims queued jobs. Core modules export a `register.ts`
  * with this shape; the composition root collects them, and the Cloud edition adds its own
- * through this port. `jobs/` knows the registry and nothing else (ADR-0030).
+ * through this port. `jobs/` knows the registry and nothing else (ADR-0004).
  */
 export type JobRecord = {
   id: string;

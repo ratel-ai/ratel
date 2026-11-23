@@ -16,7 +16,7 @@ import {
   sessionReplaySettings,
 } from "@/lib/views/session-replay/schema";
 import { type Variant, variantKey } from "@/lib/views/session-replay/variant";
-// What-if's spend reader: this request's budget check counts What-if runs (owned, ADR-0030).
+// What-if's spend reader: this request's budget check counts What-if runs (owned, ADR-0004).
 import "@/lib/views/session-replay/spend";
 
 /**
@@ -115,7 +115,7 @@ export async function requestWhatIf(
 
   const queued = await db.transaction(async (tx) => {
     // The organization's lock: two requests can't both fit in the last of the budget. Owned
-    // (ADR-0030): the eval gate's `lockOrganizationSpend`, the advisory lock every reservation
+    // (ADR-0004): the eval gate's `lockOrganizationSpend`, the advisory lock every reservation
     // of the budget takes, since the core has no `organizations`; upstream locks its row.
     if (!(await lockOrganizationSpend(projectId, tx))) throw refuse("not_found", request);
     const live = await liveRun(

@@ -25,7 +25,7 @@ import { reportServerException, trackProductEvent } from "@/lib/platform/telemet
  *      reaches the table.
  *   2. The organization has never been seeded (no `sample_project_seeds` row).
  *      This is what stops a deleted sample project coming back: the mark lives
- *      on the organization, not on the project row. Owned (ADR-0030): upstream
+ *      on the organization, not on the project row. Owned (ADR-0004): upstream
  *      keeps it as a column of the organizations table, which identity owns
  *      here, so it is a public table keyed on the organization id instead.
  *

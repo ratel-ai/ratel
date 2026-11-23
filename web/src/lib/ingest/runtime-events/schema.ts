@@ -1,7 +1,7 @@
 import { index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** Which SDK runtimes report events for a project. Owned fragment of the upstream schema (ADR-0030). */
+/** Which SDK runtimes report events for a project. Owned fragment of the upstream schema (ADR-0004). */
 
 /** Stable runtime publisher identities and the receipt/event-time facts boundary. */
 export const runtimeEventSources = pgTable(

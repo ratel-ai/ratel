@@ -49,7 +49,7 @@ function deps(): ModelPricingDeps {
       const session = await getSessionContext();
       return session ? { userId: session.user.id, externalId: session.user.externalId } : null;
     },
-    // Owned (ADR-0030): one organization per session, so the scope takes the project id only.
+    // Owned (ADR-0004): one organization per session, so the scope takes the project id only.
     findRole: async (id) => (await findProjectScope(id))?.role ?? null,
     isRestricted: isRestrictedBySupportSession,
     // A project's stored calls of one model, re-priced after the response so a

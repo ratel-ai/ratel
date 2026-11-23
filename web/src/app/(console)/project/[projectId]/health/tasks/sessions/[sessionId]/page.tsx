@@ -19,7 +19,7 @@ const TASK_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 /**
  * One conversation turn by turn, opened from a task's example run, with the task's steps marked.
- * Owned (ADR-0030): the project comes from the console scope.
+ * Owned (ADR-0004): the project comes from the console scope.
  */
 export default async function TaskSessionPage({
   params,

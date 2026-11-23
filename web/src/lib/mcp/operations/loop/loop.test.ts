@@ -38,7 +38,7 @@ import type { TaskDetailModel, TaskListModel, TaskRow } from "@/lib/views/tasks/
  * back, the chain walks to the trace, writes are scoped to a fix that exists in
  * the project, and every write emits its event.
  *
- * Owned (ADR-0030): the seven tools here; the task tools and task simulations
+ * Owned (ADR-0004): the seven tools here; the task tools and task simulations
  * land with the task loop. The fix drafts' cases are upstream's, without tasks.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -1386,7 +1386,7 @@ test("MCP task reads, simulations and shipments use the existing stores without 
   const ORG = "99999999-9999-4999-8999-999999999999";
   const OTHER = "88888888-8888-4888-8888-888888888888";
   const boundFix = taskFix();
-  // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value; OSS organizations have no plan.
+  // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value; OSS organizations have no plan.
   const taskDeps = {
     db,
     flagDeps: { FF_EVAL_GATE: "1" },

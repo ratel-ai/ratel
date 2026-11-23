@@ -21,7 +21,7 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 
 const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
-// Owned (ADR-0030): the organization is the entitlements port's limit view, not a plan row.
+// Owned (ADR-0004): the organization is the entitlements port's limit view, not a plan row.
 const ORG = {
   id: ORG_ID,
   limitOverrides: null,

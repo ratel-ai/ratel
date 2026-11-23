@@ -18,7 +18,7 @@ export function panelRouteDeps(request: Request): PanelRouteDeps {
       const session = await getSessionContext();
       return session ? { userId: session.user.id, externalId: session.user.externalId } : null;
     },
-    // Owned (ADR-0030): the project scope reads the session itself and takes the project id
+    // Owned (ADR-0004): the project scope reads the session itself and takes the project id
     // only; the project must be the session organization's.
     findProject: async (projectId) => {
       const scope = await findProjectScope(projectId);

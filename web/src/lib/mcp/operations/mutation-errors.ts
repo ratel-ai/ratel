@@ -9,7 +9,7 @@ import { McpOperationError, notFound } from "@/lib/mcp/errors";
  * were not. One mapper means a new reason is handled everywhere the moment it
  * is handled anywhere.
  *
- * ADR-0014 makes the SDK mock server the authoritative wire contract for these
+ * ADR-0007 makes the SDK mock server the authoritative wire contract for these
  * reasons, so each is passed through verbatim in `reason` rather than renamed.
  * The prose is ours; the machine code is theirs.
  */

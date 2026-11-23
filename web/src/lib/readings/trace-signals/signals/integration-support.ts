@@ -44,7 +44,7 @@ import { chooseRunBasis } from "@/lib/readings/trace-signals/workflows/run-basis
  * organization and project, a ledger seeded from turn fixtures (turns, steps and the
  * `trace_events` rows they point at), and the compute job's deps bound to that database.
  *
- * Owned (ADR-0030): organizations carry no plan column here (the limits come from the
+ * Owned (ADR-0004): organizations carry no plan column here (the limits come from the
  * entitlements port), and the deps have no feature flag and no tool-explorer enqueue.
  */
 

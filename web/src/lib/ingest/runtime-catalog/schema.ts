@@ -10,7 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** The runtime catalog: every tool and skill a project's runtimes register. Owned fragment of the upstream schema (ADR-0030). */
+/** The runtime catalog: every tool and skill a project's runtimes register. Owned fragment of the upstream schema (ADR-0004). */
 
 /** Latest content-addressed definition observed for each runtime catalog entry. */
 export const runtimeCatalogEntries = pgTable(

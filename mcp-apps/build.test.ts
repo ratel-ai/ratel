@@ -35,7 +35,7 @@ test("every view is built", () => {
 });
 
 /**
- * Owned (ADR-0030): what a view may weigh here beyond its upstream budget. This workspace
+ * Owned (ADR-0004): what a view may weigh here beyond its upstream budget. This workspace
  * resolves @base-ui/react 1.9 where upstream resolves 1.6, and the newer menu and dialog pull
  * its floating-ui hooks: about 25 KB more in the one view that renders both (list). The views'
  * own bindings.ts are copied, so the allowance lives here.
@@ -97,7 +97,7 @@ function sources(dir: string): string[] {
 }
 
 test("views reuse components/ds rather than copy it, and reach next/* only through the shims", () => {
-  // Owned (ADR-0030): the design system is the workspace package here, not components/ds.
+  // Owned (ADR-0004): the design system is the workspace package here, not components/ds.
   const dsFiles = new Set(
     readdirSync(path.join(HERE, "..", "packages", "design-system", "src", "components")),
   );
@@ -245,7 +245,7 @@ test("the console's stylesheet does not scan mcp-apps/: its compiled CSS is what
   );
 });
 
-// Owned (ADR-0030): here the brand strings read the app's name from lib/platform/app-config.ts,
+// Owned (ADR-0004): here the brand strings read the app's name from lib/platform/app-config.ts,
 // which falls back to process.env outside the console's page. A view runs in a browser frame,
 // where `process` does not exist: a bundle that still names it throws before it renders.
 test("no view reaches for Node's process: it runs in a browser frame", () => {

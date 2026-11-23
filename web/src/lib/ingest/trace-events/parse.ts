@@ -87,7 +87,7 @@ const envelopeShape = {
   trace_id: z.string().min(1).max(64).optional(),
   span_id: z.string().min(1).max(32).optional(),
   // Correlates one agent turn's search with the invoke(s) that confirm it
-  // (ADR-0014 pairing; host-supplied, never minted by the SDK). Promoted so the
+  // (ADR-0007 pairing; host-supplied, never minted by the SDK). Promoted so the
   // intent-graph fold can pair by (session_id, turn_id) without a jsonb scan.
   // Lenient: it rides on events every shipped SDK already sends, so a bad
   // value costs the pairing, never the event.
@@ -155,7 +155,7 @@ const KNOWN_SCHEMAS = {
     top_k: z.number().int().min(0).max(MAX_INT4).optional(),
     hits: z.array(toolHit).max(MAX_HITS).optional(),
     // The ranking the runtime would have served without its intent graph, sent
-    // only when the graph changed the result (ADR-0014). Payload-only: it is
+    // only when the graph changed the result (ADR-0007). Payload-only: it is
     // the "without" side of Cloud's comparison, never a served hit.
     base_hits: lenient(z.array(toolHit).max(MAX_HITS)),
     took_ms: nonNegNum.optional(),
@@ -291,8 +291,8 @@ const KNOWN_SCHEMAS = {
       .refine(isRepresentableEpoch, "window_end_ts is outside the representable epoch range")
       .optional(),
   }),
-  // Adaptive-ranking diagnostics (ADR-0014, remotely publishable since the
-  // 2026-09-24 ADR-0020 amendment). Fields stay payload-only: the dashboard
+  // Adaptive-ranking diagnostics (ADR-0007, remotely publishable since the
+  // 2026-09-24 ADR-0007 amendment). Fields stay payload-only: the dashboard
   // reads "any usage_boost per source lately" and the per-runtime status row
   // that `usage_ranking_status` maintains, not per-event columns. Validated so
   // a malformed one is rejected as one item instead of poisoning a read.

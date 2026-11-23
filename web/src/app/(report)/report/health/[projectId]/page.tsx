@@ -22,7 +22,7 @@ export const metadata: Metadata = { title: "Agent health report" };
  * session check) and built from the redacted model: a PDF gets forwarded, so it never carries
  * example runs or user requests, whoever exports it.
  *
- * Owned (ADR-0030): the project comes from the console scope; the redacted model and its load
+ * Owned (ADR-0004): the project comes from the console scope; the redacted model and its load
  * overrides are the ones the public share link uses (`views/health/shared-load`).
  */
 export default async function HealthReportPage({

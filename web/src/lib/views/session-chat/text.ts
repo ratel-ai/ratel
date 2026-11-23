@@ -1,7 +1,7 @@
 import type { ChatCallText } from "./model";
 
 /**
- * One model call's chat text from its ADR-0013 payload (RC-281): the person's
+ * One model call's chat text from its ADR-0007 payload (RC-281): the person's
  * last message in the input (the ask) and the call's own reply, in full. The
  * reply is the stored `output` (RC-280) when present, else the assistant
  * messages after the input, else (rows stored before the input count) the

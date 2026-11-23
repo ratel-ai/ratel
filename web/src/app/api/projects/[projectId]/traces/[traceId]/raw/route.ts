@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * One run's raw spans for the span pane, or `?format=otlp` as a file (RC-412). A read; no product
- * event. Owned (ADR-0030): one organization per session, so the project must be one of its
+ * event. Owned (ADR-0004): one organization per session, so the project must be one of its
  * projects (`findProjectScope` takes the project id only).
  */
 export const GET = withRequestLog(handleGet);

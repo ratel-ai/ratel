@@ -33,7 +33,7 @@ export async function generateMetadata({
  * credential, and the model is redacted before it gets here (`publicHealthModel`). Unknown and
  * revoked links, and an edition without share links, are one 404.
  *
- * Owned (ADR-0030): the link is the edition's (`EditionUi.HealthShare`), which resolves the token
+ * Owned (ADR-0004): the link is the edition's (`EditionUi.HealthShare`), which resolves the token
  * and counts the view; the rest is upstream's page.
  */
 export default async function SharedHealthPage({ params }: { params: Promise<{ token: string }> }) {

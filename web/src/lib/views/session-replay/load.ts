@@ -30,7 +30,7 @@ const BEFORE_MS = 10_000;
 const AFTER_MS = 120_000;
 const logger = getLogger("session-replay");
 
-/** Message or system text in an ADR-0013 payload. Evaluated in the database; `carriesText` in `fork.ts` is the same check for a replay. */
+/** Message or system text in an ADR-0007 payload. Evaluated in the database; `carriesText` in `fork.ts` is the same check for a replay. */
 const HAS_CONTENT = sql<boolean>`(
   coalesce(${events.payload}->>'system', '') <> ''
   or jsonb_path_exists(${events.payload}, '$.messages[*] ? (@.content.type() == "string" && @.content != "")')

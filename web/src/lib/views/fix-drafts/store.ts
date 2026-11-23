@@ -20,7 +20,7 @@ export async function latestFixDraft(projectId: string, fixId: string, db: EvalD
 
 /**
  * Reserve the full draft cap under the organization lock. Other drafts see this reservation.
- * Owned (ADR-0030): the lock is `lockOrganizationSpend`, as the core has no organizations table.
+ * Owned (ADR-0004): the lock is `lockOrganizationSpend`, as the core has no organizations table.
  */
 export async function reserveFixDraft(
   input: {

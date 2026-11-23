@@ -12,7 +12,7 @@ import {
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * The drafted change of a fix. Owned fragment of the upstream schema (ADR-0030): `fix_drafts`,
+ * The drafted change of a fix. Owned fragment of the upstream schema (ADR-0004): `fix_drafts`,
  * the fix-drafts partition of the upstream schema hub, column for column. `fix_id` is the Fix
  * model's composite id (`issue:<id>`, `craft:<id>`, …), so it is text rather than a foreign key.
  * `spend` holds the reservation while a draft is `drafting`, then what the model call cost.
