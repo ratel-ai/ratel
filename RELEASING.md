@@ -32,14 +32,14 @@ Every deploy path runs them at a pinned version (see [README.md](README.md)):
   release notes. A `Release-As: X.Y.Z` footer on a commit to `main` forces a version.
 - Merge the release PR to release. release-please then tags `vX.Y.Z` on the merge commit and
   creates the GitHub Release.
-- The config is `release-please-config.json`. Its `release-as: 0.1.0` makes the first release
-  `v0.1.0`: remove it in the PR after that release, or every later release PR stays at 0.1.0.
+- The config is `release-please-config.json`. Its `release-as: 0.3.0` makes the first release
+  `v0.3.0`, above the old SDK tags: remove it in the PR after that release, or every later release PR stays at 0.3.0.
 
 `install.sh` and `deploy.sh` take the highest `X.Y.Z` tag of `ratelai/ratel` on Docker Hub as the
 latest release. They do not read git tags or GitHub releases: this repo has SDK releases named
 `v0.1.4`, `v0.1.5`, `v0.1.6` and `v0.2.0`, which have no image. A platform release cannot reuse
-those versions: release-please fails on a tag whose GitHub Release exists. Skip each one with
-`release-as`. Between the merge of a release PR and the end of its image job, `docker compose up`
+those versions (release-please fails on a tag whose GitHub Release exists), so the platform starts
+at 0.3.0. Between the merge of a release PR and the end of its image job, `docker compose up`
 on `main` names a version that is not on Docker Hub yet.
 
 A release PR that `GITHUB_TOKEN` opens starts no CI, so its required `ci-gate` and
