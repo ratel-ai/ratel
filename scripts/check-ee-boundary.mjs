@@ -18,12 +18,12 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "..");
 const EE_ROOT = join(REPO_ROOT, "ee");
-const SCAN_ROOTS = [join(REPO_ROOT, "apps", "web"), EE_ROOT];
+const SCAN_ROOTS = [join(REPO_ROOT, "web"), join(REPO_ROOT, "mcp-apps"), EE_ROOT];
 
-// app/(ee)/ is gitignored and holds only the stubs link-ee.mjs copies from ee/src/routes,
+// app/(ee)/ is gitignored and holds only the stubs link-ee.mjs copies from ee/src/src/routes,
 // so the whole folder is the exception. The proxy stub sits at a fixed path beside core files.
-const EE_ROUTES = join(REPO_ROOT, "apps", "web", "app", "(ee)") + sep;
-const EE_PROXY = join(REPO_ROOT, "apps", "web", "proxy.ts");
+const EE_ROUTES = join(REPO_ROOT, "web", "src", "app", "(ee)") + sep;
+const EE_PROXY = join(REPO_ROOT, "web", "src", "proxy.ts");
 
 export const allowsInward = (file) => file === EE_PROXY || file.startsWith(EE_ROUTES);
 

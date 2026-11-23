@@ -1,7 +1,7 @@
 {
   "name": "@ratel/ee",
   "version": "0.1.0",
-  "description": "Manifest for Ratel Cloud edition modules. Source code lives in a private repository, checked out at ee/src.",
+  "description": "Manifest for the Cloud edition modules of Ratel. Source code lives in a private repository, checked out at ee/src.",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.3",
+    "@opentelemetry/sdk-trace-base": "~2.9.0",
     "@types/pg": "^8.11.10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -39,7 +40,7 @@
   },
   "scripts": {
     "lint": "biome check . --no-errors-on-unmatched",
-    "test": "tsx --no-wasm-code-gc --test --test-force-exit \"src/**/*.test.ts\"",
-    "db:generate": "drizzle-kit generate --config src/db/drizzle.config.ts"
+    "test": "tsx --no-wasm-code-gc --test --test-force-exit \"src/src/**/*.test.ts\"",
+    "db:generate": "drizzle-kit generate --config src/src/db/drizzle.config.ts"
   }
 }

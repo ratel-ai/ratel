@@ -5,15 +5,17 @@
 # Works with no `.env`, on public defaults. `.env.example` lists what to set on a server.
 # Both ports stay on 127.0.0.1: the console has no login and belongs behind your own proxy.
 # `web` serves and only queues jobs (APP_ROLE=api); `worker` runs them, from the same image
-# (ADR-0031). Without APP_ROLE one container does both, as `pnpm dev` does.
+# (ADR-0005). Without APP_ROLE one container does both, as `pnpm dev` does.
 name: ratel
 
 # What web and worker share: one image, one `.env`, one database.
 x-platform: &platform
   build:
     context: .
-    dockerfile: apps/web/Dockerfile
+    dockerfile: web/Dockerfile
     target: oss
+  # Back after a reboot or a daemon restart; `docker compose stop` keeps it down.
+  restart: unless-stopped
   env_file:
     - path: .env
       required: false
@@ -25,6 +27,7 @@ x-platform-env: &platform-env
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ratel
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ratel}
@@ -66,7 +69,7 @@ services:
     profiles: [demo]
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: web/Dockerfile
       target: demo
     # Shares the database's network, so `localhost` is exactly this Postgres and the seeds' guard
     # against any other database stays as it is.

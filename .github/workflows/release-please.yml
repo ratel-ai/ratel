@@ -1,0 +1,43 @@
+# Versions the platform from conventional commits (RELEASING.md).
+# On each push to main, release-please opens or updates one release PR: it bumps the version in
+# package.json and web/package.json and writes CHANGELOG.md. Merging that PR tags vX.Y.Z and
+# creates the GitHub Release, and then the image job publishes docker.io/ratelai/ratel.
+# The image is built here, not on the tag push: a tag that GITHUB_TOKEN creates starts no workflow.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          # A PR that GITHUB_TOKEN opens starts no CI, so its ci-gate and pr-title never report. With a token
+          # of a person or an app in RELEASE_PLEASE_TOKEN, the release PR runs CI as usual.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  image:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/image.yml
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+    secrets: inherit

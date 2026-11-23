@@ -1,0 +1,34 @@
+name: pr-title
+
+# A pull request title must be a conventional commit: it becomes the squash commit title on
+# `main`. Runs on drafts and forks, needs no permission and never checks out PR code.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the title
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|perf|refactor|docs|test|build|ci|chore|revert)(\([^()]+\))?!?: [^[:space:]].*$'
+          printf 'Title: %s\n' "$PR_TITLE"
+          if [[ "$PR_TITLE" =~ $pattern ]]; then
+            echo "The title is a conventional commit."
+            exit 0
+          fi
+          echo "::error::The PR title must be a conventional commit: type(scope)!: description. The scope and the ! are optional. Types: feat, fix, perf, refactor, docs, test, build, ci, chore, revert. Put a task key in the scope or the PR body, not as the prefix."
+          exit 1

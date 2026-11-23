@@ -1,0 +1,232 @@
+import type { CloudMessage, ContentBlock } from "@/lib/ingest/cloud-schema";
+import { GEN_AI } from "@/lib/ingest/otlp/constants";
+import { mapMessages, systemFromInstructions } from "@/lib/ingest/otlp/content";
+import type { AttrValue } from "@/lib/ingest/otlp/types";
+
+interface TraceContentSpan {
+  spanId: string;
+  name: string;
+  spanClass: string;
+  durationMs: number;
+  statusCode: number;
+  attributes: Readonly<Record<string, unknown>>;
+}
+
+export interface TraceMessageView {
+  id: string;
+  role: "system" | "user" | "assistant" | "tool";
+  text: string;
+  /** Sent again from an earlier turn of the session: the trace's first call carried it as history before its ask (RC-500). */
+  earlier?: boolean;
+}
+
+export interface TraceToolCallView {
+  id: string;
+  name: string;
+  arguments: unknown | null;
+  result: unknown | null;
+  spanId: string;
+  durationMs: number;
+  statusCode: number;
+  /** Made in an earlier turn of the session, as {@link TraceMessageView.earlier}. */
+  earlier?: boolean;
+}
+
+export interface TraceContentView {
+  messages: TraceMessageView[];
+  toolCalls: TraceToolCallView[];
+  contentCaptured: boolean;
+}
+
+/** Build the detail-page conversation/tool model from any retained span content. */
+export function buildTraceContentView(spans: readonly TraceContentSpan[]): TraceContentView {
+  const messages: TraceMessageView[] = [];
+  const toolCalls: TraceToolCallView[] = [];
+  let contentCaptured = false;
+
+  for (const span of spans) {
+    const attributes = span.attributes;
+    const input = structuredAttribute(attributes, GEN_AI.inputMessages);
+    const output = structuredAttribute(attributes, GEN_AI.outputMessages);
+    const mapped = mapMessages(input, output);
+    const systemRaw =
+      structuredAttribute(attributes, GEN_AI.systemInstructions) ??
+      stringAttribute(attributes, GEN_AI.systemInstructions);
+    const system = systemFromInstructions(systemRaw);
+    if (system) {
+      messages.push({ id: span.spanId, role: "system", text: system });
+      contentCaptured = true;
+    }
+
+    const results = toolResults(mapped.messages);
+    for (const [index, message] of mapped.messages.entries()) {
+      const text = messageText(message);
+      if (text) {
+        messages.push({
+          id: `${span.spanId}:${index}`,
+          role: message.role,
+          text,
+        });
+        contentCaptured = true;
+      }
+      if (message.role !== "assistant" || typeof message.content === "string") {
+        continue;
+      }
+      for (const block of message.content) {
+        if (block.type !== "tool_call") continue;
+        toolCalls.push({
+          id: block.id || `${span.spanId}:${toolCalls.length}`,
+          name: block.name,
+          arguments: block.arguments,
+          result: block.id ? (results.get(block.id) ?? null) : null,
+          spanId: span.spanId,
+          durationMs: span.durationMs,
+          statusCode: span.statusCode,
+        });
+        contentCaptured = true;
+      }
+    }
+
+    if (span.spanClass !== "tool") continue;
+    const argumentsValue = toolPayload(attributes, GEN_AI.toolCallArguments);
+    const resultValue = toolPayload(attributes, GEN_AI.toolCallResult);
+    toolCalls.push({
+      id: stringAttribute(attributes, GEN_AI.toolCallId) ?? span.spanId,
+      name: stringAttribute(attributes, GEN_AI.toolName) ?? span.name,
+      arguments: argumentsValue,
+      result: resultValue,
+      spanId: span.spanId,
+      durationMs: span.durationMs,
+      statusCode: span.statusCode,
+    });
+    contentCaptured ||= argumentsValue !== null || resultValue !== null;
+  }
+
+  return { messages, toolCalls, contentCaptured };
+}
+
+/**
+ * Span content wins when the spans carry any; the payload (`lib/traces/payload-content.ts`) fills in when they carry none.
+ * Spans that carry only tool content (an `execute_tool` span keeps its arguments and result, RC-725) and no message
+ * join the payload instead: its messages, with each tool call completed from its span (AOBS-5).
+ */
+export function preferSpanContent(
+  spans: TraceContentView,
+  payload: TraceContentView | null,
+): TraceContentView {
+  if (!payload?.contentCaptured) return spans;
+  if (!spans.contentCaptured) return payload;
+  if (spans.messages.length > 0) return spans;
+  return {
+    messages: payload.messages,
+    toolCalls: joinToolCalls(spans.toolCalls, payload.toolCalls),
+    contentCaptured: true,
+  };
+}
+
+/**
+ * The payload's tool calls in their order, each completed from its span (the
+ * span has the real name, timing, status, and the arguments and result when
+ * captured), then the span calls the payload did not name. A span is matched
+ * by its call id; a span that carries none (its id is its span id) is matched
+ * to the first payload call of the same tool. Each span is used once.
+ */
+function joinToolCalls(
+  spanCalls: readonly TraceToolCallView[],
+  payloadCalls: readonly TraceToolCallView[],
+): TraceToolCallView[] {
+  const used = new Set<TraceToolCallView>();
+  const take = (matches: (span: TraceToolCallView) => boolean): TraceToolCallView | undefined => {
+    const span = spanCalls.find((candidate) => !used.has(candidate) && matches(candidate));
+    if (span) used.add(span);
+    return span;
+  };
+  const joined = payloadCalls.map((call): TraceToolCallView => {
+    const span =
+      take((candidate) => candidate.id === call.id) ??
+      take((candidate) => candidate.id === candidate.spanId && sameTool(candidate.name, call.name));
+    if (!span) return call;
+    return {
+      ...call,
+      ...span,
+      id: call.id,
+      arguments: span.arguments ?? call.arguments,
+      result: span.result ?? call.result,
+    };
+  });
+  return [...joined, ...spanCalls.filter((call) => !used.has(call))];
+}
+
+/** A span names a per-command tool `Bash:git`; the model's own call names it `Bash`. */
+function sameTool(spanName: string, payloadName: string): boolean {
+  return spanName === payloadName || spanName.startsWith(`${payloadName}:`);
+}
+
+/**
+ * A tool span's arguments or result: parsed when it is JSON, else the text
+ * itself (a shell command's output is plain text), else null.
+ */
+function toolPayload(attributes: Readonly<Record<string, unknown>>, key: string): unknown | null {
+  const structured = structuredAttribute(attributes, key);
+  if (structured !== undefined) return structured;
+  const text = stringAttribute(attributes, key);
+  return text !== undefined && text.trim() !== "" ? text : null;
+}
+
+function structuredAttribute(
+  attributes: Readonly<Record<string, unknown>>,
+  key: string,
+): AttrValue | undefined {
+  const value = attributes[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value) as AttrValue;
+    } catch {
+      return undefined;
+    }
+  }
+  return value as AttrValue;
+}
+
+function stringAttribute(
+  attributes: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined {
+  const value = attributes[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+/** Each tool result in the messages, by the id of the call it answers. */
+export function toolResults(messages: readonly CloudMessage[]): Map<string, unknown> {
+  return new Map(
+    messages.flatMap((message): [string, unknown][] =>
+      message.role === "tool" ? [[message.tool_call_id, parseJson(message.content)]] : [],
+    ),
+  );
+}
+
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+/** A message's readable text: its text blocks, attachments as placeholders. */
+export function messageText(message: CloudMessage): string {
+  if (typeof message.content === "string") return message.content.trim();
+  return message.content
+    .flatMap((block) => blockText(block))
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function blockText(block: ContentBlock): string[] {
+  if (block.type === "text") return [block.text];
+  if (block.type === "image") return ["[Image attachment]"];
+  if (block.type === "file") return ["[File attachment]"];
+  return [];
+}

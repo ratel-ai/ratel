@@ -1,0 +1,186 @@
+import { type Config, getConfig } from "@/config";
+import { drainSteps } from "@/lib/composition/registry";
+import type { DrainStep } from "@/lib/contracts/registry";
+import { RUN_IMPORT_JOB } from "./kinds";
+import {
+  type BackgroundObservability,
+  type BackgroundObservabilityDeps,
+  createBackgroundObservability,
+  defaultBackgroundObservabilityDeps,
+} from "./observability";
+import { drainProjectJobs } from "./store";
+
+/**
+ * One cron tick (owned port of upstream's `lib/cron/drain.ts`): the registered `before` steps (the safety-net
+ * enqueues), the job drain, then the registered `after` steps (sweeps, refreshes, and the pruning
+ * passes that run only with retention on). Every step is isolated: a failure is recorded under
+ * its name and never costs the drain its job durability. The tick always emits
+ * `cron_drain_completed`, stamped `ok: false` with the reason when it threw, and with upstream's
+ * per-area error lists (`DRAIN_ERROR_AREAS`). The cron route runs it after its answer
+ * (`background-drain.ts`).
+ *
+ * Upstream enumerated its steps in this file; here `jobs/` knows only the registry, so a module
+ * (core or private) adds a step by exporting it from its `register.ts`. Two deliberate changes
+ * from upstream: every step is isolated (upstream let the query-categorization enqueue and the
+ * retention prunes throw, which failed the whole tick), and a step emits its own typed event
+ * when it did work (upstream emitted `trace_summaries_refreshed` and friends from here).
+ */
+export interface DrainCronDeps {
+  steps: DrainStep[];
+  /** `onJobFinished` runs after each finished job: the sign the worker's watchdog reads. */
+  drainProjectJobs: (onJobFinished?: () => void) => Promise<{ done: number; failed: number }>;
+  /** Whether this tick may delete anything. Steps marked `retentionOnly` are skipped otherwise. */
+  retentionEnabled?: boolean;
+  observability?: BackgroundObservabilityDeps;
+}
+
+export type DrainSummary = {
+  ok: boolean;
+  done: number;
+  failed: number;
+  retention: boolean;
+  steps: Record<string, unknown>;
+  errors?: Record<string, string>;
+  error?: string;
+  duration_ms: number;
+};
+
+/** Retention deletion is opt-in by the operator (`jobs.dataRetention`, DATA_RETENTION_ENABLED=1). */
+export function dataRetentionEnabled(config: Pick<Config, "jobs"> = getConfig()): boolean {
+  return config.jobs.dataRetention;
+}
+
+const defaultDeps = (): DrainCronDeps => ({
+  steps: drainSteps(),
+  // Imports have their own lane in the worker (RC-40): the cron drain never waits behind one.
+  drainProjectJobs: (onJobFinished) =>
+    drainProjectJobs(undefined, undefined, {
+      kinds: { except: [RUN_IMPORT_JOB] },
+      onJobFinished,
+    }),
+  retentionEnabled: dataRetentionEnabled(),
+  observability: defaultBackgroundObservabilityDeps,
+});
+
+/**
+ * Run one tick and return its summary; the HTTP route and the in-process scheduler both call this.
+ * `onJobFinished` runs after each job the tick's drain finishes (the worker's watchdog).
+ */
+export async function runDrainTick(
+  deps: DrainCronDeps = defaultDeps(),
+  onJobFinished?: () => void,
+): Promise<DrainSummary> {
+  const observability = createBackgroundObservability(
+    deps.observability ?? defaultBackgroundObservabilityDeps,
+  );
+  const startedAt = observability.now();
+  const retention = deps.retentionEnabled !== false;
+  const summary: Record<string, unknown> = {};
+  const errors: Record<string, string> = {};
+  let done = 0;
+  let failed = 0;
+  let ok = false;
+  let error: string | undefined;
+  try {
+    for (const step of deps.steps.filter((s) => s.phase === "before")) {
+      summary[step.name] = await isolated(step, observability, errors);
+    }
+    ({ done, failed } = await deps.drainProjectJobs(onJobFinished));
+    for (const step of deps.steps.filter((s) => s.phase === "after")) {
+      if (step.retentionOnly && !retention) {
+        summary[step.name] = "skipped";
+        continue;
+      }
+      summary[step.name] = await isolated(step, observability, errors);
+    }
+    ok = true;
+  } catch (thrown) {
+    error = thrown instanceof Error ? thrown.message : String(thrown);
+  }
+  const result: DrainSummary = {
+    ok,
+    done,
+    failed,
+    retention,
+    steps: summary,
+    ...(Object.keys(errors).length > 0 ? { errors } : {}),
+    ...(error !== undefined ? { error } : {}),
+    duration_ms: Math.max(0, observability.now() - startedAt),
+  };
+  await observability.trackSystemEvent("cron_drain_completed", "system:cron", {
+    ok,
+    done,
+    failed,
+    retention,
+    duration_ms: result.duration_ms,
+    ...heartbeatProperties(summary),
+    ...heartbeatErrors(errors),
+    ...(error !== undefined ? { error } : {}),
+  });
+  return result;
+}
+
+/** Run a step whose failure should degrade the drain rather than end it. */
+async function isolated(
+  step: DrainStep,
+  observability: BackgroundObservability,
+  errors: Record<string, string>,
+): Promise<unknown> {
+  try {
+    return (await step.run()) ?? null;
+  } catch (thrown) {
+    errors[step.name] = thrown instanceof Error ? thrown.message : String(thrown);
+    observability.reportException("drain step failed", thrown, "system:cron", { step: step.name });
+    return null;
+  }
+}
+
+/**
+ * Upstream's per-area error lists on the heartbeat (`traceSummaryErrors`, `qualityErrors`, ...),
+ * each entry `<step>: <message>`, by the area upstream filed each step under. A step upstream did
+ * not isolate (its failure failed the whole tick) lands in `otherErrors`.
+ */
+export const DRAIN_ERROR_AREAS: Readonly<Record<string, string>> = {
+  trace_turns_build_enqueue: "traceSignalErrors",
+  sealed_import_expiry: "traceSignalErrors",
+  trace_signal_sweep: "traceSignalErrors",
+  intent_graph_fold_enqueue: "intentGraphErrors",
+  intent_graph_revisions_prune: "intentGraphErrors",
+  intent_engine_enqueue: "intentEngineErrors",
+  intent_engine_expire: "intentEngineErrors",
+  task_scores_enqueue: "taskScoreErrors",
+  otlp_raw_prune: "otlpRawErrors",
+  trace_summary_refresh: "traceSummaryErrors",
+  trace_summary_prune: "traceSummaryErrors",
+  quality_snapshot_refresh: "qualityErrors",
+  match_quality_sweep: "matchQualityErrors",
+  what_if_prune: "whatIfErrors",
+};
+
+function heartbeatErrors(errors: Record<string, string>): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [step, message] of Object.entries(errors)) {
+    const area = DRAIN_ERROR_AREAS[step] ?? "otherErrors";
+    out[area] = [...(out[area] ?? []), `${step}: ${message}`];
+  }
+  return out;
+}
+
+/**
+ * Step results as flat heartbeat properties: a numeric result lands under the step's name, an
+ * object's numeric and boolean fields land under their own names. Upstream's heartbeat was one
+ * flat object and its dashboards join on those keys, so a step keeps them by naming its fields
+ * the same way; a field two steps both report is last-writer-wins.
+ */
+function heartbeatProperties(summary: Record<string, unknown>): Record<string, number | boolean> {
+  const out: Record<string, number | boolean> = {};
+  for (const [name, value] of Object.entries(summary)) {
+    if (typeof value === "number") out[name] = value;
+    else if (value && typeof value === "object") {
+      for (const [field, v] of Object.entries(value as Record<string, unknown>)) {
+        if (typeof v === "number" || typeof v === "boolean") out[field] = v;
+      }
+    }
+  }
+  return out;
+}

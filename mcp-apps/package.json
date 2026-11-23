@@ -1,0 +1,42 @@
+{
+  "name": "@ratel/mcp-apps",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The MCP Apps views: each view built into one self-contained HTML document, listed in dist/views.json for the MCP server in web/.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsx scripts/build.mts",
+    "dev": "tsx scripts/harness.mts",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check . --no-errors-on-unmatched",
+    "test": "pnpm build && tsx --no-wasm-code-gc --test --test-force-exit \"**/*.test.ts\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@ratel/design-system": "workspace:*",
+    "geist": "^1.7.2",
+    "lucide-react": "^1.22.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esbuild": "^0.25.0",
+    "postcss": "^8.5.6",
+    "subset-font": "^2.9.0",
+    "tailwindcss": "^4.3.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5"
+  }
+}

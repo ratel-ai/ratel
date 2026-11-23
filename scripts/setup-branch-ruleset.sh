@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provision the `main` branch ruleset on ratel-ai/ratel — the enforcement behind the
-# single required `ci-gate` check (see .github/workflows/ci.yml, ADR-0016). Mirrors the
-# ratel-cloud ruleset: exactly one required status check (`ci-gate`) with a strict policy,
+# required `ci-gate` and `pr-title` checks (see .github/workflows/ci.yml, pr-title.yml and
+# ADR-0008): two required status checks with a strict policy,
 # linear history, PR review + thread resolution, and a SINGLE bypass actor — the
 # `core-maintainers` org team (self-maintaining; not named users).
 #
@@ -27,6 +27,7 @@ REPO="ratel"
 RULESET_NAME="main"
 TEAM_SLUG="core-maintainers"
 REQUIRED_CHECK="ci-gate"
+TITLE_CHECK="pr-title"
 # The global GitHub Actions app integration id — scopes the required check to a report
 # from GitHub Actions specifically (same value ratel-cloud's ruleset pins).
 ACTIONS_APP_ID=15368
@@ -84,7 +85,8 @@ build_payload() {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": true,
         "required_status_checks": [
-          { "context": "$REQUIRED_CHECK", "integration_id": $ACTIONS_APP_ID }
+          { "context": "$REQUIRED_CHECK", "integration_id": $ACTIONS_APP_ID },
+          { "context": "$TITLE_CHECK", "integration_id": $ACTIONS_APP_ID }
         ]
       }
     }

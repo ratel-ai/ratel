@@ -14,8 +14,8 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 const MAP = {
   entries: [
-    { from: "apps/web/lib/otlp", to: "apps/web/lib/ingest/otlp", mode: "copy" },
-    { from: "apps/web/lib/db/index.ts", to: "apps/web/lib/platform/db/client.ts", mode: "owned" },
+    { from: "apps/web/lib/otlp", to: "web/src/lib/ingest/otlp", mode: "copy" },
+    { from: "apps/web/lib/db/index.ts", to: "web/src/lib/platform/db/client.ts", mode: "owned" },
     { from: "apps/web/lib/stripe", mode: "excluded" },
     { from: "apps/web/lib/otlp/billing-hook.ts", mode: "excluded" },
   ],
@@ -137,16 +137,16 @@ describe("partitions and identifiers", () => {
 
   it("keeps relative imports inside one moved folder and absolutizes the ones that cross entries", () => {
     const entries = [
-      { from: "apps/web/lib/otlp", to: "apps/web/lib/ingest/otlp", mode: "copy" },
-      { from: "apps/web/lib/db/index.ts", to: "apps/web/lib/platform/db/client.ts", mode: "owned" },
-      { from: "apps/web/lib/db/statement-timeout.ts", to: "apps/web/lib/platform/db/statement-timeout.ts", mode: "copy" },
+      { from: "apps/web/lib/otlp", to: "web/src/lib/ingest/otlp", mode: "copy" },
+      { from: "apps/web/lib/db/index.ts", to: "web/src/lib/platform/db/client.ts", mode: "owned" },
+      { from: "apps/web/lib/db/statement-timeout.ts", to: "web/src/lib/platform/db/statement-timeout.ts", mode: "copy" },
     ];
     const inFolder = absolutizeRelative('import { b } from "./nested/b";\nimport { db } from "../db/index";', "apps/web/lib/otlp/a.ts", entries);
     assert.equal(inFolder, 'import { b } from "./nested/b";\nimport { db } from "@/lib/db";');
     const fileEntry = absolutizeRelative('import { getDb } from "./index";\nimport type { X } from "./schema";', "apps/web/lib/db/statement-timeout.ts", entries);
     assert.equal(fileEntry, 'import { getDb } from "@/lib/db";\nimport type { X } from "@/lib/db/schema";');
     assert.equal(absolutizeRelative('import x from "./y";', "scripts/x.ts", entries), 'import x from "./y";');
-    const moved = [...entries, { from: "apps/web/lib/otlp/view.ts", to: "apps/web/lib/console/view.ts", mode: "copy" }];
+    const moved = [...entries, { from: "apps/web/lib/otlp/view.ts", to: "web/src/lib/console/view.ts", mode: "copy" }];
     assert.equal(
       absolutizeRelative('import { v } from "./vocabulary";', "apps/web/lib/otlp/view.ts", moved),
       'import { v } from "@/lib/otlp/vocabulary";',
@@ -312,42 +312,42 @@ describe("sync", () => {
   it("copies mapped folders with rewritten imports, skips excluded paths", () => {
     const { actions, report } = plan();
     applySync(actions, { repoRoot: repo });
-    assert.equal(read("apps/web/lib/ingest/otlp/a.ts"), 'import { cn } from "@ratel/design-system/cn";\nexport const a = 1;\n');
-    assert.equal(read("apps/web/lib/ingest/otlp/nested/b.ts"), 'import { a } from "@/lib/ingest/otlp/a";\n');
-    assert.ok(!existsSync(join(repo, "apps/web/lib/ingest/otlp/billing-hook.ts")));
-    assert.ok(!existsSync(join(repo, "apps/web/lib/stripe")));
-    assert.deepEqual(report.copied.sort(), ["apps/web/lib/ingest/otlp/a.ts", "apps/web/lib/ingest/otlp/nested/b.ts"]);
+    assert.equal(read("web/src/lib/ingest/otlp/a.ts"), 'import { cn } from "@ratel/design-system/cn";\nexport const a = 1;\n');
+    assert.equal(read("web/src/lib/ingest/otlp/nested/b.ts"), 'import { a } from "@/lib/ingest/otlp/a";\n');
+    assert.ok(!existsSync(join(repo, "web/src/lib/ingest/otlp/billing-hook.ts")));
+    assert.ok(!existsSync(join(repo, "web/src/lib/stripe")));
+    assert.deepEqual(report.copied.sort(), ["web/src/lib/ingest/otlp/a.ts", "web/src/lib/ingest/otlp/nested/b.ts"]);
   });
 
   it("lands a file with its own entry only there, not in its copied folder", () => {
-    const map = { entries: [...MAP.entries, { from: "apps/web/lib/otlp/nested/b.ts", to: "apps/web/lib/console/b.ts", mode: "copy" }] };
+    const map = { entries: [...MAP.entries, { from: "apps/web/lib/otlp/nested/b.ts", to: "web/src/lib/console/b.ts", mode: "copy" }] };
     const { actions, report } = plan({ map });
     applySync(actions, { repoRoot: repo });
-    assert.ok(existsSync(join(repo, "apps/web/lib/console/b.ts")));
-    assert.ok(!existsSync(join(repo, "apps/web/lib/ingest/otlp/nested/b.ts")));
-    assert.deepEqual(report.copied.sort(), ["apps/web/lib/console/b.ts", "apps/web/lib/ingest/otlp/a.ts"]);
+    assert.ok(existsSync(join(repo, "web/src/lib/console/b.ts")));
+    assert.ok(!existsSync(join(repo, "web/src/lib/ingest/otlp/nested/b.ts")));
+    assert.deepEqual(report.copied.sort(), ["web/src/lib/console/b.ts", "web/src/lib/ingest/otlp/a.ts"]);
   });
 
   it("lands a file with its own entry inside an excluded folder, and nothing else from there", () => {
     put(source, "apps/web/lib/stripe/plans.ts", "export const plans = 1;\n");
-    const map = { entries: [...MAP.entries, { from: "apps/web/lib/stripe/plans.ts", to: "apps/web/lib/console/plans.ts", mode: "copy" }] };
+    const map = { entries: [...MAP.entries, { from: "apps/web/lib/stripe/plans.ts", to: "web/src/lib/console/plans.ts", mode: "copy" }] };
     const { actions, report } = plan({ map });
     applySync(actions, { repoRoot: repo });
-    assert.equal(read("apps/web/lib/console/plans.ts"), "export const plans = 1;\n");
-    assert.ok(!existsSync(join(repo, "apps/web/lib/stripe")));
+    assert.equal(read("web/src/lib/console/plans.ts"), "export const plans = 1;\n");
+    assert.ok(!existsSync(join(repo, "web/src/lib/stripe")));
     assert.ok(!report.copied.some((p) => p.endsWith("client.ts")));
   });
 
   it("bootstraps an owned file once and never overwrites it afterwards", () => {
     const first = plan();
     applySync(first.actions, { repoRoot: repo });
-    assert.deepEqual(first.report.ownedBootstrapped, ["apps/web/lib/platform/db/client.ts"]);
-    put(repo, "apps/web/lib/platform/db/client.ts", "export const db = 'ours';\n");
+    assert.deepEqual(first.report.ownedBootstrapped, ["web/src/lib/platform/db/client.ts"]);
+    put(repo, "web/src/lib/platform/db/client.ts", "export const db = 'ours';\n");
     put(source, "apps/web/lib/db/index.ts", "export const db = 'upstream v2';\n");
     const second = plan();
     applySync(second.actions, { repoRoot: repo });
-    assert.equal(read("apps/web/lib/platform/db/client.ts"), "export const db = 'ours';\n");
-    assert.deepEqual(second.report.ownedKept, ["apps/web/lib/platform/db/client.ts"]);
+    assert.equal(read("web/src/lib/platform/db/client.ts"), "export const db = 'ours';\n");
+    assert.deepEqual(second.report.ownedKept, ["web/src/lib/platform/db/client.ts"]);
   });
 
   it("is idempotent and mirrors deletions", () => {
@@ -356,16 +356,16 @@ describe("sync", () => {
     assert.deepEqual(again.actions, []);
     rmSync(join(source, "apps/web/lib/otlp/nested"), { recursive: true });
     const third = plan();
-    assert.deepEqual(third.report.deleted, ["apps/web/lib/ingest/otlp/nested/b.ts"]);
+    assert.deepEqual(third.report.deleted, ["web/src/lib/ingest/otlp/nested/b.ts"]);
     applySync(third.actions, { repoRoot: repo });
-    assert.ok(!existsSync(join(repo, "apps/web/lib/ingest/otlp/nested/b.ts")));
+    assert.ok(!existsSync(join(repo, "web/src/lib/ingest/otlp/nested/b.ts")));
   });
 
   it("reports private-string hits and unmapped specifiers", () => {
     put(source, "apps/web/lib/otlp/c.ts", 'import { s } from "@/lib/legacy/s";\nconst key = process.env.STRIPE_SECRET_KEY;\n');
     const { report } = plan({ patterns: [/\bstripe_secret_key\b/i] });
-    assert.deepEqual(report.privateHits.map((h) => [h.path, h.line]), [["apps/web/lib/ingest/otlp/c.ts", 2]]);
-    assert.deepEqual(report.unmapped, [{ path: "apps/web/lib/ingest/otlp/c.ts", specifier: "@/lib/legacy/s" }]);
+    assert.deepEqual(report.privateHits.map((h) => [h.path, h.line]), [["web/src/lib/ingest/otlp/c.ts", 2]]);
+    assert.deepEqual(report.unmapped, [{ path: "web/src/lib/ingest/otlp/c.ts", specifier: "@/lib/legacy/s" }]);
   });
 
   it("never lands an upstream path that names confidential data, and never prints it", () => {
@@ -393,28 +393,28 @@ describe("sync", () => {
       formatter,
     });
     assert.equal(runs, 1);
-    const a = actions.find((x) => x.to === "apps/web/lib/ingest/otlp/a.ts");
+    const a = actions.find((x) => x.to === "web/src/lib/ingest/otlp/a.ts");
     assert.match(a.content.toString(), /\/\/ formatted\n$/);
     assert.deepEqual(
       report.privateHits.map((h) => [h.path, h.line]),
-      [["apps/web/lib/ingest/otlp/c.ts", 1]],
+      [["web/src/lib/ingest/otlp/c.ts", 1]],
     );
   });
 
   it("the batch formatter runs the repository's biome over a staged mirror, overrides included", () => {
     const files = new Map([
-      ["apps/web/lib/platform/x.ts", Buffer.from('import {b} from "./b";\nimport {a} from "./a";\nexport const x = a+b\n')],
-      ["apps/web/lib/platform/y.ts", Buffer.from("export const y = [1,2,3]\n")],
+      ["web/src/lib/platform/x.ts", Buffer.from('import {b} from "./b";\nimport {a} from "./a";\nexport const x = a+b\n')],
+      ["web/src/lib/platform/y.ts", Buffer.from("export const y = [1,2,3]\n")],
     ]);
     const out = formatAllWithBiome(REPO_ROOT, files);
-    assert.equal(out.get("apps/web/lib/platform/x.ts").toString(), 'import { a } from "./a";\nimport { b } from "./b";\nexport const x = a + b;\n');
-    assert.equal(out.get("apps/web/lib/platform/y.ts").toString(), "export const y = [1, 2, 3];\n");
+    assert.equal(out.get("web/src/lib/platform/x.ts").toString(), 'import { a } from "./a";\nimport { b } from "./b";\nexport const x = a + b;\n');
+    assert.equal(out.get("web/src/lib/platform/y.ts").toString(), "export const y = [1, 2, 3];\n");
   });
 
   it("limits a run to one destination prefix with `only`", () => {
-    const { report } = plan({ only: "apps/web/lib/platform" });
+    const { report } = plan({ only: "web/src/lib/platform" });
     assert.deepEqual(report.copied, []);
-    assert.deepEqual(report.ownedBootstrapped, ["apps/web/lib/platform/db/client.ts"]);
+    assert.deepEqual(report.ownedBootstrapped, ["web/src/lib/platform/db/client.ts"]);
   });
 });
 
@@ -446,18 +446,18 @@ describe("undecided", () => {
 describe("biome copy override", () => {
   it("lists copy entries, a folder as a glob followed by the owned files inside it", () => {
     repo = mkdtempSync(join(tmpdir(), "ratel-sync-repo-"));
-    put(repo, "apps/web/lib/ingest/otlp/a.ts", "");
+    put(repo, "web/src/lib/ingest/otlp/a.ts", "");
     const map = {
       entries: [
         ...MAP.entries,
-        { from: "apps/web/lib/otlp/own.ts", to: "apps/web/lib/ingest/otlp/own.ts", mode: "owned" },
-        { from: "apps/web/lib/seed/[id].ts", to: "apps/web/lib/console/seed/[id].ts", mode: "copy" },
+        { from: "apps/web/lib/otlp/own.ts", to: "web/src/lib/ingest/otlp/own.ts", mode: "owned" },
+        { from: "apps/web/lib/seed/[id].ts", to: "web/src/lib/console/seed/[id].ts", mode: "copy" },
       ],
     };
     assert.deepEqual(copyIncludes(map, repo), [
-      "apps/web/lib/ingest/otlp/**",
-      "!apps/web/lib/ingest/otlp/own.ts",
-      "apps/web/lib/console/seed/\\[id\\].ts",
+      "web/src/lib/ingest/otlp/**",
+      "!web/src/lib/ingest/otlp/own.ts",
+      "web/src/lib/console/seed/\\[id\\].ts",
     ]);
     rmSync(repo, { recursive: true, force: true });
   });

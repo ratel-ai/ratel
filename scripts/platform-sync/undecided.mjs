@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Lists the ratel-cloud files that have no decision in map.json (ADR-0030). A local tool: it reads
+// Lists the ratel-cloud files that have no decision in map.json (ADR-0004). A local tool: it reads
 // the file list of the synced commit (source.json) from the ratel-cloud repository's history, so it
 // answers the same whatever that checkout has checked out, and it writes nothing anywhere.
 //

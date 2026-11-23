@@ -1,8 +1,8 @@
 # Baseline capture in a distributed host
 
-How to collect the evidence for [adaptive usage ranking](adr/0014-adaptive-usage-ranking.md) when your agent runs as a **process-per-request server across many instances** — the shape where the search and the invocation that follows are different requests, on possibly different machines.
+How to collect the evidence for [adaptive usage ranking](https://github.com/ratel-ai/ratel/blob/97282f939824622e652322b31e10a865fa6c6764/docs/adr/0014-adaptive-usage-ranking.md) when your agent runs as a **process-per-request server across many instances** — the shape where the search and the invocation that follows are different requests, on possibly different machines.
 
-The single-process path is the demo: [`examples/configurable-adaptive-ranking-ts`](../examples/configurable-adaptive-ranking-ts/README.md). Read that first — it explains *why* to seed before you rank. This page covers only what changes when one process cannot see a whole turn.
+The single-process path is the demo: [`examples/configurable-adaptive-ranking-ts`](https://github.com/ratel-ai/ratel-sdk/blob/main/examples/configurable-adaptive-ranking-ts/README.md) in the [ratel-sdk](https://github.com/ratel-ai/ratel-sdk) repository. Read that first — it explains *why* to seed before you rank. This page covers only what changes when one process cannot see a whole turn.
 
 ## The setup
 
@@ -46,7 +46,7 @@ The line is **the same wire form the `"jsonl"` sink would have written** — fie
 Two properties to design around:
 
 - **Delivery is asynchronous.** Recording queues the line and returns; the callback runs on a later turn of the event loop, with no ordering guarantee against your own microtasks or `setImmediate`. Flush before a request handler resolves or a process exits, or you lose the tail of a capture.
-- **Delivery is lossy.** Per [ADR-0007](adr/0007-telemetry-two-streams.md) a trace sink may drop events under backpressure but must never block the agent loop, so a queue that cannot keep up drops silently. Treat a capture window as best-effort, and keep `onEvent` cheap — enqueue, don't await.
+- **Delivery is lossy.** Per [ADR-0007](adr/0007-sdk-wire-contracts.md) a trace sink may drop events under backpressure but must never block the agent loop, so a queue that cannot keep up drops silently. Treat a capture window as best-effort, and keep `onEvent` cheap — enqueue, don't await.
 
 ## Session ids are yours to assign
 

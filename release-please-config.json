@@ -1,0 +1,16 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "19d98264377e93ae48505a56f78c6e5e2ebe7244",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "ratel",
+      "changelog-path": "CHANGELOG.md",
+      "release-as": "0.1.0",
+      "extra-files": [{ "type": "json", "path": "web/package.json", "jsonpath": "$.version" }]
+    }
+  }
+}

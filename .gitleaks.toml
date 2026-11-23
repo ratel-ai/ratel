@@ -4,6 +4,8 @@
 # rewrites: the same fake keys then come back as new findings on the push to main.
 # These files only hold fake API keys and a placeholder bearer token in unit tests,
 # so they are allowed by path, for the one rule that flags them.
+# Each path also matches where the file lived before: apps/web, then src, now web/src.
+# The MCP Apps were in those too and are now in mcp-apps/ at the root.
 
 [extend]
 useDefault = true
@@ -12,9 +14,17 @@ useDefault = true
 description = "Fake API-key fixtures and a placeholder OTLP bearer token in unit tests"
 targetRules = ["generic-api-key"]
 paths = [
-  '''^apps/web/lib/platform/api-key-actions\.test\.ts$''',
-  '''^apps/web/lib/console/settings/api-keys\.test\.ts$''',
-  '''^apps/web/lib/console/settings/api-key-access-ui\.test\.ts$''',
-  '''^apps/web/lib/console/settings/support-session-ui\.test\.ts$''',
-  '''^apps/web/lib/platform/otel/config\.test\.ts$''',
+  '''^(apps/web|src|web/src)/lib/platform/api-key-actions\.test\.ts$''',
+  '''^(apps/web|src|web/src)/lib/console/settings/api-keys\.test\.ts$''',
+  '''^(apps/web|src|web/src)/lib/console/settings/api-key-access-ui\.test\.ts$''',
+  '''^(apps/web|src|web/src)/lib/console/settings/support-session-ui\.test\.ts$''',
+  '''^(apps/web|src|web/src)/lib/platform/otel/config\.test\.ts$''',
+]
+
+[[allowlists]]
+description = "MCP Apps view bindings and their tests: a column's or stat's `key` is a field path (p95DurationMs, kpis.p95LatencyMs), not a credential"
+targetRules = ["generic-api-key"]
+paths = [
+  '''^((apps/web|src|web/src)/)?mcp-apps/views/[^/]+/bindings\.ts$''',
+  '''^((apps/web|src|web/src)/)?mcp-apps/shell/config\.test\.ts$''',
 ]

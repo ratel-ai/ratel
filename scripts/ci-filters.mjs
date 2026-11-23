@@ -9,20 +9,7 @@ import { readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const OUTPUTS = [
-  "rust",
-  "sdk",
-  "ai_sdk",
-  "rankers_ts",
-  "python",
-  "telemetry",
-  "protocol",
-  "design_system",
-  "platform",
-  "compose",
-  "release",
-  "lockfiles",
-];
+export const OUTPUTS = ["design_system", "platform", "compose", "deploy", "lockfiles"];
 
 /** Doc allowlist: these paths set no output. */
 const DOC_ALLOW = [
@@ -41,20 +28,6 @@ const DOC_ALLOW = [
  * in the changes job itself.
  */
 export const SCRIPT_OWNERS = {
-  "scripts/inject-sdk-optional-deps.mjs": "sdk",
-  "scripts/inject-sdk-optional-deps.test.mjs": "sdk",
-  "scripts/pin-adapter-sdk-peer.mjs": "sdk",
-  "scripts/pin-adapter-sdk-peer.test.mjs": "sdk",
-  "scripts/release-units.mjs": "sdk",
-  "scripts/release-units.test.mjs": "sdk",
-  "scripts/releasable.mjs": "sdk",
-  "scripts/releasable.test.mjs": "sdk",
-  "scripts/check-release-tag.mjs": "sdk",
-  "scripts/check-release-tag.test.mjs": "sdk",
-  "scripts/rankers-sdk-floor.test.mjs": "sdk",
-  "scripts/build-rankers-ts.sh": "sdk",
-  "scripts/publish-rc.sh": "sdk",
-
   "scripts/check-layers.mjs": "platform",
   "scripts/check-layers.test.mjs": "platform",
   "scripts/layers-allow.json": "platform",
@@ -72,6 +45,10 @@ export const SCRIPT_OWNERS = {
   "scripts/platform-sync/sync.test.mjs": "platform",
   "scripts/platform-sync/undecided.mjs": "platform",
   "scripts/quick-start.test.mjs": "platform",
+  "scripts/install.test.mjs": "platform",
+  "scripts/deploy.test.mjs": "platform",
+  "scripts/deploy-buttons.mjs": "platform",
+  "scripts/deploy-buttons.test.mjs": "platform",
 
   "scripts/workflow-contracts.test.mjs": "changes",
   "scripts/ci-filters.mjs": "changes",
@@ -82,33 +59,25 @@ export const SCRIPT_OWNERS = {
 
 /** Package directory -> package.json name, for the workspace-dependency contract. */
 export const PACKAGE_DIRS = {
-  "apps/web": "@ratel/platform",
+  web: "@ratel/platform",
+  "mcp-apps": "@ratel/mcp-apps",
   "packages/brand": "@ratel/brand",
   "packages/design-system": "@ratel/design-system",
   ee: "@ratel/ee",
-  "src/sdk/ts": "@ratel-ai/sdk",
-  "src/telemetry/ts": "@ratel-ai/telemetry",
-  "src/adapters/ts-vercel-ai-sdk": "@ratel-ai/vercel-ai-sdk",
-  "src/adapters/ts-mastra": "@ratel-ai/mastra",
-  "src/rankers/ts": "@ratel-ai/rankers-plugin",
 };
 
 /**
  * Outputs that validate a package. Used by the workspace-dependency contract:
  * a dependency's directory must select every validate-output of each package
- * that workspace-depends on it. Broader path triggers (for example sdk also
- * starting rankers_ts) live in classify(), not here.
+ * that workspace-depends on it. Broader path triggers (for example brand also
+ * starting platform) live in classify(), not here.
  */
 export const PACKAGE_OUTPUTS = {
-  "apps/web": ["platform", "compose"],
+  web: ["platform", "compose"],
+  "mcp-apps": ["platform", "compose"],
   "packages/brand": ["design_system"],
   "packages/design-system": ["design_system"],
   ee: ["platform"],
-  "src/sdk/ts": ["sdk"],
-  "src/telemetry/ts": ["sdk"],
-  "src/adapters/ts-vercel-ai-sdk": ["sdk", "ai_sdk"],
-  "src/adapters/ts-mastra": ["sdk"],
-  "src/rankers/ts": ["sdk", "rankers_ts"],
 };
 
 const ALL_TRUE = Object.fromEntries(OUTPUTS.map((k) => [k, true]));
@@ -242,33 +211,21 @@ const CLAIMS = [
   "pnpm-workspace.yaml",
   "package.json",
   "biome.json",
-  "Cargo.toml",
-  "Cargo.lock",
-  "rust-toolchain.toml",
   ".github/dependabot.yml",
   ".trivyignore.yaml",
-  "src/core/**",
-  "src/telemetry/core/**",
-  "src/sdk/ts/**",
-  "src/sdk/python/**",
-  "src/adapters/**",
-  "src/telemetry/ts/**",
-  "src/telemetry/python/**",
-  "src/telemetry/conformance/**",
-  "src/rankers/**",
-  "examples/**",
-  "examples/pydantic-ai/**",
-  "examples/telemetry-python/**",
-  "protocol/**",
-  "e2e/**",
-  "apps/web/**",
+  "web/**",
+  "mcp-apps/**",
   "packages/brand/**",
   "packages/design-system/**",
   "ee/**",
   "docker-compose.yml",
   ".env.example",
   ".dockerignore",
-  "apps/web/Dockerfile",
+  "web/Dockerfile",
+  "install.sh",
+  "docker-compose.caddy.yml",
+  "deploy.sh",
+  "deploy/**",
   ...Object.keys(SCRIPT_OWNERS),
 ];
 
@@ -281,14 +238,9 @@ function applyFile(result, file) {
     const owner = SCRIPT_OWNERS[file];
     if (owner === "all") return setAll(result);
     if (owner === "changes") return result;
-    if (owner === "sdk") {
-      merge(result, ["sdk"]);
-      // inject-sdk-optional-deps also gates release verify.
-      if (file.includes("inject-sdk-optional-deps")) merge(result, ["release"]);
-      return result;
-    }
     if (owner === "platform") {
       merge(result, ["platform"]);
+      if (file.startsWith("scripts/deploy")) merge(result, ["deploy"]);
       if (file === "scripts/link-ee.mjs") merge(result, ["compose"]);
       return result;
     }
@@ -297,7 +249,7 @@ function applyFile(result, file) {
   }
 
   // Lockfile scan: the lockfiles themselves and the exceptions file.
-  if (file === "pnpm-lock.yaml" || file === "Cargo.lock" || file === ".trivyignore.yaml") {
+  if (file === "pnpm-lock.yaml" || file === ".trivyignore.yaml") {
     merge(result, ["lockfiles"]);
   }
 
@@ -309,116 +261,11 @@ function applyFile(result, file) {
     file === "pnpm-workspace.yaml" ||
     file === "package.json"
   ) {
-    return merge(result, [
-      "sdk",
-      "ai_sdk",
-      "rankers_ts",
-      "design_system",
-      "platform",
-      "compose",
-      "release",
-    ]);
+    return merge(result, ["design_system", "platform", "compose"]);
   }
 
   if (file === "biome.json") {
-    return merge(result, ["sdk", "design_system", "platform"]);
-  }
-
-  if (
-    file === "Cargo.toml" ||
-    file === "Cargo.lock" ||
-    file === "rust-toolchain.toml" ||
-    matches("src/core/**", file)
-  ) {
-    return merge(result, ["sdk", "ai_sdk", "rankers_ts", "rust", "python", "release"]);
-  }
-
-  if (matches("src/telemetry/core/**", file)) {
-    return merge(result, ["rust"]);
-  }
-
-  if (
-    matches("src/sdk/ts/native/**", file) ||
-    matches("src/sdk/python/native/**", file) ||
-    matches("src/rankers/ts/native/**", file) ||
-    matches("src/rankers/python/native/**", file) ||
-    matches("src/rankers/core/**", file)
-  ) {
-    merge(result, ["rust"]);
-  }
-
-  if (file === "protocol/v1/conformance/vectors.json") {
-    merge(result, ["rust", "protocol"]);
-  }
-
-  if (matches("protocol/**", file)) {
-    merge(result, ["protocol"]);
-  }
-
-  // SDK island (TS)
-  if (
-    matches("src/sdk/ts/**", file) ||
-    matches("src/adapters/**", file) ||
-    matches("src/telemetry/ts/**", file) ||
-    matches("src/telemetry/conformance/**", file) ||
-    matches("src/rankers/ts/**", file) ||
-    matches("src/rankers/core/**", file) ||
-    matches("examples/**", file)
-  ) {
-    // Python-only examples are under examples/ but not in the pnpm workspace.
-    if (matches("examples/pydantic-ai/**", file)) {
-      merge(result, ["python"]);
-    } else if (matches("examples/telemetry-python/**", file)) {
-      merge(result, ["telemetry"]);
-    } else if (!file.startsWith("examples/") || hasPackageJsonAncestor(file)) {
-      merge(result, ["sdk"]);
-    }
-  }
-
-  if (
-    matches("src/adapters/ts-vercel-ai-sdk/**", file) ||
-    matches("src/sdk/ts/**", file) ||
-    matches("src/telemetry/ts/**", file)
-  ) {
-    merge(result, ["ai_sdk"]);
-  }
-
-  if (
-    matches("src/rankers/**", file) ||
-    matches("src/sdk/ts/**", file)
-  ) {
-    merge(result, ["rankers_ts"]);
-  }
-
-  if (
-    matches("src/sdk/python/**", file) ||
-    matches("src/rankers/python/**", file) ||
-    matches("src/rankers/core/**", file) ||
-    matches("src/telemetry/python/**", file) ||
-    matches("examples/pydantic-ai/**", file)
-  ) {
-    merge(result, ["python"]);
-  }
-
-  if (
-    matches("src/telemetry/python/**", file) ||
-    matches("src/telemetry/conformance/**", file) ||
-    matches("examples/telemetry-python/**", file)
-  ) {
-    merge(result, ["telemetry"]);
-  }
-
-  if (
-    matches("src/core/**", file) ||
-    matches("src/rankers/**", file) ||
-    matches("src/sdk/ts/**", file) ||
-    matches("src/sdk/python/**", file) ||
-    matches("src/telemetry/ts/**", file) ||
-    matches("src/telemetry/python/**", file) ||
-    matches("e2e/**", file) ||
-    file === "scripts/inject-sdk-optional-deps.mjs"
-  ) {
-    merge(result, ["release"]);
+    return merge(result, ["design_system", "platform"]);
   }
 
   if (matches("packages/brand/**", file) || matches("packages/design-system/**", file)) {
@@ -426,10 +273,11 @@ function applyFile(result, file) {
   }
 
   if (
-    matches("apps/web/**", file) ||
+    matches("web/**", file) ||
+    matches("mcp-apps/**", file) ||
     matches("ee/**", file)
   ) {
-    // Markdown under apps/web is handled by DOC_ALLOW before we get here.
+    // Markdown under them is handled by DOC_ALLOW before we get here.
     merge(result, ["platform", "compose"]);
   }
 
@@ -437,22 +285,20 @@ function applyFile(result, file) {
     file === "docker-compose.yml" ||
     file === ".env.example" ||
     file === ".dockerignore" ||
-    file === "apps/web/Dockerfile" ||
+    file === "web/Dockerfile" ||
+    file === "install.sh" ||
+    file === "docker-compose.caddy.yml" ||
     file === "scripts/link-ee.mjs"
   ) {
     merge(result, ["compose", "platform"]);
   }
 
-  return result;
-}
+  // The cloud deployer: its script and modules (deploy job), and its tests (platform job).
+  if (file === "deploy.sh" || matches("deploy/**", file)) {
+    merge(result, ["deploy", "platform"]);
+  }
 
-function hasPackageJsonAncestor(file) {
-  // examples/foo/... — treat as TS example unless it's a known Python-only tree.
-  return (
-    file.startsWith("examples/") &&
-    !file.startsWith("examples/pydantic-ai/") &&
-    !file.startsWith("examples/telemetry-python/")
-  );
+  return result;
 }
 
 /** Walk scripts/ and return paths (posix) that have no SCRIPT_OWNERS entry. */

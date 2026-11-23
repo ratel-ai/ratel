@@ -1,0 +1,914 @@
+import { type Config, getConfig } from "@/config";
+import { composition } from "@/lib/composition/ports";
+import type { CompositionPorts } from "@/lib/contracts/composition";
+import {
+  type BackgroundObservability,
+  createBackgroundObservability,
+} from "@/lib/jobs/observability";
+import { countClosedTurns as countClosedTurnsFn } from "@/lib/ledger/closed-turns";
+import { TURN_BUILD_SEED_WINDOW_DAYS } from "@/lib/ledger/constants";
+import {
+  countUnbuiltTurnEvents as countUnbuiltTurnEventsFn,
+  getTraceTurnsCursor as getTraceTurnsCursorFn,
+} from "@/lib/ledger/turns/queries";
+import { getAgentHealthLimits } from "@/lib/platform/entitlements";
+import { getLogger } from "@/lib/platform/logger";
+import { getOrganizationByProjectId as getOrganizationByProjectIdFn } from "@/lib/platform/organizations";
+import { reportServerException } from "@/lib/platform/telemetry";
+import { decisionEngineConfigured } from "@/lib/readings/decisions/engine";
+import { models } from "@/lib/readings/models";
+import { outcomePillars, type PillarReading } from "@/lib/readings/trace-signals/health-outcomes";
+import {
+  HEALTH_SCORE_VERSION,
+  healthScore,
+  scoredIssues,
+} from "@/lib/readings/trace-signals/health-score";
+import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
+import type {
+  SelfCorrectionRunInput,
+  SelfCorrectionRunResult,
+} from "@/lib/readings/trace-signals/self-corrections/run";
+import {
+  recordSelfCorrectionsForRun,
+  type SelfCorrectionBudget,
+} from "@/lib/readings/trace-signals/self-corrections/run-job";
+import {
+  buildSetupFacts,
+  type SetupLinking,
+  type StoredSetup,
+} from "@/lib/readings/trace-signals/setup-facts";
+import { loadSetupCounts as loadSetupCountsFn } from "@/lib/readings/trace-signals/setup-facts-query";
+import { countFixesSince as countFixesSinceFn } from "@/lib/readings/trace-signals/signals/analysis-context";
+import { MAX_QUERY_HASHES } from "@/lib/readings/trace-signals/signals/catalog";
+import {
+  computeSignals as computeSignalsFn,
+  resolveWindowDays,
+  SIGNAL_TIME_BUDGET_MS,
+  signalWindow,
+  TimeBudgetError,
+  targetWindowDays,
+} from "@/lib/readings/trace-signals/signals/compute";
+import {
+  type AwaitedFix,
+  arrivedFix,
+  awaitedFixes,
+  fixRerunDue,
+} from "@/lib/readings/trace-signals/signals/data-fixes";
+import {
+  awaitsFullReading,
+  earlyRefreshDue,
+  isEarlyReading,
+  QUICK_FIRST_READING_DAYS,
+  quickWindowDays,
+  type ReadingFacts,
+} from "@/lib/readings/trace-signals/signals/early-reading";
+import {
+  enqueueComputeJob as enqueueComputeJobFn,
+  failSignalRun as failSignalRunFn,
+  isRunTrigger,
+  latestSignalRun as latestSignalRunFn,
+  listOpenSignals as listOpenSignalsFn,
+  persistSignalRun as persistSignalRunFn,
+  type RunTrigger,
+  reapStaleSignalRuns as reapStaleSignalRunsFn,
+  STALE_RUN_MS,
+  setRunHealthScore as setRunHealthScoreFn,
+  startSignalRun as startSignalRunFn,
+} from "@/lib/readings/trace-signals/signals/queries";
+import { withStoredToolStandings } from "@/lib/readings/trace-signals/signals/unknown-tool-standing";
+import { workflowMiningFor } from "@/lib/readings/trace-signals/tool-run-insights";
+import {
+  FIRST_READING_FLOOR,
+  SIGNAL_KINDS,
+  type SignalKind,
+} from "@/lib/readings/trace-signals/view";
+import { enqueueLabelWorkflowsJob as enqueueLabelWorkflowsJobFn } from "@/lib/readings/trace-signals/workflows/label-queries";
+import {
+  type PlacementWriteResult,
+  writeTaskPlacement as writeTaskPlacementFn,
+} from "@/lib/readings/trace-signals/workflows/place-queries";
+import type { WorkflowConfig } from "@/lib/readings/trace-signals/workflows/types";
+
+/**
+ * The `compute_trace_signals` job: one signal run for one project.
+ *
+ * Reap a live run a crashed job left behind, pick the window (shrunk after a time-budget
+ * failure), claim the project's one live run, run the detectors over the ledger, and
+ * persist signals and the finished run in one transaction. A time-budget overrun fails
+ * the run with `error = time_budget` and returns normally (the next run shrinks the
+ * window); any other failure fails the run, is tracked, and rethrows so the job runner
+ * records and reports it.
+ *
+ * A run that starts while turn events still wait to be built records how many
+ * (`summary.unbuiltAtStart`) when that is enough to change its numbers, so the page can
+ * ask for another once they are built.
+ *
+ * Logs and events carry counts only: no query text, no end-user ids.
+ *
+ * Owned (ADR-0004): Agent health is on for every project here, so there is no flag gate.
+ * The readings that follow a run (live task scores, topics, the tool explorer, fix drafts) are seams: each one's
+ * registration fills its enqueue in {@link computeSeams} when it lands, and a run with
+ * the seam unset simply queues nothing.
+ */
+
+const logger = getLogger("trace-signals/compute-job");
+const SYSTEM_DISTINCT_ID = "system:trace-signals";
+
+export interface ComputeJobDeps {
+  getOrganizationByProjectId: typeof getOrganizationByProjectIdFn;
+  getCursor: typeof getTraceTurnsCursorFn;
+  latestRun: typeof latestSignalRunFn;
+  reapStale: typeof reapStaleSignalRunsFn;
+  startRun: typeof startSignalRunFn;
+  failRun: typeof failSignalRunFn;
+  persist: typeof persistSignalRunFn;
+  compute: typeof computeSignalsFn;
+  observability: Pick<BackgroundObservability, "trackSystemEvent">;
+  /** What the project sends, per data point, for the page's setup card. */
+  loadSetupCounts: typeof loadSetupCountsFn;
+  /** Queue model-written workflow names after a run that found workflows. */
+  enqueueLabels: (projectId: string) => Promise<unknown>;
+  /** Whether a model is configured to name workflows or place asks in them. */
+  canLabel: () => boolean;
+  /** Turn events received after `since` (the build cursor) and not yet built, up to a cap. */
+  countUnbuilt: (projectId: string, since: Date | string) => Promise<number>;
+  /** Write each run's task (`trace_turns.workflow_id`) for the window's runs. */
+  writePlacement: typeof writeTaskPlacementFn;
+  /**
+   * The window's self-corrections (`self-corrections/run.ts`): rewrites its
+   * `trace_self_corrections` rows and finds the `self_correcting` issues, which join this
+   * run's signals.
+   */
+  recordSelfCorrections: (
+    projectId: string,
+    input: SelfCorrectionRunInput,
+    budget: SelfCorrectionBudget,
+  ) => Promise<SelfCorrectionRunResult>;
+  /** Queue the topic reading that follows every run; a seam the topics registration fills. */
+  enqueueTopics?: (projectId: string) => Promise<unknown>;
+  /** Queue the tool-explorer run that reads this run's ledger window; a seam its registration fills. */
+  enqueueExplore?: (projectId: string, signalRunId: string) => Promise<unknown>;
+  /** Queue drafts for the project's new rewrite fixes; a seam fix drafts' registration fills. */
+  enqueueFixDrafts?: (projectId: string) => Promise<unknown>;
+  /** Queue live task scores after placement and signal persistence. The queue checks the organization flag. */
+  enqueueTaskScores?: (projectId: string) => Promise<unknown>;
+  /** Whether an import is storing runs for the project right now. */
+  importRunning: (projectId: string) => Promise<boolean>;
+  /** Queue the full-window run that follows a quick first reading. */
+  enqueueFullReading: (projectId: string) => Promise<unknown>;
+  /** Store the reading's Health score (RC-225) from the project's open issues, once they are persisted. */
+  storeHealthScore: (
+    projectId: string,
+    runId: string,
+    turnsRead: number,
+    pillars: readonly PillarReading[],
+  ) => Promise<unknown>;
+  /**
+   * Workflow mining tunables for the project (RC-725, `toolRunInsights`
+   * via `workflowMiningFor`); null, the defaults.
+   */
+  workflowMining?: (
+    projectId: string,
+    organization: unknown,
+  ) => Promise<Partial<WorkflowConfig> | null>;
+  now: () => Date;
+  timeBudgetMs: number;
+}
+
+/**
+ * The enqueues of the readings that follow a signal run. Empty until their registrations
+ * assign them, so this module never imports a reading that may not have landed.
+ */
+export const computeSeams: Pick<
+  ComputeJobDeps,
+  "enqueueTopics" | "enqueueExplore" | "enqueueFixDrafts" | "enqueueTaskScores"
+> = {};
+
+/** The turn build's seed window: what a project's first build reads. */
+const SEED_WINDOW_MS = TURN_BUILD_SEED_WINDOW_DAYS * 86_400_000;
+/** Unbuilt turn events counted at most: one build page. */
+export const UNBUILT_COUNT_CAP = 5_000;
+/** The fewest unbuilt events at a run's start that make it partial, whatever its size. */
+export const PARTIAL_READING_MIN_EVENTS = 20;
+
+/**
+ * Whether a run that started with `unbuilt` turn events still waiting to be built missed
+ * enough to change its numbers: at least `PARTIAL_READING_MIN_EVENTS`, and a tenth of
+ * the turns it read. The few seconds of ingest a busy project always has in flight are
+ * neither.
+ */
+export function missedBacklog(unbuilt: number, turnsScanned: number): boolean {
+  return unbuilt >= Math.max(PARTIAL_READING_MIN_EVENTS, Math.ceil(turnsScanned / 10));
+}
+
+function defaultDeps(config: Config): ComputeJobDeps {
+  return {
+    getOrganizationByProjectId: getOrganizationByProjectIdFn,
+    getCursor: getTraceTurnsCursorFn,
+    latestRun: latestSignalRunFn,
+    reapStale: reapStaleSignalRunsFn,
+    startRun: startSignalRunFn,
+    failRun: failSignalRunFn,
+    persist: persistSignalRunFn,
+    compute: computeSignalsFn,
+    observability: createBackgroundObservability(),
+    loadSetupCounts: (projectId, window) => loadSetupCountsFn(projectId, window),
+    enqueueLabels: (projectId) => enqueueLabelWorkflowsJobFn(projectId),
+    canLabel: () =>
+      models.text("workflow_label", { config }) !== null || decisionEngineConfigured(config),
+    countUnbuilt: (projectId, since) =>
+      countUnbuiltTurnEventsFn(projectId, since, UNBUILT_COUNT_CAP),
+    writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),
+    recordSelfCorrections: recordSelfCorrectionsForRun,
+    ...computeSeams,
+    // Imports are the edition's: without an importer, no import is ever running.
+    importRunning: (projectId) => editionImportRunning(projectId),
+    enqueueFullReading: (projectId) => enqueueComputeJobFn(projectId, "full_reading"),
+    workflowMining: (projectId, organization) => workflowMiningFor(projectId, organization, config),
+    storeHealthScore: async (projectId, runId, turnsRead, pillars) => {
+      const records = (await listOpenSignalsFn(projectId)).flatMap(scoredRecordOf);
+      await setRunHealthScoreFn(runId, {
+        version: HEALTH_SCORE_VERSION,
+        value: healthScore(scoredIssues(withStoredToolStandings(records)), turnsRead, pillars),
+      });
+    },
+    now: () => new Date(),
+    timeBudgetMs: SIGNAL_TIME_BUDGET_MS,
+  };
+}
+
+/**
+ * Whether the edition's importer is storing runs for the project right now. Its `importRunning`
+ * is upstream's own read for this job (a running import among the newest, one whose heartbeat
+ * stopped not counted), so it comes first; an edition that only says which import is running
+ * (`runningImport`, the freshness line's read) is asked that instead. Without an importer, no
+ * import is ever running.
+ */
+export async function editionImportRunning(
+  projectId: string,
+  edition: Pick<CompositionPorts, "importRunning" | "runningImport"> = composition,
+): Promise<boolean> {
+  if (edition.importRunning) return edition.importRunning(projectId);
+  if (edition.runningImport) return (await edition.runningImport(projectId)) !== null;
+  return false;
+}
+
+const SCORED_KINDS: ReadonlySet<string> = new Set(SIGNAL_KINDS);
+
+/**
+ * One open issue as the Health score reads it. Owned: upstream reads the rows through the
+ * page's `toSignalRecord` (`lib/views`, a layer above this one); the score and the tool
+ * standings need only these fields, read the same way.
+ */
+function scoredRecordOf(row: TraceSignalRow): ScoredRecord[] {
+  if (!SCORED_KINDS.has(row.kind)) return [];
+  const evidence =
+    row.evidence && typeof row.evidence === "object"
+      ? (row.evidence as Record<string, unknown>)
+      : {};
+  const metrics =
+    row.metrics && typeof row.metrics === "object" ? (row.metrics as Record<string, unknown>) : {};
+  return [
+    {
+      id: row.id,
+      kind: row.kind as SignalKind,
+      subjectKey: row.subjectKey,
+      severity: row.severity,
+      totalTurns: typeof evidence.totalTurns === "number" ? evidence.totalTurns : 0,
+      metrics,
+    },
+  ];
+}
+
+/** What the Health score and the tool standings read of one open issue. */
+interface ScoredRecord {
+  id: string;
+  kind: SignalKind;
+  subjectKey: string;
+  severity: number;
+  totalTurns: number;
+  metrics: Readonly<Record<string, unknown>>;
+}
+
+export type ComputeJobOutcome = "completed" | "time_budget" | "busy";
+
+export interface ComputeJobResult {
+  outcome: ComputeJobOutcome;
+  runId: string | null;
+  windowDays: number;
+  turnsScanned: number;
+  signalsOpen: number;
+  signalsNew: number;
+  signalsResolved: number;
+}
+
+const EMPTY = {
+  runId: null,
+  windowDays: 0,
+  turnsScanned: 0,
+  signalsOpen: 0,
+  signalsNew: 0,
+  signalsResolved: 0,
+};
+
+/** The trigger a job payload names, defaulting to `scheduled` for anything unknown. */
+export function parseComputePayload(payload: unknown): { trigger: RunTrigger } {
+  const trigger =
+    payload && typeof payload === "object" ? (payload as { trigger?: unknown }).trigger : undefined;
+  return { trigger: isRunTrigger(trigger) ? trigger : "scheduled" };
+}
+
+export async function computeProjectTraceSignals(
+  projectId: string,
+  payload: { trigger: RunTrigger },
+  overrides: Partial<ComputeJobDeps> = {},
+  config: Config = getConfig(),
+): Promise<ComputeJobResult> {
+  const deps = { ...defaultDeps(config), ...overrides };
+  const organization = await deps.getOrganizationByProjectId(projectId);
+
+  const startedAt = deps.now();
+  await deps.reapStale(
+    projectId,
+    new Date(startedAt.getTime() - STALE_RUN_MS),
+    undefined,
+    startedAt,
+  );
+  const previous = await deps.latestRun(projectId);
+  const planDays = organization ? getAgentHealthLimits(organization).agentHealthWindowDays : 0;
+  const early = await earlyPlanFor(projectId, previous, targetWindowDays(planDays), deps);
+  const days = early?.quickDays ?? resolveWindowDays(previous, planDays, deps.timeBudgetMs);
+  // A quick first week is chosen, not cut by a time budget: it never climbs.
+  const windowShrunk = !early?.quickDays && days < targetWindowDays(planDays);
+  const window = signalWindow(startedAt, days);
+  const cursor = await deps.getCursor(projectId);
+  // Never built yet: everything in the build's seed window is still waiting.
+  const builtThrough = cursor?.raw ?? new Date(startedAt.getTime() - SEED_WINDOW_MS);
+  const unbuiltAtStart = await unbuiltFor(projectId, builtThrough, deps);
+  const importing = early ? await importRunningFor(projectId, deps) : false;
+  const run = await deps.startRun(
+    {
+      projectId,
+      trigger: payload.trigger,
+      windowDays: days,
+      windowStart: window.start,
+      windowEnd: window.end,
+      ledgerThrough: cursor?.at ?? null,
+    },
+    undefined,
+    startedAt,
+  );
+  if (!run) return { outcome: "busy", ...EMPTY, windowDays: days };
+
+  const base = {
+    project_id: projectId,
+    run_id: run.id,
+    trigger: payload.trigger,
+    window_days: days,
+  };
+  try {
+    const mining = (await deps.workflowMining?.(projectId, organization)) ?? null;
+    const { result, fingerprint } = await deps.compute(projectId, window, {
+      now: deps.now,
+      timeBudgetMs: deps.timeBudgetMs,
+      ...(mining ? { workflowMining: mining } : {}),
+    });
+    // The alert is for workflows hidden by mixed runs; once turn ids carry the reading it has nothing to say.
+    const basis = result.summary.workflows?.basis;
+    // A reading of the fixed runs says what is sent since the fix, not what the older runs lacked.
+    const since = basis?.basis === "exact" && basis.since ? new Date(basis.since) : null;
+    const setupWindow = since && since > window.start ? { ...window, start: since } : window;
+    const setup = await setupFor(
+      projectId,
+      setupWindow,
+      deps,
+      result.linking,
+      basis?.blocked === "mixed_runs",
+    );
+    // Each run's task first: the self-corrections read it from the runs, and the jobs this
+    // run queues (names, the tool reading) read every run's task.
+    const placement = await writePlacementFor(projectId, window, result.placement, deps);
+    const corrections = await selfCorrectionsFor(
+      projectId,
+      window,
+      result.summary,
+      startedAt,
+      deps,
+    );
+    const finishedAt = deps.now();
+    const partial = missedBacklog(unbuiltAtStart, result.turnsScanned);
+    const earlyReading =
+      !!early &&
+      isEarlyReading({
+        awaitingFull: early.awaitingFull,
+        quick: !!early.quickDays,
+        partial,
+        importing,
+      });
+    const persisted = await deps.persist({
+      runId: run.id,
+      projectId,
+      signals: corrections ? [...result.signals, ...corrections.signals] : result.signals,
+      measured: corrections
+        ? new Set([...result.measured, ...corrections.measured])
+        : result.measured,
+      summary: {
+        ...result.summary,
+        ...(windowShrunk ? { windowShrunk } : {}),
+        ...(setup ? { setup } : {}),
+        ...(partial ? { unbuiltAtStart } : {}),
+        ...(earlyReading ? { earlyReading } : {}),
+        ...(corrections ? { selfCorrections: corrections.stored } : {}),
+      },
+      turnsScanned: result.turnsScanned,
+      turnSourceMix: result.turnSourceMix,
+      corpusFingerprint: fingerprint,
+      now: finishedAt,
+    });
+    const fields = {
+      ...base,
+      turns_scanned: result.turnsScanned,
+      runs_placed: placement?.placed ?? null,
+      placement_written: placement ? placement.set + placement.cleared : null,
+      unbuilt_at_start: unbuiltAtStart,
+      early_reading: earlyReading,
+      signals_open: persisted.open,
+      signals_new: persisted.opened,
+      signals_resolved: persisted.resolved,
+      pair_tools: result.pairTools,
+      queries_truncated: result.queriesEvicted > 0,
+      self_corrections: corrections?.stored.events ?? null,
+      self_correcting_issues: corrections?.signals.length ?? null,
+      duration_ms: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
+    };
+    if (result.queriesEvicted > 0) {
+      logger.warn(
+        {
+          ...base,
+          query_hashes_evicted: result.queriesEvicted,
+          max_query_hashes: MAX_QUERY_HASHES,
+        },
+        "trace signal query hashes truncated",
+      );
+    }
+    logger.info(fields, "trace signal run completed");
+    // An early reading's score is provisional: the change and the trend compare full readings only.
+    if (!earlyReading) {
+      // The measured half reads what this run stored, over its own window, as the page does.
+      const pillars = outcomePillars(
+        {
+          daily: result.summary.daily,
+          selfCorrections: corrections?.stored,
+          workflows: result.summary.workflows,
+        },
+        { end: window.end, days },
+      );
+      await storeHealthScoreFor(projectId, run.id, result.turnsScanned, pillars, deps);
+    }
+    // The full window follows a quick week at once; an early reading for a
+    // backlog or an import waits for them instead (the build's drain hook).
+    if (early?.quickDays) await queueFullReading(projectId, deps);
+    await queueTaskScores(projectId, deps);
+    await queueWorkflowLabels(projectId, result.summary, deps);
+    await queueTopics(projectId, deps);
+    await queueToolExplorer(projectId, run.id, deps);
+    await queueFixDrafts(projectId, deps);
+    await deps.observability.trackSystemEvent("trace_signal_run_completed", SYSTEM_DISTINCT_ID, {
+      object_action: "trace_signal_run_completed",
+      ...fields,
+    });
+    return {
+      outcome: "completed",
+      runId: run.id,
+      windowDays: days,
+      turnsScanned: result.turnsScanned,
+      signalsOpen: persisted.open,
+      signalsNew: persisted.opened,
+      signalsResolved: persisted.resolved,
+    };
+  } catch (err) {
+    const overBudget = err instanceof TimeBudgetError;
+    const failedAt = deps.now();
+    await deps.failRun(
+      run.id,
+      overBudget ? "time_budget" : err instanceof Error ? err.message : String(err),
+      undefined,
+      failedAt,
+    );
+    const fields = {
+      ...base,
+      error: overBudget ? "time_budget" : "error",
+      duration_ms: Math.max(0, failedAt.getTime() - startedAt.getTime()),
+    };
+    if (overBudget) logger.warn(fields, "trace signal run over time budget");
+    else logger.error({ ...fields, err }, "trace signal run failed");
+    await deps.observability.trackSystemEvent("trace_signal_run_failed", SYSTEM_DISTINCT_ID, {
+      object_action: "trace_signal_run_failed",
+      ...fields,
+    });
+    if (overBudget) return { outcome: "time_budget", ...EMPTY, runId: run.id, windowDays: days };
+    throw err;
+  }
+}
+
+/**
+ * Best-effort: self-corrections are one more reading of the same window, so a failure or
+ * a time-budget overrun never fails the run. Their issue kind then stays unmeasured, so an
+ * open one is not resolved by a reading that did not see it, and the window keeps its
+ * earlier rows.
+ */
+async function selfCorrectionsFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  summary: { workflows?: { items: readonly { id: string; typicalOrder: readonly string[] }[] } },
+  startedAt: Date,
+  deps: Pick<ComputeJobDeps, "recordSelfCorrections" | "now" | "timeBudgetMs">,
+): Promise<SelfCorrectionRunResult | null> {
+  const tasks = new Map(
+    (summary.workflows?.items ?? []).map((item) => [item.id, item.typicalOrder] as const),
+  );
+  try {
+    return await deps.recordSelfCorrections(
+      projectId,
+      { window: { start: window.start, end: window.end }, tasks },
+      { startedAt: startedAt.getTime(), now: deps.now, timeBudgetMs: deps.timeBudgetMs },
+    );
+  } catch (err) {
+    if (err instanceof TimeBudgetError) {
+      logger.warn({ project_id: projectId }, "self corrections reading over time budget");
+      return null;
+    }
+    logger.error({ err, project_id: projectId }, "self corrections reading failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_self_corrections",
+    });
+    return null;
+  }
+}
+
+/** Best-effort: the backlog only marks a reading partial, so a failed count never fails the run. */
+async function unbuiltFor(
+  projectId: string,
+  since: Date | string,
+  deps: Pick<ComputeJobDeps, "countUnbuilt">,
+): Promise<number> {
+  try {
+    return await deps.countUnbuilt(projectId, since);
+  } catch (err) {
+    logger.error(
+      { err, project_id: projectId },
+      "unbuilt turn events unreadable for trace signals",
+    );
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_unbuilt_count",
+    });
+    return 0;
+  }
+}
+
+/**
+ * Best-effort: the run's own numbers are stored already; a failed write leaves the
+ * window's runs on the tasks the previous run gave them until the next run.
+ */
+async function writePlacementFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  placement: ReadonlyMap<string, string | null>,
+  deps: Pick<ComputeJobDeps, "writePlacement">,
+): Promise<PlacementWriteResult | null> {
+  try {
+    return await deps.writePlacement(projectId, {
+      window: { start: window.start, end: window.end },
+      placement,
+    });
+  } catch (err) {
+    logger.error(
+      { err, project_id: projectId, runs: placement.size },
+      "task placement write failed",
+    );
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_task_placement",
+    });
+    return null;
+  }
+}
+
+/** Best-effort: the setup card is guidance, so a failed read never fails the run. */
+async function setupFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  deps: Pick<ComputeJobDeps, "loadSetupCounts">,
+  linking?: SetupLinking,
+  mixedRuns = false,
+): Promise<StoredSetup | null> {
+  try {
+    return buildSetupFacts(await deps.loadSetupCounts(projectId, window), linking, { mixedRuns });
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "setup facts unreadable for trace signals");
+    reportServerException(err, `project:${projectId}`, { operation: "trace_signals_setup_facts" });
+    return null;
+  }
+}
+
+/** Best-effort: names are a nicety, so a failed enqueue never fails the run. */
+async function queueWorkflowLabels(
+  projectId: string,
+  summary: { workflows?: { items: readonly unknown[] } },
+  deps: Pick<ComputeJobDeps, "enqueueLabels" | "canLabel">,
+): Promise<void> {
+  if (!summary.workflows || summary.workflows.items.length === 0 || !deps.canLabel()) return;
+  try {
+    await deps.enqueueLabels(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "workflow label enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "label_workflows_enqueue" });
+  }
+}
+
+/** Best-effort: topics are another reading of the same turns, so a failed enqueue never fails the run. */
+async function queueTopics(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueTopics">,
+): Promise<void> {
+  try {
+    await deps.enqueueTopics?.(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "topic reading enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "assign_topics_enqueue" });
+  }
+}
+
+/** Best-effort: the explorer is a second reading of the same ledger, so a failed enqueue never fails the run. */
+async function queueToolExplorer(
+  projectId: string,
+  signalRunId: string,
+  deps: Pick<ComputeJobDeps, "enqueueExplore">,
+): Promise<void> {
+  try {
+    await deps.enqueueExplore?.(projectId, signalRunId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "tool explorer enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "explore_tool_usage_enqueue" });
+  }
+}
+
+/**
+ * Best-effort: drafts read the fixes this run's signals produce, so a failed enqueue never fails
+ * the run. Upstream queues them in the job handler once the run completed (`lib/jobs/handlers.ts`).
+ */
+async function queueFixDrafts(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueFixDrafts">,
+): Promise<void> {
+  try {
+    await deps.enqueueFixDrafts?.(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "fix draft enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "draft_fix_enqueue" });
+  }
+}
+
+/** Keep the completed signal run when the score queue fails. Log and report the failure. */
+async function queueTaskScores(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueTaskScores">,
+): Promise<void> {
+  try {
+    await deps.enqueueTaskScores?.(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "task scores enqueue failed");
+    reportServerException(err, `project:${projectId}`, { operation: "score_tasks_enqueue" });
+  }
+}
+
+/** How this run may be early (RC-224); null when it is a usual run. */
+interface EarlyPlan {
+  awaitingFull: true;
+  /** The quick first week, or null for the usual window. */
+  quickDays: number | null;
+}
+
+/**
+ * Whether this run belongs to a project still waiting for its full reading.
+ * Best-effort: a failed check is a usual run.
+ */
+async function earlyPlanFor(
+  projectId: string,
+  previous: ReadingFacts | null,
+  targetDays: number,
+  deps: Pick<ComputeJobDeps, "latestRun">,
+): Promise<EarlyPlan | null> {
+  try {
+    const latestCompleted =
+      previous?.status === "completed"
+        ? previous
+        : await deps.latestRun(projectId, undefined, "completed");
+    if (!awaitsFullReading(latestCompleted, FIRST_READING_FLOOR)) return null;
+    return {
+      awaitingFull: true,
+      quickDays: quickWindowDays(latestCompleted, targetDays, FIRST_READING_FLOOR),
+    };
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "quick first reading check failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_quick_first_reading",
+    });
+    return null;
+  }
+}
+
+/** Best-effort: an import the run cannot see only leaves the reading unmarked. */
+async function importRunningFor(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "importRunning">,
+): Promise<boolean> {
+  try {
+    return await deps.importRunning(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "running import unreadable for trace signals");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_import_running",
+    });
+    return false;
+  }
+}
+
+/** Best-effort: a reading without a stored score only shows no change on the page. */
+async function storeHealthScoreFor(
+  projectId: string,
+  runId: string,
+  turnsRead: number,
+  pillars: readonly PillarReading[],
+  deps: Pick<ComputeJobDeps, "storeHealthScore">,
+): Promise<void> {
+  try {
+    await deps.storeHealthScore(projectId, runId, turnsRead, pillars);
+  } catch (err) {
+    logger.error({ err, project_id: projectId, run_id: runId }, "health score store failed");
+    reportServerException(err, `project:${projectId}`, { operation: "trace_signals_health_score" });
+  }
+}
+
+/** Best-effort: the page asks for the full reading too, so a failed enqueue never fails the run. */
+async function queueFullReading(
+  projectId: string,
+  deps: Pick<ComputeJobDeps, "enqueueFullReading">,
+): Promise<void> {
+  try {
+    await deps.enqueueFullReading(projectId);
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "full reading enqueue failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_full_reading_enqueue",
+    });
+  }
+}
+
+export interface FirstBuildDeps {
+  latestRun: typeof latestSignalRunFn;
+  enqueue: typeof enqueueComputeJobFn;
+  countClosed: (projectId: string, from: Date, to: Date) => Promise<number>;
+  /** Fixed rows since a reading, per awaited fix. */
+  countFixes: (
+    projectId: string,
+    since: Date,
+    fixes: readonly AwaitedFix[],
+  ) => Promise<Partial<Record<AwaitedFix, number>>>;
+  now: () => Date;
+  /** Closed turns a first reading needs; the page's collecting meter counts to the same number. */
+  floor: number;
+}
+
+/** Closed turns are counted over the build's seed window, which every run window covers. */
+const FIRST_READING_LOOKBACK_MS = SEED_WINDOW_MS;
+
+/**
+ * Whether a project still waits for its first reading: it has no run yet, or its latest
+ * run completed on fewer closed turns than the floor (a thin run the page reads as
+ * "collecting"). A live or failed run is left alone.
+ */
+function awaitsFirstReading(
+  latest: Awaited<ReturnType<typeof latestSignalRunFn>>,
+  floor: number,
+): boolean {
+  if (!latest) return true;
+  return latest.status === "completed" && latest.turnsScanned < floor;
+}
+
+/**
+ * A completed reading made on incomplete data, once enough fixed data arrived since
+ * (`data-fixes.ts`): enqueue a run with `trigger = data_fixed`, so a project that turns
+ * on turn ids, tool calls or users' messages sees the page read from the fixed runs within
+ * the hour.
+ */
+async function enqueueFixedReading(
+  projectId: string,
+  latest: NonNullable<Awaited<ReturnType<typeof latestSignalRunFn>>>,
+  deps: FirstBuildDeps,
+): Promise<boolean> {
+  if (latest.status !== "completed" || !latest.finishedAt || !fixRerunDue(latest, deps.now())) {
+    return false;
+  }
+  const awaited = awaitedFixes(latest.summary);
+  if (awaited.length === 0) return false;
+  const fix = arrivedFix(awaited, await deps.countFixes(projectId, latest.finishedAt, awaited));
+  if (!fix) return false;
+  const queued = (await deps.enqueue(projectId, "data_fixed")) !== null;
+  if (queued)
+    logger.info({ project_id: projectId, fix }, "trace signal rerun queued after a data fix");
+  return queued;
+}
+
+/**
+ * The turn builder's `onBacklogDrained` hook (filled into the ledger's seams by
+ * `register.ts`), called whenever a build catches up after writing turns or closing idle
+ * ones: once a project that still awaits its first reading has `FIRST_READING_FLOOR`
+ * closed turns, enqueue a run with `trigger = first_build`, so a new project sees signals
+ * minutes after enough turns close instead of at the next sweep. A project past its first
+ * reading gets a new one when the data its last reading lacked has arrived
+ * (`enqueueFixedReading`), or, after an early reading (RC-224), the full one once that has
+ * stood a while (`earlyRefreshDue`). Before the floor it does nothing, so a first ingest
+ * batch whose turns are still open does not spend the first reading on a handful of turns.
+ * Coalesced like every compute enqueue. Never throws: a failed enqueue is logged and
+ * reported, and the sweep is the backstop.
+ */
+export async function enqueueFirstSignalRun(
+  projectId: string,
+  overrides: Partial<FirstBuildDeps> = {},
+): Promise<boolean> {
+  const deps: FirstBuildDeps = {
+    latestRun: latestSignalRunFn,
+    enqueue: enqueueComputeJobFn,
+    countClosed: (id, from, to) => countClosedTurnsFn(id, from, to),
+    countFixes: (id, since, fixes) => countFixesSinceFn(id, since, fixes),
+    now: () => new Date(),
+    floor: FIRST_READING_FLOOR,
+    ...overrides,
+  };
+  try {
+    const latest = await deps.latestRun(projectId);
+    if (!awaitsFirstReading(latest, deps.floor)) {
+      if (!latest) return false;
+      if (earlyRefreshDue(latest, deps.now()))
+        return (await deps.enqueue(projectId, "full_reading")) !== null;
+      return await enqueueFixedReading(projectId, latest, deps);
+    }
+    const now = deps.now();
+    const closed = await deps.countClosed(
+      projectId,
+      new Date(now.getTime() - FIRST_READING_LOOKBACK_MS),
+      now,
+    );
+    if (closed < deps.floor) return false;
+    return (await deps.enqueue(projectId, "first_build")) !== null;
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "first trace signal run enqueue failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_first_build_enqueue",
+    });
+    return false;
+  }
+}
+
+export type EarlyFirstReadingDeps = Pick<
+  FirstBuildDeps,
+  "latestRun" | "enqueue" | "countClosed" | "now" | "floor"
+>;
+
+/**
+ * The turn builder's hook for a build that has NOT caught up (RC-224): a
+ * project still waiting for its first reading gets one as soon as its last week holds the floor's worth of closed turns,
+ * while the older backlog is still being built. That reading is early (the
+ * backlog it missed marks it), and the full one follows once the build has
+ * caught up (`enqueueFirstSignalRun`). Never throws, like its sibling.
+ */
+export async function enqueueEarlyFirstReading(
+  projectId: string,
+  overrides: Partial<EarlyFirstReadingDeps> = {},
+): Promise<boolean> {
+  const deps: EarlyFirstReadingDeps = {
+    latestRun: latestSignalRunFn,
+    enqueue: enqueueComputeJobFn,
+    countClosed: (id, from, to) => countClosedTurnsFn(id, from, to),
+    now: () => new Date(),
+    floor: FIRST_READING_FLOOR,
+    ...overrides,
+  };
+  try {
+    if (!awaitsFirstReading(await deps.latestRun(projectId), deps.floor)) return false;
+    const now = deps.now();
+    const closed = await deps.countClosed(
+      projectId,
+      new Date(now.getTime() - QUICK_FIRST_READING_DAYS * 86_400_000),
+      now,
+    );
+    if (closed < deps.floor) return false;
+    return (await deps.enqueue(projectId, "first_build")) !== null;
+  } catch (err) {
+    logger.error({ err, project_id: projectId }, "early first trace signal run enqueue failed");
+    reportServerException(err, `project:${projectId}`, {
+      operation: "trace_signals_early_first_reading_enqueue",
+    });
+    return false;
+  }
+}
