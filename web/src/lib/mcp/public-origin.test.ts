@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resetConfigForTests } from "@/config";
 import { mcpOrigin, mcpResourceMetadataUrl, mcpResourceUrl } from "./public-origin";
 
 /**
@@ -18,11 +19,13 @@ function withEnv<T>(value: string | undefined, run: () => T): T {
   const previous = process.env.APP_PUBLIC_URL;
   if (value === undefined) delete process.env.APP_PUBLIC_URL;
   else process.env.APP_PUBLIC_URL = value;
+  resetConfigForTests();
   try {
     return run();
   } finally {
     if (previous === undefined) delete process.env.APP_PUBLIC_URL;
     else process.env.APP_PUBLIC_URL = previous;
+    resetConfigForTests();
   }
 }
 

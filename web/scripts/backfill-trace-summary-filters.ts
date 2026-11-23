@@ -20,11 +20,8 @@
  * `--before` defaults to now. Use the deploy time of the migration (0038 or
  * 0040) to skip the rows the sweep already recomputed.
  */
-import { config } from "dotenv";
 
-config({ path: ".env.local" });
-config({ path: ".env" });
-
+import "./load-env";
 import { getDb } from "@/lib/platform/db/client";
 import {
   backfillTraceSummaryFilters,

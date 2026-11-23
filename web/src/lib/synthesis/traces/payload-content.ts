@@ -18,7 +18,7 @@ import {
 /**
  * A trace's captured content read from `events.payload` (RC-393). OTLP ingest
  * strips message content from `otel_spans.attributes` by design and keeps it
- * in each model call's ADR-0013 payload, joined by the trace id. The pages and
+ * in each model call's ADR-0007 payload, joined by the trace id. The pages and
  * the MCP tools read the spans first and fall back to this when the spans
  * carry none.
  *
@@ -49,7 +49,7 @@ const FIRST_CALLS = 20;
 const ID_CHUNK = 500;
 
 const EVENT_TIME = sql`coalesce(${events.occurredAt}, ${events.receivedAt})`;
-/** A user message with text in an ADR-0013 payload, tested in the database. */
+/** A user message with text in an ADR-0007 payload, tested in the database. */
 const HAS_USER_TEXT = sql<boolean>`jsonb_path_exists(${events.payload}, '$.messages[*] ? (@.role == "user" && ((@.content.type() == "string" && @.content != "") || exists(@.content[*] ? (@.type == "text" && @.text != ""))))')`;
 const DERIVED_PROMPT = sql<string>`btrim(${traceEvents.payload} ->> 'prompt')`;
 const logger = getLogger("traces/payload-content");

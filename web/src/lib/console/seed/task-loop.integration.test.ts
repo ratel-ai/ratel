@@ -22,7 +22,7 @@ import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { dailyScoresFor } from "@/lib/views/task-scorers/store";
 
 /**
- * The task loop demo seed against a migrated PGlite. Owned (ADR-0030): upstream's
+ * The task loop demo seed against a migrated PGlite. Owned (ADR-0004): upstream's
  * `scripts/seed-task-loop.test.mts`, here beside the seed so the package's test glob runs it.
  * The organization is the edition's local one (the session port answers only for it), with no
  * plan column.

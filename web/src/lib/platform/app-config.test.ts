@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import {
   APP_NAME,
   apiUrl,
+  resolveAppConfig as appConfigOf,
   appConfigScript,
   editionServiceName,
-  resolveAppConfig,
   serviceName,
   setEditionServiceName,
 } from "./app-config";
+
+const resolveAppConfig = (env: Record<string, string>) => appConfigOf(resolveConfig({ env }));
 
 test("the defaults are local development on the open-source edition", () => {
   assert.deepEqual(resolveAppConfig({}), {
@@ -17,7 +20,7 @@ test("the defaults are local development on the open-source edition", () => {
   });
 });
 
-test("the environment overrides both; a blank value is the default; no trailing slash", () => {
+test("the settings override both; a blank value is the default; no trailing slash", () => {
   assert.deepEqual(
     resolveAppConfig({ APP_NAME: "Ratel Staging", BASE_URL: "https://ratel.example.com/" }),
     { name: "Ratel Staging", baseUrl: "https://ratel.example.com" },

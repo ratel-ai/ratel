@@ -4,7 +4,7 @@ What "good" means for one task (a kind of job the agent does), and how its live 
 against it each day. Ported from upstream `lib/task-scorers`. The pure core (`engine`,
 `outcome`, `replay`, `defaults`, `labels`, `format`, `types`) is also what the eval gate grades a
 simulated run with; the rest is the first half of the task loop and runs only when the eval gate
-is on (`FF_EVAL_GATE`, `eval-gate/gate.ts`).
+is on (`evalGate`, `eval-gate/gate.ts`).
 
 | File | What it holds |
 |---|---|
@@ -18,13 +18,13 @@ is on (`FF_EVAL_GATE`, `eval-gate/gate.ts`).
 With no `ANTHROPIC_API_KEY` the judge is skipped (no row, no call) and the deterministic scorers
 still write their counts; `EVAL_GATE_MOCK_MODEL=1` judges with a rule stand-in outside
 production. As upstream, `score_tasks` is not coalesced: each completed signal run queues one.
-With `FF_EVAL_GATE` off, the sweep still records one refusal per project with task runs a day,
+With `evalGate` off, the sweep still records one refusal per project with task runs a day,
 as upstream does for an organization without the gate.
 
-**Owned (ADR-0030).** `schema.ts` and `register.ts`; `job.ts` and its tests (the
-gate is the `FF_EVAL_GATE` env value, carried in upstream's `flagDeps`; the user scorers that
+**Owned (ADR-0004).** `schema.ts` and `register.ts`; `job.ts` and its tests (the
+gate is the configured `evalGate` flag, carried in upstream's `flagDeps`; the user scorers that
 upstream's job also runs are Evals' and are left out); `sweep.integration.test.ts` and
-`drain-task-scores*.test.ts` (upstream's sweep and drain tests, on the env switch and the
+`drain-task-scores*.test.ts` (upstream's sweep and drain tests, on the configured switch and the
 drain-step registry); `judge.ts` (the core has
 no `organizations` table, so the budget lock is `eval-gate/store.ts#lockOrganizationSpend`, and
 it loads `task-evals/spend.ts` so the budget counts the judge). The rest are copies.

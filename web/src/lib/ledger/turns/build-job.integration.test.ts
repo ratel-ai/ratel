@@ -30,7 +30,7 @@ import {
 } from "./queries";
 
 /**
- * The build job against real PGlite. Owned (ADR-0030): the signal-run enqueues the
+ * The build job against real PGlite. Owned (ADR-0004): the signal-run enqueues the
  * readings supply are stand-ins here (a coalesced `compute_trace_signals` insert and a
  * recorded callback), so the test proves the seams without importing L4. The quick first
  * reading's case (RC-224) runs the readings' own enqueue over this database instead.

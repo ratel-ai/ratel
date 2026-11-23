@@ -19,7 +19,7 @@ import {
 import { type EvalDb, loadRuns } from "@/lib/views/eval-gate/runs";
 import { lockOrganizationSpend, organizationModelSpendSince } from "@/lib/views/eval-gate/store";
 import type { OrganizationFlagDeps } from "@/lib/views/task-evals/store";
-// Owned (ADR-0030): the task loop's spend joins the daily budget through the eval gate's seam.
+// Owned (ADR-0004): the task loop's spend joins the daily budget through the eval gate's seam.
 import "@/lib/views/task-evals/spend";
 import {
   FOREIGN_PROJECT_ERROR,
@@ -125,7 +125,7 @@ export async function draftTestFromRun(
     outputTokens: SMALL_MAX_TOKENS,
   });
   const held = await db.transaction(async (tx) => {
-    // Owned (ADR-0030): the core has no organizations table; the advisory lock stands in.
+    // Owned (ADR-0004): the core has no organizations table; the advisory lock stands in.
     const [org] = await tx
       .select({ id: projects.organizationId })
       .from(projects)

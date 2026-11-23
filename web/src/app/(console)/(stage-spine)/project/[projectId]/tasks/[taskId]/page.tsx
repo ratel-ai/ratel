@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Task" };
 
 /**
- * Reuse the current task detail and keep its session routes. Owned (ADR-0030): the project comes
+ * Reuse the current task detail and keep its session routes. Owned (ADR-0004): the project comes
  * from the console scope; the stage spine and session replay are the env flags.
  */
 export default async function TaskPage({

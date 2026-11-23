@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import type { Config } from "@/config";
 import {
   type BackgroundObservability,
   createBackgroundObservability,
@@ -23,11 +24,11 @@ import { SCORER_VERSION, scoreRun } from "@/lib/views/task-scorers/engine";
 import { scorersFor } from "@/lib/views/task-scorers/store";
 
 /**
- * Owned (ADR-0030): what upstream passes to its organization flag service. Here the gate is
- * `FF_EVAL_GATE`, so the deps are the environment the gate reads; the name stays upstream's so
+ * Owned (ADR-0004): what upstream passes to its organization flag service. Here the gate is
+ * `evalGate`, so the deps are the configuration the gate reads; the name stays upstream's so
  * the copied callers compile unchanged.
  */
-export type OrganizationFlagDeps = Record<string, string | undefined>;
+export type OrganizationFlagDeps = Config;
 
 export interface RefreshTaskEvalSetDeps {
   db?: EvalDb & Pick<ReturnType<typeof getDb>, "transaction">;
@@ -188,7 +189,7 @@ export async function refreshTaskEvalSet(
 
 /** Read all cases, including exclusions. The caller chooses the cases for each simulation. */
 /**
- * RC-853, owned (ADR-0030): drop the picked runs that work on a project of another organization
+ * RC-853, owned (ADR-0004): drop the picked runs that work on a project of another organization
  * (`foreign-project.ts`). Upstream guards its score suggestions (lib/evals, not ported); here the
  * automatic pick from scored runs is this refresh.
  */

@@ -57,7 +57,7 @@ export const metadata = { title: "Agent health" };
  * the decided state of the window, and its neighbours: the tasks, the fixes
  * the issues open, and self-corrections. Each read degrades on its own.
  *
- * Owned (ADR-0030): the project comes from the console scope (the session's
+ * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits and plans from the entitlements port.
  * The importer and the share dialog are the edition's.
  */
@@ -80,7 +80,7 @@ export default async function AgentHealthPage({
   const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
-  // FF_TOOL_RUN_INSIGHTS (RC-828): a reading from 10 turns on shows, marked low confidence.
+  // toolRunInsights (RC-828): a reading from 10 turns on shows, marked low confidence.
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
     : undefined;

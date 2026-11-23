@@ -22,7 +22,7 @@ const logger = getLogger("lineage/route");
  * GET /api/projects/:projectId/lineage?kind=insight&id=<id>[&chain=1]: where an
  * object came from, one step back (`source`), or the whole way back to
  * Monitor (`chain`), as `LineageRef`s (RC-45). Read by an issue's panel when
- * it opens. A read; no product event. Owned (ADR-0030): the project comes from the console
+ * it opens. A read; no product event. Owned (ADR-0004): the project comes from the console
  * scope.
  */
 export const GET = withRequestLog(handleGet);

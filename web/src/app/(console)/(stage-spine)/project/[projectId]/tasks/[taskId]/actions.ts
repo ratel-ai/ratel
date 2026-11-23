@@ -12,7 +12,7 @@ import { resetScorer, upsertScorer } from "@/lib/views/task-scorers/store";
 import { topLevelTasksHref } from "@/lib/views/tasks/paths";
 
 /**
- * Owned (ADR-0030): the project comes from the console scope.
+ * Owned (ADR-0004): the project comes from the console scope.
  */
 const logger = getLogger("task-scorers/actions");
 

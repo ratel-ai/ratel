@@ -51,7 +51,7 @@ import type { ReloadReach } from "./build-turn";
 
 /**
  * The database layer of the turn ledger. Every function takes an injectable `db` so the
- * build job tests against PGlite, like the rest of `lib/`. Owned (ADR-0030): the
+ * build job tests against PGlite, like the rest of `lib/`. Owned (ADR-0004): the
  * run-trigger vocabulary comes from `../run-trigger` instead of the L4 signal queries.
  */
 
@@ -122,7 +122,7 @@ export interface TurnEventPageRow extends TurnEventRow {
  * boundary. A page is therefore at most `limit + one batch`.
  *
  * `types` defaults to {@link TURN_EVENT_TYPES}, the partial index's list. A
- * project with `FF_TOOL_RUN_INSIGHTS` on also reads agent runs
+ * project with `toolRunInsights` on also reads agent runs
  * (`TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742); that wider list cannot use
  * the partial index.
  */

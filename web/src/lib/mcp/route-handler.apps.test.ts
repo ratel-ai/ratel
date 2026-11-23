@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { resetConfigForTests, resolveConfig } from "@/config";
 import { buildMcpAppCatalog, type McpAppCatalog } from "@/lib/mcp/apps/catalog";
 import { VIEW_SESSION_PREFIX } from "@/lib/mcp/apps/client-views";
 import { mcpAppsEnabled } from "@/lib/mcp/apps/flag";
@@ -21,11 +22,11 @@ import { STAGE_META_KEY } from "@/lib/mcp/stages";
 import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
 
 /**
- * MCP Apps over the real POST /api/mcp handler (`FF_MCP_APPS`): with the
+ * MCP Apps over the real POST /api/mcp handler (`mcpApps`): with the
  * switch on, ui:// views are listed and read and bound tools point at them;
  * with it off, the protocol surface is exactly what main serves.
  *
- * Owned (ADR-0030): upstream's cases, with the gate the env switch. Upstream's
+ * Owned (ADR-0004): upstream's cases, with the gate the env switch. Upstream's
  * cases for its flag service (a hung or slow lookup, the caller's identity)
  * have no counterpart: reading the environment neither waits nor fails.
  */
@@ -82,7 +83,7 @@ function deps(overrides: Partial<McpRouteDeps> = {}): McpRouteDeps {
 
 const flagOn = deps({ mcpApps: async () => true });
 /** Off through the real gate: the switch unset. */
-const flagOff = deps({ mcpApps: (caller) => mcpAppsEnabled(caller, {}) });
+const flagOff = deps({ mcpApps: (caller) => mcpAppsEnabled(caller, resolveConfig()) });
 
 function rpc(
   method: string,
@@ -285,6 +286,7 @@ test("flag on: resources/read returns the view's HTML as an MCP App, with this a
 test("views link to the origin the app is served on (a local run is localhost)", async () => {
   const previous = process.env.APP_PUBLIC_URL;
   process.env.APP_PUBLIC_URL = "http://localhost:3100/";
+  resetConfigForTests();
   try {
     const { body } = await call(flagOn, "resources/read", { uri: "ui://ratel/list" });
     assert.match(
@@ -294,6 +296,7 @@ test("views link to the origin the app is served on (a local run is localhost)",
   } finally {
     if (previous === undefined) delete process.env.APP_PUBLIC_URL;
     else process.env.APP_PUBLIC_URL = previous;
+    resetConfigForTests();
   }
 });
 
@@ -425,8 +428,11 @@ for (const [name, contents] of [
   });
 }
 
-test("the real gate reads FF_MCP_APPS: on lists the views, unset serves main's server", async () => {
-  const on = deps({ mcpApps: (caller) => mcpAppsEnabled(caller, { FF_MCP_APPS: "1" }) });
+test("the real gate reads mcpApps: on lists the views, unset serves main's server", async () => {
+  const on = deps({
+    mcpApps: (caller) =>
+      mcpAppsEnabled(caller, resolveConfig({ override: { flags: { mcpApps: true } } })),
+  });
   assert.equal((await call(on, "resources/list")).body.result.resources.length, VIEWS.length);
   const pinned = JSON.parse(readFileSync(FLAG_OFF_FIXTURE, "utf8"));
   assert.deepEqual((await call(flagOff, "resources/list")).body, pinned.resourcesList);

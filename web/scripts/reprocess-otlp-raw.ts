@@ -14,11 +14,8 @@
  * Usage:
  *   DATABASE_URL=… pnpm --filter @ratel/platform otlp-raw:reprocess --project <id> --since <date> [--until <date>] [--apply] [--json]
  */
-import { config } from "dotenv";
 
-config({ path: ".env.local", quiet: true });
-config({ path: ".env", quiet: true });
-
+import "./load-env";
 import { parseArgs } from "node:util";
 import { loadPriceOverrides } from "@/lib/ingest/model-pricing/store";
 import { findTracesWithModelCalls } from "@/lib/ingest/otlp/queries";

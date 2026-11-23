@@ -165,7 +165,7 @@ test("the shell hands the edition's overlays and palette actions to the frame, w
   assert.match(frame, /<ShortcutsDialog [^\n]*\/>\s*\{data\.overlays\}\s*<Toaster \/>/);
 });
 
-test("the shell decides FF_AGENTS_PAGES per organization and the rail reads it (RP-28)", () => {
+test("the shell decides agentsPages per organization and the rail reads it (RP-28)", () => {
   assert.match(
     source("components/console/shell/ConsoleShell.tsx"),
     /entityPagesOrganizationIds\(organizations\)/,

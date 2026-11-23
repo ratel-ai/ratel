@@ -3,7 +3,7 @@
 What the platform reads out of the turn ledger and the raw runtime events: recurring asks,
 the adaptive-ranking intent graph and the intent engine's clusters. Every reading is a
 registered job plus a drain step; the lexical ones run with no model key, the naming and
-judging ones report themselves skipped without one (ADR-0030); the intent names and the
+judging ones report themselves skipped without one (ADR-0004); the intent names and the
 workflow labels also write upstream's `skipped_no_key` model-call line (`model-call-skips.test.ts`). Six readings are in: the
 three lexical ones, Agent health (signals, workflows, self-corrections), topics and the tool
 explorer; match quality follows.
@@ -20,7 +20,7 @@ explorer; match quality follows.
 | `tool-explorer/` | `tool_explorer_runs`, `_edges`, `_sets`, `_intent_tools`: which tools run together and which comes next, per turn and per session, read off the closed turns of the signal run's window (`compute`, `analyze`, `cousage`, `transitions`, `intents`); `reliability`, `timing`, `units` are the per-call helpers the signals and self-corrections also read; its own `README.md` | `explore_tool_usage`, enqueued by each signal run through `computeSeams.enqueueExplore` |
 | `query-intents/` | `query_intents`, `query_intent_occurrences`: a project's searches folded into canonical recurring asks (`normalize` → `intent-text` → `resolve-canonicals`, `pipeline`) | `categorize_queries`; before-step `query_categorizations_enqueue` (count-based) |
 | `intent-graph/` | `intent_graphs`, `_revisions`, `_clusters`, `_edges`, `_shadow_turns`: a runtime's pushed graph and the Cloud-built one (`fold` over the foldable events, `compact`, `maintenance`); the `/api/v1/intent-graph` handlers | `fold_intent_graph`; before-step `intent_graph_fold_enqueue`, retention step `intent_graph_revisions_prune` |
-| `intent-graph/catalog-drift.ts`, `catalog-drift-queries.ts`, `prune-gone-tools.ts` | the gone-tool rule (ratel-cloud #474): a tool is gone only when the project's published catalog dropped it and it went unused past the grace period; the facts it reads, and the prune the fold runs on rebuild. Behind `FF_RANKING_CATALOG_DRIFT` (`catalogDriftEnabledForActor`, owned: upstream decides it per organization and person) |
+| `intent-graph/catalog-drift.ts`, `catalog-drift-queries.ts`, `prune-gone-tools.ts` | the gone-tool rule (ratel-cloud #474): a tool is gone only when the project's published catalog dropped it and it went unused past the grace period; the facts it reads, and the prune the fold runs on rebuild. Behind the `rankingCatalogDrift` flag (`catalogDriftEnabledForActor`, owned: upstream decides it per organization and person) |
 | `intent-graph/bound.ts` | a graph over a store cap is trimmed to its strongest clusters instead of failing the fold (ratel-cloud #456); the fold compacts under pressure past `COMPACT_PRESSURE_CLUSTERS` first |
 | `intent-engine/` | `intent_engine_state`, `intent_clusters`, `intent_cluster_assignments`: asks clustered by action and object (`engine`, `frames`, `levels`, `compact`, `names`), named with a model key | `cluster_intents`; before-step `intent_engine_enqueue`, retention step `intent_engine_expire` |
 | `trace-signals/` | `trace_signal_runs`, `trace_signals`, `trace_workflow_labels`, `_verdicts`, `_insights`, `trace_self_corrections`: signal runs over closed turns (`signals/`), mined workflows with model names and judge decisions (`workflows/`), self-corrections (`self-corrections/`); its own `README.md` | `compute_trace_signals`, `label_workflows`; after-step `trace_signal_sweep` |
@@ -37,8 +37,8 @@ graph's compaction; the graph never imports the engine.
 exports `computeSeams`: `enqueueTopics` (filled by `topics/register.ts`) and
 `enqueueExplore` (filled by `tool-explorer/register.ts` with the signal run's id) and
 `enqueueFixDrafts` (filled by `views/fix-drafts/register.ts`: drafts for the new rewrite fixes,
-behind `FF_EVAL_GATE` and a model key) and `enqueueTaskScores` (filled by
-`views/task-scorers/register.ts`: the project's live task scores, behind `FF_EVAL_GATE`).
+behind the `evalGate` flag and a model key) and `enqueueTaskScores` (filled by
+`views/task-scorers/register.ts`: the project's live task scores, behind the `evalGate` flag).
 An `unknown_tool` issue about a tool that exists (in the catalog, or with an ok call in the window: `loadSucceededTools`) is told as missing from the captured tool list and raises no "Build a tool" fix (`trace-signals/signals/unknown-tool-standing.ts`); one whose calls ran costs no Health score points.
 `anthropic/client.ts` (a copy) is the one place the platform gets a Claude client:
 `anthropicClient` and `anthropicConfigured`. With `ANTHROPIC_BACKEND` unset, `ANTHROPIC_API_KEY`

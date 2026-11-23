@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Provision the `main` branch ruleset on ratel-ai/ratel — the enforcement behind the
-# single required `ci-gate` check (see .github/workflows/ci.yml, ADR-0016). Mirrors the
+# single required `ci-gate` check (see .github/workflows/ci.yml, ADR-0008). Mirrors the
 # ratel-cloud ruleset: exactly one required status check (`ci-gate`) with a strict policy,
 # linear history, PR review + thread resolution, and a SINGLE bypass actor — the
 # `core-maintainers` org team (self-maintaining; not named users).

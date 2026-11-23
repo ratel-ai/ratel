@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { parseTraceEvents } from "@/lib/ingest/trace-events/parse";
 import { insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { listClosedTurnsPage } from "@/lib/ledger/closed-turns";
@@ -100,7 +101,7 @@ import {
 } from "@/lib/synthesis/tool-crafter/queries";
 
 /**
- * The open-source edition's promise (ADR-0030): with no model key set, every reading that
+ * The open-source edition's promise (ADR-0004): with no model key set, every reading that
  * can run without one still runs, and nothing leaves the process. The lexical readings (the
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try. The
@@ -178,12 +179,8 @@ function withNoNetwork<T>(run: () => Promise<T>): Promise<T> {
   });
 }
 
-/** The environment a fresh checkout runs with: no model key of any kind. */
-const NO_KEYS: Record<string, string | undefined> = {
-  ANTHROPIC_API_KEY: undefined,
-  OPENAI_API_KEY: undefined,
-  DECISION_ENGINE: undefined,
-};
+/** The config a fresh checkout runs with: no model key of any kind. */
+const NO_KEYS = resolveConfig();
 
 test("the graph fold and the engine run on a seeded database with no key and no network", async () => {
   const db = await setup();
@@ -378,7 +375,7 @@ test("the signal run, the explorer and the label job complete on the built ledge
     assert.equal((await latestCraftRun(PROJECT_ID, cdb))?.status, "crafted");
 
     const labels = await labelProjectWorkflows(PROJECT_ID, {
-      // The real completion factory reads `process.env`; null is what it returns without a key.
+      // The real completion factory reads the config; null is what it returns without a key.
       complete: null,
       decide: defaultDecideDeps(NO_KEYS),
       loadLatestWorkflows: (p) => loadLatestWorkflows(p, sdb),

@@ -4,7 +4,7 @@ import { projectEntitiesEnabled } from "./flag";
 /**
  * The rail's check (RP-28): the organizations whose rail shows Agents and MCP servers under
  * Traces. Upstream's (`lib/agents/navigation.ts`, `lib/mcp-servers/navigation.ts`) also reads each
- * project's spans; here the owner's decision is that both items show whenever `FF_AGENTS_PAGES`
+ * project's spans; here the owner's decision is that both items show whenever `agentsPages`
  * is on, and each page has its own empty state. A failed decision hides them.
  */
 export async function entityPagesOrganizationIds(

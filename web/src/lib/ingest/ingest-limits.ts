@@ -1,3 +1,5 @@
+import { type Config, getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { clientAddress } from "@/lib/platform/http/client-address";
 import {
   createTokenBucketRateLimiter,
@@ -33,8 +35,10 @@ import {
  * Secret keys are untouched: their routes keep whatever limits they had.
  */
 
-export const DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE = 6_000;
-export const DEFAULT_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE = 120;
+export const DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE =
+  CONFIG_DEFAULTS.ingest.publishableKeyLimitPerMinute;
+export const DEFAULT_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE =
+  CONFIG_DEFAULTS.ingest.publishableSourceLimitPerMinute;
 /** Items (spans, log records, events) a request's budget allows on average. */
 export const ITEMS_PER_REQUEST = 10;
 
@@ -77,33 +81,19 @@ export function sourceBucket(address: string): string {
     .join(":")}::/64`;
 }
 
-function positiveInt(raw: string | undefined, fallback: number): number {
-  const value = Number(raw);
-  return Number.isInteger(value) && value > 0 ? value : fallback;
-}
-
-export function publishableLimitOptionsFromEnv(
-  env: Readonly<Record<string, string | undefined>> = process.env,
+export function publishableLimitOptionsFromConfig(
+  config: Pick<Config, "ingest"> = getConfig(),
 ): PublishableIngestLimitOptions {
-  const perKeyPerMinute = positiveInt(
-    env.RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE,
-    DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE,
-  );
-  const perSourcePerMinute = positiveInt(
-    env.RATEL_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE,
-    DEFAULT_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE,
-  );
+  const { ingest } = config;
+  const perKeyPerMinute = ingest.publishableKeyLimitPerMinute;
+  const perSourcePerMinute = ingest.publishableSourceLimitPerMinute;
   return {
     perKeyPerMinute,
     perSourcePerMinute,
-    perKeyItemsPerMinute: positiveInt(
-      env.RATEL_PUBLISHABLE_KEY_ITEMS_PER_MINUTE,
-      perKeyPerMinute * ITEMS_PER_REQUEST,
-    ),
-    perSourceItemsPerMinute: positiveInt(
-      env.RATEL_PUBLISHABLE_SOURCE_ITEMS_PER_MINUTE,
-      perSourcePerMinute * ITEMS_PER_REQUEST,
-    ),
+    perKeyItemsPerMinute:
+      ingest.publishableKeyItemsPerMinute ?? perKeyPerMinute * ITEMS_PER_REQUEST,
+    perSourceItemsPerMinute:
+      ingest.publishableSourceItemsPerMinute ?? perSourcePerMinute * ITEMS_PER_REQUEST,
   };
 }
 
@@ -166,7 +156,7 @@ export function createPublishableIngestLimits(
 
 /** The process-wide budget the three ingest routes share. */
 export const publishableIngestLimits: PublishableIngestLimits = createPublishableIngestLimits(
-  publishableLimitOptionsFromEnv(),
+  publishableLimitOptionsFromConfig(),
 );
 
 /** 429 with Retry-After, saying which budget ran out. */

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -14,8 +15,8 @@ import {
 } from "@/lib/views/task-scorers/job";
 
 /**
- * Owned (ADR-0030): upstream turns the gate on per organization through its flag service; here
- * it is one switch for the deployment, `FF_EVAL_GATE`. So the refusal cases run with the switch
+ * Owned (ADR-0004): upstream turns the gate on per organization through its flag service; here
+ * it is one switch for the deployment, `evalGate`. So the refusal cases run with the switch
  * off, and the projects of one organization stand in for upstream's "on" organization.
  */
 
@@ -26,8 +27,8 @@ const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
 const OFF_PROJECT = "55555555-5555-4555-8555-555555555555";
 const QUIET_PROJECT = "66666666-6666-4666-8666-666666666666";
 const NOW = new Date("2026-11-01T12:00:00Z");
-const GATE_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
-const GATE_OFF: OrganizationFlagDeps = { FF_EVAL_GATE: "0" };
+const GATE_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
+const GATE_OFF: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: false } } });
 
 interface Seen {
   logs: { message: string; fields: Record<string, unknown> }[];

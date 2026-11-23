@@ -11,6 +11,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
+import { type Config, getConfig } from "@/config";
 import { jobTierSql, QUEUE_LAG_KINDS } from "@/lib/jobs/policy";
 import { type Job, jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
@@ -177,13 +178,8 @@ export interface JobKindFilter {
 }
 
 /** Running jobs one project may have at once, across every drain. 0 turns the cap off. */
-export function jobsRunningPerProject(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): number {
-  const raw = env.JOBS_RUNNING_PER_PROJECT?.trim();
-  if (!raw) return 1;
-  const n = Number(raw);
-  return Number.isSafeInteger(n) && n >= 0 ? n : 1;
+export function jobsRunningPerProject(config: Pick<Config, "jobs"> = getConfig()): number {
+  return config.jobs.runningPerProject;
 }
 
 /**

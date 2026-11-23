@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { JOB_ASKS, jobAsk, jobAskFor, jobAskSpec, jobKindOfAsk } from "./job-ask";
 
 /**
- * Owned (ADR-0030): upstream's `job-ask.test.ts` cases for the agent job kinds this tree has (the
+ * Owned (ADR-0004): upstream's `job-ask.test.ts` cases for the agent job kinds this tree has (the
  * Evals kinds `run_eval_set` and `simulate_eval_set` are not ported). The specs are the table each
  * module's `register.ts` checks against its payload; the payload shapes are the producers'.
  */

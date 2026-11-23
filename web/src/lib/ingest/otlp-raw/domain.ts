@@ -1,4 +1,6 @@
 import { gzipSync } from "node:zlib";
+import { type Config, getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 
 /**
  * Raw OTLP capture: the full request body of an accepted export, kept within a
@@ -37,8 +39,8 @@ export interface OtlpRawStore {
   store(input: OtlpRawExportInput): Promise<OtlpRawStoreResult>;
 }
 
-export const DEFAULT_OTLP_RAW_DAILY_BYTES = 1024 ** 3;
-export const DEFAULT_OTLP_RAW_RETENTION_DAYS = 30;
+export const DEFAULT_OTLP_RAW_DAILY_BYTES = CONFIG_DEFAULTS.ingest.otlpRawDailyBytes;
+export const DEFAULT_OTLP_RAW_RETENTION_DAYS = CONFIG_DEFAULTS.ingest.otlpRawRetentionDays;
 export const OTLP_RAW_PRUNE_BATCH_SIZE = 500;
 
 const GZIP_MAGIC = [0x1f, 0x8b] as const;
@@ -51,21 +53,17 @@ export function compressForStorage(
   return new Uint8Array(gzipSync(input.body));
 }
 
-/** Stored bytes one project may add per UTC day. 0 stores nothing. */
-export function otlpRawDailyByteCap(env: Record<string, string | undefined> = process.env): number {
-  const configured = Number(env.OTLP_RAW_DAILY_BYTES);
-  return Number.isSafeInteger(configured) && configured >= 0
-    ? configured
-    : DEFAULT_OTLP_RAW_DAILY_BYTES;
+/** Stored bytes one project may add per UTC day (`ingest.otlpRawDailyBytes`). 0 stores nothing. */
+export function otlpRawDailyByteCap(config: Pick<Config, "ingest"> = getConfig()): number {
+  return config.ingest.otlpRawDailyBytes;
 }
 
 export function otlpRawRetentionDays(
   override?: number,
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "ingest"> = getConfig(),
 ): number {
   if (isValidRetentionDays(override)) return override;
-  const configured = Number(env.OTLP_RAW_RETENTION_DAYS);
-  return isValidRetentionDays(configured) ? configured : DEFAULT_OTLP_RAW_RETENTION_DAYS;
+  return config.ingest.otlpRawRetentionDays;
 }
 
 function isGzip(bytes: Uint8Array): boolean {

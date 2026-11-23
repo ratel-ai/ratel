@@ -6,16 +6,20 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { resolveConfig } from "@/config";
 import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 import {
+  resolveMcpExportConfig as exportConfigOf,
   isMcpToolSpan,
   MCP_TOOL_TRACER,
   mcpExportProcessors,
-  resolveMcpExportConfig,
 } from "./export";
 
+const resolveMcpExportConfig = (env: Record<string, string>) =>
+  exportConfigOf(resolveConfig({ env }));
+
 /**
- * Owned (ADR-0030): upstream's file, with the no-default endpoint of ./export.ts pinned in place
+ * Owned (ADR-0004): upstream's file, with the no-default endpoint of ./export.ts pinned in place
  * of upstream's own deployment.
  */
 

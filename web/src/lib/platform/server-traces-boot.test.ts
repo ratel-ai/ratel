@@ -3,7 +3,15 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import { trace } from "@opentelemetry/api";
-import { registerNodeInstrumentation } from "@/instrumentation.node";
+import { resolveConfig } from "@/config";
+import { registerNodeInstrumentation as register } from "@/instrumentation.node";
+import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
+
+const registerNodeInstrumentation = (
+  env: Record<string, string>,
+  statics: StaticTelemetryEnvironment,
+) => register(resolveConfig({ env }), statics);
+
 import { MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
 import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 

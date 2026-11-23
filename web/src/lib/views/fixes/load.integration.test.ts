@@ -13,7 +13,7 @@ import { fixSeams } from "./seams";
 import { findFix } from "./select";
 
 /**
- * Owned (ADR-0030): the tool crafter's drafts and quality's rewrites arrive through `fixSeams`,
+ * Owned (ADR-0004): the tool crafter's drafts and quality's rewrites arrive through `fixSeams`,
  * filled by `craft-drafts.ts` and `quality/fix-rewrites.ts` when `load.ts` loads. The crafter's
  * rows are seeded as upstream seeds them; the rewrite cases live with quality.
  */

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
 import { judgeFraming } from "@/lib/readings/decisions/openai-judge";
 import {
@@ -291,16 +292,22 @@ test("the insights count where the judged asks came from", () => {
 });
 
 test("the job's spend ceiling is priced at the engine's list price, and absent without a key", () => {
-  assert.equal(decideMaxUsd({ OPENAI_API_KEY: "o" }), 0.3);
-  assert.equal(decideMaxUsd({}), undefined);
+  assert.equal(decideMaxUsd(resolveConfig({ env: { OPENAI_API_KEY: "o" } })), 0.3);
+  assert.equal(decideMaxUsd(resolveConfig({ env: {} })), undefined);
 });
 
 test("the workflow judge is the OpenAI engine for both framings, and null without a key", () => {
-  assert.equal(workflowJudgeFromEnv({ OPENAI_API_KEY: "o" })?.model, "gpt-6-luna");
-  assert.equal(workflowJudgeFromEnv({ OPENAI_API_KEY: "o" }, true)?.model, "gpt-6-luna");
-  assert.equal(workflowJudgeFromEnv({}), null);
   assert.equal(
-    workflowJudgeFromEnv({ OPENAI_API_KEY: "REPLACE_ME" }),
+    workflowJudgeFromEnv(resolveConfig({ env: { OPENAI_API_KEY: "o" } }))?.model,
+    "gpt-6-luna",
+  );
+  assert.equal(
+    workflowJudgeFromEnv(resolveConfig({ env: { OPENAI_API_KEY: "o" } }), true)?.model,
+    "gpt-6-luna",
+  );
+  assert.equal(workflowJudgeFromEnv(resolveConfig({ env: {} })), null);
+  assert.equal(
+    workflowJudgeFromEnv(resolveConfig({ env: { OPENAI_API_KEY: "REPLACE_ME" } })),
     null,
     "a placeholder seed is no key",
   );
@@ -363,14 +370,24 @@ test("a decision whose workflow is unchanged is carried to a new option list and
 });
 
 test("the job's token cap reads upstream's variable, and ours as an alias", () => {
-  assert.equal(decideMaxInputTokens({}), 3_000_000);
-  assert.equal(decideMaxInputTokens({ TRACE_WORKFLOW_MAX_JEV_TOKENS: "500" }), 500);
-  assert.equal(decideMaxInputTokens({ TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700" }), 700);
+  assert.equal(decideMaxInputTokens(resolveConfig({ env: {} })), 3_000_000);
   assert.equal(
-    decideMaxInputTokens({
-      TRACE_WORKFLOW_MAX_JEV_TOKENS: "500",
-      TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700",
-    }),
+    decideMaxInputTokens(resolveConfig({ env: { TRACE_WORKFLOW_MAX_JEV_TOKENS: "500" } })),
+    500,
+  );
+  assert.equal(
+    decideMaxInputTokens(resolveConfig({ env: { TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700" } })),
+    700,
+  );
+  assert.equal(
+    decideMaxInputTokens(
+      resolveConfig({
+        env: {
+          TRACE_WORKFLOW_MAX_JEV_TOKENS: "500",
+          TRACE_WORKFLOW_MAX_JUDGE_TOKENS: "700",
+        },
+      }),
+    ),
     500,
     "upstream's name wins",
   );

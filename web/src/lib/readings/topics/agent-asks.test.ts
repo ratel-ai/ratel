@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { agentRunAsk, agentRunAsks } from "@/lib/readings/topics/agent-asks";
 
 /**
- * Owned (ADR-0030): upstream's cases, less the Evals job kinds (`run_eval_set`,
+ * Owned (ADR-0004): upstream's cases, less the Evals job kinds (`run_eval_set`,
  * `simulate_eval_set`), which are not ported; two kinds this tree has stand in.
  */
 

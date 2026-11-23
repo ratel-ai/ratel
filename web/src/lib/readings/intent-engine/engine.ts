@@ -35,7 +35,7 @@ import { sliceWellFormed } from "@/lib/readings/text/well-formed";
  *
  * It follows the adaptive-ranking learner (`lib/intent-graph/fold.ts`, the
  * SDK's `UsageLearner`) where a runtime would read the result (serving it is
- * deferred: ADR-0014 keeps the learner's graph): a search or an
+ * deferred: ADR-0007 keeps the learner's graph): a search or an
  * OTLP prompt that the agent acted on is a confirmed observation (support + 1,
  * one edge count per call), and a search it did not act on only counts what it
  * showed (`surfaced_*`). Where Cloud alone reads the result it goes further:

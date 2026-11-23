@@ -3,7 +3,7 @@
 Interactive views the Ratel MCP server shows inside MCP hosts (Claude,
 ChatGPT, VS Code…), built from the console's own design system
 (`@ratel/design-system`). The server side (resources, tool binding, the
-`FF_MCP_APPS` switch) is in `web/src/lib/mcp/apps/README.md`. This folder is
+`mcpApps` flag) is in `web/src/lib/mcp/apps/README.md`. This folder is
 the `@ratel/mcp-apps` workspace package: web/ depends on it and reads only its
 built `dist/views.json`.
 
@@ -47,7 +47,7 @@ mcp-apps/
 Upstream's one-command setup (`scripts/mcp-apps-local.mts`) is not here yet: it
 seeds through demo scripts this repo does not carry. By hand:
 
-- put `FF_MCP_APPS=1` (or `RATEL_EXPERIMENTAL_FEATURES=1`) in
+- turn the `mcpApps` flag on (`FF_MCP_APPS=1`, or `RATEL_EXPERIMENTAL_FEATURES=1`) in
   `web/.env.local` and start the app (`pnpm --filter @ratel/platform dev`);
 - seed a project with runs (`pnpm --filter @ratel/platform seed`) and create a
   project API key for it in the console;
@@ -171,7 +171,7 @@ A view shows what its console page shows. Three rules keep it so:
   (`lib/mcp/operations/session-chat-view.ts`), which reaches
   structuredContent only, never the agent's text; a run opens on its own
   turn. The inspector reads a step's text with `get_session_step_content`, an
-  app-only tool (listed only with `FF_MCP_APPS` on, `visibility: ["app"]`).
+  app-only tool (listed only with the `mcpApps` flag on, `visibility: ["app"]`).
   Opening a step or a turn sends `ui/update-model-context`; fullscreen goes
   through `requestDisplayMode`. A `"use server"` module a console component
   imports reaches a view as a stub (`scripts/build.mts`).

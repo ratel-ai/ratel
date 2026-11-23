@@ -1,4 +1,5 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { tokenizeForRelevance } from "@/lib/readings/intent-engine/text";
 import {
   buildRelevanceIndex,
@@ -42,23 +43,13 @@ export interface MatchThresholds {
   margin: number;
 }
 
-export const DEFAULT_THRESHOLDS: MatchThresholds = {
-  strong: 0.6,
-  weak: 0.3,
-  tools: 0.5,
-  margin: 0.1,
-};
+const { strong, weak, tools, margin } = CONFIG_DEFAULTS.intentEngine;
+export const DEFAULT_THRESHOLDS: MatchThresholds = { strong, weak, tools, margin };
 
-const unitInterval = (n: number) => n >= 0 && n <= 1;
-
-/** Thresholds from env (`RATEL_INTENT_ENGINE_STRONG|WEAK|TOOLS|MARGIN`), defaults otherwise. */
+/** Thresholds from the config (`intentEngine.strong|weak|tools|margin`), defaults otherwise. */
 export function thresholdsFromEnv(): MatchThresholds {
-  return {
-    strong: envNumber("RATEL_INTENT_ENGINE_STRONG", DEFAULT_THRESHOLDS.strong, unitInterval),
-    weak: envNumber("RATEL_INTENT_ENGINE_WEAK", DEFAULT_THRESHOLDS.weak, unitInterval),
-    tools: envNumber("RATEL_INTENT_ENGINE_TOOLS", DEFAULT_THRESHOLDS.tools, unitInterval),
-    margin: envNumber("RATEL_INTENT_ENGINE_MARGIN", DEFAULT_THRESHOLDS.margin, unitInterval),
-  };
+  const { strong, weak, tools, margin } = getConfig().intentEngine;
+  return { strong, weak, tools, margin };
 }
 
 /** What the index needs of a cluster. */

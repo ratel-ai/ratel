@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { envNumber } from "@/lib/platform/env-number";
+import { type Config, getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
@@ -30,9 +31,9 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * written name, and with model keys on the query clusters (level 0) get a name
  * and a key in the same call.
  *
- * Spend is set by env and keys alone: no call without a Claude backend
+ * Spend is set by the config and keys alone: no call without a Claude backend
  * (`ANTHROPIC_BACKEND=bedrock` or `ANTHROPIC_API_KEY`), at
- * most `INTENT_ENGINE_MAX_NAMES` clusters per run (0 turns naming off), and one
+ * most `intentEngine.maxNames` clusters per run (0 turns naming off), and one
  * naming pass per project per {@link NAME_INTERVAL_MS}. The default cap is one
  * batch, so a project costs at most one call an hour (two more when a batch is
  * cut off and retried in halves). Candidates come from the run's own clusters
@@ -49,8 +50,8 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
  * model as quoted data inside tags, never as instructions.
  */
 
-/** Clusters one run names when `INTENT_ENGINE_MAX_NAMES` is unset: one batch, so one call. */
-export const DEFAULT_MAX_NAMES = 20;
+/** Clusters one run names when `intentEngine.maxNames` is unset: one batch, so one call. */
+export const DEFAULT_MAX_NAMES = CONFIG_DEFAULTS.intentEngine.maxNames;
 /** Clusters per call. */
 export const NAME_BATCH = 20;
 /** Room for the model's thinking and a batch of names, as the topics namer allows. */
@@ -128,26 +129,25 @@ export const emptyNameResult = (): NameJobResult => ({
 });
 
 /** The model names are written by: the engine's own, else the one the topics namer uses. */
-export function nameModel(env: Record<string, string | undefined> = process.env): string {
-  return (
-    env.INTENT_ENGINE_NAME_MODEL ||
-    env.TOPICS_LABEL_MODEL ||
-    env.TRACE_WORKFLOW_LABEL_MODEL ||
-    DEFAULT_LABEL_MODEL
-  );
+export function nameModel(config: Pick<Config, "models"> = getConfig()): string {
+  const { intentEngineName, topicsLabel, traceWorkflowLabel } = config.models;
+  return intentEngineName || topicsLabel || traceWorkflowLabel || DEFAULT_LABEL_MODEL;
 }
 
-/** Clusters one run names at most: `INTENT_ENGINE_MAX_NAMES`, 0 turns naming off. */
-export function maxNamesPerRun(env: Record<string, string | undefined> = process.env): number {
-  return Math.floor(envNumber("INTENT_ENGINE_MAX_NAMES", DEFAULT_MAX_NAMES, (n) => n >= 0, env));
+/** Clusters one run names at most: `intentEngine.maxNames`, 0 turns naming off. */
+export function maxNamesPerRun(config: Pick<Config, "intentEngine"> = getConfig()): number {
+  return config.intentEngine.maxNames;
 }
 
 /** A structured-output Anthropic completion, or null without a Claude backend. */
 export function anthropicNamesComplete(
   model: string,
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "anthropic"> = getConfig(),
 ): NamesComplete | null {
-  const client = anthropicClient({ timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES }, env);
+  const client = anthropicClient(
+    { timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES },
+    config,
+  );
   if (!client) return null;
   return async (system, user, keyed) => {
     const request: Anthropic.MessageCreateParamsNonStreaming = {
@@ -180,12 +180,14 @@ export function anthropicNamesComplete(
   };
 }
 
-/** Read per run, so an env change or a dropped key (`make pipeline MODELS=off`) applies to the next run. */
-export function defaultNameDeps(
-  env: Record<string, string | undefined> = process.env,
-): NameJobDeps {
-  const model = nameModel(env);
-  return { model, complete: anthropicNamesComplete(model, env), maxNames: maxNamesPerRun(env) };
+/** Read per run from the config, so a dropped key (`make pipeline MODELS=off`) applies to the next process. */
+export function defaultNameDeps(config: Config = getConfig()): NameJobDeps {
+  const model = nameModel(config);
+  return {
+    model,
+    complete: anthropicNamesComplete(model, config),
+    maxNames: maxNamesPerRun(config),
+  };
 }
 
 /* the cache, applied during maintenance */

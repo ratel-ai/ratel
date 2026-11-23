@@ -12,6 +12,7 @@
  * and a cost_usd with the EU premium.
  */
 import type Anthropic from "@anthropic-ai/sdk";
+import { getConfig } from "@/config";
 import { anthropicClient, type AnthropicClient } from "@/lib/readings/anthropic/client";
 import { anthropicUsage, setModelCallSink, trackModelCall } from "@/lib/platform/model-call";
 
@@ -36,7 +37,7 @@ const WEATHER_TOOL: Anthropic.Tool = {
 
 const CHECKS: Record<string, Check> = { text, structured, stream, tools };
 
-process.env.ANTHROPIC_BACKEND = "bedrock";
+if (getConfig().anthropic.backend !== "bedrock") throw new Error("Run with ANTHROPIC_BACKEND=bedrock (pnpm bedrock:smoke sets it)");
 const bedrock = anthropicClient({ maxRetries: 0 });
 if (!bedrock) throw new Error("No Bedrock client: unset AWS_BEARER_TOKEN_BEDROCK");
 const client = tracked(bedrock);

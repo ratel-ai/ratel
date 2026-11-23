@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { configuredOrganizationName, exposureWarnings } from "./deployment-config";
+import { resolveConfig } from "@/config";
+import {
+  configuredOrganizationName as organizationNameOf,
+  exposureWarnings as warningsOf,
+} from "./deployment-config";
+
+type Env = Record<string, string | undefined>;
+const configuredOrganizationName = (env: Env) => organizationNameOf(resolveConfig({ env }));
+const exposureWarnings = (env: Env) => warningsOf(resolveConfig({ env }));
 
 test("the organization name is trimmed, and blank means none", () => {
   assert.equal(configuredOrganizationName({ RATEL_ORG_NAME: "  Acme  " }), "Acme");

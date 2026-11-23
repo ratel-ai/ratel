@@ -1,15 +1,16 @@
 /**
- * The app's canonical public origin — always from the environment, never a
- * hardcoded host. `APP_PUBLIC_URL` is the explicit knob (set in `.env` locally
+ * The app's canonical public origin — always from the configuration, never a
+ * hardcoded host. `app.publicUrl` (APP_PUBLIC_URL) is the explicit knob (set in `.env` locally
  * and on the ECS task's env in AWS, where it resolves to `https://<domain>`,
  * e.g. https://cloud.ratel.sh). It falls back to localhost so a bare `next dev`
  * still produces working links.
  *
- * Server-only: reads a non-`NEXT_PUBLIC_` var, so call it in Server Components /
+ * Server-only: reads the server's configuration, so call it in Server Components /
  * route handlers / server actions and pass the result down to client components
  * as a prop (the Settings and Embeddings pages already do).
  */
 
+import { getConfig } from "@/config";
 import { isLocalEnvironment } from "@/lib/platform/environment";
 
 const DEFAULT_LOCAL = "http://localhost:3000";
@@ -21,8 +22,8 @@ const DEFAULT_LOCAL = "http://localhost:3000";
  * a page that errors does not.
  */
 export function publicBaseUrl(): string {
-  const configured = process.env.APP_PUBLIC_URL?.trim();
-  if (!configured && !isLocalEnvironment(process.env)) {
+  const configured = getConfig().app.publicUrl;
+  if (!configured && !isLocalEnvironment()) {
     throw new Error("APP_PUBLIC_URL is not set: a deployed environment needs its public origin");
   }
   return (configured || DEFAULT_LOCAL).replace(/\/+$/, "");
@@ -43,7 +44,7 @@ export function publicUrl(path: string): string {
  * in a local environment, so `next dev` on any port still redirects to itself.
  */
 export function redirectUrl(path: string, requestUrl: string): URL {
-  const local = !process.env.APP_PUBLIC_URL?.trim() && isLocalEnvironment(process.env);
+  const local = !getConfig().app.publicUrl && isLocalEnvironment();
   return new URL(path, local ? requestUrl : publicBaseUrl());
 }
 

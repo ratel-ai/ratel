@@ -96,7 +96,7 @@ export function consoleNav({
    */
   projectGroups?: readonly ProjectNavGroup[];
   /**
-   * `FF_AGENTS_PAGES` on for the shown organization (RP-28): Agents and MCP servers under Traces.
+   * `agentsPages` on for the shown organization (RP-28): Agents and MCP servers under Traces.
    * Upstream also needs the project's data for each (`lib/agents/navigation.ts`); here both show
    * whenever the flag is on, and each page has its own empty state.
    */

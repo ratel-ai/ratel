@@ -10,7 +10,7 @@ import "@/lib/views/task-evals/spend";
 /**
  * The task scorers' registration (upstream's `score_tasks` line in `lib/jobs/handlers.ts`), and
  * what they supply to the signal run: a completed run queues the project's live task scores.
- * The queue checks `FF_EVAL_GATE` itself: with the gate off it queues nothing, and records the
+ * The queue checks `evalGate` itself: with the gate off it queues nothing, and records the
  * refusal as a finished job with one `task_scores_skipped` event. Loads the task
  * loop's spend reader, so the worker's budget checks count the live judge.
  */

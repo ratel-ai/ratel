@@ -3,11 +3,11 @@
  * environment label. Upstream also carried analytics and identity-provider keys; those belong
  * to the private edition's own injection, so `window.__ENV__` here can never leak a key.
  */
+import { type Config, getConfig } from "@/config";
+
 export interface PublicEnv {
   environment: string;
 }
-
-type PublicEnvSource = Readonly<Record<string, string | undefined>>;
 
 declare global {
   interface Window {
@@ -21,13 +21,13 @@ declare global {
  */
 const LOCAL_ENVIRONMENTS: ReadonlySet<string> = new Set(["development", "local", "test"]);
 
-/** Whether APP_ENV names a laptop or test environment (unset reads as "development"). */
-export function isLocalEnvironment(env: PublicEnvSource): boolean {
-  return LOCAL_ENVIRONMENTS.has((env.APP_ENV || "development").toLowerCase());
+/** Whether `app.environment` (APP_ENV) names a laptop or test environment (unset reads as "development"). */
+export function isLocalEnvironment(environment: string = getConfig().app.environment): boolean {
+  return LOCAL_ENVIRONMENTS.has(environment.toLowerCase());
 }
 
-export function resolvePublicEnv(env: PublicEnvSource): PublicEnv {
-  return { environment: env.APP_ENV || "development" };
+export function resolvePublicEnv(config: Pick<Config, "app"> = getConfig()): PublicEnv {
+  return { environment: config.app.environment };
 }
 
 let warnedMissingBrowserEnv = false;
@@ -42,7 +42,7 @@ export function getPublicEnv(): PublicEnv {
       );
     }
   }
-  return resolvePublicEnv(process.env);
+  return resolvePublicEnv();
 }
 
 export function serializePublicEnv(env: PublicEnv): string {
@@ -50,7 +50,7 @@ export function serializePublicEnv(env: PublicEnv): string {
 }
 
 /**
- * The deployment environment reported to observability. Reads APP_ENV, deliberately not
+ * The deployment environment reported to observability. Reads `app.environment` (APP_ENV), deliberately not
  * NODE_ENV: NODE_ENV is "production" for any `next build`, including the image run on a laptop,
  * so it cannot tell a real deployment from a local one. Defaults to "development".
  */

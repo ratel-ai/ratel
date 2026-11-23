@@ -6,7 +6,7 @@ import { insightsRedirectTarget } from "@/lib/readings/trace-signals/view";
 
 /**
  * Agent health is what the Insights teaser promised, so an old link lands
- * there, and on Overview otherwise (no teasers, DESIGN.md). Owned (ADR-0030):
+ * there, and on Overview otherwise (no teasers, DESIGN.md). Owned (ADR-0004):
  * the project comes from the console scope, and Agent health is always on in
  * this edition, so no flag decides where it lands.
  */

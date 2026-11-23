@@ -1,3 +1,4 @@
+import { type Config, getConfig } from "@/config";
 import { getLogger, type LogFields } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import { readOldestQueuedJobAgeMs } from "./queries";
@@ -14,8 +15,6 @@ import { readOldestQueuedJobAgeMs } from "./queries";
  * worker's sweep has `timedDrain`: the worker's loop runs one step at a time, so a sweep that
  * never settles would stop the analysis lane behind it.
  */
-
-type Environment = Readonly<Record<string, string | undefined>>;
 
 /**
  * How long a sweep may go with no finished job before the watchdog lets the worker go on. Each
@@ -101,12 +100,9 @@ export async function observeDrain<T extends { ok: boolean; error?: string }>(
   }
 }
 
-/** The default watchdog limit, read from `CRON_DRAIN_TIMEOUT_MS`. */
-export function drainTimeoutMs(env: Environment = process.env): number {
-  const raw = env.CRON_DRAIN_TIMEOUT_MS?.trim();
-  if (!raw) return DEFAULT_DRAIN_TIMEOUT_MS;
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_DRAIN_TIMEOUT_MS;
+/** The default watchdog limit, `jobs.drainTimeoutMs` (CRON_DRAIN_TIMEOUT_MS). */
+export function drainTimeoutMs(config: Pick<Config, "jobs"> = getConfig()): number {
+  return config.jobs.drainTimeoutMs;
 }
 
 /**

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -128,8 +129,8 @@ test("members save user drafts, add and edit fix tests, and rerun through the si
     );
     deps.ship = (input) =>
       createFixShipment(input, db, {
-        // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value.
-        flagDeps: { FF_EVAL_GATE: "1" },
+        // Owned (ADR-0004): the gate is the evalGate flag in the configuration.
+        flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
         loadFix: deps.loadFix,
       });
     assert.equal(

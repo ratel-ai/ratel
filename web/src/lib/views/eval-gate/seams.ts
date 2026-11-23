@@ -1,3 +1,4 @@
+import type { Config } from "@/config";
 import { changeOf, hasEffect } from "@/lib/views/eval-gate/change";
 import type { EvalDb } from "@/lib/views/eval-gate/runs";
 import type { FixChange } from "@/lib/views/eval-gate/types";
@@ -17,8 +18,8 @@ export interface ResolvedChange {
 export interface ResolveChangeOptions {
   db?: EvalDb;
   actor?: string;
-  /** The environment the gate reads (upstream's flag deps); unset, `process.env`. */
-  env?: Record<string, string | undefined>;
+  /** The configuration the gate reads (upstream's flag deps); unset, `getConfig()`. */
+  config?: Config;
 }
 
 export interface EvalGateSeams {

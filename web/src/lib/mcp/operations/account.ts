@@ -42,26 +42,26 @@ import { budgetLine, type RunBudget } from "@/lib/views/quality/run-menu";
  */
 /**
  * The core's switches, as `get_flag_status` reports them, each read as its callers read it
- * (`featureEnabled`): without the edition's flags port, one `FF_*` environment switch for the
- * deployment (in the open-source edition also `RATEL_EXPERIMENTAL_FEATURES`); with it, the
- * edition's value for this organization and caller, after any `FF_*` value the operator set.
+ * (`featureEnabled`): without the edition's flags port, one configured switch for the
+ * deployment (`flags.<key>`; in the open-source edition also `experimentalFeatures`); with it,
+ * the edition's value for this organization and caller, after any value the operator forced.
  */
 const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
-  { key: "FF_EVAL_GATE", note: "simulations, eval sets and task scores before a fix ships" },
+  { key: "evalGate", note: "simulations, eval sets and task scores before a fix ships" },
   {
-    key: "FF_RANKING_CATALOG_DRIFT",
+    key: "rankingCatalogDrift",
     note: "adaptive ranking warns only about tools a published catalog dropped, and prunes them on rebuild",
   },
   {
-    key: "FF_MCP_APPS",
+    key: "mcpApps",
     note: "this MCP server publishes interactive ui:// views (MCP Apps) and points its tools at them",
   },
   {
-    key: "FF_AGENTS_PAGES",
+    key: "agentsPages",
     note: "the Agents and MCP servers pages, their tools (list_agents, get_agent, list_mcp_servers, get_mcp_server) and agent overrides",
   },
   {
-    key: "FF_TOOL_RUN_INSIGHTS",
+    key: "toolRunInsights",
     note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns",
   },
 ];
@@ -78,7 +78,7 @@ export interface AccountOperationDeps {
   now: () => Date;
   /** Whether the edition lists a tool, so a hint names only tools the caller has. */
   editionToolListed: (id: string) => boolean;
-  /** A core switch for whoever asks: the edition's flags port when it has one, else the environment. */
+  /** A core switch for whoever asks: the edition's flags port when it has one, else the configuration. */
   featureEnabled: typeof featureEnabled;
 }
 
@@ -186,7 +186,7 @@ export function accountOperations(deps: AccountOperationDeps = defaultAccountDep
         return {
           data: { count: flags.length, flags },
           hint: composition.featureFlags
-            ? "Each switch is decided for this organization and caller; an FF_* value set by the operator comes first."
+            ? "Each switch is decided for this organization and caller; a value the operator forced in the configuration comes first."
             : "A switch is set for the whole deployment by its operator, not per organization.",
         };
       },

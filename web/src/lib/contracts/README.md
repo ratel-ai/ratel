@@ -10,12 +10,13 @@ side annotates against it, so the two shapes cannot drift. Its optional `product
 edition names the product in copy (`full` for the MCP server, `short` for the service in a
 sentence); without it the copy keeps its neutral words.
 
-`feature-flags.ts` names the core's switches (`CORE_FLAGS`: `FF_EVAL_GATE`,
-`FF_RANKING_CATALOG_DRIFT`, `FF_MCP_APPS`, `FF_AGENTS_PAGES`, `FF_TOOL_RUN_INSIGHTS`) and the optional `featureFlags` port. Without it each
-switch is its environment variable for the deployment (in the open-source edition also
-`RATEL_EXPERIMENTAL_FEATURES`). With it, the edition decides each switch per organization,
-project and person; an `FF_*` value in the environment still comes first, and a failed read is
-off. The core reads switches through `featureEnabled` (`lib/platform/experimental-features.ts`),
+`feature-flags.ts` names the core's switches by semantic key (`CORE_FLAGS`: `evalGate`,
+`rankingCatalogDrift`, `mcpApps`, `agentsPages`, `toolRunInsights`) and the optional
+`featureFlags` port. The deployment's configuration (`web/src/config.ts`, `flags.<key>`) may
+force each one on or off; only that file knows the environment variable of each. Without the port
+each switch is its configured value for the deployment, off when unset (in the open-source
+edition also `experimentalFeatures`). With it, the edition decides each switch per organization,
+project and person; a forced value still comes first, and a failed read is off. The core reads switches through `featureEnabled` (`lib/platform/experimental-features.ts`),
 and `get_flag_status` reports what it returns.
 
 `entitlements.ts` is what an organization may have and use. Its optional `plans` is the plan
@@ -26,7 +27,8 @@ that shows Agent health in full (optional, named by the locks), and a plan's nam
 `CoreServices` (same file) is the other direction: what only the core implements, lent to the
 edition once at startup through the optional `connect`. It holds `toolCorpus`
 (`tool-corpus.ts`), a project's tools with their searchable text resolved, which Cloud's Tool
-Picker ranks, and `importedRuns` (`imported-runs.ts`), which stores runs Cloud's Agent health
+Picker ranks, `forcedFlag`, the value the configuration forces for a core switch (an edition's
+own flag reads apply it first, as `featureEnabled` does), and `importedRuns` (`imported-runs.ts`), which stores runs Cloud's Agent health
 import read from another product as live ingest does, asks for a reading and queues the import's
 job; its optional `registerSourceIds` names the source ids the importer stores runs under, which
 the ledger and Agent health treat as imports (any other id is live telemetry). `imported-runs.ts` declares the decoded span structurally, so the edition never imports the

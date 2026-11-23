@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import { DEFAULT_FLOORS } from "./signals/catalog";
 import { createWorkflowCollector } from "./signals/workflow-run";
 import {
@@ -18,7 +19,7 @@ import { wfTurn } from "./workflows/test-fixtures";
  * 2026-11-17 (list_traces, distinct tools per run, in order): 40 runs, 18 of
  * them with two tools or more, 0 tasks.
  *
- * Owned (ADR-0030): the flag cases are the `FF_TOOL_RUN_INSIGHTS` env
+ * Owned (ADR-0004): the flag cases are the `toolRunInsights` env
  * switch's, not the flag service's.
  */
 
@@ -95,18 +96,35 @@ test("tool-run mining: the same runs make the task_define + task_update task", (
   );
 });
 
-test("workflowMiningFor: FF_TOOL_RUN_INSIGHTS on gives the tool-run config; off or unset gives none", async () => {
+test("workflowMiningFor: toolRunInsights on gives the tool-run config; off or unset gives none", async () => {
   const org = { id: "org-a" };
   assert.deepEqual(
-    await workflowMiningFor("p-on", org, { FF_TOOL_RUN_INSIGHTS: "1" }),
+    await workflowMiningFor(
+      "p-on",
+      org,
+      resolveConfig({ override: { flags: { toolRunInsights: true } } }),
+    ),
     TOOL_RUN_MINING,
   );
-  assert.equal(await workflowMiningFor("p-off", org, { FF_TOOL_RUN_INSIGHTS: "0" }), null);
+  assert.equal(
+    await workflowMiningFor(
+      "p-off",
+      org,
+      resolveConfig({ override: { flags: { toolRunInsights: false } } }),
+    ),
+    null,
+  );
 });
 
 test("without the switch, the flag is off (tests and local runs read as before)", async () => {
-  assert.equal(await workflowMiningFor("p-unset", "org-a", {}), null);
-  assert.equal(await toolRunInsightsEnabled("p-unset", undefined, {}), false);
-  assert.equal(await toolRunInsightsForProject("p-unset", {}), false);
-  assert.equal(await toolRunInsightsForProject("p-on", { FF_TOOL_RUN_INSIGHTS: "true" }), true);
+  assert.equal(await workflowMiningFor("p-unset", "org-a", resolveConfig()), null);
+  assert.equal(await toolRunInsightsEnabled("p-unset", undefined, resolveConfig()), false);
+  assert.equal(await toolRunInsightsForProject("p-unset", resolveConfig()), false);
+  assert.equal(
+    await toolRunInsightsForProject(
+      "p-on",
+      resolveConfig({ override: { flags: { toolRunInsights: true } } }),
+    ),
+    true,
+  );
 });

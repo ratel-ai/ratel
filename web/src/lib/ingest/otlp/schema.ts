@@ -18,10 +18,10 @@ import type { ContextSource } from "@/lib/ingest/context";
 import type { StoredSpanEvent, StoredSpanLink } from "@/lib/ingest/otlp/span-events";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** Raw telemetry the OTLP and legacy event routes write. Owned fragment of the upstream schema (ADR-0030). */
+/** Raw telemetry the OTLP and legacy event routes write. Owned fragment of the upstream schema (ADR-0004). */
 
 /**
- * Raw agent events (ADR-0013 landing zone). One row per LLM call the SDK sends —
+ * Raw agent events (the landing zone). One row per LLM call the SDK sends —
  * a typed header (provider/model/usage) for cheap querying plus the verbatim
  * `payload` so metrics can be re-derived when the categorizer improves. The
  * dashboard does NOT read this table; it reads the derived `event_metrics`.
@@ -50,10 +50,10 @@ export const events = pgTable(
     cachedTokens: integer("cached_tokens"),
     reasoningTokens: integer("reasoning_tokens"),
     costUsd: numeric("cost_usd", { precision: 12, scale: 6 }),
-    // The full, unmodified ADR-0013 event (messages, tools, params, …). The raw
+    // The full, unmodified agent event (messages, tools, params, …). The raw
     // material the categorizer re-runs against. Nullable only so the reshape can add
     // it to a populated table without wiping history — every new ingest sets it, and
-    // pre-ADR-0013 rows (no raw payload) stay as inert, uncategorizable history.
+    // older rows (no raw payload) stay as inert, uncategorizable history.
     payload: jsonb("payload").$type<CloudEvent>(),
     // sha256 of provider+model+ts+messages — dedup key for best-effort retries.
     // Nullable for the same back-compat reason (Postgres treats NULLs as distinct,
@@ -82,7 +82,7 @@ export const events = pgTable(
 );
 
 /**
- * Derived per-event dashboard metrics (ADR-0013 silver table). Exactly one row
+ * Derived per-event dashboard metrics (the silver table). Exactly one row
  * per `events` row, computed by `categorize()` at ingest. The dashboard's daily
  * aggregates scan THIS table, so the heavy raw payload never touches the hot path.
  * On a categorizer upgrade the backfill recomputes these rows from `events.payload`.

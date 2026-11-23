@@ -11,7 +11,7 @@ import {
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * The Improve → Ship tables of a fix. Owned fragment of the upstream schema (ADR-0030):
+ * The Improve → Ship tables of a fix. Owned fragment of the upstream schema (ADR-0004):
  * `fix_experiments`, `fix_shipments` and `fix_shipment_tasks`, the fixes partition of the
  * upstream schema hub, column for column. A fix itself has no table (`lib/views/fixes`).
  */

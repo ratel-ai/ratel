@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { type AddressInfo, createServer, type Server, type Socket } from "node:net";
 import { after, test } from "node:test";
 import { Pool } from "pg";
+import { ConfigError, resolveConfig } from "@/config";
 import {
   DEFAULT_CONNECT_TIMEOUT_MS,
   DEFAULT_QUERY_TIMEOUT_MS,
@@ -10,7 +11,7 @@ import {
 } from "@/lib/platform/db/pool";
 
 test("poolConfig sets timeouts and keepalive by default", () => {
-  const config = poolConfig("postgres://db/app", false, {});
+  const config = poolConfig("postgres://db/app", false, resolveConfig());
   assert.equal(config.max, 10);
   assert.equal(config.connectionTimeoutMillis, DEFAULT_CONNECT_TIMEOUT_MS);
   assert.equal(config.query_timeout, DEFAULT_QUERY_TIMEOUT_MS);
@@ -23,20 +24,28 @@ test("poolConfig sets timeouts and keepalive by default", () => {
 });
 
 test("poolConfig leaves the server limit unset when the client timeout is off", () => {
-  const config = poolConfig("postgres://db/app", false, { DATABASE_QUERY_TIMEOUT_MS: "0" });
+  const config = poolConfig(
+    "postgres://db/app",
+    false,
+    resolveConfig({ env: { DATABASE_QUERY_TIMEOUT_MS: "0" } }),
+  );
   assert.equal(config.query_timeout, 0);
   assert.equal(config.statement_timeout, undefined);
 });
 
-test("poolConfig reads env overrides, 0 turns a timeout off, typos keep the default", () => {
-  const config = poolConfig("postgres://db/app", false, {
-    DATABASE_POOL_MAX: "4",
-    DATABASE_CONNECT_TIMEOUT_MS: "0",
-    DATABASE_QUERY_TIMEOUT_MS: "30s",
-  });
+test("poolConfig reads the settings, 0 turns a timeout off, a typo fails the config", () => {
+  const config = poolConfig(
+    "postgres://db/app",
+    false,
+    resolveConfig({ env: { DATABASE_POOL_MAX: "4", DATABASE_CONNECT_TIMEOUT_MS: "0" } }),
+  );
   assert.equal(config.max, 4);
   assert.equal(config.connectionTimeoutMillis, 0);
   assert.equal(config.query_timeout, DEFAULT_QUERY_TIMEOUT_MS);
+  assert.throws(
+    () => resolveConfig({ env: { DATABASE_QUERY_TIMEOUT_MS: "30s" } }),
+    (error) => error instanceof ConfigError && error.path === "database.queryTimeoutMs",
+  );
 });
 
 /**
@@ -104,7 +113,7 @@ test("a connection that stops answering is dropped and the pool keeps serving", 
   const url = await listen(server);
   const warnings: string[] = [];
   const pool = new Pool({
-    ...poolConfig(url, false, { DATABASE_QUERY_TIMEOUT_MS: "200" }),
+    ...poolConfig(url, false, resolveConfig({ env: { DATABASE_QUERY_TIMEOUT_MS: "200" } })),
     max: 1,
   });
   hardenPoolClients(pool, { logWarn: (message) => warnings.push(message) });
@@ -134,7 +143,9 @@ test("waiting for a connection gives up instead of hanging", async () => {
     socket.on("error", () => {});
   });
   const url = await listen(server);
-  const pool = new Pool(poolConfig(url, false, { DATABASE_CONNECT_TIMEOUT_MS: "200" }));
+  const pool = new Pool(
+    poolConfig(url, false, resolveConfig({ env: { DATABASE_CONNECT_TIMEOUT_MS: "200" } })),
+  );
   hardenPoolClients(pool, { logWarn: () => {} });
   after(async () => {
     await pool.end();

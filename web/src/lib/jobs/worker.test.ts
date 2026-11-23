@@ -1,18 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import { startBackgroundDrain } from "@/lib/jobs/background-drain";
 import { appRole, runsJobsAfterResponse } from "@/lib/jobs/role";
 import { type ScheduleProjectDrainDeps, scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { IDLE_POLL_MS, SWEEP_EVERY_MS, startWorker, type WorkerDeps } from "@/lib/jobs/worker";
 
-test("APP_ROLE picks the role; anything unknown keeps today's all-in-one behaviour", () => {
-  assert.equal(appRole({}), "all");
-  assert.equal(appRole({ APP_ROLE: "API" }), "api");
-  assert.equal(appRole({ APP_ROLE: " worker " }), "worker");
-  assert.equal(appRole({ APP_ROLE: "both" }), "all");
-  assert.equal(runsJobsAfterResponse({}), true);
-  assert.equal(runsJobsAfterResponse({ APP_ROLE: "api" }), false);
-  assert.equal(runsJobsAfterResponse({ APP_ROLE: "worker" }), false);
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const config = (env: Record<string, string> = {}) => resolveConfig({ env });
+
+test("APP_ROLE picks the role; an unknown role fails the config", () => {
+  assert.equal(appRole(config({})), "all");
+  assert.equal(appRole(config({ APP_ROLE: "API" })), "api");
+  assert.equal(appRole(config({ APP_ROLE: " worker " })), "worker");
+  assert.throws(() => config({ APP_ROLE: "both" }), /APP_ROLE/);
+  assert.equal(runsJobsAfterResponse(config({})), true);
+  assert.equal(runsJobsAfterResponse(config({ APP_ROLE: "api" })), false);
+  assert.equal(runsJobsAfterResponse(config({ APP_ROLE: "worker" })), false);
 });
 
 /** A worker driven by a fake clock: records steps, stops after `steps` of them. */
@@ -173,7 +177,7 @@ test("a long import in its own lane does not hold up analysis or the sweeps", as
 
 test("imports go to the worker only when IMPORTS_RUN_IN_WORKER=1", async () => {
   const { importsRunInWorker } = await import("@/lib/jobs/role");
-  assert.equal(importsRunInWorker({}), false);
-  assert.equal(importsRunInWorker({ IMPORTS_RUN_IN_WORKER: "true" }), false);
-  assert.equal(importsRunInWorker({ IMPORTS_RUN_IN_WORKER: "1" }), true);
+  assert.equal(importsRunInWorker(config({})), false);
+  assert.equal(importsRunInWorker(config({ IMPORTS_RUN_IN_WORKER: "true" })), false);
+  assert.equal(importsRunInWorker(config({ IMPORTS_RUN_IN_WORKER: "1" })), true);
 });

@@ -24,7 +24,7 @@ import {
  * run a crashed job left `running` is otherwise only reaped by the next compute job of
  * that project, which the sweep would never enqueue.
  *
- * Owned (ADR-0030): Agent health is on for every project here, so there is no per-project
+ * Owned (ADR-0004): Agent health is on for every project here, so there is no per-project
  * gate and no organization read in the loop.
  */
 

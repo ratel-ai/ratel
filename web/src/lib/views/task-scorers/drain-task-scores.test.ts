@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { DrainStep } from "@/lib/contracts/registry";
 import { type DrainCronDeps, runDrainTick } from "@/lib/jobs/drain";
 import type { BackgroundObservabilityDeps } from "@/lib/jobs/observability";
@@ -16,7 +17,7 @@ import { taskScorersRegistration, taskScoresEnqueueStep } from "@/lib/views/task
 /**
  * RC-611: the drain's daily task scoring sweep, independent of the signal run.
  *
- * Owned (ADR-0030): upstream's drain took the sweep as a named dependency; here it is the task
+ * Owned (ADR-0004): upstream's drain took the sweep as a named dependency; here it is the task
  * scorers' registered `before` step, so the tick runs it through the drain-step registry. The
  * heartbeat keeps upstream's `taskScoresEnqueued`; a failure is reported under the step's name,
  * as for every registered step, where upstream kept a `taskScoreErrors` list.
@@ -25,8 +26,8 @@ import { taskScorersRegistration, taskScoresEnqueueStep } from "@/lib/views/task
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
-// The gate is the deployment's FF_EVAL_GATE, not an organization flag.
-const GATE_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
+// The gate is the deployment's evalGate, not an organization flag.
+const GATE_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("the task scorers register the sweep as a before-step of the drain", () => {
   assert.deepEqual(

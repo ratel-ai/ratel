@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import type { StepDraft } from "./types";
 
 /**
@@ -13,7 +13,7 @@ import type { StepDraft } from "./types";
  *   sameAsk(a, b) = identical salted query hash
  *                   OR Jaccard(top-10 hit ids of a, top-10 hit ids of b) >= T
  *
- * T is `TRACE_SIGNALS_SAME_ASK_JACCARD` (default 0.5). It was chosen on a labelled
+ * T is `traceSignals.sameAskJaccard` (TRACE_SIGNALS_SAME_ASK_JACCARD, default 0.5). It was chosen on a labelled
  * production replay: of its 157 consecutive search pairs, 107 share no top-10 hit at all
  * and only 8 reach 0.5, and those 8 read as reformulations of the same ask; between 0.25
  * and 0.45 the pairs mix retries with new needs, so a lower bar would bring back the
@@ -28,11 +28,7 @@ import type { StepDraft } from "./types";
 export const SAME_ASK_TOP_HITS = 10;
 
 /** Top-10 hit-id Jaccard at or above which two searches ask for the same thing. */
-export const SAME_ASK_MIN_JACCARD = envNumber(
-  "TRACE_SIGNALS_SAME_ASK_JACCARD",
-  0.5,
-  (n) => n > 0 && n <= 1,
-);
+export const SAME_ASK_MIN_JACCARD = getConfig().traceSignals.sameAskJaccard;
 
 /** Jaccard of the two searches' top-10 hit ids; null when either lists nothing. */
 export function hitOverlap(

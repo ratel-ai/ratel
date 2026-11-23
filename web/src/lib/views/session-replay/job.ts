@@ -80,7 +80,7 @@ export async function whatIfStepJob(
     const sample = await sampleStep(step.run, step.calls, run.step, variant, {
       models:
         deps.models ??
-        resolveEvalModels(process.env, "eval_gate_judge", undefined, "eval_gate_what_if"),
+        resolveEvalModels(undefined, "eval_gate_judge", undefined, "eval_gate_what_if"),
       spend,
       k: run.k,
       toolDefs: new Map(),

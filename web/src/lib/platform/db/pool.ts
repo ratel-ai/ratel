@@ -1,13 +1,13 @@
 import type { Pool, PoolClient, PoolConfig } from "pg";
-
-type Environment = Readonly<Record<string, string | undefined>>;
+import { type Config, getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 
 /**
  * How long a request waits for a pooled connection, or for a new one to open.
  * Without it a request waits forever, and when every pooled connection is stuck
  * (the 2026-10-27 outage) requests pile up until the task runs out of memory.
  */
-export const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
+export const DEFAULT_CONNECT_TIMEOUT_MS = CONFIG_DEFAULTS.database.connectTimeoutMs;
 
 /**
  * Client-side ceiling on any single query. A database restart can leave a
@@ -17,7 +17,7 @@ export const DEFAULT_CONNECT_TIMEOUT_MS = 15_000;
  * cannot tell slow from dead. `statement_timeout` (lib/db/statement-timeout.ts)
  * is the server-side limit for reads that are merely slow.
  */
-export const DEFAULT_QUERY_TIMEOUT_MS = 120_000;
+export const DEFAULT_QUERY_TIMEOUT_MS = CONFIG_DEFAULTS.database.queryTimeoutMs;
 
 /**
  * TCP keepalive starts probing after this much idle time, so a socket whose
@@ -35,14 +35,14 @@ const SERVER_CANCEL_LEAD_MS = 5_000;
 export function poolConfig(
   url: string,
   ssl: PoolConfig["ssl"],
-  env: Environment = process.env,
+  config: Pick<Config, "database"> = getConfig(),
 ): PoolConfig {
-  const queryTimeout = timeoutMs(env.DATABASE_QUERY_TIMEOUT_MS, DEFAULT_QUERY_TIMEOUT_MS);
+  const { poolMax, connectTimeoutMs, queryTimeoutMs: queryTimeout } = config.database;
   return {
     connectionString: url,
     ssl,
-    max: Number(env.DATABASE_POOL_MAX ?? 10),
-    connectionTimeoutMillis: timeoutMs(env.DATABASE_CONNECT_TIMEOUT_MS, DEFAULT_CONNECT_TIMEOUT_MS),
+    max: poolMax,
+    connectionTimeoutMillis: connectTimeoutMs,
     query_timeout: queryTimeout,
     ...(queryTimeout > SERVER_CANCEL_LEAD_MS
       ? { statement_timeout: queryTimeout - SERVER_CANCEL_LEAD_MS }
@@ -50,18 +50,6 @@ export function poolConfig(
     keepAlive: true,
     keepAliveInitialDelayMillis: KEEPALIVE_INITIAL_DELAY_MS,
   };
-}
-
-/**
- * A positive integer in milliseconds, or the default. `0` turns the timeout off
- * (pg reads 0 as "none"); unset or malformed values keep the default, so a typo
- * can never remove the guard.
- */
-function timeoutMs(value: string | undefined, fallback: number): number {
-  const raw = value?.trim();
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 export interface PoolClientObservabilityDeps {

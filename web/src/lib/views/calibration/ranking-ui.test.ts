@@ -189,7 +189,7 @@ test("comparison browser keeps existing rows mounted while loading", () => {
 });
 
 // Upstream also renders its trace calibration card (ExperimentBanner) here; the Traces pages
-// of this edition do not carry that card, so the case is left out (ADR-0030).
+// of this edition do not carry that card, so the case is left out (ADR-0004).
 
 test("arm summary shows the serving and shadowing share for each arm", () => {
   const html = renderToStaticMarkup(

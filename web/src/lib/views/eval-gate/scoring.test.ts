@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import { emptyChange } from "./change";
 import { outcomeDefaults, rebasedForReplay } from "./defaults";
 import { JUDGE_NOT_CONFIGURED, judgeCriteria, judgeLine } from "./judge";
@@ -258,22 +259,30 @@ test("criteria: no model means not judged; a judge reads both sides, within its 
 });
 
 test("with no key there is no model; a placeholder key is no key", () => {
-  assert.deepEqual(resolveEvalModels({}), { agent: null, tool: null, judge: null, standIn: false });
-  assert.equal(resolveEvalModels({ ANTHROPIC_API_KEY: "REPLACE_ME" }).agent, null);
+  assert.deepEqual(resolveEvalModels(resolveConfig({ env: {} })), {
+    agent: null,
+    tool: null,
+    judge: null,
+    standIn: false,
+  });
+  assert.equal(
+    resolveEvalModels(resolveConfig({ env: { ANTHROPIC_API_KEY: "REPLACE_ME" } })).agent,
+    null,
+  );
   assert.ok(
-    resolveEvalModels({ ANTHROPIC_API_KEY: "sk-test" }).agent,
+    resolveEvalModels(resolveConfig({ env: { ANTHROPIC_API_KEY: "sk-test" } })).agent,
     "a key gives an agent (not called here)",
   );
 });
 
 test("RC-76: a local replay model override replaces the run's own model, locally only", () => {
   const env = { ANTHROPIC_API_KEY: "sk-test", EVAL_GATE_REPLAY_MODEL_OVERRIDE: "claude-haiku-5-5" };
-  const local = resolveEvalModels(env, undefined, "development").agent!({
+  const local = resolveEvalModels(resolveConfig({ env }), undefined, "development").agent!({
     recordedModel: "claude-sonnet-4-6",
     recorded: [],
   });
   assert.equal(local?.model, "claude-haiku-5-5");
-  const prod = resolveEvalModels(env, undefined, "production").agent!({
+  const prod = resolveEvalModels(resolveConfig({ env }), undefined, "production").agent!({
     recordedModel: "claude-sonnet-4-6",
     recorded: [],
   });

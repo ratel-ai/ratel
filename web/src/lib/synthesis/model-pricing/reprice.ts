@@ -435,7 +435,7 @@ function atPrecision(cost: string | null): string | null {
 }
 
 /**
- * Fails, naming them, when an id names no organization. Owned (ADR-0030): organizations are the
+ * Fails, naming them, when an id names no organization. Owned (ADR-0004): organizations are the
  * edition's, so an id is known when a project names it.
  */
 async function assertOrganizationsExist(db: RepriceDb, ids: readonly string[]): Promise<void> {
@@ -465,7 +465,7 @@ function projectPrices(db: RepriceDb): PricesFor {
 }
 
 /**
- * Each project's organization, read once per run. Owned (ADR-0030): organizations are the
+ * Each project's organization, read once per run. Owned (ADR-0004): organizations are the
  * edition's, so the owner is the project's organization id, which also stands for its slug.
  */
 async function projectOwners(db: RepriceDb): Promise<Map<string, Owner>> {

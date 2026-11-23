@@ -22,11 +22,11 @@ import { getEvalSet, removeCase, updateCase } from "@/lib/views/eval-gate/store"
 import { evalHref } from "@/lib/views/eval-gate/view";
 
 /**
- * The eval gate's edits (RC-46), behind `FF_EVAL_GATE`: run a simulation,
+ * The eval gate's edits (RC-46), behind `evalGate`: run a simulation,
  * add runs (by id, or more from history), change a run's expected outcome and
  * criteria, remove a run. Any member of the project may; membership is
  * re-resolved here and the client posts only ids and the edited fields.
- * Owned (ADR-0030): the project comes from the console scope.
+ * Owned (ADR-0004): the project comes from the console scope.
  */
 
 const logger = getLogger("fixes/eval-actions");

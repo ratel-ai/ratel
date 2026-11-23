@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, isNotNull, lt, or, sql } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {
@@ -36,7 +36,7 @@ export type OtelFactsDb = Pick<ReturnType<typeof getDb>, "select">;
 /** Events of a turn ending inside the window may start a little before it. */
 export const OTEL_FACTS_SLACK_MS = 60 * 60_000;
 const PAGE_SIZE = 5_000;
-export const MAX_OTEL_FACT_ROWS = Math.floor(envNumber("TRACE_SIGNALS_MAX_OTEL_ROWS", 1_000_000));
+export const MAX_OTEL_FACT_ROWS = getConfig().traceSignals.maxOtelRows;
 
 const eventTime = sql<Date>`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
 

@@ -10,21 +10,20 @@ import {
   type SpanExporter,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { type Config, getConfig } from "@/config";
 import { FilteredSpanProcessor } from "@/lib/platform/otel/ratel-export";
 
 /**
  * Server traces: the requests, Postgres queries and outbound calls of this process, sent to an
  * operator's OTLP collector for APM (Cloud: the Datadog Agent sidecar on localhost). Plain OTLP,
- * no vendor library: the open-source edition sends nothing unless `OTEL_EXPORTER_OTLP_ENDPOINT`
- * is set, and `OTEL_SDK_DISABLED=true` stops it like the rest.
+ * no vendor library: the open-source edition sends nothing unless `otel.serverTraces.endpoint`
+ * (OTEL_EXPORTER_OTLP_ENDPOINT) is set, and `otel.sdkDisabled` stops it like the rest.
  *
  * Separate from self-telemetry (`config.ts`) and from Ratel's own model-call and MCP exports: it
  * rides on the same tracer provider but has its own exporter, its own resource
- * (`SERVER_TRACES_RESOURCE_ATTRIBUTES`, over the process's own) and never receives a model-call
+ * (`otel.serverTraces.resourceAttributes`, SERVER_TRACES_RESOURCE_ATTRIBUTES, over the process's own) and never receives a model-call
  * or MCP tool span, nor a URL's query string: no request body or customer text leaves this way.
  */
-
-type Environment = Readonly<Record<string, string | undefined>>;
 
 export type ServerTracesConfig = {
   url: string;
@@ -45,24 +44,23 @@ export type ServerTracesDependencies = {
   exportTimeoutMillis?: number;
 };
 
-export const SERVER_TRACES_ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT";
-export const SERVER_TRACES_HEADERS_ENV = "OTEL_EXPORTER_OTLP_HEADERS";
-export const SERVER_TRACES_RESOURCE_ENV = "SERVER_TRACES_RESOURCE_ATTRIBUTES";
-
 /** URL attributes whose query string (and fragment) is cut before export. */
 const URL_ATTRIBUTES = ["http.target", "http.url", "url.full"] as const;
 /** Attributes that only ever hold a query string, dropped before export. */
 const QUERY_ATTRIBUTES = ["url.query"] as const;
 
-/** The collector to send server traces to, or null when `OTEL_EXPORTER_OTLP_ENDPOINT` is unset. */
-export function resolveServerTracesConfig(environment: Environment): ServerTracesConfig | null {
-  if (environment.OTEL_SDK_DISABLED?.trim().toLowerCase() === "true") return null;
-  const endpoint = environment[SERVER_TRACES_ENDPOINT_ENV]?.trim().replace(/\/+$/, "");
-  if (!endpoint) return null;
+/** The collector to send server traces to, or null when `otel.serverTraces.endpoint` is unset. */
+export function resolveServerTracesConfig(
+  config: Pick<Config, "otel"> = getConfig(),
+): ServerTracesConfig | null {
+  if (config.otel.sdkDisabled) return null;
+  const { endpoint, headers, resourceAttributes } = config.otel.serverTraces;
+  const base = endpoint?.replace(/\/+$/, "");
+  if (!base) return null;
   return {
-    url: `${endpoint}/v1/traces`,
-    headers: keyPairs(environment[SERVER_TRACES_HEADERS_ENV]),
-    resourceAttributes: keyPairs(environment[SERVER_TRACES_RESOURCE_ENV]),
+    url: `${base}/v1/traces`,
+    headers: keyPairs(headers),
+    resourceAttributes: keyPairs(resourceAttributes),
   };
 }
 
@@ -124,6 +122,5 @@ function scrubbed(attributes: Attributes): Attributes {
 }
 
 function keyPairs(value: string | undefined): Record<string, string> {
-  const trimmed = value?.trim();
-  return trimmed ? parseKeyPairsIntoRecord(trimmed) : {};
+  return value ? parseKeyPairsIntoRecord(value) : {};
 }

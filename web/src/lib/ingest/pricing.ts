@@ -1,5 +1,5 @@
 /**
- * Model → token price table. The ADR-0013 event no longer carries `cost_usd`, so
+ * Model → token price table. The agent event no longer carries `cost_usd`, so
  * the ingest endpoint computes it from `usage` (see `costFor`). Rates are USD per
  * **million** tokens; `costFor` converts to an absolute dollar figure.
  *
@@ -12,7 +12,7 @@
  * Unknown models return `null` (the dashboard's Cost metric simply omits them)
  * rather than guessing a price.
  *
- * Owned (ADR-0030): upstream's file also prices the vendor models Ratel itself calls (the
+ * Owned (ADR-0004): upstream's file also prices the vendor models Ratel itself calls (the
  * decision engines and the hosted embedding model) next to their clients, which are the
  * edition's; that section lives with them in the private edition. The rest is upstream's.
  */

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deflateSync, gunzipSync, gzipSync } from "node:zlib";
 import protobuf from "protobufjs";
+import { resetConfigForTests } from "@/config";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
 import type { EventWithMetric } from "@/lib/ingest/otlp/queries";
 import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
@@ -791,6 +792,7 @@ test("the default success sampler reads OBS_INGEST_SUCCESS_SAMPLE_RATE", async (
     } else {
       process.env.OBS_INGEST_SUCCESS_SAMPLE_RATE = previousRate;
     }
+    resetConfigForTests();
   });
   t.mock.method(Math, "random", () => 0.999);
   const events: string[] = [];
@@ -805,8 +807,10 @@ test("the default success sampler reads OBS_INGEST_SUCCESS_SAMPLE_RATE", async (
   });
 
   process.env.OBS_INGEST_SUCCESS_SAMPLE_RATE = "1";
+  resetConfigForTests();
   await handleTracesRequest(req(otlpJson(), auth), deps);
   process.env.OBS_INGEST_SUCCESS_SAMPLE_RATE = "0";
+  resetConfigForTests();
   await handleTracesRequest(req(otlpJson(), auth), deps);
 
   assert.deepEqual(events, ["otlp_ingest_request"]);

@@ -1,14 +1,15 @@
+import { getConfig } from "@/config";
 import type { FlagSubject } from "@/lib/contracts/feature-flags";
 import type { McpAuthContext } from "@/lib/mcp/auth";
-import { featureEnabled } from "@/lib/platform/experimental-features";
+import { type FlagConfig, featureEnabled } from "@/lib/platform/experimental-features";
 
 /**
- * `FF_MCP_APPS`: whether the MCP server publishes its `ui://` views and links
+ * `mcpApps`: whether the MCP server publishes its `ui://` views and links
  * tools to them (MCP Apps).
  *
- * Owned (ADR-0030): off by default. Without the edition's flags port it is one
- * switch for the deployment, `FF_MCP_APPS` (or `RATEL_EXPERIMENTAL_FEATURES` in
- * the open-source edition), read from the environment; with it, the edition
+ * Owned (ADR-0004): off by default. Without the edition's flags port it is one
+ * switch for the deployment, `mcpApps` (or `experimentalFeatures` in
+ * the open-source edition), read from the configuration; with it, the edition
  * decides it for the project key or the person (`featureEnabled`), and a failed
  * read is off. The function keeps upstream's name and its caller argument so
  * the route handler stays as upstream's.
@@ -16,21 +17,21 @@ import { featureEnabled } from "@/lib/platform/experimental-features";
  * Off means the server is byte-for-byte what it was without views
  * (`route-handler.apps.test.ts` pins it).
  */
-export const MCP_APPS_FLAG = "FF_MCP_APPS" as const;
+export const MCP_APPS_FLAG = "mcpApps" as const;
 
 export interface McpAppsFlagOptions {
   /**
    * The request is the `initialize` of a client that shows views. Upstream's
-   * flag service waits longer there; the environment has nothing to wait for.
+   * flag service waits longer there; the configuration has nothing to wait for.
    */
   initialize?: boolean;
 }
 
 export async function mcpAppsEnabled(
   auth: McpAuthContext,
-  env: Record<string, string | undefined> = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return featureEnabled(MCP_APPS_FLAG, mcpAppsFlagSubject(auth), { env });
+  return featureEnabled(MCP_APPS_FLAG, mcpAppsFlagSubject(auth), { config });
 }
 
 /**

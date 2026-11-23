@@ -67,4 +67,4 @@ The platform uses the published SDK packages from npm: to take a new SDK version
 `@ratel-ai/sdk` and `@ratel-ai/telemetry` in `web/package.json` and `ee/package.json`.
 
 Every change to `main` goes through the single required `ci-gate` check in
-`.github/workflows/ci.yml` ([ADR-0016](docs/adr/0016-single-ci-gate.md)).
+`.github/workflows/ci.yml` ([ADR-0008](docs/adr/0008-single-ci-gate.md)).

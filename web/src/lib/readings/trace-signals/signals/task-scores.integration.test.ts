@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import { listInFlightJobs } from "@/lib/jobs/queries";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
@@ -24,8 +25,8 @@ test("completed signal runs queue task scores only with the eval gate on", async
         fresh().search(["find_task", "assign_task"]).invoke("find_task").invoke("assign_task"),
       ),
     );
-    // Owned (ADR-0030): the gate is FF_EVAL_GATE from the environment, not an organization flag.
-    const flagDeps: Record<string, string | undefined> = { FF_EVAL_GATE: "0" };
+    // Owned (ADR-0004): the gate is the configured evalGate flag, not an organization flag.
+    let flagDeps = resolveConfig({ override: { flags: { evalGate: false } } });
     const deps = jobDeps(db, NOW, [], {
       enqueueTaskScores: (projectId) => enqueueScoreTasksJob(projectId, { db, flagDeps }),
     });
@@ -35,7 +36,7 @@ test("completed signal runs queue task scores only with the eval gate on", async
     );
     assert.deepEqual(await listInFlightJobs(PROJECT_ID, db), []);
 
-    flagDeps.FF_EVAL_GATE = "1";
+    flagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
     assert.equal(
       (await computeProjectTraceSignals(PROJECT_ID, { trigger: "scheduled" }, deps)).outcome,
       "completed",

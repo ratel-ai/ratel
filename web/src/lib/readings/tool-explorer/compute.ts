@@ -1,9 +1,9 @@
+import { getConfig } from "@/config";
 import {
   listClosedTurnsPage as listClosedTurnsPageFn,
   TURN_PAGE_SIZE,
 } from "@/lib/ledger/closed-turns";
 import { walkClosedTurnPages } from "@/lib/ledger/turn-pages";
-import { envNumber } from "@/lib/platform/env-number";
 import {
   createExplorerAnalysis,
   type ExplorerAnalysisOptions,
@@ -29,8 +29,8 @@ import { DEFAULT_WORKFLOW_CONFIG } from "@/lib/readings/trace-signals/workflows/
 const DAY_MS = 86_400_000;
 
 /** Wall-clock budget of one run, inside the stale-job reaper's window. */
-export const EXPLORER_TIME_BUDGET_MS = envNumber("TOOL_EXPLORER_TIME_BUDGET_MS", 6 * 60_000);
-export const DEFAULT_EXPLORER_WINDOW_DAYS = Math.floor(envNumber("TOOL_EXPLORER_WINDOW_DAYS", 30));
+export const EXPLORER_TIME_BUDGET_MS = getConfig().toolExplorer.timeBudgetMs;
+export const DEFAULT_EXPLORER_WINDOW_DAYS = getConfig().toolExplorer.windowDays;
 export const MAX_EXPLORER_WINDOW_DAYS = 90;
 
 export interface ExplorerWindow {

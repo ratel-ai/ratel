@@ -20,11 +20,8 @@
  * `--before` reads only spans received before that time. Use the 0039 deploy
  * time to skip the spans ingest already filled.
  */
-import { config } from "dotenv";
 
-config({ path: ".env.local" });
-config({ path: ".env" });
-
+import "./load-env";
 import {
   backfillEntityDimensions,
   backfillOptionsFromArgs,

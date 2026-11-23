@@ -53,7 +53,7 @@ import {
  * the backlog builds once the secret is set. Logs and events carry counts only: no query
  * text, no end-user ids.
  *
- * Owned (ADR-0030): no feature-flag gate (the Agent health gate is retired, always on),
+ * Owned (ADR-0004): no feature-flag gate (the Agent health gate is retired, always on),
  * and the seams into the signal runs above (`enqueueReading`, `onBacklogDrained`, `onBacklogProgress`)
  * are optional dependencies the readings register, not imports from L4.
  */
@@ -85,7 +85,7 @@ const reportMissingSaltOnce = createMissingSaltReporter();
 
 export interface BuildJobDeps {
   /**
-   * `FF_TOOL_RUN_INSIGHTS` for the project (RC-742, upstream's
+   * `toolRunInsights` for the project (RC-742, upstream's
    * `cloud-tool-run-insights`): on, the build also reads agent runs
    * (`agent_run`), so a run with no tool call makes a turn.
    * Never throws: a failed decision is off.

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import {
   createPublishableIngestLimits,
   DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE,
   ingestRateLimitedResponse,
-  publishableLimitOptionsFromEnv,
+  publishableLimitOptionsFromConfig,
   sourceBucket,
 } from "@/lib/ingest/ingest-limits";
 
@@ -91,10 +92,14 @@ test("a source over its share does not spend the fleet's budget", () => {
 test("the default ceiling is far above a secret key's 120 a minute, and env can set both", () => {
   assert.ok(DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE > 120);
   assert.deepEqual(
-    publishableLimitOptionsFromEnv({
-      RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE: "20000",
-      RATEL_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE: "30",
-    }),
+    publishableLimitOptionsFromConfig(
+      resolveConfig({
+        env: {
+          RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE: "20000",
+          RATEL_PUBLISHABLE_SOURCE_LIMIT_PER_MINUTE: "30",
+        },
+      }),
+    ),
     {
       perKeyPerMinute: 20_000,
       perSourcePerMinute: 30,
@@ -103,9 +108,12 @@ test("the default ceiling is far above a secret key's 120 a minute, and env can 
     },
   );
   assert.equal(
-    publishableLimitOptionsFromEnv({ RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE: "-1" })
-      .perKeyPerMinute,
+    publishableLimitOptionsFromConfig(resolveConfig()).perKeyPerMinute,
     DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE,
+  );
+  assert.throws(
+    () => resolveConfig({ env: { RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE: "-1" } }),
+    /RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE/,
   );
 });
 

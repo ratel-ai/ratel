@@ -1,12 +1,8 @@
+import { type Config, getConfig } from "@/config";
 import { loadToolCorpus as loadToolCorpusFn } from "@/lib/ingest/runtime-catalog/inventory";
-import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import {
-  configured,
-  resolveDecisionEngine,
-  usdPerInputToken,
-} from "@/lib/readings/decisions/engine";
+import { resolveDecisionEngine, usdPerInputToken } from "@/lib/readings/decisions/engine";
 import {
   type CorpusEntry,
   identityFingerprint,
@@ -43,28 +39,25 @@ import type { WorkflowLabels } from "./name";
  * result for the page. Without a key it does nothing. A per-job token cap bounds the
  * spend; a rejected key or an outage is logged and leaves the previous insights in place.
  *
- * Owned (ADR-0030): OpenAI is the one decision engine in this edition, the tool corpus
- * is read from the runtime catalog, and the deps take an `env` so tests pass none.
+ * Owned (ADR-0004): OpenAI is the one decision engine in this edition, the tool corpus
+ * is read from the runtime catalog, and the deps take a config so tests pass their own.
  */
 
 const DAY_MS = 86_400_000;
 export const DECIDE_WINDOW_DAYS = 30;
-export const MAX_ASKS_PER_JOB = Math.floor(envNumber("TRACE_WORKFLOW_MAX_ASKS", 300));
+export const MAX_ASKS_PER_JOB = getConfig().traceWorkflows.maxAsks;
 /**
- * The job's input-token cap: upstream's `TRACE_WORKFLOW_MAX_JEV_TOKENS`, or this tree's earlier
- * name `TRACE_WORKFLOW_MAX_JUDGE_TOKENS`, kept as an alias. About $0.30 at the engine's input
+ * The job's input-token cap: upstream's `traceWorkflows.maxJevTokens` (TRACE_WORKFLOW_MAX_JEV_TOKENS),
+ * or this tree's earlier `traceWorkflows.maxJudgeTokens` (TRACE_WORKFLOW_MAX_JUDGE_TOKENS), kept as
+ * an alias. About $0.30 at the engine's input
  * price; a full job of 300 asks uses a fraction of it.
  */
-export function decideMaxInputTokens(
-  env: Record<string, string | undefined> = process.env,
-): number {
-  const alias = envNumber("TRACE_WORKFLOW_MAX_JUDGE_TOKENS", 3_000_000, undefined, env);
-  return Math.floor(envNumber("TRACE_WORKFLOW_MAX_JEV_TOKENS", alias, undefined, env));
+export function decideMaxInputTokens(config: Pick<Config, "traceWorkflows"> = getConfig()): number {
+  const { maxJevTokens, maxJudgeTokens } = config.traceWorkflows;
+  return Math.floor(maxJevTokens ?? maxJudgeTokens);
 }
 export const DECIDE_MAX_INPUT_TOKENS = decideMaxInputTokens();
 const logger = getLogger("trace-signals/decide-workflows");
-
-type Env = Record<string, string | undefined>;
 
 export interface DecideDeps {
   judge: JudgeEngine | null;
@@ -96,13 +89,16 @@ const WORKFLOW_DECIDE_FEATURE = "workflow_decide";
  * The decision engine (`readings/decisions/engine.ts`) with the workflow framing, or with
  * `tools` its tuned tool framing; null without a usable key.
  */
-export function workflowJudgeFromEnv(env: Env = process.env, tools = false): JudgeEngine | null {
-  const resolved = resolveDecisionEngine(env);
+export function workflowJudgeFromEnv(
+  config: Pick<Config, "openai"> = getConfig(),
+  tools = false,
+): JudgeEngine | null {
+  const resolved = resolveDecisionEngine(config);
   if (!resolved) return null;
   return openaiJudgeEngine({
     apiKey: resolved.apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
+    baseUrl: config.openai.baseUrl,
+    model: config.openai.decisionsModel,
     ...(tools ? {} : { framing: WORKFLOW_FRAMING }),
     feature: WORKFLOW_DECIDE_FEATURE,
     maxInputTokens: DECIDE_MAX_INPUT_TOKENS,
@@ -110,17 +106,17 @@ export function workflowJudgeFromEnv(env: Env = process.env, tools = false): Jud
 }
 
 /** The ceiling this job's token cap puts on spend at the engine's list price; undefined without an engine. */
-export function decideMaxUsd(env: Env = process.env): number | undefined {
-  const resolved = resolveDecisionEngine(env);
+export function decideMaxUsd(config: Pick<Config, "openai"> = getConfig()): number | undefined {
+  const resolved = resolveDecisionEngine(config);
   if (!resolved) return undefined;
   return Number((DECIDE_MAX_INPUT_TOKENS * usdPerInputToken(resolved.name)).toFixed(2));
 }
 
-export function defaultDecideDeps(env: Env = process.env): DecideDeps {
+export function defaultDecideDeps(config: Pick<Config, "openai"> = getConfig()): DecideDeps {
   return {
-    judge: workflowJudgeFromEnv(env),
-    toolJudge: workflowJudgeFromEnv(env, true),
-    maxUsd: decideMaxUsd(env),
+    judge: workflowJudgeFromEnv(config),
+    toolJudge: workflowJudgeFromEnv(config, true),
+    maxUsd: decideMaxUsd(config),
     loadToolCorpus: (projectId) => loadToolCorpusFn(projectId),
     loadRecentAskGroups: loadRecentAskGroupsFn,
     loadVerdicts: loadVerdictsFn,

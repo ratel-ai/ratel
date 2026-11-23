@@ -3,7 +3,7 @@ import type { IntentGraphDocument } from "@/lib/readings/intent-types/wire";
 
 /**
  * Which ask group a search belongs to, decided by the open-source SDK's own
- * matcher, never by a reimplementation (ADR-0014; `fold.ts` holds the same
+ * matcher, never by a reimplementation (ADR-0007; `fold.ts` holds the same
  * line). A graph's stored members are only its newest phrasings, so matching
  * a search's text against them would miss every search worded some other
  * way; the matcher reads a query the way the runtime does.

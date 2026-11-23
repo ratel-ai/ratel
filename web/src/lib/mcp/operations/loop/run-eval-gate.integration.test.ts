@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { type Config, resolveConfig } from "@/config";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { type DispatchResult, dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
@@ -24,7 +25,7 @@ import { defaultLoopDeps, loopWriteOperations } from "./index";
 
 /**
  * MCP `run_eval` and the `simulate_fix_eval` job under the eval gate, on a
- * real database. Owned (ADR-0030): the gate is one switch, `FF_EVAL_GATE`,
+ * real database. Owned (ADR-0004): the gate is one switch, `evalGate`,
  * so the cases are on and off; upstream's are its per-organization rollout.
  * Nothing here calls a model: the stand-in models count calls and answer
  * nothing.
@@ -33,11 +34,10 @@ import { defaultLoopDeps, loopWriteOperations } from "./index";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const INSIGHT = "33333333-3333-4333-8333-333333333333";
-const ON = { FF_EVAL_GATE: "1" };
-const OFF = {};
+const ON = resolveConfig({ override: { flags: { evalGate: true } } });
+const OFF = resolveConfig();
 
 type Db = ReturnType<typeof getDb>;
-type Env = Record<string, string | undefined>;
 
 async function setup(): Promise<{ client: PGlite; db: Db }> {
   const client = await createMigratedPGlite();
@@ -152,7 +152,7 @@ const auth: McpAuthContext = {
 /** The real `run_eval` over the real eval gate and service, on this database. It queues: the run ids land in `queued`, for the job. */
 async function runEval(
   db: Db,
-  env: Env,
+  config: Config,
   models: EvalModels,
   queued: string[] = [],
   fixOf: (projectId: string) => Fix = fixFor,
@@ -162,7 +162,7 @@ async function runEval(
     loadProjectFixes: async (id: string) => ({ ...modelFor(id), open: [fixOf(id)] }),
     loadInsight: async () => null,
     recordLineage: (async (input) => input.object) as typeof defaultLoopDeps.recordLineage,
-    evalGateEnabled: (id: string, actor: string) => evalGateEnabledForActor(id, actor, db, env),
+    evalGateEnabled: (id: string, actor: string) => evalGateEnabledForActor(id, actor, db, config),
     runSimulation: ((fixId, options = {}) =>
       runSimulation(fixId, {
         ...options,
@@ -195,10 +195,10 @@ async function count(client: PGlite, table: string): Promise<number> {
   return rows[0]!.n;
 }
 
-function jobDeps(db: Db, env: Env, models: EvalModels) {
+function jobDeps(db: Db, config: Config, models: EvalModels) {
   return {
     gateEnabled: (run: { projectId: string; requestedBy: string | null }) =>
-      evalGateEnabledForRun(run, db, env),
+      evalGateEnabledForRun(run, db, config),
     eval: { db, models, loadCorpus: async () => [] },
   };
 }

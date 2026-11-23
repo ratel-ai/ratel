@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, test } from "node:test";
+import { resetConfigForTests } from "@/config";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { dispatchOperation } from "@/lib/mcp/dispatch";
 import { buildRegistry } from "@/lib/mcp/registry";
@@ -7,8 +11,8 @@ import { agentsOperations, defaultAgentsDeps } from "./agents";
 import { defaultMcpServersDeps, mcpServersOperations } from "./mcp-servers";
 
 /**
- * Owned (ADR-0030), no upstream counterpart: the default gate of the Agents and MCP servers tools
- * is the core's `FF_AGENTS_PAGES` switch (`featureEnabled`), in place of upstream's
+ * Owned (ADR-0004), no upstream counterpart: the default gate of the Agents and MCP servers tools
+ * is the core's `agentsPages` switch (`featureEnabled`), in place of upstream's
  * `cloud-project-entities` flag service. Off, each tool refuses as forbidden and reads nothing.
  */
 
@@ -21,13 +25,17 @@ const auth: McpAuthContext = {
   organization: { id: "org-1", slug: "acme", effectivePlan: "pro" },
 };
 const SAVED = {
-  flag: process.env.FF_AGENTS_PAGES,
+  file: process.env.CONFIG_PATH,
   all: process.env.RATEL_EXPERIMENTAL_FEATURES,
 };
+/** The `agentsPages` flag on, through a config file (`web/src/config.ts`). */
+const FLAG_ON = path.join(mkdtempSync(path.join(tmpdir(), "entities-gate-")), "on.json");
+writeFileSync(FLAG_ON, JSON.stringify({ flags: { agentsPages: true } }));
 
 afterEach(() => {
-  restore("FF_AGENTS_PAGES", SAVED.flag);
+  restore("CONFIG_PATH", SAVED.file);
   restore("RATEL_EXPERIMENTAL_FEATURES", SAVED.all);
+  resetConfigForTests();
 });
 
 function registry(reads: string[]) {
@@ -66,9 +74,10 @@ const CALLS = [
   ["get_mcp_server", { server: "docs-mcp" }],
 ] as const;
 
-test("with FF_AGENTS_PAGES off, every Agents and MCP servers tool refuses as forbidden", async () => {
-  delete process.env.FF_AGENTS_PAGES;
+test("with agentsPages off, every Agents and MCP servers tool refuses as forbidden", async () => {
+  delete process.env.CONFIG_PATH;
   delete process.env.RATEL_EXPERIMENTAL_FEATURES;
+  resetConfigForTests();
   const reads: string[] = [];
   for (const [id, params] of CALLS) {
     const result = await dispatchOperation(id, params, { registry: registry(reads), auth });
@@ -78,8 +87,9 @@ test("with FF_AGENTS_PAGES off, every Agents and MCP servers tool refuses as for
   assert.deepEqual(reads, [], "nothing is read with the switch off");
 });
 
-test("with FF_AGENTS_PAGES on, the tools read", async () => {
-  process.env.FF_AGENTS_PAGES = "1";
+test("with agentsPages on, the tools read", async () => {
+  process.env.CONFIG_PATH = FLAG_ON;
+  resetConfigForTests();
   const reads: string[] = [];
   for (const [id, params] of CALLS) {
     const result = await dispatchOperation(id, params, { registry: registry(reads), auth });

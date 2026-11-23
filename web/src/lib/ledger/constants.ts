@@ -1,16 +1,16 @@
+import { getConfig } from "@/config";
 import {
   AGENT_RUN_EVENT_TYPE,
   TURN_EVENT_TYPES,
   TURN_EVENT_TYPES_WITH_AGENT_RUNS,
 } from "@/lib/ingest/trace-events/turns-schedule";
-import { envNumber } from "@/lib/platform/env-number";
 
 /**
- * Tuning knobs for the turn ledger. Every boundary threshold is env-overridable so a
- * deployment can correct the inferred-turn rule without a release. Pure code takes a
+ * Tuning knobs for the turn ledger. Every boundary threshold is configurable (`traceTurns`
+ * in `web/src/config.ts`) so a deployment can correct the inferred-turn rule without a release. Pure code takes a
  * {@link TurnConfig} argument defaulting to these, so tests pin their own values.
  *
- * Owned (ADR-0030): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
+ * Owned (ADR-0004): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
  * `TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742) has one source, the ingest kick in
  * `lib/ingest/trace-events/turns-schedule.ts`, re-exported here so the ledger reads the
  * same list that triggers it. The imported source ids are upstream's exact set less the one
@@ -18,17 +18,17 @@ import { envNumber } from "@/lib/platform/env-number";
  */
 
 /** The runtime event types a turn is made of. Mirrors the partial index on `trace_events`. */
-/** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types a build reads with `FF_TOOL_RUN_INSIGHTS` on. */
+/** An agent run, an OTLP `invoke_agent` root span (RC-742), and the types a build reads with `toolRunInsights` on. */
 export { AGENT_RUN_EVENT_TYPE, TURN_EVENT_TYPES, TURN_EVENT_TYPES_WITH_AGENT_RUNS };
 
 /** A silence longer than this between two events of a session starts a new inferred turn. */
-export const INFERRED_TURN_GAP_MS = envNumber("TRACE_TURNS_INFERRED_GAP_MS", 90_000);
+export const INFERRED_TURN_GAP_MS = getConfig().traceTurns.inferredGapMs;
 /** An inferred turn never holds more steps than this. */
-export const TURN_STEP_CAP = Math.floor(envNumber("TRACE_TURNS_STEP_CAP", 40));
+export const TURN_STEP_CAP = getConfig().traceTurns.stepCap;
 /** An inferred turn never spans more event time than this. */
-export const TURN_DURATION_CAP_MS = envNumber("TRACE_TURNS_DURATION_CAP_MS", 15 * 60_000);
+export const TURN_DURATION_CAP_MS = getConfig().traceTurns.durationCapMs;
 /** A turn whose session has been quiet (by receipt time) this long is closed. */
-export const TURN_IDLE_CLOSE_MS = envNumber("TRACE_TURNS_IDLE_CLOSE_MS", 30 * 60_000);
+export const TURN_IDLE_CLOSE_MS = getConfig().traceTurns.idleCloseMs;
 
 const IMPORTED_SOURCE_IDS_KEY = Symbol.for("ratel.platform.importedSourceIds");
 
@@ -64,9 +64,9 @@ export function isImportedSourceId(sourceId: string | null | undefined): boolean
 }
 
 /** A gateway row this close to a native row it summarizes is the same fact. */
-export const GATEWAY_DEDUPE_WINDOW_MS = envNumber("TRACE_TURNS_GATEWAY_DEDUPE_MS", 2_000);
+export const GATEWAY_DEDUPE_WINDOW_MS = getConfig().traceTurns.gatewayDedupeMs;
 /** An invocation end without an `invocation_id` pairs with a start at most this old. */
-export const INVOCATION_PAIRING_WINDOW_MS = envNumber("TRACE_TURNS_PAIRING_WINDOW_MS", 10 * 60_000);
+export const INVOCATION_PAIRING_WINDOW_MS = getConfig().traceTurns.pairingWindowMs;
 
 /** Hit ids kept per search step; bounds the row and every attribution scan. */
 export const MAX_STEP_HIT_IDS = 32;

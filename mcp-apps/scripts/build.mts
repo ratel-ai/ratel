@@ -76,8 +76,20 @@ const serverActions: Plugin = {
  * code out of the bundle: the replay's What if… (a view passes no `whatIf`).
  */
 const CONSOLE_ONLY: Readonly<Record<string, string>> = {
-  // Owned (ADR-0030): the panel lands in components/console here.
+  // Owned (ADR-0004): the panel lands in components/console here.
   [path.join(WEB_SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
+};
+
+/**
+ * The settings (web/src/config.ts) read files through zfig, which a view cannot bundle: a view
+ * resolves `@/config` to the defaults (web/src/config-defaults.ts), as Next's browser bundle does
+ * (web/next.config.ts).
+ */
+const browserConfig: Plugin = {
+  name: "browser-config",
+  setup(build) {
+    build.onResolve({ filter: /^@\/config$/ }, () => ({ path: path.join(WEB_SRC, "config-defaults.ts") }));
+  },
 };
 
 const consoleOnly: Plugin = {
@@ -113,11 +125,10 @@ export async function bundleScript(entry: string): Promise<{ script: string; imp
       "next/link": path.join(SHELL, "shims", "next-link.tsx"),
       "next/navigation": path.join(SHELL, "shims", "next-navigation.ts"),
     },
-    // Owned (ADR-0030): the brand strings read lib/platform/app-config.ts, which falls back to
-    // process.env outside the console's page; a view's frame has no `process`, so it reads an
-    // empty environment there and the app's default name.
+    // Owned (ADR-0004): a view's frame has no `process`; code that reads NODE_ENV (a framework
+    // exception to web/src/config.ts) reads production, and any other read an empty object.
     define: { "process.env.NODE_ENV": '"production"', "process.env": "{}" },
-    plugins: [consoleOnly, serverActions],
+    plugins: [browserConfig, consoleOnly, serverActions],
     metafile: true,
     logLevel: "silent",
   });

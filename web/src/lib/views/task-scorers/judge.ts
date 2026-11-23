@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { getDb } from "@/lib/platform/db/client";
-import { envNumber } from "@/lib/platform/env-number";
 import { getLogger, runWithLogContext } from "@/lib/platform/logger";
 import { projects } from "@/lib/platform/projects/schema";
 import { describeSide } from "@/lib/views/eval-gate/judge";
@@ -18,11 +18,11 @@ import { lockOrganizationSpend, organizationModelSpendSince } from "@/lib/views/
 import type { RunRecord } from "@/lib/views/eval-gate/types";
 import { SCORER_VERSION } from "@/lib/views/task-scorers/engine";
 import { taskScoresDaily } from "@/lib/views/task-scorers/schema";
-// Owned (ADR-0030): the task loop's spend joins the daily budget through the eval gate's seam.
+// Owned (ADR-0004): the task loop's spend joins the daily budget through the eval gate's seam.
 import "@/lib/views/task-evals/spend";
 
-export const TASK_JUDGE_SAMPLE = Math.floor(envNumber("TASK_JUDGE_SAMPLE", 20, (n) => n >= 0));
-export const TASK_JUDGE_BUDGET_USD = envNumber("TASK_JUDGE_BUDGET_USD", 0.5, (n) => n >= 0);
+export const TASK_JUDGE_SAMPLE = getConfig().evalGate.taskJudgeSample;
+export const TASK_JUDGE_BUDGET_USD = getConfig().evalGate.taskJudgeBudgetUsd;
 export interface TaskJudgeDeps {
   judge?: JudgeModel | null;
   sample?: number;
@@ -51,7 +51,7 @@ export async function judgeTaskSample(
     eq(taskScoresDaily.scorerKind, "judge_criteria"),
   );
   const held = await db.transaction(async (tx) => {
-    // Owned (ADR-0030): the core has no organizations table; the advisory lock stands in.
+    // Owned (ADR-0004): the core has no organizations table; the advisory lock stands in.
     const [org] = await tx
       .select({ id: projects.organizationId })
       .from(projects)

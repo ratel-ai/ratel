@@ -1,9 +1,9 @@
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { loadPriceBook } from "@/lib/ingest/model-pricing/price-book";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
 import {
@@ -33,7 +33,7 @@ const logger = getLogger("trace-signals/linked-runs");
 export type LinkedRunsDb = Pick<ReturnType<typeof getDb>, "select">;
 
 const PAGE_SIZE = 5_000;
-export const MAX_LINK_ROWS = Math.floor(envNumber("TRACE_SIGNALS_MAX_LINK_ROWS", 100_000));
+export const MAX_LINK_ROWS = getConfig().traceSignals.maxLinkRows;
 
 const eventTime = sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
 

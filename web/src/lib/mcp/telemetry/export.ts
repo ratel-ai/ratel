@@ -4,12 +4,8 @@ import {
   type ReadableSpan,
   type SpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import { configuredSetting } from "@/lib/contracts/self-telemetry";
-import {
-  FilteredSpanProcessor,
-  RATEL_SELF_TELEMETRY_ENDPOINT_ENV,
-  type RatelExportConfig,
-} from "@/lib/platform/otel/ratel-export";
+import { type Config, getConfig } from "@/config";
+import { FilteredSpanProcessor, type RatelExportConfig } from "@/lib/platform/otel/ratel-export";
 
 /**
  * Ratel's own MCP server as a customer of Ratel: each tool call is an `execute_tool` span
@@ -22,25 +18,24 @@ import {
  * The pattern of lib/platform/otel/ratel-export.ts with a key of its own, so the backend model
  * calls and the MCP calls land in two projects. It rides on the self-telemetry provider.
  *
- * Owned (ADR-0030): upstream defaults the endpoint to its own deployment. Here there is no default
- * destination: the export is off unless both `RATEL_SELF_TELEMETRY_MCP_API_KEY` (a project key;
- * the `REPLACE_ME` seed counts as unset) and `RATEL_SELF_TELEMETRY_ENDPOINT` are set.
+ * Owned (ADR-0004): upstream defaults the endpoint to its own deployment. Here there is no default
+ * destination: the export is off unless both `selfTelemetry.mcpApiKey`
+ * (RATEL_SELF_TELEMETRY_MCP_API_KEY, a project key; the `REPLACE_ME` seed counts as unset) and
+ * `selfTelemetry.endpoint` (RATEL_SELF_TELEMETRY_ENDPOINT) are set.
  */
 
 /** The tracer `traceMcpToolCall` makes its spans with; its scope is what this export selects on. */
 export const MCP_TOOL_TRACER = "ratel-cloud/mcp";
 
-export const RATEL_SELF_TELEMETRY_MCP_KEY_ENV = "RATEL_SELF_TELEMETRY_MCP_API_KEY";
-
 const EXPORT_TIMEOUT_MS = 5_000;
 
-type Environment = Readonly<Record<string, string | undefined>>;
 type ScopedSpan = Pick<ReadableSpan, "instrumentationScope">;
 
 /** Where MCP tool spans go and how they authenticate, or null unless both key and endpoint are set. */
-export function resolveMcpExportConfig(environment: Environment): RatelExportConfig | null {
-  const key = configuredSetting(environment[RATEL_SELF_TELEMETRY_MCP_KEY_ENV]);
-  const url = configuredSetting(environment[RATEL_SELF_TELEMETRY_ENDPOINT_ENV]);
+export function resolveMcpExportConfig(
+  config: Pick<Config, "selfTelemetry"> = getConfig(),
+): RatelExportConfig | null {
+  const { mcpApiKey: key, endpoint: url } = config.selfTelemetry;
   if (!key || !url) return null;
   return { url, headers: { Authorization: `Bearer ${key}` } };
 }

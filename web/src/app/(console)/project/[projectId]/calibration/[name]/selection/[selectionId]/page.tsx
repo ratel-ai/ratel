@@ -44,7 +44,7 @@ const TONE_CHIP: Record<OutcomeTone, string> = {
   muted: "border-forest-300 bg-forest/40 text-warm-muted",
 };
 
-/** Owned (ADR-0030): the project comes from the guarded route, a 404 outside the organization. */
+/** Owned (ADR-0004): the project comes from the guarded route, a 404 outside the organization. */
 export default async function SelectionInspectorPage({
   params,
   searchParams,

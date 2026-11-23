@@ -3688,7 +3688,7 @@
   {
     "name": "get_task",
     "title": "Get task",
-    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with FF_EVAL_GATE on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
+    "description": "Read one task as its page shows it: steps, flow, order stability, self-corrections, issues, fixes, cost, example runs, and with the evalGate flag on its scorers, daily scores, eval set and shipments with post-ship results. Use list_fixes for the task's fixes.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",
@@ -4575,7 +4575,7 @@
   {
     "name": "run_eval",
     "title": "Run eval on a fix",
-    "description": "Queue one simulation per affected task when FF_EVAL_GATE is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
+    "description": "Queue one simulation per affected task when the evalGate flag is on. A fix without tasks uses the per-fix eval. Poll get_eval while runs are pending. If the status is drafting, read get_fix. Call run_eval when the draft is ready. Call mark_fix_shipped when the fix is live.",
     "inputSchema": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "object",

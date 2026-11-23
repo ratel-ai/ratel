@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { jobs } from "@/lib/jobs/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
@@ -27,7 +28,7 @@ test("a shipment queues one measure per distinct task only when the gate is on",
   try {
     await createFixShipment(input, db, {
       ...deps,
-      flagDeps: { FF_EVAL_GATE: "0" },
+      flagDeps: resolveConfig({ override: { flags: { evalGate: false } } }),
     });
     assert.equal((await db.select().from(taskEvalRuns)).length, 0);
     assert.equal((await db.select().from(jobs)).length, 0);
@@ -179,7 +180,7 @@ test("a disabled gate refuses measurement without scoring production runs", asyn
   try {
     await createFixShipment(input, db, deps);
     const [run] = await db.select().from(taskEvalRuns);
-    const off = { ...deps, flagDeps: { FF_EVAL_GATE: "0" } };
+    const off = { ...deps, flagDeps: resolveConfig({ override: { flags: { evalGate: false } } }) };
     assert.deepEqual(await simulateTaskEvalJob(PROJECT, { runId: run!.id }, off), {
       simulated: false,
       reason: "gate_off",
@@ -355,8 +356,8 @@ async function setup() {
   };
   const deps: TaskSimulationDeps = {
     db,
-    // Owned (ADR-0030): the gate is the FF_EVAL_GATE env value.
-    flagDeps: { FF_EVAL_GATE: "1" },
+    // Owned (ADR-0004): the gate is the evalGate flag in the configuration.
+    flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
     loadFix: async () => ({ projectId: PROJECT, fix }),
     observability: { trackSystemEvent: async () => undefined },
   };

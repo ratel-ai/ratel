@@ -19,7 +19,7 @@ const logger = getLogger("trace-signals/issue-examples-route");
 
 /**
  * An issue's example turns, read on demand when a member opens the issue on Agent health's
- * Summary (`?issues=<id>,<id>`, one row's members). A read; no product event. Owned (ADR-0030):
+ * Summary (`?issues=<id>,<id>`, one row's members). A read; no product event. Owned (ADR-0004):
  * the project comes from the console scope.
  */
 export const GET = withRequestLog(handleGet);

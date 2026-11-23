@@ -3,7 +3,7 @@
 The drafted text of a fix whose change is a rewrite: a better tool description, or the words
 that tell two tools apart. With a ready draft, the eval gate simulates the drafted change
 instead of refusing the fix as "nothing to simulate". Ported from upstream `lib/fix-drafts`;
-everything runs only when the eval gate is on (`FF_EVAL_GATE`, `eval-gate/gate.ts`).
+everything runs only when the eval gate is on (`evalGate`, `eval-gate/gate.ts`).
 
 | File | What it holds |
 |---|---|
@@ -17,7 +17,7 @@ everything runs only when the eval gate is on (`FF_EVAL_GATE`, `eval-gate/gate.t
 The table comes with `jobs_draft_fix_pending_idx` on `jobs` (`lib/jobs/schema.ts`): at most one
 queued or running `draft_fix` job per fix.
 
-**Owned (ADR-0030).** Every file but `change.test.ts` (copied). The gate reads `env` where
+**Owned (ADR-0004).** Every file but `change.test.ts` (copied). The gate reads `env` where
 upstream takes organization flag deps; the core has no `organizations` table, so the budget lock
 is an advisory lock (`eval-gate/store.ts#lockOrganizationSpend`); `model-call` has no `payer`.
 With no model key, upstream would reserve and write a failed draft on each simulation (and with

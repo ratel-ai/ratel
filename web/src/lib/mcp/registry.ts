@@ -49,7 +49,7 @@ export interface OperationContext {
   organizationId: string | null;
   logger: Logger;
   /**
-   * The result renders in an MCP Apps view: `FF_MCP_APPS` is on for the
+   * The result renders in an MCP Apps view: `mcpApps` is on for the
    * caller and this tool is bound to one. Only then may an operation spend a
    * read on `OperationResult.view`.
    */
@@ -98,7 +98,7 @@ export interface McpOperation<Schema extends AnyParamsSchema = AnyParamsSchema> 
   /**
    * Called by an MCP Apps view through tools/call, not offered to an agent
    * (such as the replay's step content). Registered only with
-   * `FF_MCP_APPS` on, and marked `_meta.ui.visibility: ["app"]`, so the
+   * `mcpApps` on, and marked `_meta.ui.visibility: ["app"]`, so the
    * server without views lists exactly what it did.
    */
   appOnly?: boolean;

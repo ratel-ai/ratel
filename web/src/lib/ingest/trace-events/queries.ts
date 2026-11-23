@@ -14,7 +14,7 @@ import {
 import { getDb } from "@/lib/platform/db/client";
 
 /**
- * The trace event reads and writes (owned fragment of the upstream queries hub, ADR-0030): the
+ * The trace event reads and writes (owned fragment of the upstream queries hub, ADR-0004): the
  * ingest path, the top search queries, and the joins the MCP improvement tools read (skills
  * searched but never invoked, the erroring tools, the queries that surfaced a skill).
  */

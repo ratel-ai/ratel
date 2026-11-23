@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { type TestContext, test } from "node:test";
+import { resolveConfig } from "@/config";
 import { OSS_LIMITS } from "@/lib/adapters/oss/entitlements";
 import { composition } from "@/lib/composition/ports";
 import type { EntitlementsPort, OrgLimitView, PlanLimits } from "@/lib/contracts/entitlements";
@@ -15,7 +16,7 @@ import { type AccountOperationDeps, accountOperations } from "./account";
  * console counts it (the demo project is free), limits that say "unlimited" rather than null,
  * the plan and its subscription state, and the match quality run budget.
  *
- * Owned (ADR-0030): upstream's quota cases. Its plan table is the edition's, so the cases that
+ * Owned (ADR-0004): upstream's quota cases. Its plan table is the edition's, so the cases that
  * need one install a stand-in for it (`withPlans`); the open-source edition has none.
  */
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -277,27 +278,27 @@ test("get_flag_status reports each switch as the flags port decides it for this 
   const result = await run("get_flag_status", {
     featureEnabled: async (flag, subject) => {
       asked.push([flag, subject]);
-      return flag === "FF_EVAL_GATE";
+      return flag === "evalGate";
     },
   });
   const flags = result.data.flags as { key: string; enabled: boolean }[];
   assert.deepEqual(
     flags.map(({ key, enabled }) => [key, enabled]),
     [
-      ["FF_EVAL_GATE", true],
-      ["FF_RANKING_CATALOG_DRIFT", false],
-      ["FF_MCP_APPS", false],
-      ["FF_AGENTS_PAGES", false],
-      ["FF_TOOL_RUN_INSIGHTS", false],
+      ["evalGate", true],
+      ["rankingCatalogDrift", false],
+      ["mcpApps", false],
+      ["agentsPages", false],
+      ["toolRunInsights", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
   assert.deepEqual(asked, [
-    ["FF_EVAL_GATE", subject],
-    ["FF_RANKING_CATALOG_DRIFT", subject],
-    ["FF_MCP_APPS", subject],
-    ["FF_AGENTS_PAGES", subject],
-    ["FF_TOOL_RUN_INSIGHTS", subject],
+    ["evalGate", subject],
+    ["rankingCatalogDrift", subject],
+    ["mcpApps", subject],
+    ["agentsPages", subject],
+    ["toolRunInsights", subject],
   ]);
 });
 
@@ -309,7 +310,7 @@ test("get_flag_status reports MCP Apps as the real gate decides it for an OAuth 
   // The edition's flags service turns Apps on for organization org-1 only.
   const port = {
     enabled: async (flag: string, subject: { organizationId?: string }) =>
-      flag === "FF_MCP_APPS" && subject.organizationId === "org-1",
+      flag === "mcpApps" && subject.organizationId === "org-1",
   };
   const ports = composition as { featureFlags?: unknown };
   const previous = ports.featureFlags;
@@ -341,8 +342,8 @@ test("get_flag_status reports MCP Apps as the real gate decides it for an OAuth 
   );
   assert.equal(result.ok, true, JSON.stringify(result));
   const flags = (result as { data: { flags: { key: string; enabled: boolean }[] } }).data.flags;
-  const reported = flags.find(({ key }) => key === "FF_MCP_APPS")?.enabled;
-  assert.equal(reported, await mcpAppsEnabled(oauth, {}));
+  const reported = flags.find(({ key }) => key === "mcpApps")?.enabled;
+  assert.equal(reported, await mcpAppsEnabled(oauth, resolveConfig()));
   assert.equal(reported, false);
 });
 
@@ -351,7 +352,7 @@ test("get_flag_status reports MCP Apps for a project key with that project, as t
   const { mcpAppsEnabled } = await import("@/lib/mcp/apps/flag");
   const port = {
     enabled: async (flag: string, subject: { projectId?: string }) =>
-      flag === "FF_MCP_APPS" && subject.projectId === PROJECT,
+      flag === "mcpApps" && subject.projectId === PROJECT,
   };
   const ports = composition as { featureFlags?: unknown };
   const previous = ports.featureFlags;
@@ -361,7 +362,7 @@ test("get_flag_status reports MCP Apps for a project key with that project, as t
   });
   const result = await run("get_flag_status", { featureEnabled });
   const flags = result.data.flags as { key: string; enabled: boolean }[];
-  const reported = flags.find(({ key }) => key === "FF_MCP_APPS")?.enabled;
-  assert.equal(reported, await mcpAppsEnabled(keyAuth, {}));
+  const reported = flags.find(({ key }) => key === "mcpApps")?.enabled;
+  assert.equal(reported, await mcpAppsEnabled(keyAuth, resolveConfig()));
   assert.equal(reported, true);
 });

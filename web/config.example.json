@@ -1,0 +1,23 @@
+{
+  "database": {
+    "url": "postgres://ratel:ratel@localhost:5432/ratel",
+    "poolMax": 10,
+    "migrateOnBoot": true
+  },
+  "app": {
+    "baseUrl": "http://localhost:3000",
+    "environment": "development",
+    "role": "all"
+  },
+  "logging": { "level": "info" },
+  "jobs": { "runningPerProject": 1 },
+  "experimentalFeatures": false,
+  "flags": {
+    "evalGate": true,
+    "mcpApps": false
+  },
+  "traceSignals": {
+    "windowDays": 30,
+    "floors": { "magnet": { "minImpressions": 50 } }
+  }
+}

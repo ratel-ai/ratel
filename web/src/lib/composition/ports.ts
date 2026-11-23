@@ -1,4 +1,5 @@
 import { eeComposition as seamEe } from "#ee-composition";
+import { getConfig } from "@/config";
 import { ossEmbeddingProvider } from "@/lib/adapters/oss/embedding-provider";
 import { ossEntitlements } from "@/lib/adapters/oss/entitlements";
 import { ossRegistry } from "@/lib/adapters/oss/registry";
@@ -7,7 +8,7 @@ import { ossTelemetry } from "@/lib/adapters/oss/telemetry";
 import { type CompositionPorts, PORT_NAMES } from "@/lib/contracts/composition";
 
 /**
- * The composition root for the ports (ADR-0030). It imports the contracts, the OSS adapters and
+ * The composition root for the ports (ADR-0004). It imports the contracts, the OSS adapters and
  * the `#ee-composition` seam, and nothing else, so any module may read it without a cycle. The
  * other root, `registry.ts`, collects every module's `register.ts` and is the one file allowed
  * to import upward.
@@ -192,6 +193,6 @@ export function createComposition(
   return { ...(ports as CompositionPorts), edition, nav, organizationNav, projectNav };
 }
 
-export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");
+export const composition = createComposition(getConfig().app.composition);
 
 export type { CompositionPorts } from "@/lib/contracts/composition";

@@ -25,7 +25,7 @@ import { handleIntentGraphPut } from "@/lib/readings/intent-graph/put-handler";
  * intent graph, embeddings, Tool Picker, MCP and captured content all refuse
  * it with 403, before any of them reads or spends anything.
  *
- * Owned (ADR-0030): the embeddings proxy and the Tool Picker are the edition's
+ * Owned (ADR-0004): the embeddings proxy and the Tool Picker are the edition's
  * (ratel-platform), which proves their refusal itself.
  */
 

@@ -23,7 +23,7 @@ import {
 /**
  * Everything a Quality tab decides before it reads any data: who is asking,
  * which sources are on, and whether the plan includes match quality. One
- * place, so the three tabs gate the same way the rail does. Owned (ADR-0030): the
+ * place, so the three tabs gate the same way the rail does. Owned (ADR-0004): the
  * project comes from the console scope, a 404 otherwise.
  */
 

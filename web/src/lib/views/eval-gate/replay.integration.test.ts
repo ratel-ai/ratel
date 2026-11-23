@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { CloudMessage } from "@/lib/ingest/cloud-schema";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
@@ -393,7 +394,7 @@ test("model replay: held-out runs replayed with and without the fix, scored with
         outcome.spend.models.includes("stand-in-model-local"),
     );
 
-    // Owned (ADR-0030): read through the store; `db/tables` has no relational reader for this table.
+    // Owned (ADR-0004): read through the store; `db/tables` has no relational reader for this table.
     const run = await getEvalRun(outcome.runId, db);
     const results = parseResults(run?.results);
     const three = results.find((item) => item.turnId === turnId(3))!;
@@ -457,7 +458,7 @@ test("RC-76: a replay that leaves the recorded path is stored with what it did, 
     assert.deepEqual(outcome.methods?.fidelity, { matched: 2, total: 3 });
     assert.equal(outcome.nSimulated, 2);
 
-    // Owned (ADR-0030): read through the store; `db/tables` has no relational reader for this table.
+    // Owned (ADR-0004): read through the store; `db/tables` has no relational reader for this table.
     const run = await getEvalRun(outcome.runId, db);
     const five = parseResults(run?.results).find((item) => item.turnId === turnId(5))!;
     assert.deepEqual(
@@ -491,7 +492,7 @@ test("RC-76: a replay that leaves the recorded path is stored with what it did, 
   }
 });
 
-/* - Owned (ADR-0030): nothing calls out without a model key ------------------- */
+/* - Owned (ADR-0004): nothing calls out without a model key ------------------- */
 
 /** Runs `run` with the network cut: any `fetch` is recorded and refused. */
 async function withNoNetwork<T>(run: () => Promise<T>): Promise<T> {
@@ -515,7 +516,7 @@ test("with no model key a simulation completes, says it can't replay, and never 
   const { client, db } = await setup();
   try {
     const fix = failClearlyFix();
-    const models = resolveEvalModels(NO_KEYS, undefined, "production");
+    const models = resolveEvalModels(resolveConfig({ env: NO_KEYS }), undefined, "production");
     const outcome = await withNoNetwork(() =>
       runSimulation(fix.id, { projectId: PROJECT, deps: deps(db, fix, models) }),
     );
@@ -536,7 +537,7 @@ test("with EVAL_GATE_MOCK_MODEL=1 a simulation runs on the stand-ins, with no ne
   try {
     const fix = failClearlyFix();
     const models = resolveEvalModels(
-      { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" },
+      resolveConfig({ env: { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" } }),
       undefined,
       "development",
     );

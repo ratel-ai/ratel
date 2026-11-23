@@ -17,9 +17,9 @@ export const metadata = { title: "Turn" };
 /**
  * One turn, call by call: where an Agent health example's "Open in Traces"
  * lands. `?focus=<event id>` rings the call the example is about; the link's
- * hash scrolls to it. Owned (ADR-0030): the project comes from the console
+ * hash scrolls to it. Owned (ADR-0004): the project comes from the console
  * scope, Agent health is always on in this edition, so there is no gate, and "run to test" (a closed
- * turn's run into its task's eval set) follows `FF_EVAL_GATE`.
+ * turn's run into its task's eval set) follows `evalGate`.
  */
 export default async function TurnTracePage({
   params,

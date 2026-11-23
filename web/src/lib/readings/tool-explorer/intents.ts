@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import { buildRelevanceIndex, tokenizeForRelevance } from "@/lib/readings/query-intents/relevance";
 import { labelForFreq, tokenize } from "@/lib/readings/text/cluster";
 import { SURE_HOP_P } from "@/lib/readings/tool-explorer/thresholds";
@@ -31,17 +31,13 @@ import { wilsonLow } from "@/lib/readings/trace-signals/signals/severity";
  */
 
 /** An intent needs this many units before its tool shares are stored. */
-export const MIN_INTENT_UNITS = Math.floor(envNumber("TOOL_EXPLORER_MIN_INTENT_UNITS", 5));
+export const MIN_INTENT_UNITS = getConfig().toolExplorer.minIntentUnits;
 /**
  * Symmetric relevance at or above this puts two intents in one group. The
  * categorize job merges intents at 0.6; a group sits below that on purpose,
  * so it joins what the job kept apart as distinct phrasings of one ask.
  */
-export const INTENT_GROUP_RELEVANCE = envNumber(
-  "TOOL_EXPLORER_INTENT_GROUP_RELEVANCE",
-  0.4,
-  (n) => n > 0 && n <= 1,
-);
+export const INTENT_GROUP_RELEVANCE = getConfig().toolExplorer.intentGroupRelevance;
 export const MAX_INTENT_GROUPS = 200;
 
 /** A unit whose "calls" are its intents, first appearance order, repeats collapsed. */
@@ -317,7 +313,10 @@ export function groupIntents(
     best.phrases.push(intent.text);
     for (const stem of stems) {
       let set = byStem.get(stem);
-      if (!set) byStem.set(stem, (set = new Set()));
+      if (!set) {
+        set = new Set();
+        byStem.set(stem, set);
+      }
       set.add(best);
     }
     for (const token of new Set(tokenize(intent.text)))

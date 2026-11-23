@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ConfigError, resolveConfig } from "@/config";
 import { nameHash, namePhrases } from "@/lib/readings/intent-engine/names";
 import {
   applyCachedIntentNames,
@@ -125,24 +126,21 @@ test("candidates: first names before renames, intents only unless keyed, busiest
   );
 });
 
-test("the cap is INTENT_ENGINE_MAX_NAMES, one batch by default, and 0 turns naming off", () => {
-  assert.equal(maxNamesPerRun({}), DEFAULT_MAX_NAMES);
-  assert.equal(maxNamesPerRun({ INTENT_ENGINE_MAX_NAMES: "0" }), 0);
-  assert.equal(maxNamesPerRun({ INTENT_ENGINE_MAX_NAMES: "45.7" }), 45);
+test("the cap is intentEngine.maxNames, one batch by default, and 0 turns naming off", () => {
+  const config = (env: Record<string, string>) => resolveConfig({ env });
+  assert.equal(maxNamesPerRun(config({})), DEFAULT_MAX_NAMES);
+  assert.equal(maxNamesPerRun(config({ INTENT_ENGINE_MAX_NAMES: "0" })), 0);
+  assert.equal(maxNamesPerRun(config({ INTENT_ENGINE_MAX_NAMES: "45.7" })), 45);
+  assert.throws(() => config({ INTENT_ENGINE_MAX_NAMES: "-3" }), ConfigError, "nonsense fails");
+  assert.equal(nameModel(config({})), "claude-sonnet-5-5", "the topics namer's model");
+  assert.equal(nameModel(config({ TOPICS_LABEL_MODEL: "m-topics" })), "m-topics");
   assert.equal(
-    maxNamesPerRun({ INTENT_ENGINE_MAX_NAMES: "-3" }),
-    DEFAULT_MAX_NAMES,
-    "nonsense keeps the default",
-  );
-  assert.equal(nameModel({}), "claude-sonnet-5-5", "the topics namer's model");
-  assert.equal(nameModel({ TOPICS_LABEL_MODEL: "m-topics" }), "m-topics");
-  assert.equal(
-    nameModel({ INTENT_ENGINE_NAME_MODEL: "m-engine", TOPICS_LABEL_MODEL: "m-topics" }),
+    nameModel(config({ INTENT_ENGINE_NAME_MODEL: "m-engine", TOPICS_LABEL_MODEL: "m-topics" })),
     "m-engine",
   );
-  assert.equal(defaultNameDeps({}).complete, null, "no key, no client");
+  assert.equal(defaultNameDeps(config({})).complete, null, "no key, no client");
   assert.equal(
-    defaultNameDeps({ ANTHROPIC_API_KEY: "REPLACE_ME" }).complete,
+    defaultNameDeps(config({ ANTHROPIC_API_KEY: "REPLACE_ME" })).complete,
     null,
     "the placeholder is no key",
   );

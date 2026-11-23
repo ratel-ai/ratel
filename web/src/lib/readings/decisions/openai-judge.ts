@@ -35,7 +35,7 @@ import {
  * A refusal (the whole rewording chain declined) is an abstention: the ask is stored
  * unclear, exactly like a low-confidence answer.
  *
- * Owned (ADR-0030): the one judge engine of this edition.
+ * Owned (ADR-0004): the one judge engine of this edition.
  */
 
 const logger = getLogger("decisions/openai-judge");

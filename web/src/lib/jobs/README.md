@@ -25,7 +25,7 @@ handlers and drain steps through its own `register.ts`, collected by `lib/compos
 
 ## Roles
 
-One image, three roles ([ADR-0031](../../../../docs/adr/0031-platform-background-worker.md)):
+One image, three roles ([ADR-0005](../../../../docs/adr/0005-background-worker.md)):
 
 | `APP_ROLE` | After a response | Minute tick | `GET /api/cron/drain` | Migrates |
 |---|---|---|---|---|

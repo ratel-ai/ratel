@@ -48,7 +48,7 @@ import { loadTaskUsage, storedTaskUsage } from "./usage";
  *
  * Other pages call `loadFixes` and then pick theirs with `fixesForSubject`.
  *
- * Owned (ADR-0030): the issue and intent sources and the task usage are read here; the tool
+ * Owned (ADR-0004): the issue and intent sources and the task usage are read here; the tool
  * crafter's drafts with their windows, quality's rewrites and the override adoption arrive
  * through `fixSeams`, each in a read of its own. Unset, a seam contributes nothing and is not a
  * failed source.

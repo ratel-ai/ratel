@@ -19,7 +19,7 @@ import { resolveTraceListView, type TraceListSearchParams } from "@/lib/synthesi
 export const metadata = { title: "Calibration comparison" };
 
 /**
- * Owned (ADR-0030): the project comes from the guarded route, a 404 outside the organization.
+ * Owned (ADR-0004): the project comes from the guarded route, a 404 outside the organization.
  * The ranking view links the printable report.
  */
 export default async function ScopedCalibrationDetailPage({

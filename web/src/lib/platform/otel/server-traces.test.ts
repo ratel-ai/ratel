@@ -4,12 +4,16 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, InMemorySpanExporter } from "@opentelemetry/sdk-trace-base";
+import { resolveConfig } from "@/config";
 import { isMcpToolSpan, MCP_TOOL_TRACER } from "@/lib/mcp/telemetry/export";
 import { isModelCallSpan, MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 import {
-  resolveServerTracesConfig,
+  resolveServerTracesConfig as serverTracesConfigOf,
   serverTracesProcessor,
 } from "@/lib/platform/otel/server-traces";
+
+const resolveServerTracesConfig = (env: Record<string, string>) =>
+  serverTracesConfigOf(resolveConfig({ env }));
 
 const ENDPOINT = "http://localhost:4318";
 
