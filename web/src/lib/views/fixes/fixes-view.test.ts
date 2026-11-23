@@ -535,7 +535,7 @@ test("the URL period scales row and Panel savings and caps excessive shares", ()
   }
 });
 
-// Owned (ADR-0004): the eval gate on Fixes, behind FF_EVAL_GATE (the page passes no badges when it is off).
+// Owned (ADR-0004): the eval gate on Fixes, behind evalGate (the page passes no badges when it is off).
 test("with the eval gate on, each fix carries its eval badge and the panel offers a simulation", () => {
   const evalBadges = { "craft:c-merge": { state: "pending" as const, runs: 4 } };
   const on = render(

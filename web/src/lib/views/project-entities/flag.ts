@@ -1,4 +1,5 @@
-import { featureEnabled } from "@/lib/platform/experimental-features";
+import { getConfig } from "@/config";
+import { type FlagConfig, featureEnabled } from "@/lib/platform/experimental-features";
 import type { Organization } from "@/lib/platform/organizations";
 
 /**
@@ -7,22 +8,20 @@ import type { Organization } from "@/lib/platform/organizations";
  * (`lib/otlp/dimensions`); the flag gates only what a person sees, such as the
  * Agent and MCP server filters of Traces (RC-790).
  *
- * Owned (ADR-0004): the switch is the core's `FF_AGENTS_PAGES`, off by default. Without the
- * edition's flags port it is one switch for the deployment, read from the environment (or
- * `RATEL_EXPERIMENTAL_FEATURES` in the open-source edition); with it, the edition decides it for
+ * Owned (ADR-0004): the switch is the core's `agentsPages`, off by default. Without the
+ * edition's flags port it is one switch for the deployment, read from the configuration (or
+ * `experimentalFeatures` in the open-source edition); with it, the edition decides it for
  * the organization or the caller (`featureEnabled`). The Traces filters stay on for everyone
  * here. Upstream's names are kept so call sites stay identical.
  */
-export const PROJECT_ENTITIES_FLAG = "FF_AGENTS_PAGES" as const;
-
-type Env = Record<string, string | undefined>;
+export const PROJECT_ENTITIES_FLAG = "agentsPages" as const;
 
 /** The flag for the signed-in person in the project's organization. Off when it cannot be decided. */
 export function projectEntitiesEnabled(
   organization: Pick<Organization, "id">,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return featureEnabled(PROJECT_ENTITIES_FLAG, { organizationId: organization.id }, { env });
+  return featureEnabled(PROJECT_ENTITIES_FLAG, { organizationId: organization.id }, { config });
 }
 
 /**
@@ -32,9 +31,9 @@ export function projectEntitiesEnabled(
  */
 export function projectEntitiesEnabledForProject(
   projectId: string,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return featureEnabled(PROJECT_ENTITIES_FLAG, { projectId }, { env });
+  return featureEnabled(PROJECT_ENTITIES_FLAG, { projectId }, { config });
 }
 
 /**
@@ -44,7 +43,7 @@ export function projectEntitiesEnabledForProject(
 export function projectEntitiesEnabledForActor(
   projectId: string,
   actor: string,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return featureEnabled(PROJECT_ENTITIES_FLAG, { projectId, actor }, { env });
+  return featureEnabled(PROJECT_ENTITIES_FLAG, { projectId, actor }, { config });
 }

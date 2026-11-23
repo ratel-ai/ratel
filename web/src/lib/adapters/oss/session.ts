@@ -1,6 +1,5 @@
+import { type Config, getConfig } from "@/config";
 import type { Organization, Session, SessionPort, SessionUser } from "@/lib/contracts/session";
-
-type Env = Readonly<Record<string, string | undefined>>;
 
 /**
  * The open-source edition is single-operator: whoever reaches the console is this user, admin of
@@ -20,11 +19,11 @@ export const LOCAL_OPERATOR: SessionUser = Object.freeze({
 /** Every project of this edition belongs to it. Never change it: projects are keyed on it. */
 export const LOCAL_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000001";
 
-/** `RATEL_ORG_NAME` names it, validated at boot (`deployment-config.ts`); the slug never moves. */
-export function localOrganization(env: Env = process.env): Organization {
+/** `app.organizationName` (RATEL_ORG_NAME) names it, validated at boot (`deployment-config.ts`); the slug never moves. */
+export function localOrganization(config: Pick<Config, "app"> = getConfig()): Organization {
   return {
     id: LOCAL_ORGANIZATION_ID,
-    name: env.RATEL_ORG_NAME?.trim() || "Local operator",
+    name: config.app.organizationName || "Local operator",
     slug: "local",
   };
 }

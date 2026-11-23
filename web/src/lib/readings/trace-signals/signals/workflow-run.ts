@@ -1,5 +1,5 @@
+import { getConfig } from "@/config";
 import type { StepDraft } from "@/lib/ledger/types";
-import { envNumber } from "@/lib/platform/env-number";
 import { MAX_HANDOFF_MS } from "@/lib/readings/tool-explorer/timing";
 import { detectInTurn } from "@/lib/readings/trace-signals/self-corrections/detect";
 import { DEFAULT_FLOORS, type Floors } from "@/lib/readings/trace-signals/signals/catalog";
@@ -71,9 +71,7 @@ import { isToolCall, turnUnit } from "@/lib/readings/trace-signals/workflows/uni
  */
 
 /** Compact turns one run keeps for mining at most. */
-export const MAX_WORKFLOW_TURNS = Math.floor(
-  envNumber("TRACE_SIGNALS_MAX_WORKFLOW_TURNS", 100_000),
-);
+export const MAX_WORKFLOW_TURNS = getConfig().traceSignals.maxWorkflowTurns;
 
 export const WORKFLOW_SIGNAL_KINDS = [
   "workflow_failing",

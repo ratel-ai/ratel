@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resetConfigForTests, resolveConfig } from "@/config";
 import { upsertRuntimeCatalogEntries } from "@/lib/ingest/runtime-catalog/queries";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { jobs } from "@/lib/jobs/schema";
@@ -26,13 +30,21 @@ const PROJECT = "11111111-1111-4111-8111-111111111111";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const ISSUE = "44444444-4444-4444-8444-444444444444";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0004): the gate is FF_EVAL_GATE, read from env, where upstream stubs flag deps. The
-// stand-in model stands for a key; the simulations read process.env through the seam.
-const ON = { FF_EVAL_GATE: "1", EVAL_GATE_MOCK_MODEL: "1" };
-const OFF = { FF_EVAL_GATE: "0" };
-const NO_KEY = { FF_EVAL_GATE: "1" };
-process.env.FF_EVAL_GATE = "1";
-process.env.EVAL_GATE_MOCK_MODEL = "1";
+// Owned (ADR-0004): the gate is evalGate, read from the configuration, where upstream stubs flag
+// deps. The stand-in model stands for a key; the simulations read `getConfig()` through the seam,
+// so the process's configuration says the same (a config file, `web/src/config.ts`).
+const ON = resolveConfig({
+  override: { flags: { evalGate: true }, evalGate: { mockModel: true } },
+});
+const OFF = resolveConfig({ override: { flags: { evalGate: false } } });
+const NO_KEY = resolveConfig({ override: { flags: { evalGate: true } } });
+const configDir = mkdtempSync(path.join(tmpdir(), "fix-drafts-"));
+process.env.CONFIG_PATH = path.join(configDir, "config.json");
+writeFileSync(
+  process.env.CONFIG_PATH,
+  JSON.stringify({ flags: { evalGate: true }, evalGate: { mockModel: true } }),
+);
+resetConfigForTests();
 
 async function setup() {
   const client = await createMigratedPGlite();
@@ -124,7 +136,7 @@ test("draft_fix writes a usable rewrite without a Quality run", async () => {
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix }),
         model: {
@@ -163,7 +175,7 @@ test("draft_fix writes a usable rewrite without a Quality run", async () => {
     );
     assert.ok(Number((draft.spend as { usd: number }).usd) <= 0.05);
     assert.equal(
-      (await resolveFixChange(PROJECT, fix, { db, env: ON, environment: "test" })).status,
+      (await resolveFixChange(PROJECT, fix, { db, config: ON, environment: "test" })).status,
       "ready",
     );
     const simulated = await runSimulation(fix.id, {
@@ -191,7 +203,7 @@ test("draft_fix refuses the daily organization budget before calling the model",
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         dailyBudgetUsd: 0,
         loadFix: async () => ({ projectId: PROJECT, fix }),
@@ -215,8 +227,8 @@ test("draft_fix refuses the daily organization budget before calling the model",
 test("with the gate on a missing draft queues once and never names Quality", async () => {
   const { client, db, fix } = await setup();
   try {
-    const first = await resolveFixChange(PROJECT, fix, { db, env: ON, environment: "test" });
-    const second = await resolveFixChange(PROJECT, fix, { db, env: ON, environment: "test" });
+    const first = await resolveFixChange(PROJECT, fix, { db, config: ON, environment: "test" });
+    const second = await resolveFixChange(PROJECT, fix, { db, config: ON, environment: "test" });
     assert.equal(first.status, "drafting");
     assert.match(first.change.unsupportedReason ?? "", /draft/i);
     assert.doesNotMatch(first.change.unsupportedReason ?? "", /Quality/);
@@ -234,7 +246,7 @@ test("with the gate on a missing draft queues once and never names Quality", asy
     assert.equal(queued[0].kind, "draft_fix");
     const off = await resolveFixChange(PROJECT, fix, {
       db,
-      env: OFF,
+      config: OFF,
     });
     assert.match(off.change.unsupportedReason ?? "", /Run an analysis on Quality/);
   } finally {
@@ -260,7 +272,7 @@ test("the draft analyst reads the tool's evidence ask without a later unrelated 
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix }),
         model: {
@@ -315,7 +327,7 @@ test("the draft budget includes spend from another project in the same organizat
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix }),
         model: {
@@ -345,7 +357,7 @@ test("the draft cap refuses oversized prompts before the model call", async () =
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix }),
         model: {
@@ -370,7 +382,7 @@ test("a disabled draft job makes no model call or draft row", async () => {
       { fixId: fix.id },
       {
         db,
-        env: OFF,
+        config: OFF,
         loadFix: async () => {
           throw new Error("A disabled job must not load the fix.");
         },
@@ -427,7 +439,7 @@ test("a tell-apart draft writes replacements for both tools in one model call", 
       { fixId: pair.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix: pair }),
         model: {
@@ -475,7 +487,7 @@ test("a reply without a usable proposal fails the draft and says why, without a 
       { fixId: fix.id },
       {
         db,
-        env: ON,
+        config: ON,
         now: () => NOW,
         loadFix: async () => ({ projectId: PROJECT, fix }),
         model: {
@@ -518,8 +530,14 @@ test("with the gate on and no model key nothing is queued, reserved, written or 
     throw new Error("no network in this test");
   }) as typeof fetch;
   try {
-    for (const env of [NO_KEY, { ...NO_KEY, ANTHROPIC_API_KEY: "REPLACE_ME" }]) {
-      const resolved = await resolveFixChange(PROJECT, fix, { db, env, environment: "test" });
+    for (const config of [
+      NO_KEY,
+      resolveConfig({
+        env: { ANTHROPIC_API_KEY: "REPLACE_ME" },
+        override: { flags: { evalGate: true } },
+      }),
+    ]) {
+      const resolved = await resolveFixChange(PROJECT, fix, { db, config, environment: "test" });
       assert.equal(resolved.status, "unsupported");
       assert.equal(resolved.change.unsupportedReason, NO_DRAFT_MODEL_MESSAGE);
       const result = await draftFixJob(
@@ -527,7 +545,7 @@ test("with the gate on and no model key nothing is queued, reserved, written or 
         { fixId: fix.id },
         {
           db,
-          env,
+          config,
           environment: "test",
           now: () => NOW,
           loadFix: async () => ({ projectId: PROJECT, fix }),
@@ -549,7 +567,7 @@ test("EVAL_GATE_MOCK_MODEL=1 drafts with the local stand-in, outside production 
   try {
     const deps = {
       db,
-      env: ON,
+      config: ON,
       now: () => NOW,
       loadFix: async () => ({ projectId: PROJECT, fix }),
     };
@@ -617,12 +635,12 @@ test("after a signal run, drafts are queued only for open rewrites with no draft
       createdAt: NOW,
     });
     const loadOpenFixes = async () => [fix, other, notRewrite];
-    for (const env of [OFF, NO_KEY]) {
-      await enqueueProjectFixDrafts(PROJECT, { db, env, environment: "test", loadOpenFixes });
+    for (const config of [OFF, NO_KEY]) {
+      await enqueueProjectFixDrafts(PROJECT, { db, config, environment: "test", loadOpenFixes });
     }
     assert.equal((await db.select().from(jobs)).length, 0, "gate off or no key queues nothing");
-    await enqueueProjectFixDrafts(PROJECT, { db, env: ON, environment: "test", loadOpenFixes });
-    await enqueueProjectFixDrafts(PROJECT, { db, env: ON, environment: "test", loadOpenFixes });
+    await enqueueProjectFixDrafts(PROJECT, { db, config: ON, environment: "test", loadOpenFixes });
+    await enqueueProjectFixDrafts(PROJECT, { db, config: ON, environment: "test", loadOpenFixes });
     const queued = await db.select().from(jobs);
     assert.deepEqual(
       queued.map((job) => [job.kind, (job.payload as { fixId: string }).fixId]),

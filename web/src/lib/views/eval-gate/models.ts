@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { type Config, getConfig } from "@/config";
 import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
-import { envNumber } from "@/lib/platform/env-number";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
@@ -9,7 +9,6 @@ import {
   anthropicClient,
   ModelNotEnabledError,
 } from "@/lib/readings/anthropic/client";
-import { configured } from "@/lib/readings/decisions/engine";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import type { ToolDef } from "@/lib/views/eval-gate/types";
 
@@ -272,43 +271,40 @@ export const SMALL_MAX_TOKENS = 1_024;
  */
 export const DAILY_ORG_BUDGET_USD = 10;
 
-export const REPLAY_BUDGET_USD = envNumber("EVAL_GATE_REPLAY_BUDGET_USD", 1, (n) => n >= 0);
-export const JUDGE_BUDGET_USD = envNumber("EVAL_GATE_JUDGE_BUDGET_USD", 0.1, (n) => n >= 0);
-export const REPLAY_MAX_STEPS = Math.max(
-  1,
-  Math.floor(envNumber("EVAL_GATE_REPLAY_MAX_STEPS", 8, (n) => n >= 1)),
-);
+export const REPLAY_BUDGET_USD = getConfig().evalGate.replayBudgetUsd;
+export const JUDGE_BUDGET_USD = getConfig().evalGate.judgeBudgetUsd;
+export const REPLAY_MAX_STEPS = getConfig().evalGate.replayMaxSteps;
 
 const LOCAL_ENVIRONMENTS: ReadonlySet<string> = new Set(["development", "local", "test"]);
 
 export function mockModelsEnabled(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "evalGate"> = getConfig(),
   environment: string = deploymentEnvironment(),
 ): boolean {
-  return LOCAL_ENVIRONMENTS.has(environment) && env.EVAL_GATE_MOCK_MODEL === "1";
+  return LOCAL_ENVIRONMENTS.has(environment) && config.evalGate.mockModel;
 }
 
 /**
  * The models this deployment has: stand-ins when asked for locally (checked
  * first), the deployment's Claude backend, else none. `judgeFeature` names the spend line
  * of the judge, `agentFeature` the one of the agent (a fix replay, or a What-if
- * sample, RC-176). RC-76: locally, `EVAL_GATE_REPLAY_MODEL_OVERRIDE` replays
+ * sample, RC-176). RC-76: locally, `evalGate.replayModelOverride` replays
  * every run with that model instead of the run's own (a cheaper model while
  * iterating on fidelity).
  */
 export function resolveEvalModels(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
   judgeFeature: EvalGateFeature = "eval_gate_judge",
   environment: string = deploymentEnvironment(),
   agentFeature: AgentFeature = "eval_gate_replay",
 ): EvalModels {
-  if (mockModelsEnabled(env, environment)) return standInModels();
-  const client = anthropicClient({}, env);
+  if (mockModelsEnabled(config, environment)) return standInModels();
+  const client = anthropicClient({}, config);
   if (!client) return { agent: null, tool: null, judge: null, standIn: false };
-  const fallback = configured(env.EVAL_GATE_REPLAY_MODEL) ?? DEFAULT_REPLAY_MODEL;
-  const small = configured(env.EVAL_GATE_JUDGE_MODEL) ?? DEFAULT_JUDGE_MODEL;
+  const fallback = config.evalGate.replayModel ?? DEFAULT_REPLAY_MODEL;
+  const small = config.evalGate.judgeModel ?? DEFAULT_JUDGE_MODEL;
   const override = LOCAL_ENVIRONMENTS.has(environment)
-    ? configured(env.EVAL_GATE_REPLAY_MODEL_OVERRIDE)
+    ? config.evalGate.replayModelOverride
     : undefined;
   return {
     agent: ({ recordedModel }) =>
@@ -327,18 +323,18 @@ export function resolveEvalModels(
 
 /** Resolve the live task judge with its own spend feature. */
 export function resolveTaskJudge(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
 ): JudgeModel | null {
-  if (mockModelsEnabled(env)) return ruleJudge();
-  const client = anthropicClient({}, env);
+  if (mockModelsEnabled(config)) return ruleJudge();
+  const client = anthropicClient({}, config);
   return client ? anthropicJudge(client, DEFAULT_JUDGE_MODEL, "eval_gate_task_judge") : null;
 }
 
 /** Resolve the small model for a test proposal. */
 export function resolveTestDraftModel(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
 ): TestDraftModel | null {
-  if (mockModelsEnabled(env))
+  if (mockModelsEnabled(config))
     return {
       model: STAND_IN_MODEL,
       standIn: true,
@@ -364,7 +360,7 @@ export function resolveTestDraftModel(
         };
       },
     };
-  const client = anthropicClient({}, env);
+  const client = anthropicClient({}, config);
   if (!client) return null;
   const model = DEFAULT_JUDGE_MODEL;
   return {
@@ -566,13 +562,13 @@ export function recordBudgetRefusal(
 export function recordNoModelKey(
   feature: EvalGateFeature,
   calls: number = 1,
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "evalGate"> = getConfig(),
 ): void {
   if (calls < 1) return;
   const model =
     feature === "eval_gate_replay" || feature === "eval_gate_what_if"
-      ? (configured(env.EVAL_GATE_REPLAY_MODEL) ?? DEFAULT_REPLAY_MODEL)
-      : (configured(env.EVAL_GATE_JUDGE_MODEL) ?? DEFAULT_JUDGE_MODEL);
+      ? (config.evalGate.replayModel ?? DEFAULT_REPLAY_MODEL)
+      : (config.evalGate.judgeModel ?? DEFAULT_JUDGE_MODEL);
   recordModelCall({
     provider: "anthropic",
     model,

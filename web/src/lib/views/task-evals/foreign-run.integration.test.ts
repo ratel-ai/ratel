@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -169,8 +170,8 @@ test("drafting a test from a run of another organization's project is refused be
     await assert.rejects(
       draftTestFromRun(PROJECT, "cluster_intents", TURN, {
         db: f.db,
-        // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value, not an organization flag.
-        flagDeps: { FF_EVAL_GATE: "1" },
+        // Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
+        flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
         model: {
           model: "claude-haiku-5-5",
           standIn: false,
@@ -200,7 +201,7 @@ test("the eval-set refresh does not pick a run of another organization's project
     try {
       const result = await refreshTaskEvalSet(PROJECT, "cluster_intents", {
         db: f.db,
-        flagDeps: { FF_EVAL_GATE: "1" },
+        flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
         observability: { trackSystemEvent: async () => undefined },
       });
       assert.equal(result.refreshed, true);

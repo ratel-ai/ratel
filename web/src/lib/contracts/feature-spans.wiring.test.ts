@@ -8,6 +8,7 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { resolveAgentsPageContext } from "@/app/(console)/project/[projectId]/agents/context";
 import { resolveMcpPageContext } from "@/app/(console)/project/[projectId]/mcp/context";
+import { resolveConfig } from "@/config";
 import type { Organization } from "@/lib/platform/organizations";
 import type { Project } from "@/lib/platform/projects/schema";
 import { workflowMiningFor } from "@/lib/readings/trace-signals/tool-run-insights";
@@ -62,8 +63,12 @@ test("with the flag off the page's not-found is its outcome, not an error", asyn
 });
 
 test("a project's tool-run mining config is decided in a feature.tool_run_insights span", async () => {
-  await workflowMiningFor("p1", undefined, { FF_TOOL_RUN_INSIGHTS: "1" });
-  await workflowMiningFor("p2", undefined, {});
+  await workflowMiningFor(
+    "p1",
+    undefined,
+    resolveConfig({ override: { flags: { toolRunInsights: true } } }),
+  );
+  await workflowMiningFor("p2", undefined, resolveConfig());
   assert.deepEqual(
     exporter
       .getFinishedSpans()

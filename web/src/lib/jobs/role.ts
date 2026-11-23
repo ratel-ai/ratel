@@ -1,4 +1,4 @@
-type Environment = Readonly<Record<string, string | undefined>>;
+import { type Config, getConfig } from "@/config";
 
 /**
  * What this process does with background work (docs/design/background-worker.md):
@@ -11,23 +11,23 @@ type Environment = Readonly<Record<string, string | undefined>>;
  */
 export type AppRole = "all" | "api" | "worker";
 
-export function appRole(env: Environment = process.env): AppRole {
-  const raw = env.APP_ROLE?.trim().toLowerCase();
-  return raw === "api" || raw === "worker" ? raw : "all";
+/** `app.role` (APP_ROLE). */
+export function appRole(config: Pick<Config, "app"> = getConfig()): AppRole {
+  return config.app.role;
 }
 
 /**
  * Whether an accepted import is handed to the worker as a `run_import` job
  * (RC-40) instead of running in the request's task. Off until
- * IMPORTS_RUN_IN_WORKER=1, set together with APP_ROLE=api once the worker runs
+ * `jobs.importsRunInWorker` (IMPORTS_RUN_IN_WORKER=1), set together with APP_ROLE=api once the worker runs
  * in that environment: before then every task that drains must know the job
  * kind, or an older one mid-deploy would claim it and fail it.
  */
-export function importsRunInWorker(env: Environment = process.env): boolean {
-  return env.IMPORTS_RUN_IN_WORKER?.trim() === "1";
+export function importsRunInWorker(config: Pick<Config, "jobs"> = getConfig()): boolean {
+  return config.jobs.importsRunInWorker;
 }
 
 /** Whether this process runs jobs right after a request's response. */
-export function runsJobsAfterResponse(env: Environment = process.env): boolean {
-  return appRole(env) === "all";
+export function runsJobsAfterResponse(config: Pick<Config, "app"> = getConfig()): boolean {
+  return appRole(config) === "all";
 }

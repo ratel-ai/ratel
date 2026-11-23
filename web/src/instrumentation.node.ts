@@ -1,8 +1,7 @@
+import type { Config } from "@/config";
 import type { RequestErrorContext, RequestErrorRequest } from "@/lib/contracts/telemetry";
 import type { StaticTelemetryEnvironment } from "@/lib/platform/otel/config";
 import type { TelemetryShutdown } from "@/lib/platform/otel/shutdown";
-
-type Environment = Readonly<Record<string, string | undefined>>;
 
 const EXPORT_TIMEOUT_MS = 5_000;
 const SHUTDOWN_TIMEOUT_MS = 6_000;
@@ -15,14 +14,14 @@ let registeredShutdown: TelemetryShutdown | undefined;
  * The platform's own traces and logs (owned port of upstream's registration, without its
  * analytics vendor), and its server traces for APM. Nothing is registered, and the OpenTelemetry
  * SDK is not even loaded, unless both self-telemetry OTLP endpoints are set
- * (`lib/platform/otel/config.ts`) or the APM collector's `OTEL_EXPORTER_OTLP_ENDPOINT` is
+ * (`lib/platform/otel/config.ts`) or the APM collector's `otel.serverTraces.endpoint` is
  * (`lib/platform/otel/server-traces.ts`): an unconfigured process exports nothing. Returns the
  * flush to run before the process exits.
  *
  * Call it before anything loads `pg`: the instrumentations patch modules as they load.
  */
 export async function registerNodeInstrumentation(
-  environment: Environment,
+  settings: Config,
   staticEnvironment: StaticTelemetryEnvironment,
 ): Promise<TelemetryShutdown | undefined> {
   if (registered) return registeredShutdown;
@@ -31,15 +30,14 @@ export async function registerNodeInstrumentation(
     isTelemetryExportOrigin,
     processResourceAttributes,
     resolveSelfTelemetryConfig,
-    resolveTracesSamplerRatio,
     selfTelemetryConfigWarnings,
   } = await import("@/lib/platform/otel/config");
   const { resolveServerTracesConfig } = await import("@/lib/platform/otel/server-traces");
-  const config = resolveSelfTelemetryConfig(environment, staticEnvironment);
-  for (const warning of selfTelemetryConfigWarnings(environment, staticEnvironment, config)) {
+  const config = resolveSelfTelemetryConfig(settings, staticEnvironment);
+  for (const warning of selfTelemetryConfigWarnings(settings, staticEnvironment, config)) {
     console.warn(warning);
   }
-  const serverTraces = resolveServerTracesConfig(environment);
+  const serverTraces = resolveServerTracesConfig(settings);
   if (!config && !serverTraces) return undefined;
 
   const [
@@ -87,18 +85,18 @@ export async function registerNodeInstrumentation(
   ]);
 
   const resource = resourceFromAttributes(
-    config?.resourceAttributes ?? processResourceAttributes(environment, staticEnvironment),
+    config?.resourceAttributes ?? processResourceAttributes(settings, staticEnvironment),
   );
   // Ratel's own model calls go to a Ratel project (lib/platform/otel/ratel-export.ts),
   // and only there: the self-telemetry exporter keeps every other span, as before. Both ride
   // on self-telemetry, so neither is on without it.
-  const ratelExport = config ? resolveRatelExportConfig(environment) : null;
+  const ratelExport = config ? resolveRatelExportConfig(settings) : null;
   // Ratel's own MCP tool calls go to their own project (lib/mcp/telemetry/export.ts).
-  const mcpExport = config ? resolveMcpExportConfig(environment) : null;
+  const mcpExport = config ? resolveMcpExportConfig(settings) : null;
   const tracerProvider = new NodeTracerProvider({
     resource,
     sampler: createSelfTelemetrySampler(
-      config?.tracesSamplerRatio ?? resolveTracesSamplerRatio(environment.OTEL_TRACES_SAMPLER_ARG),
+      config?.tracesSamplerRatio ?? settings.otel.tracesSamplerRatio,
     ),
     spanProcessors: [
       new SelfTimeSpanProcessor(),
@@ -182,7 +180,7 @@ export async function registerNodeInstrumentation(
   // termination: it flushes buffered telemetry, then exits explicitly. The worker is the
   // exception: its own handler waits for the step in flight, so it runs this flush itself
   // (`bootBackground` hands it over) instead of being cut short by an exit from here.
-  if (appRole(environment) !== "worker") registerTelemetryShutdownHandlers(registeredShutdown);
+  if (appRole(settings) !== "worker") registerTelemetryShutdownHandlers(registeredShutdown);
   registered = true;
   return registeredShutdown;
 }
@@ -201,17 +199,29 @@ export async function reportRequestError(
 }
 
 /**
+ * This process's settings (`web/src/config.ts`), read first at boot. An invalid value exits with
+ * the ConfigError that names it, like a bad composition: never serve a misconfigured server.
+ */
+export async function bootConfig(): Promise<Config> {
+  try {
+    const { getConfig } = await import("@/config");
+    return getConfig();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+/**
  * Memory and event loop once a minute from every process (upstream's RC-216), where this
  * process exports its own telemetry: the deployments whose logs reach a dashboard. Upstream keys
  * it on its production and staging environments, which are the ones that export.
  */
-export async function startProcessStatsIfExported(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): Promise<void> {
+export async function startProcessStatsIfExported(config?: Config): Promise<void> {
   const { selfTelemetryEnabled } = await import("@/lib/platform/otel/config");
-  if (!selfTelemetryEnabled(env)) return;
+  if (!selfTelemetryEnabled(config)) return;
   const { startProcessStats } = await import("@/lib/platform/process-stats");
-  startProcessStats(env);
+  startProcessStats(config);
 }
 
 /**
@@ -231,10 +241,13 @@ export async function assertComposition(): Promise<void> {
       const { createToolCorpus } = await import("@/lib/synthesis/tool-corpus");
       const { createImportedRuns } = await import("@/lib/ledger/imported-runs");
       const { createOnboardingService } = await import("@/lib/console/onboarding/core-service");
+      const { getConfig } = await import("@/config");
       composition.connect({
         toolCorpus: createToolCorpus(),
         importedRuns: createImportedRuns(),
         onboarding: createOnboardingService(),
+        // The value the configuration forces for a core flag, for the edition's own flag reads.
+        forcedFlag: (flag) => getConfig().flags[flag],
       });
     }
     // An edition's MCP tools are checked now, so a bad one stops startup, not a client's call.
@@ -251,19 +264,21 @@ export async function assertComposition(): Promise<void> {
 }
 
 /**
- * What the open-source edition does for itself at boot, by this process's role (`APP_ROLE`,
- * `lib/jobs/boot-plan.ts`): apply migrations (on by default for OSS,
- * `DATABASE_MIGRATE_ON_BOOT=0` opts out; the worker never migrates, the web process does),
- * then run the cron tick in process (`RATEL_CRON=inprocess`, the OSS default) or, as the
+ * What the open-source edition does for itself at boot, by this process's role (`app.role`,
+ * APP_ROLE, `lib/jobs/boot-plan.ts`): apply migrations (on by default for OSS,
+ * `database.migrateOnBoot` false opts out; the worker never migrates, the web process does),
+ * then run the cron tick in process (`jobs.cron` inprocess, the OSS default) or, as the
  * worker, the job loop. An API-only process starts neither: it only queues. A migration
- * failure or an external scheduler with no `CRON_SECRET` exits, like a bad composition: never
- * serve a misconfigured server. Nothing here runs without a DATABASE_URL.
+ * failure or an external scheduler with no `jobs.cronSecret` exits, like a bad composition:
+ * never serve a misconfigured server. Nothing here runs without a `database.url`.
  *
  * `flushTelemetry` is what `registerNodeInstrumentation` returned: the worker runs it after its
  * last step, before it exits.
  */
 export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promise<void> {
-  if (!process.env.DATABASE_URL) return;
+  const { getConfig } = await import("@/config");
+  const url = getConfig().database.url;
+  if (!url) return;
   const { exposureWarnings } = await import("@/lib/platform/deployment-config");
   for (const warning of exposureWarnings()) console.warn(`[deployment] ${warning}`);
   const { bootPlan } = await import("@/lib/jobs/boot-plan");
@@ -271,7 +286,7 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
   if (plan.migrate) {
     const { runMigrations } = await import("@/lib/platform/db/migrate");
     try {
-      await runMigrations({ url: process.env.DATABASE_URL });
+      await runMigrations({ url });
     } catch (error) {
       console.error("[migrate] failed; refusing to serve against a mismatched schema");
       console.error(error instanceof Error ? error.message : error);

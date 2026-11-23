@@ -88,5 +88,6 @@ export function contextFor(
 
 /** Floors with some values replaced, for at-the-floor tests. */
 export function withFloors<K extends keyof Floors>(kind: K, values: Partial<Floors[K]>): Floors {
-  return { ...DEFAULT_FLOORS, [kind]: { ...DEFAULT_FLOORS[kind], ...values } };
+  const floors: Readonly<Record<string, number>> = DEFAULT_FLOORS[kind];
+  return { ...DEFAULT_FLOORS, [kind]: { ...floors, ...values } };
 }

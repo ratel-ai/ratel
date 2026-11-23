@@ -122,7 +122,7 @@ test("tools/list exposes every operation as its own tool, plus whoami", async ()
   const { body } = await call("tools/list");
   const names: string[] = body.result.tools.map((tool: { name: string }) => tool.name);
 
-  // App-only operations (a view's own reads) are listed only with FF_MCP_APPS on.
+  // App-only operations (a view's own reads) are listed only with mcpApps on.
   assert.equal(
     names.length,
     assembleOperations().filter((operation) => !operation.appOnly).length + 1,
@@ -334,13 +334,13 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
   const keys = body.result.structuredContent.data.flags
     .map((flag: { key: string }) => flag.key)
     .sort();
-  // Owned: the deployment's FF_* switches, not upstream's flag service.
+  // Owned: the deployment's configured switches, not upstream's flag service.
   assert.deepEqual(keys, [
-    "FF_AGENTS_PAGES",
-    "FF_EVAL_GATE",
-    "FF_MCP_APPS",
-    "FF_RANKING_CATALOG_DRIFT",
-    "FF_TOOL_RUN_INSIGHTS",
+    "agentsPages",
+    "evalGate",
+    "mcpApps",
+    "rankingCatalogDrift",
+    "toolRunInsights",
   ]);
 });
 

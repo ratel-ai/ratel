@@ -39,7 +39,7 @@ sees on their own dashboard. Do not add totals from the two together.
 Tools that change something say so in their description.`;
 
 /**
- * Added to the instructions with `FF_MCP_APPS` on, for a client that shows views
+ * Added to the instructions with `mcpApps` on, for a client that shows views
  * (lib/mcp/apps/client-views.ts). Plain, not hedged: a hedged line ("where the
  * client supports…") left the model unsure and it restated every row (RW-54).
  */
@@ -69,7 +69,7 @@ export interface McpServerDeps {
   projectOwner?: DispatchDeps["projectOwner"];
   onOutcome?: DispatchDeps["onOutcome"];
   /**
-   * The MCP Apps views to publish (`FF_MCP_APPS`). Absent, the server
+   * The MCP Apps views to publish (`mcpApps`). Absent, the server
    * declares no resources and no tool carries a view: exactly the server
    * without the flag.
    */

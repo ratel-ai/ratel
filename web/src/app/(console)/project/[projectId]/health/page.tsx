@@ -80,7 +80,7 @@ export default async function AgentHealthPage({
   const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
-  // FF_TOOL_RUN_INSIGHTS (RC-828): a reading from 10 turns on shows, marked low confidence.
+  // toolRunInsights (RC-828): a reading from 10 turns on shows, marked low confidence.
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
     : undefined;

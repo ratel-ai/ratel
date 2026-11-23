@@ -1,4 +1,6 @@
+import { getConfig } from "@/config";
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
+import type { FlagConfig } from "@/lib/platform/experimental-features";
 import { toolRunInsightsOn } from "@/lib/platform/tool-run-insights-flag";
 import type { WorkflowConfig } from "./workflows/types";
 
@@ -22,15 +24,13 @@ import type { WorkflowConfig } from "./workflows/types";
  *   agent ("draft_fix" reads "Draft fix") until the labeller names it from
  *   its asks.
  *
- * Owned (ADR-0004): the switch is the core's `FF_TOOL_RUN_INSIGHTS`
- * (`lib/platform/tool-run-insights-flag.ts`), off by default: the environment
+ * Owned (ADR-0004): the switch is the core's `toolRunInsights`
+ * (`lib/platform/tool-run-insights-flag.ts`), off by default: the configuration
  * without the edition's flags port, else the edition decides it for the
- * project and organization, after any `FF_*` value the operator set.
+ * project and organization, after any value the operator forced.
  * The functions keep upstream's names and arguments, so every caller stays
- * upstream's; the last argument is the environment instead of the flag deps.
+ * upstream's; the last argument is the configuration instead of the flag deps.
  */
-
-type Env = Record<string, string | undefined>;
 
 /**
  * The mining config of a project with the flag on: three runs make a task,
@@ -45,31 +45,33 @@ export const TOOL_RUN_MINING: Readonly<Partial<WorkflowConfig>> = Object.freeze(
 export async function toolRunInsightsEnabled(
   projectId: string,
   organization?: unknown,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
   const organizationId = organizationIdOf(organization);
-  return toolRunInsightsOn(organizationId ? { projectId, organizationId } : { projectId }, { env });
+  return toolRunInsightsOn(organizationId ? { projectId, organizationId } : { projectId }, {
+    config,
+  });
 }
 
 /** The flag for a project. Never throws. */
 export async function toolRunInsightsForProject(
   projectId: string,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return toolRunInsightsEnabled(projectId, undefined, env);
+  return toolRunInsightsEnabled(projectId, undefined, config);
 }
 
 /** The mining config for the project's signal run: {@link TOOL_RUN_MINING} with the flag on, else null (the defaults). */
 export async function workflowMiningFor(
   projectId: string,
   organization?: unknown,
-  env: Env = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<Partial<WorkflowConfig> | null> {
   return withFeatureSpan(
     "tool_run_insights",
     "mining_config",
     async (span) => {
-      const enabled = await toolRunInsightsEnabled(projectId, organization, env);
+      const enabled = await toolRunInsightsEnabled(projectId, organization, config);
       span.setAttribute("tool_run_insights.enabled", enabled);
       return enabled ? TOOL_RUN_MINING : null;
     },

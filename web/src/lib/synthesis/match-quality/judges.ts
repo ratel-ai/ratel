@@ -1,9 +1,7 @@
-import { configured } from "@/lib/readings/decisions/engine";
+import { type Config, getConfig } from "@/config";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
 import { OPENAI_USD_PER_INPUT_TOKEN } from "@/lib/readings/decisions/openai";
 import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
-
-type Env = Record<string, string | undefined>;
 
 /** Per-run settings the engine is built with. */
 export interface JudgeRunOptions {
@@ -19,15 +17,15 @@ const MATCH_QUALITY_JUDGE_FEATURE = "match_quality_judge";
  * judging. Owned (ADR-0004): OpenAI is the one decision engine here.
  */
 export function resolveJudgeEngine(
-  env: Env = process.env,
+  config: Pick<Config, "openai"> = getConfig(),
   run: JudgeRunOptions = {},
 ): JudgeEngine | undefined {
-  const apiKey = configured(env.OPENAI_API_KEY);
+  const { apiKey, baseUrl, decisionsModel } = config.openai;
   if (!apiKey) return undefined;
   return openaiJudgeEngine({
     apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL),
-    model: configured(env.OPENAI_DECISIONS_MODEL),
+    baseUrl,
+    model: decisionsModel,
     feature: MATCH_QUALITY_JUDGE_FEATURE,
     ...(run.budgetUsd === undefined
       ? {}

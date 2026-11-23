@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { getConfig } from "@/config";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
@@ -265,7 +266,7 @@ export function anthropicAnalystDeps(model: string): AnalystDeps {
 }
 
 export function defaultAnalystDeps(): AnalystDeps {
-  return anthropicAnalystDeps(process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL);
+  return anthropicAnalystDeps(getConfig().models.analyst || DEFAULT_ANALYST_MODEL);
 }
 
 /** Run the analyst over one assembled context. */

@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import { type CousageOptions, mineCousage } from "@/lib/readings/tool-explorer/cousage";
 import {
   countIntentTools,
@@ -57,9 +57,9 @@ import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
  */
 
 /** Edge rows stored per scope, most counted first. */
-export const MAX_EDGE_ROWS = Math.floor(envNumber("TOOL_EXPLORER_MAX_EDGE_ROWS", 20_000));
+export const MAX_EDGE_ROWS = getConfig().toolExplorer.maxEdgeRows;
 /** Set rows stored per scope, most supported first. */
-export const MAX_SET_ROWS = Math.floor(envNumber("TOOL_EXPLORER_MAX_SET_ROWS", 10_000));
+export const MAX_SET_ROWS = getConfig().toolExplorer.maxSetRows;
 
 export interface ExplorerAnalysisOptions {
   workflows?: readonly ExplorerWorkflowCore[];

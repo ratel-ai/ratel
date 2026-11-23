@@ -44,11 +44,11 @@ export function FixesPage({
   projectId: string;
   model: FixesModel;
   now: string;
-  /** Each fix's eval gate badge; null when `FF_EVAL_GATE` is off. */
+  /** Each fix's eval gate badge; null when `evalGate` is off. */
   evalBadges?: Readonly<Record<string, EvalBadge>> | null;
   /** Each shipped fix's newest shipment; null when none. */
   shipped?: Readonly<Record<string, FixShipped>> | null;
-  /** Each fix's tasks link to their simulations; `FF_EVAL_GATE`. */
+  /** Each fix's tasks link to their simulations; `evalGate`. */
   taskSimulations?: boolean;
   /** Where the jobs that find fixes stand; null reads as idle. */
   progress?: SectionProgress | null;

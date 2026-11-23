@@ -1,5 +1,5 @@
+import { getConfig } from "@/config";
 import type { TurnEndedBy, TurnSource } from "@/lib/ledger/types";
-import { envNumber } from "@/lib/platform/env-number";
 
 /**
  * Which runs workflows are mined from, decided from how the runs were cut.
@@ -19,11 +19,11 @@ import { envNumber } from "@/lib/platform/env-number";
  */
 
 /** Exact multi-tool runs that are enough to mine from without the guessed ones. */
-export const MIN_EXACT_RUNS = Math.floor(envNumber("TRACE_SIGNALS_MIN_EXACT_RUNS", 30));
+export const MIN_EXACT_RUNS = getConfig().traceSignals.minExactRuns;
 /** Guessed runs needed before their endings say anything about mixing. */
-export const MIN_INFERRED_FOR_MIX = Math.floor(envNumber("TRACE_SIGNALS_MIN_INFERRED_FOR_MIX", 20));
+export const MIN_INFERRED_FOR_MIX = getConfig().traceSignals.minInferredForMix;
 /** Share of guessed runs cut at a cap from which runs read as mixed together. */
-export const MIXED_CAP_SHARE = envNumber("TRACE_SIGNALS_MIXED_CAP_SHARE", 0.25);
+export const MIXED_CAP_SHARE = getConfig().traceSignals.mixedCapShare;
 
 /** all: every run; exact: only runs with exact boundaries; none: workflows hidden. */
 export type WorkflowBasis = "all" | "exact" | "none";

@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import type { DrainStep } from "@/lib/contracts/registry";
 import { type DrainCronDeps, dataRetentionEnabled, runDrainTick } from "./drain";
 import type { BackgroundObservabilityDeps } from "./observability";
+
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const config = (env: Record<string, string> = {}) => resolveConfig({ env });
 
 function observability() {
   const events: Array<{
@@ -181,8 +185,8 @@ test("the heartbeat carries upstream's per-area error lists; a step upstream did
 });
 
 test("data retention is opt-in", () => {
-  assert.equal(dataRetentionEnabled({}), false);
-  assert.equal(dataRetentionEnabled({ DATA_RETENTION_ENABLED: "0" }), false);
-  assert.equal(dataRetentionEnabled({ DATA_RETENTION_ENABLED: "1" }), true);
-  assert.equal(dataRetentionEnabled({ DATA_RETENTION_ENABLED: " 1 " }), true);
+  assert.equal(dataRetentionEnabled(config({})), false);
+  assert.equal(dataRetentionEnabled(config({ DATA_RETENTION_ENABLED: "0" })), false);
+  assert.equal(dataRetentionEnabled(config({ DATA_RETENTION_ENABLED: "1" })), true);
+  assert.equal(dataRetentionEnabled(config({ DATA_RETENTION_ENABLED: " 1 " })), true);
 });

@@ -1,4 +1,5 @@
 import { eeComposition as seamEe } from "#ee-composition";
+import { getConfig } from "@/config";
 import { ossEmbeddingProvider } from "@/lib/adapters/oss/embedding-provider";
 import { ossEntitlements } from "@/lib/adapters/oss/entitlements";
 import { ossRegistry } from "@/lib/adapters/oss/registry";
@@ -192,6 +193,6 @@ export function createComposition(
   return { ...(ports as CompositionPorts), edition, nav, organizationNav, projectNav };
 }
 
-export const composition = createComposition(process.env.RATEL_COMPOSITION || "oss");
+export const composition = createComposition(getConfig().app.composition);
 
 export type { CompositionPorts } from "@/lib/contracts/composition";

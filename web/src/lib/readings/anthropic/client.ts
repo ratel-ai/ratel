@@ -1,8 +1,8 @@
 import AnthropicBedrock from "@anthropic-ai/bedrock-sdk";
 import Anthropic from "@anthropic-ai/sdk";
+import { type Config, getConfig } from "@/config";
 import { anthropicBackend } from "@/lib/platform/anthropic-backend";
 import { asModelNotEnabled, modelsSeenNotEnabled } from "@/lib/platform/anthropic-errors";
-import { configured } from "@/lib/platform/env-configured";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 
 /**
@@ -46,8 +46,6 @@ export type AnthropicClientOptions = {
   fetch?: typeof fetch;
 };
 
-type Env = Record<string, string | undefined>;
-
 /** The fewest retries a Bedrock call gets for a 429, a 5xx or a timeout (the SDK's default). */
 export const BEDROCK_MIN_RETRIES = 2;
 
@@ -76,22 +74,19 @@ const EU_PROFILES: Readonly<Record<string, string>> = {
 /** A client for this deployment's backend, or null when it has none. */
 export function anthropicClient(
   options: AnthropicClientOptions = {},
-  env: Env = process.env,
+  config: Pick<Config, "anthropic"> = getConfig(),
 ): AnthropicClient | null {
-  const backend = configured(env.ANTHROPIC_BACKEND);
-  if (backend === "bedrock")
-    return configured(env.AWS_BEARER_TOKEN_BEDROCK) ? null : euBedrockClient(options);
+  const { backend, apiKey, bedrockBearerToken } = config.anthropic;
+  if (backend === "bedrock") return bedrockBearerToken ? null : euBedrockClient(options);
   if (backend !== undefined) return null;
-  const apiKey = configured(env.ANTHROPIC_API_KEY);
   return apiKey ? new Anthropic({ ...options, apiKey, openTelemetry: false }) : null;
 }
 
 /** Whether this deployment can call Claude at all. */
-export function anthropicConfigured(env: Env = process.env): boolean {
-  const backend = configured(env.ANTHROPIC_BACKEND);
-  if (backend !== undefined)
-    return backend === "bedrock" && !configured(env.AWS_BEARER_TOKEN_BEDROCK);
-  return configured(env.ANTHROPIC_API_KEY) !== undefined;
+export function anthropicConfigured(config: Pick<Config, "anthropic"> = getConfig()): boolean {
+  const { backend, apiKey, bedrockBearerToken } = config.anthropic;
+  if (backend !== undefined) return backend === "bedrock" && !bedrockBearerToken;
+  return apiKey !== undefined;
 }
 
 /**
@@ -99,8 +94,8 @@ export function anthropicConfigured(env: Env = process.env): boolean {
  * model with an EU profile (on the API too, so a choice made locally also runs
  * in prod). Empty when the deployment has no client.
  */
-export function servedClaudeModels(env: Env = process.env): string[] {
-  return anthropicConfigured(env) ? [...CLAUDE_MODELS] : [];
+export function servedClaudeModels(config: Pick<Config, "anthropic"> = getConfig()): string[] {
+  return anthropicConfigured(config) ? [...CLAUDE_MODELS] : [];
 }
 
 /** Every Claude model id Cloud can call on either backend. */
@@ -111,9 +106,9 @@ export const CLAUDE_MODELS: readonly string[] = Object.keys(EU_PROFILES);
  * account: those named in `BEDROCK_MODELS_NOT_ENABLED` (comma-separated), and
  * those this process saw refused with `model_not_enabled`. Empty on the API.
  */
-export function modelsNotEnabled(env: Env = process.env): Set<string> {
-  if (anthropicBackend(env) !== "bedrock") return new Set();
-  const listed = (configured(env.BEDROCK_MODELS_NOT_ENABLED) ?? "")
+export function modelsNotEnabled(config: Pick<Config, "anthropic"> = getConfig()): Set<string> {
+  if (anthropicBackend(config) !== "bedrock") return new Set();
+  const listed = (config.anthropic.bedrockModelsNotEnabled ?? "")
     .split(",")
     .map((model) => model.trim())
     .filter(Boolean);

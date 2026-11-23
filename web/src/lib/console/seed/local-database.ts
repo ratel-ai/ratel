@@ -7,7 +7,11 @@
  * name its host in the query (`?host=`, `?hostaddr=`), which the Postgres
  * clients prefer over the authority, and a pattern that finds `@localhost`
  * anywhere passes `postgres://u:p@prod.example.com/db?application_name=x@localhost/`.
+ *
+ * The URL is `database.url` (`web/src/config.ts`). `PGHOST` and `PGHOSTADDR` are read from the
+ * environment, where libpq reads them (an exception in `web/src/config.ts`).
  */
+import { getConfig } from "@/config";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -62,8 +66,12 @@ export function localDatabaseProblem(
 }
 
 /** Throw unless the configured database is on this machine. `purpose` finishes "refusing to ...". */
-export function assertLocalDatabase(purpose: string, env: Environment = process.env): void {
-  const problem = localDatabaseProblem(env.DATABASE_URL, env);
+export function assertLocalDatabase(
+  purpose: string,
+  url: string | undefined = getConfig().database.url,
+  env: Environment = process.env,
+): void {
+  const problem = localDatabaseProblem(url, env);
   if (problem)
     throw new Error(
       `refusing to ${purpose}: ${problem}. Point DATABASE_URL at your local Postgres.`,

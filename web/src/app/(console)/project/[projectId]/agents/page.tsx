@@ -24,7 +24,7 @@ export const metadata = { title: "Agents" };
 type Loaded = { list: AgentList; handoffs: AgentHandoff[]; extras: AgentListExtras } | null;
 
 /**
- * The project's agents and their handoffs (RC-775), behind `FF_AGENTS_PAGES`, in the approved
+ * The project's agents and their handoffs (RC-775), behind `agentsPages`, in the approved
  * RP-25 design: an admin's list always reads the hidden agents too, to count them for
  * "Hidden (n)", and shows them only with `?showHidden=1`.
  */

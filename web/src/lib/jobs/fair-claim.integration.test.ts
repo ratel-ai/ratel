@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { claimNextQueuedJob, jobsRunningPerProject, markJobDone } from "@/lib/jobs/queries";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+
+/** The settings `env` resolves to (`web/src/config.ts`). */
+const config = (env: Record<string, string> = {}) => resolveConfig({ env });
 
 /** RC-33 against real PGlite: one busy project cannot take every drain, and a drain takes turns. */
 
@@ -34,10 +38,13 @@ async function setup(): Promise<Db> {
 }
 
 test("the cap defaults to one running job per project and reads JOBS_RUNNING_PER_PROJECT", () => {
-  assert.equal(jobsRunningPerProject({}), 1);
-  assert.equal(jobsRunningPerProject({ JOBS_RUNNING_PER_PROJECT: "3" }), 3);
-  assert.equal(jobsRunningPerProject({ JOBS_RUNNING_PER_PROJECT: "0" }), 0);
-  assert.equal(jobsRunningPerProject({ JOBS_RUNNING_PER_PROJECT: "lots" }), 1);
+  assert.equal(jobsRunningPerProject(config({})), 1);
+  assert.equal(jobsRunningPerProject(config({ JOBS_RUNNING_PER_PROJECT: "3" })), 3);
+  assert.equal(jobsRunningPerProject(config({ JOBS_RUNNING_PER_PROJECT: "0" })), 0);
+  assert.throws(
+    () => jobsRunningPerProject(config({ JOBS_RUNNING_PER_PROJECT: "lots" })),
+    /JOBS_RUNNING_PER_PROJECT/,
+  );
 });
 
 test("while a busy project runs a job, a second drain gets the quiet project's job, not the busy one's next", async () => {

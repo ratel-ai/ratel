@@ -43,6 +43,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: {
       "#ee-composition": eeCompositionTarget,
+      // The settings (src/config.ts) read files: a browser bundle gets the defaults instead
+      // (src/config-defaults.ts), as it read an empty environment before.
+      "@/config": { browser: "./src/config-defaults.ts" },
     },
   },
   // The public SDK paths (ADR-0007): the SDK posts traces and lifecycle logs, pulls the

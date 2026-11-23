@@ -85,7 +85,7 @@ const reportMissingSaltOnce = createMissingSaltReporter();
 
 export interface BuildJobDeps {
   /**
-   * `FF_TOOL_RUN_INSIGHTS` for the project (RC-742, upstream's
+   * `toolRunInsights` for the project (RC-742, upstream's
    * `cloud-tool-run-insights`): on, the build also reads agent runs
    * (`agent_run`), so a run with no tool call makes a turn.
    * Never throws: a failed decision is off.

@@ -3,9 +3,10 @@ import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
+import { type Config, getConfig } from "@/config";
 import { sslConfig } from "@/lib/platform/db/client";
 
-/** Where the open-source migrations live; `MIGRATIONS_DIR` overrides it in the image. */
+/** Where the open-source migrations live; `database.migrationsDir` (MIGRATIONS_DIR) overrides it in the image. */
 export const DEFAULT_MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "migrations");
 
 /** One advisory lock key for every Ratel replica that migrates the same database. */
@@ -55,7 +56,7 @@ export async function runMigrations({
       await withMigrationLock(client, () =>
         migrate(drizzle(client), {
           migrationsFolder:
-            migrationsFolder ?? process.env.MIGRATIONS_DIR ?? DEFAULT_MIGRATIONS_DIR,
+            migrationsFolder ?? getConfig().database.migrationsDir ?? DEFAULT_MIGRATIONS_DIR,
         }),
       );
     } finally {
@@ -67,17 +68,14 @@ export async function runMigrations({
 }
 
 /**
- * Whether the server migrates at boot. `DATABASE_MIGRATE_ON_BOOT=1` turns it on and `0` off.
- * Unset: on for the open-source edition, where a server that starts against an empty schema
- * and fails on the first request is the worse default; off for Cloud, which migrates as a
- * deploy step. Never without a `DATABASE_URL`.
+ * Whether the server migrates at boot. `database.migrateOnBoot` (DATABASE_MIGRATE_ON_BOOT)
+ * turns it on or off. Unset: on for the open-source edition, where a server that starts against
+ * an empty schema and fails on the first request is the worse default; off for Cloud, which
+ * migrates as a deploy step. Never without a `database.url`.
  */
 export function migrateOnBootEnabled(
-  env: Record<string, string | undefined> = process.env,
+  config: Pick<Config, "app" | "database"> = getConfig(),
 ): boolean {
-  if (!env.DATABASE_URL) return false;
-  const flag = env.DATABASE_MIGRATE_ON_BOOT?.trim();
-  if (flag === "1") return true;
-  if (flag === "0") return false;
-  return (env.RATEL_COMPOSITION || "oss") === "oss";
+  if (!config.database.url) return false;
+  return config.database.migrateOnBoot ?? config.app.composition === "oss";
 }

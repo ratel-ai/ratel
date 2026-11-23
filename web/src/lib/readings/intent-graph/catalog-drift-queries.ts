@@ -1,8 +1,9 @@
 import { and, eq, gte } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { runtimeCatalogEntries } from "@/lib/ingest/runtime-catalog/schema";
 import { toolUsageCounters } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
-import { featureEnabled } from "@/lib/platform/experimental-features";
+import { type FlagConfig, featureEnabled } from "@/lib/platform/experimental-features";
 import { type CatalogDrift, GONE_TOOL_GRACE_DAYS, goneTools } from "./catalog-drift";
 
 /** The facts the gone-tool rule (./catalog-drift.ts) reads, and its switch. */
@@ -10,9 +11,9 @@ import { type CatalogDrift, GONE_TOOL_GRACE_DAYS, goneTools } from "./catalog-dr
 /**
  * Upstream's `cloud-ranking-catalog-drift` (RC-721), still a rollout flag there. Owned
  * (ADR-0004): here it is the deployment switch, off by default (in the open-source edition also
- * `RATEL_EXPERIMENTAL_FEATURES`).
+ * `experimentalFeatures`).
  */
-export const CATALOG_DRIFT_SWITCH = "FF_RANKING_CATALOG_DRIFT" as const;
+export const CATALOG_DRIFT_SWITCH = "rankingCatalogDrift" as const;
 
 export type CatalogDriftDb = Pick<ReturnType<typeof getDb>, "select" | "selectDistinct">;
 
@@ -67,7 +68,7 @@ export async function loadCatalogDrift(
 export async function catalogDriftEnabledForActor(
   projectId: string,
   actor: string,
-  env: Record<string, string | undefined> = process.env,
+  config: FlagConfig = getConfig(),
 ): Promise<boolean> {
-  return featureEnabled(CATALOG_DRIFT_SWITCH, { projectId, actor }, { env });
+  return featureEnabled(CATALOG_DRIFT_SWITCH, { projectId, actor }, { config });
 }

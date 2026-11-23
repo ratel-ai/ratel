@@ -6,7 +6,7 @@
  *   pnpm --filter @ratel/platform seed --drain 4
  *   pnpm --filter @ratel/platform seed:task-loop --project <id or slug> [--no-models]
  *
- *   --no-models   local stand-ins for the drafts and simulations (EVAL_GATE_MOCK_MODEL=1, the
+ *   --no-models   local stand-ins for the drafts and simulations (evalGate.mockModel, the
  *                 model keys unset), and no live judging: nothing calls out
  *
  * Then start the app with RATEL_EXPERIMENTAL_FEATURES=1 to open the pages it prints.
@@ -30,13 +30,9 @@ async function main() {
     );
   }
   assertLocalDatabase("seed the task loop demo");
-  process.env.FF_EVAL_GATE = "true";
+  // The seed forces the eval gate on, and with --no-models the stand-ins, in the configuration
+  // it hands the jobs (lib/console/seed/task-loop.ts).
   const noModels = argv.includes("--no-models");
-  if (noModels) {
-    process.env.EVAL_GATE_MOCK_MODEL = "1";
-    for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_BACKEND", "OPENAI_API_KEY"])
-      delete process.env[key];
-  }
   await seedTaskLoop(getDb(), ref, {
     noModels,
     out: (line) => process.stdout.write(`${line}\n`),

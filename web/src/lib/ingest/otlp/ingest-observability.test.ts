@@ -75,19 +75,19 @@ test("a sampled-in rejection emits the taxonomy event", async () => {
 
 test("rejection sampling honours the one-in-N rate", () => {
   assert.equal(
-    shouldSampleIngestRejection(() => 0, "100"),
+    shouldSampleIngestRejection(() => 0, 100),
     true,
   ); // 0 < 1/100
   assert.equal(
-    shouldSampleIngestRejection(() => 0.5, "100"),
+    shouldSampleIngestRejection(() => 0.5, 100),
     false,
   ); // 0.5 >= 1/100
   assert.equal(
-    shouldSampleIngestRejection(() => 0, "0"),
+    shouldSampleIngestRejection(() => 0, 0),
     false,
   ); // disabled
   assert.equal(
-    shouldSampleIngestRejection(() => 0.999, "1"),
+    shouldSampleIngestRejection(() => 0.999, 1),
     true,
   ); // keep all
 });

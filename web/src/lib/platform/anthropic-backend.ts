@@ -1,4 +1,4 @@
-import { configured } from "@/lib/platform/env-configured";
+import { type Config, getConfig } from "@/config";
 
 /**
  * Which backend serves this deployment's Claude calls. A leaf module, so the
@@ -9,9 +9,9 @@ import { configured } from "@/lib/platform/env-configured";
 
 export type AnthropicBackend = "api" | "bedrock";
 
-type Env = Record<string, string | undefined>;
-
-/** `bedrock` when `ANTHROPIC_BACKEND=bedrock`, else `api`: the only backend a client can then have. */
-export function anthropicBackend(env: Env = process.env): AnthropicBackend {
-  return configured(env.ANTHROPIC_BACKEND) === "bedrock" ? "bedrock" : "api";
+/** `bedrock` when `anthropic.backend` (ANTHROPIC_BACKEND) is `bedrock`, else `api`: the only backend a client can then have. */
+export function anthropicBackend(
+  config: Pick<Config, "anthropic"> = getConfig(),
+): AnthropicBackend {
+  return config.anthropic.backend === "bedrock" ? "bedrock" : "api";
 }

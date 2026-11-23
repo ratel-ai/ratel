@@ -16,7 +16,7 @@ const FIX_ID = /^(rewrite|craft|issue|intent):[^\s]{1,200}$/;
 /**
  * A fix's eval gate badge (`?fix=<fix id>`), read by the eval page while a
  * simulation runs so it can refresh when it lands. A read; no product event.
- * Behind `FF_EVAL_GATE`: off reads as not found. Owned (ADR-0004): the project
+ * Behind `evalGate`: off reads as not found. Owned (ADR-0004): the project
  * comes from the console scope.
  */
 export const GET = withRequestLog(handleGet);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -14,8 +15,8 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0004): the gate is FF_EVAL_GATE from the environment, not an organization flag.
-const FLAGS_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
+// Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
+const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("the score job writes nothing when the eval gate is off", async () => {
   const { client, db } = await setup();
@@ -30,7 +31,9 @@ test("the score job writes nothing when the eval gate is off", async () => {
       },
       db,
     );
-    const flagDeps: OrganizationFlagDeps = { FF_EVAL_GATE: "0" };
+    const flagDeps: OrganizationFlagDeps = resolveConfig({
+      override: { flags: { evalGate: false } },
+    });
     assert.deepEqual(
       await scoreTasksJob(PROJECT, {
         db,

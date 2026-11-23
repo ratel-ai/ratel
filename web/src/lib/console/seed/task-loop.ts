@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { type Config, getConfig } from "@/config";
 import type { JobHandler } from "@/lib/contracts/registry";
 import { markJobDone } from "@/lib/jobs/queries";
 import { drainJobs, type JobKind, type JobStore } from "@/lib/jobs/runner";
@@ -29,7 +30,8 @@ import { scorersFor, upsertScorer } from "@/lib/views/task-scorers/store";
  * The task loop demo, run through the production jobs on a seeded project: 14 UTC days of live
  * scores, the eval sets, a draft, two fix simulations and a shipment dated eight days ago with
  * its post-ship measure. Owned (ADR-0004): upstream's `lib/seed/task-loop.ts`. The gates are
- * `FF_EVAL_GATE` (set here, as upstream sets its Cloud flag); a job runs
+ * `evalGate` (forced on in the configuration the jobs get here, as upstream sets its Cloud
+ * flag; with `noModels` also the local stand-in models and no model keys); a job runs
  * as one row through this repository's runner, which is the part of upstream's
  * `lib/seed/pipeline-runner.ts` (excluded) the demo needs (`runStep`, `resolveProject`); the
  * organization comes from the session port.
@@ -48,7 +50,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Run the demo through the production jobs. This function accepts test data only. */
 export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOptions = {}) {
-  process.env.FF_EVAL_GATE = "true";
+  const config = demoConfig(options.noModels ?? false);
   const project = await resolveProject(db, ref);
   const now = options.now ?? new Date();
   const out = options.out ?? (() => undefined);
@@ -86,6 +88,7 @@ export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOpt
   if (!older) throw new Error("The demo needs two supported fixes with tasks.");
   const deps: TaskSimulationDeps = {
     db,
+    flagDeps: config,
     now: () => now,
     loadFix: async (_projectId, fixId) => {
       const fix = fixes.find((item) => item.id === fixId);
@@ -126,8 +129,9 @@ export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOpt
       }),
     );
   }
-  await enqueueDueTaskEvalSets(project.id, { db, now: () => now });
-  for (const item of tasks) await enqueueTaskEvalRefreshJob(project.id, item.id, { db });
+  await enqueueDueTaskEvalSets(project.id, { db, flagDeps: config, now: () => now });
+  for (const item of tasks)
+    await enqueueTaskEvalRefreshJob(project.id, item.id, { db, flagDeps: config });
   const refreshes = await queued("refresh_task_eval_set");
   for (const job of refreshes)
     await step(
@@ -256,6 +260,7 @@ export async function seedTaskLoop(db: Db, ref: string, options: TaskLoopSeedOpt
         (record) =>
           draftFixJob(project.id, record.payload, {
             ...deps,
+            config,
             ...(options.noModels ? { model: demoDraftModel(fix) } : {}),
           }),
         pending?.id,
@@ -406,4 +411,20 @@ async function insertRunning(
       returning id, payload`)
   ).rows;
   return rows[0]!;
+}
+
+/** This deployment's configuration with the eval gate on, and without models when asked. */
+function demoConfig(noModels: boolean): Config {
+  const base = getConfig();
+  return {
+    ...base,
+    flags: { ...base.flags, evalGate: true },
+    ...(noModels
+      ? {
+          evalGate: { ...base.evalGate, mockModel: true },
+          anthropic: { ...base.anthropic, backend: undefined, apiKey: undefined },
+          openai: { ...base.openai, apiKey: undefined },
+        }
+      : {}),
+  };
 }

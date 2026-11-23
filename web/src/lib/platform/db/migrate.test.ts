@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import {
   DEFAULT_MIGRATIONS_DIR,
   type LockClient,
@@ -47,16 +48,14 @@ test("a failing migration still releases the lock and rethrows", async () => {
 
 test("migrate on boot: on by default for OSS, off for Ratel, explicit flag wins, never without a database", () => {
   const url = { DATABASE_URL: "postgres://x" };
-  assert.equal(migrateOnBootEnabled({ ...url }), true);
-  assert.equal(migrateOnBootEnabled({ ...url, RATEL_COMPOSITION: "oss" }), true);
-  assert.equal(migrateOnBootEnabled({ ...url, RATEL_COMPOSITION: "cloud" }), false);
-  assert.equal(migrateOnBootEnabled({ ...url, DATABASE_MIGRATE_ON_BOOT: "0" }), false);
-  assert.equal(
-    migrateOnBootEnabled({ ...url, RATEL_COMPOSITION: "cloud", DATABASE_MIGRATE_ON_BOOT: "1" }),
-    true,
-  );
-  assert.equal(migrateOnBootEnabled({ DATABASE_MIGRATE_ON_BOOT: "1" }), false);
-  assert.equal(migrateOnBootEnabled({}), false);
+  const on = (env: Record<string, string>) => migrateOnBootEnabled(resolveConfig({ env }));
+  assert.equal(on({ ...url }), true);
+  assert.equal(on({ ...url, RATEL_COMPOSITION: "oss" }), true);
+  assert.equal(on({ ...url, RATEL_COMPOSITION: "cloud" }), false);
+  assert.equal(on({ ...url, DATABASE_MIGRATE_ON_BOOT: "0" }), false);
+  assert.equal(on({ ...url, RATEL_COMPOSITION: "cloud", DATABASE_MIGRATE_ON_BOOT: "1" }), true);
+  assert.equal(on({ DATABASE_MIGRATE_ON_BOOT: "1" }), false);
+  assert.equal(on({}), false);
 });
 
 // The migrator applies only entries newer than the last one it recorded, so a lower `when` is

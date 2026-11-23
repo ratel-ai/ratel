@@ -3,7 +3,7 @@
 The drafted text of a fix whose change is a rewrite: a better tool description, or the words
 that tell two tools apart. With a ready draft, the eval gate simulates the drafted change
 instead of refusing the fix as "nothing to simulate". Ported from upstream `lib/fix-drafts`;
-everything runs only when the eval gate is on (`FF_EVAL_GATE`, `eval-gate/gate.ts`).
+everything runs only when the eval gate is on (`evalGate`, `eval-gate/gate.ts`).
 
 | File | What it holds |
 |---|---|

@@ -34,7 +34,7 @@ type Loaded = {
 } | null;
 
 /**
- * The project's MCP servers (RC-777), behind `FF_AGENTS_PAGES`, in the approved RP-25 design:
+ * The project's MCP servers (RC-777), behind `agentsPages`, in the approved RP-25 design:
  * each server side with its calls per day, tools, calling agents (by their override names) and
  * last error.
  */

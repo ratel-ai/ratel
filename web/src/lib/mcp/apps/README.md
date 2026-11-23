@@ -1,7 +1,7 @@
 # MCP Apps on the Ratel MCP server
 
 Interactive views for MCP hosts (Claude, ChatGPT, VS Code…), per the MCP Apps
-extension (SEP-1865). Behind the `FF_MCP_APPS` switch (`flag.ts`), one switch
+extension (SEP-1865). Behind the `mcpApps` flag (`flag.ts`; `flags.mcpApps` in `web/src/config.ts`), one switch
 for the whole deployment and off by default (`RATEL_EXPERIMENTAL_FEATURES`
 turns it on too in the open-source edition). With it off the server is exactly
 what it was: `route-handler.apps.test.ts` pins initialize, tools/list and

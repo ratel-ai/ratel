@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
+import { resolveConfig } from "@/config";
 import { resolveTaskJudge, resolveTestDraftModel } from "@/lib/views/eval-gate/models";
 import { draftTestFromRun, TestDraftError } from "@/lib/views/task-evals/run-to-test";
 import { judgeTaskSample } from "@/lib/views/task-scorers/judge";
@@ -31,12 +32,16 @@ afterEach(() => {
 });
 
 test("with no key and no mock there is no task judge", () => {
-  assert.equal(resolveTaskJudge(NO_KEYS), null);
-  assert.equal(resolveTaskJudge({ ANTHROPIC_API_KEY: "REPLACE_ME" }), null, "the placeholder key");
+  assert.equal(resolveTaskJudge(resolveConfig({ env: NO_KEYS })), null);
+  assert.equal(
+    resolveTaskJudge(resolveConfig({ env: { ANTHROPIC_API_KEY: "REPLACE_ME" } })),
+    null,
+    "the placeholder key",
+  );
 });
 
 test("EVAL_GATE_MOCK_MODEL=1 gives the rule judge outside production", () => {
-  const judge = resolveTaskJudge({ ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" });
+  const judge = resolveTaskJudge(resolveConfig({ env: { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" } }));
   assert.equal(judge?.standIn, true);
 });
 
@@ -61,9 +66,16 @@ test("the live judge with no key reads nothing, writes nothing and calls nothing
 });
 
 test("with no key and no mock there is no test drafter; the stand-in only with the mock", () => {
-  assert.equal(resolveTestDraftModel(NO_KEYS), null);
-  assert.equal(resolveTestDraftModel({ ANTHROPIC_API_KEY: "REPLACE_ME" }), null);
-  assert.equal(resolveTestDraftModel({ ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" })?.standIn, true);
+  assert.equal(resolveTestDraftModel(resolveConfig({ env: NO_KEYS })), null);
+  assert.equal(
+    resolveTestDraftModel(resolveConfig({ env: { ANTHROPIC_API_KEY: "REPLACE_ME" } })),
+    null,
+  );
+  assert.equal(
+    resolveTestDraftModel(resolveConfig({ env: { ...NO_KEYS, EVAL_GATE_MOCK_MODEL: "1" } }))
+      ?.standIn,
+    true,
+  );
 });
 
 test("run-to-test with no key refuses before it reserves or calls anything", async () => {
@@ -90,7 +102,7 @@ test("run-to-test with no key refuses before it reserves or calls anything", asy
   await assert.rejects(
     draftTestFromRun("11111111-1111-4111-8111-111111111111", "task-a", "turn", {
       db,
-      flagDeps: { FF_EVAL_GATE: "1" },
+      flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
       model: null,
     }),
     (err: unknown) => err instanceof TestDraftError && /No model is configured/.test(err.message),

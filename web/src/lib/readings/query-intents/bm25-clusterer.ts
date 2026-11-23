@@ -1,4 +1,5 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
+import { CONFIG_DEFAULTS } from "@/config-defaults";
 import type {
   CanonicalAssignment,
   ClusterCandidate,
@@ -48,11 +49,11 @@ import { buildRelevanceIndex, tokenizeForRelevance } from "@/lib/readings/query-
  * and score 0. The only lexical lever is the optional {@link SynonymMap}.
  */
 
-/** Merge when the symmetric relevance is at least this. Env `RATEL_INTENT_BM25_THRESHOLD`. */
-export const BM25_CLUSTER_THRESHOLD = 0.6;
-/** Ambiguity band: two buckets over threshold and closer than this ⇒ singleton. Env
- * `RATEL_INTENT_BM25_MARGIN`. */
-export const BM25_CLUSTER_MARGIN = 0.1;
+/** Merge when the symmetric relevance is at least this. Config `intentEngine.bm25Threshold`. */
+export const BM25_CLUSTER_THRESHOLD = CONFIG_DEFAULTS.intentEngine.bm25Threshold;
+/** Ambiguity band: two buckets over threshold and closer than this ⇒ singleton. Config
+ * `intentEngine.bm25Margin`. */
+export const BM25_CLUSTER_MARGIN = CONFIG_DEFAULTS.intentEngine.bm25Margin;
 
 /** Stemmed token → canonical stemmed token ("subscription" → "plan"). Applied to
  * documents and queries alike. Empty by default; no map ships with the product. */
@@ -152,7 +153,10 @@ export class Bm25Clusterer implements Clusterer {
     const post = (bucket: Bucket, phrase: string) => {
       for (const token of this.tokenize(phrase)) {
         let set = postings.get(token);
-        if (!set) postings.set(token, (set = new Set()));
+        if (!set) {
+          set = new Set();
+          postings.set(token, set);
+        }
         set.add(bucket);
       }
     };
@@ -248,16 +252,14 @@ function clusterDocument(e: ClusterCanonical): string {
   return clusterPhrases(e).join("\n");
 }
 
-/** A clusterer tuned from env (`RATEL_INTENT_BM25_THRESHOLD`, `RATEL_INTENT_BM25_MARGIN`),
+/** A clusterer tuned from the config (`intentEngine.bm25Threshold`, `intentEngine.bm25Margin`),
  * the jobs-wiring entry point. */
-const unitInterval = (n: number) => n >= 0 && n <= 1;
-
 export function bm25ClustererFromEnv(
   opts: Pick<Bm25ClustererOptions, "onSummary" | "synonyms"> = {},
 ): Bm25Clusterer {
   return new Bm25Clusterer({
-    threshold: envNumber("RATEL_INTENT_BM25_THRESHOLD", BM25_CLUSTER_THRESHOLD, unitInterval),
-    margin: envNumber("RATEL_INTENT_BM25_MARGIN", BM25_CLUSTER_MARGIN, unitInterval),
+    threshold: getConfig().intentEngine.bm25Threshold,
+    margin: getConfig().intentEngine.bm25Margin,
     ...opts,
   });
 }

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
+import { resetConfigForTests } from "@/config";
 import { composition } from "@/lib/composition";
 import type { EditionUi } from "@/lib/contracts/composition";
 import type { SharedHealth } from "@/lib/views/health/shared-load";
@@ -31,16 +32,19 @@ function withShare(share: Partial<Share>): void {
 beforeEach(() => {
   // Never connected to: every case below stops before a query.
   process.env.DATABASE_URL = "postgres://nobody@127.0.0.1:1/none";
+  resetConfigForTests();
 });
 
 afterEach(() => {
   composition.ui = editionUi;
   if (databaseUrl === undefined) delete process.env.DATABASE_URL;
   else process.env.DATABASE_URL = databaseUrl;
+  resetConfigForTests();
 });
 
 test("without a database every link is unknown", async () => {
   delete process.env.DATABASE_URL;
+  resetConfigForTests();
   let asked = false;
   withShare({
     resolve: async () => {

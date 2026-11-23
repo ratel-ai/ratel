@@ -5,14 +5,19 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
+import { resolveConfig } from "@/config";
 import {
+  resolveRatelExportConfig as exportConfigOf,
   FilteredSpanProcessor,
   isModelCallSpan,
   MODEL_CALL_TRACER,
-  resolveRatelExportConfig,
   sameOrigin,
-  selfTelemetryProjectId,
 } from "@/lib/platform/otel/ratel-export";
+
+const resolveRatelExportConfig = (env: Record<string, string>) =>
+  exportConfigOf(resolveConfig({ env }));
+const selfTelemetryProjectId = (env: Record<string, string>) =>
+  resolveConfig({ env }).selfTelemetry.projectId;
 
 test("the export is off until a project key is set, and the Terraform seed counts as unset", () => {
   assert.equal(resolveRatelExportConfig({}), null);

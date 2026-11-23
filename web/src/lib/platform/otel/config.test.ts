@@ -1,12 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ConfigError, resolveConfig } from "@/config";
 import {
+  selfTelemetryEnabled as enabledFrom,
   isTelemetryExportOrigin,
-  resolveSelfTelemetryConfig,
-  selfTelemetryConfigWarnings,
-  selfTelemetryEnabled,
-  unauthenticatedOverrideWarnings,
+  resolveSelfTelemetryConfig as resolveFrom,
+  type SelfTelemetryConfig,
+  type StaticTelemetryEnvironment,
+  unauthenticatedOverrideWarnings as unauthenticatedFrom,
+  selfTelemetryConfigWarnings as warningsFrom,
 } from "./config";
+
+type Env = Record<string, string>;
+const settings = (env: Env) => resolveConfig({ env });
+const selfTelemetryEnabled = (env: Env) => enabledFrom(settings(env));
+const resolveSelfTelemetryConfig = (env: Env, statics: StaticTelemetryEnvironment) =>
+  resolveFrom(settings(env), statics);
+const unauthenticatedOverrideWarnings = (env: Env) => unauthenticatedFrom(settings(env));
+const selfTelemetryConfigWarnings = (
+  env: Env,
+  statics: StaticTelemetryEnvironment,
+  config: SelfTelemetryConfig | null,
+) => warningsFrom(settings(env), statics, config);
 
 const BOTH = {
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://collector.example/v1/traces",
@@ -56,19 +71,19 @@ test("an endpoint without headers exports unauthenticated and is flagged for a b
   assert.deepEqual(unauthenticatedOverrideWarnings(BOTH), []);
 });
 
-test("OTEL_TRACES_SAMPLER_ARG configures and clamps the root trace sample ratio", () => {
+test("otel.tracesSamplerRatio configures and clamps the root trace sample ratio", () => {
   for (const [value, expected] of [
     ["0.25", 0.25],
     ["2", 1],
     ["-0.5", 0],
-    ["garbage", 1],
   ] as const) {
     const config = resolveSelfTelemetryConfig({ ...BOTH, OTEL_TRACES_SAMPLER_ARG: value }, {});
     assert.equal(config?.tracesSamplerRatio, expected, value);
   }
+  assert.throws(() => settings({ OTEL_TRACES_SAMPLER_ARG: "garbage" }), ConfigError);
 });
 
-test("OTEL_SDK_DISABLED is an emergency stop and silences the warnings", () => {
+test("otel.sdkDisabled is an emergency stop and silences the warnings", () => {
   const environment = { ...BOTH, OTEL_SDK_DISABLED: " TRUE " };
   assert.equal(resolveSelfTelemetryConfig(environment, {}), null);
   assert.deepEqual(selfTelemetryConfigWarnings(environment, {}, null), []);
@@ -96,7 +111,7 @@ test("exporter origins are recognised so their own traffic is not re-traced", ()
   assert.equal(isTelemetryExportOrigin("not a url", config), false);
 });
 
-test("the service name is OTEL_SERVICE_NAME when set, else ratel-platform", () => {
+test("the service name is otel.serviceName when set, else ratel-platform", () => {
   const named = (environment: Record<string, string>) =>
     resolveSelfTelemetryConfig({ ...BOTH, ...environment }, {})?.resourceAttributes["service.name"];
   assert.equal(named({}), "ratel-platform");

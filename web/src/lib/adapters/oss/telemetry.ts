@@ -1,4 +1,5 @@
 import pino, { type Logger } from "pino";
+import { getConfig } from "@/config";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 
 /**
@@ -43,7 +44,7 @@ function safeFields(properties: Record<string, unknown>): Record<string, unknown
 }
 
 function defaultLogger(): Logger {
-  return pino({ name: "telemetry", level: process.env.LOG_LEVEL ?? "info" });
+  return pino({ name: "telemetry", level: getConfig().logging.level ?? "info" });
 }
 
 export const ossTelemetry: TelemetryPort = createOssTelemetry();

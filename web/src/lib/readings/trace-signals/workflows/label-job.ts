@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import { getLogger } from "@/lib/platform/logger";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
@@ -42,7 +42,7 @@ import {
 
 export const LABEL_WORKFLOWS_JOB_KIND = "label_workflows";
 export const DEFAULT_LABEL_MODEL = "claude-sonnet-5-5";
-export const MAX_LABELS_PER_JOB = Math.floor(envNumber("TRACE_WORKFLOW_MAX_LABELS", 30));
+export const MAX_LABELS_PER_JOB = getConfig().traceWorkflows.maxLabels;
 const LABEL_MAX_TOKENS = 400;
 const logger = getLogger("trace-signals/label-workflows");
 
@@ -100,7 +100,7 @@ export function anthropicLabelComplete(model: string): LabelJobDeps["complete"] 
 }
 
 function defaultDeps(): LabelJobDeps {
-  const model = process.env.TRACE_WORKFLOW_LABEL_MODEL || DEFAULT_LABEL_MODEL;
+  const model = getConfig().models.traceWorkflowLabel || DEFAULT_LABEL_MODEL;
   return {
     model,
     complete: anthropicLabelComplete(model),

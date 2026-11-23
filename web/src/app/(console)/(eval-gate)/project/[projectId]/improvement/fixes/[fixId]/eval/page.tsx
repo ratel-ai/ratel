@@ -12,7 +12,7 @@ export const metadata = { title: "Eval gate" };
 
 /**
  * One fix's eval gate (RC-46): the project's runs it is simulated on, what
- * each should do, and before and after. Behind `FF_EVAL_GATE`; off, the page
+ * each should do, and before and after. Behind `evalGate`; off, the page
  * does not exist. Owned (ADR-0004): the project comes from the console scope.
  */
 export default async function FixEvalRoute({

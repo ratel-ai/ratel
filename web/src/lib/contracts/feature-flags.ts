@@ -1,19 +1,20 @@
 /**
  * The core's feature switches, and the optional port through which an edition decides them
- * (ADR-0004). Without the port each switch is its `FF_*` environment variable for the whole
- * deployment (in the open-source edition also `RATEL_EXPERIMENTAL_FEATURES`). With it, the
- * edition decides each switch for whoever asks, and an `FF_*` value set in the environment
- * still comes first. The core reads them through `featureEnabled`
- * (`lib/platform/experimental-features.ts`), never through the port directly.
+ * (ADR-0004). Each switch has a semantic key; the deployment's configuration (`web/src/config.ts`,
+ * `flags.<key>`) may force it on or off. Without the port each switch is that configured value for
+ * the whole deployment (in the open-source edition also `experimentalFeatures`). With it, the
+ * edition decides each switch for whoever asks, and a forced value still comes first. The core
+ * reads them through `featureEnabled` (`lib/platform/experimental-features.ts`), never through the
+ * port directly.
  */
 
-/** Every switch the core reads, by its environment name. */
+/** Every switch the core reads, by its semantic key. */
 export const CORE_FLAGS = [
-  "FF_EVAL_GATE",
-  "FF_RANKING_CATALOG_DRIFT",
-  "FF_MCP_APPS",
-  "FF_AGENTS_PAGES",
-  "FF_TOOL_RUN_INSIGHTS",
+  "evalGate",
+  "rankingCatalogDrift",
+  "mcpApps",
+  "agentsPages",
+  "toolRunInsights",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

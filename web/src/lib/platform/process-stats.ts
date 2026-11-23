@@ -1,4 +1,5 @@
 import { type IntervalHistogram, monitorEventLoopDelay } from "node:perf_hooks";
+import { type Config, getConfig } from "@/config";
 import { appRole } from "@/lib/jobs/role";
 import { getLogger } from "@/lib/platform/logger";
 
@@ -44,14 +45,12 @@ let started = false;
  * outages left nothing in the logs because the kernel killed the container
  * first. The timer never keeps the process alive.
  */
-export function startProcessStats(
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): void {
+export function startProcessStats(config: Pick<Config, "app"> = getConfig()): void {
   if (started) return;
   started = true;
   const loopDelay = monitorEventLoopDelay({ resolution: 20 });
   loopDelay.enable();
-  const role = appRole(env);
+  const role = appRole(config);
   const timer = setInterval(() => {
     try {
       logger.info(readProcessStats(process.memoryUsage(), loopDelay, role), "process_stats");

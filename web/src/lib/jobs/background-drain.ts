@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { getConfig } from "@/config";
 import type { LogFields } from "@/lib/platform/logger";
 import { type DrainSummary, runDrainTick } from "./drain";
 import {
@@ -39,7 +40,7 @@ const defaultDeps = (): BackgroundDrainDeps => ({
   ...defaultDrainObserverDeps,
   after: (callback) => after(callback),
   drain: (onProgress) => runDrainTick(undefined, onProgress),
-  secret: () => process.env.CRON_SECRET?.trim() || undefined,
+  secret: () => getConfig().jobs.cronSecret,
   role: () => appRole(),
   timeoutMs: () => drainTimeoutMs(),
 });

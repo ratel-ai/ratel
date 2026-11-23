@@ -8,11 +8,8 @@
  * Usage:
  *   DATABASE_URL=… pnpm --filter @ratel/cloud otlp-raw:keys --project <id> --since <date> [--until <date>] [--json]
  */
-import { config } from "dotenv";
 
-config({ path: ".env.local" });
-config({ path: ".env" });
-
+import "./load-env";
 import { parseArgs } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createKeyInventory, formatKeyInventory } from "@/lib/ingest/otlp-raw/inventory";

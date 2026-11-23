@@ -1,5 +1,5 @@
+import { getConfig } from "@/config";
 import type { StepDraft } from "@/lib/ledger/types";
-import { envNumber } from "@/lib/platform/env-number";
 import type { ExplorerUnit } from "@/lib/readings/tool-explorer/types";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
 
@@ -11,11 +11,9 @@ import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
  */
 
 /** Sessions kept in memory while folding; past it the newest sessions are dropped and the run says so. */
-export const MAX_SESSIONS = Math.floor(envNumber("TOOL_EXPLORER_MAX_SESSIONS", 100_000));
+export const MAX_SESSIONS = getConfig().toolExplorer.maxSessions;
 /** Calls kept per session; a longer session is cut and the run says so. */
-export const MAX_CALLS_PER_SESSION = Math.floor(
-  envNumber("TOOL_EXPLORER_MAX_CALLS_PER_SESSION", 500),
-);
+export const MAX_CALLS_PER_SESSION = getConfig().toolExplorer.maxCallsPerSession;
 
 /** The explorer's node id for an invoke step, or null for anything else. */
 export function nodeIdOf(step: Pick<StepDraft, "kind" | "targetType" | "targetId">): string | null {

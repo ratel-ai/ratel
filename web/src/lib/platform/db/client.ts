@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { getConfig } from "@/config";
 import { hardenPoolClients, poolConfig } from "@/lib/platform/db/pool";
 import * as tables from "@/lib/platform/db/tables";
 import { getLogger, type LogError } from "@/lib/platform/logger";
@@ -18,7 +19,7 @@ const defaultPoolErrorDeps: PoolErrorObservabilityDeps = {
 
 /**
  * Lazily-initialized drizzle client over node-postgres. Lazy so that merely importing this
- * module never requires DATABASE_URL (builds stay green before a database exists), and the
+ * module never requires `database.url` (DATABASE_URL) (builds stay green before a database exists), and the
  * pool does not open a socket until the first query. The L1 tables are attached so the
  * client's type matches a test PGlite built the same way; modules import their own fragments
  * for the query builder, which is all the app uses.
@@ -27,11 +28,11 @@ type Db = ReturnType<typeof createDb>;
 
 /**
  * TLS: local plaintext Postgres gets none; anything else gets TLS without certificate pinning.
- * Override with DATABASE_SSL = "disable" | "require".
+ * Override with `database.ssl` (DATABASE_SSL) = "disable" | "require".
  */
 export function sslConfig(
   url: string,
-  mode = process.env.DATABASE_SSL,
+  mode = getConfig().database.ssl,
 ): false | { rejectUnauthorized: boolean } {
   const resolved = mode ?? (/localhost|127\.0\.0\.1/.test(url) ? "disable" : "require");
   return resolved === "disable" ? false : { rejectUnauthorized: false };
@@ -64,12 +65,12 @@ let _db: Db | undefined;
 
 /** Whether a database connection is configured, so pages can degrade before one exists. */
 export function isDbConfigured(): boolean {
-  return !!process.env.DATABASE_URL;
+  return !!getConfig().database.url;
 }
 
 export function getDb(): Db {
   if (!_db) {
-    const url = process.env.DATABASE_URL;
+    const url = getConfig().database.url;
     if (!url) {
       throw new Error(
         "DATABASE_URL is not set: provision a Postgres database and add it to the environment.",

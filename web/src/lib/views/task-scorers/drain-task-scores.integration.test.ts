@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { type DrainCronDeps, runDrainTick } from "@/lib/jobs/drain";
 import type { BackgroundObservabilityDeps } from "@/lib/jobs/observability";
 import { claimNextQueuedJob, markJobDone, readJobQueueClock } from "@/lib/jobs/queries";
@@ -19,7 +20,7 @@ import { dailyScoresFor } from "@/lib/views/task-scorers/store";
  * RC-622: one cron drain, with no signal run, fills `task_scores_daily` for each task with runs.
  *
  * Owned (ADR-0004): upstream turns the gate on for one organization and shows the other stays
- * unscored in the same drain. Here the gate is one switch for the deployment (`FF_EVAL_GATE`),
+ * unscored in the same drain. Here the gate is one switch for the deployment (`evalGate`),
  * so the on and off cases are two drains, and the sweep is the registered drain step.
  */
 
@@ -28,8 +29,8 @@ type Db = ReturnType<typeof getDb>;
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-01T12:00:00Z");
-const GATE_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
-const GATE_OFF: OrganizationFlagDeps = { FF_EVAL_GATE: "0" };
+const GATE_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
+const GATE_OFF: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: false } } });
 const SILENT = { trackSystemEvent: async () => undefined };
 
 test("one cron drain writes task_scores_daily rows, overall included, for each task with runs", async () => {

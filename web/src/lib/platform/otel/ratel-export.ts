@@ -1,11 +1,7 @@
 import type { Context } from "@opentelemetry/api";
 import type { ReadableSpan, Span, SpanProcessor } from "@opentelemetry/sdk-trace-base";
-import {
-  configuredSetting,
-  MODEL_CALL_TRACER,
-  RATEL_SELF_TELEMETRY_PROJECT_ENV,
-  selfTelemetryProjectId,
-} from "@/lib/contracts/self-telemetry";
+import { type Config, getConfig } from "@/config";
+import { MODEL_CALL_TRACER } from "@/lib/contracts/self-telemetry";
 
 /**
  * Ratel as a customer of itself: the model calls Ratel pays for (labelling, intent names, the
@@ -18,17 +14,13 @@ import {
  * receives anything new it did not decide to receive.
  *
  * Owned (ADR-0004): upstream defaults the endpoint to its own deployment. Here there is no default
- * destination: the export is off unless both `RATEL_SELF_TELEMETRY_API_KEY` (a project key; the
- * `REPLACE_ME` seed counts as unset) and `RATEL_SELF_TELEMETRY_ENDPOINT` are set. It rides on the
- * self-telemetry provider. The tracer and project names are contracts, shared with the edition.
+ * destination: the export is off unless both `selfTelemetry.apiKey` (RATEL_SELF_TELEMETRY_API_KEY,
+ * a project key; the `REPLACE_ME` seed counts as unset) and `selfTelemetry.endpoint`
+ * (RATEL_SELF_TELEMETRY_ENDPOINT) are set. It rides on the self-telemetry provider. The tracer
+ * name is a contract, shared with the edition.
  */
 
-export { MODEL_CALL_TRACER, RATEL_SELF_TELEMETRY_PROJECT_ENV, selfTelemetryProjectId };
-
-export const RATEL_SELF_TELEMETRY_KEY_ENV = "RATEL_SELF_TELEMETRY_API_KEY";
-export const RATEL_SELF_TELEMETRY_ENDPOINT_ENV = "RATEL_SELF_TELEMETRY_ENDPOINT";
-
-type Environment = Readonly<Record<string, string | undefined>>;
+export { MODEL_CALL_TRACER };
 
 export type RatelExportConfig = {
   url: string;
@@ -36,9 +28,10 @@ export type RatelExportConfig = {
 };
 
 /** Where model-call spans go and how they authenticate, or null unless both key and endpoint are set. */
-export function resolveRatelExportConfig(environment: Environment): RatelExportConfig | null {
-  const key = configuredSetting(environment[RATEL_SELF_TELEMETRY_KEY_ENV]);
-  const url = configuredSetting(environment[RATEL_SELF_TELEMETRY_ENDPOINT_ENV]);
+export function resolveRatelExportConfig(
+  config: Pick<Config, "selfTelemetry"> = getConfig(),
+): RatelExportConfig | null {
+  const { apiKey: key, endpoint: url } = config.selfTelemetry;
   if (!key || !url) return null;
   return { url, headers: { Authorization: `Bearer ${key}` } };
 }

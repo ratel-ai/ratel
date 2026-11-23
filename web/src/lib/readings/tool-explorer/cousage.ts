@@ -1,4 +1,4 @@
-import { envNumber } from "@/lib/platform/env-number";
+import { getConfig } from "@/config";
 import type {
   ExplorerScope,
   ExplorerSet,
@@ -28,11 +28,11 @@ import { workflowFingerprint } from "@/lib/readings/trace-signals/workflows/orde
  * flooded.
  */
 
-export const MIN_SET_SUPPORT = Math.floor(envNumber("TOOL_EXPLORER_MIN_SET_SUPPORT", 5));
-export const MIN_SET_SHARE = envNumber("TOOL_EXPLORER_MIN_SET_SHARE", 0.01, (n) => n > 0 && n <= 1);
+export const MIN_SET_SUPPORT = getConfig().toolExplorer.minSetSupport;
+export const MIN_SET_SHARE = getConfig().toolExplorer.minSetShare;
 /** The largest co-used set by default; a run mines larger ones when a task is larger (`cousageSizeFor`). */
 export const MAX_SET_SIZE = 4;
-export const MAX_SET_CANDIDATES = Math.floor(envNumber("TOOL_EXPLORER_MAX_SET_CANDIDATES", 5_000));
+export const MAX_SET_CANDIDATES = getConfig().toolExplorer.maxSetCandidates;
 const EXAMPLE_SESSIONS = 10;
 
 export interface CousageOptions {

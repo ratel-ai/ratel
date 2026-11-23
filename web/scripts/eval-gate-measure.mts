@@ -13,9 +13,10 @@
  * stand-ins, none otherwise; caps from `EVAL_GATE_*`. Refuses a database that
  * is not on this machine. Prints numbers and ids, never run text.
  */
+import "./load-env";
 import { writeFileSync } from "node:fs";
-import { config } from "dotenv";
 import { and, eq, or } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { getDb } from "@/lib/platform/db/client";
 import { fixEvalSets } from "@/lib/views/eval-gate/schema";
 import { projects } from "@/lib/platform/projects/schema";
@@ -23,8 +24,6 @@ import { runSimulation } from "@/lib/views/eval-gate/service";
 import { percent } from "@/lib/views/eval-gate/view";
 import { assertLocalDatabase } from "@/lib/console/seed/local-database";
 
-config({ path: ".env.local", quiet: true });
-config({ path: ".env", quiet: true });
 
 function arg(name: string): string | null {
   const index = process.argv.indexOf(`--${name}`);
@@ -49,7 +48,7 @@ async function main(): Promise<void> {
     .select({ fixId: fixEvalSets.fixId, kind: fixEvalSets.fixKind, title: fixEvalSets.title })
     .from(fixEvalSets)
     .where(only ? and(eq(fixEvalSets.projectId, project.id), eq(fixEvalSets.fixId, only)) : eq(fixEvalSets.projectId, project.id));
-  console.log(`project ${project.slug}: ${sets.length} eval sets; fresh ${flag("fresh") ? "yes" : "no"}; key ${process.env.ANTHROPIC_API_KEY ? "set" : "unset"}; stand-ins ${process.env.EVAL_GATE_MOCK_MODEL === "1" ? "on" : "off"}`);
+  console.log(`project ${project.slug}: ${sets.length} eval sets; fresh ${flag("fresh") ? "yes" : "no"}; key ${getConfig().anthropic.apiKey ? "set" : "unset"}; stand-ins ${getConfig().evalGate.mockModel ? "on" : "off"}`);
   const rows: Record<string, unknown>[] = [];
   for (const set of sets.sort((a, b) => a.kind.localeCompare(b.kind))) {
     if (flag("fresh")) await db.delete(fixEvalSets).where(and(eq(fixEvalSets.projectId, project.id), eq(fixEvalSets.fixId, set.fixId)));

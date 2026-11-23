@@ -40,7 +40,7 @@ const defaultMcpPageDeps: McpPageDeps = {
 
 /**
  * What both MCP servers pages (RC-777) start from: the signed-in person's
- * project, the flag (`FF_AGENTS_PAGES`; off, the pages do not exist),
+ * project, the flag (`agentsPages`; off, the pages do not exist),
  * the window (`range`, `from`, `to`, 30 days by default) and the environment.
  */
 export async function resolveMcpPageContext(

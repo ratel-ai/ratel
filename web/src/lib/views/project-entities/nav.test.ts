@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resolveConfig } from "@/config";
 import { activeNavItemId, consoleNav, flattenNav } from "@/lib/console/navigation";
 import { projectEntitiesEnabled } from "./flag";
 import { entityPagesOrganizationIds } from "./nav";
 
 /**
- * RP-28: `FF_AGENTS_PAGES` at the rail. Off, the rail is what it was; on, Traces holds All
+ * RP-28: `agentsPages` at the rail. Off, the rail is what it was; on, Traces holds All
  * traces, Agents and MCP servers (the owner's decision: always, whatever the project's data).
  */
 
@@ -14,7 +15,7 @@ const ORGANIZATIONS = [{ id: "org-1" }, { id: "org-2" }];
 
 test("flag off: no organization shows the pages, and the rail is unchanged", async () => {
   const ids = await entityPagesOrganizationIds(ORGANIZATIONS, (organization) =>
-    projectEntitiesEnabled(organization, {}),
+    projectEntitiesEnabled(organization, resolveConfig()),
   );
   assert.equal(ids.length, 0);
   const off = consoleNav({ projectId: P1, additions: [], entityPages: ids.includes("org-1") });
@@ -27,7 +28,10 @@ test("flag off: no organization shows the pages, and the rail is unchanged", asy
 
 test("flag on: every organization shows the pages, and Traces holds All traces, Agents and MCP servers", async () => {
   const ids = await entityPagesOrganizationIds(ORGANIZATIONS, (organization) =>
-    projectEntitiesEnabled(organization, { FF_AGENTS_PAGES: "1" }),
+    projectEntitiesEnabled(
+      organization,
+      resolveConfig({ override: { flags: { agentsPages: true } } }),
+    ),
   );
   assert.deepEqual(ids, ["org-1", "org-2"]);
   const on = consoleNav({ projectId: P1, additions: [], entityPages: true });

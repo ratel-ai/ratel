@@ -1,3 +1,4 @@
+import { type Config, getConfig } from "@/config";
 import { drainSteps } from "@/lib/composition/registry";
 import type { DrainStep } from "@/lib/contracts/registry";
 import { RUN_IMPORT_JOB } from "./kinds";
@@ -44,11 +45,9 @@ export type DrainSummary = {
   duration_ms: number;
 };
 
-/** Retention deletion is opt-in by the operator (`DATA_RETENTION_ENABLED=1`). */
-export function dataRetentionEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return env.DATA_RETENTION_ENABLED?.trim() === "1";
+/** Retention deletion is opt-in by the operator (`jobs.dataRetention`, DATA_RETENTION_ENABLED=1). */
+export function dataRetentionEnabled(config: Pick<Config, "jobs"> = getConfig()): boolean {
+  return config.jobs.dataRetention;
 }
 
 const defaultDeps = (): DrainCronDeps => ({

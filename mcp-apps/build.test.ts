@@ -37,10 +37,12 @@ test("every view is built", () => {
 /**
  * Owned (ADR-0004): what a view may weigh here beyond its upstream budget. This workspace
  * resolves @base-ui/react 1.9 where upstream resolves 1.6, and the newer menu and dialog pull
- * its floating-ui hooks: about 25 KB more in the one view that renders both (list). The views'
- * own bindings.ts are copied, so the allowance lives here.
+ * its floating-ui hooks: about 25 KB more in the one view that renders both (list). Every view
+ * also carries the settings' defaults (web/src/config-defaults.ts, the browser's config: about
+ * 3 KB), which the list view, already at its limit, needs room for. The views' own bindings.ts
+ * are copied, so the allowance lives here.
  */
-const EDITION_EXTRA_KB: Readonly<Record<string, number>> = { list: 30 };
+const EDITION_EXTRA_KB: Readonly<Record<string, number>> = { list: 35 };
 
 /** A view's own budget from its bindings.ts, or the default, plus this edition's allowance. */
 function budgetOf(view: string): number {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { eq, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import { jobs } from "@/lib/jobs/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import type { getDb } from "@/lib/platform/db/client";
@@ -26,8 +27,8 @@ import { upsertScorer } from "@/lib/views/task-scorers/store";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
-// Owned (ADR-0004): the gate is FF_EVAL_GATE from the environment, not an organization flag.
-const FLAGS_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
+// Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
+const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("a fix queues one simulation per distinct task and refreshes missing eval sets", async () => {
   const { client, db, deps, fix } = await setup();
@@ -185,7 +186,7 @@ test("task simulations report each scorer before and after for task cases and fi
 test("the organization flag refuses queue and execution before model calls", async () => {
   const { client, db, deps, fix } = await setup();
   try {
-    const off = { ...deps, flagDeps: { FF_EVAL_GATE: "0" } };
+    const off = { ...deps, flagDeps: resolveConfig({ override: { flags: { evalGate: false } } }) };
     await assert.rejects(
       runTaskSimulation(fix.id, { projectId: PROJECT, deps: off }),
       /eval gate is off/,

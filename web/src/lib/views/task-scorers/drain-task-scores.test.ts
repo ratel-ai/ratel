@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { DrainStep } from "@/lib/contracts/registry";
 import { type DrainCronDeps, runDrainTick } from "@/lib/jobs/drain";
 import type { BackgroundObservabilityDeps } from "@/lib/jobs/observability";
@@ -25,8 +26,8 @@ import { taskScorersRegistration, taskScoresEnqueueStep } from "@/lib/views/task
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
-// The gate is the deployment's FF_EVAL_GATE, not an organization flag.
-const GATE_ON: OrganizationFlagDeps = { FF_EVAL_GATE: "1" };
+// The gate is the deployment's evalGate, not an organization flag.
+const GATE_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("the task scorers register the sweep as a before-step of the drain", () => {
   assert.deepEqual(

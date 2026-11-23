@@ -14,7 +14,7 @@ import { MCP_APP_MIME_TYPE } from "@/lib/mcp/apps/types";
  * stored: the id is the whole signal. A client faking one only gets a line
  * asking for a short reply.
  *
- * The id is issued at `initialize` or never, and only with `FF_MCP_APPS`
+ * The id is issued at `initialize` or never, and only with `mcpApps`
  * on for that request. So that request waits longer for the flag than any
  * other (`issueSession`, read before the flag is asked; lib/mcp/apps/flag.ts).
  *

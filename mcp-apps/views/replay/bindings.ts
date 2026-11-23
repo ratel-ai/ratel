@@ -4,7 +4,7 @@ import type { ViewBindings } from "../../shell/types";
 /**
  * Session replay. Three tools tell a run or a session; each carries the
  * console's SessionChat in its result's `view` (lib/mcp/operations/session-chat-view.ts).
- * Published behind FF_MCP_APPS like every view; message text follows the
+ * Published behind the `mcpApps` flag like every view; message text follows the
  * project's content opt-in and, for an API key, its content:read scope (RC-585).
  */
 export const replayBindings: McpAppBinding[] = [

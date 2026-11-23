@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import {
   type BoundReadDb,
   readTimeoutMs,
@@ -55,12 +56,12 @@ test("withStatementTimeout applies primary and supplementary read tiers", async 
   const primaryTimeout = await withStatementTimeout(
     (tx) => currentTimeout(tx),
     db,
-    readTimeoutMs({}),
+    readTimeoutMs(resolveConfig()),
   );
   const supplementaryTimeout = await withStatementTimeout(
     (tx) => currentTimeout(tx),
     db,
-    supplementaryReadTimeoutMs({}),
+    supplementaryReadTimeoutMs(resolveConfig()),
   );
 
   assert.equal(primaryTimeout, "15s");

@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
-import type { FeatureFlagsPort } from "@/lib/contracts/feature-flags";
+import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
 import type {
   ImportedRunsPort,
   ImportSummary,
@@ -232,6 +232,12 @@ export type CoreServices = {
    * core still type-checks; the core always lends it.
    */
   onboarding?: OnboardingPort;
+  /**
+   * The value the deployment's configuration forces for a core switch, or undefined. An edition's
+   * own flag reads (a diagnostics view) apply it first, as `featureEnabled` does. Optional so an
+   * edition built against an older core still type-checks; the core always lends it.
+   */
+  forcedFlag?: (flag: CoreFlag) => boolean | undefined;
 };
 
 export type CompositionPorts = {
@@ -280,10 +286,10 @@ export type CompositionPorts = {
    */
   productName?: { full: string; short: string };
   /**
-   * Absent in the open-source edition, where each core switch is its `FF_*` environment variable
-   * (or `RATEL_EXPERIMENTAL_FEATURES`) for the whole deployment. With it, the edition decides each
-   * switch per organization, project and person; an `FF_*` value in the environment still comes
-   * first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
+   * Absent in the open-source edition, where each core switch is its configured value
+   * (`flags.<key>` in `web/src/config.ts`, or `experimentalFeatures`) for the whole deployment.
+   * With it, the edition decides each switch per organization, project and person; a value the
+   * configuration forces still comes first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
    */
   featureFlags?: FeatureFlagsPort;
 };

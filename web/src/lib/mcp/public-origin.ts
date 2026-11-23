@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import { isLocalEnvironment } from "@/lib/platform/environment";
 import { publicBaseUrl } from "@/lib/platform/public-url";
 
@@ -12,7 +13,7 @@ import { publicBaseUrl } from "@/lib/platform/public-url";
  * open and then nothing happens.
  *
  * `publicUrl()` is wrong for this, because it falls back to a hardcoded
- * `http://localhost:3000` when `APP_PUBLIC_URL` is unset. That default is fine
+ * `http://localhost:3000` when `app.publicUrl` (APP_PUBLIC_URL) is unset. That default is fine
  * for rendering a copyable snippet and fatal here, since a developer running on
  * any other port gets sent to a different server.
  *
@@ -20,13 +21,13 @@ import { publicBaseUrl } from "@/lib/platform/public-url";
  * and it is the authority on what the public URL is), and otherwise the request
  * answers for itself. That ordering also keeps the header untrusted in the one
  * environment where trusting it would matter, because production always has
- * `APP_PUBLIC_URL` set and never reaches the fallback.
+ * `app.publicUrl` set and never reaches the fallback.
  */
 export function mcpOrigin(request: Request): string {
-  const configured = process.env.APP_PUBLIC_URL?.trim();
+  const configured = getConfig().app.publicUrl;
   if (configured) return configured.replace(/\/+$/, "");
   // Deployed without it: refuse (publicBaseUrl throws) rather than trust headers.
-  if (!isLocalEnvironment(process.env)) return publicBaseUrl();
+  if (!isLocalEnvironment()) return publicBaseUrl();
 
   // Local development. A proxy in front (a tunnel, `next dev` behind something)
   // rewrites the host, so prefer what it forwarded over the socket-level URL.
@@ -64,10 +65,10 @@ export function mcpResourceMetadataUrl(request: Request): string {
  * client that hangs, with nothing pointing back at this page.
  */
 export async function mcpOriginFromHeaders(): Promise<string> {
-  const configured = process.env.APP_PUBLIC_URL?.trim();
+  const configured = getConfig().app.publicUrl;
   if (configured) return configured.replace(/\/+$/, "");
   // Deployed without it: refuse (publicBaseUrl throws) rather than trust headers.
-  if (!isLocalEnvironment(process.env)) return publicBaseUrl();
+  if (!isLocalEnvironment()) return publicBaseUrl();
 
   const { headers } = await import("next/headers");
   const headerList = await headers();

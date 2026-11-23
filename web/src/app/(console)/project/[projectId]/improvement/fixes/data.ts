@@ -20,7 +20,7 @@ export type FixesPageData =
       projectId: string;
       model: FixesModel;
       now: string;
-      /** Each fix's eval gate badge, by fix id; null when `FF_EVAL_GATE` is off. */
+      /** Each fix's eval gate badge, by fix id; null when `evalGate` is off. */
       evalBadges: Record<string, EvalBadge> | null;
       /** Each shipped fix's newest shipment, by fix id. */
       shipped: Record<string, FixShipped>;
@@ -74,7 +74,7 @@ async function loadShipped(
 }
 
 /**
- * The eval gate's badges, behind `FF_EVAL_GATE` (null when off). A failed
+ * The eval gate's badges, behind `evalGate` (null when off). A failed
  * read costs the badges, never the page: every fix then reads "Not simulated".
  */
 async function loadEvalBadges(

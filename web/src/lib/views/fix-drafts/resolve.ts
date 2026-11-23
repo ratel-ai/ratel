@@ -1,4 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
+import { type Config, getConfig } from "@/config";
 import { jobs } from "@/lib/jobs/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { changeOf, emptyChange, hasEffect } from "@/lib/views/eval-gate/change";
@@ -8,8 +9,6 @@ import type { FixChange } from "@/lib/views/eval-gate/types";
 import { draftModelAvailable } from "@/lib/views/fix-drafts/model";
 import { latestFixDraft } from "@/lib/views/fix-drafts/store";
 import type { Fix } from "@/lib/views/fixes/types";
-
-type Env = Record<string, string | undefined>;
 
 export const DRAFTING_MESSAGE =
   "The fix draft is being prepared. Try the simulation again when the draft is ready.";
@@ -23,11 +22,11 @@ export interface DraftFixJobPayload {
   requestedBy: string;
 }
 
-/** Owned (ADR-0004): the gate reads `env` (`FF_EVAL_GATE`) where upstream takes flag deps. */
+/** Owned (ADR-0004): the gate reads `config` (`evalGate`) where upstream takes flag deps. */
 export interface ResolveDraftDeps {
   db?: EvalDb;
   actor?: string;
-  env?: Env;
+  config?: Config;
   environment?: string;
 }
 
@@ -38,9 +37,14 @@ export async function resolveFixChange(
   deps: ResolveDraftDeps = {},
 ): Promise<{ status: "ready" | "drafting" | "unsupported"; change: FixChange }> {
   const db = deps.db ?? getDb();
-  const env = deps.env ?? process.env;
+  const config = deps.config ?? getConfig();
   const fallback = changeOf(fix);
-  const enabled = await evalGateEnabledForActor(projectId, deps.actor ?? DRAFT_FIX_ACTOR, db, env);
+  const enabled = await evalGateEnabledForActor(
+    projectId,
+    deps.actor ?? DRAFT_FIX_ACTOR,
+    db,
+    config,
+  );
   if (!enabled) return { status: hasEffect(fallback) ? "ready" : "unsupported", change: fallback };
   const draft = await latestFixDraft(projectId, fix.id, db);
   if (draft?.status === "ready" && hasEffect(draft.change))
@@ -49,7 +53,7 @@ export async function resolveFixChange(
   if (fix.kind !== "rewrite" && fix.kind !== "tell-apart")
     return { status: "unsupported", change: fallback };
   // Owned (ADR-0004): with no model there is nothing to draft, so nothing is queued.
-  if (!draftModelAvailable(env, deps.environment))
+  if (!draftModelAvailable(config, deps.environment))
     return {
       status: "unsupported",
       change: { ...emptyChange(), unsupportedReason: NO_DRAFT_MODEL_MESSAGE },

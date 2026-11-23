@@ -1,3 +1,4 @@
+import { getConfig } from "@/config";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import type { JudgeCase, JudgeEngine } from "@/lib/readings/decisions/judge";
 import type { AnalystDeps } from "./analyst";
@@ -25,7 +26,7 @@ import { CAPTURED_DIAGNOSIS, CAPTURED_PROPOSALS } from "./mock-fixture";
  * is look like a live answer, which is why the fixture is a separate file that
  * says what it is at the top.
  *
- * Enabled by `MATCH_QUALITY_MOCK_ANALYST=1`, and refused outright anywhere that is
+ * Enabled by `matchQuality.mockAnalyst` (MATCH_QUALITY_MOCK_ANALYST=1), and refused outright anywhere that is
  * not a local environment.
  *
  * The gate reads APP_ENV, not NODE_ENV, for the same reason `embed-local.ts` does:
@@ -42,19 +43,15 @@ const LOCAL_ENVIRONMENTS: ReadonlySet<string> = new Set(["development", "local",
 /** Reported as the model, so nothing downstream prints a real model name. */
 export const MOCK_ANALYST_MODEL = "mock-analyst-local";
 
-/** Long enough that the queued -> running transition is actually observable. */
-const DEFAULT_MOCK_DELAY_MS = 1_500;
-
 export function mockAnalystEnabled(): boolean {
   if (!LOCAL_ENVIRONMENTS.has(deploymentEnvironment())) return false;
-  return process.env.MATCH_QUALITY_MOCK_ANALYST === "1";
+  return getConfig().matchQuality.mockAnalyst;
 }
 
+/** `matchQuality.mockDelayMs`: by default long enough that the queued -> running transition is observable. */
 export function mockAnalystDelayMs(): number {
-  const raw = Number(process.env.MATCH_QUALITY_MOCK_DELAY_MS);
-  if (!Number.isFinite(raw) || raw < 0) return DEFAULT_MOCK_DELAY_MS;
   // Capped so a typo cannot wedge a job slot for an hour.
-  return Math.min(30_000, raw);
+  return Math.min(30_000, getConfig().matchQuality.mockDelayMs);
 }
 
 /**

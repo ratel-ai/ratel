@@ -27,9 +27,10 @@
  *
  * Refuses a database that is not on this machine. Prints counts, never text.
  */
+import "./load-env";
 import { writeFileSync } from "node:fs";
-import { config } from "dotenv";
 import { and, eq } from "drizzle-orm";
+import { getConfig } from "@/config";
 import { assertLocalDatabase } from "@/lib/console/seed/local-database";
 import { resolveSeedOrganization } from "@/lib/console/seed/replace-project";
 import {
@@ -103,7 +104,6 @@ import { bm25Order } from "@/lib/synthesis/match-quality/replay";
 import { matchQualityProposals } from "@/lib/synthesis/match-quality/schema";
 
 // The analyst key, read the way the app reads it, for --capture only. Set values win.
-config({ path: ".env.local", quiet: true });
 
 const logger = getLogger("scripts/seed-site-copilot-quality");
 const DEFAULT_SLUG = "site-copilot";
@@ -214,7 +214,7 @@ function analystFor(
   if (!capture) return (context) => replayAnalyst(context, SITE_QUALITY_CAPTURED[run]);
   if (!anthropicConfigured()) throw new Error("--capture needs a Claude backend: set ANTHROPIC_BACKEND=bedrock or ANTHROPIC_API_KEY");
   return () => {
-    const real = anthropicAnalystDeps(process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL);
+    const real = anthropicAnalystDeps(getConfig().models.analyst || DEFAULT_ANALYST_MODEL);
     return {
       model: real.model,
       complete: async (system, user) => {
@@ -454,7 +454,7 @@ async function seed() {
     const ids = new Set(before.map((entry) => entry.entryId));
     writeFixture(
       { earlier: capturedRun(sink.earlier, ids), latest: capturedRun(sink.latest, ids) },
-      process.env.ANTHROPIC_MODEL || DEFAULT_ANALYST_MODEL,
+      getConfig().models.analyst || DEFAULT_ANALYST_MODEL,
     );
   }
 
@@ -477,7 +477,7 @@ async function seed() {
 }
 
 function report(out: Awaited<ReturnType<typeof seed>>): string {
-  const base = (process.env.APP_PUBLIC_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  const base = (getConfig().app.publicUrl ?? "http://localhost:3000").replace(/\/+$/, "");
   const root = `${base}/project/${out.project.id}/quality`;
   const run = (name: string, outcome: (typeof out.runs)["latest"]) =>
     `   ${name} run: ${outcome.census.selectionsEvaluated} searches scored, ${outcome.candidatesFound} tools nominated, ${outcome.proposalsCreated} rewrites offered, ${outcome.proposalsDiscarded} discarded by the replay${outcome.declinedReason ? ` (declined: ${outcome.declinedReason})` : ""}`;

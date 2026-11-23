@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { resolveConfig } from "@/config";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -40,8 +41,8 @@ async function setup() {
   const deps: RunTestDraftDeps = {
     db,
     now: () => NOW,
-    // Owned (ADR-0004): the gate is the FF_EVAL_GATE env value, not an organization flag.
-    flagDeps: { FF_EVAL_GATE: "1" },
+    // Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
+    flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
     model: {
       model: "claude-haiku-5-5",
       standIn: false,
@@ -138,7 +139,7 @@ test("the flag and project and task boundaries refuse before a model call", asyn
   try {
     await assert.rejects(draftTestFromRun(OTHER, "task-a", TURN, f.deps), /No completed run/);
     await assert.rejects(draftTestFromRun(PROJECT, "task-b", TURN, f.deps), /No completed run/);
-    f.deps.flagDeps!.FF_EVAL_GATE = "0";
+    f.deps.flagDeps = resolveConfig({ override: { flags: { evalGate: false } } });
     await assert.rejects(draftTestFromRun(PROJECT, "task-a", TURN, f.deps), /eval gate is off/);
     assert.equal(f.calls(), 0);
   } finally {

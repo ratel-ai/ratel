@@ -340,6 +340,9 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
+      zfig:
+        specifier: 0.9.15
+        version: 0.9.15(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -3082,6 +3085,11 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zfig@0.9.15:
+    resolution: {integrity: sha512-Tai5E2Dh9pvzoTBTJrzx4IsnGKUglgVaciVjItre3yhC5meVoMN+eHeBbU9SDU2vadZ3xQGiE0wpQwT3HWa3BQ==}
+    peerDependencies:
+      zod: ^4.0.0
+
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
@@ -5659,6 +5667,10 @@ snapshots:
   xtend@4.0.2: {}
 
   yocto-queue@0.1.0: {}
+
+  zfig@0.9.15(zod@4.4.3):
+    dependencies:
+      zod: 4.4.3
 
   zod-to-json-schema@3.25.2(zod@4.4.3):
     dependencies:

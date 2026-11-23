@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
+import { resetConfigForTests } from "@/config";
 import { toOtelLogRows } from "@/lib/ingest/otlp/log-rows";
 import { insertOtelLogs, insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { NewOtelLog, NewOtelSpan } from "@/lib/ingest/otlp/schema";
@@ -2733,16 +2734,13 @@ test("pruneExpiredOtelSpans falls back when retention config exceeds the date ra
     update otel_spans
     set received_at = '2026-06-29T23:59:59.999Z'::timestamptz;
   `);
-  process.env.OTEL_SPAN_RETENTION_DAYS = "1e308";
+  process.env.OTEL_SPAN_RETENTION_DAYS = "1000000000";
+  resetConfigForTests();
 
   try {
     assert.equal(await pruneExpiredOtelSpans({ now: new Date("2026-07-30T00:00:00.000Z") }, db), 1);
   } finally {
-    if (previousRetention === undefined) {
-      delete process.env.OTEL_SPAN_RETENTION_DAYS;
-    } else {
-      process.env.OTEL_SPAN_RETENTION_DAYS = previousRetention;
-    }
+    restoreEnv("OTEL_SPAN_RETENTION_DAYS", previousRetention);
     await client.close();
   }
 });
@@ -2889,6 +2887,7 @@ test("OTEL_LOG_RETENTION_DAYS overrides span retention for logs", async () => {
   `);
   process.env.OTEL_LOG_RETENTION_DAYS = "1";
   process.env.OTEL_SPAN_RETENTION_DAYS = "30";
+  resetConfigForTests();
 
   try {
     assert.equal(await pruneExpiredOtelLogs({ now: new Date("2026-07-30T00:00:00.000Z") }, db), 1);
@@ -2908,8 +2907,9 @@ test("log pruning falls back to OTEL_SPAN_RETENTION_DAYS", async () => {
     update otel_logs
     set received_at = '2026-07-28T00:00:00.000Z'::timestamptz;
   `);
-  process.env.OTEL_LOG_RETENTION_DAYS = "invalid";
+  delete process.env.OTEL_LOG_RETENTION_DAYS;
   process.env.OTEL_SPAN_RETENTION_DAYS = "1";
+  resetConfigForTests();
 
   try {
     assert.equal(await pruneExpiredOtelLogs({ now: new Date("2026-07-30T00:00:00.000Z") }, db), 1);
@@ -2920,7 +2920,7 @@ test("log pruning falls back to OTEL_SPAN_RETENTION_DAYS", async () => {
   }
 });
 
-test("log pruning defaults to 30 days when retention config is invalid", async () => {
+test("log pruning defaults to 30 days when span retention exceeds the date range", async () => {
   const { client, db } = await setup();
   const previousLogRetention = process.env.OTEL_LOG_RETENTION_DAYS;
   const previousSpanRetention = process.env.OTEL_SPAN_RETENTION_DAYS;
@@ -2929,8 +2929,9 @@ test("log pruning defaults to 30 days when retention config is invalid", async (
     update otel_logs
     set received_at = '2026-06-29T23:59:59.999Z'::timestamptz;
   `);
-  process.env.OTEL_LOG_RETENTION_DAYS = "invalid";
-  process.env.OTEL_SPAN_RETENTION_DAYS = "1e308";
+  delete process.env.OTEL_LOG_RETENTION_DAYS;
+  process.env.OTEL_SPAN_RETENTION_DAYS = "1000000000";
+  resetConfigForTests();
 
   try {
     assert.equal(await pruneExpiredOtelLogs({ now: new Date("2026-07-30T00:00:00.000Z") }, db), 1);
@@ -3245,4 +3246,5 @@ function restoreEnv(name: string, value: string | undefined): void {
   } else {
     process.env[name] = value;
   }
+  resetConfigForTests();
 }

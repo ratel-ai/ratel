@@ -1,4 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import { type Config, getConfig } from "@/config";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
@@ -7,8 +8,6 @@ import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
 import type { ModelUsage } from "@/lib/views/eval-gate/models";
 import { mockModelsEnabled } from "@/lib/views/eval-gate/models";
-
-type Env = Record<string, string | undefined>;
 
 export const DEFAULT_DRAFT_MODEL = "claude-sonnet-5-5";
 export const DRAFT_MAX_TOKENS = 1024;
@@ -56,10 +55,10 @@ export function standInDraftModel(
 
 /** Whether a draft can be made here: the local stand-in, or a Claude backend. */
 export function draftModelAvailable(
-  env: Env = process.env,
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
   environment: string = deploymentEnvironment(),
 ): boolean {
-  return mockModelsEnabled(env, environment) || anthropicConfigured(env);
+  return mockModelsEnabled(config, environment) || anthropicConfigured(config);
 }
 
 /**
@@ -68,14 +67,14 @@ export function draftModelAvailable(
  * or sent. The placeholder key is no key.
  */
 export function draftModelFromEnv(
-  env: Env = process.env,
+  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
   environment: string = deploymentEnvironment(),
   tools: ReadonlyArray<{ entryId: string; searchable: string }> = [],
 ): DraftModel | null {
-  if (mockModelsEnabled(env, environment)) return standInDraftModel(tools);
-  const client = anthropicClient({ maxRetries: 0 }, env);
+  if (mockModelsEnabled(config, environment)) return standInDraftModel(tools);
+  const client = anthropicClient({ maxRetries: 0 }, config);
   if (!client) return null;
-  const model = env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL;
+  const model = config.evalGate.draftModel || DEFAULT_DRAFT_MODEL;
   return {
     model,
     async complete({ system, user, maxTokens }) {
@@ -116,10 +115,10 @@ export function draftModelFromEnv(
 }
 
 /** A draft never made because no Anthropic key is configured, as one `model_call` line. */
-export function recordNoDraftKey(env: Env = process.env): void {
+export function recordNoDraftKey(config: Pick<Config, "evalGate"> = getConfig()): void {
   recordModelCall({
     provider: "anthropic",
-    model: env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL,
+    model: config.evalGate.draftModel || DEFAULT_DRAFT_MODEL,
     feature: DRAFT_FEATURE,
     payer: "ratel",
     outcome: "skipped_no_key",

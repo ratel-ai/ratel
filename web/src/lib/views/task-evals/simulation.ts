@@ -63,8 +63,8 @@ export async function runTaskSimulation(fixId: string, options: TaskSimulationOp
   const ctx = await (deps.loadFix ?? loadFixContext)(projectId, fixId);
   if (!ctx || ctx.projectId !== projectId)
     throw new Error("This fix does not exist in the project.");
-  // Owned (ADR-0004): the gate is FF_EVAL_GATE, so the flag deps are the environment it reads.
-  const resolved = await resolveFixChange(projectId, ctx.fix, { db, actor, env: deps.flagDeps });
+  // Owned (ADR-0004): the gate is evalGate, so the flag deps are the environment it reads.
+  const resolved = await resolveFixChange(projectId, ctx.fix, { db, actor, config: deps.flagDeps });
   if (resolved.status === "drafting")
     return { status: "drafting" as const, runs: [] as TaskEvalRunRow[] };
   if (resolved.status !== "ready")

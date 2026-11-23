@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { resetConfigForTests } from "@/config";
 import { parseAnalystResponse } from "./analyst";
 import type { AnalystContext } from "./context";
 import {
@@ -19,6 +20,7 @@ function withEnv(vars: Record<string, string | undefined>, run: () => void): voi
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+  resetConfigForTests();
   try {
     run();
   } finally {
@@ -26,6 +28,7 @@ function withEnv(vars: Record<string, string | undefined>, run: () => void): voi
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    resetConfigForTests();
   }
 }
 
@@ -119,12 +122,15 @@ test("the mock turns on locally when switched on", () => {
   });
 });
 
-test("a nonsense or hostile delay falls back and is capped", () => {
-  withEnv({ MATCH_QUALITY_MOCK_DELAY_MS: "not-a-number" }, () => {
+test("a nonsense or hostile delay fails the config, a long one is capped", () => {
+  withEnv({ MATCH_QUALITY_MOCK_DELAY_MS: undefined }, () => {
     assert.equal(mockAnalystDelayMs(), 1_500);
   });
+  withEnv({ MATCH_QUALITY_MOCK_DELAY_MS: "not-a-number" }, () => {
+    assert.throws(() => mockAnalystDelayMs(), /MATCH_QUALITY_MOCK_DELAY_MS/);
+  });
   withEnv({ MATCH_QUALITY_MOCK_DELAY_MS: "-1" }, () => {
-    assert.equal(mockAnalystDelayMs(), 1_500);
+    assert.throws(() => mockAnalystDelayMs(), /MATCH_QUALITY_MOCK_DELAY_MS/);
   });
   withEnv({ MATCH_QUALITY_MOCK_DELAY_MS: "999999" }, () => {
     assert.equal(mockAnalystDelayMs(), 30_000);
