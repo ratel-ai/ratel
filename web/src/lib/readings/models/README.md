@@ -63,8 +63,8 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |
 | `llama.cpp` | `MODEL_BASE_URL`; start it with `--jinja` for tools | name one | `qwen2.5:0.5b` |
 | `vllm` | `MODEL_BASE_URL`; its tool flags for tools | name one | no |
-| `litellm` | `MODEL_BASE_URL`, usually `MODEL_API_KEY` | name one | no |
-| `custom` | `MODEL_BASE_URL` with its path | name one | no |
+| `litellm` | `MODEL_BASE_URL`, usually `MODEL_API_KEY` | name one | v1.110.2, over `llama3.2:1b` and `qwen2.5:0.5b` |
+| `custom` | `MODEL_BASE_URL` with its path | name one | `qwen2.5:0.5b` |
 
 The model of a feature, in order: `MODEL_FEATURE_<FEATURE>`; on a vendor that serves Claude, the
 feature's own settings (the `settings` column of `features.ts`); `MODEL_DEEP`, `MODEL_STANDARD`
@@ -87,7 +87,8 @@ its thinking comes out of the same cap. The Responses API is asked to store noth
 does not report is estimated. One call, with its retries, is one spend line.
 
 `pnpm --filter @ratel/platform models:smoke` runs a plain answer, a schema-bound answer, a streamed
-answer, a tool call and a decision against whatever the environment selects.
+answer, a tool call, a decision and, with `EMBEDDING_*` set, embeddings, against whatever the
+environment selects.
 
 ## Tests that hold it
 
@@ -95,4 +96,4 @@ answer, a tool call and a decision against whatever the environment selects.
 `views/eval-gate/models-neutral.test.ts` the eval gate. The golden tests beside each site
 (`*.golden.test.ts`) hold the Claude path to the requests it sent before the kit. Decisions are in
 `readings/decisions` (`vendors.ts`, `DECISION_PROVIDER`); OpenAI, Levanto (Sage 2) and
-TypeSafe (Jev 1.14) were run live, the others not. A reranker or an LLM as the judge is not built.
+TypeSafe (Jev 1.14) were run live, and `custom` against Sage; Google was not. A reranker or an LLM as the judge is not built.
