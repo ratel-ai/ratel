@@ -13,7 +13,7 @@ Read models built on the layers below. Traces, Test a search and its experiment 
 | `model-pricing/reprice.ts` | restates stored costs after a price changes, and the summaries of the traces it touched; backs `pnpm backfill:costs [--reprice] [--dry-run]` (ported, run by hand; stored costs are not re-priced on deploy). Owned: an owner is its project's organization id |
 | `traces/queries.ts`, `run-details.ts`, `events-queries.ts` | the trace, span, operation and log reads over `otel_spans`, `otel_logs` and the summaries |
 | `traces/view.ts`, `events-view.ts` | search params to query options and cursors, rows to view models |
-| `traces/waterfall.ts`, `tree.ts`, `content-view.ts`, `format.ts` | one trace as a span tree, a waterfall and its message content |
+| `traces/waterfall.ts`, `tree.ts`, `format.ts` | one trace as a span tree and a waterfall; its message content is `ingest/otlp/content-view.ts` (it reads only ingest, and the outcome reading in `readings/` reads a span's reply through it) |
 | `match-quality/` | a run over a project's searches: evidence, the judge, the analyst, replay, rewrites and their apply path; `judges.ts` resolves the OpenAI judge. Without a key a run stops before judging. |
 | `quality/` | the ground truth and metrics, the snapshots and fingerprints; `register.ts` holds the `match_quality_run` job, the snapshot and sweep steps, and fills `foldSeams.loadShadow` |
 | `playground/` | Test a search (upstream's Playground): rank a prompt with the SDK's engine against the live catalog, with what-if edits. `embed.ts` goes through the embedding-provider port (a refused or unreadable answer keeps its reason; a keyless run is told to the provider), `rank-route.ts` is the route's logic |

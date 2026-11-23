@@ -4,7 +4,7 @@
  * the conversation keeps each message once, where it first appeared.
  */
 
-import type { TraceMessageView } from "@/lib/synthesis/traces/content-view";
+import type { TraceMessageView } from "@/lib/ingest/otlp/content-view";
 
 export const ROLE_LABEL: Readonly<Record<TraceMessageView["role"], string>> = {
   system: "Instructions",

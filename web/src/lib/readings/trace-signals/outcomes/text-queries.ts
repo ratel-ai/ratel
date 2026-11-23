@@ -1,11 +1,11 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { GEN_AI } from "@/lib/ingest/otlp/constants";
+import { buildTraceContentView } from "@/lib/ingest/otlp/content-view";
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { events, otelSpans } from "@/lib/ingest/otlp/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { getDb } from "@/lib/platform/db/client";
 import { replyTextOf } from "@/lib/readings/trace-signals/self-corrections/replies";
-import { buildTraceContentView } from "@/lib/synthesis/traces/content-view";
 
 /**
  * A model call's own reply: its last message, when the assistant wrote text in

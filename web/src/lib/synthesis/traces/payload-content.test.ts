@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CloudEvent } from "@/lib/ingest/cloud-schema";
+import { preferSpanContent, type TraceContentView } from "@/lib/ingest/otlp/content-view";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
 import { groupSpans } from "@/lib/ingest/otlp/group";
 import { normalizeAiSdkSpans } from "@/lib/ingest/otlp/normalize-ai-sdk";
 import { toRows } from "@/lib/ingest/otlp/reconstruct";
 import { normalizeSemconvAliases } from "@/lib/ingest/otlp/semconv/aliases";
 import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
-import { preferSpanContent, type TraceContentView } from "./content-view";
 import { buildPayloadContent, type PayloadCall } from "./payload-content";
 import { conversationMessages } from "./v2/conversation";
 

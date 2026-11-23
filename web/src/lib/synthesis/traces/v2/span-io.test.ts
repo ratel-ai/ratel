@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { TraceContentView } from "@/lib/ingest/otlp/content-view";
 import { decodeOtlp } from "@/lib/ingest/otlp/decode";
 import { loadFixture } from "@/lib/ledger/turns/real-fixtures";
-import type { TraceContentView } from "@/lib/synthesis/traces/content-view";
 import { buildSpanIO } from "./span-io";
 
 const NO_PAYLOAD = null;

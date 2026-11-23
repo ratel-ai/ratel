@@ -21,10 +21,8 @@ never a higher one; nothing here imports the UI (`@/components`, `@/app`) outsid
 Each module owns its `schema.ts` (tables), `queries.ts` and `register.ts` (job handlers and drain
 steps). `platform/db` holds no table; it composes the fragments.
 
-`scripts/layers-allow.json` is the ratchet for tolerated violations, and it only shrinks: a stale
-entry fails the check. It holds one: `readings/trace-signals/outcomes/text-queries.ts` reads a
-span's reply through `synthesis/traces/content-view.ts`, a file that imports only ingest and can
-move down to it with a sync.
+`scripts/layers-allow.json` is the ratchet for tolerated violations. It is empty now, and it only
+shrinks: a stale entry fails the check.
 
 Files maintained here rather than synced from `ratel-cloud` (`owned` in
 `scripts/platform-sync/map.json`) keep the upstream export names so call sites stay identical.

@@ -1,5 +1,12 @@
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { CloudEvent, CloudMessage } from "@/lib/ingest/cloud-schema";
+import {
+  messageText,
+  type TraceContentView,
+  type TraceMessageView,
+  type TraceToolCallView,
+  toolResults,
+} from "@/lib/ingest/otlp/content-view";
 import { OTLP_MODEL_CALL } from "@/lib/ingest/otlp/derive-model-calls";
 import { events } from "@/lib/ingest/otlp/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
@@ -7,18 +14,11 @@ import { getDb } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { getLogger } from "@/lib/platform/logger";
 import { reportServerException } from "@/lib/platform/telemetry";
-import {
-  messageText,
-  type TraceContentView,
-  type TraceMessageView,
-  type TraceToolCallView,
-  toolResults,
-} from "./content-view";
 
 /**
  * A trace's captured content read from `events.payload` (RC-393). OTLP ingest
  * strips message content from `otel_spans.attributes` by design and keeps it
- * in each model call's ADR-0007 payload, joined by the trace id. The pages and
+ * in each model call's ADR-0013 payload, joined by the trace id. The pages and
  * the MCP tools read the spans first and fall back to this when the spans
  * carry none.
  *
@@ -49,7 +49,7 @@ const FIRST_CALLS = 20;
 const ID_CHUNK = 500;
 
 const EVENT_TIME = sql`coalesce(${events.occurredAt}, ${events.receivedAt})`;
-/** A user message with text in an ADR-0007 payload, tested in the database. */
+/** A user message with text in an ADR-0013 payload, tested in the database. */
 const HAS_USER_TEXT = sql<boolean>`jsonb_path_exists(${events.payload}, '$.messages[*] ? (@.role == "user" && ((@.content.type() == "string" && @.content != "") || exists(@.content[*] ? (@.type == "text" && @.text != ""))))')`;
 const DERIVED_PROMPT = sql<string>`btrim(${traceEvents.payload} ->> 'prompt')`;
 const logger = getLogger("traces/payload-content");

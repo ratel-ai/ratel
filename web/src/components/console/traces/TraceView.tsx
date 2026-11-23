@@ -10,12 +10,12 @@ import { Tabs } from "@ratel/design-system/tabs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RawSpanView, TraceRawRouteResponse } from "@/lib/ingest/otlp-raw/trace-raw-route";
 import {
   buildTraceContentView,
   preferSpanContent,
   type TraceContentView,
-} from "@/lib/synthesis/traces/content-view";
+} from "@/lib/ingest/otlp/content-view";
+import type { RawSpanView, TraceRawRouteResponse } from "@/lib/ingest/otlp-raw/trace-raw-route";
 import type { AgentSubtree } from "@/lib/synthesis/traces/v2/agent-rollup";
 import { costLabel } from "@/lib/synthesis/traces/v2/cost-label";
 import { formatDuration, formatInteger, formatTimestamp } from "@/lib/synthesis/traces/v2/format";

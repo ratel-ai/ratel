@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTraceContentView } from "./content-view";
+import { buildTraceContentView } from "@/lib/ingest/otlp/content-view";
 
 test("trace content view separates captured messages and tool calls", () => {
   const view = buildTraceContentView([
@@ -111,7 +111,7 @@ test("a tool span's plain-text result is shown as text, not dropped", () => {
 });
 
 test("tool content on the spans joins the payload's messages instead of replacing them", async () => {
-  const { preferSpanContent } = await import("./content-view");
+  const { preferSpanContent } = await import("@/lib/ingest/otlp/content-view");
   const spans = buildTraceContentView([
     {
       spanId: "span-bash",
@@ -195,7 +195,7 @@ test("tool content on the spans joins the payload's messages instead of replacin
 });
 
 test("spans that carry their own messages still win over the payload", async () => {
-  const { preferSpanContent } = await import("./content-view");
+  const { preferSpanContent } = await import("@/lib/ingest/otlp/content-view");
   const spans = {
     messages: [{ id: "s:0", role: "user" as const, text: "From the span" }],
     toolCalls: [],
@@ -214,7 +214,7 @@ test("spans that carry their own messages still win over the payload", async () 
 });
 
 test("a tool span without a call id joins the payload call of the same tool, once", async () => {
-  const { preferSpanContent } = await import("./content-view");
+  const { preferSpanContent } = await import("@/lib/ingest/otlp/content-view");
   const toolSpan = (spanId: string, result: string, callId?: string) => ({
     spanId,
     name: "execute_tool Bash:git",

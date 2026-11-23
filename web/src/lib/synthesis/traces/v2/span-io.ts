@@ -1,11 +1,11 @@
 import type { CloudMessage } from "@/lib/ingest/cloud-schema";
 import { GEN_AI } from "@/lib/ingest/otlp/constants";
 import { mapMessages, systemFromInstructions } from "@/lib/ingest/otlp/content";
+import type { TraceContentView, TraceMessageView } from "@/lib/ingest/otlp/content-view";
+import { messageText } from "@/lib/ingest/otlp/content-view";
 import { splitPromptMessages } from "@/lib/ingest/otlp/normalize-ai-sdk";
 import { mastraMessageList } from "@/lib/ingest/otlp/semconv/mastra-content";
 import type { AttrValue } from "@/lib/ingest/otlp/types";
-import type { TraceContentView, TraceMessageView } from "@/lib/synthesis/traces/content-view";
-import { messageText } from "@/lib/synthesis/traces/content-view";
 
 /**
  * One span's input and output for the span pane (RC-412): messages for a

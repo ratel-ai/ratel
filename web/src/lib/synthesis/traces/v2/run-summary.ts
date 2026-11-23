@@ -7,9 +7,9 @@
  * the trace's `events.payload` content, read when the spans carry none.
  */
 
+import { buildTraceContentView, preferSpanContent } from "@/lib/ingest/otlp/content-view";
 import { promptOf } from "@/lib/ingest/otlp/prompt-text";
 import type { AttrMap } from "@/lib/ingest/otlp/types";
-import { buildTraceContentView, preferSpanContent } from "@/lib/synthesis/traces/content-view";
 import type { PayloadContent } from "@/lib/synthesis/traces/payload-content";
 import { isUnpricedCall } from "./cost-label";
 import type { RunStatus } from "./runs";
