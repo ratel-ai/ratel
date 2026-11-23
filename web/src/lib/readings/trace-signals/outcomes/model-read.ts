@@ -226,7 +226,7 @@ const openingOf = (text: string): string | null => {
     : null;
 };
 
-/** A message that opens with a bracketed tag ("[beluga] Kayra's agent replied …") is a tool's notice. */
+/** A message that opens with a bracketed tag ("[beluga] a teammate's agent replied …") is a tool's notice. */
 const TAGGED_NOTICE = /^\s*\[[\p{L}\p{N}_ .-]{1,40}\]/u;
 
 /**

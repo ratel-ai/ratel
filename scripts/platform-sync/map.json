@@ -2209,7 +2209,7 @@
     {"from": "apps/web/lib/trace-signals/outcomes/gate.ts", "to": "web/src/lib/readings/trace-signals/outcomes/gate.ts", "mode": "owned", "$why": "the switch is the core's sentimentAnalysis, read through featureEnabled; upstream's names and arguments are kept"},
     {"from": "apps/web/lib/trace-signals/outcomes/kinds.ts", "to": "web/src/lib/readings/trace-signals/outcomes/kinds.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/outcomes/model-read.test.ts", "to": "web/src/lib/readings/trace-signals/outcomes/model-read.test.ts", "mode": "owned", "$why": "a fixture names the Cloud decision vendor's model: a neutral model id"},
-    {"from": "apps/web/lib/trace-signals/outcomes/model-read.ts", "to": "web/src/lib/readings/trace-signals/outcomes/model-read.ts", "mode": "copy"},
+    {"from": "apps/web/lib/trace-signals/outcomes/model-read.ts", "to": "web/src/lib/readings/trace-signals/outcomes/model-read.ts", "mode": "owned", "$why": "a comment names a person; only the comment differs"},
     {"from": "apps/web/lib/trace-signals/outcomes/model.integration.test.ts", "to": "web/src/lib/readings/trace-signals/outcomes/model.integration.test.ts", "mode": "owned", "$why": "the engine is a fake of the closed-questions port's client; a neutral model id"},
     {"from": "apps/web/lib/trace-signals/outcomes/overview.test.ts", "to": "web/src/lib/views/traces/sentiment/overview.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/outcomes/overview.ts", "to": "web/src/lib/views/traces/sentiment/overview.ts", "mode": "copy"},
