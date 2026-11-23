@@ -56,8 +56,8 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 
 | `MODEL_PROVIDER` | Needs | Deep · standard · fast | Run live |
 |---|---|---|---|
-| unset, `claude` | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BACKEND` | `claude-opus-5-5` · `claude-sonnet-5-5` · `claude-haiku-5-5` | not since the kit |
-| `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | no |
+| unset, `claude` | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BACKEND` | `claude-opus-5-5` · `claude-sonnet-5-5` · `claude-haiku-5-5` | all three, on the Anthropic API |
+| `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | all three |
 | `mistral` | `MISTRAL_API_KEY` | `mistral-large-latest` · `mistral-large-latest` · `mistral-small-latest` | no |
 | `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | no |
 | `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | no |
@@ -93,5 +93,5 @@ answer, a tool call and a decision against whatever the environment selects.
 `call-sites.test.ts` runs the features on a model that is not Claude, and
 `views/eval-gate/models-neutral.test.ts` the eval gate. The golden tests beside each site
 (`*.golden.test.ts`) hold the Claude path to the requests it sent before the kit. Decisions are in
-`readings/decisions` (`vendors.ts`, `DECISION_PROVIDER`); a reranker or an LLM as the judge is not
-built.
+`readings/decisions` (`vendors.ts`, `DECISION_PROVIDER`); OpenAI and Levanto (Sage 2) were run live, the
+others not. A reranker or an LLM as the judge is not built.
