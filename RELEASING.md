@@ -14,8 +14,9 @@ workflows and tooling. Read its
 
 The platform (`web/`) is not published as a package. It is versioned as one unit with
 [release-please](https://github.com/googleapis/release-please), and each release publishes the
-OSS image `docker.io/ratelai/ratel`. Operators can also build it from source with
-`docker compose` (see [README.md](README.md)).
+OSS image `docker.io/ratelai/ratel` and the demo data image `docker.io/ratelai/ratel-demo`.
+Every deploy path runs them at a pinned version (see [README.md](README.md)):
+`docker-compose.build.yml` and `install.sh --ref` build from source instead.
 
 ### Versions
 
@@ -26,12 +27,20 @@ OSS image `docker.io/ratelai/ratel`. Operators can also build it from source wit
   (`refactor:`, `docs:`, `chore:`, `ci:`, `test:`) make no release on their own.
 - On each push to `main`, `.github/workflows/release-please.yml` opens or updates one release PR,
   `chore(main): release X.Y.Z`. It bumps `version` in `package.json` and `web/package.json`,
-  updates `.release-please-manifest.json` and writes `CHANGELOG.md`. Edit the PR body to change the
+  moves the default `RATEL_VERSION` in `docker-compose.yml` and `.env.example`, updates
+  `.release-please-manifest.json` and writes `CHANGELOG.md`. Edit the PR body to change the
   release notes. A `Release-As: X.Y.Z` footer on a commit to `main` forces a version.
 - Merge the release PR to release. release-please then tags `vX.Y.Z` on the merge commit and
   creates the GitHub Release.
 - The config is `release-please-config.json`. Its `release-as: 0.1.0` makes the first release
   `v0.1.0`: remove it in the PR after that release, or every later release PR stays at 0.1.0.
+
+`install.sh` and `deploy.sh` take the highest `X.Y.Z` tag of `ratelai/ratel` on Docker Hub as the
+latest release. They do not read git tags or GitHub releases: this repo has SDK releases named
+`v0.1.4`, `v0.1.5`, `v0.1.6` and `v0.2.0`, which have no image. A platform release cannot reuse
+those versions: release-please fails on a tag whose GitHub Release exists. Skip each one with
+`release-as`. Between the merge of a release PR and the end of its image job, `docker compose up`
+on `main` names a version that is not on Docker Hub yet.
 
 A release PR that `GITHUB_TOKEN` opens starts no CI, so its required `ci-gate` and
 `pr-title` checks never report. Store a fine-grained token (contents and pull requests: read and write) or a GitHub App
@@ -42,7 +51,8 @@ second run pushes the same tags again from the build cache.
 ### Images
 
 `.github/workflows/image.yml` builds the `oss` target of `web/Dockerfile` for linux/amd64 and
-linux/arm64 (arm64 under QEMU) and pushes `docker.io/ratelai/ratel`:
+linux/arm64 (arm64 under QEMU) and pushes `docker.io/ratelai/ratel`. It builds the `demo` target
+and pushes `docker.io/ratelai/ratel-demo` with the same tags:
 
 | Trigger | Tags |
 | --- | --- |
@@ -59,8 +69,8 @@ provenance attestation (`mode=max`) and an SBOM. Read them with
 `/api/health`.
 
 The job logs in with the `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets: a Docker Hub
-access token with Read & Write on the `ratelai` namespace. The repository `ratelai/ratel` must
-be public.
+access token with Read & Write on the `ratelai` namespace. The repositories `ratelai/ratel` and
+`ratelai/ratel-demo` must be public.
 
 ### SDK versions
 

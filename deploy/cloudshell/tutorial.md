@@ -34,7 +34,7 @@ For no web port, and a console that you reach through an SSH tunnel:
 ./deploy.sh up --cloud gcp --access private
 ```
 
-Other options: `--region`, `--size`, `--domain`, `--allow-cidr` and `--ref`. See "Deploy to your cloud" in the README.
+Other options: `--region`, `--size`, `--domain`, `--allow-cidr`, `--version` and `--ref`. See "Deploy to your cloud" in the README.
 
 ## Keep the state
 
