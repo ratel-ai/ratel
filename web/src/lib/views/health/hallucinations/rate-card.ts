@@ -16,6 +16,7 @@ import {
   type PageDb,
 } from "@/lib/views/health/hallucinations/page-queries";
 import { hallucinationsHref } from "@/lib/views/health/hallucinations/paths";
+import { hasWorkingTool } from "@/lib/views/health/hallucinations/tool-names";
 
 /**
  * The hallucination rate on Agent health's Summary, beside Task completion:
@@ -32,6 +33,8 @@ export interface HallucinationRateCard {
   read: boolean;
   /** Whether any group's rules had something to read in the window (`uncheckedReason`); false: nothing could be checked. */
   checked: boolean;
+  /** Tools were checked by name only (`tool-names.ts`): a name that never worked is left open. */
+  byNameOnly: boolean;
   /** Each group's occurrences, and whether it could be checked. */
   groups: Array<{ group: HallucinationGroup; occurrences: number; checked: boolean }>;
   href: string;
@@ -82,8 +85,13 @@ export async function loadHallucinationRateCard(
   }
   const turnsAffected = found?.turnsAffected ?? 0;
   const read = lastRead.at !== null;
+  const byNameOnly =
+    (found?.occurrences ?? 0) === 0 &&
+    uncheckedReason("tool", coverage) !== null &&
+    (await hasWorkingTool(projectId, window, db));
   // A group with a finding was checked, whatever the coverage reads.
   const checked =
+    byNameOnly ||
     (found?.occurrences ?? 0) > 0 ||
     HALLUCINATION_GROUPS.some((group) => uncheckedReason(group, coverage) === null);
   return {
@@ -93,10 +101,14 @@ export async function loadHallucinationRateCard(
     occurrences: found?.occurrences ?? 0,
     read,
     checked,
+    byNameOnly,
     groups: HALLUCINATION_GROUPS.map((group) => ({
       group,
       occurrences: perGroup.get(group) ?? 0,
-      checked: (perGroup.get(group) ?? 0) > 0 || uncheckedReason(group, coverage) === null,
+      checked:
+        (group === "tool" && byNameOnly) ||
+        (perGroup.get(group) ?? 0) > 0 ||
+        uncheckedReason(group, coverage) === null,
     })),
     href: hallucinationsHref(projectId, { days: windowDays }),
   };

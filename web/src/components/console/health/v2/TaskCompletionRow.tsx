@@ -1,7 +1,7 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { Section } from "@ratel/design-system/section";
-import { ArrowRight, ListChecks } from "lucide-react";
+import { ArrowRight, CircleCheck, ListChecks } from "lucide-react";
 import Link from "next/link";
 import { GROUP_COLOR, GROUP_SHORT } from "@/components/console/hallucinations/copy";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
@@ -10,6 +10,7 @@ import { percent, plural, STATUS_COLOR } from "@/components/console/sentiment/co
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { GROUP_LABEL } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { windowPhrase } from "@/lib/readings/trace-signals/view";
+import { NONE_FOUND, TRUSTWORTHY } from "@/lib/views/health/hallucinations/clean";
 import type { HallucinationRateCard } from "@/lib/views/health/hallucinations/rate-card";
 import type { TaskCompletionCard } from "@/lib/views/health/root-causes/completion-card";
 import { TASK_FILTER_LABEL, TASK_FILTER_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
@@ -146,22 +147,26 @@ function HallucinationRateTile({
 }) {
   const value =
     !card.checked && card.read
-      ? "Not checked"
+      ? "Not checked yet"
       : card.rate === null
         ? "None"
-        : card.rate > 0 && card.rate < 0.001
-          ? "<0.1%"
-          : card.rate < 0.1
-            ? `${(card.rate * 100).toFixed(1)}%`
-            : percent(card.rate);
+        : card.rate === 0
+          ? "0%"
+          : card.rate > 0 && card.rate < 0.001
+            ? "<0.1%"
+            : card.rate < 0.1
+              ? `${(card.rate * 100).toFixed(1)}%`
+              : percent(card.rate);
   const hint = !card.read
     ? "Not read yet"
     : !card.checked
-      ? "This project sends nothing the rules can read"
+      ? "Checks start when your agent sends error text or replies"
       : card.turns === 0
         ? `No turns ${windowPhrase(windowDays)}`
         : `${formatCount(card.turnsAffected)} of ${plural(card.turns, "turn")} had at least one`;
   const found = card.groups.filter((group) => group.occurrences > 0);
+  // Read, checked and nothing found: good news, said as such.
+  const clean = card.read && card.checked && card.turns > 0 && card.occurrences === 0;
   return (
     <div className="flex min-w-[16rem] flex-1 flex-col gap-3" data-health-hallucination-rate="">
       {/* Laid out like task completion beside it: a heading line with its link, no box. */}
@@ -186,8 +191,17 @@ function HallucinationRateTile({
           {value}
         </span>
         <span className="text-xs text-fg-subtle">{hint}</span>
+        {clean ? (
+          <span
+            className="mt-1 inline-flex items-center gap-1.5 text-ui text-success"
+            data-health-hallucination-clean=""
+          >
+            <CircleCheck className="size-4" aria-hidden />
+            {card.byNameOnly ? NONE_FOUND : TRUSTWORTHY}
+          </span>
+        ) : null}
       </span>
-      {card.read ? (
+      {card.read && card.checked ? (
         <>
           {/* Each group's part of the occurrences. */}
           <span className="flex flex-col gap-1.5" data-health-hallucination-groups="">

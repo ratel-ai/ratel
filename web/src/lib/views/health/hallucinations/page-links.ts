@@ -31,9 +31,13 @@ export interface ToolView extends KindTool {
 
 export interface ExampleView {
   turnId: string;
+  /** The call it is on; null once its step is gone. */
+  eventId: string | null;
   occurredAt: string;
   /** The turn in Traces, on the call the finding sits on. */
   traceHref: string;
+  /** The same turn opened in the Panel beside the list. */
+  panelHref: string;
 }
 
 export interface KindView extends Omit<KindRow, "tools" | "examples"> {
@@ -99,8 +103,17 @@ export function hallucinationsLinks(model: HallucinationsPageModel): Hallucinati
         })),
         examples: kind.examples.map((example) => ({
           turnId: example.turnId,
+          eventId: example.eventId,
           occurredAt: example.occurredAt,
           traceHref: turnTracesHref(projectId, example.turnId, example.eventId),
+          panelHref: hallucinationsHref(projectId, {
+            days,
+            group: query.group,
+            kind: query.kind,
+            open: kind.kind,
+            turn: example.turnId,
+            call: example.eventId,
+          }),
         })),
       })),
     };

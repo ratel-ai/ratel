@@ -11,6 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WhatIfSetup } from "@/components/console/session-replay/SessionTimeline";
 import { createUrlWriter, withQueryUpdates } from "@/lib/synthesis/traces/v2/url-writer";
+import type { TrackBookmark } from "@/lib/views/health/hallucinations/session-bookmarks";
 import type { PanelChat, PanelChatTurn } from "@/lib/views/session-chat/actions";
 import {
   type ChatTurn,
@@ -88,6 +89,8 @@ export interface SessionChatViewProps {
   inspectorActions?: InspectorActions;
   /** A line on the track at one step; absent, none. */
   marker?: TrackMarker;
+  /** The session's hallucinations on the track; the one the reader came from is where the replay opens. */
+  bookmarks?: readonly TrackBookmark[];
   /** "Open full trace" on a work line; off for a chat with no trace (an eval run). */
   traceLinks?: boolean;
 }
@@ -101,6 +104,7 @@ export function SessionChatView({
   source,
   inspectorActions,
   marker,
+  bookmarks = [],
   traceLinks = true,
   syncUrl = true,
   className,
@@ -109,7 +113,9 @@ export function SessionChatView({
   const { id, open: openPeek, close: closePeek } = usePeek();
   // Closed once, the default inspector stays closed until a click opens a panel.
   const [dismissed, setDismissed] = useState(false);
-  const firstCall = chat.calls[0]?.stepIndex;
+  // Opened from a hallucination, the replay starts on its step; else on the first model call.
+  const startStep = bookmarks.find((bookmark) => bookmark.current)?.stepIndex;
+  const firstCall = startStep ?? chat.calls[0]?.stepIndex;
   const peek =
     parseChatPeek(id) ??
     (synced && !dismissed && firstCall !== undefined
@@ -132,7 +138,9 @@ export function SessionChatView({
   const pathname = usePathname();
   const total = chat.trackTotalMs;
   const [t, setT] = useState(() =>
-    parsePlayhead(searchParams.get("t"), total, { fromStart: synced }),
+    searchParams.get("t") === null && startStep !== undefined
+      ? (callStart(chat, startStep) ?? 0)
+      : parsePlayhead(searchParams.get("t"), total, { fromStart: synced }),
   );
   const [zoom, setZoom] = useState<Zoom>(() => parseZoom(searchParams.get("zoom")));
   const [playing, setPlaying] = useState(false);
@@ -315,6 +323,7 @@ export function SessionChatView({
             if (call !== undefined) open({ kind: "step", stepIndex: call });
           }}
           marker={marker}
+          bookmarks={bookmarks}
         />
       </div>
       {peek && panelMode === "push" ? (

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { HallucinationsView } from "@/components/console/hallucinations/HallucinationsView";
+import { loadPanelTurn } from "@/components/console/turn-panel/load";
 import { getProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
@@ -64,5 +65,12 @@ export default async function HallucinationsPage({
       active: option.days === windowDays,
     }));
 
-  return <HallucinationsView model={model} windows={windows} now={now.toISOString()} />;
+  const turn = await loadPanelTurn({
+    projectId: project.id,
+    organization,
+    search,
+    operation: "hallucinations_turn",
+  });
+
+  return <HallucinationsView model={model} windows={windows} now={now.toISOString()} turn={turn} />;
 }

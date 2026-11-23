@@ -12,15 +12,18 @@ import { KindTable } from "@/components/console/hallucinations/KindTable";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { percent, plural } from "@/components/console/sentiment/copy";
 import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
+import { cleanResult } from "@/lib/views/health/hallucinations/clean";
 import {
   type HallucinationsLinks,
   hallucinationsLinks,
 } from "@/lib/views/health/hallucinations/page-links";
 import type { HallucinationsPageModel } from "@/lib/views/health/hallucinations/page-model";
 import { MAX_PAGE_FINDINGS } from "@/lib/views/health/hallucinations/page-queries";
+import type { ToolNameCheck } from "@/lib/views/health/hallucinations/tool-names";
 
 /**
  * Hallucinations (Agent health): what the agent made up, read from the trace
@@ -34,12 +37,15 @@ export function HallucinationsView({
   model,
   windows,
   now,
+  turn = null,
 }: {
   model: HallucinationsPageModel;
   /** The time windows the plan allows, as links. */
   windows: readonly LinkSwitchOption[];
   /** The request's time, so relative times match between server and client. */
   now: string;
+  /** The turn the address opens in the Panel, with what Traces shows of it. */
+  turn?: PanelTurn | null;
 }) {
   return (
     <Page>
@@ -50,7 +56,7 @@ export function HallucinationsView({
         actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
       />
       <PageBody wide>
-        <Body model={model} links={hallucinationsLinks(model)} now={now} />
+        <Body model={model} links={hallucinationsLinks(model)} now={now} turn={turn} />
       </PageBody>
     </Page>
   );
@@ -60,10 +66,12 @@ function Body({
   model,
   links,
   now,
+  turn,
 }: {
   model: HallucinationsPageModel;
   links: HallucinationsLinks;
   now: string;
+  turn: PanelTurn | null;
 }) {
   const span = windowPhrase(model.windowDays);
   const health = (
@@ -104,9 +112,15 @@ function Body({
   const { totals } = model;
   return (
     <>
-      <StatRow stats={headline(model)} />
+      {/* Zeros over a window nothing could be read in would read as a result. */}
+      {totals.occurrences === 0 &&
+      model.groups.every((group) => group.unchecked !== null) ? null : (
+        <StatRow
+          stats={model.toolNames ? byNameHeadline(model, model.toolNames) : headline(model)}
+        />
+      )}
       {totals.occurrences === 0 ? (
-        <NothingFound links={links} turns={totals.turns} span={span} />
+        <NothingFound model={model} />
       ) : (
         <>
           <Section
@@ -128,61 +142,53 @@ function Body({
             />
             <Footnotes model={model} now={now} />
           </Section>
-          <KindPanel groups={links.listed} now={now} />
+          <KindPanel groups={links.listed} now={now} turn={turn} />
         </>
       )}
     </>
   );
 }
 
-/**
- * No finding in the window. It says so only for the groups that could be
- * checked: a group whose rules had nothing to read is named, with what the
- * project would need to send, instead of being counted as clean.
- */
-function NothingFound({
-  links,
-  turns,
-  span,
-}: {
-  links: HallucinationsLinks;
-  turns: number;
-  span: string;
-}) {
-  const unchecked = links.groups.filter((group) => group.unchecked !== null);
-  const checked = links.groups.filter((group) => group.unchecked === null);
-  if (unchecked.length === 0) {
+/** No finding in the window (`cleanResult`): good news, large, where something was checked. */
+function NothingFound({ model }: { model: HallucinationsPageModel }) {
+  const result = cleanResult({ groups: model.groups, toolNames: model.toolNames });
+  if (result.state === "unchecked")
     return (
       <EmptyState
-        icon={CircleCheck}
-        title={`No hallucinations found ${span}`}
-        description={`In ${plural(turns, "turn")}, the agent asked for no tool that doesn't exist, sent nothing a tool called missing, and reported no work it hadn't done.`}
+        icon={CircleDashed}
+        title={result.title}
+        description="Your agent's traces carry no finished tool calls, error text or replies."
       />
     );
-  }
   return (
-    <EmptyState
-      icon={CircleDashed}
-      title={
-        checked.length === 0
-          ? `Nothing could be checked ${span}`
-          : `No hallucinations found in what could be checked ${span}`
-      }
-      description={
-        <span className="flex flex-col gap-2 text-left" data-hallucination-unchecked="">
-          {checked.length > 0 ? (
-            <span>{`Checked in ${plural(turns, "turn")}: ${checked.map((group) => group.label).join(", ")}. Nothing found.`}</span>
-          ) : null}
-          {unchecked.map((group) => (
-            <span key={group.group}>
-              <span className="font-medium text-fg">{`${group.label}: not checked.`}</span>{" "}
-              {group.unchecked}
-            </span>
-          ))}
-        </span>
-      }
-    />
+    <div
+      className="flex flex-col items-center gap-4 px-6 py-20 text-center"
+      data-hallucination-result={result.state}
+    >
+      <CircleCheck className="size-14 text-success" strokeWidth={1.25} aria-hidden />
+      <p className="text-3xl font-semibold text-balance text-fg">{result.title}</p>
+    </div>
   );
+}
+
+/** A share that never rounds up to a whole it is not: 99.94% is 99.9%. */
+const flooredPercent = (part: number, whole: number): string =>
+  whole === 0
+    ? "None"
+    : part === whole
+      ? "100%"
+      : `${(Math.floor((part / whole) * 1000) / 10).toFixed(1)}%`;
+
+/** The numbers of a window whose tools were checked by name. */
+function byNameHeadline(model: HallucinationsPageModel, check: ToolNameCheck): StatProps[] {
+  return [
+    ...headline(model).slice(0, 2),
+    {
+      label: "Calls to a tool that works",
+      value: flooredPercent(check.callsOnWorking, check.calls),
+      hint: `${formatCount(check.callsOnWorking)} of ${plural(check.calls, "tool call")}`,
+    },
+  ];
 }
 
 /** Three numbers: the share of turns with a hallucination, how many there were, and the turns they sit in. */
@@ -195,11 +201,13 @@ function headline(model: HallucinationsPageModel): StatProps[] {
       value:
         totals.rate === null
           ? "None"
-          : totals.rate > 0 && totals.rate < 0.001
-            ? "<0.1%"
-            : totals.rate < 0.1
-              ? `${(totals.rate * 100).toFixed(1)}%`
-              : percent(totals.rate),
+          : totals.rate === 0
+            ? "0%"
+            : totals.rate > 0 && totals.rate < 0.001
+              ? "<0.1%"
+              : totals.rate < 0.1
+                ? `${(totals.rate * 100).toFixed(1)}%`
+                : percent(totals.rate),
       hint: `${formatCount(totals.turnsAffected)} of ${plural(totals.turns, "turn")} had at least one`,
     },
     {

@@ -417,7 +417,7 @@ export function consoleNav({
 
 /**
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
- * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
+ * labelled section). Monitor contains Agent health, without its Tasks child;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
@@ -444,9 +444,7 @@ function stageRailNav(
     ...classicHealth,
     // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
     also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
-    children: (classicHealth.children ?? [])
-      .filter((item) => item.id !== "health-tasks")
-      .map((item) => ({ ...item, activeId: classicHealth.id })),
+    children: (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks"),
   };
   const tasks: NavItem = {
     id: "tasks",

@@ -9,6 +9,7 @@ import {
 import type { StoredAlias } from "@/lib/readings/trace-signals/hallucinations/run";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import type { HallucinationsQuery } from "@/lib/views/health/hallucinations/paths";
+import type { ToolNameCheck } from "@/lib/views/health/hallucinations/tool-names";
 
 /**
  * The Hallucinations page (pure): how often the agent made something up, the
@@ -120,6 +121,8 @@ export interface HallucinationsPageInput {
   coverage?: PageCoverage;
   /** Names the last reading took for aliases, not findings. */
   aliases?: readonly StoredAlias[];
+  /** The tool check by name, loaded only where the rules have nothing to read for tools. */
+  toolNames?: ToolNameCheck | null;
 }
 
 export interface HallucinationsPageModel {
@@ -135,6 +138,8 @@ export interface HallucinationsPageModel {
   capped: boolean;
   /** Names the runtime steadily maps to a tool: left out of the findings as naming mismatches. */
   aliases: StoredAlias[];
+  /** How tools were checked when the rules had nothing to read: by name. Null: the rules checked them, or nothing could. */
+  toolNames: ToolNameCheck | null;
 }
 
 const share = (part: number, whole: number): number => (whole === 0 ? 0 : part / whole);
@@ -217,7 +222,7 @@ export function buildHallucinationsPage(
       kinds,
       // A group with findings was checked, whatever the coverage reads.
       unchecked:
-        inGroup.length > 0
+        inGroup.length > 0 || (group === "tool" && (input.toolNames?.callsOnWorking ?? 0) > 0)
           ? null
           : uncheckedReason(
               group,
@@ -251,6 +256,7 @@ export function buildHallucinationsPage(
     lastReadAt: input.lastReadAt?.toISOString() ?? null,
     capped: input.capped,
     aliases: [...(input.aliases ?? [])],
+    toolNames: (input.toolNames?.callsOnWorking ?? 0) > 0 ? (input.toolNames ?? null) : null,
   };
 }
 
@@ -279,5 +285,6 @@ export function unavailableHallucinationsPage(
     lastReadAt: null,
     capped: false,
     aliases: [],
+    toolNames: null,
   };
 }

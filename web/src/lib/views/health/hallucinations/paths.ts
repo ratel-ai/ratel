@@ -7,6 +7,7 @@ import {
 } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import { parseSentimentWindow } from "@/lib/views/traces/sentiment/page-paths";
+import { CALL_PEEK, TURN_PEEK } from "@/lib/views/traces/turn-peek";
 
 /**
  * The Hallucinations page's address: its window, the group or the one kind it
@@ -47,6 +48,8 @@ export function hallucinationsHref(
     group?: HallucinationGroup | null;
     kind?: HallucinationKind | null;
     open?: string | null;
+    turn?: string | null;
+    call?: string | null;
   } = {},
 ): string {
   const query = new URLSearchParams();
@@ -56,6 +59,8 @@ export function hallucinationsHref(
   if (options.kind) query.set("kind", options.kind);
   else if (options.group) query.set("group", options.group);
   if (options.open) query.set(KIND_PEEK, options.open);
+  if (options.turn) query.set(TURN_PEEK, options.turn);
+  if (options.turn && options.call) query.set(CALL_PEEK, options.call);
   const text = query.toString();
   const path = `/project/${encodeURIComponent(projectId)}/health/hallucinations`;
   return text ? `${path}?${text}` : path;

@@ -3,10 +3,11 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { Panel, usePeek } from "@ratel/design-system/panel";
-import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { GROUP_COLOR } from "@/components/console/hallucinations/copy";
 import { percent, plural } from "@/components/console/sentiment/copy";
+import { type PanelTurn, useTurnPanel } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import type { GroupView, KindView } from "@/lib/views/health/hallucinations/page-links";
@@ -16,14 +17,24 @@ import { KIND_PEEK } from "@/lib/views/health/hallucinations/paths";
  * One kind of hallucination, opened from its row: what it is, how often it
  * happened, the tools it happened on (for a reroute, the name the agent
  * asked for and the tool that ran, with how many still worked), and where it
- * happened: its newest occurrences, each a date and the call in Traces.
- * `j` and `k` step through the kinds listed.
+ * happened: its newest occurrences, each a date and its turn. `j` and `k`
+ * step through the kinds listed. "Open in Traces" shows the turn in this
+ * same Panel, scrolled to the call, with the way back to the kind.
  */
-export function KindPanel({ groups, now }: { groups: readonly GroupView[]; now: string }) {
+export function KindPanel({
+  groups,
+  now,
+  turn,
+}: {
+  groups: readonly GroupView[];
+  now: string;
+  turn: PanelTurn | null;
+}) {
   const peek = usePeek(KIND_PEEK);
   const kinds = groups.flatMap((group) => group.kinds);
   const index = kinds.findIndex((kind) => kind.kind === peek.id);
   const kind = index >= 0 ? kinds[index] : undefined;
+  const panel = useTurnPanel({ turn, openId: peek.id, backLabel: kind?.label ?? "the list" });
   const step = (by: 1 | -1) => {
     const next = kinds[index + by];
     if (next) peek.open(next.kind);
@@ -32,19 +43,33 @@ export function KindPanel({ groups, now }: { groups: readonly GroupView[]; now: 
     <Panel
       open={kind !== undefined}
       onOpenChange={(next) => {
-        if (!next) peek.close();
+        if (!next) panel.close(KIND_PEEK);
       }}
-      title={kind?.label ?? "Hallucination"}
-      subtitle={kind?.groupLabel}
-      onPrevious={index > 0 ? () => step(-1) : undefined}
-      onNext={index >= 0 && index < kinds.length - 1 ? () => step(1) : undefined}
+      size={panel.inTurn ? "wide" : "default"}
+      title={panel.inTurn ? panel.title : (kind?.label ?? "Hallucination")}
+      subtitle={panel.inTurn ? undefined : kind?.groupLabel}
+      actions={panel.actions}
+      onPrevious={!panel.inTurn && index > 0 ? () => step(-1) : undefined}
+      onNext={!panel.inTurn && index >= 0 && index < kinds.length - 1 ? () => step(1) : undefined}
     >
-      {kind ? <Body kind={kind} now={now} /> : null}
+      {panel.inTurn ? (
+        panel.body
+      ) : kind ? (
+        <Body kind={kind} now={now} onOpenTurn={panel.onOpen} />
+      ) : null}
     </Panel>
   );
 }
 
-function Body({ kind, now }: { kind: KindView; now: string }) {
+function Body({
+  kind,
+  now,
+  onOpenTurn,
+}: {
+  kind: KindView;
+  now: string;
+  onOpenTurn: ReturnType<typeof useTurnPanel>["onOpen"];
+}) {
   const reroute = kind.tools.some((tool) => tool.requestedName !== null);
   return (
     <div className="flex flex-col gap-6" data-hallucination-kind={kind.kind}>
@@ -126,12 +151,13 @@ function Body({ kind, now }: { kind: KindView; now: string }) {
                 {formatTimestamp(example.occurredAt)}
               </time>
               <Link
-                href={example.traceHref}
+                href={example.panelHref}
                 className={buttonVariants({ variant: "secondary", size: "sm" })}
                 data-hallucination-open-trace=""
+                onClick={onOpenTurn({ turnId: example.turnId, eventId: example.eventId })}
               >
                 Open in Traces
-                <ArrowUpRight aria-hidden />
+                <ArrowRight aria-hidden />
               </Link>
             </li>
           ))}

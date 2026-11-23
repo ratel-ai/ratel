@@ -2,8 +2,10 @@
 
 import { Button } from "@ratel/design-system/button";
 import { cn } from "@ratel/design-system/cn";
-import { ArrowRight, Pause, Play, ScanSearch, TriangleAlert } from "lucide-react";
+import { Tooltip } from "@ratel/design-system/tooltip";
+import { ArrowRight, Bookmark, Pause, Play, ScanSearch, TriangleAlert } from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef } from "react";
+import type { TrackBookmark } from "@/lib/views/health/hallucinations/session-bookmarks";
 import {
   formatStepTime,
   type SessionChat,
@@ -46,6 +48,8 @@ export interface SessionTrackProps {
   onInspect: () => void;
   /** A line at one step, with its words (an eval run: where it differs from the last run). */
   marker?: TrackMarker;
+  /** The session's hallucinations, each a bookmark over its step; a click goes there. */
+  bookmarks?: readonly TrackBookmark[];
 }
 
 export interface TrackMarker {
@@ -87,6 +91,7 @@ export function SessionTrack({
   onOpenStep,
   onInspect,
   marker,
+  bookmarks = [],
 }: SessionTrackProps) {
   const total = chat.trackTotalMs;
   const view = zoomWindow(total, zoom, t);
@@ -237,6 +242,60 @@ export function SessionTrack({
           </Button>
         </div>
       </div>
+      {bookmarks.length > 0 ? (
+        <div className="relative h-8" data-track-bookmarks="">
+          {bookmarks.map((bookmark) => {
+            const at = chat.segments.find((s) => s.stepIndex === bookmark.stepIndex)?.trackStartMs;
+            if (at === undefined) return null;
+            const left = percent(at);
+            if (left < 0 || left > 100) return null;
+            return (
+              <Tooltip
+                key={bookmark.stepIndex}
+                content={`${bookmark.label} · at ${formatStepTime(at)}`}
+              >
+                <button
+                  type="button"
+                  aria-label={`Hallucination. ${bookmark.label}. Go there`}
+                  data-track-bookmark={bookmark.stepIndex}
+                  data-current={bookmark.current ? "true" : undefined}
+                  onClick={() => {
+                    onPlayingChange(false);
+                    onSeek(at);
+                    onOpenStep(bookmark.stepIndex);
+                  }}
+                  className={cn(
+                    "absolute top-0 inline-flex h-6 items-center gap-1.5 rounded-full border border-danger/50 bg-danger-subtle text-xs font-medium whitespace-nowrap text-danger outline-none transition-colors duration-120 hover:border-danger focus-visible:z-20 focus-visible:ring-2 focus-visible:ring-focus",
+                    bookmark.current ? "z-10 px-2.5" : "w-6 justify-center",
+                    // The label grows inward at the ends of the track, so it is never cut off.
+                    bookmark.current && left < 10
+                      ? "-translate-x-3"
+                      : bookmark.current && left > 90
+                        ? "-translate-x-[calc(100%-0.75rem)]"
+                        : "-translate-x-1/2",
+                  )}
+                  style={{ left: `${left}%` }}
+                >
+                  <Bookmark aria-hidden className="size-3.5 fill-current" />
+                  {bookmark.current ? "Hallucination" : null}
+                </button>
+              </Tooltip>
+            );
+          })}
+          {/* Each bookmark's stem, down to its step. */}
+          {bookmarks.map((bookmark) => {
+            const at = chat.segments.find((s) => s.stepIndex === bookmark.stepIndex)?.trackStartMs;
+            return at === undefined || percent(at) < 0 || percent(at) > 100 ? null : (
+              <span
+                key={bookmark.stepIndex}
+                aria-hidden
+                className="pointer-events-none absolute top-6 bottom-0 w-0.5 -translate-x-1/2 bg-danger"
+                style={{ left: `${percent(at)}%` }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
       <div
         ref={viewport}
         role="slider"
@@ -293,6 +352,20 @@ export function SessionTrack({
             style={{ left: `${percent(markerAt)}%` }}
           />
         ) : null}
+        {bookmarks.map((bookmark) => {
+          const at = chat.segments.find((s) => s.stepIndex === bookmark.stepIndex)?.trackStartMs;
+          return at === undefined || percent(at) < 0 || percent(at) > 100 ? null : (
+            <div
+              key={bookmark.stepIndex}
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-y-0 -translate-x-1/2 rounded-sm bg-danger/30 ring-1 ring-danger ring-inset",
+                bookmark.current ? "w-3" : "w-2",
+              )}
+              style={{ left: `${percent(at)}%` }}
+            />
+          );
+        })}
         <div
           data-playhead
           aria-hidden
@@ -322,6 +395,12 @@ export function SessionTrack({
           <span className="inline-flex items-center gap-1.5 text-info">
             <span aria-hidden className="h-2.5 border-l-2 border-dashed border-info" />
             {marker.label}
+          </span>
+        ) : null}
+        {bookmarks.length > 0 ? (
+          <span className="inline-flex items-center gap-1.5 text-danger">
+            <Bookmark aria-hidden className="size-3 fill-current" />
+            Hallucination
           </span>
         ) : null}
         <span className="ml-auto">Drag, scroll or use ← → to move through it</span>

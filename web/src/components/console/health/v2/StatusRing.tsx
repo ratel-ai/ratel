@@ -123,7 +123,10 @@ export function StatusRing({
             <span className="text-2xl font-semibold text-fg tabular-nums">
               {percent(active.share)}
             </span>
-            <span className="text-xs leading-tight text-fg-muted">{active.label}</span>
+            <span className="text-xs leading-tight text-fg-muted">
+              {/* Lower case, like the unit at rest. */}
+              {active.label.toLowerCase()}
+            </span>
           </>
         ) : (
           <>

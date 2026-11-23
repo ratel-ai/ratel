@@ -3,6 +3,7 @@ import type { WindowDays } from "@/lib/readings/trace-signals/view";
 import {
   buildHallucinationsPage,
   type HallucinationsPageModel,
+  uncheckedReason,
 } from "@/lib/views/health/hallucinations/page-model";
 import {
   countWindowTurns,
@@ -12,6 +13,7 @@ import {
   type PageDb,
 } from "@/lib/views/health/hallucinations/page-queries";
 import type { HallucinationsQuery } from "@/lib/views/health/hallucinations/paths";
+import { loadToolNames, toolNameCheck } from "@/lib/views/health/hallucinations/tool-names";
 
 const DAY_MS = 86_400_000;
 
@@ -36,6 +38,11 @@ export async function loadHallucinationsPage(
     loadLastRead(options.projectId, db),
     loadCoverage(options.projectId, window, db),
   ]);
+  // Tools the rules have nothing to read for are checked by name instead.
+  const toolNames =
+    found.findings.length === 0 && turns > 0 && uncheckedReason("tool", coverage) !== null
+      ? toolNameCheck(await loadToolNames(options.projectId, window, db))
+      : null;
   return buildHallucinationsPage(
     {
       projectId: options.projectId,
@@ -46,6 +53,7 @@ export async function loadHallucinationsPage(
       capped: found.capped,
       coverage,
       aliases: lastRead.aliases,
+      toolNames,
     },
     options.query,
   );
