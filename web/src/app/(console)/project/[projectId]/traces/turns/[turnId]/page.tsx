@@ -6,8 +6,10 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { hallucinationDetectionEnabled } from "@/lib/readings/trace-signals/hallucinations/gate";
 import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
+import { loadTurnMarkers } from "@/lib/views/health/hallucinations/turn-markers";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
 import { loadTurnConversation } from "@/lib/views/traces/sentiment/example";
@@ -72,12 +74,23 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
-  // Behind `cloud-sentiment-analysis`: the words around the turn, which explain why it shows up there. A failed read leaves the page as it was.
-  const conversation = (await sentimentAnalysisEnabled(organization).catch(() => false))
-    ? await withStatementTimeout((db) => loadTurnConversation(db, project.id, turnId), {
-        operation: "trace_turn_conversation",
-      }).catch(() => null)
-    : null;
+  // Behind `cloud-hallucination-detection`: the turn's hallucinations, marked on the calls they sit on.
+  const [sentimentOn, hallucinationsOn] = await Promise.all([
+    sentimentAnalysisEnabled(organization).catch(() => false),
+    hallucinationDetectionEnabled(organization).catch(() => false),
+  ]);
+  const hallucinations = hallucinationsOn
+    ? await withStatementTimeout((db) => loadTurnMarkers(db, project.id, turnId), {
+        operation: "trace_turn_hallucinations",
+      }).catch(() => [])
+    : [];
+  // Behind either flag: the words around the turn, which explain why it shows up on those pages. A failed read leaves the page as it was.
+  const conversation =
+    sentimentOn || hallucinationsOn
+      ? await withStatementTimeout((db) => loadTurnConversation(db, project.id, turnId), {
+          operation: "trace_turn_conversation",
+        }).catch(() => null)
+      : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
   const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (
@@ -89,6 +102,7 @@ export default async function TurnTracePage({
         focusEventId={focus?.trim() || null}
         sessionHref={sessionHref}
         conversation={conversation}
+        hallucinations={hallucinations}
       />
     </>
   );

@@ -291,6 +291,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["agentsPages", false],
       ["toolRunInsights", false],
       ["sentimentAnalysis", false],
+      ["hallucinationDetection", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -301,6 +302,7 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["agentsPages", subject],
     ["toolRunInsights", subject],
     ["sentimentAnalysis", subject],
+    ["hallucinationDetection", subject],
   ]);
 });
 

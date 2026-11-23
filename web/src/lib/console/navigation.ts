@@ -85,6 +85,7 @@ export function consoleNav({
   projectGroups = [],
   entityPages = false,
   sentiment = false,
+  hallucinations = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -104,6 +105,8 @@ export function consoleNav({
   entityPages?: boolean;
   /** `sentimentAnalysis` on for the shown organization (`cloud-sentiment-analysis`, RC-357): Sentiment analysis under Traces. */
   sentiment?: boolean;
+  /** `hallucinationDetection` on for the shown organization (`cloud-hallucination-detection`): Hallucinations under Agent health. */
+  hallucinations?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -204,6 +207,25 @@ export function consoleNav({
               icon: "health",
               keywords: ["retries", "apologies", "sorry", "tried again", "gave up", "backtracks"],
             },
+            ...(hallucinations
+              ? [
+                  {
+                    id: "health-hallucinations",
+                    label: "Hallucinations",
+                    href: `${root}/health/hallucinations`,
+                    icon: "health" as const,
+                    keywords: [
+                      "hallucination",
+                      "made up",
+                      "wrong tool",
+                      "tool that doesn't exist",
+                      "not found",
+                      "false done",
+                      "claimed done",
+                    ],
+                  },
+                ]
+              : []),
           ],
         },
         {

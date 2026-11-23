@@ -186,3 +186,14 @@ test("the shell decides sentimentAnalysis per organization and the rail reads it
     /sentimentOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*sentiment,/,
   );
 });
+
+test("the shell decides hallucinationDetection per organization and the rail reads it", () => {
+  assert.match(
+    source("components/console/shell/ConsoleShell.tsx"),
+    /hallucinationOrganizationIds\(organizations\)/,
+  );
+  assert.match(
+    source("components/console/shell/AppFrame.tsx"),
+    /hallucinationOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*hallucinations,/,
+  );
+});

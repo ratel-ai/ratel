@@ -1,5 +1,12 @@
 import { cn } from "@ratel/design-system/cn";
-import { ArrowLeft, ArrowRight, ArrowUpRight, HeartPulse, History } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  HeartPulse,
+  History,
+  TriangleAlert,
+} from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { StepGlyph } from "@/components/console/health/kinds";
@@ -12,6 +19,7 @@ import {
   turnEventAnchor,
   turnTracesHref,
 } from "@/lib/readings/trace-signals/view";
+import type { TurnMarker } from "@/lib/views/health/hallucinations/turn-markers";
 import type { TurnConversation as Conversation } from "@/lib/views/traces/sentiment/example";
 import type { TurnDetail, TurnDetailCall } from "@/lib/views/traces/turn-detail";
 
@@ -45,8 +53,10 @@ export interface TurnDetailViewProps {
   focusEventId: string | null;
   /** The session replay of this turn's session. */
   sessionHref?: string | null;
-  /** What was asked, replied and said next; null while `cloud-sentiment-analysis` is off or nothing was read. */
+  /** What was asked, replied and said next; null while both flags that show it are off, or nothing was read. */
   conversation?: Conversation | null;
+  /** The turn's hallucinations, each on the call it sits on; empty while `cloud-hallucination-detection` is off. */
+  hallucinations?: readonly TurnMarker[];
 }
 
 export function TurnDetailView({
@@ -55,7 +65,13 @@ export function TurnDetailView({
   focusEventId,
   sessionHref = null,
   conversation = null,
+  hallucinations = [],
 }: TurnDetailViewProps) {
+  // A false "done" is about the reply: it shows there, when the reply is on the page; else on its call.
+  const onReply = conversation?.reply
+    ? hallucinations.filter((marker) => marker.kind === "claimed_done_after_failure")
+    : [];
+  const onCalls = hallucinations.filter((marker) => !onReply.includes(marker));
   const started = new Date(turn.startedAt);
   const spanMs = Math.max(0, new Date(turn.endedAt).getTime() - started.getTime());
   const errors = turn.calls.filter((call) => call.outcome === "error").length;
@@ -113,6 +129,7 @@ export function TurnDetailView({
             projectId={projectId}
             call={call}
             focused={call.eventId === focusEventId}
+            markers={onCalls.filter((marker) => marker.stepOrdinal === call.ordinal)}
           />
         ))}
       </ol>
@@ -122,7 +139,22 @@ export function TurnDetailView({
         </p>
       )}
       {/* After the calls, as it happened: the reply, then what came next. */}
-      {conversation && <TurnAfter conversation={conversation} />}
+      {conversation && (
+        <TurnAfter
+          conversation={conversation}
+          afterReply={
+            onReply.length > 0 ? (
+              <ul className="flex flex-col gap-2" aria-label="Hallucinations in the reply">
+                {onReply.map((marker) => (
+                  <li key={`${marker.kind}:${marker.stepOrdinal}`}>
+                    <HallucinationMarker marker={marker} />
+                  </li>
+                ))}
+              </ul>
+            ) : null
+          }
+        />
+      )}
 
       {(turn.previousTurnId || turn.nextTurnId) && (
         <nav
@@ -149,6 +181,32 @@ export function TurnDetailView({
   );
 }
 
+/** One hallucination, where it happened: the kind, what the trace shows, and the way to every case of it. */
+function HallucinationMarker({ marker }: { marker: TurnMarker }) {
+  return (
+    <div
+      className="rounded-lg border border-coral/40 bg-coral/5 px-3 py-2 text-[12px] leading-5"
+      data-hallucination-marker={marker.kind}
+    >
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="inline-flex items-center gap-1.5 font-medium text-coral">
+          <TriangleAlert className="size-3.5" aria-hidden />
+          Hallucination
+        </span>
+        <span className="text-cream">{marker.label}</span>
+        <Link
+          href={marker.href}
+          className="ml-auto inline-flex items-center gap-1 rounded text-cream-dim underline decoration-forest-300 underline-offset-4 outline-none hover:text-cream focus-visible:ring-2 focus-visible:ring-coral/60"
+        >
+          See all like this
+          <ArrowUpRight className="size-3" aria-hidden />
+        </Link>
+      </p>
+      <p className="mt-0.5 text-cream-dim [overflow-wrap:anywhere]">{marker.detail}</p>
+    </div>
+  );
+}
+
 function NavLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link
@@ -164,10 +222,12 @@ function CallRow({
   projectId,
   call,
   focused,
+  markers,
 }: {
   projectId: string;
   call: TurnDetailCall;
   focused: boolean;
+  markers: readonly TurnMarker[];
 }) {
   const glyph = call.kind === "search" ? "search" : call.targetType === "skill" ? "skill" : "tool";
   const failed = call.outcome === "error";
@@ -198,6 +258,15 @@ function CallRow({
         <p className="mt-1 text-[12px] font-medium text-cream-dim">
           The call this example is about
         </p>
+      )}
+      {markers.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-2" aria-label="Hallucinations on this call">
+          {markers.map((marker) => (
+            <li key={marker.kind}>
+              <HallucinationMarker marker={marker} />
+            </li>
+          ))}
+        </ul>
       )}
 
       <dl className="mt-2.5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-5 gap-y-1.5 text-[12px] leading-5">

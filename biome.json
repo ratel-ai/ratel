@@ -1406,7 +1406,32 @@
         "web/src/lib/readings/trace-signals/outcomes/task-question.ts",
         "web/src/lib/readings/trace-signals/outcomes/tasks.test.ts",
         "web/src/lib/readings/trace-signals/outcomes/tasks.ts",
-        "web/src/lib/readings/trace-signals/outcomes/text-queries.ts"
+        "web/src/lib/readings/trace-signals/outcomes/text-queries.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/action-class.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/claims.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/detect.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/error-shapes.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/kinds.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/run-job.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/run-queries.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/run.integration.test.ts",
+        "web/src/lib/readings/trace-signals/hallucinations/run.ts",
+        "web/src/lib/views/health/hallucinations/page-links.ts",
+        "web/src/lib/views/health/hallucinations/page-load.ts",
+        "web/src/lib/views/health/hallucinations/page-model.test.ts",
+        "web/src/lib/views/health/hallucinations/page-model.ts",
+        "web/src/lib/views/health/hallucinations/page-queries.ts",
+        "web/src/lib/views/health/hallucinations/paths.ts",
+        "web/src/lib/views/health/hallucinations/rate-card.ts",
+        "web/src/lib/views/health/hallucinations/turn-markers.ts",
+        "web/src/app/(console)/project/\\[projectId\\]/health/hallucinations/loading.tsx",
+        "web/src/components/console/hallucinations/GroupDonut.tsx",
+        "web/src/components/console/hallucinations/HallucinationsView.tsx",
+        "web/src/components/console/hallucinations/KindPanel.tsx",
+        "web/src/components/console/hallucinations/KindTable.tsx",
+        "web/src/components/console/hallucinations/copy.ts",
+        "web/src/components/console/health/v2/StatusRing.tsx",
+        "web/src/components/console/sentiment/reveal.tsx"
       ],
       "linter": {
         "rules": {
@@ -1428,6 +1453,7 @@
         "web/src/components/console/playground/**",
         "web/src/components/console/self-corrections/**",
         "web/src/components/console/sentiment/**",
+        "web/src/components/console/hallucinations/**",
         "web/src/components/console/session-replay/**",
         "web/src/components/console/session-chat/**",
         "web/src/components/console/traces-sessions/**",
@@ -1538,6 +1564,16 @@
         "rules": {
           "suspicious": {
             "noShadowRestrictedNames": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["web/src/components/console/health/v2/StatusRing.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useJsxKeyInIterable": "off"
           }
         }
       }

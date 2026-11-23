@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { TurnConversation as Conversation } from "@/lib/views/traces/sentiment/example";
 
 /**
@@ -25,12 +26,19 @@ export function TurnAsked({
   );
 }
 
-export function TurnAfter({ conversation }: { conversation: Conversation }) {
+export function TurnAfter({
+  conversation,
+  afterReply,
+}: {
+  conversation: Conversation /** What is about the reply itself, shown right under it. */;
+  afterReply?: ReactNode;
+}) {
   const { reply, next } = conversation;
   if (!reply && !next) return null;
   return (
     <section aria-label="What came after" data-turn-conversation="" className="flex flex-col gap-3">
       {reply ? <Message speaker="agent" text={reply} /> : null}
+      {reply ? afterReply : null}
       {next ? (
         <Message
           speaker={next.from === "person" ? "user" : "agent"}

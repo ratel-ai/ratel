@@ -16,6 +16,7 @@ export const CORE_FLAGS = [
   "agentsPages",
   "toolRunInsights",
   "sentimentAnalysis",
+  "hallucinationDetection",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];

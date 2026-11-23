@@ -11,6 +11,16 @@ import {
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite, organizations } from "@/lib/platform/db/test-support";
+import { recordHallucinations } from "@/lib/readings/trace-signals/hallucinations/run";
+import {
+  hallucinationRunDeps,
+  loadCatalogIdentities,
+} from "@/lib/readings/trace-signals/hallucinations/run-job";
+import {
+  loadCallFacts,
+  loadFalseSuccessTurns,
+  replaceHallucinations,
+} from "@/lib/readings/trace-signals/hallucinations/run-queries";
 import { recordOutcomes } from "@/lib/readings/trace-signals/outcomes/run";
 import { outcomeRunDeps } from "@/lib/readings/trace-signals/outcomes/run-job";
 import {
@@ -37,6 +47,7 @@ import {
 import { loadSetupCounts } from "@/lib/readings/trace-signals/setup-facts-query";
 import {
   loadAnalysisContext,
+  loadCatalogNames,
   loadRunBasisCounts,
 } from "@/lib/readings/trace-signals/signals/analysis-context";
 import { computeSignals } from "@/lib/readings/trace-signals/signals/compute";
@@ -161,6 +172,19 @@ export function jobDeps(
         loadPageFacts: (p, turns) => loadCorrectionPageFacts(p, turns, db),
         loadTopicNames: (p) => loadTopicNames(p, db),
         replaceRows: (p, range, rows) => replaceSelfCorrections(p, range, rows, db),
+      }),
+    recordHallucinations: (projectId, input, budget) =>
+      recordHallucinations(projectId, input, {
+        ...hallucinationRunDeps(budget),
+        // On in the suite: the flag is a deployment's switch, not what these tests are about.
+        enabled: async () => true,
+        listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
+        loadBasis: async (p, w) => chooseRunBasis(await loadRunBasisCounts(p, w, db)),
+        loadCallFacts: (p, ids) => loadCallFacts(p, ids, db),
+        loadCatalog: (p) => loadCatalogIdentities(p, (id) => loadCatalogNames(id, db)),
+        loadReplyTexts: (p, turns) => loadTurnReplies(p, turns, db),
+        loadFalseSuccessTurns: (p, range) => loadFalseSuccessTurns(p, range, db),
+        replaceRows: (p, range, rows) => replaceHallucinations(p, range, rows, db),
       }),
     // The topic and explorer readings are their own jobs with their own tests; here no
     // enqueue reaches a real database.

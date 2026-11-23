@@ -257,6 +257,51 @@ export const traceSelfCorrections = pgTable(
 );
 
 /**
+ * Hallucination detection (Agent health): one row per thing the agent made
+ * up, at the step it starts on, read by rules with every signal run
+ * (`hallucinations/`): a tool that does not exist or a wrong
+ * tool name the runtime rerouted, a record or a value that does not exist, a
+ * "done" after the call that would have done it failed. Rows of the window's
+ * turns are replaced by each reading; older rows stay as history.
+ *
+ * PRIVACY: closed values, catalog ids, counts and times only. `evidence` is a
+ * closed id of the shape a rule matched; no error text, reply or argument is
+ * ever stored. `requested_tool_id` is the id the agent asked for, kept only
+ * when it is shaped like an id.
+ */
+export const traceHallucinations = pgTable(
+  "trace_hallucinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    turnId: uuid("turn_id")
+      .notNull()
+      .references(() => traceTurns.id, { onDelete: "cascade" }),
+    // 1-based ordinal, in the turn, of the step the finding starts on.
+    stepOrdinal: integer("step_ordinal").notNull(),
+    // One of HALLUCINATION_KINDS.
+    kind: text("kind").notNull(),
+    // The tool that ran (a skill as skill:<id>), and the one the agent asked for when it differs.
+    toolId: text("tool_id").notNull(),
+    requestedToolId: text("requested_tool_id"),
+    // One of HALLUCINATION_EVIDENCE.
+    evidence: text("evidence").notNull(),
+    // Calls the finding covers (the tries of one streak), and whether the last of them worked.
+    repeats: integer("repeats").notNull().default(1),
+    worked: boolean("worked").notNull().default(false),
+    ruleVersion: integer("rule_version").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("trace_hallucinations_project_time_idx").on(t.projectId, t.occurredAt),
+    index("trace_hallucinations_turn_idx").on(t.turnId),
+  ],
+);
+
+/**
  * Sentiment analysis (Agent health): what one closed turn came to, one row per
  * turn. Three writers, each with its own columns, so a reading never erases
  * another's: the rule layer (`outcomes/`, with every signal

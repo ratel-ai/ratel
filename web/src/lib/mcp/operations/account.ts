@@ -68,6 +68,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "sentimentAnalysis",
     note: "The console's Sentiment analysis page under Traces, and task completion with its root causes on Agent health. No tool reads them yet.",
   },
+  {
+    key: "hallucinationDetection",
+    note: "The console's Hallucinations page under Agent health, and its markers in Traces. No tool reads it yet.",
+  },
 ];
 
 export interface AccountOperationDeps {

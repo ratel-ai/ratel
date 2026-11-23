@@ -46,6 +46,7 @@ import {
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
 import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
+import type { HallucinationRateCard } from "@/lib/views/health/hallucinations/rate-card";
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
 import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
@@ -105,6 +106,8 @@ export interface SummaryViewProps {
   imports: SummaryImports | null;
   /** `cloud-sentiment-analysis`: task completion right above the issues; null hides it (off, or its read failed). */
   taskCompletion?: TaskCompletionCard | null;
+  /** `cloud-hallucination-detection`: the hallucination rate beside task completion; null hides it. */
+  hallucinationRate?: HallucinationRateCard | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;
   /**
@@ -240,6 +243,7 @@ function Ready({
   imports,
   inferredTools = false,
   taskCompletion = null,
+  hallucinationRate = null,
 }: SummaryViewProps) {
   const gap = pageGap(model);
   const lane = model.sourceMode === "otel" ? "otel" : "sdk";
@@ -263,7 +267,9 @@ function Ready({
   });
   const issues = (
     <>
-      {taskCompletion ? <TaskCompletionRow card={taskCompletion} /> : null}
+      {taskCompletion ? (
+        <TaskCompletionRow card={taskCompletion} hallucinations={hallucinationRate} />
+      ) : null}
       <IssuesSection
         projectId={projectId}
         rows={rows}
