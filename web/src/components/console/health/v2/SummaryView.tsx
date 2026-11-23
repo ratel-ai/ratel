@@ -27,6 +27,7 @@ import {
   summaryState,
   taskLookups,
 } from "@/components/console/health/v2/summary-model";
+import { TaskCompletionRow } from "@/components/console/health/v2/TaskCompletionRow";
 import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLook";
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
@@ -48,6 +49,7 @@ import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gap
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
 import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
+import type { TaskCompletionCard } from "@/lib/views/health/root-causes/completion-card";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
@@ -101,6 +103,8 @@ export interface SummaryViewProps {
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
   imports: SummaryImports | null;
+  /** `cloud-sentiment-analysis`: task completion right above the issues; null hides it (off, or its read failed). */
+  taskCompletion?: TaskCompletionCard | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;
   /**
@@ -235,6 +239,7 @@ function Ready({
   lockedPlan = null,
   imports,
   inferredTools = false,
+  taskCompletion = null,
 }: SummaryViewProps) {
   const gap = pageGap(model);
   const lane = model.sourceMode === "otel" ? "otel" : "sdk";
@@ -257,18 +262,21 @@ function Ready({
     score,
   });
   const issues = (
-    <IssuesSection
-      projectId={projectId}
-      rows={rows}
-      line={issuesLine(rows, signals)}
-      windowLabel={runLabel}
-      examplesAllowed={model.evidenceTurnsPerSignal > 0}
-      lockedCount={model.lockedCount}
-      upgradeHref={billingHref}
-      lockedPlan={lockedPlan}
-      dismissed={model.dismissed ?? []}
-      calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
-    />
+    <>
+      {taskCompletion ? <TaskCompletionRow card={taskCompletion} /> : null}
+      <IssuesSection
+        projectId={projectId}
+        rows={rows}
+        line={issuesLine(rows, signals)}
+        windowLabel={runLabel}
+        examplesAllowed={model.evidenceTurnsPerSignal > 0}
+        lockedCount={model.lockedCount}
+        upgradeHref={billingHref}
+        lockedPlan={lockedPlan}
+        dismissed={model.dismissed ?? []}
+        calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
+      />
+    </>
   );
   const workflows = model.workflows;
   const asksLaneKey = lane === "otel" ? "otel_content" : "sdk_user_messages";

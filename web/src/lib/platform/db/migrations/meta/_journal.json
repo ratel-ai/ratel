@@ -309,6 +309,13 @@
       "when": 1795284125731,
       "tag": "0043_agent_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795427269414,
+      "tag": "0044_trace_outcomes",
+      "breakpoints": true
     }
   ]
 }

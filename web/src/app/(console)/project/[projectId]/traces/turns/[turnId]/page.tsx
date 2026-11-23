@@ -6,9 +6,11 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { traceTurns } from "@/lib/ledger/schema";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
 import { runIsInEvalSet } from "@/lib/views/task-evals/run-to-test";
+import { loadTurnConversation } from "@/lib/views/traces/sentiment/example";
 import { loadTurnDetail } from "@/lib/views/traces/turn-detail";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +72,12 @@ export default async function TurnTracePage({
         { operation: "trace_turn_test" },
       )
     : null;
+  // Behind `cloud-sentiment-analysis`: the words around the turn, which explain why it shows up there. A failed read leaves the page as it was.
+  const conversation = (await sentimentAnalysisEnabled(organization).catch(() => false))
+    ? await withStatementTimeout((db) => loadTurnConversation(db, project.id, turnId), {
+        operation: "trace_turn_conversation",
+      }).catch(() => null)
+    : null;
   const focus = Array.isArray(search.focus) ? search.focus[0] : search.focus;
   const sessionHref = sessionReplayHref(project.id, turn.sessionId);
   return (
@@ -80,6 +88,7 @@ export default async function TurnTracePage({
         turn={turn}
         focusEventId={focus?.trim() || null}
         sessionHref={sessionHref}
+        conversation={conversation}
       />
     </>
   );

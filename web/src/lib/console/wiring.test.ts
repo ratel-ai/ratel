@@ -175,3 +175,14 @@ test("the shell decides agentsPages per organization and the rail reads it (RP-2
     /entityPagesOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*entityPages,/,
   );
 });
+
+test("the shell decides sentimentAnalysis per organization and the rail reads it", () => {
+  assert.match(
+    source("components/console/shell/ConsoleShell.tsx"),
+    /sentimentOrganizationIds\(organizations\)/,
+  );
+  assert.match(
+    source("components/console/shell/AppFrame.tsx"),
+    /sentimentOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*sentiment,/,
+  );
+});

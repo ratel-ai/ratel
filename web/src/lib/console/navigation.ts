@@ -84,6 +84,7 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
+  sentiment = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -101,6 +102,8 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
+  /** `sentimentAnalysis` on for the shown organization (`cloud-sentiment-analysis`, RC-357): Sentiment analysis under Traces. */
+  sentiment?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -378,7 +381,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, sentiment) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -401,6 +404,7 @@ function stageRailNav(
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
   entityPages: boolean,
+  sentiment: boolean,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -416,6 +420,8 @@ function stageRailNav(
   const classicHealth = pick("health");
   const health: NavItem = {
     ...classicHealth,
+    // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
+    also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
     children: (classicHealth.children ?? [])
       .filter((item) => item.id !== "health-tasks")
       .map((item) => ({ ...item, activeId: classicHealth.id })),
@@ -439,34 +445,23 @@ function stageRailNav(
   };
   // Upstream's entities (RC-775, RC-777) fold under Traces, so the rail keeps its budget.
   const classicTraces = pick("traces");
-  const traces: NavItem = entityPages
-    ? {
-        ...classicTraces,
-        children: [
-          {
-            id: "traces-all",
-            label: "All traces",
-            href: classicTraces.href,
-            icon: "traces",
-            activeId: classicTraces.id,
-          },
-          {
-            id: "agents",
-            label: "Agents",
-            href: `${root}/agents`,
-            icon: "traces",
-            keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
-          },
-          {
-            id: "mcp-servers",
-            label: "MCP servers",
-            href: `${root}/mcp`,
-            icon: "traces",
-            keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
-          },
-        ],
-      }
-    : classicTraces;
+  const traces: NavItem =
+    entityPages || sentiment
+      ? {
+          ...classicTraces,
+          children: [
+            {
+              id: "traces-all",
+              label: "All traces",
+              href: classicTraces.href,
+              icon: "traces",
+              activeId: classicTraces.id,
+            },
+            ...(sentiment ? [sentimentItem(root)] : []),
+            ...(entityPages ? entityItems(root) : []),
+          ],
+        }
+      : classicTraces;
   return [
     ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
     ...stage("insights", "Insights", [tasks, pick("intents")]),
@@ -476,6 +471,37 @@ function stageRailNav(
     { ...pick("catalog"), section: "settings" },
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("settings"),
+  ];
+}
+
+/** Sentiment analysis (`cloud-sentiment-analysis`, RC-357), a child of Traces. */
+function sentimentItem(root: string): NavItem {
+  return {
+    id: "traces-sentiment",
+    label: "Sentiment analysis",
+    href: `${root}/traces/sentiment`,
+    icon: "traces",
+    keywords: ["satisfaction", "sentiment", "satisfied", "unsatisfied", "how people took it"],
+  };
+}
+
+/** Agents and MCP servers, children of Traces. */
+function entityItems(root: string): NavItem[] {
+  return [
+    {
+      id: "agents",
+      label: "Agents",
+      href: `${root}/agents`,
+      icon: "traces",
+      keywords: ["agents", "multi-agent", "sub-agents", "handoffs", "cost", "errors"],
+    },
+    {
+      id: "mcp-servers",
+      label: "MCP servers",
+      href: `${root}/mcp`,
+      icon: "traces",
+      keywords: ["mcp", "model context protocol", "servers", "tools", "latency", "errors"],
+    },
   ];
 }
 

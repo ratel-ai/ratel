@@ -10,7 +10,8 @@ export type ShareSegment = {
 };
 
 /** The categorical slots in their fixed order (DESIGN.md, Data visualization). */
-const SLOTS = [
+/** The slice colors, in order: a list beside a bar drawn without its legend can match them (the nth slice with a value). */
+export const SHARE_BAR_SLOTS = [
   "bg-chart-1",
   "bg-chart-2",
   "bg-chart-3",
@@ -18,6 +19,7 @@ const SLOTS = [
   "bg-chart-5",
   "bg-chart-6",
 ] as const;
+const SLOTS = SHARE_BAR_SLOTS;
 const OTHER = "bg-fg-faint";
 
 /** Six named slices at most; a seventh folds into "Other", never a recycled color. */

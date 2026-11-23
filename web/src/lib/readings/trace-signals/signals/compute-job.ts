@@ -23,6 +23,12 @@ import {
   healthScore,
   scoredIssues,
 } from "@/lib/readings/trace-signals/health-score";
+import { sentimentQuestionsEnabled } from "@/lib/readings/trace-signals/outcomes/questions-gate";
+import type { OutcomeRunInput, OutcomeRunResult } from "@/lib/readings/trace-signals/outcomes/run";
+import {
+  type OutcomeBudget,
+  recordOutcomesForRun,
+} from "@/lib/readings/trace-signals/outcomes/run-job";
 import type { TraceSignalRow } from "@/lib/readings/trace-signals/schema";
 import type {
   SelfCorrectionRunInput,
@@ -144,6 +150,21 @@ export interface ComputeJobDeps {
     input: SelfCorrectionRunInput,
     budget: SelfCorrectionBudget,
   ) => Promise<SelfCorrectionRunResult>;
+  /**
+   * The window's outcomes (`outcomes/run.ts`): rewrites its
+   * `trace_turn_outcomes` rows and folds their sessions, from the trace alone.
+   */
+  recordOutcomes?: (
+    projectId: string,
+    input: OutcomeRunInput,
+    budget: OutcomeBudget,
+  ) => Promise<OutcomeRunResult>;
+  /**
+   * Owned: whether the outcomes are read for this project at all, the core's `sentimentAnalysis`
+   * switch. Upstream reads them with every run; here a deployment with the switch off writes no
+   * outcome row. Absent (a test's deps), the reading runs.
+   */
+  outcomesEnabled?: (projectId: string) => Promise<boolean>;
   /** Queue the topic reading that follows every run; a seam the topics registration fills. */
   enqueueTopics?: (projectId: string) => Promise<unknown>;
   /** Queue the tool-explorer run that reads this run's ledger window; a seam its registration fills. */
@@ -219,6 +240,8 @@ function defaultDeps(config: Config): ComputeJobDeps {
       countUnbuiltTurnEventsFn(projectId, since, UNBUILT_COUNT_CAP),
     writePlacement: (projectId, input) => writeTaskPlacementFn(projectId, input),
     recordSelfCorrections: recordSelfCorrectionsForRun,
+    recordOutcomes: recordOutcomesForRun,
+    outcomesEnabled: (projectId) => sentimentQuestionsEnabled(projectId),
     ...computeSeams,
     // Imports are the edition's: without an importer, no import is ever running.
     importRunning: (projectId) => editionImportRunning(projectId),
@@ -394,6 +417,7 @@ export async function computeProjectTraceSignals(
       startedAt,
       deps,
     );
+    const outcomes = await outcomesFor(projectId, window, startedAt, deps);
     const finishedAt = deps.now();
     const partial = missedBacklog(unbuiltAtStart, result.turnsScanned);
     const earlyReading =
@@ -418,6 +442,7 @@ export async function computeProjectTraceSignals(
         ...(partial ? { unbuiltAtStart } : {}),
         ...(earlyReading ? { earlyReading } : {}),
         ...(corrections ? { selfCorrections: corrections.stored } : {}),
+        ...(outcomes ? { outcomes: outcomes.stored } : {}),
       },
       turnsScanned: result.turnsScanned,
       turnSourceMix: result.turnSourceMix,
@@ -438,6 +463,11 @@ export async function computeProjectTraceSignals(
       queries_truncated: result.queriesEvicted > 0,
       self_corrections: corrections?.stored.events ?? null,
       self_correcting_issues: corrections?.signals.length ?? null,
+      outcome_turns: outcomes?.stored.turns ?? null,
+      outcome_sessions: outcomes?.stored.sessions ?? null,
+      outcome_failed_calls: outcomes?.stored.failedCalls ?? null,
+      outcome_errors_unread: outcomes?.stored.errorsUnread ?? null,
+      outcome_other_causes: outcomes?.stored.causes.other ?? null,
       duration_ms: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
     };
     if (result.queriesEvicted > 0) {
@@ -541,6 +571,40 @@ async function selfCorrectionsFor(
     reportServerException(err, `project:${projectId}`, {
       operation: "trace_signals_self_corrections",
     });
+    return null;
+  }
+}
+
+/**
+ * Best-effort: outcomes are one more reading of the same window under the
+ * same budget, so a failure or an overrun never fails the run. The reading
+ * writes nothing until its walk is done, so the window keeps its earlier rows.
+ * Owned: behind the core's `sentimentAnalysis` switch; a switch that cannot be
+ * read is off.
+ */
+async function outcomesFor(
+  projectId: string,
+  window: { start: Date; end: Date },
+  startedAt: Date,
+  deps: Pick<ComputeJobDeps, "recordOutcomes" | "outcomesEnabled" | "now" | "timeBudgetMs">,
+): Promise<OutcomeRunResult | null> {
+  if (!deps.recordOutcomes) return null;
+  if (deps.outcomesEnabled && !(await deps.outcomesEnabled(projectId).catch(() => false))) {
+    return null;
+  }
+  try {
+    return await deps.recordOutcomes(
+      projectId,
+      { window: { start: window.start, end: window.end } },
+      { startedAt: startedAt.getTime(), now: deps.now, timeBudgetMs: deps.timeBudgetMs },
+    );
+  } catch (err) {
+    if (err instanceof TimeBudgetError) {
+      logger.warn({ project_id: projectId }, "outcome reading over time budget");
+      return null;
+    }
+    logger.error({ err, project_id: projectId }, "outcome reading failed");
+    reportServerException(err, `project:${projectId}`, { operation: "trace_signals_outcomes" });
     return null;
   }
 }

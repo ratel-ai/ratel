@@ -77,6 +77,7 @@ const FLAG_ENV = {
   mcpApps: "FF_MCP_APPS",
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
+  sentimentAnalysis: "FF_SENTIMENT_ANALYSIS",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -372,6 +373,55 @@ const CONFIG_SCHEMA = schema({
     mixedCapShare: setting("TRACE_SIGNALS_MIXED_CAP_SHARE", positive, D.traceSignals.mixedCapShare),
     /** Each detector's floors: `TRACE_SIGNALS_<KIND>_<FLOOR>`, `traceSignals.floors.<kind>.<floor>`. */
     floors: floorSettings(D.traceSignals.floors),
+  },
+  /** The outcome reading behind Sentiment analysis (`readings/trace-signals/outcomes`). */
+  traceOutcomes: {
+    /** Fresh questions per run; 0 turns the questions off. */
+    maxAsks: setting(
+      "TRACE_OUTCOMES_MAX_ASKS",
+      nonNegative.transform(Math.floor),
+      D.traceOutcomes.maxAsks,
+    ),
+    /** Estimated input tokens of a run's fresh questions. */
+    maxAskTokens: setting(
+      "TRACE_OUTCOMES_MAX_ASK_TOKENS",
+      nonNegative.transform(Math.floor),
+      D.traceOutcomes.maxAskTokens,
+    ),
+    /** `auto` lets the questions that may reason do so; anything else is off. */
+    reasoning: setting(
+      "TRACE_OUTCOMES_REASONING",
+      z.preprocess(
+        (value) =>
+          typeof value === "string" && value.trim().toLowerCase() === "auto" ? "auto" : "off",
+        z.enum(["off", "auto"]),
+      ),
+      D.traceOutcomes.reasoning,
+    ),
+    /** Characters of a user's message a question reads. */
+    maxMessageChars: setting(
+      "TRACE_OUTCOMES_MAX_MESSAGE_CHARS",
+      positiveCount,
+      D.traceOutcomes.maxMessageChars,
+    ),
+    /** Characters of an agent's reply a question reads. */
+    maxReplyChars: setting(
+      "TRACE_OUTCOMES_MAX_REPLY_CHARS",
+      positiveCount,
+      D.traceOutcomes.maxReplyChars,
+    ),
+    /** The longest search run that is still one need. */
+    searchRunMax: setting(
+      "TRACE_OUTCOMES_SEARCH_RUN_MAX",
+      positive.min(1).transform(Math.floor),
+      D.traceOutcomes.searchRunMax,
+    ),
+    /** A Sentiment analysis row seen in fewer sessions than this is hidden. */
+    minSessions: setting(
+      "TRACE_SIGNALS_OUTCOMES_MIN_SESSIONS",
+      positive.min(1).transform(Math.floor),
+      D.traceOutcomes.minSessions,
+    ),
   },
   traceWorkflows: {
     maxAsks: setting("TRACE_WORKFLOW_MAX_ASKS", positiveCount, D.traceWorkflows.maxAsks),

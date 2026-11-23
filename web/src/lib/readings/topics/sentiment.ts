@@ -73,12 +73,16 @@ const STRONG_NEGATIVE_RE = pattern(STRONG_NEGATIVE);
 const POSITIVE_RE = pattern(POSITIVE);
 const WEAK_NEGATIVE_RE = pattern(WEAK_NEGATIVE);
 
-/** The lexicon's reading of one message in the user's own words. */
-export function lexiconSentiment(text: string): Sentiment {
+/**
+ * The lexicon's reading of one message in the user's own words. `weak: false`
+ * reads clear phrases only: a bare "again" ("can we make sure this never
+ * happens again?") stays neutral.
+ */
+export function lexiconSentiment(text: string, options: { weak?: boolean } = {}): Sentiment {
   const flat = text.toLowerCase().replace(/[\u2018\u2019\u02bc]/g, "'");
   if (STRONG_NEGATIVE_RE.test(flat)) return "negative";
   if (POSITIVE_RE.test(flat)) return "positive";
-  if (WEAK_NEGATIVE_RE.test(flat)) return "negative";
+  if ((options.weak ?? true) && WEAK_NEGATIVE_RE.test(flat)) return "negative";
   return "neutral";
 }
 

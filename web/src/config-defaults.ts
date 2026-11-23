@@ -167,6 +167,15 @@ export const CONFIG_DEFAULTS = {
       self_correcting: { minN: 20, minK: 5, minLow: 0.1 },
     },
   },
+  traceOutcomes: {
+    maxAsks: 400,
+    maxAskTokens: 400_000,
+    reasoning: "off",
+    maxMessageChars: 1_500,
+    maxReplyChars: 1_200,
+    searchRunMax: 5,
+    minSessions: 3,
+  },
   traceWorkflows: { maxAsks: 300, maxJudgeTokens: 3_000_000, maxLabels: 30 },
   intentEngine: {
     strong: 0.6,

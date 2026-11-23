@@ -48,6 +48,8 @@
     { "from": "@/components/health/", "to": "@/components/console/health/" },
     { "from": "@/components/tasks/", "to": "@/components/console/tasks/" },
     { "from": "@/components/self-corrections/", "to": "@/components/console/self-corrections/" },
+    { "from": "@/components/sentiment/", "to": "@/components/console/sentiment/" },
+    { "from": "@/components/traces/TurnConversation", "to": "@/components/console/traces/TurnConversation", "exact": true },
     { "from": "@/components/fixes/v2/", "to": "@/components/console/fixes/" },
     { "from": "@/components/freshness/", "to": "@/components/console/freshness/" },
     { "from": "@/components/home/v2/", "to": "@/components/console/home/" },
@@ -270,6 +272,9 @@
         "traceWorkflowVerdicts": "@/lib/readings/trace-signals/schema",
         "traceWorkflowInsights": "@/lib/readings/trace-signals/schema",
         "traceSelfCorrections": "@/lib/readings/trace-signals/schema",
+        "traceTurnOutcomes": "@/lib/readings/trace-signals/schema",
+        "traceSessionOutcomes": "@/lib/readings/trace-signals/schema",
+        "traceTaskOutcomes": "@/lib/readings/trace-signals/schema",
         "TraceSignalRunRow": "@/lib/readings/trace-signals/schema",
         "NewTraceSignalRunRow": "@/lib/readings/trace-signals/schema",
         "TraceSignalRow": "@/lib/readings/trace-signals/schema",
@@ -562,6 +567,17 @@
     "clerkUserId": "externalUserId",
     "JevFraming": "JudgeFraming",
     "__dirname": "import.meta.dirname",
-    "cloud-mcp-apps": "FF_MCP_APPS"
+    "cloud-mcp-apps": "FF_MCP_APPS",
+    "Sage2Client": "ClosedQuestionClient",
+    "Sage2Error": "ClosedQuestionError",
+    "Sage2FailureReason": "ClosedQuestionFailureReason",
+    "Sage2Option": "ClosedQuestionOption",
+    "Sage2Question": "ClosedQuestion",
+    "Sage2Reasoning": "ClosedQuestionReasoning",
+    "Sage2Request": "ClosedQuestionRequest",
+    "Sage2Answer": "ClosedQuestionAnswer",
+    "Sage2Result": "ClosedQuestionResult",
+    "SAGE2_MAX_REQUEST_TOKENS": "CLOSED_QUESTION_MAX_REQUEST_TOKENS",
+    "SAGE2_MAX_BATCH_REQUESTS": "CLOSED_QUESTION_MAX_BATCH_REQUESTS"
   }
 }

@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, HeartPulse, History } from "lucide
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { StepGlyph } from "@/components/console/health/kinds";
+import { TurnAfter, TurnAsked } from "@/components/console/traces/TurnConversation";
 import { TurnLinkedPanel } from "@/components/console/traces/TurnLinkedPanel";
 import { formatDuration } from "@/lib/readings/trace-signals/claims";
 import {
@@ -11,6 +12,7 @@ import {
   turnEventAnchor,
   turnTracesHref,
 } from "@/lib/readings/trace-signals/view";
+import type { TurnConversation as Conversation } from "@/lib/views/traces/sentiment/example";
 import type { TurnDetail, TurnDetailCall } from "@/lib/views/traces/turn-detail";
 
 /**
@@ -43,6 +45,8 @@ export interface TurnDetailViewProps {
   focusEventId: string | null;
   /** The session replay of this turn's session. */
   sessionHref?: string | null;
+  /** What was asked, replied and said next; null while `cloud-sentiment-analysis` is off or nothing was read. */
+  conversation?: Conversation | null;
 }
 
 export function TurnDetailView({
@@ -50,6 +54,7 @@ export function TurnDetailView({
   turn,
   focusEventId,
   sessionHref = null,
+  conversation = null,
 }: TurnDetailViewProps) {
   const started = new Date(turn.startedAt);
   const spanMs = Math.max(0, new Date(turn.endedAt).getTime() - started.getTime());
@@ -96,7 +101,10 @@ export function TurnDetailView({
         </nav>
       </header>
 
-      {turn.linked && <TurnLinkedPanel linked={turn.linked} />}
+      {turn.linked && <TurnLinkedPanel linked={turn.linked} hideAsked={conversation != null} />}
+      {conversation && (
+        <TurnAsked conversation={conversation} fallback={turn.linked?.asked ?? null} />
+      )}
 
       <ol aria-label="Calls in this turn" className="flex flex-col gap-2.5">
         {turn.calls.map((call) => (
@@ -113,6 +121,8 @@ export function TurnDetailView({
           No calls were kept for this turn.
         </p>
       )}
+      {/* After the calls, as it happened: the reply, then what came next. */}
+      {conversation && <TurnAfter conversation={conversation} />}
 
       {(turn.previousTurnId || turn.nextTurnId) && (
         <nav

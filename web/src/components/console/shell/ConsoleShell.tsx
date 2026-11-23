@@ -9,6 +9,7 @@ import {
 } from "@/lib/console/sidebar-cookie";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { productName } from "@/lib/platform/product-name";
+import { sentimentOrganizationIds } from "@/lib/readings/trace-signals/outcomes/gate";
 import { entityPagesOrganizationIds } from "@/lib/views/project-entities/nav";
 
 /** The console's rail and page, with its data resolved on the server. */
@@ -26,7 +27,11 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
   // Every organization the reader belongs to and their projects: the frame picks the one shown.
   const projects = scope?.memberProjects ?? [];
   const organizations = scope?.organizations ?? [];
-  const entityPagesOrganizations = await entityPagesOrganizationIds(organizations);
+  // Decided per organization: a flag read that fails keeps the item out of the rail.
+  const [entityPagesOrganizations, sentimentOrganizations] = await Promise.all([
+    entityPagesOrganizationIds(organizations),
+    sentimentOrganizationIds(organizations).catch(() => []),
+  ]);
   const hiddenOrganizationNav = ui?.hiddenOrganizationNav;
   const hidden: Record<string, readonly string[]> = hiddenOrganizationNav
     ? Object.fromEntries(
@@ -55,6 +60,7 @@ export async function ConsoleShell({ ui, children }: { ui?: EditionUi; children:
           hiddenOrganizationNav: hidden,
           projectNav: composition.projectNav,
           entityPagesOrganizations,
+          sentimentOrganizations,
           productName: productName(),
           scopeSwitcher: ScopeSwitcher
             ? {

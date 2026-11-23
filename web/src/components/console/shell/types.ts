@@ -28,6 +28,8 @@ export type ShellData = {
   projectNav: ProjectNavGroup[];
   /** The organizations with `agentsPages` on: their rail shows Agents and MCP servers under Traces. */
   entityPagesOrganizations?: readonly string[];
+  /** `cloud-sentiment-analysis` (RC-357): the organizations whose projects show Sentiment analysis under Traces. */
+  sentimentOrganizations?: readonly string[];
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */

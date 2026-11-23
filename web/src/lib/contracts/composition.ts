@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
+import type { ClosedQuestionsPort } from "@/lib/contracts/closed-questions";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
 import type { EntitlementsPort } from "@/lib/contracts/entitlements";
 import type { CoreFlag, FeatureFlagsPort } from "@/lib/contracts/feature-flags";
@@ -292,6 +293,13 @@ export type CompositionPorts = {
    * configuration forces still comes first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
    */
   featureFlags?: FeatureFlagsPort;
+  /**
+   * Absent in the open-source edition, which has no question engine: the outcome reading behind
+   * Sentiment analysis (`readings/trace-signals/outcomes`) then asks nothing and writes its rule
+   * and lexicon rows. With it, and when it is configured, the reading puts its closed questions to
+   * the edition's engine, under the per-run cap and the answer cache.
+   */
+  closedQuestions?: ClosedQuestionsPort;
 };
 
 export const PORT_NAMES = [
