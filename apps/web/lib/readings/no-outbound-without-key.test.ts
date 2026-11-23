@@ -183,6 +183,8 @@ const NO_KEYS: Record<string, string | undefined> = {
   ANTHROPIC_API_KEY: undefined,
   OPENAI_API_KEY: undefined,
   DECISION_ENGINE: undefined,
+  DECISION_PROVIDER: undefined,
+  MODEL_PROVIDER: undefined,
 };
 
 test("the graph fold and the engine run on a seeded database with no key and no network", async () => {

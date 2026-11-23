@@ -3,29 +3,25 @@ import { configured } from "@/lib/platform/env-configured";
 import { getLogger } from "@/lib/platform/logger";
 import { FALLBACK_PRICE_MODEL, priceOverrides } from "@/lib/readings/models/prices";
 import { OPENAI_DEFAULT_BASE_URL, OPENAI_USD_PER_INPUT_TOKEN } from "./openai";
+import { DECISION_VENDORS, type DecisionVendorName, decisionVendorNamed } from "./vendors";
 
 /**
  * Which decision model answers the closed-set questions: the match-quality judge, Agent
- * health's workflow decisions, the topics placement. Without a usable engine none runs and
+ * health's workflow decisions, the topics placement. Without a usable vendor none runs and
  * every feature that would ask one reports itself as not measured.
  *
- * `DECISION_ENGINE` picks it (ADR-0033):
- *   - `openai` or unset: OpenAI's Decisions API. `DECISION_API_KEY` and `DECISION_BASE_URL`
- *     select the server when either is set; otherwise `OPENAI_API_KEY` and `OPENAI_BASE_URL`,
- *     as before. `DECISION_MODEL`, then `OPENAI_DECISIONS_MODEL`, names the model.
- *   - `system-one`: any server that speaks the System One wire format (`system-one.ts`). It
- *     needs `DECISION_BASE_URL` and `DECISION_MODEL`; `DECISION_API_KEY` when the server asks
- *     for one. It never falls back to the OpenAI key or engine.
+ * `DECISION_PROVIDER` names the vendor (ADR-0033 §9, `vendors.ts`): `openai`, `typesafe`,
+ * `levanto`, `google`, or `custom` for another server that speaks the System One format. Each
+ * takes its own key variable; `DECISION_API_KEY` is ahead of it, `DECISION_MODEL` names another
+ * model, and `DECISION_BASE_URL` another address. A named vendor is used or nothing is, a name
+ * the table does not have selects nothing, and a vendor's key is sent to that vendor only.
  *
- * A key goes only to the server it was set for: `OPENAI_API_KEY` is never sent to
- * `DECISION_BASE_URL`.
- *
- * Any other name logs a warning once and is read as `openai`. That leniency is kept on
- * purpose: Ratel's own deployments set the names of the Cloud edition's private engines
- * (ADR-0030), and the core must keep judging there.
+ * Unset is OpenAI's Decisions API with `OPENAI_API_KEY` and `OPENAI_BASE_URL`, as before.
+ * `DECISION_ENGINE` is the private edition's setting for its own calls (ADR-0030): here it
+ * selects nothing, and any name but `openai` is warned about once.
  */
 
-export type DecisionEngineName = "openai" | "system-one";
+export type DecisionEngineName = DecisionVendorName;
 
 export const DEFAULT_DECISION_ENGINE: DecisionEngineName = "openai";
 
@@ -38,72 +34,75 @@ export { configured } from "@/lib/platform/env-configured";
 
 export interface ResolvedDecisionEngine {
   name: DecisionEngineName;
-  /** Empty for a `system-one` server that asks for none. */
+  /** Empty for a custom server that asks for none. */
   apiKey: string;
   baseUrl: string;
-  /** The model the deployment names. Absent leaves the engine's own default. */
+  /** The model the deployment names. Absent leaves the OpenAI engine's own default. */
   model?: string;
 }
 
-/** The engine `DECISION_ENGINE` asks for, read leniently: a known name, or `openai` with a warning. */
-export function preferredDecisionEngine(env: Env = process.env): DecisionEngineName {
-  const raw = configured(env.DECISION_ENGINE)?.toLowerCase();
-  if (raw === "system-one") return raw;
-  if (raw !== undefined && raw !== DEFAULT_DECISION_ENGINE && !warnedUnknown) {
+/** The vendor the environment names; null for a name that is not a vendor. */
+export function preferredDecisionEngine(env: Env = process.env): DecisionEngineName | null {
+  const named = configured(env.DECISION_PROVIDER);
+  if (named !== undefined) return decisionVendorNamed(named)?.name ?? null;
+  const legacy = configured(env.DECISION_ENGINE)?.toLowerCase();
+  if (legacy !== undefined && legacy !== DEFAULT_DECISION_ENGINE && !warnedUnknown) {
     warnedUnknown = true;
     logger.warn(
-      { engine: raw, using: DEFAULT_DECISION_ENGINE },
-      "decision engine is not available in this edition",
+      { engine: legacy, using: DEFAULT_DECISION_ENGINE },
+      "DECISION_ENGINE selects nothing here; name the vendor in DECISION_PROVIDER",
     );
   }
   return DEFAULT_DECISION_ENGINE;
 }
 
-/** The engine to run and where it is, or null when no engine is usable. */
+/** The vendor to ask and where it is, or null when none is usable. */
 export function resolveDecisionEngine(env: Env = process.env): ResolvedDecisionEngine | null {
   const name = preferredDecisionEngine(env);
-  const ownBaseUrl = configured(env.DECISION_BASE_URL);
+  if (!name) return null;
+  const vendor = DECISION_VENDORS[name];
+  const ownUrl = configured(env.DECISION_BASE_URL);
   const ownKey = configured(env.DECISION_API_KEY);
+  // A vendor's key is not sent to another address.
+  const apiKey = ownKey ?? (ownUrl ? undefined : configured(env[vendor.keyVariable ?? ""]));
   const ownModel = configured(env.DECISION_MODEL);
 
-  if (name === "system-one") {
-    if (!ownBaseUrl || !ownModel) return null;
-    return { name, apiKey: ownKey ?? "", baseUrl: ownBaseUrl, model: ownModel };
-  }
-
-  const model = ownModel ?? configured(env.OPENAI_DECISIONS_MODEL);
-  if (ownBaseUrl || ownKey) {
-    if (!ownKey) return null;
+  if (name === "openai") {
+    if (!apiKey) return null;
+    const legacyUrl = ownKey ? undefined : configured(env.OPENAI_BASE_URL);
+    const model = ownModel ?? configured(env.OPENAI_DECISIONS_MODEL);
     return {
       name,
-      apiKey: ownKey,
-      baseUrl: ownBaseUrl ?? OPENAI_DEFAULT_BASE_URL,
+      apiKey,
+      baseUrl: ownUrl ?? legacyUrl ?? OPENAI_DEFAULT_BASE_URL,
       ...(model ? { model } : {}),
     };
   }
-  const apiKey = configured(env.OPENAI_API_KEY);
-  if (!apiKey) return null;
-  return {
-    name,
-    apiKey,
-    baseUrl: configured(env.OPENAI_BASE_URL) ?? OPENAI_DEFAULT_BASE_URL,
-    ...(model ? { model } : {}),
-  };
+  const baseUrl = ownUrl ?? vendor.baseUrl;
+  const model = ownModel ?? vendor.model;
+  if (!baseUrl || !model) return null;
+  // Only a server the deployment runs may ask for no key.
+  if (!apiKey && name !== "custom") return null;
+  return { name, apiKey: apiKey ?? "", baseUrl, model };
 }
 
-/** True when a decision engine can run. */
+/** True when a decision vendor can be asked. */
 export function decisionEngineConfigured(env: Env = process.env): boolean {
   return resolveDecisionEngine(env) !== null;
 }
 
 /**
- * The engine's price per input token, for turning a dollar cap into a token cap. OpenAI's is
- * its list price. Another engine's model is priced by `MODEL_PRICES`; unpriced, it is charged
- * at the fallback rate, so a dollar cap allows fewer questions, never more.
+ * The price per input token, for turning a dollar cap into a token cap: `MODEL_PRICES` for a
+ * model it names, else the vendor's list price. A model neither prices is charged at the fallback
+ * rate, so a dollar cap allows fewer questions, never more.
  */
 export function usdPerInputToken(name: DecisionEngineName, env: Env = process.env): number {
   if (name === "openai") return OPENAI_USD_PER_INPUT_TOKEN;
-  const model = configured(env.DECISION_MODEL);
-  const own = model ? priceOverrides(env)[model] : undefined;
-  return (own ?? RATEL_BUDGET_PRICES[FALLBACK_PRICE_MODEL]).input / 1_000_000;
+  const vendor = DECISION_VENDORS[name];
+  const named = configured(env.DECISION_MODEL);
+  const own = priceOverrides(env)[named ?? vendor.model ?? ""];
+  if (own) return own.input / 1_000_000;
+  // A vendor's price is its own model's; another model it serves may cost more.
+  const listed = !named || named === vendor.model ? vendor.usdPerInputToken : undefined;
+  return listed ?? RATEL_BUDGET_PRICES[FALLBACK_PRICE_MODEL].input / 1_000_000;
 }

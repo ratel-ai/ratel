@@ -1,10 +1,11 @@
+import { choiceClient } from "./choice";
 import { configured, resolveDecisionEngine, usdPerInputToken } from "./engine";
 import type { JudgeEngine, JudgeFraming } from "./judge";
 import { judgeEngineOver, openaiJudgeEngine } from "./openai-judge";
-import { systemOneClient } from "./system-one";
+import { DECISION_VENDORS } from "./vendors";
 
 /**
- * The judge this deployment's decision engine gives a surface (ADR-0033 §10): the match-quality
+ * The judge this deployment's decision vendor gives a surface (ADR-0033 §10): the match-quality
  * judge, the workflow decisions and the topic placement all build theirs here, so one setting
  * moves all three. Null when no engine is usable; the surface then reports itself as not
  * measured.
@@ -46,8 +47,9 @@ export function judgeFromEnv(
     ...(options.maxInputTokens === undefined ? {} : { maxInputTokens: options.maxInputTokens }),
   };
 
-  if (resolved.name === "system-one") {
-    const client = systemOneClient({
+  if (resolved.name !== "openai") {
+    const client = choiceClient({
+      vendor: resolved.name,
       baseUrl: resolved.baseUrl,
       // The resolver gives no engine without a model for this one.
       model: resolved.model ?? "",
@@ -61,7 +63,7 @@ export function judgeFromEnv(
       ...shared,
       minConfidence: minConfidence ?? UNMEASURED_MIN_CONFIDENCE,
       usdPerInputToken: usdPerInputToken(resolved.name, env),
-      label: "The decision engine",
+      label: DECISION_VENDORS[resolved.name].label,
     });
   }
 

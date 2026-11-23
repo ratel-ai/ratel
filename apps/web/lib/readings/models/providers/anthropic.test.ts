@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
 import { setModelCallSink } from "@/lib/platform/model-call";
+import { anthropicClient } from "@/lib/readings/anthropic/client";
 import { models } from "../index";
 import { anthropicProvider, anthropicTextModel } from "./anthropic";
 
@@ -288,4 +289,71 @@ test("the kit gives a Claude deployment each feature's own model", async () => {
   await label?.complete({ system: "s", user: "u", maxTokens: 10 });
   assert.equal(sent[0].body.model, "claude-sonnet-5-5");
   assert.equal(lines[0].feature, "workflow_label");
+});
+
+test("Ratel's own Bedrock setting still goes to the EU profile, signed, with today's body", async () => {
+  const saved = { ...process.env };
+  process.env.ANTHROPIC_BACKEND = "bedrock";
+  process.env.AWS_ACCESS_KEY_ID = "AKIATEST";
+  process.env.AWS_SECRET_ACCESS_KEY = "test";
+  delete process.env.AWS_SESSION_TOKEN;
+  delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+  try {
+    answers.push(failure(503), failure(503), message("ok"));
+    const env = { ANTHROPIC_BACKEND: "bedrock", ANTHROPIC_API_KEY: "never-used" };
+    const model = models.text("workflow_label", { env, environment: "production" });
+    const reply = await model?.complete({
+      system: "Name it.",
+      user: "A thing.",
+      schema: SCHEMA,
+      maxTokens: 400,
+      // Bedrock retries twice whatever a feature asks for: its errors are the shared capacity.
+      maxRetries: 0,
+    });
+    assert.equal(reply?.text, "ok");
+  } finally {
+    for (const name of ["ANTHROPIC_BACKEND", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+    if (saved.AWS_SESSION_TOKEN) process.env.AWS_SESSION_TOKEN = saved.AWS_SESSION_TOKEN;
+    if (saved.AWS_BEARER_TOKEN_BEDROCK)
+      process.env.AWS_BEARER_TOKEN_BEDROCK = saved.AWS_BEARER_TOKEN_BEDROCK;
+  }
+  assert.equal(sent.length, 3);
+  assert.equal(
+    sent[2].url,
+    "https://bedrock-runtime.eu-central-1.amazonaws.com/model/eu.anthropic.claude-sonnet-5-5/invoke",
+  );
+  assert.equal(sent[2].apiKey, null);
+  const { anthropic_version: version, ...body } = sent[2].body;
+  assert.equal(typeof version, "string");
+  assert.deepEqual(body, {
+    max_tokens: 400,
+    system: "Name it.",
+    messages: [{ role: "user", content: "A thing." }],
+    output_config: { format: { type: "json_schema", schema: SCHEMA } },
+  });
+  assert.equal(lines[0].model, "claude-sonnet-5-5");
+  assert.equal(lines[0].backend, "bedrock");
+});
+
+test("a model keeps its client: one per time limit and retry count, however many calls", async () => {
+  const built: unknown[] = [];
+  const model = anthropicTextModel({
+    model: "claude-sonnet-5-5",
+    feature: "workflow_label",
+    payer: "ratel",
+    env: ENV,
+    clientFor: (options) => {
+      built.push(options);
+      return anthropicClient(options, ENV);
+    },
+  });
+  built.length = 0;
+  answers.push(message("a"), message("b"), message("c"));
+  await model?.complete({ system: "s", user: "u", maxTokens: 10 });
+  await model?.complete({ system: "s", user: "u", maxTokens: 10 });
+  await model?.complete({ system: "s", user: "u", maxTokens: 10, maxRetries: 0 });
+  assert.deepEqual(built, [{}, { maxRetries: 0 }]);
 });

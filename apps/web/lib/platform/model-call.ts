@@ -15,7 +15,7 @@ import type {
   ModelProvider,
 } from "@/lib/contracts/telemetry";
 import { agentRunParent } from "@/lib/platform/agent-run";
-import { type AnthropicBackend, anthropicBackend } from "@/lib/platform/anthropic-backend";
+import { anthropicBackend } from "@/lib/platform/anthropic-backend";
 import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 import { currentLogContext } from "@/lib/platform/logger";
 import { contentAttributes, type ModelCallContent } from "@/lib/platform/model-call-content";
@@ -81,8 +81,9 @@ function errorType(error: unknown): string | undefined {
 }
 
 /** The endpoint that served the call: only Claude calls can go to Bedrock. */
-function backendOf(provider: ModelProvider): AnthropicBackend {
-  return provider === "anthropic" ? anthropicBackend() : "api";
+function backendOf(meta: Pick<ModelCallMeta, "provider" | "backend">): string {
+  if (meta.backend) return meta.backend;
+  return meta.provider === "anthropic" ? anthropicBackend() : "api";
 }
 
 /**
@@ -123,7 +124,7 @@ export function recordModelCall(record: ModelCallRecord): void {
         ...(written !== null ? { cache_write_tokens: written } : {}),
         duration_ms: Math.max(0, Math.round(record.durationMs)),
         outcome: record.outcome,
-        backend: backendOf(record.provider),
+        backend: backendOf(record),
         ...(record.calls !== undefined ? { calls: Math.max(1, Math.trunc(record.calls)) } : {}),
         ...(type ? { error_type: type } : {}),
       },
@@ -214,7 +215,7 @@ function reportNotEnabled(meta: ModelCallMeta, error: ModelNotEnabledError): voi
       feature: meta.feature,
       model: error.model,
       bedrock_profile: error.bedrockProfile,
-      backend: backendOf(meta.provider),
+      backend: backendOf(meta),
       ...(projectId ? { project_id: projectId } : {}),
     });
   } catch {

@@ -1318,6 +1318,8 @@
         "!apps/web/lib/views/eval-gate/seams.ts",
         "!apps/web/lib/views/eval-gate/no-outbound-without-key.test.ts",
         "!apps/web/lib/views/eval-gate/models.golden.test.ts",
+        "!apps/web/lib/views/eval-gate/models-neutral.ts",
+        "!apps/web/lib/views/eval-gate/models-neutral.test.ts",
         "apps/web/components/console/eval-gate/**",
         "apps/web/app/(console)/(eval-gate)/project/\\[projectId\\]/improvement/fixes/\\[fixId\\]/eval/loading.tsx",
         "apps/web/lib/platform/model-call-content.test.ts",

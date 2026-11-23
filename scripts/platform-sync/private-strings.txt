@@ -18,10 +18,5 @@
 see what fills your agent
 filled the limit
 \b(LandingBackdrop|WaitlistScreen)\b
-# Decision engines that stay private (apps/web)
-\bTYPESAFE_API_KEY\b
-\bSAGE_API_KEY\b
-\blevanto\b
-\bjev(-|_|\.)?(client|judge|1\.)
 # Confidential names (whole repository)
 sha256:a74dcec0a28ece4a63fb5200d881ad5d201032e3846a0009bcdf3abbb31c9c3e

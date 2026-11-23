@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { setModelCallSink } from "@/lib/platform/model-call";
 import type { ModelContext } from "../index";
-import { ModelHttpError, openAiCompatibleProvider, resetJsonModes } from "./openai-compatible";
+import { chatCompletions, type Dialect, resetJsonModes } from "./chat-completions";
+import { ModelHttpError } from "./http";
 
 /** One request the fake server saw. */
 interface Seen {
@@ -66,7 +67,7 @@ function context(overrides: Partial<ModelContext> = {}): ModelContext {
     model: "llama-3.3-70b",
     feature: "workflow_label",
     payer: "ratel",
-    provider: { name: "openai-compatible", baseUrl: "http://llm.test/v1", apiKey: "sk-test" },
+    vendor: { name: "vllm", baseUrl: "http://llm.test/v1", apiKey: "sk-test" },
     env: {},
     ...overrides,
   };
@@ -77,15 +78,13 @@ const SCHEMA = { type: "object", properties: { name: { type: "string" } }, requi
 
 function textModel(fetchImpl: typeof fetch, overrides: Partial<ModelContext> = {}) {
   resetJsonModes();
-  const model = openAiCompatibleProvider({ fetch: fetchImpl, sleep: noSleep }).text(
-    context(overrides),
-  );
+  const model = chatCompletions({ fetch: fetchImpl, sleep: noSleep }).text(context(overrides));
   assert.ok(model);
   return model;
 }
 
 function chatModel(fetchImpl: typeof fetch, overrides: Partial<ModelContext> = {}) {
-  const model = openAiCompatibleProvider({ fetch: fetchImpl, sleep: noSleep }).chat?.(
+  const model = chatCompletions({ fetch: fetchImpl, sleep: noSleep }).chat?.(
     context({ feature: "eval_gate_replay", ...overrides }),
   );
   assert.ok(model);
@@ -105,7 +104,7 @@ test("a plain completion: the request, the answer, the usage", async () => {
     model: "served-model",
     stop: "end",
   });
-  assert.equal(model.provider, "openai-compatible");
+  assert.equal(model.provider, "vllm");
   assert.equal(model.model, "llama-3.3-70b");
   assert.equal(seen.length, 1);
   assert.equal(seen[0].url, "http://llm.test/v1/chat/completions");
@@ -124,7 +123,7 @@ test("a plain completion: the request, the answer, the usage", async () => {
 test("a server without a key gets no authorization header", async () => {
   const { seen, fetchImpl } = server(completion({ content: "ok" }));
   const model = textModel(fetchImpl, {
-    provider: { name: "openai-compatible", baseUrl: "http://localhost:8000/v1" },
+    vendor: { name: "vllm", baseUrl: "http://localhost:8000/v1" },
   });
   await model.complete({ system: "s", user: "u", maxTokens: 10 });
   assert.equal(seen[0].headers.authorization, undefined);
@@ -308,7 +307,7 @@ test("effort is dropped unless the model is named as a reasoning model", async (
   await model.complete({ system: "s", user: "u", maxTokens: 10, effort: "low" });
   // A reasoning model takes `max_completion_tokens`, and `xhigh` is its `high`.
   assert.equal(reasoning.seen[0].body.reasoning_effort, "high");
-  assert.equal(reasoning.seen[0].body.max_completion_tokens, 10);
+  assert.equal(reasoning.seen[0].body.max_completion_tokens, 4096);
   assert.equal(reasoning.seen[0].body.max_tokens, undefined);
   assert.equal(reasoning.seen[1].body.reasoning_effort, "low");
 });
@@ -340,7 +339,7 @@ test("each call is one spend line, with the feature and the tokens", async () =>
   assert.equal(lines.length, 2);
   const { duration_ms: _first, ...ok } = lines[0];
   assert.deepEqual(ok, {
-    provider: "openai-compatible",
+    provider: "vllm",
     model: "llama-3.3-70b",
     feature: "workflow_label",
     payer: "customer",
@@ -410,7 +409,7 @@ test("a tool call: what is sent, and what comes back", async () => {
     { id: "call_abc", name: "crm.lookup customer", args: { q: "acme" } },
   ]);
   assert.equal(reply.stop, "end");
-  assert.deepEqual(reply.raw, [{ openAiCompatible: { role: "assistant", ...assistant } }]);
+  assert.deepEqual(reply.raw, [{ chatCompletions: { role: "assistant", ...assistant } }]);
 });
 
 test("the turn it wrote goes back unchanged, with the tool's result after it", async () => {
@@ -435,7 +434,7 @@ test("the turn it wrote goes back unchanged, with the tool's result after it", a
         role: "assistant",
         text: "",
         calls: [{ id: "call_abc", name: "crm.lookup customer", args: {} }],
-        raw: [{ openAiCompatible: written }],
+        raw: [{ chatCompletions: written }],
       },
       { role: "tool", callId: "call_abc", content: "Acme Inc.", isError: false },
       { role: "tool", callId: "call_def", content: "timeout", isError: true },
@@ -446,7 +445,8 @@ test("the turn it wrote goes back unchanged, with the tool's result after it", a
     { role: "user", content: "Who is Acme?" },
     written,
     { role: "tool", tool_call_id: "call_abc", content: "Acme Inc." },
-    { role: "tool", tool_call_id: "call_def", content: "Error: timeout" },
+    // A result whose call is not in the conversation is refused as one, so it is told as text.
+    { role: "user", content: "Tool result: timeout" },
   ]);
   assert.equal(reply.text, "Acme is a customer.");
   assert.deepEqual(reply.calls, []);
@@ -511,9 +511,9 @@ test("arguments that are not JSON become no arguments; missing ids get one", asy
     { id: "call_2", name: "crm.lookup customer", args: {} },
   ]);
   // The turn that goes back carries the same ids the calls were given.
-  const raw = reply.raw[0] as { openAiCompatible: { tool_calls: Array<{ id: string }> } };
+  const raw = reply.raw[0] as { chatCompletions: { tool_calls: Array<{ id: string }> } };
   assert.deepEqual(
-    raw.openAiCompatible.tool_calls.map((call) => call.id),
+    raw.chatCompletions.tool_calls.map((call) => call.id),
     ["call_1", "call_2"],
   );
 });
@@ -539,5 +539,5 @@ test("a reasoning model is not given a temperature", async () => {
   });
   assert.equal(seen[0].body.temperature, undefined);
   assert.equal(seen[0].body.reasoning_effort, "low");
-  assert.equal(seen[0].body.max_completion_tokens, 10);
+  assert.equal(seen[0].body.max_completion_tokens, 4096);
 });

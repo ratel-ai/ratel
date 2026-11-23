@@ -93,7 +93,7 @@ test("a feature is asked for by its own kind", () => {
 test("a provider without a model for the feature's tier gives no model", () => {
   const seen: string[] = [];
   const restore = withProviders({
-    "openai-compatible": {
+    custom: {
       text(context) {
         seen.push(context.model);
         return fakeTextModel({ model: context.model });
@@ -101,7 +101,7 @@ test("a provider without a model for the feature's tier gives no model", () => {
     },
   });
   try {
-    const env = { MODEL_PROVIDER: "openai-compatible", MODEL_BASE_URL: "http://x/v1" };
+    const env = { MODEL_PROVIDER: "custom", MODEL_BASE_URL: "http://x/v1" };
     assert.equal(models.text("workflow_label", { env, environment: "production" }), null);
     const model = models.text("workflow_label", {
       env: { ...env, MODEL_STANDARD: "llama-3.3-70b" },
@@ -117,7 +117,7 @@ test("a provider without a model for the feature's tier gives no model", () => {
 test("the adapter is told the feature, the payer and the provider's settings", () => {
   let context: unknown;
   const restore = withProviders({
-    "openai-compatible": {
+    custom: {
       text(given) {
         context = given;
         return fakeTextModel({ model: given.model });
@@ -126,7 +126,7 @@ test("the adapter is told the feature, the payer and the provider's settings", (
   });
   try {
     const env = {
-      MODEL_PROVIDER: "openai-compatible",
+      MODEL_PROVIDER: "custom",
       MODEL_BASE_URL: "http://x/v1",
       MODEL_API_KEY: "sk-test",
       MODEL_FAST: "small",
@@ -136,7 +136,7 @@ test("the adapter is told the feature, the payer and the provider's settings", (
       model: "small",
       feature: "eval_gate_judge",
       payer: "customer",
-      provider: { name: "openai-compatible", baseUrl: "http://x/v1", apiKey: "sk-test" },
+      vendor: { name: "custom", baseUrl: "http://x/v1", apiKey: "sk-test" },
       env,
     });
   } finally {
@@ -147,17 +147,17 @@ test("the adapter is told the feature, the payer and the provider's settings", (
 test("MODEL_MAX_OUTPUT_TOKENS caps what a feature asks for", async () => {
   const asked: number[] = [];
   const recording: TextModel = {
-    provider: "openai-compatible",
+    provider: "custom",
     model: "m",
     async complete(request) {
       asked.push(request.maxTokens);
       return { text: "", usage: { inputTokens: 0, outputTokens: 0 }, model: "m", stop: "end" };
     },
   };
-  const restore = withProviders({ "openai-compatible": { text: () => recording } });
+  const restore = withProviders({ custom: { text: () => recording } });
   try {
     const env = {
-      MODEL_PROVIDER: "openai-compatible",
+      MODEL_PROVIDER: "custom",
       MODEL_BASE_URL: "http://x/v1",
       MODEL_STANDARD: "m",
       MODEL_MAX_OUTPUT_TOKENS: "4096",

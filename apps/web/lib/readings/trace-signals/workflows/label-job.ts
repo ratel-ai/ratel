@@ -3,7 +3,7 @@ import { envNumber } from "@/lib/platform/env-number";
 import { getLogger } from "@/lib/platform/logger";
 import { recordModelCall } from "@/lib/platform/model-call";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { models } from "@/lib/readings/models";
+import { models, providerFor } from "@/lib/readings/models";
 import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 import {
   type DecideDeps,
@@ -177,7 +177,7 @@ async function writeLabels(
   if (!complete) {
     if (workflows.length > 0) {
       recordModelCall({
-        provider: "anthropic",
+        provider: providerFor("workflow_label"),
         model: deps.model,
         feature: "workflow_label",
         payer: "ratel",

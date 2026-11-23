@@ -1,6 +1,6 @@
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { recordModelCall } from "@/lib/platform/model-call";
-import { models } from "@/lib/readings/models";
+import { models, providerFor } from "@/lib/readings/models";
 import { ANALYST_SCHEMA } from "@/lib/synthesis/match-quality/analyst";
 import type { ModelUsage } from "@/lib/views/eval-gate/models";
 import { mockModelsEnabled } from "@/lib/views/eval-gate/models";
@@ -95,10 +95,10 @@ export function draftModelFromEnv(
   };
 }
 
-/** A draft never made because no Anthropic key is configured, as one `model_call` line. */
+/** A draft never made because no vendor is configured, as one `model_call` line. */
 export function recordNoDraftKey(env: Env = process.env): void {
   recordModelCall({
-    provider: "anthropic",
+    provider: providerFor(DRAFT_FEATURE, { env }),
     model: env.EVAL_GATE_DRAFT_MODEL || DEFAULT_DRAFT_MODEL,
     feature: DRAFT_FEATURE,
     payer: "ratel",

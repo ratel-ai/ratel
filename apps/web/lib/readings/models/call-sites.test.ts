@@ -13,7 +13,7 @@ import { LABEL_SCHEMA } from "@/lib/readings/trace-signals/workflows/label";
 import { labelCompleteOver } from "@/lib/readings/trace-signals/workflows/label-job";
 import { ANALYST_SCHEMA, analystDepsOver } from "@/lib/synthesis/match-quality/analyst";
 import { draftModelAvailable, draftModelFromEnv } from "@/lib/views/fix-drafts/model";
-import { resetJsonModes } from "./providers/openai-compatible";
+import { resetJsonModes } from "./providers/chat-completions";
 
 /**
  * The features that moved onto the kit (ADR-0033), on a model that is not Claude: what each
@@ -25,7 +25,7 @@ import { resetJsonModes } from "./providers/openai-compatible";
 function recording(text: string, stop: ModelStop = "end") {
   const asked: TextRequest[] = [];
   const model: TextModel = {
-    provider: "openai-compatible",
+    provider: "custom",
     model: "llama-3.3-70b",
     async complete(request) {
       asked.push(request);
@@ -36,7 +36,7 @@ function recording(text: string, stop: ModelStop = "end") {
 }
 
 const OTHER = {
-  MODEL_PROVIDER: "openai-compatible",
+  MODEL_PROVIDER: "custom",
   MODEL_BASE_URL: "http://llm.test/v1",
   MODEL_STANDARD: "llama-3.3-70b",
 };
@@ -89,7 +89,7 @@ test("the names job takes the deployment's model, whoever serves it", () => {
 
   // A provider named without a model for the tier is no model, not Claude.
   const unnamed = defaultNameDeps({
-    MODEL_PROVIDER: "openai-compatible",
+    MODEL_PROVIDER: "custom",
     MODEL_BASE_URL: "http://llm.test/v1",
     ANTHROPIC_API_KEY: "sk-test",
   });

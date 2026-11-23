@@ -1,5 +1,4 @@
 import type {
-  DecisionCapabilities,
   DecisionClient,
   DecisionFraming,
   DecisionOption,
@@ -9,28 +8,22 @@ import type { ModelCallPayer } from "@/lib/contracts/telemetry";
 import { trackModelCall } from "@/lib/platform/model-call";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
 import { DEFAULT_DECISION_FEATURE, DecisionCallError, optionDescription } from "./openai";
+import { CHOICE_WIRE, DECISION_VENDORS, type DecisionVendorName } from "./vendors";
 
 /**
- * One closed-set decision answered by a server that speaks the System One wire format
- * (`POST {base}/v1/systemone`, a `choice` question), ADR-0033 §9:
+ * One closed-set decision answered by a vendor of the System One family (ADR-0033 §9): TypeSafe's
+ * Jev and Levanto's Sage (`POST {base}/v1/systemone`), Google's Gemini Decision
+ * (`POST {base}/v1beta/decisions`), or any server that speaks the format:
  *
  *   request  { model, state, questions: { tool: { type: "choice", instructions, criteria: { t0: "…" } } } }
- *   response { answers: { tool: { type: "choice", probabilities: { t0: 0.9 } } }, usage? }
+ *   response { answers: { tool: { type: "choice", choice, confidence, probabilities: { t0: 0.9 } } }, usage }
  *
- * It is the format the SDK's ranker plugin speaks (`src/rankers`). Nothing here names a vendor:
- * the deployment gives the base URL, the model and the key (`DECISION_BASE_URL`,
- * `DECISION_MODEL`, `DECISION_API_KEY`), so it runs against whichever server speaks it.
+ * `vendors.ts` holds what each does its own way. The format is the one the SDK's ranker plugin
+ * speaks.
  *
  * The options go as index keys (`t0`…), not ids: an id may be long or odd, and the key is part
  * of what the model reads. The option text is the one the OpenAI engine settled on.
- *
- * What it can be relied on for is declared as a score, not a calibrated probability: an engine
- * is trusted for a surface only after the judge benchmark has run on it, and until then the
- * judge holds it to a stricter threshold (`DECISION_MIN_CONFIDENCE` sets it once measured).
  */
-
-export const SYSTEM_ONE_PROVIDER = "system-one";
-export const SYSTEM_ONE_MAX_OPTIONS = 150;
 
 /** The one question's name, as the OpenAI engine names it. */
 const QUESTION = "tool";
@@ -38,13 +31,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_ATTEMPTS = 3;
 const MAX_RATE_LIMIT_WAIT_MS = 30_000;
 
-export const SYSTEM_ONE_CAPABILITIES: DecisionCapabilities = {
-  refusals: false,
-  confidence: "score",
-  maxOptions: SYSTEM_ONE_MAX_OPTIONS,
-};
-
-export interface SystemOneConfig {
+export interface ChoiceConfig {
+  vendor: Exclude<DecisionVendorName, "openai">;
   baseUrl: string;
   model: string;
   /** Absent for a server that asks for none. */
@@ -76,6 +64,7 @@ function readAnswer(
   data: unknown,
   options: readonly DecisionOption[],
   body: string,
+  usageField: string,
 ): DecisionResult {
   const answers = isRecord(data) ? data.answers : undefined;
   const answer = isRecord(answers) ? answers[QUESTION] : undefined;
@@ -101,7 +90,7 @@ function readAnswer(
       ? answer.confidence
       : probabilities[choice];
 
-  const usage = isRecord(data) && isRecord(data.usage) ? data.usage.input_tokens : undefined;
+  const usage = isRecord(data) && isRecord(data.usage) ? data.usage[usageField] : undefined;
   return {
     answer: { choice, confidence, probabilities },
     // A server that reports no usage still moves the budget, at about 3.5 characters a token.
@@ -109,14 +98,34 @@ function readAnswer(
   };
 }
 
-export function systemOneClient(config: SystemOneConfig): DecisionClient {
-  const endpoint = `${config.baseUrl.replace(/\/+$/, "")}/v1/systemone`;
+/** Google answers a blocked input with a safety code in place of an answer. */
+const SAFETY_CODES: ReadonlySet<unknown> = new Set([
+  "safety",
+  "prohibited_content",
+  "blocklist",
+  "image_safety",
+  "content_blocked",
+]);
+
+function isSafetyBlock(detail: string): boolean {
+  try {
+    const body: unknown = JSON.parse(detail);
+    return isRecord(body) && isRecord(body.error) && SAFETY_CODES.has(body.error.code);
+  } catch {
+    return false;
+  }
+}
+
+export function choiceClient(config: ChoiceConfig): DecisionClient {
+  const vendor = DECISION_VENDORS[config.vendor];
+  const wire = CHOICE_WIRE[config.vendor];
+  const endpoint = `${config.baseUrl.replace(/\/+$/, "")}${wire.path}`;
   const fetchImpl = config.fetchImpl ?? fetch;
   const sleep = config.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const attempts = Math.max(1, config.attempts ?? DEFAULT_ATTEMPTS);
   const meta = {
-    provider: SYSTEM_ONE_PROVIDER,
+    provider: vendor.provider,
     model: config.model,
     feature: config.feature ?? DEFAULT_DECISION_FEATURE,
     payer: config.payer ?? ("ratel" as const),
@@ -131,7 +140,7 @@ export function systemOneClient(config: SystemOneConfig): DecisionClient {
     const body = JSON.stringify(
       wellFormedJson({
         model: config.model,
-        state: `${framing.about}\n\nSearch query: ${query}`,
+        [wire.state]: `${framing.about}\n\nSearch query: ${query}`,
         questions: {
           [QUESTION]: {
             type: "choice",
@@ -152,30 +161,36 @@ export function systemOneClient(config: SystemOneConfig): DecisionClient {
         response = await fetchImpl(endpoint, {
           method: "POST",
           headers: {
-            ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
+            ...(config.apiKey ? wire.key(config.apiKey) : {}),
             "content-type": "application/json",
           },
           body,
+          // A redirect would carry the question, and the key, to another address.
+          redirect: "error",
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (err) {
-        lastFailure = new DecisionCallError("unavailable", "the decision request failed", {
-          cause: err,
-        });
+        lastFailure = new DecisionCallError(
+          "unavailable",
+          `${vendor.label}: the decision request failed`,
+          {
+            cause: err,
+          },
+        );
         continue;
       }
       if (response.status === 401 || response.status === 403) {
         await response.body?.cancel().catch(() => {});
         throw new DecisionCallError(
           "credentials",
-          `the decision engine rejected the API key (${response.status})`,
+          `${vendor.label} rejected the API key (${response.status})`,
         );
       }
       if (response.status === 429) {
         await response.body?.cancel().catch(() => {});
         lastFailure = new DecisionCallError(
           "rate_limited",
-          "the decision engine rate limited the request",
+          `${vendor.label} rate limited the request`,
         );
         if (!config.retryRateLimit) throw lastFailure;
         await sleep(retryAfterMs(response, attempt));
@@ -183,28 +198,34 @@ export function systemOneClient(config: SystemOneConfig): DecisionClient {
       }
       if (!response.ok) {
         const detail = await response.text().catch(() => "");
+        if (wire.capabilities.refusals && response.status === 400 && isSafetyBlock(detail))
+          return { answer: null, inputTokens: 0 };
         lastFailure = new DecisionCallError(
           "unavailable",
-          `the decision engine returned ${response.status}: ${detail.slice(0, 200)}`,
+          `${vendor.label} returned ${response.status}: ${detail.slice(0, 200)}`,
         );
         // A 4xx is our request's shape, or a plan's usage running out: a retry will not change it.
         if (response.status < 500) break;
         continue;
       }
       try {
-        return readAnswer(await response.json(), options, body);
+        return readAnswer(await response.json(), options, body, wire.usage);
       } catch (err) {
-        lastFailure = new DecisionCallError("unreadable", "the decision answer was unreadable", {
-          cause: err,
-        });
+        lastFailure = new DecisionCallError(
+          "unreadable",
+          `${vendor.label}: the decision answer was unreadable`,
+          {
+            cause: err,
+          },
+        );
       }
     }
-    throw lastFailure ?? new DecisionCallError("unavailable", "the decision engine did not answer");
+    throw lastFailure ?? new DecisionCallError("unavailable", `${vendor.label} did not answer`);
   }
 
   return {
     model: config.model,
-    capabilities: SYSTEM_ONE_CAPABILITIES,
+    capabilities: wire.capabilities,
     async decideChoice(query, options, framing) {
       // One option needs no model, and the format takes at least two.
       if (options.length === 1) {

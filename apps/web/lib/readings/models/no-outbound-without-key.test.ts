@@ -12,15 +12,27 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
   ["placeholder Claude key", { ANTHROPIC_API_KEY: "REPLACE_ME" }, "production"],
   ["only the OpenAI key", { OPENAI_API_KEY: "sk-test" }, "production"],
   ["mistyped provider", { MODEL_PROVIDER: "opnai-compatible", MODEL_BASE_URL: "http://x" }, "test"],
-  ["provider without a base URL", { MODEL_PROVIDER: "openai-compatible" }, "production"],
+  ["provider without a base URL", { MODEL_PROVIDER: "custom" }, "production"],
   [
     "provider with a key but no base URL",
-    { MODEL_PROVIDER: "openai-compatible", MODEL_API_KEY: "sk-test" },
+    { MODEL_PROVIDER: "custom", MODEL_API_KEY: "sk-test" },
     "production",
   ],
   [
     "provider with a base URL but no model named",
-    { MODEL_PROVIDER: "openai-compatible", MODEL_BASE_URL: "http://localhost:8000/v1" },
+    { MODEL_PROVIDER: "custom", MODEL_BASE_URL: "http://localhost:8000/v1" },
+    "production",
+  ],
+  ...["openai", "mistral", "grok", "gcp", "bedrock", "ollama", "llama.cpp", "vllm", "litellm"].map(
+    (name): [string, Record<string, string>, string] => [
+      `${name} named, only a Claude key present`,
+      { MODEL_PROVIDER: name, ANTHROPIC_API_KEY: "k", MODEL_STANDARD: "m" },
+      "production",
+    ],
+  ),
+  [
+    "a hosted vendor at another address, only its own key present",
+    { MODEL_PROVIDER: "mistral", MISTRAL_API_KEY: "k", MODEL_BASE_URL: "https://elsewhere.test" },
     "production",
   ],
   ["fake in production", { MODEL_PROVIDER: "fake" }, "production"],
@@ -37,7 +49,7 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
   ],
   [
     "another provider named, only a Claude key present",
-    { MODEL_PROVIDER: "openai-compatible", ANTHROPIC_API_KEY: "k" },
+    { MODEL_PROVIDER: "custom", ANTHROPIC_API_KEY: "k" },
     "production",
   ],
 ];

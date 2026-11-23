@@ -21,7 +21,7 @@ import { intentClusters } from "@/lib/readings/intent-engine/schema";
 import { boundEngineTransaction, type EngineDb } from "@/lib/readings/intent-engine/store";
 import type { EngineCluster, LevelTree } from "@/lib/readings/intent-types/engine-types";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
-import { models } from "@/lib/readings/models";
+import { models, providerFor } from "@/lib/readings/models";
 import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 
 /**
@@ -343,7 +343,7 @@ export async function nameEngineClusters(
   if (!deps.complete) {
     if (candidates.length > 0 && deps.maxNames > 0) {
       recordModelCall({
-        provider: "anthropic",
+        provider: providerFor("intent_names"),
         model: deps.model,
         feature: "intent_names",
         payer: "ratel",

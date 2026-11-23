@@ -37,8 +37,8 @@ Three things constrain a change:
 in, text out, optionally bound to a JSON schema), `ChatModel` (one turn of a tool-using
 conversation) and `DecisionClient` (one closed-set choice, with the engine's capabilities). The
 kit in `lib/readings/models/` resolves them from the environment: `models.text(feature)`,
-`models.chat(feature)`, `models.decision(feature)`. A feature names what it is; it never names a
-provider or a model id. Embeddings keep `EmbeddingProviderPort`.
+`models.chat(feature)`; decisions are resolved beside their judge, in `lib/readings/decisions/`. A
+feature names what it is; it never names a vendor or a model id. Embeddings keep `EmbeddingProviderPort`.
 
 **2. The kit lives in `lib/readings/models/`.** Its Claude adapter wraps
 `lib/readings/anthropic/client.ts`, which is a `copy` file at layer 4, and it records spend
@@ -51,31 +51,39 @@ and embeddings follow `OPENAI_API_KEY`.
 
 | Kind | Variables | Values |
 |---|---|---|
-| Text and chat | `MODEL_PROVIDER`, `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_DEEP`, `MODEL_STANDARD`, `MODEL_FAST`, `MODEL_MAX_OUTPUT_TOKENS`, `MODEL_REASONING_MODELS`, `MODEL_PRICES` | unset (Claude, as today), `anthropic-vertex`, `anthropic-bedrock`, `openai-compatible`, `fake` |
-| Decision | `DECISION_ENGINE`, `DECISION_BASE_URL`, `DECISION_API_KEY`, `DECISION_MODEL`, `DECISION_MIN_CONFIDENCE` | `openai` (default), `system-one`; `rerank` and `llm` are planned |
+| Text and chat | `MODEL_PROVIDER` | unset (Claude, as today), `claude`, `openai`, `mistral`, `grok`, `gcp`, `bedrock`, `ollama`, `llama.cpp`, `vllm`, `litellm`, `custom`, `fake` |
+| Decision | `DECISION_PROVIDER` | unset (OpenAI, as today), `openai`, `typesafe`, `levanto`, `google`, `custom` |
 | Embedding | `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL` | fall back to `OPENAI_*`, then the local hash |
 
-`openai-compatible` is any server that speaks chat completions: OpenAI, Gemini's compatible
-endpoint, vLLM, llama.cpp, Ollama. The adapters are written over `fetch`; no vendor SDK is added.
+**The setting is a vendor, not a wire format.** A self-hoster knows which vendor they have an
+account with; which API it speaks is the vendor table's business (`lib/readings/models/vendors.ts`,
+`lib/readings/decisions/vendors.ts`). A hosted vendor takes its own key variable or cloud login and
+nothing else. A server the customer runs takes its address. Vendors share an adapter where they
+share a format: Claude's own (Anthropic, Vertex AI, Bedrock), the Responses API (OpenAI, Grok),
+chat completions (Mistral, Gemini on Vertex AI, the other models on Bedrock, every server), and the
+System One family for decisions. Vendors are chosen in the environment; there is no settings page.
 
-**4. The selection is explicit and fails closed.** An unknown `MODEL_PROVIDER` gives no client.
-An unknown `DECISION_ENGINE` is the one exception: it is read as `openai` with a warning, as
-before, because Ratel's own deployments set the names of the Cloud edition's private engines
-there and the core must keep judging. A key goes only to the server it was set for: the OpenAI
-key is never sent to `DECISION_BASE_URL` or `EMBEDDING_BASE_URL`. The text
-provider is never inferred from `OPENAI_API_KEY`, which Ratel sets for decisions. A server
-without a key counts as configured only when its base URL is set; nothing defaults to localhost.
-`fake` works only in local environments.
+**4. The selection is explicit and fails closed.** A named vendor is used or nothing is. A name
+that is not in the table selects nothing. A vendor is never inferred from a key. A vendor's key is
+sent to that vendor only: at another address (`MODEL_BASE_URL`, `DECISION_BASE_URL`) only
+`MODEL_API_KEY` or `DECISION_API_KEY` is. Nothing defaults to localhost, to a cloud region or to a
+worldwide endpoint, and no request follows a redirect. `fake` works only in local environments.
+`DECISION_ENGINE`, which Ratel's own deployments set for the private edition's calls, selects
+nothing in the core.
 
-**5. Tiers, not model ids.** A feature asks for `deep`, `standard` or `fast`. On Claude each
-feature keeps its present default and its present variable (`ANTHROPIC_MODEL`,
-`TRACE_WORKFLOW_LABEL_MODEL`, `TOPICS_LABEL_MODEL`, `INTENT_ENGINE_NAME_MODEL`,
-`EVAL_GATE_REPLAY_MODEL`, `EVAL_GATE_JUDGE_MODEL`, `EVAL_GATE_DRAFT_MODEL`). On another provider
-`MODEL_DEEP`, `MODEL_STANDARD` and `MODEL_FAST` name the models. One flat table lists every
-feature with its kind, tier and variable; a test fails when a call names a feature that is not in it.
+**5. Tiers, not model ids, and every default can be changed.** A feature asks for `deep`,
+`standard` or `fast`. On Claude each feature keeps its present model (Opus 5.5, Sonnet 5.5, Haiku
+5.5) and its present variable (`ANTHROPIC_MODEL`, `TRACE_WORKFLOW_LABEL_MODEL`,
+`TOPICS_LABEL_MODEL`, `INTENT_ENGINE_NAME_MODEL`, `EVAL_GATE_REPLAY_MODEL`,
+`EVAL_GATE_JUDGE_MODEL`, `EVAL_GATE_DRAFT_MODEL`). A vendor that serves Claude (`gcp`, `bedrock`)
+runs the same models. Another hosted vendor has its nearest equivalent per tier, never a weaker one
+where the choice is between two; a server has none until one is named. `MODEL_DEEP`,
+`MODEL_STANDARD` and `MODEL_FAST` change a tier on any vendor and `MODEL_FEATURE_<FEATURE>` changes
+one feature. One flat table lists every feature; a test fails when a call names one that is not in it.
 
 **6. What a provider lacks degrades silently.** Effort is sent where the model takes it and
-dropped elsewhere. JSON output is asked for by schema, then as a JSON object, then by prompt
+dropped elsewhere. A model that thinks spends its token cap on thinking first, so a small cap is
+raised to 4,096 and, with no effort asked for, thinking is kept low. JSON output is asked for by schema, then as a JSON object, then by prompt
 alone. A stop is returned, never thrown: `end`, `cut_off` or `refused`, and each feature keeps its
 own error for it.
 
@@ -84,14 +92,15 @@ path keeps the accounting it has.
 
 **8. A model without a price is charged at the fallback price.** A budget can then never be
 bypassed by an unknown hosted model. `MODEL_PRICES` (JSON, model id to input and output price in
-dollars per million tokens) is read first, and `0` is allowed for a local model.
+dollars per million tokens) is read first, and `0` is allowed for a local model; then the vendors'
+list prices.
 
-**9. System One ships as a format, not a vendor.** The `system-one` engine speaks the System One
-wire format (`POST /v1/systemone`) and is configured by base URL, model and key alone, so a
-self-hoster can point it at any server that speaks it. No vendor name, default URL or key variable
-enters `apps/web`, and `check:private` is unchanged. This amends the note in
-`lib/readings/decisions/engine.ts` that the other engines are private: vendor defaults and
-calibration stay private, the format is open.
+**9. Decision vendors are named too.** `typesafe` (Jev), `levanto` (Sage) and `google` (Gemini
+Decision) share one client, because their formats differ by a path, a header and a field name;
+`custom` is any other server that speaks System One. Their names, addresses and key variables are in
+the open code, so `private-strings.txt` no longer lists them; the hosted embedding endpoint's vendor
+stays listed. Models are pinned. Google's Decisions API is on the Gemini Developer API only, so it
+takes a Gemini key and not the Google Cloud login.
 
 **10. Confidence thresholds belong to the engine.** Each engine declares whether it refuses,
 whether its confidence is calibrated, a score, or absent, and how many options it takes. The judge
@@ -100,7 +109,10 @@ whose confidence is only a score is held to 0.9 until `DECISION_MIN_CONFIDENCE` 
 measured. An engine is trusted for a surface only after the judge benchmark has run on it.
 
 **11. The eval gate gains a branch; the Claude branch is not rewritten.** `resolveEvalModels`
-and its siblings choose by provider. Everything exported from `views/eval-gate/models.ts` stays.
+and its siblings ask the kit who answers: a Claude model, wherever it is hosted, through the code
+that was there; any other through `models-neutral.ts`. Everything exported from
+`views/eval-gate/models.ts` stays. Naming another vendor is enough to keep Claude out, even with a
+Claude key present. A run recorded on a model the vendor serves is replayed on it.
 
 **12. One file leaves the sync.** `lib/synthesis/match-quality/job.ts` becomes `owned`: its
 `resolveAnalystFactory` asks whether Claude is configured, and no other provider could be chosen
@@ -118,12 +130,14 @@ conformance tests and new features' tests.
   code outside the adapters imports a vendor SDK or names a model host.
 - Quality is not portable. The prompts were tuned on Claude; a weaker model writes weaker fixes.
   The docs name which providers Ratel has tested.
-- The tool-calling translation for OpenAI-compatible servers is ours to maintain, and local
+- The tool-calling translation for each format is ours to maintain, and local
   servers differ in how well they follow it.
 - The platform does not reuse the SDK's ranker plugins (ADR-0028). They return ids and scores
   only, without token usage, framing or retries, and the platform pins an SDK below their floor.
   The two align on wire formats and variable names.
-- Not covered here: Tool Picker and the hosted `/v1/embeddings` in `ratel-platform`, Bedrock's
-  Converse API for models other than Claude, a Bedrock embeddings adapter, and a hook for an
-  edition to register private engines.
+- A vendor's default models age. They are in one table per kind, with the date they were checked.
+- Google Cloud and Bedrock add two dependencies (`@anthropic-ai/vertex-sdk`,
+  `google-auth-library`); the vendor SDKs stay inside the adapters.
+- Not covered here: Tool Picker and the hosted `/v1/embeddings` in `ratel-platform`, a reranker or
+  a plain LLM as the decision engine, and vendor settings for embeddings.
 - When `ratel-cloud` is retired, the Claude branch of the eval gate can fold into `ChatModel`.

@@ -14,7 +14,7 @@ type Env = Record<string, string | undefined>;
 export const DRAFTING_MESSAGE =
   "The fix draft is being prepared. Try the simulation again when the draft is ready.";
 export const NO_DRAFT_MODEL_MESSAGE =
-  "No Claude backend is configured (ANTHROPIC_API_KEY or ANTHROPIC_BACKEND), so this fix's text can't be drafted.";
+  "No model is configured (MODEL_PROVIDER, or ANTHROPIC_API_KEY), so this fix's text can't be drafted.";
 export const DRAFT_FIX_ACTOR = "system:fix-drafts";
 
 /** Owned (ADR-0030): the gate reads `env` (`FF_EVAL_GATE`) where upstream takes flag deps. */

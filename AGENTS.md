@@ -75,6 +75,15 @@ visible and minimal.
    (`copyIncludes` in `sync.mjs`; `sync.test.mjs` fails until it is).
 7. A rewrite of upstream logic needs explicit agreement first.
 
+## Calling a model in the platform
+
+A feature in `apps/web` never talks to a vendor. It asks the model kit (`models.text("…")`,
+`models.chat("…")`, or `judgeFromEnv` for a closed-set choice) and handles having none, so it runs on
+every vendor a self-hoster can name (ADR-0033). Add its row to `lib/readings/models/features.ts`, ask
+for a tier and not a model id, and test it on the fake vendor. Tests fail when code outside the
+adapters imports a vendor SDK, names a vendor's address, or calls with a feature that has no row.
+How-to: [`apps/web/lib/readings/models/README.md`](apps/web/lib/readings/models/README.md).
+
 ## When in doubt
 
 - For locked architectural decisions: [`docs/adr/`](docs/adr/) — the ADR is the source of truth, not any README.

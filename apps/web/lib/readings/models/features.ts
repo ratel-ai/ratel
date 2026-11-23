@@ -3,8 +3,9 @@ import type { ModelTier } from "@/lib/contracts/models";
 /**
  * Every feature that calls a model, in one table (ADR-0033 §5). A feature's id is the name its
  * spend line carries. A text or chat feature asks for a tier; on Claude it keeps the default and
- * the variables it has always read (`variables`, first one set wins), and on another provider the
- * tier's variable names the model. A decision feature runs on the deployment's decision engine.
+ * the variables it has always read (`variables`, first one set wins); every vendor has a model per
+ * tier (`vendors.ts`), and `config.ts` holds the order. A decision feature runs on the deployment's
+ * decision vendor.
  *
  * A new feature is a row here. `features.test.ts` fails when a call names a feature that has none.
  */
@@ -104,7 +105,6 @@ export const FEATURES = [
     id: "eval_gate_task_judge",
     kind: "text",
     tier: "fast",
-    variables: ["EVAL_GATE_JUDGE_MODEL"],
     claudeDefault: HAIKU,
     does: "Judges a live task run against its criteria",
   },
@@ -112,7 +112,6 @@ export const FEATURES = [
     id: "eval_gate_task_test_draft",
     kind: "text",
     tier: "fast",
-    variables: ["EVAL_GATE_JUDGE_MODEL"],
     claudeDefault: HAIKU,
     does: "Drafts a test from a run",
   },

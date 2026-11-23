@@ -72,6 +72,8 @@ const VENDOR_SDK_ALLOWED = new Set([
   "platform/anthropic-errors.ts",
   "readings/anthropic/client.ts",
   "readings/models/providers/anthropic.ts",
+  "readings/models/providers/claude-hosts.ts",
+  "readings/models/providers/cloud-auth.ts",
   // Not on the kit yet. Remove each as it moves.
   "views/eval-gate/models.ts",
 ]);
@@ -94,19 +96,46 @@ test("only the Claude client and the model kit's adapters import a vendor SDK", 
 });
 
 test("every request a model kit adapter sends over fetch is well-formed", () => {
+  // One file sends for all of them, and it makes the body well-formed before anything is signed.
   const providers = path.join(LIB, "readings", "models", "providers");
-  const bodies: string[] = [];
-  const unguarded: string[] = [];
-  for (const file of libSources(providers)) {
-    for (const match of readFileSync(file, "utf8").matchAll(/body:\s*JSON\.stringify\(\s*(\w+)/g)) {
-      const where = `${path.relative(LIB, file)}: ${match[0]}`;
-      bodies.push(where);
-      if (match[1] !== "wellFormedJson") unguarded.push(where);
-    }
-  }
-  assert.ok(
-    bodies.length >= 1,
-    "found no fetch body in the adapters: the scan no longer sees them",
+  const senders = libSources(providers).filter((file) =>
+    /\b(doFetch|fetch|fetchImpl)\(/.test(readFileSync(file, "utf8")),
   );
-  assert.deepEqual(unguarded, []);
+  assert.deepEqual(
+    senders.map((file) => path.basename(file)),
+    ["http.ts"],
+  );
+  const bodies = [...readFileSync(senders[0], "utf8").matchAll(/JSON\.stringify\((\w+)\(body\)/g)];
+  assert.deepEqual(
+    bodies.map((match) => match[1]),
+    ["wellFormedJson"],
+  );
+});
+
+const VENDOR_HOST =
+  /(api\.openai\.com|api\.anthropic\.com|api\.mistral\.ai|api\.x\.ai|aiplatform|generativelanguage\.googleapis|bedrock-runtime|api\.typesafe\.ai|sage\.levanto\.ai)/;
+
+const VENDOR_HOST_ALLOWED = [
+  "adapters/oss/embedding-provider.ts",
+  "readings/anthropic/client.ts",
+  "readings/decisions/openai.ts",
+  "readings/decisions/vendors.ts",
+  "readings/models/providers/claude-hosts.ts",
+  "readings/models/providers/index.ts",
+  "readings/models/vendors.ts",
+];
+
+test("only the vendor tables and the adapters name a vendor's address", () => {
+  const naming = libSources(LIB)
+    .filter((file) => {
+      const code = readFileSync(file, "utf8")
+        .split("\n")
+        .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+        .join("\n");
+      return VENDOR_HOST.test(code);
+    })
+    .map((file) => path.relative(LIB, file))
+    .filter((file) => !file.startsWith("ingest/") && !file.startsWith("console/seed/"))
+    .sort();
+  assert.deepEqual(naming, VENDOR_HOST_ALLOWED);
 });

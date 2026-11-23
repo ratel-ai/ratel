@@ -162,5 +162,6 @@ the read models are `synthesis/experiments` and `synthesis/traces`. Owned: `rank
 (the trace calibration card case is left out; the Traces pages here do not carry that card).
 
 `fix-drafts/model.ts` gets its model from the model kit (`lib/readings/models`, ADR-0033), so a
-draft runs on whichever provider the deployment selects; the eval gate's own models are still
-Claude only.
+draft runs on whichever vendor the deployment names. So do the eval gate's models:
+`eval-gate/models.ts` holds the interfaces and the Claude code, `eval-gate/models-neutral.ts` the
+same on any other vendor.
