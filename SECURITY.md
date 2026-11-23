@@ -2,10 +2,11 @@
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a security problem. Report it privately through
-GitHub's vulnerability reporting on this repository: **Security › Report a vulnerability**
-(`https://github.com/ratel-ai/ratel/security/advisories/new`). Include the package and version,
-what the problem is, and how to reproduce it; a proof of concept helps.
+Please do not put the details of a security problem in a public issue.
+[Open an issue](https://github.com/ratel-ai/ratel/issues/new) titled **Security contact request** with
+no details, not even the affected package. A maintainer then opens a private draft security advisory
+and invites you to it. Put the package and version, what the problem is, and how to reproduce it
+there; a proof of concept helps.
 
 What to expect:
 
@@ -20,7 +21,7 @@ Please give us a reasonable time to ship the fix before you talk about the probl
 
 | Package | Supported |
 |---|---|
-| Ratel Platform (`src`) | `main` |
+| Ratel Platform (`web`) | `main` |
 
 The SDK packages (`ratel-ai-core`, `@ratel-ai/sdk`, `ratel-ai`, the telemetry packages, the
 framework adapters and the rankers plugin) live in
@@ -29,7 +30,7 @@ there; its `SECURITY.md` lists the supported versions.
 
 ## Scope
 
-In scope: the platform at `src`, the packages in this repository, and the repository's
+In scope: the platform at `web`, the packages in this repository, and the repository's
 build tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
 authentication or binding it to localhost is the operator's job (see `web/README.md`).
 
