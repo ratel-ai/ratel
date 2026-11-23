@@ -35,8 +35,8 @@ import {
 } from "./http";
 
 /**
- * A vendor's Responses API (`POST {base}/responses`): OpenAI and Grok (ADR-0033). OpenAI's
- * chat completions refuse tools on some of its current models, and xAI documents this API first.
+ * A vendor's Responses API (`POST {base}/responses`): OpenAI (ADR-0033), whose chat completions
+ * refuse tools on some of its current models.
  *
  * Nothing is kept at the vendor: every request says `store: false`, and a conversation's earlier
  * turns go back as the items the vendor wrote, its encrypted reasoning included.

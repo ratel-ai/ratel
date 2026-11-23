@@ -15,7 +15,6 @@ export type VendorName =
   | "claude"
   | "openai"
   | "mistral"
-  | "grok"
   | "gcp"
   | "bedrock"
   | "ollama"
@@ -87,18 +86,6 @@ export const VENDORS: Readonly<Record<VendorName, Vendor>> = {
     replays: /^(mistral|ministral|magistral|codestral|devstral)-/i,
     provider: "mistral_ai",
   },
-  // https://docs.x.ai/developers/models (checked 2026-11-23). 4.3 is the cheapest current
-  // general model, so it serves two tiers.
-  grok: {
-    name: "grok",
-    label: "Grok (xAI)",
-    hosted: true,
-    baseUrl: "https://api.x.ai/v1",
-    keyVariable: "XAI_API_KEY",
-    models: { deep: "grok-4.7", standard: "grok-4.3", fast: "grok-4.3" },
-    replays: /^grok-/i,
-    provider: "x_ai",
-  },
   gcp: {
     name: "gcp",
     label: "Google Cloud (Vertex AI)",
@@ -128,7 +115,6 @@ const ALIASES: Readonly<Record<string, VendorName>> = {
   anthropic: "claude",
   llamacpp: "llama.cpp",
   "llama-cpp": "llama.cpp",
-  xai: "grok",
 };
 
 /** The vendor a name means, or undefined: a name that is not in the table selects nothing. */

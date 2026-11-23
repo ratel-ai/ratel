@@ -46,7 +46,7 @@ A row in `vendors.ts` (its address, its key variable, a model per tier) and a li
 | `fake.ts` | The fake vendor: fixed answers, no network |
 | `providers/index.ts` | Which adapter serves each vendor |
 | `providers/anthropic.ts`, `claude-hosts.ts` | Claude: Anthropic's API or Ratel's Bedrock through `readings/anthropic/client.ts`; Vertex AI and Bedrock as vendors |
-| `providers/responses.ts` | The Responses API: OpenAI, Grok |
+| `providers/responses.ts` | The Responses API: OpenAI |
 | `providers/chat-completions.ts` | Chat completions: Mistral, Gemini on Vertex AI, the other models on Bedrock, every server |
 | `providers/http.ts`, `cloud-auth.ts` | The request with its retries; the Google and AWS logins |
 
@@ -59,7 +59,6 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | unset, `claude` | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BACKEND` | `claude-opus-5-5` · `claude-sonnet-5-5` · `claude-haiku-5-5` | not since the kit |
 | `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | no |
 | `mistral` | `MISTRAL_API_KEY` | `mistral-large-latest` · `mistral-large-latest` · `mistral-small-latest` | no |
-| `grok` | `XAI_API_KEY` | `grok-4.7` · `grok-4.3` · `grok-4.3` | no |
 | `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | no |
 | `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | no |
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |

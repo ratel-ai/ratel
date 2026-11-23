@@ -51,7 +51,7 @@ and embeddings follow `OPENAI_API_KEY`.
 
 | Kind | Variables | Values |
 |---|---|---|
-| Text and chat | `MODEL_PROVIDER` | unset (Claude, as today), `claude`, `openai`, `mistral`, `grok`, `gcp`, `bedrock`, `ollama`, `llama.cpp`, `vllm`, `litellm`, `custom`, `fake` |
+| Text and chat | `MODEL_PROVIDER` | unset (Claude, as today), `claude`, `openai`, `mistral`, `gcp`, `bedrock`, `ollama`, `llama.cpp`, `vllm`, `litellm`, `custom`, `fake` |
 | Decision | `DECISION_PROVIDER` | unset (OpenAI, as today), `openai`, `typesafe`, `levanto`, `google`, `custom` |
 | Embedding | `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL` | fall back to `OPENAI_*`, then the local hash |
 
@@ -59,7 +59,7 @@ and embeddings follow `OPENAI_API_KEY`.
 account with; which API it speaks is the vendor table's business (`lib/readings/models/vendors.ts`,
 `lib/readings/decisions/vendors.ts`). A hosted vendor takes its own key variable or cloud login and
 nothing else. A server the customer runs takes its address. Vendors share an adapter where they
-share a format: Claude's own (Anthropic, Vertex AI, Bedrock), the Responses API (OpenAI, Grok),
+share a format: Claude's own (Anthropic, Vertex AI, Bedrock), the Responses API (OpenAI),
 chat completions (Mistral, Gemini on Vertex AI, the other models on Bedrock, every server), and the
 System One family for decisions. Vendors are chosen in the environment; there is no settings page.
 

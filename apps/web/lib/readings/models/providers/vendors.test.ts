@@ -113,7 +113,7 @@ const TOOLS = [
 ];
 const OPENAI = { MODEL_PROVIDER: "openai", OPENAI_API_KEY: "sk-openai" };
 
-/* - OpenAI and Grok: the Responses API -------------------------------------- */
+/* - OpenAI: the Responses API ----------------------------------------------- */
 
 test("openai: one key, its own address, nothing stored, the tier's model", async () => {
   const seen = await on([json(response([message("Hello")]))], async () => {
@@ -279,18 +279,6 @@ test("openai: a model that does not reason is given neither an effort nor encryp
   assert.equal(seen[0].body.reasoning, undefined);
   assert.equal(seen[0].body.include, undefined);
   assert.equal(seen[0].body.temperature, 0);
-});
-
-test("grok: xAI's address and key", async () => {
-  const seen = await on([json(response([message("Hello")]))], async () => {
-    await models
-      .text("workflow_label", at({ MODEL_PROVIDER: "grok", XAI_API_KEY: "xai-key" }))
-      ?.complete(ASK);
-  });
-  assert.equal(seen[0].url, "https://api.x.ai/v1/responses");
-  assert.equal(seen[0].headers.authorization, "Bearer xai-key");
-  assert.equal(seen[0].body.model, "grok-4.3");
-  assert.equal(seen[0].body.store, false);
 });
 
 /* - Mistral ----------------------------------------------------------------- */
