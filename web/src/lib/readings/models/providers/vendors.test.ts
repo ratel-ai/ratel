@@ -6,6 +6,7 @@ import type { ChatRequest } from "@/lib/contracts/models";
 import { setModelCallSink } from "@/lib/platform/model-call";
 import { resolveModelVendor } from "../config";
 import { models, withProviders } from "../index";
+import { resetStructuredOutputs } from "./claude-hosts";
 import { vendorAdapters } from "./index";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */
@@ -313,6 +314,63 @@ test("gcp: Claude by default, on Vertex, with the Google login and no Anthropic 
   assert.equal(seen[0].body.model, undefined);
   assert.equal(typeof seen[0].body.anthropic_version, "string");
   assert.deepEqual(seen[0].body.output_config, { format: { type: "json_schema", schema: SCHEMA } });
+});
+
+/** Google's answer where an organization does not allow structured outputs on a partner model. */
+const disallowed = () =>
+  json(
+    {
+      error: {
+        code: 400,
+        message:
+          "Organization Policy constraint constraints/vertexai.allowedPartnerModelFeatures violated for `projects/1` attempting to use a disallowed feature structured_outputs for Partner model claude-sonnet-5-5.",
+        status: "FAILED_PRECONDITION",
+      },
+    },
+    400,
+  );
+
+test("gcp: where the organization forbids structured outputs, Claude is asked for JSON in words", async () => {
+  resetStructuredOutputs();
+  const fenced = () =>
+    json({
+      id: "msg_1",
+      type: "message",
+      role: "assistant",
+      model: "claude-sonnet-5-5",
+      content: [{ type: "text", text: 'Here:\n```json\n{"name":"x"}\n```' }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 10, output_tokens: 2 },
+    });
+  const seen = await on([disallowed(), fenced(), fenced()], async () => {
+    const model = models.text("workflow_label", at(GCP));
+    const request = { ...ASK, schema: SCHEMA, effort: "low" as const };
+    assert.equal((await model?.complete(request))?.text, '{"name":"x"}');
+    // Remembered: the refused form is not tried again.
+    assert.equal((await model?.complete(request))?.text, '{"name":"x"}');
+  });
+  assert.equal(seen.length, 3);
+  assert.deepEqual(seen[0].body.output_config, {
+    format: { type: "json_schema", schema: SCHEMA },
+    effort: "low",
+  });
+  for (const sent of seen.slice(1)) {
+    assert.deepEqual(sent.body.output_config, { effort: "low" });
+    assert.match(String(sent.body.system), /^Be brief\.\n\nAnswer with one JSON object/);
+    assert.ok(String(sent.body.system).includes(JSON.stringify(SCHEMA)));
+  }
+  resetStructuredOutputs();
+});
+
+test("gcp: without a schema nothing changes, and any other 400 is the request's own error", async () => {
+  resetStructuredOutputs();
+  const bad = () => json({ error: { code: 400, message: "prompt is too long" } }, 400);
+  const seen = await on([bad(), disallowed()], async () => {
+    const model = models.text("workflow_label", at(GCP));
+    await assert.rejects(async () => model?.complete({ ...ASK, schema: SCHEMA }), /too long/);
+    await assert.rejects(async () => model?.complete(ASK), /structured_outputs/);
+  });
+  assert.equal(seen.length, 2);
 });
 
 test("gcp: a Gemini model by name, on Vertex's chat completions", async () => {

@@ -58,7 +58,7 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 |---|---|---|---|
 | unset, `claude` | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BACKEND` | `claude-opus-5-5` · `claude-sonnet-5-5` · `claude-haiku-5-5` | all three, on the Anthropic API |
 | `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | all three |
-| `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | no |
+| `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | in `eu`: `gemini-4-hydrogen`, `gemini-4-carbon`, `gemini-3.5-flash-lite`, `claude-sonnet-5-5`; Opus and Haiku not yet (no access in the project) |
 | `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | `openai.gpt-oss-120b-1:0`, `qwen.qwen3-32b-v1:0`; Claude not yet (no access in the account) |
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |
 | `llama.cpp` | `MODEL_BASE_URL`; start it with `--jinja` for tools | name one | `qwen2.5:0.5b` |
@@ -77,6 +77,10 @@ or `MODEL_FAST`; the vendor's model for the tier. A server has none of its own, 
 
 The selection fails closed: a named vendor never falls back to another, a vendor is never inferred
 from a key, and nothing defaults to localhost. `no-outbound-without-key.test.ts` holds the table.
+
+On Google Cloud an organization allows a partner model's features one by one
+(`constraints/vertexai.allowedPartnerModelFeatures`). Where it forbids `structured_outputs`, Claude
+is asked for its JSON in words, and the refusal is remembered for that project and model.
 
 What the adapters do where vendors differ: chat completions asks for JSON by schema, then as a JSON
 object, then by the prompt alone, stepping down when a server refuses the format or ignores it, and
