@@ -12,8 +12,7 @@
  * - `next.config.ts` at build time: `RATEL_COMPOSITION` (the `#ee-composition` alias),
  *   `NEXT_DEPLOYMENT_ID`, `BROWSER_SOURCEMAPS`;
  * - variables a third-party SDK reads itself; where the code checks one it reads what the SDK
- *   reads: `PGHOST`/`PGHOSTADDR` (pg, `console/seed/local-database.ts`) and
- *   `AWS_BEARER_TOKEN_BEDROCK` (the AWS SDK, `readings/anthropic/client.ts`);
+ *   reads: `PGHOST`/`PGHOSTADDR` (pg, `console/seed/local-database.ts`);
  * - `CONFIG_PATH`, which zfig reads.
  */
 import { ConfigError, field, type InferSchema, resolve, schema } from "zfig";
@@ -253,6 +252,11 @@ const CONFIG_SCHEMA = schema({
     apiKey: optional("ANTHROPIC_API_KEY", configured, { sensitive: true }),
     /** Comma-separated Bedrock model ids this account has not enabled. */
     bedrockModelsNotEnabled: optional("BEDROCK_MODELS_NOT_ENABLED", configured),
+    /**
+     * A long-term Bedrock key. The AWS SDK reads the variable itself; the app reads it only to
+     * refuse a Bedrock client, so the calls stay signed by the credential chain (the task role).
+     */
+    bedrockBearerToken: optional("AWS_BEARER_TOKEN_BEDROCK", configured, { sensitive: true }),
   },
   openai: {
     apiKey: optional("OPENAI_API_KEY", configured, { sensitive: true }),

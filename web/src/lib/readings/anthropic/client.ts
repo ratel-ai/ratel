@@ -76,16 +76,16 @@ export function anthropicClient(
   options: AnthropicClientOptions = {},
   config: Pick<Config, "anthropic"> = getConfig(),
 ): AnthropicClient | null {
-  const { backend, apiKey } = config.anthropic;
-  if (backend === "bedrock") return bedrockBearerToken() ? null : euBedrockClient(options);
+  const { backend, apiKey, bedrockBearerToken } = config.anthropic;
+  if (backend === "bedrock") return bedrockBearerToken ? null : euBedrockClient(options);
   if (backend !== undefined) return null;
   return apiKey ? new Anthropic({ ...options, apiKey, openTelemetry: false }) : null;
 }
 
 /** Whether this deployment can call Claude at all. */
 export function anthropicConfigured(config: Pick<Config, "anthropic"> = getConfig()): boolean {
-  const { backend, apiKey } = config.anthropic;
-  if (backend !== undefined) return backend === "bedrock" && !bedrockBearerToken();
+  const { backend, apiKey, bedrockBearerToken } = config.anthropic;
+  if (backend !== undefined) return backend === "bedrock" && !bedrockBearerToken;
   return apiKey !== undefined;
 }
 
@@ -162,14 +162,4 @@ function euProfile(model: string): string {
     `Model ${model} has no EU inference profile on Bedrock`,
     new Headers(),
   );
-}
-
-/**
- * `AWS_BEARER_TOKEN_BEDROCK`, which the AWS SDK reads itself (an exception in `web/src/config.ts`):
- * a long-term key, refused here so the calls are signed by the credential chain. Read from the
- * environment, as the SDK reads it; the placeholder and a blank value count as unset.
- */
-function bedrockBearerToken(): string | undefined {
-  const token = process.env.AWS_BEARER_TOKEN_BEDROCK?.trim();
-  return token && token !== "REPLACE_ME" ? token : undefined;
 }

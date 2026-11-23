@@ -192,6 +192,21 @@ test("a secret still at the Terraform placeholder reads as unset", () => {
   assert.equal(config.openai.apiKey, "sk-1");
 });
 
+test("the Bedrock bearer token comes from env or file; blank and the placeholder read as unset", () => {
+  assert.equal(
+    resolveConfig({ env: { AWS_BEARER_TOKEN_BEDROCK: " tok " } }).anthropic.bedrockBearerToken,
+    "tok",
+  );
+  const configPath = configFile("bedrock-token.json", {
+    anthropic: { bedrockBearerToken: "from-file" },
+  });
+  assert.equal(resolveConfig({ configPath }).anthropic.bedrockBearerToken, "from-file");
+  for (const raw of ["", "  ", "REPLACE_ME"]) {
+    const { anthropic } = resolveConfig({ env: { AWS_BEARER_TOKEN_BEDROCK: raw } });
+    assert.equal(anthropic.bedrockBearerToken, undefined, JSON.stringify(raw));
+  }
+});
+
 test("override sets values over every source, for tests", () => {
   const config = resolveConfig({
     env: { FF_EVAL_GATE: "0" },

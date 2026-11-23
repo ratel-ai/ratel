@@ -298,16 +298,9 @@ test("on Bedrock, a base URL in the environment cannot move the host out of Fran
 });
 
 test("on Bedrock, a bearer token gives no client, because it would replace the task role", () => {
-  const env = cfg({ ANTHROPIC_BACKEND: "bedrock" });
-  const saved = process.env.AWS_BEARER_TOKEN_BEDROCK;
-  process.env.AWS_BEARER_TOKEN_BEDROCK = "token";
-  try {
-    assert.equal(anthropicClient({}, env), null);
-    assert.equal(anthropicConfigured(env), false);
-  } finally {
-    if (saved === undefined) delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    else process.env.AWS_BEARER_TOKEN_BEDROCK = saved;
-  }
+  const env = cfg({ ANTHROPIC_BACKEND: "bedrock", AWS_BEARER_TOKEN_BEDROCK: "token" });
+  assert.equal(anthropicClient({}, env), null);
+  assert.equal(anthropicConfigured(env), false);
 });
 
 test("an unknown backend gives no client, even with a key, and no call can leave", () => {
