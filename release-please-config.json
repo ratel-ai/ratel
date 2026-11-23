@@ -10,7 +10,11 @@
       "package-name": "ratel",
       "changelog-path": "CHANGELOG.md",
       "release-as": "0.1.0",
-      "extra-files": [{ "type": "json", "path": "web/package.json", "jsonpath": "$.version" }]
+      "extra-files": [
+        { "type": "json", "path": "web/package.json", "jsonpath": "$.version" },
+        { "type": "generic", "path": "docker-compose.yml" },
+        { "type": "generic", "path": ".env.example" }
+      ]
     }
   }
 }

@@ -1,4 +1,5 @@
-# Publishes the OSS image docker.io/ratelai/ratel for linux/amd64 and linux/arm64 (RELEASING.md).
+# Publishes the OSS image docker.io/ratelai/ratel, and the demo data image
+# docker.io/ratelai/ratel-demo with the same tags, for linux/amd64 and linux/arm64 (RELEASING.md).
 #   release (called by release-please.yml with `version`)   X.Y.Z, X.Y, latest
 #   a pushed tag vX.Y.Z or vX.Y.Z-rc.N                      X.Y.Z, X.Y, latest (a pre-release: only its version)
 #   a push to main                                          edge
@@ -31,16 +32,19 @@ concurrency:
   group: image-${{ inputs.version || inputs.tag || github.ref }}
   cancel-in-progress: false
 
-env:
-  IMAGE: docker.io/ratelai/ratel
-
 jobs:
   publish:
     runs-on: ubuntu-latest
     # The arm64 half builds under QEMU, which is slow.
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: oss, image: ratelai/ratel, title: Ratel, description: "Ratel Platform, open-source edition" }
+          - { target: demo, image: ratelai/ratel-demo, title: Ratel demo data, description: "One-shot demo data for Ratel" }
+    # The same for both images.
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
@@ -55,7 +59,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: docker.io/${{ matrix.image }}
           # semver: from `version` when called, else from the pushed tag (it skips a branch push).
           # A pre-release gets only its full version, and `latest` follows only a final release.
           tags: |
@@ -64,20 +68,19 @@ jobs:
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=edge,branch=main,enable=${{ inputs.version == '' && inputs.tag == '' }}
           labels: |
-            org.opencontainers.image.title=Ratel
-            org.opencontainers.image.description=Ratel Platform, open-source edition
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
             org.opencontainers.image.vendor=Ratel
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#readme
           annotations: |
-            org.opencontainers.image.title=Ratel
-            org.opencontainers.image.description=Ratel Platform, open-source edition
-      - id: build
-        uses: docker/build-push-action@v6
+            org.opencontainers.image.title=${{ matrix.title }}
+            org.opencontainers.image.description=${{ matrix.description }}
+      - uses: docker/build-push-action@v6
         with:
           context: .
           file: web/Dockerfile
-          target: oss
+          target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -86,8 +89,8 @@ jobs:
           build-args: NEXT_DEPLOYMENT_ID=${{ steps.meta.outputs.version }}
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=image-oss
-          cache-to: type=gha,scope=image-oss,mode=max
+          cache-from: type=gha,scope=image-${{ matrix.target }}
+          cache-to: type=gha,scope=image-${{ matrix.target }},mode=max
 
   smoke:
     needs: publish
@@ -106,7 +109,7 @@ jobs:
     steps:
       - name: Pull and run the pushed image
         env:
-          REF: ${{ env.IMAGE }}:${{ needs.publish.outputs.version }}
+          REF: docker.io/ratelai/ratel:${{ needs.publish.outputs.version }}
         run: |
           docker pull "$REF"
           docker run -d --name ratel --network host \

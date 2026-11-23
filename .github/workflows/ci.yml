@@ -239,12 +239,14 @@ jobs:
           az bicep decompile --file "$RUNNER_TEMP/arm/main.json" --force
           az bicep build --file "$RUNNER_TEMP/arm/main.bicep" --stdout > /dev/null
 
-  # The OSS edition as an operator runs it: docker-compose.yml builds the image, starts
+  # The OSS edition as an operator runs it: built from source (the override), it starts
   # Postgres, migrates on boot and serves; web only queues jobs and the worker runs them.
   platform-compose:
     needs: changes
     if: needs.changes.outputs.compose == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    env:
+      COMPOSE_FILE: docker-compose.yml:docker-compose.build.yml
     steps:
       - uses: actions/checkout@v4
       - name: Build and start

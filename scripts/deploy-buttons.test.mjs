@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { BUTTONS, TEMPLATE_BUCKET, awsLaunchStackUrl, azureDeployUrl, cloudShellUrl } from "./deploy-buttons.mjs";
@@ -43,7 +45,8 @@ test("the README shows each button with its generated link", () => {
 
 test("the CloudFormation template runs install.sh with both access modes and hides the password", () => {
   const cfn = read("deploy/cloudformation/ratel.yaml");
-  assert.match(cfn, /raw\.githubusercontent\.com\/ratel-ai\/ratel\/\$\{Ref\}\/install\.sh" \| sh -s -- --yes/);
+  assert.match(cfn, /ratel-ai\/ratel\/\$branch\/install\.sh" \| sh -s -- --yes \$args/);
+  assert.match(cfn, /args="--version '\$\{Version\}'|args="--version \$\{Version\}"/);
   assert.match(cfn, /AllowedValues: \[public, private\]/);
   assert.match(cfn, /LoginPassword:\n\s+Type: String\n\s+NoEcho: true/);
   assert.match(cfn, /--auth-hash \$hash/);
@@ -56,9 +59,9 @@ test("the ARM template runs install.sh with both access modes and takes the pass
   assert.equal(arm.parameters.loginPassword.type, "secureString");
   assert.deepEqual(arm.parameters.accessMode.allowedValues, ["public", "private"]);
   assert.equal(arm.parameters.accessMode.defaultValue, "public");
-  assert.match(arm.variables.bootstrap, /ratel\/\$ref\/install\.sh" \| sh -s -- --yes/);
+  assert.match(arm.variables.bootstrap, /ratel\/\$branch\/install\.sh" \| sh -s -- --yes/);
   assert.match(arm.variables.bootstrap, /needs a password of 12 characters or more/, "no public console with an empty password");
-  for (const p of ["ref", "domain", "loginPassword", "accessMode"]) {
+  for (const p of ["version", "ref", "domain", "loginPassword", "accessMode"]) {
     assert.ok(arm.variables.bootstrap.includes(`base64(`) && arm.variables.bootstrap.match(new RegExp(`base64\\((concat\\()?parameters\\('${p}'\\)`)), `${p} reaches the script base64-encoded`);
   }
   const vm = arm.resources.find((r) => r.type === "Microsoft.Compute/virtualMachines");
@@ -74,10 +77,19 @@ test("the CloudFormation Ref pattern rejects a ref with ..", () => {
   for (const ref of ["main/../../evil", "..", "a..b"]) assert.ok(!pattern.test(ref), ref);
 });
 
-test("the ARM bootstrap stops on a ref with .. before it installs anything", () => {
+test("the CloudFormation Version pattern takes a release, latest or edge, and nothing else", () => {
+  const cfn = read("deploy/cloudformation/ratel.yaml");
+  const block = cfn.slice(cfn.indexOf("\n  Version:\n"));
+  assert.match(block, /Default: latest/);
+  const pattern = new RegExp(JSON.parse(block.match(/AllowedPattern: (".*")/)[1]));
+  for (const ok of ["latest", "edge", "0.4.0", "0.4.0-rc.1"]) assert.ok(pattern.test(ok), ok);
+  for (const bad of ["", "main", "v0.4", "0.4.0;id", "$(id)"]) assert.ok(!pattern.test(bad), bad);
+});
+
+const armRun = (input) => {
   const arm = JSON.parse(read("deploy/azure/azuredeploy.json"));
   const b64 = (v) => Buffer.from(v).toString("base64");
-  const values = { accessMode: "private", ref: "main/../../evil", domain: "", loginPassword: "" };
+  const values = { accessMode: "private", version: "latest", ref: "", domain: "", loginPassword: "", ...input };
   // Render the concat(): each string literal as is, each base64(...parameters('x')...) with the value.
   const tokens = arm.variables.bootstrap
     .slice("[concat(".length, -")]".length)
@@ -90,7 +102,26 @@ test("the ARM bootstrap stops on a ref with .. before it installs anything", () 
     })
     .join("");
   assert.match(script, /^#!\/bin\/sh\n/);
-  const run = spawnSync("sh", ["-c", script], { encoding: "utf8", env: { PATH: "/usr/bin:/bin" } });
-  assert.equal(run.status, 1, run.stderr);
-  assert.match(run.stderr, /bad ref/);
+  // curl is a fake that prints an install.sh printing its arguments, so nothing is downloaded.
+  const bin = mkdtempSync(join(tmpdir(), "ratel-arm-"));
+  writeFileSync(join(bin, "curl"), `#!/bin/sh\necho 'echo "$@"'\n`, { mode: 0o755 });
+  return spawnSync("sh", ["-c", script], { encoding: "utf8", env: { PATH: `${bin}:/usr/bin:/bin` } });
+};
+
+test("the ARM bootstrap stops on a bad ref or version before it installs anything", () => {
+  for (const [input, message] of [
+    [{ ref: "main/../../evil" }, /bad ref/],
+    [{ version: "0.4.0;id" }, /bad version/],
+    [{ version: "" }, /bad version/],
+  ]) {
+    const run = armRun(input);
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, message);
+  }
+});
+
+test("the ARM bootstrap passes the version, or the ref when one is set", () => {
+  assert.match(armRun({}).stdout, /--version latest --dir \/opt\/ratel/);
+  assert.match(armRun({ version: "0.4.0" }).stdout, /--version 0\.4\.0 --dir/);
+  assert.match(armRun({ ref: "feat/x" }).stdout, /--ref feat\/x --dir/);
 });
