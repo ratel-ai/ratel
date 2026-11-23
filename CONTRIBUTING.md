@@ -19,7 +19,7 @@ pnpm -r lint
 pnpm -r test
 ```
 
-CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the single required `ci-gate` check. PRs are expected to land green.
+CI (`.github/workflows/ci.yml`) runs all of the above on every PR through the single required `ci-gate` check; `pr-title` checks the PR title. PRs are expected to land green.
 
 ## Branching
 
@@ -46,10 +46,16 @@ Avoid breaking changes wherever avoidable. Ship new capabilities as additive, cl
 
 For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Status` / `Context` / `Decision` / `Consequences`), next available number, kebab-cased title. The set is kept minimal and current: each ADR states the current decision, amended in place for small drift and rewritten or deleted when the decision changes (git history is the archive). List it in `docs/adr/README.md`. See [ADR 0001](docs/adr/0001-record-architecture-decisions.md) for the full convention.
 
-## Commit messages
+## Pull request titles and commit messages
 
 - Concise, imperative mood; sacrifice grammar for brevity
-- Conventional-commits-ish prefixes (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `ci:`) where useful
+- A pull request title **MUST** be a [conventional commit](https://www.conventionalcommits.org):
+  `type(scope)!: description`. The scope and the `!` (breaking change) are optional. The allowed
+  types are `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`.
+- A task key goes in the scope (`feat(RP-123): ...`) or in the PR body, never as the prefix.
+- A pull request merges as one squash commit and its title becomes the commit title. The
+  `pr-title` check (`.github/workflows/pr-title.yml`) fails any other title. Commits inside the
+  branch are free-form.
 - No tool-attribution lines (no `Co-Authored-By` for AI assistants)
 
 ## Releases

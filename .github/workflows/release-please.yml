@@ -28,7 +28,7 @@ jobs:
       - id: release
         uses: googleapis/release-please-action@v4
         with:
-          # A PR that GITHUB_TOKEN opens starts no CI, so its ci-gate never reports. With a token
+          # A PR that GITHUB_TOKEN opens starts no CI, so its ci-gate and pr-title never report. With a token
           # of a person or an app in RELEASE_PLEASE_TOKEN, the release PR runs CI as usual.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
 

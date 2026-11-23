@@ -19,7 +19,8 @@ OSS image `docker.io/ratelai/ratel`. Operators can also build it from source wit
 
 ### Versions
 
-- Commit titles follow [Conventional Commits](https://www.conventionalcommits.org): `feat:` makes
+- Commit titles follow [Conventional Commits](https://www.conventionalcommits.org), enforced by the
+  `pr-title` check on PR titles: `feat:` makes
   a minor release, `fix:` and `perf:` make a patch release, and `feat!:` or a `BREAKING CHANGE:`
   footer makes a major release (a minor release while the version is below 1.0.0). Other types
   (`refactor:`, `docs:`, `chore:`, `ci:`, `test:`) make no release on their own.
@@ -32,8 +33,8 @@ OSS image `docker.io/ratelai/ratel`. Operators can also build it from source wit
 - The config is `release-please-config.json`. Its `release-as: 0.1.0` makes the first release
   `v0.1.0`: remove it in the PR after that release, or every later release PR stays at 0.1.0.
 
-A release PR that `GITHUB_TOKEN` opens starts no CI, so its required `ci-gate` check never
-reports. Store a fine-grained token (contents and pull requests: read and write) or a GitHub App
+A release PR that `GITHUB_TOKEN` opens starts no CI, so its required `ci-gate` and
+`pr-title` checks never report. Store a fine-grained token (contents and pull requests: read and write) or a GitHub App
 token in the `RELEASE_PLEASE_TOKEN` secret, and the workflow uses it. Until then, close and reopen
 the release PR to start CI. With that token, the release tag push also starts `image.yml`: the
 second run pushes the same tags again from the build cache.
@@ -66,5 +67,5 @@ be public.
 The platform uses the published SDK packages from npm: to take a new SDK version, bump
 `@ratel-ai/sdk` and `@ratel-ai/telemetry` in `web/package.json` and `ee/package.json`.
 
-Every change to `main` goes through the single required `ci-gate` check in
-`.github/workflows/ci.yml` ([ADR-0008](docs/adr/0008-single-ci-gate.md)).
+Every change to `main` goes through the required `ci-gate` check in `.github/workflows/ci.yml` and
+the `pr-title` check in `.github/workflows/pr-title.yml` ([ADR-0008](docs/adr/0008-single-ci-gate.md)).

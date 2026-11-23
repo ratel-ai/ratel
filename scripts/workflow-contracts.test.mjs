@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const ciWorkflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const prTitleWorkflow = readFileSync(
+  new URL("../.github/workflows/pr-title.yml", import.meta.url),
+  "utf8",
+);
 
 test("main push path filtering checks out the repository first", () => {
   const changesJob = jobBody(ciWorkflow, "changes");
@@ -49,6 +54,69 @@ test("ci-gate needs every other job", () => {
 test("ci.yml builds no SDK artifact", () => {
   assert.doesNotMatch(ciWorkflow, /dtolnay\/rust-toolchain|cargo |maturin|src\/sdk|e2e\//);
 });
+
+test("pr-title accepts conventional titles", () => {
+  for (const title of [
+    "feat: add evals",
+    "feat(RP-178): check PR titles",
+    "fix(api)!: drop v0",
+    "perf: cache tokens",
+    "refactor!: move web",
+    "docs(adr): cut 33 ADRs",
+    "test: cover reaper",
+    "build: pin node",
+    "ci: check titles",
+    'revert: "feat: add evals"',
+    "chore(deps): bump the npm-minor-patch group across 1 directory with 42 updates",
+    "chore(ci): bump actions/checkout from 4 to 7",
+    "chore(main): release 0.1.0",
+    "chore(deps): update pkg requirement from <1.42,>=1.41.0 to >=1.41.0,<1.46 in /src",
+    "fix: $(exit 1) `exit 1` '; exit 1",
+  ]) {
+    assert.equal(prTitleStatus(title), 0, title);
+  }
+});
+
+test("pr-title rejects other titles", () => {
+  for (const title of [
+    "",
+    "RP-169 Core flags by semantic key",
+    "RP-178: feat: check PR titles",
+    "Feat: add evals",
+    "feature: add evals",
+    "feat add evals",
+    "feat:add evals",
+    "feat:  ",
+    "feat(): add evals",
+    "feat(api: add evals",
+    "Merge pull request #13 from ratel-ai/branch",
+    'Revert "feat: add evals"',
+    "$(exit 0)",
+  ]) {
+    assert.equal(prTitleStatus(title), 1, title);
+  }
+});
+
+test("pr-title runs no pull-request code and needs no permission", () => {
+  assert.match(prTitleWorkflow, /^permissions: \{\}$/m);
+  assert.doesNotMatch(prTitleWorkflow, /pull_request_target|uses:/);
+  assert.doesNotMatch(prTitleScript(), /\$\{\{/);
+  assert.match(prTitleWorkflow, /types: \[opened, edited, synchronize, reopened, ready_for_review\]/);
+  assert.match(jobBody(prTitleWorkflow, "pr-title"), /name: pr-title\n/);
+});
+
+function prTitleStatus(title) {
+  const { status } = spawnSync("bash", ["-eo", "pipefail", "-c", prTitleScript()], {
+    env: { PATH: process.env.PATH, PR_TITLE: title },
+  });
+  return status;
+}
+
+function prTitleScript() {
+  const run = prTitleWorkflow.match(/^ +run: \|\n((?: {10}.*\n|\n)+)/m);
+  assert.ok(run, "pr-title must have one run script");
+  return run[1].replace(/^ {10}/gm, "");
+}
 
 function jobBody(workflow, job) {
   const start = workflow.indexOf(`\n  ${job}:`);
