@@ -2,8 +2,9 @@ name: ci
 
 # The single pre-merge workflow. Every everyday platform check lives here, in ONE
 # workflow, so a single terminal `ci-gate` job can `needs:` all of them — GitHub `needs:`
-# cannot cross workflow files, so a true single-context gate requires one file. `ci-gate` (bottom) is the ONLY status check
-# registered as required in the `main` ruleset (scripts/setup-branch-ruleset.sh); it always
+# cannot cross workflow files, so a true single-context gate requires one file. `ci-gate` (bottom) is the ONLY check of
+# this workflow registered as required in the `main` ruleset (scripts/setup-branch-ruleset.sh; the
+# other one is `pr-title`, in pr-title.yml); it always
 # runs on a ready PR and aggregates the rest.
 #
 # Draft arming (replaces the old `ready-to-merge` label): `changes` and `ci-gate` carry a

@@ -36,9 +36,11 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
 - **Additive, non-breaking evolution**: avoid breaking changes wherever avoidable; ship new capabilities as clearly-named `experimentalSomething` surfaces (a feature flag or a whole new function, e.g. `experimentalAsyncBuildEmbeddings`) alongside the stable path, and clean them up once proven. See [CONTRIBUTING.md](CONTRIBUTING.md).
 - **ADRs are kept minimal and current.** New cross-cutting choices go in `docs/adr/`, next number, Nygard format, listed in `docs/adr/README.md`. Each ADR states the current decision: amend it in place for small drift, rewrite or delete it when the decision changes (no superseded chains; git history is the archive). See [ADR 0001](docs/adr/0001-record-architecture-decisions.md).
 - **Folder READMEs are kept current.** Every package folder, plus `docs/`, has a `README.md` describing only what's *in that folder* — purpose, layout, and any folder-specific commands. If you add or move things, update the README in the same commit.
-- **Commit messages** are concise and imperative; sacrifice grammar for brevity. Use conventional prefixes (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`, `ci:`). **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
+- **Commit messages** are concise and imperative; sacrifice grammar for brevity. **MUST NOT** add AI-attribution lines (`Co-Authored-By: Claude`, etc.).
+- **PR titles MUST be conventional commits**: `type(scope)!: description`, with an optional scope and `!`. Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`. A PR merges as a squash commit with this title, and the `pr-title` check fails any other title. Put a task key in the scope or the PR body, never as the prefix.
   - Good: `feat(core): rank skills alongside tools in search_capabilities`
-  - Bad: `updated some files`
+  - Good: `fix(RP-123): keep the session open`
+  - Bad: `updated some files`, `RP-123 Keep the session open`
 
 ## Code from ratel-cloud
 
