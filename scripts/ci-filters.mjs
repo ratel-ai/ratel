@@ -59,7 +59,8 @@ export const SCRIPT_OWNERS = {
 
 /** Package directory -> package.json name, for the workspace-dependency contract. */
 export const PACKAGE_DIRS = {
-  "src": "@ratel/platform",
+  web: "@ratel/platform",
+  "mcp-apps": "@ratel/mcp-apps",
   "packages/brand": "@ratel/brand",
   "packages/design-system": "@ratel/design-system",
   ee: "@ratel/ee",
@@ -72,7 +73,8 @@ export const PACKAGE_DIRS = {
  * starting platform) live in classify(), not here.
  */
 export const PACKAGE_OUTPUTS = {
-  "src": ["platform", "compose"],
+  web: ["platform", "compose"],
+  "mcp-apps": ["platform", "compose"],
   "packages/brand": ["design_system"],
   "packages/design-system": ["design_system"],
   ee: ["platform"],
@@ -211,14 +213,15 @@ const CLAIMS = [
   "biome.json",
   ".github/dependabot.yml",
   ".trivyignore.yaml",
-  "src/**",
+  "web/**",
+  "mcp-apps/**",
   "packages/brand/**",
   "packages/design-system/**",
   "ee/**",
   "docker-compose.yml",
   ".env.example",
   ".dockerignore",
-  "src/Dockerfile",
+  "web/Dockerfile",
   "install.sh",
   "docker-compose.caddy.yml",
   "deploy.sh",
@@ -270,10 +273,11 @@ function applyFile(result, file) {
   }
 
   if (
-    matches("src/**", file) ||
+    matches("web/**", file) ||
+    matches("mcp-apps/**", file) ||
     matches("ee/**", file)
   ) {
-    // Markdown under src is handled by DOC_ALLOW before we get here.
+    // Markdown under them is handled by DOC_ALLOW before we get here.
     merge(result, ["platform", "compose"]);
   }
 
@@ -281,7 +285,7 @@ function applyFile(result, file) {
     file === "docker-compose.yml" ||
     file === ".env.example" ||
     file === ".dockerignore" ||
-    file === "src/Dockerfile" ||
+    file === "web/Dockerfile" ||
     file === "install.sh" ||
     file === "docker-compose.caddy.yml" ||
     file === "scripts/link-ee.mjs"

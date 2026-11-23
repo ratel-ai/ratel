@@ -8,7 +8,7 @@ This index is for AI coding agents and tools that consume `llms.txt` per the [ll
 
 - [README](https://github.com/ratel-ai/ratel/blob/main/README.md): what Ratel is, the Quick Start and the console pages.
 - [.env.example](https://github.com/ratel-ai/ratel/blob/main/.env.example): every setting.
-- [src/README.md](https://github.com/ratel-ai/ratel/blob/main/src/README.md): the application's layout and development commands.
+- [web/README.md](https://github.com/ratel-ai/ratel/blob/main/web/README.md): the application's layout and development commands.
 
 ## Install
 

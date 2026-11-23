@@ -54,7 +54,7 @@ For cross-cutting choices, write an ADR in `docs/adr/` — Nygard format (`Statu
 
 ## Releases
 
-The SDK packages release from [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); see [RELEASING.md](RELEASING.md). The platform (`src`) is not released as a package: it ships from `main`.
+The SDK packages release from [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk); see [RELEASING.md](RELEASING.md). The platform (`web`) is not released as a package: it ships from `main`.
 
 ## Pull requests
 

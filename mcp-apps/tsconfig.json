@@ -1,0 +1,23 @@
+{
+  "//": "The views import the console's code through @/ (web/src), as the private modules do: this package builds from that source, and web/ reads only its dist/ output.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "#ee-composition": ["../web/src/lib/composition/ee-absent.ts"],
+      "@/*": ["../web/src/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "../web/next-env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -31,7 +31,7 @@ there; its `SECURITY.md` lists the supported versions.
 
 In scope: the platform at `src`, the packages in this repository, and the repository's
 build tooling. A self-hosted platform is operated by whoever deploys it: putting the console behind
-authentication or binding it to localhost is the operator's job (see `src/README.md`).
+authentication or binding it to localhost is the operator's job (see `web/README.md`).
 
 Out of scope: the hosted Ratel service and its private modules, which have their own
 reporting channel.

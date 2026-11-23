@@ -41,8 +41,14 @@ test("brand-only change runs design_system, platform, compose", () => {
   assertFalse(r, ["lockfiles"]);
 });
 
-test("src-only change runs platform and compose", () => {
-  const r = on(["src/app/page.tsx"]);
+test("web-only change runs platform and compose", () => {
+  const r = on(["web/src/app/page.tsx"]);
+  assertTrue(r, ["platform", "compose"]);
+  assertFalse(r, ["design_system", "lockfiles"]);
+});
+
+test("mcp-apps change runs platform and compose: web builds it and serves its views", () => {
+  const r = on(["mcp-apps/views/list/main.tsx"]);
   assertTrue(r, ["platform", "compose"]);
   assertFalse(r, ["design_system", "lockfiles"]);
 });
@@ -54,7 +60,7 @@ test("ee change runs platform and compose", () => {
 });
 
 test("markdown under src and docs sets no output", () => {
-  const r = on(["src/README.md", "docs/README.md", "README.md"]);
+  const r = on(["web/README.md", "docs/README.md", "README.md"]);
   assertFalse(r, ["design_system", "platform", "compose", "lockfiles"]);
 });
 
@@ -128,7 +134,7 @@ test("lockfile and exceptions-file changes set lockfiles", () => {
   for (const f of ["pnpm-lock.yaml", ".trivyignore.yaml"]) {
     assertTrue(on([f]), ["lockfiles"]);
   }
-  assertFalse(on(["src/package.json"]), ["lockfiles"]);
+  assertFalse(on(["web/package.json"]), ["lockfiles"]);
 });
 
 test("dependabot.yml alone runs no leg", () => {

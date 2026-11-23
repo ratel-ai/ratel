@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Copies the open-source parts of ratel-cloud into this tree (ADR-0004), repeatably.
 //
-//   node scripts/platform-sync/sync.mjs [--source ../ratel-cloud] [--only src/lib/ingest] [--check] [--no-format]
+//   node scripts/platform-sync/sync.mjs [--source ../ratel-cloud] [--only web/src/lib/ingest] [--check] [--no-format]
 //
 // `map.json` lists what moves where: `copy` entries are mirrored from the source (added, updated,
 // deleted) with every import specifier rewritten through `rewrites.json`; `owned` entries are
