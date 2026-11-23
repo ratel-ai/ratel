@@ -1,6 +1,6 @@
 /**
  * The two statistics the readings share with the quality meter (L5), kept here so the
- * detectors can read them without reaching up a layer. Owned (ADR-0030): upstream defines
+ * detectors can read them without reaching up a layer. Owned (ADR-0004): upstream defines
  * both in its quality metrics module beside the metric itself.
  */
 

@@ -12,7 +12,7 @@ import { type MarkFixShippedResult, markFixShipped } from "@/lib/views/fixes/mar
  * Dismiss a drafted change on Fixes. Any member of the project may: it changes
  * what the team's list shows, and the next analysis keeps the same change from
  * being drafted again (`finishCraftRun`). The project is re-resolved here; the
- * client posts only the project and draft ids. Owned (ADR-0030): the project
+ * client posts only the project and draft ids. Owned (ADR-0004): the project
  * comes from the console scope.
  */
 

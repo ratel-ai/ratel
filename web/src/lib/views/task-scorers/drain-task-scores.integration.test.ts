@@ -19,7 +19,7 @@ import { dailyScoresFor } from "@/lib/views/task-scorers/store";
 /**
  * RC-622: one cron drain, with no signal run, fills `task_scores_daily` for each task with runs.
  *
- * Owned (ADR-0030): upstream turns the gate on for one organization and shows the other stays
+ * Owned (ADR-0004): upstream turns the gate on for one organization and shows the other stays
  * unscored in the same drain. Here the gate is one switch for the deployment (`evalGate`),
  * so the on and off cases are two drains, and the sweep is the registered drain step.
  */

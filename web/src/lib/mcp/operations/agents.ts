@@ -29,7 +29,7 @@ export interface AgentsOperationDeps {
 }
 
 export const defaultAgentsDeps: AgentsOperationDeps = {
-  // Owned (ADR-0030): the core's agentsPages switch, not upstream's flag service.
+  // Owned (ADR-0004): the core's agentsPages switch, not upstream's flag service.
   projectEntitiesEnabled: (projectId, actor) => projectEntitiesEnabledForActor(projectId, actor),
   listAgents: (projectId, window) =>
     withStatementTimeout((db) => createDrizzleAgentStore(db).listAgents(projectId, window), {

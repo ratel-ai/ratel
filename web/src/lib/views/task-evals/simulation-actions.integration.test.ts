@@ -129,7 +129,7 @@ test("members save user drafts, add and edit fix tests, and rerun through the si
     );
     deps.ship = (input) =>
       createFixShipment(input, db, {
-        // Owned (ADR-0030): the gate is the evalGate flag in the configuration.
+        // Owned (ADR-0004): the gate is the evalGate flag in the configuration.
         flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
         loadFix: deps.loadFix,
       });

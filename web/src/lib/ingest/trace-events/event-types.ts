@@ -8,7 +8,7 @@ import type { traceEvents } from "@/lib/ingest/trace-events/schema";
 
 /**
  * The runtime lane's learning events: the four the core learner consumes
- * (ADR-0014). Never `gateway_search`: it summarizes an inner `search` that is
+ * (ADR-0007). Never `gateway_search`: it summarizes an inner `search` that is
  * already here, and folding both would double count impressions.
  */
 export const FOLD_EVENT_TYPES = ["search", "skill_search", "invoke_start", "skill_invoke"] as const;

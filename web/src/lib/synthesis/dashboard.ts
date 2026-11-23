@@ -57,7 +57,7 @@ export type BreakdownDay = {
 };
 
 /**
- * The waste story the ADR-0013 rich logs let us measure directly: how much of the
+ * The waste story the ADR-0007 rich logs let us measure directly: how much of the
  * tool footprint the model never called (`unused`), and how much of history the
  * provider had to re-read uncached (`uncached`). Both are the tokens Ratel can
  * reclaim — the "you could save ~N" headline, now derived from real usage rather

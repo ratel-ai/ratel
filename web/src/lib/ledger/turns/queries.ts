@@ -51,7 +51,7 @@ import type { ReloadReach } from "./build-turn";
 
 /**
  * The database layer of the turn ledger. Every function takes an injectable `db` so the
- * build job tests against PGlite, like the rest of `lib/`. Owned (ADR-0030): the
+ * build job tests against PGlite, like the rest of `lib/`. Owned (ADR-0004): the
  * run-trigger vocabulary comes from `../run-trigger` instead of the L4 signal queries.
  */
 

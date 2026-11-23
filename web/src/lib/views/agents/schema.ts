@@ -8,7 +8,7 @@ import { projects } from "@/lib/platform/projects/schema";
  * them at read time, so stored spans never change and every override is
  * reversible. A merge is one hop (`./domain/overrides.ts`).
  *
- * Owned fragment of the upstream schema (ADR-0030): `agent_overrides`, the agents partition of
+ * Owned fragment of the upstream schema (ADR-0004): `agent_overrides`, the agents partition of
  * the upstream schema hub, column for column.
  */
 export const agentOverrides = pgTable(

@@ -18,7 +18,7 @@ import {
 import "@/lib/views/task-evals/ship";
 
 /**
- * Owned (ADR-0030): the project comes from the console scope.
+ * Owned (ADR-0004): the project comes from the console scope.
  */
 
 const logger = getLogger("task-evals/simulation-actions");

@@ -11,7 +11,7 @@ import { ToolRegistry } from "@ratel-ai/sdk";
  * is the most valuable verdict there is, and must be able to abstain, because a two-word
  * ambiguous ask should drop out rather than mint a coin-flip answer.
  *
- * Owned (ADR-0030): the contract, the corpus entry and the option, verdict and ordering
+ * Owned (ADR-0004): the contract, the corpus entry and the option, verdict and ordering
  * helpers of upstream's match-quality judge modules. The sampling, the census and the
  * verdict application land with the match-quality reading.
  */

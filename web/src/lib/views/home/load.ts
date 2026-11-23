@@ -205,7 +205,7 @@ const RECENT_RUNS = 5;
  * so one slow aggregate on a dense project costs a number or a tile, never
  * the page.
  *
- * Owned (ADR-0030): no feature-flag gate, since Agent health is always on
+ * Owned (ADR-0004): no feature-flag gate, since Agent health is always on
  * here; its read runs with the rest.
  */
 export async function loadOverview({

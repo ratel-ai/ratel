@@ -29,7 +29,7 @@ import { scorersFor, upsertScorer } from "@/lib/views/task-scorers/store";
 /**
  * The task loop demo, run through the production jobs on a seeded project: 14 UTC days of live
  * scores, the eval sets, a draft, two fix simulations and a shipment dated eight days ago with
- * its post-ship measure. Owned (ADR-0030): upstream's `lib/seed/task-loop.ts`. The gates are
+ * its post-ship measure. Owned (ADR-0004): upstream's `lib/seed/task-loop.ts`. The gates are
  * `evalGate` (forced on in the configuration the jobs get here, as upstream sets its Cloud
  * flag; with `noModels` also the local stand-in models and no model keys); a job runs
  * as one row through this repository's runner, which is the part of upstream's

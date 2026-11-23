@@ -18,7 +18,7 @@ export const runtime = "nodejs";
 
 /**
  * GET /api/v1/catalog[?scope=<end-user>] — the `protocol/v1` catalog-source
- * pull-sync (ADR-0003). Bearer-authenticated; returns the project's published
+ * pull-sync (ADR-0007). Bearer-authenticated; returns the project's published
  * skills as `WireSkill[]` under a conditional-GET ETag. A global pull answers 304
  * from the stored `projects.catalog_version` without loading the catalog; a scoped
  * pull (`?scope=`) serves global + that end-user's own skills, ETag'd on the fly

@@ -26,7 +26,7 @@ import { createTokenBucketRateLimiter } from "@/lib/platform/rate-limit";
  * switch on, ui:// views are listed and read and bound tools point at them;
  * with it off, the protocol surface is exactly what main serves.
  *
- * Owned (ADR-0030): upstream's cases, with the gate the env switch. Upstream's
+ * Owned (ADR-0004): upstream's cases, with the gate the env switch. Upstream's
  * cases for its flag service (a hung or slow lookup, the caller's identity)
  * have no counterpart: reading the environment neither waits nor fails.
  */

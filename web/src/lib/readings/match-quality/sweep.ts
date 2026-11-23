@@ -11,7 +11,7 @@
  * also does retention. The job queue already handles claiming, staleness reaping and
  * retry, so the sweep's whole job is to decide.
  *
- * Owned (ADR-0030): the signal sweep reads `dueProjectsInRotation` from here before the
+ * Owned (ADR-0004): the signal sweep reads `dueProjectsInRotation` from here before the
  * match-quality reading lands; the run trigger is inlined because upstream's
  * match-quality types import a higher-layer module.
  */

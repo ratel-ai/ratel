@@ -12,7 +12,7 @@ import { setSignalDismissed } from "@/lib/readings/trace-signals/signals/queries
  * Hide a slow-tool problem as "slow by design", and show it again. Any member
  * of the project may: it changes what the team's page lists, not what is
  * measured. Membership is re-resolved server-side; the client posts only the
- * project and signal ids. Owned (ADR-0030): the project comes from the console
+ * project and signal ids. Owned (ADR-0004): the project comes from the console
  * scope, and the actor is the session user.
  */
 

@@ -74,7 +74,7 @@ const ONLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DETAIL_CLUSTERS = 50;
 
 /**
- * Owned (ADR-0030): the project comes from the console scope, a 404 otherwise.
+ * Owned (ADR-0004): the project comes from the console scope, a 404 otherwise.
  */
 export type RankingData = {
   projectId: string;

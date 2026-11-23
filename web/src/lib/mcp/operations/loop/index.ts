@@ -87,7 +87,7 @@ import "@/lib/views/task-evals/ship";
  * Listed for everyone with app access, as the console's Fixes and Tasks are. `run_eval` and
  * `get_eval` need `evalGate`; off, they refuse with `forbidden` (`eval_gate_off`).
  *
- * Owned (ADR-0030): the eval gate is an env flag. `list_tasks` and
+ * Owned (ADR-0004): the eval gate is an env flag. `list_tasks` and
  * `get_task` read the Tasks page's model and one task's page; a task's scorers,
  * scores, eval set and shipments only with `evalGate`. A fix with tasks is simulated once per task on the task's
  * eval set (`lib/views/task-evals`); other fixes on their own eval set.

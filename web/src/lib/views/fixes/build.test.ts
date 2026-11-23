@@ -17,7 +17,7 @@ import {
 } from "./test-fixtures";
 
 /**
- * Owned (ADR-0030): the drafted changes are `DraftFixInput`s (what the tool crafter's seam
+ * Owned (ADR-0004): the drafted changes are `DraftFixInput`s (what the tool crafter's seam
  * delivers), so the cases that read a draft's worth off the crafter's card are stated on the
  * fixture's own figures.
  */

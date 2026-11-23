@@ -7,7 +7,7 @@ import { type FlagConfig, featureEnabled } from "@/lib/platform/experimental-fea
  * `mcpApps`: whether the MCP server publishes its `ui://` views and links
  * tools to them (MCP Apps).
  *
- * Owned (ADR-0030): off by default. Without the edition's flags port it is one
+ * Owned (ADR-0004): off by default. Without the edition's flags port it is one
  * switch for the deployment, `mcpApps` (or `experimentalFeatures` in
  * the open-source edition), read from the configuration; with it, the edition
  * decides it for the project key or the person (`featureEnabled`), and a failed

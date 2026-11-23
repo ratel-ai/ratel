@@ -63,7 +63,7 @@ async function setup(ask: string | null) {
       values ('${TURN}', '${PROJECT}', 'job-1', 'otlp:trace-1', 'otlp', 'runtime', 'closed', now(), now(), now(), 'cluster_intents');
   `);
   if (ask !== null) {
-    // Owned (ADR-0030): the core reads an OTLP run's ask from its model call; agent_run asks (RC-742) are not ported.
+    // Owned (ADR-0004): the core reads an OTLP run's ask from its model call; agent_run asks (RC-742) are not ported.
     await client.query(
       `insert into trace_events (id, project_id, type, session_id, occurred_at, received_at, client_event_id, trace_id, payload)
         values ('bbbbbbbb-bbbb-4bbb-8bbb-000000000001', $1, 'otlp_model_call', 'job-1', now(), now(), 'otlp:model:trace-1:span-1', 'trace-1', $2)`,
@@ -170,7 +170,7 @@ test("drafting a test from a run of another organization's project is refused be
     await assert.rejects(
       draftTestFromRun(PROJECT, "cluster_intents", TURN, {
         db: f.db,
-        // Owned (ADR-0030): the gate is the evalGate flag in the configuration, not an organization flag.
+        // Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
         flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
         model: {
           model: "claude-haiku-5-5",
@@ -190,7 +190,7 @@ test("drafting a test from a run of another organization's project is refused be
   }
 });
 
-// Owned (ADR-0030): upstream's score suggestions (lib/evals/suggest.ts) are not ported; the core's
+// Owned (ADR-0004): upstream's score suggestions (lib/evals/suggest.ts) are not ported; the core's
 // automatic pick from scored runs is the eval-set refresh, so the same rule guards it.
 test("the eval-set refresh does not pick a run of another organization's project", async () => {
   for (const [ask, picked] of [

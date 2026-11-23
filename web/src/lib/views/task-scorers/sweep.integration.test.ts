@@ -15,7 +15,7 @@ import {
 } from "@/lib/views/task-scorers/job";
 
 /**
- * Owned (ADR-0030): upstream turns the gate on per organization through its flag service; here
+ * Owned (ADR-0004): upstream turns the gate on per organization through its flag service; here
  * it is one switch for the deployment, `evalGate`. So the refusal cases run with the switch
  * off, and the projects of one organization stand in for upstream's "on" organization.
  */

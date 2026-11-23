@@ -16,7 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
 
-/** SDK runtime events and what consolidation derives from them. Owned fragment of the upstream schema (ADR-0030). */
+/** SDK runtime events and what consolidation derives from them. Owned fragment of the upstream schema (ADR-0004). */
 
 /**
  * Granular tool/skill **usage** telemetry: the search ledger beside the coarse
@@ -85,7 +85,7 @@ export const traceEvents = pgTable(
     invocationId: text("invocation_id"),
     traceId: text("trace_id"),
     spanId: text("span_id"),
-    // Host-supplied agent-turn correlation (ADR-0014). Pairs a search with the
+    // Host-supplied agent-turn correlation (the SDK's `turn_id`). Pairs a search with the
     // invoke(s) that followed it inside one session; the intent-graph fold keys
     // on (session_id, turn_id). Null when the host passed none.
     turnId: text("turn_id"),

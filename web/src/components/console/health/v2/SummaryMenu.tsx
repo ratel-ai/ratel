@@ -10,7 +10,7 @@ import { openHealthShare } from "@/components/console/health/share/open-share";
 /**
  * The page's actions in one menu beside the window: import past runs (the
  * importer is mounted on the page), the PDF report, and sharing a read-only
- * copy. Owned (ADR-0030): the importer and the share dialog are the edition's
+ * copy. Owned (ADR-0004): the importer and the share dialog are the edition's
  * (`EditionUi.HealthImports`, `EditionUi.HealthShare`), mounted by the page
  * and opened from here by a window event; without them the items are absent.
  */

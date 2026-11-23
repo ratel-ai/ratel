@@ -53,7 +53,7 @@ import {
  * the backlog builds once the secret is set. Logs and events carry counts only: no query
  * text, no end-user ids.
  *
- * Owned (ADR-0030): no feature-flag gate (the Agent health gate is retired, always on),
+ * Owned (ADR-0004): no feature-flag gate (the Agent health gate is retired, always on),
  * and the seams into the signal runs above (`enqueueReading`, `onBacklogDrained`, `onBacklogProgress`)
  * are optional dependencies the readings register, not imports from L4.
  */

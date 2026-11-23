@@ -16,7 +16,7 @@ import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
 
 /**
- * The port set a composition supplies (ADR-0030). It lives among the contracts because both
+ * The port set a composition supplies (ADR-0004). It lives among the contracts because both
  * sides of the boundary annotate against it: the core assembles one in `lib/composition/ports.ts`,
  * and the private modules in `ee/` declare one through the `#ee-composition` seam. The seam
  * resolves to a single candidate so the open-source build excludes the private modules, which

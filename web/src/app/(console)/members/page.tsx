@@ -7,7 +7,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 export const dynamic = "force-dynamic";
 
 /**
- * `/members`, now the organization's Team page. Owned (ADR-0030): upstream's proxy redirects it;
+ * `/members`, now the organization's Team page. Owned (ADR-0004): upstream's proxy redirects it;
  * here the route does. Members are the edition's page, so without it the old address stays a 404.
  */
 export default async function LegacyMembersPage({

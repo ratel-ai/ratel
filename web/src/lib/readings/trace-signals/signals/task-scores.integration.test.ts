@@ -25,7 +25,7 @@ test("completed signal runs queue task scores only with the eval gate on", async
         fresh().search(["find_task", "assign_task"]).invoke("find_task").invoke("assign_task"),
       ),
     );
-    // Owned (ADR-0030): the gate is the configured evalGate flag, not an organization flag.
+    // Owned (ADR-0004): the gate is the configured evalGate flag, not an organization flag.
     let flagDeps = resolveConfig({ override: { flags: { evalGate: false } } });
     const deps = jobDeps(db, NOW, [], {
       enqueueTaskScores: (projectId) => enqueueScoreTasksJob(projectId, { db, flagDeps }),

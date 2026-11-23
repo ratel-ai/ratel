@@ -33,7 +33,7 @@ const logger = getLogger("fixes/data");
 /**
  * What Fixes reads: the scope, then every source of fixes (`loadFixes`,
  * where each one degrades on its own). On for every project: no flag.
- * Owned (ADR-0030): the project comes from the console scope, a 404 otherwise.
+ * Owned (ADR-0004): the project comes from the console scope, a 404 otherwise.
  */
 export async function loadFixesPage(projectId: string): Promise<FixesPageData> {
   if (!isDbConfigured()) return { kind: "no-db" };

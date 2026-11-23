@@ -13,7 +13,7 @@ import { MODEL_CALL_TRACER } from "@/lib/contracts/self-telemetry";
  * self-telemetry exporter, and the model-call spans stay out of it, so neither destination
  * receives anything new it did not decide to receive.
  *
- * Owned (ADR-0030): upstream defaults the endpoint to its own deployment. Here there is no default
+ * Owned (ADR-0004): upstream defaults the endpoint to its own deployment. Here there is no default
  * destination: the export is off unless both `selfTelemetry.apiKey` (RATEL_SELF_TELEMETRY_API_KEY,
  * a project key; the `REPLACE_ME` seed counts as unset) and `selfTelemetry.endpoint`
  * (RATEL_SELF_TELEMETRY_ENDPOINT) are set. It rides on the self-telemetry provider. The tracer

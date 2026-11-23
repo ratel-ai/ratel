@@ -15,7 +15,7 @@ const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER_PROJECT = "33333333-3333-4333-8333-333333333333";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0030): the gate is the evalGate flag in the configuration, not an organization flag.
+// Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
 const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("the score job writes nothing when the eval gate is off", async () => {

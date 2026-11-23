@@ -4,7 +4,7 @@ import type { Skill } from "@/lib/catalog/schema";
 /**
  * Serialize a catalog row for the management API. Extracted from the upstream
  * session-bound http module so the Bearer skills routes stay free of console
- * imports (ADR-0030).
+ * imports (ADR-0004).
  */
 
 export type SerializedSkill = ManagedSkillWire & {

@@ -41,7 +41,7 @@ async function setup() {
   const deps: RunTestDraftDeps = {
     db,
     now: () => NOW,
-    // Owned (ADR-0030): the gate is the evalGate flag in the configuration, not an organization flag.
+    // Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
     flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
     model: {
       model: "claude-haiku-5-5",

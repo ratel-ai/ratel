@@ -62,7 +62,7 @@ import type { TaskListModel } from "@/lib/views/tasks/model";
  * and the requests no task handles. Before there is a reading, one designed
  * state sits where the reading would.
  *
- * Owned (ADR-0030): no public share link or plan to pick. The sections that
+ * Owned (ADR-0004): no public share link or plan to pick. The sections that
  * upstream hands an upgrade link get none, so nothing is sold. The importer is
  * the edition's (`EditionUi.HealthImports`), absent without one.
  */

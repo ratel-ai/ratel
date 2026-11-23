@@ -39,7 +39,7 @@ import type { WorkflowLabels } from "./name";
  * result for the page. Without a key it does nothing. A per-job token cap bounds the
  * spend; a rejected key or an outage is logged and leaves the previous insights in place.
  *
- * Owned (ADR-0030): OpenAI is the one decision engine in this edition, the tool corpus
+ * Owned (ADR-0004): OpenAI is the one decision engine in this edition, the tool corpus
  * is read from the runtime catalog, and the deps take a config so tests pass their own.
  */
 

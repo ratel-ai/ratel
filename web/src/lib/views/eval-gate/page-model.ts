@@ -1,4 +1,4 @@
-// Owned (ADR-0030): fills evalGateSeams (the drafted change and the drafts' spend) in every
+// Owned (ADR-0004): fills evalGateSeams (the drafted change and the drafts' spend) in every
 // process that reads a fix's change, the web process included.
 import "@/lib/views/fix-drafts/register";
 import { getDb } from "@/lib/platform/db/client";

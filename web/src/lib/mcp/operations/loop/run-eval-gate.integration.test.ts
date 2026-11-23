@@ -25,7 +25,7 @@ import { defaultLoopDeps, loopWriteOperations } from "./index";
 
 /**
  * MCP `run_eval` and the `simulate_fix_eval` job under the eval gate, on a
- * real database. Owned (ADR-0030): the gate is one switch, `evalGate`,
+ * real database. Owned (ADR-0004): the gate is one switch, `evalGate`,
  * so the cases are on and off; upstream's are its per-organization rollout.
  * Nothing here calls a model: the stand-in models count calls and answer
  * nothing.

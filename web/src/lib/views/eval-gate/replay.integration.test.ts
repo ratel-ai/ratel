@@ -394,7 +394,7 @@ test("model replay: held-out runs replayed with and without the fix, scored with
         outcome.spend.models.includes("stand-in-model-local"),
     );
 
-    // Owned (ADR-0030): read through the store; `db/tables` has no relational reader for this table.
+    // Owned (ADR-0004): read through the store; `db/tables` has no relational reader for this table.
     const run = await getEvalRun(outcome.runId, db);
     const results = parseResults(run?.results);
     const three = results.find((item) => item.turnId === turnId(3))!;
@@ -458,7 +458,7 @@ test("RC-76: a replay that leaves the recorded path is stored with what it did, 
     assert.deepEqual(outcome.methods?.fidelity, { matched: 2, total: 3 });
     assert.equal(outcome.nSimulated, 2);
 
-    // Owned (ADR-0030): read through the store; `db/tables` has no relational reader for this table.
+    // Owned (ADR-0004): read through the store; `db/tables` has no relational reader for this table.
     const run = await getEvalRun(outcome.runId, db);
     const five = parseResults(run?.results).find((item) => item.turnId === turnId(5))!;
     assert.deepEqual(
@@ -492,7 +492,7 @@ test("RC-76: a replay that leaves the recorded path is stored with what it did, 
   }
 });
 
-/* - Owned (ADR-0030): nothing calls out without a model key ------------------- */
+/* - Owned (ADR-0004): nothing calls out without a model key ------------------- */
 
 /** Runs `run` with the network cut: any `fetch` is recorded and refused. */
 async function withNoNetwork<T>(run: () => Promise<T>): Promise<T> {

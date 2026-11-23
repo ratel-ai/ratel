@@ -19,7 +19,7 @@ import { runtimeCatalogEntries } from "./schema";
  * the intent: the count of distinct fingerprints is the number of times retrieval could
  * genuinely have behaved differently.
  *
- * Owned (ADR-0030): the read half of upstream's quality fingerprint and the corpus
+ * Owned (ADR-0004): the read half of upstream's quality fingerprint and the corpus
  * loader of its match-quality service, in the layer that owns the table. Recording
  * fingerprints over time stays with the quality reading.
  */

@@ -356,7 +356,7 @@ async function setup() {
   };
   const deps: TaskSimulationDeps = {
     db,
-    // Owned (ADR-0030): the gate is the evalGate flag in the configuration.
+    // Owned (ADR-0004): the gate is the evalGate flag in the configuration.
     flagDeps: resolveConfig({ override: { flags: { evalGate: true } } }),
     loadFix: async () => ({ projectId: PROJECT, fix }),
     observability: { trackSystemEvent: async () => undefined },

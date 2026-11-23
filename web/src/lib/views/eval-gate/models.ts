@@ -27,7 +27,7 @@ import type { ToolDef } from "@/lib/views/eval-gate/types";
  * stand-ins, in local environments only (the `MATCH_QUALITY_MOCK_ANALYST`
  * allowlist), and every result made with them says so.
  *
- * Owned (ADR-0030): every call is reported through `platform/model-call`, a
+ * Owned (ADR-0004): every call is reported through `platform/model-call`, a
  * seam with no sink here, in place of upstream's spend line; the deployment's
  * own key pays.
  */

@@ -14,7 +14,7 @@ const MATCH_QUALITY_JUDGE_FEATURE = "match_quality_judge";
 
 /**
  * The judge this deployment can plug in, or undefined with no key: a run then stops before
- * judging. Owned (ADR-0030): OpenAI is the one decision engine here.
+ * judging. Owned (ADR-0004): OpenAI is the one decision engine here.
  */
 export function resolveJudgeEngine(
   config: Pick<Config, "openai"> = getConfig(),

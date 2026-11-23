@@ -16,7 +16,7 @@ import { splitMemberText } from "@/lib/readings/query-intents/member-text";
  *
  *   - every cluster of the Cloud-built graph becomes an engine cluster with
  *     the same wire id, members and edges, so the engine's ids line up with
- *     the graph's should it ever serve one (deferred: ADR-0014);
+ *     the graph's should it ever serve one (deferred: ADR-0007);
  *   - each source's own graph is matched onto those clusters and kept as that
  *     source's slice, under the ids that source's graph used;
  *   - every recurring query intent (`query_intents`) is linked to the cluster

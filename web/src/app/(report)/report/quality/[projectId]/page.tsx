@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * `(console)`, so it does not inherit the console's layout check, and the report
  * contains a customer's real query volumes and catalog shape.
  *
- * Owned (ADR-0030): it is a member's report, so the project comes from the console
+ * Owned (ADR-0004): it is a member's report, so the project comes from the console
  * scope (a 404 outside the organization). No edition reads other tenants' reports.
  * The quality stylesheet, which upstream loads globally, is loaded here.
  */

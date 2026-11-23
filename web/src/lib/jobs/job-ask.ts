@@ -6,7 +6,7 @@
  * and settings, never a project id, a user id, free text, tool definitions, patches or
  * connection details. Pure.
  *
- * Owned (ADR-0030): upstream keeps one table of every agent job kind, typed by each kind's
+ * Owned (ADR-0004): upstream keeps one table of every agent job kind, typed by each kind's
  * payload. Here `lib/jobs` sits below the modules that own those payloads (`check-layers`), so
  * the table ({@link JOB_ASKS}) holds the words and the allowlists without the payload types, and
  * each module's `register.ts` checks its kind's entry against its payload with {@link jobAskFor}

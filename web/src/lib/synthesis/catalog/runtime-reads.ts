@@ -6,7 +6,7 @@ import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
 import type { RuntimeCatalogEntry, RuntimeToolDefinition } from "@/lib/synthesis/dashboard";
 
-/** The runtime-catalog and adoption reads the Catalog pages load (owned fragment of the upstream queries hub, ADR-0030). */
+/** The runtime-catalog and adoption reads the Catalog pages load (owned fragment of the upstream queries hub, ADR-0004). */
 
 /** Newest runtime definition for each tool name, ready to join onto usage. */
 export async function getRuntimeToolDefinitions(

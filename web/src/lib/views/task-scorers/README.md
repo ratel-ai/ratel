@@ -21,7 +21,7 @@ production. As upstream, `score_tasks` is not coalesced: each completed signal r
 With `evalGate` off, the sweep still records one refusal per project with task runs a day,
 as upstream does for an organization without the gate.
 
-**Owned (ADR-0030).** `schema.ts` and `register.ts`; `job.ts` and its tests (the
+**Owned (ADR-0004).** `schema.ts` and `register.ts`; `job.ts` and its tests (the
 gate is the configured `evalGate` flag, carried in upstream's `flagDeps`; the user scorers that
 upstream's job also runs are Evals' and are left out); `sweep.integration.test.ts` and
 `drain-task-scores*.test.ts` (upstream's sweep and drain tests, on the configured switch and the

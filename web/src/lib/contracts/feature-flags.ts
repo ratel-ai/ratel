@@ -1,6 +1,6 @@
 /**
  * The core's feature switches, and the optional port through which an edition decides them
- * (ADR-0030). Each switch has a semantic key; the deployment's configuration (`web/src/config.ts`,
+ * (ADR-0004). Each switch has a semantic key; the deployment's configuration (`web/src/config.ts`,
  * `flags.<key>`) may force it on or off. Without the port each switch is that configured value for
  * the whole deployment (in the open-source edition also `experimentalFeatures`). With it, the
  * edition decides each switch for whoever asks, and a forced value still comes first. The core

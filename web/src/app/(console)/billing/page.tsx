@@ -7,7 +7,7 @@ import { getConsoleScope } from "@/lib/console/shell-data";
 export const dynamic = "force-dynamic";
 
 /**
- * `/billing`, now the organization's. Owned (ADR-0030): upstream's proxy redirects it; here the
+ * `/billing`, now the organization's. Owned (ADR-0004): upstream's proxy redirects it; here the
  * route does. Billing is the edition's page, so without it the old address stays a 404.
  */
 export default async function LegacyBillingPage({

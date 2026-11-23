@@ -30,7 +30,7 @@ const PROJECT = "11111111-1111-4111-8111-111111111111";
 const ORG = "22222222-2222-4222-8222-222222222222";
 const ISSUE = "44444444-4444-4444-8444-444444444444";
 const NOW = new Date("2026-11-01T12:00:00Z");
-// Owned (ADR-0030): the gate is evalGate, read from the configuration, where upstream stubs flag
+// Owned (ADR-0004): the gate is evalGate, read from the configuration, where upstream stubs flag
 // deps. The stand-in model stands for a key; the simulations read `getConfig()` through the seam,
 // so the process's configuration says the same (a config file, `web/src/config.ts`).
 const ON = resolveConfig({
@@ -519,7 +519,7 @@ test("a reply without a usable proposal fails the draft and says why, without a 
   }
 });
 
-// Owned (ADR-0030): the cases this edition adds.
+// Owned (ADR-0004): the cases this edition adds.
 
 test("with the gate on and no model key nothing is queued, reserved, written or sent", async () => {
   const { client, db, fix } = await setup();

@@ -4,11 +4,11 @@ import type { IntentGraphEdgeKind } from "@/lib/readings/intent-types/wire";
 
 /**
  * The view helpers Adaptive ranking and Fixes read. Pure: no database, no React. Cluster `members`
- * are raw user query text and must never reach logs or attributes. Owned (ADR-0030): cut from
+ * are raw user query text and must never reach logs or attributes. Owned (ADR-0004): cut from
  * upstream's `intent-graph/view.ts`, whose summary cards and force graph have no page here.
  */
 
-/** Confirmed observations at which the ranker gives a cluster full weight (ADR-0014). */
+/** Confirmed observations at which the ranker gives a cluster full weight (the SDK's adaptive ranking). */
 export const SUPPORT_FULL = 3;
 
 /** Arm weight ramp: one observation nudges, three or more carry full weight. */

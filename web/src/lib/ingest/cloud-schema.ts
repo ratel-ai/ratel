@@ -5,7 +5,7 @@
  * input the categorizer derives the dashboard's context categories from
  * (`categorize.ts`); it is also the `events.payload` JSONB shape.
  *
- * This used to be the public wire contract (an ADR-0013 Zod schema validated at
+ * This used to be the public wire contract (an ADR-0007 Zod schema validated at
  * `POST /api/v1/events`). Since the cutover to stock OTLP ingest (ADR-0007), Ratel
  * no longer accepts this shape over the wire — it is reconstructed internally from
  * OpenTelemetry `gen_ai.*` telemetry — so it is now a plain type, not a validator.

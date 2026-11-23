@@ -76,7 +76,7 @@ const serverActions: Plugin = {
  * code out of the bundle: the replay's What if… (a view passes no `whatIf`).
  */
 const CONSOLE_ONLY: Readonly<Record<string, string>> = {
-  // Owned (ADR-0030): the panel lands in components/console here.
+  // Owned (ADR-0004): the panel lands in components/console here.
   [path.join(WEB_SRC, "components", "console", "session-replay", "WhatIfPanel")]: path.join(SHELL, "shims", "what-if-panel.tsx"),
 };
 
@@ -125,7 +125,7 @@ export async function bundleScript(entry: string): Promise<{ script: string; imp
       "next/link": path.join(SHELL, "shims", "next-link.tsx"),
       "next/navigation": path.join(SHELL, "shims", "next-navigation.ts"),
     },
-    // Owned (ADR-0030): a view's frame has no `process`; code that reads NODE_ENV (a framework
+    // Owned (ADR-0004): a view's frame has no `process`; code that reads NODE_ENV (a framework
     // exception to web/src/config.ts) reads production, and any other read an empty object.
     define: { "process.env.NODE_ENV": '"production"', "process.env": "{}" },
     plugins: [browserConfig, consoleOnly, serverActions],

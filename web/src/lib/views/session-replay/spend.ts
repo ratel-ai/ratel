@@ -6,7 +6,7 @@ import { sessionReplayRuns } from "./schema";
 
 /**
  * What-if's share of the organization's one daily model budget (RC-176), read through
- * `evalGateSeams.spendSince`. Owned (ADR-0030): upstream sums the same query inline in
+ * `evalGateSeams.spendSince`. Owned (ADR-0004): upstream sums the same query inline in
  * `organizationModelSpendSince` (`lib/eval-gate/store.ts`). Loaded for its side effect by
  * `register.ts` (the worker and the drain) and `runs.ts` (a request), so every process that
  * checks the budget counts What-if.

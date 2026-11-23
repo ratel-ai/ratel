@@ -10,7 +10,7 @@ import { type CatalogDrift, GONE_TOOL_GRACE_DAYS, goneTools } from "./catalog-dr
 
 /**
  * Upstream's `cloud-ranking-catalog-drift` (RC-721), still a rollout flag there. Owned
- * (ADR-0030): here it is the deployment switch, off by default (in the open-source edition also
+ * (ADR-0004): here it is the deployment switch, off by default (in the open-source edition also
  * `experimentalFeatures`).
  */
 export const CATALOG_DRIFT_SWITCH = "rankingCatalogDrift" as const;

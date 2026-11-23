@@ -101,7 +101,7 @@ import {
 } from "@/lib/synthesis/tool-crafter/queries";
 
 /**
- * The open-source edition's promise (ADR-0030): with no model key set, every reading that
+ * The open-source edition's promise (ADR-0004): with no model key set, every reading that
  * can run without one still runs, and nothing leaves the process. The lexical readings (the
  * intent graph fold, the intent engine's clustering) must complete on a seeded database with
  * `fetch` disabled, and the engine's naming step must make no call rather than try. The

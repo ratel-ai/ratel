@@ -22,7 +22,7 @@ import { anthropicContent } from "@/lib/platform/model-call-content";
 import { MODEL_CALL_TRACER } from "@/lib/platform/otel/ratel-export";
 
 /**
- * Owned (ADR-0030): upstream also turns off its model-call lines' project label lookup here; this
+ * Owned (ADR-0004): upstream also turns off its model-call lines' project label lookup here; this
  * edition's lines read their labels from the log context, so there is no lookup to turn off.
  */
 

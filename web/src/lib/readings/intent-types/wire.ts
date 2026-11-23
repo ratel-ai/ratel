@@ -3,7 +3,7 @@ import { stableStringify } from "@/lib/ingest/trace-events/parse";
 
 /**
  * Wire shape of the adaptive-ranking intent graph (open-source `protocol/v1`
- * `intent-graph.schema.json`, ADR-0014). Cloud stores the document exactly as a
+ * `intent-graph.schema.json`, ADR-0007). Cloud stores the document exactly as a
  * runtime's `IntentGraph.toJson()` produced it and hands it back through
  * `IntentGraph.fromJson()`, so these types are deliberately open: every object
  * carries an index signature because the contract is additive and a consumer

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * `/explore`: the skills catalog, or Fixes for the retired Intents and Suggestions tabs.
- * Owned (ADR-0030): upstream's proxy redirects it; here the route does.
+ * Owned (ADR-0004): upstream's proxy redirects it; here the route does.
  */
 export default async function LegacyExplorePage({
   searchParams,

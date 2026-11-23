@@ -21,7 +21,7 @@ export interface BootPlan {
 
 /**
  * What a process does for background work at boot, from `APP_ROLE` and `RATEL_CRON`
- * (docs/adr/0031-platform-background-worker.md). `RATEL_CRON` only decides for the all-in-one
+ * (docs/adr/0005-background-worker.md). `RATEL_CRON` only decides for the all-in-one
  * process: the worker is its own clock in either mode, and an API-only process never ticks.
  * One service migrates: the worker never does, whatever `DATABASE_MIGRATE_ON_BOOT` says, so a
  * worker that starts first cannot race the web process to an empty schema.

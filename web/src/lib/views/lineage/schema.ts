@@ -2,7 +2,7 @@ import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/
 import { projects } from "@/lib/platform/projects/schema";
 
 /**
- * Lineage's table. Owned fragment of the upstream schema (ADR-0030): `lineage_links`, the
+ * Lineage's table. Owned fragment of the upstream schema (ADR-0004): `lineage_links`, the
  * lineage partition of the upstream schema hub, column for column.
  */
 

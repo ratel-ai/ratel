@@ -7,7 +7,7 @@ import { OPENAI_DEFAULT_BASE_URL, OPENAI_USD_PER_INPUT_TOKEN } from "./openai";
  * health's workflow decisions, the topics placement. The open-source edition ships one
  * engine, OpenAI's Decisions API, keyed by `openai.apiKey` (OPENAI_API_KEY); without a key no engine
  * runs and every feature that would ask one reports itself as not measured. The Cloud
- * edition's other engines are private (ADR-0030).
+ * edition's other engines are private (ADR-0004).
  *
  * `openai.decisionEngine` (DECISION_ENGINE) is honoured for compatibility: `openai` or unset selects it, any
  * other name logs a warning once and is ignored.

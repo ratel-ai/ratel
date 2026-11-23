@@ -11,7 +11,7 @@ import { agentsOperations, defaultAgentsDeps } from "./agents";
 import { defaultMcpServersDeps, mcpServersOperations } from "./mcp-servers";
 
 /**
- * Owned (ADR-0030), no upstream counterpart: the default gate of the Agents and MCP servers tools
+ * Owned (ADR-0004), no upstream counterpart: the default gate of the Agents and MCP servers tools
  * is the core's `agentsPages` switch (`featureEnabled`), in place of upstream's
  * `cloud-project-entities` flag service. Off, each tool refuses as forbidden and reads nothing.
  */

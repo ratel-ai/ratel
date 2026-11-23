@@ -77,7 +77,7 @@ import type {
  *
  * Pure: the loader reads, this decides. Nothing here knows a database.
  *
- * Owned (ADR-0030): upstream builds a draft's seed from the tool crafter's card here; in this
+ * Owned (ADR-0004): upstream builds a draft's seed from the tool crafter's card here; in this
  * edition the crafter's filler tells the draft as a `DraftFixInput` before it arrives, so this
  * module never imports the crafter.
  */

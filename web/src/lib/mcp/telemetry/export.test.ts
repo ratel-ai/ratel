@@ -19,7 +19,7 @@ const resolveMcpExportConfig = (env: Record<string, string>) =>
   exportConfigOf(resolveConfig({ env }));
 
 /**
- * Owned (ADR-0030): upstream's file, with the no-default endpoint of ./export.ts pinned in place
+ * Owned (ADR-0004): upstream's file, with the no-default endpoint of ./export.ts pinned in place
  * of upstream's own deployment.
  */
 

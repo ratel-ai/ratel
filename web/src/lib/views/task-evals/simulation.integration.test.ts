@@ -27,7 +27,7 @@ import { upsertScorer } from "@/lib/views/task-scorers/store";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
-// Owned (ADR-0030): the gate is the evalGate flag in the configuration, not an organization flag.
+// Owned (ADR-0004): the gate is the evalGate flag in the configuration, not an organization flag.
 const FLAGS_ON: OrganizationFlagDeps = resolveConfig({ override: { flags: { evalGate: true } } });
 
 test("a fix queues one simulation per distinct task and refreshes missing eval sets", async () => {

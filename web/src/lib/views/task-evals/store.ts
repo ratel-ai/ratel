@@ -24,7 +24,7 @@ import { SCORER_VERSION, scoreRun } from "@/lib/views/task-scorers/engine";
 import { scorersFor } from "@/lib/views/task-scorers/store";
 
 /**
- * Owned (ADR-0030): what upstream passes to its organization flag service. Here the gate is
+ * Owned (ADR-0004): what upstream passes to its organization flag service. Here the gate is
  * `evalGate`, so the deps are the configuration the gate reads; the name stays upstream's so
  * the copied callers compile unchanged.
  */
@@ -189,7 +189,7 @@ export async function refreshTaskEvalSet(
 
 /** Read all cases, including exclusions. The caller chooses the cases for each simulation. */
 /**
- * RC-853, owned (ADR-0030): drop the picked runs that work on a project of another organization
+ * RC-853, owned (ADR-0004): drop the picked runs that work on a project of another organization
  * (`foreign-project.ts`). Upstream guards its score suggestions (lib/evals, not ported); here the
  * automatic pick from scored runs is this refresh.
  */

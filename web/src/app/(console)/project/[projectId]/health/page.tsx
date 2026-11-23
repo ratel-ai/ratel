@@ -57,7 +57,7 @@ export const metadata = { title: "Agent health" };
  * the decided state of the window, and its neighbours: the tasks, the fixes
  * the issues open, and self-corrections. Each read degrades on its own.
  *
- * Owned (ADR-0030): the project comes from the console scope (the session's
+ * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits and plans from the entitlements port.
  * The importer and the share dialog are the edition's.
  */

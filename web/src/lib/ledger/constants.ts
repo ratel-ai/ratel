@@ -10,7 +10,7 @@ import {
  * in `web/src/config.ts`) so a deployment can correct the inferred-turn rule without a release. Pure code takes a
  * {@link TurnConfig} argument defaulting to these, so tests pin their own values.
  *
- * Owned (ADR-0030): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
+ * Owned (ADR-0004): `TURN_EVENT_TYPES` (with `AGENT_RUN_EVENT_TYPE` and
  * `TURN_EVENT_TYPES_WITH_AGENT_RUNS`, RC-742) has one source, the ingest kick in
  * `lib/ingest/trace-events/turns-schedule.ts`, re-exported here so the ledger reads the
  * same list that triggers it. The imported source ids are upstream's exact set less the one
