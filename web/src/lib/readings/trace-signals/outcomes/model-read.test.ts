@@ -657,7 +657,7 @@ test("tool notices and templates with changing names and ids are machine-written
       "s1",
       "a",
       0,
-      "[beluga] rstagi's agent replied (task t_79, which you sent earlier in this conversation)",
+      "[beluga] a teammate's agent replied (task t_79, which you sent earlier in this conversation)",
     ),
     message(
       "s1",
