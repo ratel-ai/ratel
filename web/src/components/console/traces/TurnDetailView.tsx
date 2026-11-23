@@ -57,6 +57,8 @@ export interface TurnDetailViewProps {
   conversation?: Conversation | null;
   /** The turn's hallucinations, each on the call it sits on; empty while `cloud-hallucination-detection` is off. */
   hallucinations?: readonly TurnMarker[];
+  /** Inside a Panel: without the page's own navigation, which would leave the list. */
+  embedded?: boolean;
 }
 
 export function TurnDetailView({
@@ -66,6 +68,7 @@ export function TurnDetailView({
   sessionHref = null,
   conversation = null,
   hallucinations = [],
+  embedded = false,
 }: TurnDetailViewProps) {
   // A false "done" is about the reply: it shows there, when the reply is on the page; else on its call.
   const onReply = conversation?.reply
@@ -79,8 +82,13 @@ export function TurnDetailView({
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6" data-turn-detail={turn.id}>
       <header className="pixel-header flex flex-wrap items-end justify-between gap-4 border-b border-forest-300 pb-6">
         <div className="min-w-0">
-          <div className="eyebrow">Traces · Turn</div>
-          <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-cream">
+          {embedded ? null : <div className="eyebrow">Traces · Turn</div>}
+          <h1
+            className={cn(
+              "mt-1 font-display font-bold tracking-tight text-cream",
+              embedded ? "text-lg" : "text-2xl",
+            )}
+          >
             A turn on {DAY.format(started)}, {TIME.format(started)} UTC
           </h1>
           <p className="mt-2 text-sm text-warm-muted">
@@ -103,11 +111,17 @@ export function TurnDetailView({
           </p>
         </div>
         <nav aria-label="Turn navigation" className="flex flex-wrap items-center gap-2 text-[12px]">
-          <NavLink href={agentHealthHref(projectId)}>
-            <HeartPulse className="size-3.5" aria-hidden />
-            Agent health
-          </NavLink>
-          <NavLink href={`/project/${encodeURIComponent(projectId)}/traces`}>All traces</NavLink>
+          {embedded ? null : (
+            <>
+              <NavLink href={agentHealthHref(projectId)}>
+                <HeartPulse className="size-3.5" aria-hidden />
+                Agent health
+              </NavLink>
+              <NavLink href={`/project/${encodeURIComponent(projectId)}/traces`}>
+                All traces
+              </NavLink>
+            </>
+          )}
           {sessionHref && (
             <NavLink href={sessionHref}>
               <History className="size-3.5" aria-hidden />
@@ -130,6 +144,7 @@ export function TurnDetailView({
             call={call}
             focused={call.eventId === focusEventId}
             markers={onCalls.filter((marker) => marker.stepOrdinal === call.ordinal)}
+            seeAll={!embedded}
           />
         ))}
       </ol>
@@ -147,7 +162,7 @@ export function TurnDetailView({
               <ul className="flex flex-col gap-2" aria-label="Hallucinations in the reply">
                 {onReply.map((marker) => (
                   <li key={`${marker.kind}:${marker.stepOrdinal}`}>
-                    <HallucinationMarker marker={marker} />
+                    <HallucinationMarker marker={marker} seeAll={!embedded} />
                   </li>
                 ))}
               </ul>
@@ -156,7 +171,7 @@ export function TurnDetailView({
         />
       )}
 
-      {(turn.previousTurnId || turn.nextTurnId) && (
+      {!embedded && (turn.previousTurnId || turn.nextTurnId) && (
         <nav
           aria-label="Same session"
           className="flex items-center justify-between gap-3 border-t border-forest-300 pt-4 text-[13px]"
@@ -182,7 +197,7 @@ export function TurnDetailView({
 }
 
 /** One hallucination, where it happened: the kind, what the trace shows, and the way to every case of it. */
-function HallucinationMarker({ marker }: { marker: TurnMarker }) {
+function HallucinationMarker({ marker, seeAll }: { marker: TurnMarker; seeAll: boolean }) {
   return (
     <div
       className="rounded-lg border border-coral/40 bg-coral/5 px-3 py-2 text-[12px] leading-5"
@@ -194,13 +209,15 @@ function HallucinationMarker({ marker }: { marker: TurnMarker }) {
           Hallucination
         </span>
         <span className="text-cream">{marker.label}</span>
-        <Link
-          href={marker.href}
-          className="ml-auto inline-flex items-center gap-1 rounded text-cream-dim underline decoration-forest-300 underline-offset-4 outline-none hover:text-cream focus-visible:ring-2 focus-visible:ring-coral/60"
-        >
-          See all like this
-          <ArrowUpRight className="size-3" aria-hidden />
-        </Link>
+        {seeAll ? (
+          <Link
+            href={marker.href}
+            className="ml-auto inline-flex items-center gap-1 rounded text-cream-dim underline decoration-forest-300 underline-offset-4 outline-none hover:text-cream focus-visible:ring-2 focus-visible:ring-coral/60"
+          >
+            See all like this
+            <ArrowUpRight className="size-3" aria-hidden />
+          </Link>
+        ) : null}
       </p>
       <p className="mt-0.5 text-cream-dim [overflow-wrap:anywhere]">{marker.detail}</p>
     </div>
@@ -223,11 +240,13 @@ function CallRow({
   call,
   focused,
   markers,
+  seeAll,
 }: {
   projectId: string;
   call: TurnDetailCall;
   focused: boolean;
   markers: readonly TurnMarker[];
+  seeAll: boolean;
 }) {
   const glyph = call.kind === "search" ? "search" : call.targetType === "skill" ? "skill" : "tool";
   const failed = call.outcome === "error";
@@ -263,7 +282,7 @@ function CallRow({
         <ul className="mt-2 flex flex-col gap-2" aria-label="Hallucinations on this call">
           {markers.map((marker) => (
             <li key={marker.kind}>
-              <HallucinationMarker marker={marker} />
+              <HallucinationMarker marker={marker} seeAll={seeAll} />
             </li>
           ))}
         </ul>

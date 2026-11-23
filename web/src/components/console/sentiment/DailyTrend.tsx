@@ -9,6 +9,7 @@ import { useId, useState } from "react";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { percent, plural } from "@/components/console/sentiment/copy";
 import { areaPath, gapSegments, labelEvery, smoothPath } from "@/lib/platform/chart";
+import { dayStops, MOOD_STOPS, moodColor } from "@/lib/views/traces/sentiment/mood";
 import { type DayPoint, SMOOTHING_DAYS } from "@/lib/views/traces/sentiment/overview";
 
 const WIDTH = 800;
@@ -17,34 +18,6 @@ const LEFT = 4;
 const PLOT_WIDTH = WIDTH - LEFT * 2;
 const PLOT_BOTTOM = 156;
 const PAD_TOP = 12;
-/**
- * The line's color follows its value: red when people were unsatisfied,
- * yellow when mixed, green when satisfied, blended smoothly in between. The
- * stops sit around the mood bands the satisfaction faces use (below 40%,
- * 40 to 70%, from 70%).
- */
-const MOOD_STOPS: ReadonlyArray<{ at: number; color: string; hex: string }> = [
-  { at: 0, color: "var(--ds-danger)", hex: "#f75b6b" },
-  { at: 0.3, color: "var(--ds-danger)", hex: "#f75b6b" },
-  { at: 0.55, color: "var(--ds-warning)", hex: "#edb345" },
-  { at: 0.8, color: "var(--ds-success)", hex: "#5ac576" },
-  { at: 1, color: "var(--ds-success)", hex: "#5ac576" },
-];
-
-/** The line's color at a value, for the marker on the hovered day. */
-function moodColor(value: number): string {
-  const upper = MOOD_STOPS.findIndex((stop) => stop.at >= value);
-  if (upper <= 0) return MOOD_STOPS[Math.max(0, upper)]!.hex;
-  const low = MOOD_STOPS[upper - 1]!;
-  const high = MOOD_STOPS[upper]!;
-  const t = (value - low.at) / (high.at - low.at);
-  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-  const mixed = [0, 1, 2].map((i) =>
-    Math.round(channel(low.hex, i) + (channel(high.hex, i) - channel(low.hex, i)) * t),
-  );
-  return `rgb(${mixed.join(", ")})`;
-}
-
 /**
  * Satisfaction day by day over the window (UTC): each day's point is
  * satisfied of the turns people said how it went over that day and the
@@ -58,7 +31,6 @@ export function DailyTrend({ days }: { days: readonly DayPoint[] }) {
   return (
     <Section
       title={<NounTitle icon={ChartLine}>Satisfaction day by day</NounTitle>}
-      description={`Turns people did not push back on, of those they reacted to, averaged over ${SMOOTHING_DAYS} days to each day. Days are UTC.`}
       actions={
         has ? (
           <Button variant="ghost" size="sm" onClick={() => setTable(!table)}>
@@ -161,17 +133,17 @@ function Plot({ days }: { days: readonly DayPoint[] }) {
           aria-hidden
         >
           <defs>
-            {/* Along the value axis, so a point's color is its value's: 100% at the top, 0% at the bottom. */}
+            {/* Along the days: the whole height over a day is that day's color. */}
             <linearGradient
               id={gradient}
               gradientUnits="userSpaceOnUse"
-              x1={0}
-              x2={0}
-              y1={y(1)}
-              y2={y(0)}
+              x1={x(0)}
+              x2={x(Math.max(1, last))}
+              y1={0}
+              y2={0}
             >
-              {[...MOOD_STOPS].reverse().map((stop) => (
-                <stop key={stop.at} offset={1 - stop.at} stopColor={stop.color} />
+              {dayStops(values).map((stop) => (
+                <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
               ))}
             </linearGradient>
           </defs>
@@ -190,7 +162,7 @@ function Plot({ days }: { days: readonly DayPoint[] }) {
             const run = segment.map((at) => points[at]!);
             return (
               <g key={segment[0]}>
-                <path d={areaPath(run, PLOT_BOTTOM)} fill={`url(#${gradient})`} opacity={0.14} />
+                <path d={areaPath(run, PLOT_BOTTOM)} fill={`url(#${gradient})`} opacity={0.28} />
                 <path
                   d={smoothPath(run)}
                   fill="none"

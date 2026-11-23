@@ -15,6 +15,7 @@ import { SatisfactionByStatus } from "@/components/console/sentiment/Satisfactio
 import { SatisfactionFace } from "@/components/console/sentiment/SatisfactionFace";
 import { SentimentFilters } from "@/components/console/sentiment/SentimentFilters";
 import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { projectRoot } from "@/lib/console/navigation";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
@@ -36,12 +37,15 @@ export function SentimentView({
   model,
   windows,
   now,
+  turn = null,
 }: {
   model: SentimentPageModel;
   /** The time windows the plan allows, as links. */
   windows: readonly LinkSwitchOption[];
   /** The request's time, so relative times match between server and client. */
   now: string;
+  /** The turn the address opens in the Panel, with what Traces shows of it. */
+  turn?: PanelTurn | null;
 }) {
   const links = sentimentLinks(model);
   return (
@@ -53,7 +57,7 @@ export function SentimentView({
         actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
       />
       <PageBody wide>
-        <Body model={model} links={links} now={now} />
+        <Body model={model} links={links} now={now} turn={turn} />
       </PageBody>
     </Page>
   );
@@ -63,10 +67,12 @@ function Body({
   model,
   links,
   now,
+  turn,
 }: {
   model: SentimentPageModel;
   links: SentimentLinks;
   now: string;
+  turn: PanelTurn | null;
 }) {
   const span = windowPhrase(model.windowDays);
   if (model.state === "unavailable") {
@@ -103,9 +109,9 @@ function Body({
       <SatisfactionByStatus overview={model.overview} />
       <DissatisfactionPareto
         projectId={model.projectId}
-        windowDays={model.windowDays}
         dissatisfaction={model.overview.dissatisfaction}
         now={now}
+        turn={turn}
       />
       <SatisfactionBreakdown links={links} />
       <DailyTrend days={model.overview.daily} />

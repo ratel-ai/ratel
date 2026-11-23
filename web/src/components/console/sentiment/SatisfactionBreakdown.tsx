@@ -21,10 +21,7 @@ export function SatisfactionBreakdown({ links }: { links: SentimentLinks }) {
   const scores = links.intentScores;
   if (!scores) return null;
   return (
-    <Section
-      title={<NounTitle icon={Smile}>Satisfaction by intent</NounTitle>}
-      description="Turns people did not push back on, of those they reacted to. Pick an intent to see its satisfaction day by day."
-    >
+    <Section title={<NounTitle icon={Smile}>Satisfaction by intent</NounTitle>}>
       <div
         className="grid grid-cols-1 gap-x-10 gap-y-8 lg:grid-cols-2"
         data-sentiment-satisfaction=""
