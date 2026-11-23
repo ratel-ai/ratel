@@ -19,8 +19,6 @@ export interface ProviderOptions extends HttpOptions {
 const openAiReasons = (model: string) =>
   /^(gpt-([5-9]|\d\d)|o\d)/i.test(model) && !/-chat/i.test(model);
 
-const MISTRAL: Dialect = { streamOptions: false, mistralTools: true };
-
 /** Gemini on Vertex: it thinks within `max_tokens`, and its ids carry the publisher. */
 const GEMINI: Dialect = {
   reasons: (model) => /(^|\/)gemini-/i.test(model),
@@ -60,7 +58,6 @@ export function vendorAdapters(
   return {
     claude: anthropicProvider,
     openai: responses({ ...http, reasons: openAiReasons }),
-    mistral: chatCompletions({ ...http, dialect: MISTRAL }),
     gcp: cloud(
       claudeOn(host),
       chatCompletions({ ...http, dialect: GEMINI, authorize: () => googleToken(googleAuth) }),

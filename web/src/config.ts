@@ -296,7 +296,6 @@ const CONFIG_SCHEMA = schema({
   },
   /** What each vendor of `modelVendor` or `decisions` is reached with, beside `anthropic` and `openai`. */
   vendors: {
-    mistralApiKey: optional("MISTRAL_API_KEY", configured, { sensitive: true }),
     typesafeApiKey: optional("TYPESAFE_API_KEY", configured, { sensitive: true }),
     sageApiKey: optional("SAGE_API_KEY", configured, { sensitive: true }),
     geminiApiKey: optional("GEMINI_API_KEY", configured, { sensitive: true }),

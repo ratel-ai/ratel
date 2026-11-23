@@ -24,9 +24,17 @@ const cfg = (env: Record<string, string | undefined> = {}) => resolveConfig({ en
  */
 
 // A Claude key is present on purpose: naming another vendor must be enough to keep Claude out.
-const MISTRAL = {
-  MODEL_PROVIDER: "mistral",
-  MISTRAL_API_KEY: "mistral-key",
+const LITELLM = {
+  MODEL_PROVIDER: "litellm",
+  MODEL_BASE_URL: "http://gateway.test",
+  MODEL_DEEP: "big",
+  MODEL_STANDARD: "middle",
+  MODEL_FAST: "small",
+  ANTHROPIC_API_KEY: "sk-ant",
+};
+const OPENAI = {
+  MODEL_PROVIDER: "openai",
+  OPENAI_API_KEY: "sk-openai",
   ANTHROPIC_API_KEY: "sk-ant",
 };
 
@@ -86,7 +94,7 @@ afterEach(() => {
   for (const undo of restore) undo();
 });
 
-const resolve = (env: Record<string, string> = MISTRAL) =>
+const resolve = (env: Record<string, string> = LITELLM) =>
   resolveEvalModels(cfg(env), "eval_gate_judge", "production");
 
 const TOOLS = [{ name: "crm.lookup", description: "Find", parameters: {} }];
@@ -94,10 +102,10 @@ const TOOLS = [{ name: "crm.lookup", description: "Find", parameters: {} }];
 test("every model is the named vendor's, and a Claude key is not used", async () => {
   const models = resolve();
   const agent = models.agent?.({ recordedModel: "claude-opus-5-5", recorded: [] });
-  assert.equal(agent?.model, "mistral-large-latest");
-  assert.equal(models.tool?.model, "mistral-small-latest");
-  assert.equal(models.judge?.model, "mistral-small-latest");
-  assert.equal(models.person?.model, "mistral-small-latest");
+  assert.equal(agent?.model, "big");
+  assert.equal(models.tool?.model, "small");
+  assert.equal(models.judge?.model, "small");
+  assert.equal(models.person?.model, "small");
   assert.equal(models.standIn, false);
 
   answers.push(
@@ -112,7 +120,7 @@ test("every model is the named vendor's, and a Claude key is not used", async ()
     messages: [{ role: "user", text: "hi" }],
   });
   assert.equal(reply?.text, "Done.");
-  assert.equal(reply?.model, "mistral-large-latest");
+  assert.equal(reply?.model, "big");
   assert.deepEqual(
     await models.tool?.answer({ tool: TOOLS[0], name: "crm.lookup", args: {}, examples: [] }),
     { content: '{"id":1}', isError: false, usage: { inputTokens: 100, outputTokens: 10 } },
@@ -123,14 +131,14 @@ test("every model is the named vendor's, and a Claude key is not used", async ()
       ?.text,
     "Hello?",
   );
-  for (const call of seen) assert.equal(call.url, "https://api.mistral.ai/v1/chat/completions");
+  for (const call of seen) assert.equal(call.url, "http://gateway.test/v1/chat/completions");
   assert.deepEqual(
     lines.map((line) => [line.provider, line.feature]),
     [
-      ["mistral_ai", "eval_gate_replay"],
-      ["mistral_ai", "eval_gate_stand_in"],
-      ["mistral_ai", "eval_gate_judge"],
-      ["mistral_ai", "eval_gate_stand_in"],
+      ["litellm", "eval_gate_replay"],
+      ["litellm", "eval_gate_stand_in"],
+      ["litellm", "eval_gate_judge"],
+      ["litellm", "eval_gate_stand_in"],
     ],
   );
 });
@@ -167,29 +175,33 @@ test("a tool call round-trips: the call comes back, and its result goes with the
 });
 
 test("a run recorded on the vendor's own model is replayed on it, and on the default once it is gone", async () => {
-  const agent = resolve().agent?.({ recordedModel: "mistral-medium-2505", recorded: [] });
-  assert.equal(agent?.model, "mistral-medium-2505");
-  answers.push(
-    completion({ message: "no such model" }, 404),
-    completion({ content: "a" }),
-    completion({ content: "b" }),
-  );
+  const agent = resolve(OPENAI).agent?.({ recordedModel: "gpt-5.6-sol", recorded: [] });
+  assert.equal(agent?.model, "gpt-5.6-sol");
+  const response = (text: string) => () =>
+    new Response(
+      JSON.stringify({
+        status: "completed",
+        output: [{ type: "message", content: [{ type: "output_text", text }] }],
+        usage: { input_tokens: 5, output_tokens: 1 },
+      }),
+    );
+  answers.push(completion({ message: "no such model" }, 404), response("a"), response("b"));
   const turn = {
     system: undefined,
     tools: [],
     messages: [{ role: "user" as const, text: "hi" }],
   };
-  assert.equal((await agent?.next(turn))?.model, "mistral-large-latest");
-  assert.equal((await agent?.next(turn))?.model, "mistral-large-latest");
+  assert.equal((await agent?.next(turn))?.model, "gpt-6.2-astra");
+  assert.equal((await agent?.next(turn))?.model, "gpt-6.2-astra");
   assert.deepEqual(
     seen.map((call) => call.body.model),
-    ["mistral-medium-2505", "mistral-large-latest", "mistral-large-latest"],
+    ["gpt-5.6-sol", "gpt-6.2-astra", "gpt-6.2-astra"],
   );
 });
 
 test("a run recorded on another vendor's model is replayed on this one's", () => {
   for (const recordedModel of ["gpt-6.2-sol", "claude-opus-5-5", "gemini-4-carbon", null])
-    assert.equal(resolve().agent?.({ recordedModel, recorded: [] })?.model, "mistral-large-latest");
+    assert.equal(resolve().agent?.({ recordedModel, recorded: [] })?.model, "big");
 });
 
 test("a refused key stops the simulation, as on Claude", async () => {
@@ -214,11 +226,11 @@ test("a verdict is read out of words and a code fence; an answer without one is 
 
 test("the live task judge and the test draft run on the vendor too", async () => {
   answers.push(completion({ content: '{"pass":true}' }), completion({ content: "{}" }));
-  const judge = resolveTaskJudge(cfg(MISTRAL));
-  assert.equal(judge?.model, "mistral-small-latest");
+  const judge = resolveTaskJudge(cfg(LITELLM));
+  assert.equal(judge?.model, "small");
   await judge?.judge({ criteria: "c", run: "r" });
-  const draft = resolveTestDraftModel(cfg(MISTRAL));
-  assert.equal(draft?.model, "mistral-small-latest");
+  const draft = resolveTestDraftModel(cfg(LITELLM));
+  assert.equal(draft?.model, "small");
   await draft?.draft("{}");
   assert.deepEqual(
     lines.map((line) => line.feature),
@@ -228,7 +240,7 @@ test("the live task judge and the test draft run on the vendor too", async () =>
 
 test("naming a vendor that cannot run leaves no model, though Claude is configured", () => {
   for (const env of [
-    { MODEL_PROVIDER: "mistral", ANTHROPIC_API_KEY: "sk-ant" },
+    { MODEL_PROVIDER: "openai", ANTHROPIC_API_KEY: "sk-ant" },
     { MODEL_PROVIDER: "ollama", ANTHROPIC_API_KEY: "sk-ant" },
     { MODEL_PROVIDER: "typo", ANTHROPIC_API_KEY: "sk-ant" },
   ]) {
@@ -243,21 +255,21 @@ test("naming a vendor that cannot run leaves no model, though Claude is configur
 });
 
 test("one feature can run on another of the vendor's models", () => {
-  const models = resolve({ ...MISTRAL, MODEL_FEATURE_EVAL_GATE_JUDGE: "mistral-large-latest" });
-  assert.equal(models.judge?.model, "mistral-large-latest");
-  assert.equal(models.tool?.model, "mistral-small-latest");
+  const models = resolve({ ...LITELLM, MODEL_FEATURE_EVAL_GATE_JUDGE: "big" });
+  assert.equal(models.judge?.model, "big");
+  assert.equal(models.tool?.model, "small");
 });
 
 test("a call refused for its budget, or never made, names the vendor", () => {
   const judge = resolve().judge;
   assert.ok(judge);
   recordBudgetRefusal(judge, "eval_gate_judge");
-  recordNoModelKey("eval_gate_judge", 1, cfg({ MODEL_PROVIDER: "mistral", MISTRAL_API_KEY: "k" }));
+  recordNoModelKey("eval_gate_judge", 1, cfg(LITELLM));
   assert.deepEqual(
     lines.map((line) => [line.provider, line.outcome]),
     [
-      ["mistral_ai", "refused_budget"],
-      ["mistral_ai", "skipped_no_key"],
+      ["litellm", "refused_budget"],
+      ["litellm", "skipped_no_key"],
     ],
   );
 });
@@ -265,7 +277,7 @@ test("a call refused for its budget, or never made, names the vendor", () => {
 test("the meter prices a vendor's model at its own rate, and an unknown one high", () => {
   const meter = new SpendMeter(1);
   const usage = { inputTokens: 1_000_000, outputTokens: 0 };
-  assert.equal(meter.price("mistral-large-latest", usage), 0.7);
+  assert.equal(meter.price("gpt-6.2-sol", usage), 2);
   assert.equal(meter.price("gpt-6.2-astra", usage), 8);
   assert.equal(meter.price("who-knows", usage), 5);
 });

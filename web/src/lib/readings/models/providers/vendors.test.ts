@@ -115,6 +115,11 @@ const SCHEMA = { type: "object", properties: { name: { type: "string" } }, requi
 const TOOLS = [
   { name: "crm.lookup", description: "Find a customer", parameters: { properties: { q: {} } } },
 ];
+const LITELLM = {
+  MODEL_PROVIDER: "litellm",
+  MODEL_BASE_URL: "http://gateway.test",
+  MODEL_STANDARD: "gateway-model",
+};
 const OPENAI = { MODEL_PROVIDER: "openai", OPENAI_API_KEY: "sk-openai" };
 
 /* - OpenAI: the Responses API ----------------------------------------------- */
@@ -283,58 +288,6 @@ test("openai: a model that does not reason is given neither an effort nor encryp
   assert.equal(seen[0].body.reasoning, undefined);
   assert.equal(seen[0].body.include, undefined);
   assert.equal(seen[0].body.temperature, 0);
-});
-
-/* - Mistral ----------------------------------------------------------------- */
-
-const MISTRAL = { MODEL_PROVIDER: "mistral", MISTRAL_API_KEY: "mistral-key" };
-
-test("mistral: its address, key and models, and no stream_options", async () => {
-  const chunk = `data: ${JSON.stringify({
-    model: "served",
-    choices: [{ delta: { content: "Hi" }, finish_reason: "stop" }],
-    usage: { prompt_tokens: 4, completion_tokens: 1 },
-  })}\n\ndata: [DONE]\n\n`;
-  const seen = await on([new Response(chunk)], async () => {
-    const reply = await models
-      .text("match_quality_analyst", at(MISTRAL))
-      ?.complete({ ...ASK, longOutput: true, effort: "xhigh" });
-    assert.deepEqual(reply?.usage, { inputTokens: 4, outputTokens: 1 });
-  });
-  assert.equal(seen[0].url, "https://api.mistral.ai/v1/chat/completions");
-  assert.equal(seen[0].headers.authorization, "Bearer mistral-key");
-  assert.deepEqual(seen[0].body, {
-    model: "mistral-large-latest",
-    messages: [
-      { role: "system", content: "Be brief." },
-      { role: "user", content: "Say hello." },
-    ],
-    max_tokens: 400,
-    stream: true,
-  });
-});
-
-test("mistral: a recorded call's id is made one it takes, the same on the call and its result", async () => {
-  const seen = await on([completion({ content: "ok" })], async () => {
-    await models.chat("eval_gate_replay", at(MISTRAL))?.next({
-      tools: TOOLS,
-      messages: [
-        { role: "user", text: "go" },
-        {
-          role: "assistant",
-          text: "",
-          calls: [{ id: "toolu_01ABCDEFGH", name: "crm.lookup", args: {} }],
-        },
-        { role: "tool", callId: "toolu_01ABCDEFGH", content: "Acme", isError: false },
-      ],
-      maxTokens: 100,
-    });
-  });
-  const sent = seen[0].body.messages as Array<Record<string, never>>;
-  const id = (sent[1].tool_calls as Array<{ id: string }>)[0].id;
-  assert.match(id, /^[a-zA-Z0-9]{9}$/);
-  assert.equal(sent[2].tool_call_id, id);
-  assert.equal(sent[2].name, "crm_lookup");
 });
 
 /* - Google Cloud ------------------------------------------------------------ */
@@ -510,7 +463,7 @@ test("a spend line names the vendor, and where Claude was called", async () => {
         claudeMessage(),
       ],
       async () => {
-        for (const env of [OPENAI, MISTRAL, GCP, BEDROCK])
+        for (const env of [OPENAI, LITELLM, GCP, BEDROCK])
           await models.text("workflow_label", at(env))?.complete(ASK);
       },
     );
@@ -521,7 +474,7 @@ test("a spend line names the vendor, and where Claude was called", async () => {
     lines.map((line) => [line.provider, line.model, line.backend]),
     [
       ["openai", "gpt-6.2-sol", "api"],
-      ["mistral_ai", "mistral-large-latest", "api"],
+      ["litellm", "gateway-model", "api"],
       ["anthropic", "claude-sonnet-5-5", "vertex"],
       ["anthropic", "claude-sonnet-5-5", "bedrock"],
     ],

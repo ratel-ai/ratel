@@ -22,8 +22,6 @@ const VENDOR_PRICES: Readonly<Record<string, ModelPrice>> = {
   "gpt-6.2-astra": { input: 8, output: 40, cachedInput: 0.4 },
   "gpt-6.2-sol": { input: 2, output: 10, cachedInput: 0.1 },
   "gpt-6-luna": { input: 0.1, output: 0.5, cachedInput: 0.01 },
-  "mistral-large-latest": { input: 0.7, output: 2.1, cachedInput: 0.07 },
-  "mistral-small-latest": { input: 0.15, output: 0.6, cachedInput: 0.015 },
 };
 
 const logger = getLogger("models/prices");

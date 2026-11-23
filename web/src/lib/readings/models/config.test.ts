@@ -31,7 +31,6 @@ test("claude by name is the same, and needs its key", () => {
 test("a hosted vendor needs only its own key", () => {
   for (const [name, variable, baseUrl] of [
     ["openai", "OPENAI_API_KEY", "https://api.openai.com/v1"],
-    ["mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"],
   ] as const) {
     assert.deepEqual(resolve({ MODEL_PROVIDER: name, [variable]: KEY }), {
       name,
@@ -46,7 +45,7 @@ test("a hosted vendor needs only its own key", () => {
 
 test("a vendor is never inferred from a key", () => {
   assert.equal(resolve({ OPENAI_API_KEY: KEY }), null);
-  assert.equal(resolve({ MISTRAL_API_KEY: KEY, GEMINI_API_KEY: KEY }), null);
+  assert.equal(resolve({ SAGE_API_KEY: KEY, GEMINI_API_KEY: KEY }), null);
 });
 
 test("a vendor's key goes only to that vendor: another address needs MODEL_API_KEY", () => {
@@ -143,7 +142,15 @@ test("bedrock needs its region, and keeps Claude calls in the region's own geogr
 });
 
 test("an unknown vendor gives nothing, whatever else is set", () => {
-  for (const name of ["openai-compatible", "groq", "grok", "opena", "anthropicc", "azure"]) {
+  for (const name of [
+    "openai-compatible",
+    "groq",
+    "grok",
+    "mistral",
+    "opena",
+    "anthropicc",
+    "azure",
+  ]) {
     assert.equal(
       resolve({
         MODEL_PROVIDER: name,

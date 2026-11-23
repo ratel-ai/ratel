@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { resolveConfig } from "@/config";
 import { setModelCallSink } from "@/lib/platform/model-call";
 import type { ModelContext } from "../index";
-import { chatCompletions, type Dialect, resetJsonModes } from "./chat-completions";
+import { chatCompletions, resetJsonModes } from "./chat-completions";
 import { ModelHttpError } from "./http";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */

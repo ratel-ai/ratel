@@ -41,7 +41,7 @@ import {
 } from "./http";
 
 /**
- * A server that speaks chat completions (`POST {base}/chat/completions`): Mistral, Ollama,
+ * A server that speaks chat completions (`POST {base}/chat/completions`): Ollama,
  * llama.cpp, vLLM, LiteLLM, Gemini on Vertex and the open models on Bedrock (ADR-0009). Written
  * over `fetch`, with no vendor SDK. What a vendor does differently is its `Dialect`.
  *
@@ -63,10 +63,6 @@ export interface Dialect {
   reasons?: (model: string) => boolean;
   /** The field that caps a reasoning model's tokens. */
   reasoningCap?: "max_tokens" | "max_completion_tokens";
-  /** False: refuses `stream_options`, and reports usage in its last chunk anyway. */
-  streamOptions?: boolean;
-  /** Mistral: a call id is nine letters or digits, and a tool's result names the tool. */
-  mistralTools?: boolean;
   /** The model id as the endpoint takes it. */
   modelId?: (model: string) => string;
 }
@@ -264,7 +260,7 @@ function responseFormat(schema: Json, mode: JsonMode): Json {
   return mode === "json_object" ? { response_format: { type: "json_object" } } : {};
 }
 
-function textModel(context: ModelContext, server: Server, dialect: Dialect): TextModel {
+function textModel(context: ModelContext, server: Server): TextModel {
   const { model } = context;
 
   async function ask(request: TextRequest, mode: JsonMode | null): Promise<TextReply> {
@@ -276,7 +272,7 @@ function textModel(context: ModelContext, server: Server, dialect: Dialect): Tex
       ...(request.longOutput
         ? {
             stream: true,
-            ...(dialect.streamOptions === false ? {} : { stream_options: { include_usage: true } }),
+            stream_options: { include_usage: true },
           }
         : {}),
     };
@@ -348,19 +344,8 @@ function textModel(context: ModelContext, server: Server, dialect: Dialect): Tex
 /** The marker on a `raw` turn this adapter wrote, so it reads back only its own. */
 const RAW_KEY = "chatCompletions";
 
-const MISTRAL_ID = /^[a-zA-Z0-9]{9}$/;
-
-/** A call id Mistral takes: the id itself when it fits, else nine characters made from it. */
-function mistralId(id: string): string {
-  if (MISTRAL_ID.test(id)) return id;
-  let hash = 0;
-  for (const char of id) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
-  return `c${hash.toString(36).padStart(8, "0")}`.slice(0, 9);
-}
-
-function chatMessages(request: ChatRequest, names: ToolNames, dialect: Dialect): Json[] {
-  const idOf = dialect.mistralTools ? mistralId : (id: string) => id;
-  const toolOf = new Map<string, string>();
+function chatMessages(request: ChatRequest, names: ToolNames): Json[] {
+  const known = new Set<string>();
   const out: Json[] = [];
   const user = (text: string) => {
     const last = out.at(-1);
@@ -372,13 +357,12 @@ function chatMessages(request: ChatRequest, names: ToolNames, dialect: Dialect):
   for (const message of request.messages) {
     if (message.role === "user") user(message.text);
     else if (message.role === "assistant") {
-      for (const call of message.calls) toolOf.set(call.id, names.safe(call.name));
-      out.push(assistantMessage(message, names, idOf));
-    } else if (toolOf.has(message.callId)) {
+      for (const call of message.calls) known.add(call.id);
+      out.push(assistantMessage(message, names));
+    } else if (known.has(message.callId)) {
       out.push({
         role: "tool",
-        tool_call_id: idOf(message.callId),
-        ...(dialect.mistralTools ? { name: toolOf.get(message.callId) } : {}),
+        tool_call_id: message.callId,
         content: resultText(message),
       });
     } else user(orphanResult(message));
@@ -389,7 +373,6 @@ function chatMessages(request: ChatRequest, names: ToolNames, dialect: Dialect):
 function assistantMessage(
   message: Extract<ChatMessage, { role: "assistant" }>,
   names: ToolNames,
-  idOf: (id: string) => string,
 ): Json {
   const own = message.raw?.[0];
   if (isRecord(own) && isRecord(own[RAW_KEY])) return own[RAW_KEY];
@@ -399,7 +382,7 @@ function assistantMessage(
     ...(message.calls.length > 0
       ? {
           tool_calls: message.calls.map((call) => ({
-            id: idOf(call.id),
+            id: call.id,
             type: "function",
             function: { name: names.safe(call.name), arguments: JSON.stringify(call.args) },
           })),
@@ -431,12 +414,12 @@ function readCalls(
   return { calls, toolCalls };
 }
 
-function chatModel(context: ModelContext, server: Server, dialect: Dialect): ChatModel {
+function chatModel(context: ModelContext, server: Server): ChatModel {
   const { model } = context;
 
   async function next(request: ChatRequest): Promise<ChatReply> {
     const names = toolNames(request.tools);
-    const messages = chatMessages(request, names, dialect);
+    const messages = chatMessages(request, names);
     const body: Json = {
       model: server.id,
       messages,
@@ -517,11 +500,11 @@ export function chatCompletions(options: ChatCompletionsOptions = {}): ModelProv
   return {
     text(context) {
       const at = server(context);
-      return at && textModel(context, at, dialect);
+      return at && textModel(context, at);
     },
     chat(context) {
       const at = server(context);
-      return at && chatModel(context, at, dialect);
+      return at && chatModel(context, at);
     },
   };
 }

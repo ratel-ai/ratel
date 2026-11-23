@@ -143,9 +143,11 @@ async function checkDecision(): Promise<void> {
     ],
   );
   const verdict = verdicts?.[0];
-  // Below its threshold the judge abstains, and its leaning is the runner-up.
+  // Below its threshold the judge abstains, and its leaning is the runner-up: the vendor answered,
+  // but a feature would leave this one undecided.
   const leaning = verdict?.entryId || verdict?.runnerUp;
-  check("decision", leaning === "refund_payment", verdict ?? "no verdict");
+  const step = verdict && !verdict.entryId ? "decision (undecided, below its threshold)" : "decision";
+  check(step, leaning === "refund_payment", verdict ?? "no verdict");
 }
 
 const text = models.text("workflow_label");

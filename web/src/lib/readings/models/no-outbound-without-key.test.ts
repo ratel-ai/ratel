@@ -27,7 +27,7 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
     { MODEL_PROVIDER: "custom", MODEL_BASE_URL: "http://localhost:8000/v1" },
     "production",
   ],
-  ...["openai", "mistral", "gcp", "bedrock", "ollama", "llama.cpp", "vllm", "litellm"].map(
+  ...["openai", "gcp", "bedrock", "ollama", "llama.cpp", "vllm", "litellm"].map(
     (name): [string, Record<string, string>, string] => [
       `${name} named, only a Claude key present`,
       { MODEL_PROVIDER: name, ANTHROPIC_API_KEY: "k", MODEL_STANDARD: "m" },
@@ -36,7 +36,7 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
   ),
   [
     "a hosted vendor at another address, only its own key present",
-    { MODEL_PROVIDER: "mistral", MISTRAL_API_KEY: "k", MODEL_BASE_URL: "https://elsewhere.test" },
+    { MODEL_PROVIDER: "openai", OPENAI_API_KEY: "k", MODEL_BASE_URL: "https://elsewhere.test" },
     "production",
   ],
   ["fake in production", { MODEL_PROVIDER: "fake" }, "production"],

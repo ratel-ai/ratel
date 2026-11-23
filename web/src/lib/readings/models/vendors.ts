@@ -17,7 +17,6 @@ type VendorKeys = Pick<Config, "openai" | "vendors">;
 export type VendorName =
   | "claude"
   | "openai"
-  | "mistral"
   | "gcp"
   | "bedrock"
   | "ollama"
@@ -71,22 +70,6 @@ export const VENDORS: Readonly<Record<VendorName, Vendor>> = {
     models: { deep: "gpt-6.2-astra", standard: "gpt-6.2-sol", fast: "gpt-6-luna" },
     replays: /^(gpt-|chatgpt-|o\d)/i,
     provider: "openai",
-  },
-  // https://docs.mistral.ai/models (checked 2026-11-23). Medium is deprecated in favour of
-  // Large 4, which is why Large serves two tiers.
-  mistral: {
-    name: "mistral",
-    label: "Mistral",
-    hosted: true,
-    baseUrl: "https://api.mistral.ai/v1",
-    key: (config) => config.vendors.mistralApiKey,
-    models: {
-      deep: "mistral-large-latest",
-      standard: "mistral-large-latest",
-      fast: "mistral-small-latest",
-    },
-    replays: /^(mistral|ministral|magistral|codestral|devstral)-/i,
-    provider: "mistral_ai",
   },
   gcp: {
     name: "gcp",
