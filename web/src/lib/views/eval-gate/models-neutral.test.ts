@@ -204,6 +204,8 @@ test("a verdict is read out of words and a code fence; an answer without one is 
   answers.push(
     completion({ content: 'Here you go:\n```json\n{"pass": false}\n```' }),
     completion({ content: '{"verdict":"yes"}' }),
+    completion({ content: '{"verdict":"yes"}' }),
+    completion({ content: '{"verdict":"yes"}' }),
   );
   const judge = resolve().judge;
   assert.equal((await judge?.judge({ criteria: "c", run: "r" }))?.pass, false);

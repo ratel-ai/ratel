@@ -182,6 +182,116 @@ test("a server that refuses json_schema is asked for a JSON object, then by prom
   assert.equal(seen[3].body.response_format, undefined);
 });
 
+test("a server that takes a schema and ignores it is asked again in words, and both calls count", async () => {
+  const { seen, fetchImpl } = server(
+    completion({ content: "Paris is in France." }),
+    completion({ content: '{"landmark":"Eiffel Tower"}' }),
+    completion({ content: '{"name":"x"}' }),
+    completion({ content: '{"name":"y"}' }),
+  );
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  const reply = await model.complete(request);
+  assert.equal(reply.text, '{"name":"x"}');
+  // Three calls of 12 and 3 tokens.
+  assert.deepEqual(reply.usage, { inputTokens: 36, outputTokens: 9 });
+  assert.equal((seen[0].body.response_format as { type: string }).type, "json_schema");
+  assert.deepEqual(seen[1].body.response_format, { type: "json_object" });
+  assert.equal(seen[2].body.response_format, undefined);
+
+  // What worked is remembered.
+  assert.equal((await model.complete(request)).text, '{"name":"y"}');
+  assert.equal(seen.length, 4);
+});
+
+test("an answer cut off, refused, or that never fits is handed back as it is", async () => {
+  const ask = (...responses: Response[]) => {
+    const { seen, fetchImpl } = server(...responses);
+    return textModel(fetchImpl)
+      .complete({ system: "s", user: "u", maxTokens: 10, schema: SCHEMA })
+      .then((reply) => ({ reply, calls: seen.length }));
+  };
+  const cut = await ask(completion({ content: '{"na' }, { finish: "length" }));
+  assert.deepEqual([cut.reply.stop, cut.calls], ["cut_off", 1]);
+  const refused = await ask(completion({ content: "" }, { finish: "content_filter" }));
+  assert.deepEqual([refused.reply.stop, refused.calls], ["refused", 1]);
+  const never = await ask(
+    completion({ content: "no" }),
+    completion({ content: "no" }),
+    completion({ content: "still no" }),
+  );
+  assert.deepEqual([never.reply.text, never.calls], ["still no", 3]);
+});
+
+test("an answer in a code fence or in words is handed back as its JSON; plain JSON as it was written", async () => {
+  for (const [content, text] of [
+    ['```json\n{"name":"x"}\n```', '{"name":"x"}'],
+    // A fence a server's schema support left open.
+    ['```json\n{"name":"x"}', '{"name":"x"}'],
+    ['Here it is: {"name":"x"}', '{"name":"x"}'],
+    ['{ "name": "x" }\n', '{ "name": "x" }\n'],
+  ]) {
+    const { seen, fetchImpl } = server(completion({ content }));
+    const reply = await textModel(fetchImpl).complete({
+      system: "s",
+      user: "u",
+      maxTokens: 10,
+      schema: SCHEMA,
+    });
+    assert.equal(reply.text, text);
+    assert.equal(seen.length, 1);
+  }
+});
+
+test("thinking written into the answer is taken out of it, streamed or not", async () => {
+  const cases: Array<[string, string]> = [
+    ["<reasoning>Hmm.</reasoning>Paris.", "Paris."],
+    ["<think>\nHmm.\n</think>\n\nParis.", "Paris."],
+    ["<reasoning>One</reasoning><reasoning> two.</reasoning>Paris.", "Paris."],
+    // Only what comes first is thinking; the same words later are the answer's.
+    ["Use <think>tags</think>.", "Use <think>tags</think>."],
+    // Cut off while it was still thinking: there is no answer.
+    ["<think>Hmm", ""],
+  ];
+  for (const [content, text] of cases) {
+    const plain = await textModel(server(completion({ content })).fetchImpl).complete({
+      system: "s",
+      user: "u",
+      maxTokens: 10,
+    });
+    assert.equal(plain.text, text);
+    const chunks = sse({ choices: [{ delta: { content }, finish_reason: "stop" }] });
+    const streamed = await textModel(server(chunks).fetchImpl).complete({
+      system: "s",
+      user: "u",
+      maxTokens: 10,
+      longOutput: true,
+    });
+    assert.equal(streamed.text, text);
+  }
+});
+
+test("a chat turn's thinking is not its text, and goes back with the turn", async () => {
+  const content = "<reasoning>Look it up.</reasoning>";
+  const { fetchImpl } = server(
+    completion({
+      content,
+      tool_calls: [
+        { id: "c1", type: "function", function: { name: "crm_lookup_customer", arguments: "{}" } },
+      ],
+    }),
+  );
+  const reply = await chatModel(fetchImpl).next({
+    tools: TOOLS,
+    messages: [{ role: "user", text: "go" }],
+    maxTokens: 100,
+  });
+  assert.equal(reply.text, "");
+  assert.equal(reply.calls.length, 1);
+  const raw = reply.raw[0] as { chatCompletions: { content: string } };
+  assert.equal(raw.chatCompletions.content, content);
+});
+
 test("a 400 without a schema is the request's own error: thrown, not retried", async () => {
   const { seen, fetchImpl } = server(json({ error: { message: "context too long" } }, 400));
   await assert.rejects(

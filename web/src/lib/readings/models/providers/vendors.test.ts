@@ -435,7 +435,7 @@ test("bedrock: another model by name, signed the same way over the body that is 
   const seen = await on([completion({ content: "Hello" })], async () => {
     const model = models.text(
       "workflow_label",
-      at({ ...BEDROCK, MODEL_STANDARD: "openai.gpt-oss-120b" }),
+      at({ ...BEDROCK, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }),
     );
     assert.equal(model?.provider, "aws.bedrock");
     await model?.complete(ASK);
@@ -446,14 +446,25 @@ test("bedrock: another model by name, signed the same way over the body that is 
   );
   assert.match(seen[0].headers.authorization, /^AWS4-HMAC-SHA256 .*SignedHeaders=.*host/);
   assert.ok(seen[0].headers["x-amz-date"]);
-  assert.equal(seen[0].body.model, "openai.gpt-oss-120b");
+  assert.equal(seen[0].body.model, "openai.gpt-oss-120b-1:0");
+});
+
+test("bedrock: an OpenAI model thinks within its cap, so a small cap is raised", async () => {
+  const seen = await on([completion({ content: "Hello" })], async () => {
+    await models
+      .text("workflow_label", at({ ...BEDROCK, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }))
+      ?.complete(ASK);
+  });
+  assert.equal(seen[0].body.max_completion_tokens, 4096);
+  assert.equal(seen[0].body.max_tokens, undefined);
+  assert.equal(seen[0].body.reasoning_effort, "low");
 });
 
 test("bedrock: a Bedrock API key signs in place of the AWS login", async () => {
   const env = { ...BEDROCK, AWS_BEARER_TOKEN_BEDROCK: "bedrock-key" };
   const seen = await on([completion({ content: "Hello" })], async () => {
     await models
-      .text("workflow_label", at({ ...env, MODEL_STANDARD: "openai.gpt-oss-120b" }))
+      .text("workflow_label", at({ ...env, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }))
       ?.complete(ASK);
   });
   assert.equal(seen[0].headers.authorization, "Bearer bedrock-key");

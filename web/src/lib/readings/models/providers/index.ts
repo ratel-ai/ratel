@@ -28,6 +28,9 @@ const GEMINI: Dialect = {
   modelId: (model) => (model.includes("/") ? model : `google/${model}`),
 };
 
+/** OpenAI's models on Bedrock, the open-weight ones included: they think within their cap. */
+const BEDROCK: Dialect = { reasons: (model) => /^openai\./i.test(model) };
+
 /** A cloud answers Claude models in Claude's own format, and every other model as chat completions. */
 function cloud(
   claude: ModelProviderAdapter,
@@ -68,6 +71,7 @@ export function vendorAdapters(
       claudeOn(host),
       chatCompletions({
         ...http,
+        dialect: BEDROCK,
         authorize: ({ vendor }) =>
           awsSigned({ region: vendor.region ?? "", apiKey: vendor.apiKey, keys: awsKeys }),
       }),

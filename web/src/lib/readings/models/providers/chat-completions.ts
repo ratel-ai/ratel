@@ -1,4 +1,5 @@
 import type { Config } from "@/config";
+import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import type {
   ChatCall,
   ChatMessage,
@@ -46,8 +47,9 @@ import {
  *
  * Servers differ, so the adapter asks for the most and steps down:
  *   - JSON output: by schema (`json_schema`, not strict), then as a JSON object, then by the
- *     prompt alone. A 400 or 422 to a request that carried a `response_format` moves one step
- *     down, and what worked is remembered for that server and model.
+ *     prompt alone. A 400 or 422 to a request that carried a `response_format`, or an answer that
+ *     ignored it, moves one step down, and what worked is remembered for that server and model.
+ *   - Thinking a server writes into the answer (`<think>`, `<reasoning>`) is taken out of it.
  *   - Effort goes only to a model that reasons: one the dialect names, or one in
  *     `MODEL_REASONING_MODELS` (comma-separated id prefixes).
  *   - Usage a server does not report is estimated, so a budget still moves.
@@ -96,8 +98,16 @@ function stopOf(finish: unknown, refusal: unknown): ModelStop {
   return finish === "length" ? "cut_off" : "end";
 }
 
-/** A message's text: a string, or the text parts of a content array. */
+/** Thinking at the start of an answer, which some servers write into it; unclosed when it was cut off there. */
+const THINKING = /^(?:\s*<(think|reasoning)>[\s\S]*?(?:<\/\1>|$))+\s*/;
+
+/** A message's answer: its text without the thinking in front of it. */
 function textOf(content: unknown): string {
+  return contentOf(content).replace(THINKING, "");
+}
+
+/** A message's text: a string, or the text parts of a content array. */
+function contentOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
@@ -147,7 +157,7 @@ function readStream(text: string): Completion {
     if (!choice) continue;
     if (choice.finish_reason) finish = choice.finish_reason;
     const delta = isRecord(choice.delta) ? choice.delta : {};
-    content += textOf(delta.content);
+    content += contentOf(delta.content);
     if (typeof delta.refusal === "string") refusal += delta.refusal;
   }
   return {
@@ -209,6 +219,40 @@ function textMessages(request: TextRequest, mode: JsonMode | null): Json[] {
   ];
 }
 
+/** The object in an answer, out of a code fence or words around it; null when there is none. */
+function objectIn(text: string): Json | null {
+  try {
+    const answer: unknown = extractModelJsonObject(text);
+    return isRecord(answer) ? answer : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether an answer has what the schema requires: enough to see the schema was not ignored. */
+function fits(answer: Json | null, schema: Json): boolean {
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  return answer !== null && required.every((key) => typeof key === "string" && key in answer);
+}
+
+function isJson(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function addUsage(a: ModelUsage, b: ModelUsage): ModelUsage {
+  const cached = (a.cachedTokens ?? 0) + (b.cachedTokens ?? 0);
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    ...(cached > 0 ? { cachedTokens: cached } : {}),
+  };
+}
+
 function responseFormat(schema: Json, mode: JsonMode): Json {
   if (mode === "json_schema")
     return {
@@ -249,15 +293,28 @@ function textModel(context: ModelContext, server: Server, dialect: Dialect): Tex
     };
   }
 
-  /** With a schema: from what this server last took, one step down on each refusal of the format. */
-  async function withSchema(request: TextRequest): Promise<TextReply> {
+  /**
+   * With a schema: from what this server last took, one step down each time it refuses the format
+   * or answers without it. An answer left behind is paid for, so its tokens count.
+   */
+  async function withSchema(request: TextRequest, schema: Json): Promise<TextReply> {
     let index = JSON_LADDER.indexOf(jsonModes.get(server.key) ?? "json_schema");
+    let spent: ModelUsage | undefined;
     for (;;) {
       const mode = JSON_LADDER[index];
       try {
         const reply = await ask(request, mode);
-        jsonModes.set(server.key, mode);
-        return reply;
+        const usage = spent ? addUsage(spent, reply.usage) : reply.usage;
+        const answer = reply.stop === "end" ? objectIn(reply.text) : null;
+        if (mode !== "prompt" && reply.stop === "end" && !fits(answer, schema)) {
+          spent = usage;
+          index += 1;
+          continue;
+        }
+        if (reply.stop === "end") jsonModes.set(server.key, mode);
+        // A feature that asked for JSON gets JSON, whatever the model put around it.
+        const text = answer && !isJson(reply.text) ? JSON.stringify(answer) : reply.text;
+        return { ...reply, text, usage };
       } catch (error) {
         const refusedFormat =
           error instanceof ModelHttpError && (error.status === 400 || error.status === 422);
@@ -279,7 +336,7 @@ function textModel(context: ModelContext, server: Server, dialect: Dialect): Tex
           payer: context.payer,
           content: textContent(request),
         },
-        () => (request.schema ? withSchema(request) : ask(request, null)),
+        () => (request.schema ? withSchema(request, request.schema) : ask(request, null)),
         (reply) => reply.usage,
       );
     },

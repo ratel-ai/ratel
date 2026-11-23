@@ -146,7 +146,10 @@ test("a fix draft runs on another provider, end to end", async () => {
       JSON.stringify({
         model: "llama-3.3-70b",
         choices: [
-          { message: { role: "assistant", content: '{"proposals":[]}' }, finish_reason: "stop" },
+          {
+            message: { role: "assistant", content: '{"diagnosis":{},"proposals":[]}' },
+            finish_reason: "stop",
+          },
         ],
         usage: { prompt_tokens: 50, completion_tokens: 9 },
       }),
@@ -162,7 +165,7 @@ test("a fix draft runs on another provider, end to end", async () => {
       maxTokens: 1024,
     });
     assert.deepEqual(reply, {
-      text: '{"proposals":[]}',
+      text: '{"diagnosis":{},"proposals":[]}',
       usage: { inputTokens: 50, outputTokens: 9 },
     });
   } finally {

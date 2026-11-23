@@ -60,7 +60,7 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | all three |
 | `mistral` | `MISTRAL_API_KEY` | `mistral-large-latest` · `mistral-large-latest` · `mistral-small-latest` | no |
 | `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | no |
-| `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | no |
+| `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | `openai.gpt-oss-120b-1:0`, `qwen.qwen3-32b-v1:0`; Claude not yet (no access in the account) |
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |
 | `llama.cpp` | `MODEL_BASE_URL`; start it with `--jinja` for tools | name one | `qwen2.5:0.5b` |
 | `vllm` | `MODEL_BASE_URL`; its tool flags for tools | name one | no |
@@ -80,7 +80,9 @@ The selection fails closed: a named vendor never falls back to another, a vendor
 from a key, and nothing defaults to localhost. `no-outbound-without-key.test.ts` holds the table.
 
 What the adapters do where vendors differ: chat completions asks for JSON by schema, then as a JSON
-object, then by the prompt alone, and remembers what a server took. A model that thinks (the
+object, then by the prompt alone, stepping down when a server refuses the format or ignores it, and
+remembers what a server took. A feature gets the JSON alone, and an answer without the thinking some
+servers write in front of it. A model that thinks (the
 vendor's, or one named in `MODEL_REASONING_MODELS`) gets its effort and at least 4,096 tokens, since
 its thinking comes out of the same cap. The Responses API is asked to store nothing. Usage a server
 does not report is estimated. One call, with its retries, is one spend line.
