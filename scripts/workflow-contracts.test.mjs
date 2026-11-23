@@ -39,6 +39,16 @@ test("platform-compose scans the image it built, pinned by digest", () => {
   assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
 });
 
+test("platform-compose builds from source through the override", () => {
+  assert.match(jobBody(ciWorkflow, "platform-compose"), /COMPOSE_FILE: docker-compose\.yml:docker-compose\.build\.yml/);
+});
+
+test("image.yml publishes the app image and the demo image with the same tags", () => {
+  const image = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
+  assert.match(image, /\{ target: oss, image: ratelai\/ratel, /);
+  assert.match(image, /\{ target: demo, image: ratelai\/ratel-demo, /);
+});
+
 // ci-gate is the only required check, so a job missing from its `needs` cannot block a merge.
 test("ci-gate needs every other job", () => {
   const jobs = [...ciWorkflow.matchAll(/^ {2}([a-z][a-z0-9-]*):\s*$/gm)]

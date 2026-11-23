@@ -126,6 +126,7 @@ test("deploy.sh, its modules and its test set deploy and platform", () => {
 });
 
 test("the Caddy overlay sets compose and platform", () => {
+  assertTrue(on(["docker-compose.build.yml"]), ["compose", "platform"]);
   assertTrue(on(["docker-compose.caddy.yml"]), ["compose", "platform"]);
   assertFalse(on(["docker-compose.caddy.yml"]), ["deploy", "lockfiles"]);
 });

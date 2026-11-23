@@ -37,7 +37,7 @@ const sh = async (body, { args = [], env = {}, bin = {} } = {}) => {
   }
 };
 
-const FIELDS = ["COMMAND", "NAME", "CLOUD", "REGION", "SIZE", "REF", "ACCESS", "DOMAIN", "ALLOW_CIDRS", "IAC", "ASSUME_YES"];
+const FIELDS = ["COMMAND", "NAME", "CLOUD", "REGION", "SIZE", "VERSION", "REF", "ACCESS", "DOMAIN", "ALLOW_CIDRS", "IAC", "ASSUME_YES"];
 const parsed = async (args) => {
   const result = await sh(`parse_args "$@"\n${FIELDS.map((f) => `printf '%s\\n' "$${f}"`).join("\n")}`, { args });
   if (result.code !== 0) return result;
@@ -52,6 +52,7 @@ test("parse_args defaults to up, the name ratel and interactive, and leaves the 
     CLOUD: "",
     REGION: "",
     SIZE: "",
+    VERSION: "",
     REF: "",
     ACCESS: "",
     DOMAIN: "",
@@ -71,7 +72,7 @@ test("parse_args reads every flag in both spellings, and --allow-cidr repeats", 
     "e2-standard-4",
     "--name",
     "ratel-eu",
-    "--ref=v1.2.3",
+    "--ref=feat/x",
     "--access",
     "public",
     "--domain",
@@ -89,7 +90,8 @@ test("parse_args reads every flag in both spellings, and --allow-cidr repeats", 
     CLOUD: "gcp",
     REGION: "europe-west1",
     SIZE: "e2-standard-4",
-    REF: "v1.2.3",
+    VERSION: "",
+    REF: "feat/x",
     ACCESS: "public",
     DOMAIN: "ratel.example.com",
     ALLOW_CIDRS: "10.0.0.0/8 192.168.1.0/24",
@@ -128,7 +130,50 @@ test("parse_args rejects bad values with exit 2", async () => {
   }
 });
 
-test("apply_defaults fills the public mode, main and each cloud's region and size", async () => {
+test("parse_args takes a release as --version or --ref vX.Y.Z, and not with a --ref", async () => {
+  for (const args of [["--version", "0.4.0"], ["--version=v0.4.0"], ["--ref", "v0.4.0"]]) {
+    const { values } = await parsed(args);
+    assert.deepEqual([values.VERSION, values.REF], ["0.4.0", ""], args.join(" "));
+  }
+  for (const args of [["--version", "main"], ["--version", "0.4;id"], ["--version", "0.4.0", "--ref", "main"]]) {
+    assert.equal((await parsed(args)).code, 2, args.join(" "));
+  }
+});
+
+// Docker Hub's tags, as curl would print them.
+const hubTags = (...names) => `echo '${JSON.stringify({ results: names.map((name) => ({ name })) })}'`;
+
+test("choose_version pins the highest published release, else builds main", async () => {
+  const choose = (curl, set = "") => sh(`${set}\nchoose_version\necho "$VERSION|$REF"`, { bin: { curl } });
+  assert.equal((await choose(hubTags("latest", "0.9.1", "0.10.0", "0.10", "0.11.0-rc.1"))).stdout.trim(), "0.10.0|");
+  assert.match((await choose(hubTags("edge"))).stdout, /\|main\n$/);
+  assert.equal((await choose("exit 7", "REF=feat/x")).stdout.trim(), "|feat/x");
+  assert.equal((await choose("exit 7", "VERSION=0.4.0")).stdout.trim(), "0.4.0|");
+  const down = await choose("exit 7");
+  assert.equal(down.code, 1);
+  assert.match(down.stderr, /--version/);
+});
+
+test("upgrade_target: flags win, a deployed branch stays, main and a release move to the latest", async () => {
+  const run = async (saved, given = "") => {
+    const body = `STATE="$HOME/s"; mkdir "$STATE"; printf '${saved}' >"$STATE/config"\n${given}\nupgrade_target\necho "$VERSION|$REF"`;
+    return (await sh(body, { bin: { curl: hubTags("0.5.0") } })).stdout.trim();
+  };
+  assert.equal(await run("REF=main\\n"), "0.5.0|");
+  assert.equal(await run("VERSION=0.4.0\\nREF=\\n"), "0.5.0|");
+  assert.equal(await run("REF=feat/x\\n"), "|feat/x");
+  assert.equal(await run("REF=feat/x\\n", "VERSION=0.4.0"), "0.4.0|");
+  assert.equal(await run("VERSION=0.4.0\\n", "REF=feat/x"), "|feat/x");
+});
+
+test("install_command passes the version, or the ref, to the matching install.sh", async () => {
+  const cmd = async (set) => (await sh(`${set}\ninstall_command`)).stdout.trim();
+  const raw = "https://raw.githubusercontent.com/ratel-ai/ratel";
+  assert.equal(await cmd("VERSION=0.4.0"), `curl -fsSL '${raw}/main/install.sh' | sudo sh -s -- --yes --version '0.4.0' --dir /opt/ratel`);
+  assert.equal(await cmd("REF=feat/x"), `curl -fsSL '${raw}/feat/x/install.sh' | sudo sh -s -- --yes --ref 'feat/x' --dir /opt/ratel`);
+});
+
+test("apply_defaults fills the public mode and each cloud's region and size", async () => {
   const expected = {
     aws: "us-east-1|t3.large",
     gcp: "us-central1|e2-standard-2",
@@ -137,11 +182,11 @@ test("apply_defaults fills the public mode, main and each cloud's region and siz
     hetzner: "nbg1|cx33",
   };
   for (const cloud of CLOUDS) {
-    const { stdout } = await sh(`CLOUD=${cloud}\napply_defaults\nprintf '%s|%s|%s|%s\\n' "$ACCESS" "$REF" "$REGION" "$SIZE"`);
-    assert.equal(stdout.trim(), `public|main|${expected[cloud]}`, cloud);
+    const { stdout } = await sh(`CLOUD=${cloud}\napply_defaults\nprintf '%s|%s|%s\\n' "$ACCESS" "$REGION" "$SIZE"`);
+    assert.equal(stdout.trim(), `public|${expected[cloud]}`, cloud);
   }
-  const { stdout } = await sh('CLOUD=aws REGION=eu-west-1 SIZE=m7i.large ACCESS=private REF=v1\napply_defaults\necho "$ACCESS|$REF|$REGION|$SIZE"');
-  assert.equal(stdout.trim(), "private|v1|eu-west-1|m7i.large");
+  const { stdout } = await sh('CLOUD=aws REGION=eu-west-1 SIZE=m7i.large ACCESS=private REF=v1\napply_defaults\necho "$ACCESS|$REGION|$SIZE"');
+  assert.equal(stdout.trim(), "private|eu-west-1|m7i.large");
 });
 
 test("apply_defaults takes the region the cloud CLI is set to", async () => {
@@ -325,6 +370,16 @@ test("write_tfvars opens 80 and 443 to all and 22 to the caller's IP only, in pu
   assert.match(vars.ssh_public_key, /^"ssh-ed25519 /);
 });
 
+test("write_tfvars passes the version, and the same release as a ref for an older module", async () => {
+  const release = await tfvars("ACCESS=private REF= VERSION=0.4.0");
+  assert.equal(release.ratel_version, '"0.4.0"');
+  assert.equal(release.ref, '"v0.4.0"');
+  const branch = await tfvars("ACCESS=private REF=feat/x");
+  assert.equal(branch.ratel_version, '""');
+  assert.equal(branch.ref, '"feat/x"');
+  assert.match(branch.install_url, /\/feat\/x\/install\.sh"$/);
+});
+
 test("write_tfvars opens 80 and 443 to --allow-cidr only, with Caddy's own CA, in public mode", async () => {
   const vars = await tfvars('ACCESS=public ALLOW_CIDRS="10.0.0.0/8 192.168.0.0/16"');
   assert.equal(vars.web_cidrs, '["10.0.0.0/8", "192.168.0.0/16"]');
@@ -387,7 +442,7 @@ test("plan_summary prints the resource lines and the totals of a plan", async ()
 });
 
 // The contract between deploy.sh and the modules: the same inputs and outputs in each cloud.
-const COMMON_VARIABLES = ["name", "region", "size", "ssh_public_key", "ssh_cidrs", "web_cidrs", "access", "domain", "tls", "ref", "install_url"];
+const COMMON_VARIABLES = ["name", "region", "size", "ssh_public_key", "ssh_cidrs", "web_cidrs", "access", "domain", "tls", "ratel_version", "ref", "install_url"];
 const OUTPUTS = ["public_ip", "ssh_user", "domain", "url", "password"];
 const declared = (dir, kind) =>
   readdirSync(dir)
@@ -424,7 +479,7 @@ test("every module runs on Terraform 1.5.7, the last version GCP Infrastructure 
 
 test("the shared cloud-init checks every value that reaches the install command", () => {
   const main = readFileSync(join(MODULES, "cloud-init", "main.tf"), "utf8");
-  for (const name of ["domain", "ref", "install_url"]) {
+  for (const name of ["domain", "ratel_version", "ref", "install_url"]) {
     const block = main.slice(main.indexOf(`variable "${name}"`), main.indexOf("\n}\n", main.indexOf(`variable "${name}"`)));
     assert.match(block, /validation \{\n\s+condition\s+= can\(regex\(/, name);
   }

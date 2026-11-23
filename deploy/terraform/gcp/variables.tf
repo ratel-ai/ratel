@@ -58,10 +58,16 @@ variable "tls" {
   }
 }
 
-variable "ref" {
-  description = "The branch, tag or commit that install.sh checks out."
+variable "ratel_version" {
+  description = "The release to run: X.Y.Z, latest or edge. Empty: ref, else latest."
   type        = string
-  default     = "main"
+  default     = ""
+}
+
+variable "ref" {
+  description = "A branch or commit to build from source, when ratel_version is empty."
+  type        = string
+  default     = ""
 }
 
 variable "install_url" {

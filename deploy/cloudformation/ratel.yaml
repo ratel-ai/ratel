@@ -9,7 +9,7 @@ Metadata:
       - Label: { default: Access }
         Parameters: [AccessMode, LoginPassword, Domain, WebCidr]
       - Label: { default: VM }
-        Parameters: [InstanceType, KeyName, SshCidr, Ref]
+        Parameters: [InstanceType, KeyName, SshCidr, Version, Ref]
 
 Parameters:
   AccessMode:
@@ -48,12 +48,18 @@ Parameters:
     Default: ""
     AllowedPattern: "^$|^[0-9]{1,3}(\\.[0-9]{1,3}){3}/[0-9]{1,2}$"
     Description: "Who reaches SSH (22), for example your IP with /32. Empty: SSH stays closed."
+  Version:
+    Type: String
+    Default: latest
+    AllowedPattern: "^(latest|edge|[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)?)$"
+    ConstraintDescription: X.Y.Z, latest or edge
+    Description: "The Ratel release to run: X.Y.Z, or latest. The VM pins what latest is at its first boot."
   Ref:
     Type: String
-    Default: main
-    AllowedPattern: "^(?!.*\\.\\.)[A-Za-z0-9._][A-Za-z0-9._/-]*$"
+    Default: ""
+    AllowedPattern: "^$|^(?!.*\\.\\.)[A-Za-z0-9._][A-Za-z0-9._/-]*$"
     ConstraintDescription: letters, digits and . _ / - with no ..
-    Description: The branch, tag or commit that install.sh checks out.
+    Description: A branch or commit to build from source instead of Version. Empty for the release.
   ImageId:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
@@ -105,16 +111,21 @@ Resources:
             set -eu
             export HOME=/root
             access='${AccessMode}'
-            args="--access private"
+            access_args="--access private"
+            ref='${Ref}'
+            branch=main
+            [ -z "$ref" ] || branch=$ref
+            args="--version ${Version}"
+            [ -z "$ref" ] || args="--ref $ref"
             if [ "$access" = public ]; then
               apt-get update -q && apt-get install -yq apache2-utils
               password=$(echo '${PasswordB64}' | base64 -d)
               hash=$(htpasswd -nbBC 12 ratel "$password" | cut -d: -f2 | sed 's/^[$]2y[$]/$2a$/')
-              args="--access public --tls ${Tls} --auth-hash $hash"
-              [ -z '${Domain}' ] || args="$args --domain ${Domain}"
+              access_args="--access public --tls ${Tls} --auth-hash $hash"
+              [ -z '${Domain}' ] || access_args="$access_args --domain ${Domain}"
             fi
             # shellcheck disable=SC2086
-            curl -fsSL "https://raw.githubusercontent.com/ratel-ai/ratel/${Ref}/install.sh" | sh -s -- --yes --ref '${Ref}' --dir /opt/ratel $args
+            curl -fsSL "https://raw.githubusercontent.com/ratel-ai/ratel/$branch/install.sh" | sh -s -- --yes $args --dir /opt/ratel $access_args
           - PasswordB64: { "Fn::Base64": !Ref LoginPassword }
             Tls: !If [WebOpen, acme, internal]
 

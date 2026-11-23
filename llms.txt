@@ -29,7 +29,7 @@ By hand, the same without the secrets:
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
 cd ratel
-docker compose up -d --build --wait
+docker compose up -d --wait
 ```
 
 The console is then on port 3000 of that machine. `--wait` returns once the application is healthy, so its exit code is reliable. The command is safe to run again, and migrations run on boot.

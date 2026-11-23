@@ -224,6 +224,7 @@ const CLAIMS = [
   "web/Dockerfile",
   "install.sh",
   "docker-compose.caddy.yml",
+  "docker-compose.build.yml",
   "deploy.sh",
   "deploy/**",
   ...Object.keys(SCRIPT_OWNERS),
@@ -288,6 +289,7 @@ function applyFile(result, file) {
     file === "web/Dockerfile" ||
     file === "install.sh" ||
     file === "docker-compose.caddy.yml" ||
+    file === "docker-compose.build.yml" ||
     file === "scripts/link-ee.mjs"
   ) {
     merge(result, ["compose", "platform"]);
