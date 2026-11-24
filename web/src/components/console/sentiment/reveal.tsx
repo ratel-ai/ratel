@@ -8,7 +8,8 @@ import { type ReactNode, useRef, useState } from "react";
  * state of which groups are open (`useReveal`), and the wrapper that grows a
  * cell's content from no height to its own and back (`Reveal`). Shared by the
  * tables grouped by reason (Root cause analysis) and by group
- * (Hallucinations).
+ * (Hallucinations); `Grow` alone is how a long list's next rows come in
+ * (`turn-panel/SeeMoreList`).
  */
 
 /** How long a group folds or opens, in ms; the CSS uses the same. */
@@ -49,6 +50,20 @@ export function useReveal(defaultOpen: boolean) {
   return { isOpen, isMounted, toggle };
 }
 
+/** Content grown from no height to its own (and back), fading in and out. */
+export function Grow({ shown, children }: { shown: boolean; children: ReactNode }) {
+  return (
+    <div
+      className={cn(
+        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+        shown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+      )}
+    >
+      <div className="min-h-0 overflow-hidden">{children}</div>
+    </div>
+  );
+}
+
 /** A cell's content, grown from no height to its own (and back) as its line opens and closes. */
 export function Reveal({
   shown,
@@ -60,17 +75,10 @@ export function Reveal({
   children: ReactNode;
 }) {
   return (
-    <div
-      className={cn(
-        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
-        shown ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-      )}
-    >
-      <div className="min-h-0 overflow-hidden">
-        <div className={cn("flex min-h-9 items-center", align === "right" && "justify-end")}>
-          {children}
-        </div>
+    <Grow shown={shown}>
+      <div className={cn("flex min-h-9 items-center", align === "right" && "justify-end")}>
+        {children}
       </div>
-    </div>
+    </Grow>
   );
 }

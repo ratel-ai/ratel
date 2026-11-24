@@ -1,9 +1,9 @@
 "use client";
 
 import { Button } from "@ratel/design-system/button";
-import { cn } from "@ratel/design-system/cn";
 import { ChevronDown } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { Grow } from "@/components/console/sentiment/reveal";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { batches, nextCount, SEE_MORE_STEP } from "@/lib/views/traces/see-more";
 
@@ -62,14 +62,9 @@ function Batch({ animate, children }: { animate: boolean; children: ReactNode })
   }, [open]);
   return (
     <li className="list-none">
-      <div
-        className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-200 ease-enter motion-reduce:transition-none",
-          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
-        )}
-      >
-        <ul className="min-h-0 overflow-hidden">{children}</ul>
-      </div>
+      <Grow shown={open}>
+        <ul>{children}</ul>
+      </Grow>
     </li>
   );
 }

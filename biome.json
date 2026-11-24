@@ -1371,8 +1371,7 @@
         "web/src/lib/views/health/hallucinations/turn-markers.ts",
         "web/src/app/(console)/project/\\[projectId\\]/health/hallucinations/loading.tsx",
         "web/src/components/console/hallucinations/KindTable.tsx",
-        "web/src/components/console/hallucinations/copy.ts",
-        "web/src/components/console/sentiment/reveal.tsx"
+        "web/src/components/console/hallucinations/copy.ts"
       ],
       "linter": {
         "rules": {

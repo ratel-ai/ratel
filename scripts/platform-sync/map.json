@@ -2278,7 +2278,7 @@
     {"from": "apps/web/components/hallucinations/KindTable.tsx", "to": "web/src/components/console/hallucinations/KindTable.tsx", "mode": "copy"},
     {"from": "apps/web/components/hallucinations/copy.ts", "to": "web/src/components/console/hallucinations/copy.ts", "mode": "copy"},
     {"from": "apps/web/components/health/v2/StatusRing.tsx", "to": "web/src/components/console/health/v2/StatusRing.tsx", "mode": "owned", "$why": "changed here after ratel-cloud froze (2026-11-23): the pointed status reads in lower case; the ring's geometry, arcs and paint are the shared health/v2/ring.tsx"},
-    {"from": "apps/web/components/sentiment/reveal.tsx", "to": "web/src/components/console/sentiment/reveal.tsx", "mode": "copy"},
+    {"from": "apps/web/components/sentiment/reveal.tsx", "to": "web/src/components/console/sentiment/reveal.tsx", "mode": "owned", "$why": "changed here after ratel-cloud froze (2026-11-24): the grow animation is shared: Grow in reveal.tsx"},
     {"from": "Makefile", "mode": "excluded", "$why": "upstream's developer targets; this repository runs through pnpm scripts"}
   ]
 }
