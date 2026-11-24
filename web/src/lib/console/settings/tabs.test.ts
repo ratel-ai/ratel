@@ -9,7 +9,7 @@ import {
 } from "@/lib/console/settings/tabs";
 
 test("project settings tabs are URLs, with General matching its path exactly", () => {
-  const tabs = projectSettingsTabs("p 1", { notifications: false });
+  const tabs = projectSettingsTabs("p 1");
   assert.deepEqual(
     tabs.map((tab) => [tab.label, tab.href, tab.exact ?? false]),
     [
@@ -18,10 +18,6 @@ test("project settings tabs are URLs, with General matching its path exactly", (
       ["Developer", "/project/p%201/settings/developer", false],
       ["Danger zone", "/project/p%201/settings/danger", false],
     ],
-  );
-  assert.deepEqual(
-    projectSettingsTabs("p 1", { notifications: true }).map((tab) => tab.label),
-    ["General", "API keys", "Notifications", "Developer", "Danger zone"],
   );
   assert.equal(projectSettingsRoot("p 1"), "/project/p%201/settings");
 });
