@@ -40,6 +40,14 @@ edition lacks are not rendered; moved pages redirect.
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
+With `focusedConsole` on, Agent health is one page (the Health score, then the issues under the
+four categories it counts by) and Self-corrections is an item of its own in Insights:
+
+| Item | Answers | Contains |
+|---|---|---|
+| Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
+| Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
+
 ## Layout
 
 - **Inverted-L frame:** sidebar (240 px, 48 collapsed, a drawer on phones) and a 52 px page
