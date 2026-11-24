@@ -715,3 +715,47 @@ test("the shell's organization: the project's own, else the route's, else the ac
   assert.equal(pick("/organizations"), "acme", "with nothing else, the first");
   assert.equal(shellOrganization([], projects, "/org/acme", "acme"), undefined);
 });
+
+test("focusedConsole on: Self-corrections is an insight and Agent health has no sub-page", () => {
+  const items = consoleNav({ projectId: P1, additions: [], focusedConsole: true });
+  assert.deepEqual(
+    items.map(({ id, section, sectionLabel }) => `${id}|${section ?? ""}|${sectionLabel ?? ""}`),
+    [
+      "overview|group:monitor|Monitor",
+      "health|group:monitor|",
+      "traces|group:monitor|",
+      "tasks|group:insights|Insights",
+      "intents|group:insights|",
+      "self-corrections|group:insights|",
+      "improvements|group:improve|Improve",
+      "ship|group:ship|Ship",
+      "catalog|settings|",
+      "settings|settings|",
+    ],
+  );
+  assert.equal(items.find(({ id }) => id === "health")?.children, undefined);
+  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
+  assert.equal(activeNavItemId(`/project/${P1}/self-corrections`, items), "self-corrections");
+  assert.equal(
+    activeNavItemId(`/project/${P1}/health/self-corrections`, items),
+    "self-corrections",
+  );
+  assert.equal(activeNavItemId(`/project/${P1}/health/tasks`, items), "tasks");
+});
+
+test("the command menu finds Self-corrections by its keywords, flag off and on", () => {
+  for (const [focusedConsole, href] of [
+    [false, `/project/${P1}/health/self-corrections`],
+    [true, `/project/${P1}/self-corrections`],
+  ] as const) {
+    const entries = commandEntries({
+      items: consoleNav({ projectId: P1, additions: [], focusedConsole }),
+      projectId: P1,
+      projects: [],
+      pathname: `/project/${P1}`,
+    });
+    for (const word of ["apologies", "retries", "gave up"]) {
+      assert.equal(searchCommands(entries, word)[0]?.href, href, word);
+    }
+  }
+});
