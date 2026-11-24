@@ -835,7 +835,6 @@
         "web/src/components/console/home/**",
         "!web/src/components/console/home/OverviewPage.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/loading.tsx",
-        "web/src/app/(console)/project/\\[projectId\\]/dashboards/page.tsx",
         "web/src/lib/views/freshness/**",
         "!web/src/lib/views/freshness/load.ts",
         "!web/src/lib/views/freshness/load.integration.test.ts",

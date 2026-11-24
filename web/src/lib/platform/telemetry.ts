@@ -109,6 +109,7 @@ export const SERVER_EVENT_NAMES = [
   "agent_override_updated",
   "mcp_servers_viewed",
   "agents_viewed",
+  "dashboard_changed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];
