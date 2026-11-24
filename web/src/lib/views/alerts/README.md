@@ -27,6 +27,7 @@ widget's, without a grouping), an operator, a threshold and a window. Core-owned
 | `slack-message.ts` | the fire, recovery and test messages |
 | `webhook-post.ts` | one POST with a deadline and no redirect, on `node:https`: a `fetch` span carries the URL |
 | `format.ts`, `links.ts` | how an alert reads, and the pages' addresses; safe for the browser |
+| `preview.ts` | `loadAlertPreview`: the last 7 days for the form's chart |
 | `register.ts` | the `alerts_evaluate` before-step of the drain: evaluate, then deliver |
 
 Rules:

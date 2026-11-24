@@ -6,6 +6,7 @@ import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
 } from "@/lib/platform/db/statement-timeout";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { parseProjectUuid } from "@/lib/platform/projects/queries";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
@@ -53,7 +54,7 @@ export default async function ScopedDashboardPage({
     organizationId: scope.organization.id,
     actor: scope.user.externalId,
   });
-  const [results, facets, scorers] = await Promise.all([
+  const [results, facets, scorers, alerts] = await Promise.all([
     loadWidgets(scope.project.id, dashboard.widgets, range, features),
     loadOrFallback({
       operation: "dashboard_facets",
@@ -73,6 +74,11 @@ export default async function ScopedDashboardPage({
           load: () => listScorers(scope.project.id),
         })
       : null,
+    featureEnabled("alerts", {
+      projectId: scope.project.id,
+      organizationId: scope.organization.id,
+      actor: scope.user.externalId,
+    }),
   ]);
   const options = scorers?.map((scorer) => ({
     id: scorer.id,
@@ -83,6 +89,7 @@ export default async function ScopedDashboardPage({
   return (
     <DashboardView
       scorers={options ?? null}
+      alerts={alerts}
       draft={added ? scorerWidget(added) : null}
       projectId={scope.project.id}
       dashboard={{ id: dashboard.id, name: dashboard.name }}

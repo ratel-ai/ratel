@@ -4,6 +4,7 @@ import {
   ALERT_OPERATORS,
   ALERT_WINDOWS,
   type AlertDraft,
+  type AlertQuery,
   MAX_ALERT_NAME,
 } from "@/lib/views/alerts/types";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
@@ -34,7 +35,17 @@ export function parseRule(raw: unknown, features: MetricFeatures): ParsedRule {
   if (!name) return { ok: false, error: "Give the alert a name." };
   if (name.length > MAX_ALERT_NAME)
     return { ok: false, error: `An alert name can have ${MAX_ALERT_NAME} characters.` };
-  const { metric, aggregation, filter, scorerId, ...rest } = record(rawQuery);
+  const parsedQuery = parseQuery(rawQuery, features);
+  if (!parsedQuery.ok) return parsedQuery;
+  return { ok: true, draft: { ...condition, name, query: parsedQuery.query } };
+}
+
+/** The metric query alone: a rule's, or the one a new alert starts from. */
+export function parseQuery(
+  raw: unknown,
+  features: MetricFeatures,
+): { ok: true; query: AlertQuery } | { ok: false; error: string } {
+  const { metric, aggregation, filter, scorerId, ...rest } = record(raw);
   if (Object.keys(rest).length > 0) return { ok: false, error: "The alert settings are invalid." };
   const checked = parseWidget(
     {
@@ -51,15 +62,11 @@ export function parseRule(raw: unknown, features: MetricFeatures): ParsedRule {
   const { widget } = checked;
   return {
     ok: true,
-    draft: {
-      ...condition,
-      name,
-      query: {
-        metric: widget.metric,
-        aggregation: widget.aggregation,
-        filter: widget.filter,
-        ...(widget.scorerId ? { scorerId: widget.scorerId } : {}),
-      },
+    query: {
+      metric: widget.metric,
+      aggregation: widget.aggregation,
+      filter: widget.filter,
+      ...(widget.scorerId ? { scorerId: widget.scorerId } : {}),
     },
   };
 }

@@ -44,6 +44,7 @@ export function MetricChart({
   result,
   unit,
   label,
+  threshold,
 }: {
   chart: "line" | "bar";
   model: ChartModel;
@@ -51,6 +52,8 @@ export function MetricChart({
   unit: MetricUnit;
   /** What the chart measures, for its accessible name. */
   label: string;
+  /** A dashed line at this value, within the scale. */
+  threshold?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -152,6 +155,17 @@ export function MetricChart({
           ) : (
             <Bars model={model} count={buckets.length} layout={layout} yOf={yOf} />
           )}
+          {threshold === undefined ? null : (
+            <line
+              x1={0}
+              x2={plotWidth}
+              y1={yOf(threshold)}
+              y2={yOf(threshold)}
+              stroke="var(--ds-danger)"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+            />
+          )}
           <line
             x1={0}
             x2={plotWidth}
@@ -162,6 +176,15 @@ export function MetricChart({
           />
         </svg>
 
+        {threshold === undefined ? null : (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-0 bg-app px-1 text-xs leading-4 text-danger tabular-nums"
+            style={{ top: yOf(threshold) - 8 }}
+          >
+            {formatMetric(threshold, unit)}
+          </span>
+        )}
         {buckets.map((start, index) => (
           <div
             key={start}
