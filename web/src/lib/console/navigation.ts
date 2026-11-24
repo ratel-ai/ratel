@@ -403,7 +403,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages, sentiment) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, sentiment, hallucinations) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -417,7 +417,8 @@ export function consoleNav({
 
 /**
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
- * labelled section). Monitor contains Agent health, without its Tasks child;
+ * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item
+ * (each of its pages lights its own row once Hallucinations is among them);
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
  * Ship is new. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
  */
@@ -427,6 +428,7 @@ function stageRailNav(
   setupRows: readonly NavItem[],
   entityPages: boolean,
   sentiment: boolean,
+  hallucinations: boolean,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -444,7 +446,10 @@ function stageRailNav(
     ...classicHealth,
     // Root cause analysis is no rail or ⌘K destination: task completion on the Summary opens it.
     also: [...(classicHealth.also ?? []), ...(sentiment ? [`${root}/health/root-causes`] : [])],
-    children: (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks"),
+    // Lit as one item; with Hallucinations among its pages, each page lights its own row instead.
+    children: (classicHealth.children ?? [])
+      .filter((item) => item.id !== "health-tasks")
+      .map((item) => (hallucinations ? item : { ...item, activeId: classicHealth.id })),
   };
   const tasks: NavItem = {
     id: "tasks",

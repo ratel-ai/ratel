@@ -404,12 +404,8 @@ test("the active item matches exact index pages and nested paths", () => {
   assert.equal(activeNavItemId(`/project/${P1}/settings`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/settings/general`, items), "settings");
   assert.equal(activeNavItemId(`/project/${P1}/traces/abc`, items), "traces");
-  // Each Agent health page lights its own row in the rail, and Tasks has absorbed its Tasks pages.
-  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health-summary");
-  assert.equal(
-    activeNavItemId(`/project/${P1}/health/self-corrections`, items),
-    "health-self-corrections",
-  );
+  // Agent health is lit as one item in the stage rail, and Tasks has absorbed its Tasks pages.
+  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks/t1`, items), "tasks");
   assert.equal(activeNavItemId(`/project/${P1}/intents/map`, items), "intents-map");
   assert.equal(activeNavItemId(`/project/${P1}/catalogs`, items), "catalog");
@@ -676,12 +672,9 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
     items.find(({ id }) => id === "health")?.children?.map(({ id }) => id),
     ["health-summary", "health-self-corrections"],
   );
-  // Each Agent health page lights its own row.
-  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health-summary");
-  assert.equal(
-    activeNavItemId(`/project/${P1}/health/self-corrections`, items),
-    "health-self-corrections",
-  );
+  // Agent health is lit as one item, wherever inside it the reader is.
+  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
+  assert.equal(activeNavItemId(`/project/${P1}/health/self-corrections`, items), "health");
   // Tasks has absorbed the Agent health Tasks pages.
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks`, items), "tasks");
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks/sessions/s-1`, items), "tasks");
@@ -809,11 +802,14 @@ test("Hallucinations sits under Agent health only with hallucinationDetection on
     ["Summary", "Self-corrections", "Hallucinations"],
   );
   assert.equal(health?.children?.at(-1)?.href, `${root}/health/hallucinations`);
+  // With Hallucinations in it, each Agent health page lights its own row, so the reader sees which one is open.
   assert.equal(
     activeNavItemId(`${root}/health/hallucinations`, nav),
     "health-hallucinations",
     "the page lights its own row",
   );
+  assert.equal(activeNavItemId(`${root}/health`, nav), "health-summary");
+  assert.equal(activeNavItemId(`${root}/health/self-corrections`, nav), "health-self-corrections");
   assert.equal(nav.length, off.length, "a child, so the rail keeps its budget");
   assert.ok(commands(nav).some((entry) => entry.href === `${root}/health/hallucinations`));
 });
