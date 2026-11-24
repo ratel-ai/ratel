@@ -11,13 +11,12 @@ import {
 import { issueCategories } from "@/lib/views/health/issue-categories";
 
 /**
- * Agent health with `focusedConsole`: the Health score, and what costs its points, in the four
+ * Agent health: the Health score, and what costs its points, in the four
  * categories the score counts by. The header, the states before a reading and the notices about
  * the data are the Summary's.
  */
-export function FocusedHealthView(props: Omit<SummaryViewProps, "corrections">) {
-  const summary = { ...props, corrections: null };
-  return <SummaryView {...summary} content={<FocusedReading {...summary} />} />;
+export function FocusedHealthView(props: SummaryViewProps) {
+  return <SummaryView {...props} content={<FocusedReading {...props} />} />;
 }
 
 function FocusedReading(props: SummaryViewProps) {

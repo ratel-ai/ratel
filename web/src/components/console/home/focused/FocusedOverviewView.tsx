@@ -6,11 +6,15 @@ import { Callout } from "@ratel/design-system/states";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { HealthCard } from "@/components/console/home/focused/HealthCard";
-import { DemoNotice, TelemetryStatus, WindowSwitch } from "@/components/console/home/OverviewView";
+import {
+  DemoNotice,
+  TelemetryStatus,
+  WindowSwitch,
+} from "@/components/console/home/overview-header";
 import { TopologyMap } from "@/components/console/topology/TopologyMap";
 import type { FocusedOverviewData } from "@/lib/views/home/focused-load";
 
-/** The recap Overview: how healthy the project is, and what runs in it. Everything else is a click away. */
+/** Overview: how healthy the project is, and what runs in it. Everything else is a click away. */
 export function FocusedOverviewView({
   data,
   now,

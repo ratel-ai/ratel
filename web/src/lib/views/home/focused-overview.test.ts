@@ -6,8 +6,6 @@ import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
-import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
-import { TOUR_STEPS, tourSteps } from "@/lib/console/onboarding/tour-steps";
 import {
   HEALTH_SCORE_VERSION,
   healthScoreView,
@@ -26,7 +24,7 @@ import { topologyModel } from "@/lib/views/project-entities/topology";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../eslint-rules/ds-tokens.mjs";
 
-/** The recap Overview (`focusedConsole`): what it reads, and every state it draws. */
+/** The Overview: what it reads, and every state it draws. */
 
 const NOW = new Date("2026-11-24T12:00:00.000Z");
 const AT = new Date("2026-11-24T11:00:00.000Z");
@@ -245,13 +243,8 @@ test("each failed read costs its own part only", async () => {
   }
 });
 
-test("the skeleton and the tour say the recap with the flag, today's Overview without", () => {
-  const skeleton = (on: boolean) =>
-    render(createElement(FocusedConsoleProvider, { value: on }, createElement(OverviewSkeleton)));
-  assert.match(skeleton(true), /data-skeleton="focused"/);
-  assert.doesNotMatch(skeleton(false), /data-skeleton="focused"/);
-  assert.equal(render(createElement(OverviewSkeleton)), skeleton(false));
-  assert.equal(tourSteps(false), TOUR_STEPS);
-  assert.match(tourSteps(true)[0].body, /Health score/);
-  assert.deepEqual(tourSteps(true).slice(1), TOUR_STEPS.slice(1));
+test("the skeleton draws the Health card and the map", () => {
+  const html = render(createElement(OverviewSkeleton));
+  assert.match(html, /Loading page/);
+  assert.match(html, /h-64[\s\S]*h-96/);
 });

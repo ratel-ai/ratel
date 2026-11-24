@@ -111,7 +111,7 @@ export function selfCorrectionsHref(
   projectId: string,
   filter: { task?: string; tool?: string; topic?: string } = {},
 ): string {
-  return withQuery(`${root(projectId)}/health/self-corrections`, filter);
+  return withQuery(`${root(projectId)}/self-corrections`, filter);
 }
 
 /** The Fixes list, filtered to a task, a tool or a topic, or open on one fix. */

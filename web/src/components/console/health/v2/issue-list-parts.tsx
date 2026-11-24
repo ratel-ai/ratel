@@ -80,19 +80,6 @@ export function issueColumns(
   ];
 }
 
-/** The link targets of rows that are not on screen, so `#signal-<id>` always finds one. */
-export function IssueAnchors({ rows }: { rows: readonly IssueRow[] }) {
-  return (
-    <div className="sr-only">
-      {rows
-        .flatMap((row) => row.anchors)
-        .map((anchor) => (
-          <span key={anchor} id={anchor} />
-        ))}
-    </div>
-  );
-}
-
 const LINK =
   "rounded-sm outline-none hover:text-fg hover:underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-focus";
 

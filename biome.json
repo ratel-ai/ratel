@@ -30,7 +30,10 @@
   },
   "overrides": [
     {
-      "includes": ["web/**", "mcp-apps/**"],
+      "includes": [
+        "web/**",
+        "mcp-apps/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -58,7 +61,9 @@
       }
     },
     {
-      "includes": ["web/src/components/console/traces/**"],
+      "includes": [
+        "web/src/components/console/traces/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
@@ -74,7 +79,9 @@
       }
     },
     {
-      "includes": ["web/src/lib/console/catalog/item-id.ts"],
+      "includes": [
+        "web/src/lib/console/catalog/item-id.ts"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
@@ -84,7 +91,9 @@
       }
     },
     {
-      "includes": ["web/src/components/console/errors/**"],
+      "includes": [
+        "web/src/components/console/errors/**"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
@@ -562,14 +571,9 @@
         "web/src/lib/views/health/self-corrections/example.ts",
         "web/src/lib/views/health/self-corrections/example.test.ts",
         "web/src/lib/views/health/self-corrections/page-load.ts",
-        "web/src/lib/views/health/self-corrections/page-load.integration.test.ts",
         "web/src/lib/views/health/self-corrections/page-model.ts",
-        "web/src/lib/views/health/self-corrections/page-model.test.ts",
         "web/src/lib/views/health/self-corrections/page-queries.ts",
-        "web/src/lib/views/health/self-corrections/paths.ts",
-        "web/src/lib/views/health/self-corrections/paths.test.ts",
         "web/src/lib/views/health/summary/fix-links.test.ts",
-        "web/src/lib/views/health/summary/task-chains.ts",
         "web/src/lib/views/health/summary/fix-links.ts",
         "web/src/lib/views/tasks/model.ts",
         "web/src/lib/views/tasks/model.test.ts",
@@ -585,8 +589,6 @@
         "web/src/lib/views/tasks/format.ts",
         "web/src/lib/views/tasks/fixes.ts",
         "web/src/lib/views/tasks/test-support.ts",
-        "web/src/lib/views/tasks/paths.ts",
-        "web/src/lib/views/tasks/paths.test.ts",
         "web/src/lib/views/tasks/queries.integration.test.ts",
         "web/src/lib/views/fixes/types.ts",
         "web/src/lib/views/fixes/kinds.ts",
@@ -609,7 +611,6 @@
         "web/src/lib/views/fixes/topics.ts",
         "web/src/lib/views/fixes/href.ts",
         "web/src/lib/views/fixes/href.test.ts",
-        "web/src/lib/views/intents/topics-view.ts",
         "web/src/lib/views/intents/topics-explain.ts",
         "web/src/lib/views/intents/topics-explain.test.ts",
         "web/src/lib/views/intents/topics-map-model.ts",
@@ -695,31 +696,17 @@
         "web/src/components/console/health/report/ReportToolbar.tsx",
         "web/src/components/console/health/report/health-report.css",
         "web/src/components/console/health/report/report-model.ts",
-        "web/src/components/console/health/v2/CallOrder.tsx",
-        "web/src/components/console/health/v2/CallOrderSection.tsx",
-        "web/src/components/console/health/v2/GapBlock.tsx",
         "web/src/components/console/health/v2/IssueTurn.tsx",
         "web/src/components/console/health/v2/Calculating.tsx",
         "web/src/components/console/health/v2/PartialReading.tsx",
-        "web/src/components/console/health/v2/InferredToolsCallout.tsx",
         "web/src/components/console/health/v2/health-score-model.ts",
         "web/src/components/console/health/v2/NounTitle.tsx",
-        "web/src/components/console/health/v2/Readings.tsx",
-        "web/src/components/console/health/v2/ReadingsPanel.tsx",
-        "web/src/components/console/health/v2/SelfCorrectionsRow.tsx",
         "web/src/components/console/health/v2/SetupCallout.tsx",
         "web/src/components/console/health/v2/SetupGuidePanel.tsx",
-        "web/src/components/console/health/v2/ShapesSection.tsx",
-        "web/src/components/console/health/v2/SummarySkeleton.tsx",
-        "web/src/components/console/health/v2/TasksNeedingLook.tsx",
         "web/src/components/console/health/v2/ToolSpansBlock.tsx",
-        "web/src/components/console/health/v2/UnservedSection.tsx",
-        "web/src/components/console/health/v2/call-order-copy.ts",
         "web/src/lib/views/health/issue-rows.ts",
-        "web/src/components/console/health/v2/reading-views.ts",
         "web/src/components/console/health/v2/setup-nudge.ts",
         "web/src/components/console/health/v2/setup-peek.ts",
-        "web/src/components/console/health/v2/summary-model.ts",
         "web/src/components/console/health/v2/OpenImportButtonV2.tsx",
         "web/src/components/console/health/imports/open-import.ts",
         "web/src/components/console/health/imports/OpenImportButton.tsx",
@@ -751,7 +738,6 @@
         "web/src/components/console/self-corrections/peeks.ts",
         "web/src/components/console/fixes/kind-icons.ts",
         "web/eslint-rules/ds-tokens.mjs",
-        "web/src/app/(console)/project/\\[projectId\\]/health/loading.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/health/self-corrections/loading.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/health/tasks/loading.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/health/tasks/\\[taskId\\]/loading.tsx",
@@ -763,9 +749,7 @@
         "web/src/lib/views/health/flow-journey-focus.test.ts",
         "web/src/lib/views/health/flow-journey-workflow.test.ts",
         "web/src/lib/views/health/summary/issue-rows.test.ts",
-        "web/src/lib/views/health/summary/task-chains.test.ts",
         "web/src/lib/views/tasks/flow-layout.test.ts",
-        "web/src/lib/views/tasks/tasks-ui.test.ts",
         "web/src/lib/views/health/kind-icons-consistency.test.ts",
         "web/src/components/console/intents/FlowCanvas.tsx",
         "web/src/components/console/intents/FlowStepPanel.tsx",
@@ -820,19 +804,8 @@
         "web/src/components/console/fixes/effect-icons.ts",
         "web/src/app/(console)/project/\\[projectId\\]/improvement/page.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/improvement/fixes/loading.tsx",
-        "web/src/lib/views/home/overview-model.ts",
-        "web/src/lib/views/home/overview-model.test.ts",
-        "web/src/lib/views/home/attention.ts",
-        "web/src/lib/views/home/attention.test.ts",
-        "web/src/lib/views/home/glance.ts",
-        "web/src/lib/views/home/glance.test.ts",
-        "web/src/lib/views/home/glance-queries.ts",
-        "web/src/lib/views/home/glance-queries.integration.test.ts",
-        "web/src/lib/views/home/load.test.ts",
-        "web/src/lib/views/home/load.integration.test.ts",
-        "web/src/lib/views/home/overview-view.test.ts",
         "web/src/components/console/home/**",
-        "!web/src/components/console/home/OverviewPage.tsx",
+        "!web/src/components/console/home/OverviewSkeleton.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/loading.tsx",
         "web/src/app/(console)/project/\\[projectId\\]/dashboards/page.tsx",
         "web/src/lib/views/freshness/**",
@@ -1154,6 +1127,8 @@
         "web/src/lib/console/onboarding/transition.ts",
         "web/src/lib/console/onboarding/arrival-veil.ts",
         "web/src/lib/console/onboarding/arrival-veil.test.ts",
+        "web/src/components/console/onboarding/GuidedTour.tsx",
+        "web/src/components/console/onboarding/TourLauncher.tsx",
         "web/src/lib/console/onboarding/tour-state.ts",
         "web/src/lib/console/onboarding/tour-state.test.ts",
         "web/src/lib/console/onboarding/tour-geometry.ts",
@@ -1457,7 +1432,9 @@
       }
     },
     {
-      "includes": ["mcp-apps/shell/shims/next-link.tsx"],
+      "includes": [
+        "mcp-apps/shell/shims/next-link.tsx"
+      ],
       "linter": {
         "rules": {
           "a11y": {

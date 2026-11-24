@@ -7,8 +7,7 @@ import {
 import type { FixesModel } from "@/lib/views/fixes/types";
 import type { FixLookup, TaskLookup } from "@/lib/views/health/issue-rows";
 import type { HealthPageState } from "@/lib/views/health/page-state";
-import type { TaskListModel, TaskRow } from "@/lib/views/tasks/model";
-import { TASK_STATUS_RANK } from "@/lib/views/tasks/status";
+import type { TaskListModel } from "@/lib/views/tasks/model";
 
 /**
  * The Summary's small decisions, pure: its one line under the title, the
@@ -63,22 +62,6 @@ export function summaryState(
     };
   if (model.waitingOn === "tool_spans") return { kind: "tool_spans" };
   return { kind: "nothing_yet" };
-}
-
-/** Tasks shown in "Tasks that need a look". */
-export const TASKS_SHOWN = 5;
-
-/** The tasks that are failing, slow or worth watching: worst status first, then the busiest. */
-export function tasksNeedingLook(rows: readonly TaskRow[], limit = TASKS_SHOWN): TaskRow[] {
-  return rows
-    .filter((row) => row.status !== "healthy")
-    .sort(
-      (a, b) =>
-        TASK_STATUS_RANK[a.status] - TASK_STATUS_RANK[b.status] ||
-        b.runs - a.runs ||
-        (a.id < b.id ? -1 : 1),
-    )
-    .slice(0, limit);
 }
 
 /**

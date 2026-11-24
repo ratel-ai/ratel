@@ -32,22 +32,14 @@ edition lacks are not rendered; moved pages redirect.
 
 | Item | Answers | Contains |
 |---|---|---|
-| Overview | How is this project doing? | Numbers, "Needs attention", recent runs |
-| Agent health | What does my agent get wrong? | Summary, Tasks, Self-corrections |
+| Overview | How is this project doing? | The Health score, agents and MCP servers with their flows |
+| Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
 | Traces | What happened in a run? | Runs, Spans, Logs |
 | Catalog | What can my agent use? | Tools, Skills, Test |
 | Intents | What do people want, and what next? | All intents, Flows, Map |
+| Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
-
-With `focusedConsole` on, Overview is a recap (the Health score and the topology), Agent health is
-one page (the Health score, then the issues under the four categories it counts by) and Self-corrections is an item of its own in Insights:
-
-| Item | Answers | Contains |
-|---|---|---|
-| Overview | How is this project doing? | The Health score, agents and MCP servers with their flows |
-| Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
-| Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
 
 ## Layout
 

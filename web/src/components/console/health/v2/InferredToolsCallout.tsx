@@ -29,7 +29,7 @@ export function InferredToolsCallout() {
       >
         Received: the steps of each run, with their timing, errors, models and tokens. Each step
         that runs inside no other step is read as a tool call. Missing: what people asked, the
-        replies and the tool arguments and results, so the asks below are empty.
+        replies and the tool arguments and results.
       </Callout>
     </div>
   );

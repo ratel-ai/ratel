@@ -190,7 +190,7 @@ export function rowMembers(row: HealthRow, data: Pick<HealthData, "issues" | "to
   return row.memberIds.flatMap((id) => byId.get(id) ?? []);
 }
 
-/** The three fixes worth the most points, as the console's score lists them (`scoreFixes` in SummaryView.tsx). */
+/** The three fixes worth the most points, as the score lists them. */
 export function nextFixes(rows: readonly HealthRow[]): HealthRow[] {
   return rows.filter((row) => (row.points ?? 0) >= 1).slice(0, 3);
 }

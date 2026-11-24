@@ -1,5 +1,5 @@
-import { SummarySkeleton } from "@/components/console/health/v2/SummarySkeleton";
+import { HealthSkeleton } from "@/components/console/health/focused/HealthSkeleton";
 
 export default function AgentHealthLoading() {
-  return <SummarySkeleton />;
+  return <HealthSkeleton />;
 }

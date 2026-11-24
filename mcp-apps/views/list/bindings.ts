@@ -227,7 +227,7 @@ export const listBindings: ListBinding[] = [
     },
   },
   {
-    // Agent health's issues (components/health/v2/IssuesSection.tsx), worst first as the tool orders them.
+    // Agent health's issues (components/console/health/v2/issue-list-parts.tsx), worst first as the tool orders them.
     // No detail: an insight's own tool is get_fix, which fails for one with no fix yet.
     tool: "list_insights",
     config: {
@@ -261,7 +261,7 @@ export const listBindings: ListBinding[] = [
       ],
       empty: { title: "No issues", description: "Nothing stands out in the latest reading." },
       // The tool returns every issue; Agent health lists one row per kind of issue, most points first
-      // (components/health/v2/IssuesSection.tsx: issue, status, if fixed, measure). The server sends
+      // (components/console/health/v2/issue-list-parts.tsx: issue, status, if fixed, measure). The server sends
       // those rows for the view, so the list is the page's.
       fromView: {
         kind: "health_issue_rows",

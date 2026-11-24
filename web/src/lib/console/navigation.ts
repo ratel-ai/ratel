@@ -84,7 +84,6 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
-  focusedConsole = false,
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -102,8 +101,6 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
-  /** `focusedConsole` on for the shown organization (`lib/console/focused-console`). */
-  focusedConsole?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -173,38 +170,6 @@ export function consoleNav({
           also: [`${root}/improvement/health`],
           shortcut: "h",
           keywords: ["signals", "issues", "problems", "first try", "detours"],
-          children: [
-            {
-              id: "health-summary",
-              label: "Summary",
-              href: `${root}/health`,
-              icon: "health",
-              exact: true,
-              keywords: ["readings", "issues", "turn shapes", "flow map"],
-            },
-            {
-              id: "health-tasks",
-              label: "Tasks",
-              href: `${root}/health/tasks`,
-              icon: "health",
-              also: [`${root}/improvement/tool-explorer`],
-              keywords: [
-                "task pipelines",
-                "steps",
-                "tools run together",
-                "workflows",
-                "tool craft",
-                "finish rate",
-              ],
-            },
-            {
-              id: "health-self-corrections",
-              label: "Self-corrections",
-              href: `${root}/health/self-corrections`,
-              icon: "health",
-              keywords: ["retries", "apologies", "sorry", "tried again", "gave up", "backtracks"],
-            },
-          ],
         },
         {
           id: "traces",
@@ -381,7 +346,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, { entityPages, focusedConsole }) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -395,16 +360,16 @@ export function consoleNav({
 
 /**
  * Group the project rail by stage (upstream's `stageRailNav`, in this flat model: a stage is a
- * labelled section). Monitor contains Agent health, without its Tasks child and lit as one item;
+ * labelled section). Monitor contains Agent health, one page;
  * Insights contains Tasks, a top-level page (`/tasks`) that absorbs the Agent health Tasks pages.
- * Ship is new. With `focusedConsole`, Agent health has no sub-page and Self-corrections is an
- * Insights page (`/self-corrections`) that absorbs its Agent health path. Catalog, the edition's setup rows and Settings close the rail, unlabelled.
+ * Self-corrections is one too, and absorbs its Agent health path. Ship is new. Catalog, the
+ * edition's setup rows and Settings close the rail, unlabelled.
  */
 function stageRailNav(
   root: string,
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
-  { entityPages, focusedConsole }: { entityPages: boolean; focusedConsole: boolean },
+  entityPages: boolean,
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -417,25 +382,14 @@ function stageRailNav(
       section: `group:${id}` as const,
       ...(index === 0 ? { sectionLabel: label } : {}),
     }));
-  const classicHealth = pick("health");
-  const healthPages = (classicHealth.children ?? []).filter((item) => item.id !== "health-tasks");
-  const health: NavItem = {
-    ...classicHealth,
-    children: focusedConsole
-      ? undefined
-      : healthPages.map((item) => ({ ...item, activeId: classicHealth.id })),
+  const selfCorrections: NavItem = {
+    id: "self-corrections",
+    label: "Self-corrections",
+    href: `${root}/self-corrections`,
+    icon: "self-corrections",
+    also: [`${root}/health/self-corrections`],
+    keywords: ["retries", "apologies", "sorry", "tried again", "gave up", "backtracks"],
   };
-  const selfCorrections: NavItem[] = focusedConsole
-    ? healthPages
-        .filter((item) => item.id === "health-self-corrections")
-        .map((item) => ({
-          ...item,
-          id: "self-corrections",
-          href: `${root}/self-corrections`,
-          icon: "self-corrections",
-          also: [item.href],
-        }))
-    : [];
   const tasks: NavItem = {
     id: "tasks",
     label: "Tasks",
@@ -484,8 +438,8 @@ function stageRailNav(
       }
     : classicTraces;
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
-    ...stage("insights", "Insights", [tasks, pick("intents"), ...selfCorrections]),
+    ...stage("monitor", "Monitor", [pick("overview"), pick("health"), traces]),
+    ...stage("insights", "Insights", [tasks, pick("intents"), selfCorrections]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
     ...classic.filter((item) => item.section?.startsWith("group:")),

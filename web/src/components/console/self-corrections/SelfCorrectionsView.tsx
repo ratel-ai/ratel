@@ -36,7 +36,6 @@ export function SelfCorrectionsView({
   now,
   actions = {},
   progress = null,
-  topLevel = false,
 }: {
   model: SelfCorrectionsPageModel;
   /** The time windows the plan allows, as links. */
@@ -49,16 +48,11 @@ export function SelfCorrectionsView({
   actions?: Readonly<Record<string, FixAction>>;
   /** Where the readings behind this page stand (RC-210); null reads as idle. */
   progress?: SectionProgress | null;
-  /** The page stands in Insights (`focusedConsole`), not under Agent health. */
-  topLevel?: boolean;
 }) {
   return (
     <Page>
       <PageHeader
         title="Self-corrections"
-        crumbs={
-          topLevel ? undefined : [{ label: "Agent health", href: agentHealthHref(model.projectId) }]
-        }
         description={SELF_CORRECTIONS_DESCRIPTION}
         actions={
           <>

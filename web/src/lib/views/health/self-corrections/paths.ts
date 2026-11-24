@@ -33,7 +33,7 @@ export function selfCorrectionsHref(
   options: { days?: WindowDays; filters?: Partial<SelfCorrectionFilters> } = {},
 ): string {
   const filters = { ...NO_FILTERS, ...options.filters };
-  return withQuery(`${root(projectId)}/health/self-corrections`, {
+  return withQuery(`${root(projectId)}/self-corrections`, {
     days: options.days && options.days !== DEFAULT_WINDOW_DAYS ? String(options.days) : null,
     tool: filters.tool,
     task: filters.task,

@@ -1,9 +1,7 @@
 import { cookies } from "next/headers";
 import { FocusedOverviewPage } from "@/components/console/home/focused/FocusedOverviewPage";
-import { OverviewPage } from "@/components/console/home/OverviewPage";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { composition } from "@/lib/composition/ports";
-import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { TOUR_STATUS_COOKIE } from "@/lib/console/onboarding/tour-cookie";
 import { shouldOfferTour } from "@/lib/console/onboarding/tour-state";
 import { readTourStatus } from "@/lib/console/onboarding/tour-status";
@@ -14,7 +12,7 @@ import { isRestrictedBySupportSession } from "@/lib/platform/support-session";
 export const metadata = { title: "Project home" };
 
 /**
- * A project's home: the Overview; with `focusedConsole`, its recap (`FocusedOverviewPage`).
+ * A project's home: the Overview (`FocusedOverviewPage`).
  *
  * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise). How a person left the guided tour is the
@@ -49,16 +47,14 @@ export default async function ProjectHomePage({
   });
   const inSupportSession = await isRestrictedBySupportSession();
   const { range, peek } = await searchParams;
-  const overview = {
-    project,
-    organization,
-    range,
-    inSupportSession,
-  };
-  const offerTour = !inSupportSession && shouldOfferTour(tourStatus);
-  return (await focusedConsoleEnabled(organization)) ? (
-    <FocusedOverviewPage {...overview} offerTour={offerTour} peek={peek} />
-  ) : (
-    <OverviewPage {...overview} offerTour={offerTour} />
+  return (
+    <FocusedOverviewPage
+      project={project}
+      organization={organization}
+      range={range}
+      peek={peek}
+      offerTour={!inSupportSession && shouldOfferTour(tourStatus)}
+      inSupportSession={inSupportSession}
+    />
   );
 }

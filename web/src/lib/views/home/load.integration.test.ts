@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { countSdkActivity, countSdkActivityByDay, latestSdkEventAt } from "@/lib/views/home/load";
+import { latestSdkEventAt } from "@/lib/views/home/load";
 
 const ORGANIZATION_ID = "22222222-2222-4222-8222-222222222222";
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -29,44 +29,9 @@ async function setup(): Promise<BoundReadDb> {
   return drizzle(client, { schema }) as unknown as BoundReadDb;
 }
 
-test("SDK activity counts searches, tool calls and skill runs in the window, for this project only", async () => {
-  const db = await setup();
-  const activity = await countSdkActivity(
-    PROJECT_ID,
-    { since: new Date("2026-10-09T00:00:00Z"), until: new Date("2026-10-16T00:00:00Z") },
-    db,
-  );
-  // invoke_end is not counted twice: a tool call is its start.
-  assert.deepEqual(activity, { searches: 2, toolCalls: 1, skillRuns: 1 });
-});
-
-test("an empty window counts nothing", async () => {
-  const db = await setup();
-  const activity = await countSdkActivity(
-    PROJECT_ID,
-    { since: new Date("2026-10-01T00:00:00Z"), until: new Date("2026-10-08T00:00:00Z") },
-    db,
-  );
-  assert.deepEqual(activity, { searches: 0, toolCalls: 0, skillRuns: 0 });
-});
-
 test("the newest SDK event falls back to when it was received", async () => {
   const db = await setup();
   assert.equal((await latestSdkEventAt(PROJECT_ID, db))?.toISOString(), "2026-10-15T11:00:00.000Z");
   const empty = "44444444-4444-4444-8444-444444444444";
   assert.equal(await latestSdkEventAt(empty, db), null);
-});
-
-test("SDK activity by day: each UTC day's searches, tool calls and skill runs, oldest first", async () => {
-  const db = await setup();
-  const days = await countSdkActivityByDay(
-    PROJECT_ID,
-    { since: new Date("2026-10-09T00:00:00Z"), until: new Date("2026-10-16T00:00:00Z") },
-    db,
-  );
-  assert.deepEqual(days, [
-    { day: "2026-10-14", searches: 1, toolCalls: 0, skillRuns: 0 },
-    // The skill run has no event time: it is counted when it was received.
-    { day: "2026-10-15", searches: 1, toolCalls: 1, skillRuns: 1 },
-  ]);
 });

@@ -147,7 +147,7 @@ test("Tasks: one header, four numbers, then every task over its steps as pins, w
   assert.match(
     html,
     new RegExp(
-      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections`)}Self-corrections per 100 runs</a></dt>`,
+      `<dt[^>]*>${anchor(`${ROOT}/self-corrections`)}Self-corrections per 100 runs</a></dt>`,
     ),
     "the number opens its page",
   );
@@ -323,7 +323,7 @@ test("a task's page: a header in its color, its numbers, its steps as a drawing"
   assert.match(
     html,
     new RegExp(
-      `<dt[^>]*>${anchor(`${ROOT}/health/self-corrections?task=wf-release`)}Self-corrections per 100 runs</a></dt>`,
+      `<dt[^>]*>${anchor(`${ROOT}/self-corrections?task=wf-release`)}Self-corrections per 100 runs</a></dt>`,
     ),
   );
   assert.doesNotMatch(html, /Cost per run/, "no cost without model calls, so no stat to say so");
@@ -366,7 +366,7 @@ test("a task's page: self-corrections as one strip, issues, fixes and intents as
   assert.match(
     html,
     new RegExp(
-      `${anchor(`${ROOT}/health/self-corrections?task=wf-release`)}[^]*?Self-corrections[^]*?data-correction-kind="gave_up_after_error"><svg[^]*?lucide-circle-slash[^]*?>12</span><span[^>]*>Gave up`,
+      `${anchor(`${ROOT}/self-corrections?task=wf-release`)}[^]*?Self-corrections[^]*?data-correction-kind="gave_up_after_error"><svg[^]*?lucide-circle-slash[^]*?>12</span><span[^>]*>Gave up`,
     ),
   );
   assert.doesNotMatch(
@@ -459,7 +459,7 @@ test("a step's panel: its numbers, what came next and its neighbours", () => {
   assert.match(html, /data-step-next=""[^]*lucide-flag[^]*Run ends[^]*100%/);
   assert.match(
     html,
-    new RegExp(`href="${ROOT}/health/self-corrections\\?tool=notify&amp;task=wf-release"`),
+    new RegExp(`href="${ROOT}/self-corrections\\?tool=notify&amp;task=wf-release"`),
   );
   assert.match(html, new RegExp(`href="${ROOT}/improvement/fixes\\?tool=notify"`));
   assert.match(html, new RegExp(`href="${ROOT}/catalogs/tools\\?q=notify&amp;highlight=notify"`));

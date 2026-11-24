@@ -32,14 +32,11 @@ export function TourLauncher({
   isDemoProject,
   surface,
   record = true,
-  focusedConsole = false,
 }: {
   autoStart: boolean;
   isDemoProject: boolean;
   surface: string;
   record?: boolean;
-  /** The Overview under the tour is the recap. */
-  focusedConsole?: boolean;
 }) {
   const [runId, setRunId] = useState(autoStart ? 1 : 0);
   const [running, setRunning] = useState(autoStart);
@@ -77,7 +74,6 @@ export function TourLauncher({
           offer
           isDemoProject={isDemoProject}
           surface={surface}
-          focusedConsole={focusedConsole}
           onFinish={handleFinish}
         />
       )}

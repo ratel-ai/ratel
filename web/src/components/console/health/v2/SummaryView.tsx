@@ -3,21 +3,13 @@ import { Callout } from "@ratel/design-system/states";
 import type { ComponentType, ReactNode } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
 import { RefreshWhileBuilding } from "@/components/console/health/RefreshWhileBuilding";
-import { asksMissing, setupCardModel } from "@/components/console/health/setup-card-model";
-import { CallOrderSection } from "@/components/console/health/v2/CallOrderSection";
-import { GapBlock } from "@/components/console/health/v2/GapBlock";
-import { HealthScore, type ScoreFix } from "@/components/console/health/v2/HealthScore";
+import { setupCardModel } from "@/components/console/health/setup-card-model";
 import { HealthStateV2 } from "@/components/console/health/v2/HealthStateV2";
 import { InferredToolsCallout } from "@/components/console/health/v2/InferredToolsCallout";
-import { IssuesSection } from "@/components/console/health/v2/IssuesSection";
 import { OpenImportButtonV2 } from "@/components/console/health/v2/OpenImportButtonV2";
 import { PartialReading } from "@/components/console/health/v2/PartialReading";
-import { Readings } from "@/components/console/health/v2/Readings";
-import { readingViews } from "@/components/console/health/v2/reading-views";
-import { SelfCorrectionsRow } from "@/components/console/health/v2/SelfCorrectionsRow";
 import { SetupCallout } from "@/components/console/health/v2/SetupCallout";
 import { SetupGuidePanel } from "@/components/console/health/v2/SetupGuidePanel";
-import { ShapesSection } from "@/components/console/health/v2/ShapesSection";
 import { SummaryMenu } from "@/components/console/health/v2/SummaryMenu";
 import { type CaptureNudgeInput, nudgeShown } from "@/components/console/health/v2/setup-nudge";
 import {
@@ -27,9 +19,7 @@ import {
   summaryState,
   taskLookups,
 } from "@/components/console/health/v2/summary-model";
-import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLook";
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
-import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
 import type {
   HealthImporterProps,
@@ -45,23 +35,16 @@ import {
   type WindowOption,
 } from "@/lib/readings/trace-signals/view";
 import type { FixesModel } from "@/lib/views/fixes/types";
-import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
-import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
+import { pageGap, signalsForGap } from "@/lib/views/health/data-gaps-model";
+import { issueRows, issuesLine } from "@/lib/views/health/issue-rows";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
 import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
-import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
 
 /**
- * Agent health's Summary, the hub of Agent health. One question above the
- * fold: what does my agent get wrong, and what do I do about it? Numbers,
- * pins and marks first, the sentences one click away: the readings, how
- * turns went (their shapes), the issues in one list worst first (each opens
- * its fix), self-corrections in a row of their own, the tasks that need a
- * look, the order tools are called in with the common chains that are tasks,
- * and the requests no task handles. Before there is a reading, one designed
- * state sits where the reading would.
+ * Agent health's page around its reading: the header, the designed state shown before there is a
+ * reading, and the notices about the data. The reading itself is `content`.
  *
  * Owned (ADR-0004): no public share link or plan to pick. The sections that
  * upstream hands an upgrade link get none, so nothing is sold. The importer is
@@ -97,8 +80,6 @@ export interface SummaryViewProps {
   tasks: TaskListModel | null;
   /** Null when Fixes could not be read: no issue then claims a fix. */
   fixes: Pick<FixesModel, "open" | "applied"> | null;
-  /** Null when the page does not show them (`FocusedHealthView`). */
-  corrections: SelfCorrectionsCardModel | null;
   /** The printable report for this window; null hides it. */
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
@@ -122,8 +103,8 @@ export function SummaryView({
   content,
   ...props
 }: SummaryViewProps & {
-  /** Drawn in place of the Summary once there is a reading; the page around it stays the same. */
-  content?: ReactNode;
+  /** Drawn once there is a reading. */
+  content: ReactNode;
 }) {
   const { projectId, projectName, model, imports } = props;
   const share = props.share ?? null;
@@ -188,16 +169,7 @@ export function SummaryView({
           data-health-page-state={state.kind}
           data-health-readiness={stateReadiness(state)}
         >
-          {ready ? (
-            (content ?? <Ready {...props} />)
-          ) : (
-            <NotReady
-              {...props}
-              state={state}
-              canImport={canImport}
-              readings={content === undefined}
-            />
-          )}
+          {ready ? content : <NotReady {...props} state={state} canImport={canImport} />}
         </div>
         {ready ? importer("dialog") : importer("history")}
       </PageBody>
@@ -205,7 +177,7 @@ export function SummaryView({
   );
 }
 
-/** Before a reading: the state block where the reading would be, then the readings as dashes while it fills. */
+/** Before a reading: the state block where the reading would be. */
 function NotReady({
   projectId,
   model,
@@ -214,132 +186,23 @@ function NotReady({
   canImport,
   imports,
   partial = null,
-  readings,
 }: SummaryViewProps & {
   state: HealthPageState;
   canImport: boolean;
-  /** The readings as dashes, where the page will show them. */
-  readings: boolean;
 }) {
-  const collecting = stateReadiness(state) === "collecting";
+  if (state.kind === "ready") return null;
+  if (state.kind === "tool_spans") return <ToolSpansBlock />;
+  if (state.kind === "imported_no_tools" && partial)
+    return <PartialReading reading={partial} source={state.source} canImport={canImport} />;
   return (
-    <>
-      {state.kind === "tool_spans" ? (
-        <ToolSpansBlock />
-      ) : state.kind === "ready" ? null : state.kind === "imported_no_tools" && partial ? (
-        <PartialReading reading={partial} source={state.source} canImport={canImport} />
-      ) : (
-        <HealthStateV2
-          projectId={projectId}
-          state={state}
-          windowDays={model.windowDays}
-          canImport={canImport}
-          billingHref={billingHref}
-          sourceLabel={imports?.sourceLabel}
-        />
-      )}
-      {collecting && readings ? (
-        <Readings readings={readingViews(model.tiles)} interactive={false} />
-      ) : null}
-    </>
-  );
-}
-
-function Ready({
-  projectId,
-  model,
-  state,
-  tasks,
-  fixes,
-  corrections,
-  billingHref,
-  lockedPlan = null,
-  imports,
-  inferredTools = false,
-}: SummaryViewProps) {
-  const { gap, lane, runLabel, rows, taskSteps, score, line } = readyReading({
-    projectId,
-    model,
-    tasks,
-    fixes,
-  });
-  const issues = (
-    <IssuesSection
+    <HealthStateV2
       projectId={projectId}
-      rows={rows}
-      line={line}
-      windowLabel={runLabel}
-      examplesAllowed={model.evidenceTurnsPerSignal > 0}
-      lockedCount={model.lockedCount}
-      upgradeHref={billingHref}
-      lockedPlan={lockedPlan}
-      dismissed={model.dismissed ?? []}
-      calculating={score && model.earlyReading ? { progress: model.earlyProgress ?? null } : null}
+      state={state}
+      windowDays={model.windowDays}
+      canImport={canImport}
+      billingHref={billingHref}
+      sourceLabel={imports?.sourceLabel}
     />
-  );
-  const workflows = model.workflows;
-  const asksLaneKey = lane === "otel" ? "otel_content" : "sdk_user_messages";
-  // Inferred tool calls come without content: the asks say why they are empty, even with no task mined yet.
-  const asksShowSetup =
-    inferredTools || (!!workflows && workflows.items.length > 0 && asksMissing(model.setup));
-  const asksSetupKey = asksShowSetup ? asksLaneKey : null;
-  return (
-    <>
-      <LeadingCallouts
-        state={state}
-        model={model}
-        imports={imports}
-        inferredTools={inferredTools}
-      />
-      {score ? (
-        <HealthScore
-          score={score}
-          next={scoreFixes(rows)}
-          early={!!model.earlyReading}
-          progress={model.earlyProgress ?? null}
-          inferredTools={inferredTools}
-        />
-      ) : null}
-      <TrailingCallouts
-        projectId={projectId}
-        state={state}
-        model={model}
-        imports={imports}
-        score={score}
-      />
-      {/* With the score leading, what moves it comes right under it. */}
-      {score ? issues : null}
-      <Readings readings={readingViews(tilesForGap(model.tiles, gap))} />
-      {gap ? null : <ShapesSection shapes={model.shapes} turns={model.turns} vocabulary={lane} />}
-      {score ? null : issues}
-      {corrections ? <SelfCorrectionsRow model={corrections} /> : null}
-      {gap ? (
-        <GapBlock gap={gap} lane={lane} />
-      ) : (
-        <TasksNeedingLook projectId={projectId} tasks={tasks} />
-      )}
-      {gap ? null : (
-        <>
-          <CallOrderSection
-            projectId={projectId}
-            flow={model.flow}
-            windowLabel={runLabel}
-            turnSourceMix={model.turnSourceMix}
-            sourceMode={model.sourceMode}
-            tasks={taskSteps}
-          />
-          {workflows && !workflows.blocked ? (
-            <UnservedSection
-              projectId={projectId}
-              asks={workflows.unserved}
-              asksFrom={workflows.asksFrom}
-              asksSetupKey={asksSetupKey}
-              contentNotCaptured={inferredTools}
-            />
-          ) : null}
-        </>
-      )}
-    </>
   );
 }
 
@@ -454,14 +317,6 @@ function EarlyReadingNotice(props: {
       <Callout title={copy.title}>{copy.body}</Callout>
     </div>
   );
-}
-
-/** The three fixes worth the most points, as the score lists them; the rows already go most points first. */
-function scoreFixes(rows: readonly IssueRow[]): ScoreFix[] {
-  return rows
-    .filter((row) => (row.points ?? 0) >= 1)
-    .slice(0, 3)
-    .map((row) => ({ peek: row.peek, title: row.title, kind: row.kind, points: row.points ?? 0 }));
 }
 
 /** The page when no database is connected: the header and one notice. */

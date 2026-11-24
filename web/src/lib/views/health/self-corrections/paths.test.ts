@@ -10,11 +10,11 @@ import {
 } from "@/lib/views/health/self-corrections/paths";
 
 test("the page's own link drops the default window and empty filters", () => {
-  assert.equal(selfCorrectionsHref("p 1"), "/project/p%201/health/self-corrections");
-  assert.equal(selfCorrectionsHref("p1", { days: 7 }), "/project/p1/health/self-corrections");
+  assert.equal(selfCorrectionsHref("p 1"), "/project/p%201/self-corrections");
+  assert.equal(selfCorrectionsHref("p1", { days: 7 }), "/project/p1/self-corrections");
   assert.equal(
     selfCorrectionsHref("p1", { days: 30, filters: { tool: "skill:triage" } }),
-    "/project/p1/health/self-corrections?days=30&tool=skill%3Atriage",
+    "/project/p1/self-corrections?days=30&tool=skill%3Atriage",
   );
 });
 

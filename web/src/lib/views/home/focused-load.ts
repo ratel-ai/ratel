@@ -47,7 +47,7 @@ import {
 import { readTopology, type Topology } from "@/lib/views/project-entities/topology";
 
 /**
- * The recap Overview's reads (`focusedConsole`): when telemetry last arrived,
+ * The Overview's reads: when telemetry last arrived,
  * the Agent health reading and the topology, nothing else. Each degrades on
  * its own. The context Panel's read runs only when the Panel is asked for.
  */

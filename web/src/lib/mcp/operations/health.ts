@@ -335,7 +335,7 @@ export interface HealthScoreViewData {
 }
 
 /**
- * The page's own score and rows (`Ready` in `components/health/v2/SummaryView.tsx`),
+ * The page's own score and rows (`readyReading` in `components/console/health/v2/SummaryView.tsx`),
  * through the same functions with the same inputs, so the card and the page
  * cannot disagree: a gap in the data hides the run-based issues and the score
  * over them, issues group by kind, and a row is worth what fixing all of it

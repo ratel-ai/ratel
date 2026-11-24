@@ -3,28 +3,21 @@
 import assert from "node:assert/strict";
 import { type TestContext, test } from "node:test";
 import { createElement } from "react";
+import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
+import { HealthSkeleton } from "@/components/console/health/focused/HealthSkeleton";
 import { IssueDetail } from "@/components/console/health/v2/IssueDetail";
-import { SelfCorrectionsRow } from "@/components/console/health/v2/SelfCorrectionsRow";
-import { SummarySkeleton } from "@/components/console/health/v2/SummarySkeleton";
 import {
   SummaryNoDatabase,
-  SummaryView,
   type SummaryViewProps,
 } from "@/components/console/health/v2/SummaryView";
 import { fixLookups } from "@/components/console/health/v2/summary-model";
-import { AskExample } from "@/components/console/health/v2/UnservedSection";
 import { composition } from "@/lib/composition/ports";
 import type { ImportSummary } from "@/lib/contracts/imported-runs";
-import {
-  HEALTH_SCORE_VERSION,
-  healthScoreView,
-  scoredIssues,
-} from "@/lib/readings/trace-signals/health-score";
+import { HARM_LEVELS, healthScoreView } from "@/lib/readings/trace-signals/health-score";
 import type { StoredSetup } from "@/lib/readings/trace-signals/setup-facts";
 import {
   type FlowJourney,
   type HealthPageModel,
-  type HealthTile,
   type WorkflowsView,
   windowOptionsForPlan,
 } from "@/lib/readings/trace-signals/view";
@@ -33,7 +26,6 @@ import { issueRows, rowOfIssue } from "@/lib/views/health/issue-rows";
 import { MOCK_HEALTH_MODEL, MOCK_NO_TELEMETRY } from "@/lib/views/health/mock-fixture";
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import type { HealthPageState } from "@/lib/views/health/page-state";
-import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import type { TaskListModel, TaskRow } from "@/lib/views/tasks/model";
 import { attributeValues, render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
@@ -41,8 +33,8 @@ import { findDsViolations } from "../../../../../eslint-rules/ds-tokens.mjs";
 /**
  * Agent health's Summary as a reader sees it, in every state: the reading,
  * before one (nothing yet, collecting, being built, outside the window, no
- * tool calls, a read that failed), runs mixed together, and OpenTelemetry
- * or SDK runs. Each checks the house rules (DESIGN.md), the product's nouns
+ * tool calls, a read that failed), and a degraded read.
+ * Each checks the house rules (DESIGN.md), the product's nouns
  * (never "topic"), and that what users wrote never sits in an attribute.
  *
  * Owned (ADR-0004): no importer, share link or plan link on the Summary.
@@ -196,38 +188,6 @@ const COMBINE = fix(
   ["find_task", "assign_task"],
 );
 
-const CARD: SelfCorrectionsCardModel = {
-  state: "ready",
-  windowDays: 7,
-  rate: {
-    label: "Per 100 turns",
-    value: "19.4",
-    hint: "21.1 in the 7 days before",
-    delta: { value: "-1.7", direction: "down", good: true, label: "vs the 7 days before" },
-  },
-  events: 58,
-  turns: 298,
-  topTool: {
-    node: "assign_task",
-    entryId: "assign_task",
-    entryKind: "tool",
-    name: "assign_task",
-    events: 32,
-    mainKind: "Switched tools",
-    href: `${ROOT}/health/self-corrections?days=7&tool=assign_task`,
-  },
-  href: `${ROOT}/health/self-corrections?days=7`,
-  trend: {
-    values: [21, 18, null, 20, 19, 22, 19.4],
-    bucketDays: 1,
-    label: "Per 100 turns, day by day",
-  },
-  recovered: { label: "Recovered", value: "68%", hint: "25 of 37 failed calls" },
-  recoveredShare: 25 / 37,
-  topPhrase: { phrase: "I'm sorry", events: 6 },
-  phrasesCaptured: true,
-};
-
 const SETUP: StoredSetup = {
   version: 1,
   lanes: { sdk: true, otel: false },
@@ -282,7 +242,6 @@ function props(over: Partial<SummaryViewProps> = {}): SummaryViewProps {
     billingHref: null,
     tasks: TASKS,
     fixes: { open: [FIX, REWRITE, COMBINE], applied: [] },
-    corrections: CARD,
     reportHref: `/report/health/${PROJECT}?days=7&print=1`,
     imports: null,
     now: NOW,
@@ -315,7 +274,10 @@ function importsOf(list: ImportSummary[]): NonNullable<SummaryViewProps["imports
 }
 
 function page(over: Partial<SummaryViewProps> = {}, search = ""): string {
-  return render(createElement(SummaryView, props(over)), { pathname: `${ROOT}/health`, search });
+  return render(createElement(FocusedHealthView, props(over)), {
+    pathname: `${ROOT}/health`,
+    search,
+  });
 }
 
 /** DESIGN.md's rules and the product's nouns, on every render. */
@@ -344,275 +306,6 @@ function assertHouseStyle(html: string, where: string) {
     );
   }
 }
-
-/** Where each section's heading sits in the page, in order. */
-function headingOrder(html: string, titles: readonly string[]): number[] {
-  return titles.map((title) =>
-    html.search(new RegExp(`<h2[^>]*>(?:<span[^>]*>(?:<svg[^]*?</svg>)?)?${title}`)),
-  );
-}
-
-test("the reading, in its order: readings, turn shapes, issues, self-corrections, tasks, call order, chains, requests", () => {
-  const html = page();
-  assertHouseStyle(html, "ready");
-  const text = visibleText(html);
-  assert.match(html, /<h1[^>]*>Agent health<\/h1>/);
-  assert.match(
-    text,
-    /What Site Copilot gets wrong this week, from 1,284 turns through the Ratel SDK\./,
-  );
-  assert.match(html, /data-health-page-state="ready"/);
-  const order = headingOrder(html, [
-    "Turn shapes",
-    "Issues",
-    "Self-corrections",
-    "Tasks that need a look",
-    "What your agent calls first",
-    "Common chains",
-    "Asks no task handles",
-  ]);
-  assert.ok(
-    order.every((at) => at > 0),
-    `every section is there: ${order.join(", ")}`,
-  );
-  assert.deepEqual(
-    [...order].sort((a, b) => a - b),
-    order,
-    "in the page's order",
-  );
-  assert.ok(html.indexOf("data-health-readings") < order[0]!, "the readings first");
-
-  // The window as links, the plan's longest one locked with the plan that has it.
-  assert.match(
-    html,
-    new RegExp(`<a (?=[^>]*aria-current="true")(?=[^>]*href="${ROOT}/health")[^>]*>7\\sdays</a>`),
-  );
-  assert.match(html, new RegExp(`href="${ROOT}/health\\?days=30"`));
-  // Owned: a window outside the limits is locked without a plan name; the menu holds the report alone.
-  assert.match(html, /data-health-window-locked="90"[^]*90 days[^]*, not included/);
-  assert.match(html, /aria-label="Download"/, "one header menu");
-
-  // The readings, in plain words, with their change; self-corrections are no reading of their own.
-  for (const label of ["First try", "Detours", "Junk in lists", "Wasted calls per 100 turns"]) {
-    assert.match(html, new RegExp(`<dt[^>]*>(?:<a[^>]*>)?${label}(?:</a>)?</dt>`), label);
-  }
-  assert.doesNotMatch(html, />Self-corrections per 100 turns</);
-  assert.match(html, /href="[^"]*\?peek=reading%3Afirst_try"/, "a reading opens its numbers");
-
-  // Turn shapes: a picture, a name, a share; the sentence is read aloud, not shown.
-  assert.match(html, /data-shape-pictogram="direct"/);
-  assert.match(html, /<span class="sr-only">: /);
-
-  // The one Callout: what to turn on, each chip opening its guide.
-  assert.match(html, /role="note"[^]*2 settings missing/);
-  assert.match(html, /href="[^"]*\?peek=setup%3Asdk_turn_ids"[^>]*>[^]*Turn ids[^]*Not sent/);
-  assert.match(html, /Partly sent, 42%/);
-});
-
-test("issues: one list, each row only its kind's icon, title, status, one number and the way forward", () => {
-  const html = page();
-  const text = visibleText(html);
-  assert.match(
-    html,
-    /<h2[^>]*>(?:<span[^>]*>)?<svg[^>]*lucide-circle-alert/,
-    "the issue noun's mark on the heading",
-  );
-  assert.match(text, /12 issues across \d+ tools, worst first\. 2 more are too early to call\./);
-  assert.equal((html.match(/data-issue-row=/g) ?? []).length, 5, "five, then the rest");
-  assert.match(html, /data-show-all-issues=""[^>]*>Show all 14 issues</);
-  assert.match(
-    html,
-    /id="signal-sig-no-follow-search-projects"/,
-    "a hidden row's link target is still there",
-  );
-  assert.match(html, /data-issue-icon="magnet"/, "the kind's icon");
-  assert.match(html, /Wrong tool keeps showing up/);
-
-  // No chips on a row: the tools and the task live in the panel.
-  const issues = html.slice(
-    html.search(/<h2[^>]*>(?:<span[^>]*>)?(?:<svg[^]*?<\/svg>)?Issues/),
-    html.search(/data-health-corrections=/),
-  );
-  assert.doesNotMatch(
-    issues,
-    /lucide-wrench|data-issue-task=|Ship a release/,
-    "no tool or task chips on the rows",
-  );
-
-  // A description update says so and goes to Quality › Descriptions.
-  assert.match(
-    html,
-    new RegExp(
-      `<a (?=[^>]*href="${ROOT}/quality/descriptions\\?tool=create_task")(?=[^>]*data-issue-action="description")[^>]*>[^]*?Update description<span class="sr-only">: Narrow create_task&#x27;s searchable description</span>`,
-    ),
-  );
-  assert.match(
-    html,
-    new RegExp(
-      `<a (?=[^>]*href="${ROOT}/quality/descriptions\\?peek=rewrite%3Arw-1")(?=[^>]*data-issue-action="description")`,
-    ),
-    "Quality's own rewrite in its panel",
-  );
-  // Any other fix opens on Fixes; no fix, its turns.
-  assert.match(
-    html,
-    new RegExp(
-      `<a (?=[^>]*href="${ROOT}/improvement/fixes\\?peek=craft%3Afx-2")(?=[^>]*data-issue-action="fix")[^>]*>Fix<span class="sr-only">: Combine find_task and assign_task</span>`,
-    ),
-  );
-  assert.match(html, /data-issue-action="turns"[^>]*>See turns/);
-  assert.ok(
-    !text.includes(CAPTURED),
-    "an example turn is read when its issue is opened, never with the page",
-  );
-});
-
-test("self-corrections: their own row, the headline only, and the way to the page", () => {
-  const html = render(createElement(SelfCorrectionsRow, { model: CARD }), {
-    pathname: `${ROOT}/health`,
-  });
-  assertHouseStyle(`<h1></h1>${html}`, "self-corrections row");
-  const text = visibleText(html);
-  assert.match(
-    html,
-    /<h2[^>]*>(?:<span[^>]*>)?<svg[^>]*lucide-rotate-ccw[^]*Self-corrections/,
-    "the self-correction noun's mark",
-  );
-  assert.match(
-    html,
-    new RegExp(
-      `<a (?=[^>]*href="${ROOT}/health/self-corrections\\?days=7")(?=[^>]*data-corrections-open="")[^>]*>See self-corrections`,
-    ),
-  );
-  for (const label of ["Per 100 turns", "Recovered", "Most after", "Top phrase"])
-    assert.match(html, new RegExp(`>${label}<`), label);
-  assert.match(text, /19\.4/);
-  assert.match(html, /role="img" aria-label="Per 100 turns, day by day"/, "its trend");
-  assert.match(text, /68%/);
-  assert.match(
-    html,
-    new RegExp(
-      `<a (?=[^>]*href="${ROOT}/health/self-corrections\\?days=7&amp;tool=assign_task")[^>]*>[^]*?assign_task`,
-    ),
-    "the top tool as a pin that narrows the page",
-  );
-  assert.match(text, /“I&#x27;m sorry”|“I'm sorry”/);
-  assert.match(text, /6 times/);
-
-  const none = visibleText(
-    render(createElement(SelfCorrectionsRow, { model: { ...CARD, events: 0 } })),
-  );
-  assert.match(none, /None this week/);
-  const capture = visibleText(
-    render(
-      createElement(SelfCorrectionsRow, {
-        model: { ...CARD, topPhrase: null, phrasesCaptured: false },
-      }),
-    ),
-  );
-  assert.match(capture, /Needs content capture/, "without captured replies it says what it needs");
-  for (const [state, words] of [
-    ["unavailable", /Couldn't load self-corrections|Couldn&#x27;t load self-corrections/],
-    ["not_read", /after the next reading/],
-    ["mixed_runs", /Needs turn ids/],
-    ["no_turns", /No runs in this window/],
-  ] as const) {
-    assert.match(
-      render(createElement(SelfCorrectionsRow, { model: { ...CARD, state } })),
-      words,
-      state,
-    );
-  }
-});
-
-test("tasks that need a look: the task as its pin, its weakest step as a tool pin with how often it fails", () => {
-  const html = page();
-  assert.match(html, new RegExp(`href="${ROOT}/health/tasks"[^>]*>All tasks`));
-  assert.match(
-    html,
-    new RegExp(
-      `data-task-row="wf-release"[^>]*><a (?=[^>]*href="${ROOT}/health/tasks/wf-release")[^>]*>[^]*?bg-chart-1[^]*?Ship a release`,
-    ),
-    "the task in its color",
-  );
-  assert.match(html, /data-task-weakest="assign_task"[^]*lucide-wrench[^]*assign_task[^]*40% fail/);
-  assert.doesNotMatch(html, /data-task-row="wf-browse"/, "a healthy task is not here");
-});
-
-/** find_task runs before assign_task in all its turns, and seldom otherwise: a pair "What comes before" keeps. */
-const PAIRED: FlowJourney = {
-  ...JOURNEY,
-  turns: 150,
-  paths: [
-    { start: "none", tools: ["find_task", "assign_task"], end: "ended", turns: 30 },
-    { start: "none", tools: ["create_task"], end: "ended", turns: 100 },
-    {
-      start: "search",
-      tools: ["find_task", "assign_task", "create_task"],
-      end: "ended",
-      turns: 20,
-    },
-  ],
-};
-
-test("the call order: plain words for its views, the lane it was read from, and chains named by their task", () => {
-  const html = page({ model: { ...READY_MODEL, flow: { ...READY_MODEL.flow, journey: PAIRED } } });
-  const text = visibleText(html);
-  assert.match(html, /<h2[^>]*>[^]*What your agent calls first[^]*data-journey-canvas="true"/);
-  assert.match(html, /data-call-order-source="sdk"[^]*Read from[^]*Ratel SDK/, "the SDK lane");
-  assert.match(text, /What comes before/);
-  assert.match(text, /Every call/);
-  assert.doesNotMatch(text, /Needs first/);
-  // Chains: only those that are a task, by its pin, with their turns and share.
-  assert.match(html, /data-journey-chains="1"/);
-  assert.match(
-    html,
-    new RegExp(
-      `data-chain-task="wf-release"[^]*href="${ROOT}/health/tasks/wf-release"[^]*Ship a release[^]*20 turns · 13%`,
-    ),
-  );
-  assert.match(
-    html,
-    /data-prereq-line=""[^]*lucide-hammer[^]*Say so in the tool/,
-    "what to do, marked as a fix",
-  );
-  assert.doesNotMatch(
-    html.slice(html.indexOf("data-journey-chains")),
-    /lucide-chevron-right[^]*find_task/,
-    "no raw tool list",
-  );
-
-  const otel = page({ model: { ...READY_MODEL, sourceMode: "otel" } });
-  assert.match(otel, /data-call-order-source="otel"[^]*OpenTelemetry/);
-  const noTask = page({
-    tasks: { ...TASKS, rows: [] },
-    model: { ...READY_MODEL, workflows: { ...WORKFLOWS, items: [] } },
-  });
-  assert.doesNotMatch(noTask, /Common chains/, "no chain is a task: the section is dropped");
-});
-
-test("asks no task handles: compact rows, the example on a click", () => {
-  const html = page();
-  const text = visibleText(html);
-  assert.match(html, /<h2[^>]*>[^]*Asks no task handles/);
-  assert.match(text, /1 ask · 4 runs/);
-  assert.match(
-    html,
-    /data-unserved-ask="0"[^]*lucide-wrench-off[^]*4 runs/,
-    "why, as an icon, and how often",
-  );
-  assert.ok(text.includes(ASK), "what was asked, as text");
-  assert.doesNotMatch(html, /make a pdf of the board/, "the example waits for a click");
-  assert.doesNotMatch(html, new RegExp(`href="${ROOT}/traces/turns/turn-77"`));
-
-  const example = render(
-    createElement(AskExample, { projectId: PROJECT, ask: WORKFLOWS.unserved[0]! }),
-  );
-  assertHouseStyle(`<h1></h1>${example}`, "request example");
-  assert.match(visibleText(example), /Also asked: “make a pdf of the board”/);
-  assert.match(visibleText(example), /No tool does this\. 4 runs\./);
-  assert.match(example, new RegExp(`href="${ROOT}/traces/turns/turn-77"`));
-});
 
 /** The detail a row's Panel holds (a Panel renders in a portal, so the detail is rendered on its own here). */
 function detail(
@@ -766,7 +459,7 @@ test("a plan without example turns says how many there are and where to get them
   );
   const page = render(
     createElement(
-      SummaryView,
+      FocusedHealthView,
       props({ model: { ...READY_MODEL, evidenceTurnsPerSignal: 0, lockedCount: 3 } }),
     ),
     { pathname: `${ROOT}/health` },
@@ -784,7 +477,7 @@ test("with an edition's plans, the locks name the plan that shows them, as upstr
   );
   const page = render(
     createElement(
-      SummaryView,
+      FocusedHealthView,
       props({
         model: { ...READY_MODEL, evidenceTurnsPerSignal: 0, lockedCount: 3 },
         lockedPlan: "Plus",
@@ -816,7 +509,7 @@ function withPlans(t: TestContext): void {
 test("with self-serve billing: the plan a window needs is named, and See plans links to Billing", (t) => {
   withPlans(t);
   const billingHref = "/org/acme/billing";
-  const ready = render(createElement(SummaryView, props({ billingHref })), {
+  const ready = render(createElement(FocusedHealthView, props({ billingHref })), {
     pathname: `${ROOT}/health`,
   });
   // The window as links, the plan's longest one locked with the plan that has it.
@@ -824,7 +517,7 @@ test("with self-serve billing: the plan a window needs is named, and See plans l
 
   const locked = render(
     createElement(
-      SummaryView,
+      FocusedHealthView,
       props({
         billingHref,
         model: { ...READY_MODEL, evidenceTurnsPerSignal: 0, lockedCount: 3 },
@@ -836,7 +529,7 @@ test("with self-serve billing: the plan a window needs is named, and See plans l
 
   const tooFew = render(
     createElement(
-      SummaryView,
+      FocusedHealthView,
       props({
         billingHref,
         state: {
@@ -858,7 +551,7 @@ test("with self-serve billing: the plan a window needs is named, and See plans l
   // Billing off: no plan is named and nothing links to Billing.
   const off = render(
     createElement(
-      SummaryView,
+      FocusedHealthView,
       props({
         billingHref: null,
         state: {
@@ -873,94 +566,6 @@ test("with self-serve billing: the plan a window needs is named, and See plans l
     { pathname: `${ROOT}/health` },
   );
   assert.doesNotMatch(off, /See plans|Plus includes/);
-});
-
-function otelTile(
-  key: HealthTile["key"],
-  value: number,
-  unit: HealthTile["unit"],
-  upIsGood: boolean,
-  sub: string,
-): HealthTile {
-  return {
-    key,
-    label: key,
-    value,
-    unit,
-    interval: null,
-    sub,
-    tier: "deterministic",
-    upIsGood,
-    delta: 0.01,
-    series: [],
-    n: 298,
-  };
-}
-
-test("OpenTelemetry only: its readings, its shapes and the source in the line under the title", () => {
-  const otel: HealthPageModel = {
-    ...READY_MODEL,
-    sourceMode: "otel",
-    tiles: [
-      otelTile("completed", 0.97, "share", true, "288 of 298 runs ended without a failed call."),
-      otelTile("failed_calls", 0.07, "share", false, "34 of 508 tool calls failed."),
-      otelTile(
-        "wasted_calls",
-        5.7,
-        "per_100_turns",
-        false,
-        "17 repeats and retries of the same tool.",
-      ),
-      otelTile("round_trips", 2.7, "per_turn", false, "806 model calls over 298 runs."),
-    ],
-    shapes: [
-      {
-        shape: "otel_direct",
-        label: "Direct",
-        description: "One tool call, and it worked.",
-        share: 0.6,
-        count: 180,
-      },
-      {
-        shape: "otel_retry",
-        label: "Retry",
-        description: "A tool failed, and the agent ran it again.",
-        share: 0.4,
-        count: 118,
-      },
-    ],
-  };
-  const html = page({ model: otel });
-  assertHouseStyle(html, "otel");
-  assert.match(visibleText(html), /through OpenTelemetry\./);
-  assert.match(html, /data-call-order-source="otel"/, "the call order says its lane");
-  for (const label of ["Finish rate", "Failed calls", "Model calls per run"])
-    assert.match(html, new RegExp(`>${label}<`));
-  assert.match(html, /data-shape-pictogram="otel_retry"/);
-  assert.match(html, /aria-label="Key"[^]*Another tool/);
-});
-
-test("runs mixed together: the run-based sections give way to one block that says how to send turn ids", () => {
-  const mixed: HealthPageModel = {
-    ...READY_MODEL,
-    workflows: { ...WORKFLOWS, blocked: "mixed_runs" },
-    setup: { ...SETUP, warnings: ["mixed_runs"] },
-  };
-  const html = page({ model: mixed, corrections: { ...CARD, state: "mixed_runs" } });
-  assertHouseStyle(html, "mixed runs");
-  assert.match(
-    html,
-    /data-health-gap="mixed_runs"[^]*Runs are mixed together[^]*href="[^"]*\?peek=setup%3Asdk_turn_ids"[^>]*>How to send turn ids/,
-  );
-  assert.doesNotMatch(html, />Turn shapes</);
-  assert.doesNotMatch(html, /data-tool-flow-map/);
-  assert.match(html, /data-setup-alert=""/, "the callout says why");
-  assert.match(html, /Needs turn ids/, "self-corrections say what they need");
-  assert.match(
-    html,
-    /<dt[^>]*>(?:<a[^>]*>)?First try(?:<\/a>)?<\/dt><dd[^>]*><span[^>]*>–<\/span>/,
-    "readings that need whole runs show a dash",
-  );
 });
 
 test("a newer reading on its way: the page watches for it", () => {
@@ -1023,93 +628,14 @@ test("a reading that read none of the imported runs shows no score and no verdic
   assert.doesNotMatch(text, /great shape|Healthy|of 100/);
 });
 
-test("the page leads with the Health score, and each issue says what fixing it wins back (RC-225)", () => {
-  const issues = scoredIssues(
-    READY_MODEL.signals.map((signal) => ({
-      id: signal.id,
-      kind: signal.kind,
-      severity: signal.severity,
-      totalTurns: signal.evidence.totalTurns,
-    })),
-  );
-  const base = healthScoreView(issues, READY_MODEL.turns);
-  const score = healthScoreView(issues, READY_MODEL.turns, [
-    { version: HEALTH_SCORE_VERSION, value: base.value - 4 },
-    { version: HEALTH_SCORE_VERSION, value: base.value - 9 },
-  ]);
-  const html = page({ model: { ...READY_MODEL, score } });
-  assertHouseStyle(html, "health score");
-  const text = visibleText(html);
-  assert.match(html, new RegExp(`data-health-score="${score.value}"`));
-  assert.match(text, /Health score/);
-  assert.match(text, new RegExp(`${score.value}\\s*of 100`));
-  assert.match(text, /\+4 since the last reading/);
-  assert.match(text, /most points first/);
-  assert.match(text, /costs points by how many turns it touches and how much it hurts them/);
-  assert.match(text, new RegExp(`Fix the top 3 issues to reach ${score.value + score.topGain}`));
-  assert.match(html, /data-health-score-ring=""/);
-  assert.match(text, /Raise it next/);
-  const fixes = [...html.matchAll(/data-score-fix-points="(\d+)"/g)].map((m) => Number(m[1]));
-  assert.ok(fixes.length > 0 && fixes.length <= 3, "the three fixes worth the most");
-  assert.ok(
-    text.indexOf("Health score") < text.indexOf("Issues") &&
-      text.indexOf("Issues") < text.indexOf("First try"),
-    "score, then what moves it, then the readings",
-  );
-  assert.match(text, /If fixed/);
-  const points = [...html.matchAll(/data-issue-points="(\d+)"/g)].map((m) => Number(m[1]));
-  assert.ok(points.length > 0, "rows carry their points");
-  assert.deepEqual(
-    points,
-    [...points].sort((a, b) => b - a),
-    "most points first",
-  );
-
-  // An early reading says "still calculating" without a paragraph: the ring beats, a pill counts, the issues say more may come.
-  const early = page({
-    model: {
-      ...READY_MODEL,
-      score,
-      earlyReading: true,
-      earlyProgress: { read: 1_055, total: 5_315, percent: 19 },
-    },
-  });
-  assertHouseStyle(early, "early score");
-  assert.match(early, /data-calculating=""/);
-  assert.match(early, /class="[^"]*score-beat/);
-  assert.match(early, /class="[^"]*score-wave/);
-  assert.match(early, /data-health-calculating="19"/);
-  assert.match(visibleText(early), /Calculating\s*19%/);
-  assert.match(early, /data-health-still-reading=""/);
-  assert.match(visibleText(early), /More issues may appear as we read the rest/);
-  assert.match(visibleText(early), /1,055 of 5,315 runs read/);
-  assert.doesNotMatch(
-    early,
-    /data-health-early-reading/,
-    "no paragraph-long notice when the score leads",
-  );
-  assert.doesNotMatch(
-    visibleText(early),
-    /since the last reading|Your first reading with a score/,
-    "a provisional score claims no change",
-  );
-  // A full reading neither beats nor counts.
-  assert.doesNotMatch(
-    html,
-    /score-beat|score-wave|data-health-calculating|data-health-still-reading/,
-  );
-});
-
 test("reads that failed cost their part, not the page", () => {
   const html = page({
     tasks: null,
     fixes: null,
-    corrections: { ...CARD, state: "unavailable" },
   });
   assertHouseStyle(html, "degraded");
-  assert.match(html, /role="alert"[^]*Couldn&#x27;t load tasks/);
+  assert.match(html, /data-health-issues=/, "the issues stay");
   assert.doesNotMatch(html, /data-issue-action="fix"/, "without Fixes no issue claims a fix");
-  assert.match(html, /Couldn&#x27;t load self-corrections/);
   assert.match(html, /aria-label="Download"/, "the PDF stays");
 });
 
@@ -1166,9 +692,6 @@ for (const [name, state, expected] of STATES) {
     assert.match(html, new RegExp(`data-health-page-state="${state.kind}"`));
     assert.doesNotMatch(html, /data-health-issues=/, "no issues before a reading");
     assert.doesNotMatch(html, /aria-label="Download"/, "the report waits for a reading");
-    if (state.kind === "too_few" || state.kind === "building")
-      assert.match(html, /data-health-readings="4"/, "the readings wait as dashes while it fills");
-    else assert.doesNotMatch(html, /data-health-readings=/);
   });
 }
 
@@ -1215,15 +738,20 @@ test("without a decided state, the model's own count decides: the collecting met
 });
 
 test("the loading state and the page without a database keep the header", () => {
-  const skeleton = render(createElement(SummarySkeleton));
+  const skeleton = render(createElement(HealthSkeleton));
   assertHouseStyle(skeleton, "skeleton");
   assert.match(skeleton, /role="status"[^>]*>Loading Agent health…/);
-  assert.match(skeleton, /data-summary-skeleton=""/);
+  assert.equal(skeleton.match(/data-health-skeleton="score"/g)?.length, 1);
+  assert.equal(
+    skeleton.match(/data-health-skeleton="category"/g)?.length,
+    HARM_LEVELS.length,
+    "a row per category",
+  );
   const noDb = render(createElement(SummaryNoDatabase));
   assert.match(noDb, /<h1[^>]*>Agent health<\/h1>[^]*No database connected yet/);
 });
 
-test("tool calls inferred from imported span shape: one callout near the top says so, and the asks say why they are empty", () => {
+test("tool calls inferred from imported span shape: one callout near the top says so", () => {
   const noAsks: HealthPageModel = {
     ...READY_MODEL,
     sourceMode: "otel",
@@ -1243,50 +771,6 @@ test("tool calls inferred from imported span shape: one callout near the top say
     html.indexOf("<h2") > 0 && html.indexOf("data-health-inferred-tools") < html.indexOf("<h2"),
     "above every section",
   );
-  assert.match(html, /data-unserved="content_not_captured"/);
-  assert.match(text, /Empty: content not captured/);
-
   const off = page({ model: noAsks });
   assert.doesNotMatch(off, /data-health-inferred-tools/, "recorded tool calls: no callout");
-  assert.doesNotMatch(
-    off,
-    /content_not_captured/,
-    "recorded tool calls: the asks section as before",
-  );
-});
-
-test("with the score shown and the tool calls inferred, the score card says what it could not check", () => {
-  const issues = scoredIssues(
-    READY_MODEL.signals.map((signal) => ({
-      id: signal.id,
-      kind: signal.kind,
-      severity: signal.severity,
-      totalTurns: signal.evidence.totalTurns,
-    })),
-  );
-  const score = healthScoreView(issues, READY_MODEL.turns);
-  const line = /Read from tool calls inferred from span shape\. Asks and answers are not checked\./;
-  const inferred = page({ model: { ...READY_MODEL, score }, inferredTools: true });
-  assertHouseStyle(inferred, "inferred score");
-  assert.match(visibleText(inferred), line);
-  assert.ok(
-    inferred.indexOf("data-health-score-inferred") > inferred.indexOf("data-health-score="),
-    "inside the score card",
-  );
-  assert.match(
-    inferred,
-    new RegExp(`data-health-score="${score.value}"`),
-    "the score itself is unchanged",
-  );
-
-  assert.doesNotMatch(
-    visibleText(page({ model: { ...READY_MODEL, score } })),
-    line,
-    "recorded tool calls: no line",
-  );
-  assert.doesNotMatch(
-    visibleText(page({ model: { ...READY_MODEL, score: null }, inferredTools: true })),
-    line,
-    "no score: no line",
-  );
 });

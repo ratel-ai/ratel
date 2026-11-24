@@ -50,18 +50,11 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "traces", href: `/project/${P1}/traces` },
       { id: "tasks", href: `/project/${P1}/tasks` },
       { id: "intents", href: `/project/${P1}/intents` },
+      { id: "self-corrections", href: `/project/${P1}/self-corrections` },
       { id: "improvements", href: `/project/${P1}/improvement` },
       { id: "ship", href: `/project/${P1}/ship` },
       { id: "catalog", href: `/project/${P1}/catalogs` },
       { id: "settings", href: `/project/${P1}/settings` },
-    ],
-  );
-  const health = items.find(({ id }) => id === "health");
-  assert.deepEqual(
-    health?.children?.map(({ id, href }) => ({ id, href })),
-    [
-      { id: "health-summary", href: `/project/${P1}/health` },
-      { id: "health-self-corrections", href: `/project/${P1}/health/self-corrections` },
     ],
   );
   const intents = items.find(({ id }) => id === "intents");
@@ -91,15 +84,6 @@ test("with a project, the rail links every core destination to that project", ()
       { id: "catalog-test", href: `/project/${P1}/playground` },
     ],
   );
-});
-
-test("focusedConsole off: the rail is the one without the flag", () => {
-  for (const projectId of [P1, undefined]) {
-    assert.deepEqual(
-      consoleNav({ projectId, additions: [], focusedConsole: false }),
-      consoleNav({ projectId, additions: [] }),
-    );
-  }
 });
 
 test("without a project, project-scoped destinations are absent, not disabled", () => {
@@ -159,6 +143,7 @@ test("outside a project, the organization rail lists its projects page", () => {
       "traces",
       "tasks",
       "intents",
+      "self-corrections",
       "improvements",
       "ship",
       "catalog",
@@ -178,7 +163,7 @@ test("composition additions follow the core destinations with stable ids", () =>
     icon: "edition",
     section: "edition",
   });
-  assert.equal(withProject.length, 10);
+  assert.equal(withProject.length, 11);
   assert.deepEqual(
     without.map(({ id }) => id),
     ["edition:/admin"],
@@ -200,6 +185,7 @@ test("the OSS composition adds no destination", () => {
       "traces",
       "tasks",
       "intents",
+      "self-corrections",
       "improvements",
       "ship",
       "catalog",
@@ -237,6 +223,7 @@ test("an edition's project group sits between the core pages and Settings, under
       "group:monitor:traces:",
       "group:insights:tasks:Insights",
       "group:insights:intents:",
+      "group:insights:self-corrections:",
       "group:improve:improvements:Improve",
       "group:ship:ship:Ship",
       "group:apis:project-models/embeddings:APIs",
@@ -292,6 +279,7 @@ test("an edition's group placed in setup is one collapsible row between Catalog 
       "group:monitor:traces:",
       "group:insights:tasks:Insights",
       "group:insights:intents:",
+      "group:insights:self-corrections:",
       "group:improve:improvements:Improve",
       "group:ship:ship:Ship",
       "settings:catalog:",
@@ -394,6 +382,7 @@ test("Settings sits in a section of its own in both rails, the edition's items i
       "group:monitor:traces",
       "group:insights:tasks",
       "group:insights:intents",
+      "group:insights:self-corrections",
       "group:improve:improvements",
       "group:ship:ship",
       "settings:catalog",
@@ -485,12 +474,12 @@ test("the command menu lists the project's pages, the organization's, then every
     [
       `Project|Overview|/project/${P1}`,
       `Project|Agent health|/project/${P1}/health`,
-      `Project|Self-corrections|/project/${P1}/health/self-corrections`,
       `Project|Traces|/project/${P1}/traces`,
       `Project|Tasks|/project/${P1}/tasks`,
       `Project|Intents|/project/${P1}/intents`,
       `Project|Flows|/project/${P1}/intents/flows`,
       `Project|Map|/project/${P1}/intents/map`,
+      `Project|Self-corrections|/project/${P1}/self-corrections`,
       `Project|Improvements|/project/${P1}/improvement`,
       `Project|Fixes|/project/${P1}/improvement/fixes`,
       `Project|Quality|/project/${P1}/quality`,
@@ -617,6 +606,7 @@ test("g then a letter jumps to the rail item that owns it, in either rail", () =
       "traces:t",
       "tasks:w",
       "intents:i",
+      "self-corrections:",
       "improvements:",
       "ship:l",
       "catalog:c",
@@ -661,6 +651,7 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
       "traces|group:monitor|",
       "tasks|group:insights|Insights",
       "intents|group:insights|",
+      "self-corrections|group:insights|",
       "improvements|group:improve|Improve",
       "ship|group:ship|Ship",
       "project-models/x|group:apis|APIs",
@@ -672,18 +663,11 @@ test("the project rail groups into Monitor, Insights, Improve and Ship, then set
   assert.equal(ship?.href, `/project/${P1}/ship`, "Ship is the one new page");
   assert.equal(activeNavItemId(`/project/${P1}/ship`, items), "ship");
   assert.equal(shortcutHref(items, "l"), `/project/${P1}/ship`);
-  // Tasks is a top-level page under Insights; Agent health keeps its Summary and Self-corrections.
+  // Tasks is a top-level page under Insights.
   const tasks = items.find(({ id }) => id === "tasks");
   assert.equal(tasks?.href, `/project/${P1}/tasks`);
   assert.equal(activeNavItemId(`/project/${P1}/tasks/book-flight`, items), "tasks");
   assert.equal(shortcutHref(items, "w"), `/project/${P1}/tasks`);
-  assert.deepEqual(
-    items.find(({ id }) => id === "health")?.children?.map(({ id }) => id),
-    ["health-summary", "health-self-corrections"],
-  );
-  // Agent health is lit as one item, wherever inside it the reader is.
-  assert.equal(activeNavItemId(`/project/${P1}/health`, items), "health");
-  assert.equal(activeNavItemId(`/project/${P1}/health/self-corrections`, items), "health");
   // Tasks has absorbed the Agent health Tasks pages.
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks`, items), "tasks");
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks/sessions/s-1`, items), "tasks");
@@ -716,8 +700,8 @@ test("the shell's organization: the project's own, else the route's, else the ac
   assert.equal(shellOrganization([], projects, "/org/acme", "acme"), undefined);
 });
 
-test("focusedConsole on: Self-corrections is an insight and Agent health has no sub-page", () => {
-  const items = consoleNav({ projectId: P1, additions: [], focusedConsole: true });
+test("Self-corrections is an insight and Agent health has no sub-page", () => {
+  const items = consoleNav({ projectId: P1, additions: [] });
   assert.deepEqual(
     items.map(({ id, section, sectionLabel }) => `${id}|${section ?? ""}|${sectionLabel ?? ""}`),
     [
@@ -743,19 +727,14 @@ test("focusedConsole on: Self-corrections is an insight and Agent health has no 
   assert.equal(activeNavItemId(`/project/${P1}/health/tasks`, items), "tasks");
 });
 
-test("the command menu finds Self-corrections by its keywords, flag off and on", () => {
-  for (const [focusedConsole, href] of [
-    [false, `/project/${P1}/health/self-corrections`],
-    [true, `/project/${P1}/self-corrections`],
-  ] as const) {
-    const entries = commandEntries({
-      items: consoleNav({ projectId: P1, additions: [], focusedConsole }),
-      projectId: P1,
-      projects: [],
-      pathname: `/project/${P1}`,
-    });
-    for (const word of ["apologies", "retries", "gave up"]) {
-      assert.equal(searchCommands(entries, word)[0]?.href, href, word);
-    }
+test("the command menu finds Self-corrections by its keywords", () => {
+  const entries = commandEntries({
+    items: consoleNav({ projectId: P1, additions: [] }),
+    projectId: P1,
+    projects: [],
+    pathname: `/project/${P1}`,
+  });
+  for (const word of ["apologies", "retries", "gave up"]) {
+    assert.equal(searchCommands(entries, word)[0]?.href, `/project/${P1}/self-corrections`, word);
   }
 });

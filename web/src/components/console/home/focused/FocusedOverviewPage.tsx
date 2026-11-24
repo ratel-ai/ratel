@@ -11,7 +11,7 @@ import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 type LoadOrganization = Parameters<typeof loadFocusedOverview>[0]["organization"];
 
-/** Overview with `focusedConsole`: the Health score and the topology. */
+/** Overview: the Health score and the topology. */
 export async function FocusedOverviewPage({
   project,
   organization,
@@ -46,7 +46,6 @@ export async function FocusedOverviewPage({
             isDemoProject={project.isDemo}
             surface="project_home"
             record={!inSupportSession}
-            focusedConsole
           />
         </span>
       }
