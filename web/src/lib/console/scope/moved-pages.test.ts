@@ -35,7 +35,6 @@ test("pages folded into one product answer with their new home", () => {
     `/project/${P}/health/tasks/sessions/s-1?tools=a%2Cb`,
   );
   assert.equal(at("/intents/asks?peek=intent_3&sort=label"), `/project/${P}/intents?peek=intent_3`);
-  assert.equal(at("/dashboards"), `/project/${P}?peek=context`);
   assert.equal(at("/runtime-events?type=search"), `/project/${P}/settings/developer?type=search`);
 });
 
@@ -48,6 +47,7 @@ test("what needs the database, or never moved, is left to the page", () => {
   assert.equal(at(`/improvement/tool-explorer?peek=${U}`), null);
   assert.equal(at("/improvement/fixes"), null);
   assert.equal(at("/intents"), null);
+  assert.equal(at("/dashboards"), null, "the page decides by its flag");
   assert.equal(at("/health/tasks"), null);
   assert.equal(at("/quality"), null);
   assert.equal(

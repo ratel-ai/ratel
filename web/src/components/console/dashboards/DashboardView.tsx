@@ -1,0 +1,304 @@
+"use client";
+
+import { Button, IconButton } from "@ratel/design-system/button";
+import { cn } from "@ratel/design-system/cn";
+import { ConfirmDialog } from "@ratel/design-system/dialog";
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLinkItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@ratel/design-system/menu";
+import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
+import { EmptyState } from "@ratel/design-system/states";
+import { toast } from "@ratel/design-system/toast";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartColumn,
+  Ellipsis,
+  ListTree,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useTraceNavigation } from "@/components/console/traces/navigation";
+import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/TracesHeader";
+import type { MetricResult } from "@/lib/synthesis/metrics/query";
+import {
+  filterChips,
+  type TraceFilterBarFacets,
+  withRangePreset,
+} from "@/lib/synthesis/traces/v2/filters";
+import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
+import {
+  dashboardsHref,
+  searchFromTraceFilter,
+  widgetTracesHref,
+} from "@/lib/views/dashboards/links";
+import type { Widget, WidgetInput, WidgetWidth } from "@/lib/views/dashboards/types";
+import { widgetName } from "@/lib/views/dashboards/widget";
+import { NameDialog } from "./NameDialog";
+import { useDashboardAction } from "./use-dashboard-action";
+import { WidgetBody } from "./WidgetBody";
+import { WidgetEditor } from "./WidgetEditor";
+
+const WIDTH_CLASS: Readonly<Record<WidgetWidth, string>> = {
+  third: "lg:col-span-2",
+  half: "lg:col-span-3",
+  full: "lg:col-span-6",
+};
+
+/** One dashboard: its widgets in order, over the time window in the URL. */
+export function DashboardView({
+  projectId,
+  dashboard,
+  widgets,
+  facets,
+  timeWindow,
+}: {
+  projectId: string;
+  dashboard: { id: string; name: string };
+  widgets: readonly { widget: Widget; result: MetricResult | null }[];
+  facets: TraceFilterBarFacets;
+  timeWindow: TimeWindow;
+}) {
+  const router = useRouter();
+  const { pending, go } = useTraceNavigation();
+  const { change, saving } = useDashboardAction(projectId);
+  // The editor's widget outlives `editing`, so the dialog keeps its content as it closes.
+  const [editing, setEditing] = useState(false);
+  const [edited, setEdited] = useState<{ id: string; widget: WidgetInput } | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const dashboardId = dashboard.id;
+
+  function openEditor(stored: Widget | null) {
+    if (stored) {
+      const { id, ...widget } = stored;
+      setEdited({ id, widget });
+    } else {
+      setEdited(null);
+    }
+    setEditing(true);
+  }
+
+  async function save(widget: WidgetInput) {
+    const saved = await change(
+      edited
+        ? { action: "edit-widget", dashboardId, widgetId: edited.id, widget }
+        : { action: "add-widget", dashboardId, widget },
+    );
+    if (saved) setEditing(false);
+  }
+
+  async function remove({ id, ...widget }: Widget, index: number) {
+    if (!(await change({ action: "remove-widget", dashboardId, widgetId: id }))) return;
+    toast({
+      title: `${widgetName(widget)} removed`,
+      action: {
+        label: "Undo",
+        onClick: () => void change({ action: "add-widget", dashboardId, widget, index }),
+      },
+    });
+  }
+
+  const addWidget = (
+    <Button variant="primary" size="sm" onClick={() => openEditor(null)}>
+      <Plus className="size-3.5" aria-hidden />
+      Add widget
+    </Button>
+  );
+
+  return (
+    <Page>
+      <PageHeader
+        title={dashboard.name}
+        crumbs={[{ label: "Dashboards", href: dashboardsHref(projectId) }]}
+        actions={
+          <>
+            <TimeWindowMenu
+              timeWindow={timeWindow}
+              onToday={() =>
+                go((current) =>
+                  withSelectedDays(current, { from: timeWindow.today, to: timeWindow.today }),
+                )
+              }
+              onSelect={(preset) => go((current) => withRangePreset(current, preset))}
+            />
+            <Menu>
+              <MenuTrigger
+                render={<IconButton label="Dashboard actions" size="icon-sm" icon={<Ellipsis />} />}
+              />
+              <MenuContent align="end">
+                <MenuItem icon={<Pencil />} onClick={() => setRenaming(true)}>
+                  Rename
+                </MenuItem>
+                <MenuItem icon={<Trash2 />} tone="danger" onClick={() => setDeleting(true)}>
+                  Delete dashboard
+                </MenuItem>
+              </MenuContent>
+            </Menu>
+            {widgets.length > 0 ? addWidget : null}
+          </>
+        }
+      />
+      <PageBody wide>
+        {widgets.length === 0 ? (
+          <EmptyState
+            icon={ChartColumn}
+            title="No widgets yet"
+            description="Add a chart, a number or a table of any metric."
+            action={addWidget}
+          />
+        ) : (
+          <div
+            aria-busy={pending || undefined}
+            className={cn(
+              "grid grid-cols-1 gap-4 transition-opacity duration-160 lg:grid-cols-6",
+              pending && "opacity-60",
+            )}
+          >
+            {widgets.map(({ widget, result }, index) => (
+              <section
+                key={widget.id}
+                aria-labelledby={`widget-${widget.id}`}
+                className={cn(
+                  "flex min-w-0 flex-col gap-3 rounded-lg border border-line p-4",
+                  WIDTH_CLASS[widget.width],
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <h2
+                    id={`widget-${widget.id}`}
+                    className="min-w-0 flex-1 truncate text-sm font-semibold text-fg"
+                  >
+                    {widgetName(widget)}
+                  </h2>
+                  <FilterNote filter={widget.filter} />
+                  <Menu>
+                    <MenuTrigger
+                      render={
+                        <IconButton
+                          label={`${widgetName(widget)} actions`}
+                          size="icon-sm"
+                          icon={<Ellipsis />}
+                        />
+                      }
+                    />
+                    <MenuContent align="end">
+                      <MenuItem icon={<Pencil />} onClick={() => openEditor(widget)}>
+                        Edit
+                      </MenuItem>
+                      <MenuItem
+                        icon={<ArrowUp />}
+                        disabled={saving || index === 0}
+                        onClick={() =>
+                          void change({
+                            action: "move-widget",
+                            dashboardId,
+                            widgetId: widget.id,
+                            direction: "up",
+                          })
+                        }
+                      >
+                        Move up
+                      </MenuItem>
+                      <MenuItem
+                        icon={<ArrowDown />}
+                        disabled={saving || index === widgets.length - 1}
+                        onClick={() =>
+                          void change({
+                            action: "move-widget",
+                            dashboardId,
+                            widgetId: widget.id,
+                            direction: "down",
+                          })
+                        }
+                      >
+                        Move down
+                      </MenuItem>
+                      <MenuLinkItem
+                        icon={<ListTree />}
+                        render={
+                          <Link href={widgetTracesHref(projectId, widget.filter, timeWindow)} />
+                        }
+                      >
+                        View traces
+                      </MenuLinkItem>
+                      <MenuSeparator />
+                      <MenuItem
+                        icon={<Trash2 />}
+                        tone="danger"
+                        disabled={saving}
+                        onClick={() => void remove(widget, index)}
+                      >
+                        Remove
+                      </MenuItem>
+                    </MenuContent>
+                  </Menu>
+                </div>
+                <WidgetBody
+                  projectId={projectId}
+                  widget={widget}
+                  result={result}
+                  range={timeWindow}
+                />
+              </section>
+            ))}
+          </div>
+        )}
+      </PageBody>
+      <WidgetEditor
+        open={editing}
+        onOpenChange={setEditing}
+        projectId={projectId}
+        initial={edited?.widget ?? null}
+        facets={facets}
+        range={timeWindow}
+        saving={saving}
+        onSave={(widget) => void save(widget)}
+      />
+      <NameDialog
+        open={renaming}
+        onOpenChange={setRenaming}
+        title="Rename dashboard"
+        submitLabel="Rename"
+        initial={dashboard.name}
+        saving={saving}
+        onSubmit={async (name) => {
+          if (await change({ action: "rename", dashboardId, name })) setRenaming(false);
+        }}
+      />
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title={`Delete ${dashboard.name}?`}
+        description="The dashboard and its widgets are gone for everyone in the project. Traces stay."
+        confirmLabel="Delete dashboard"
+        requireText={dashboard.name}
+        onConfirm={async () => {
+          if (await change({ action: "delete", dashboardId }))
+            router.push(dashboardsHref(projectId));
+        }}
+      />
+    </Page>
+  );
+}
+
+/** A filtered widget says so: its number is not the whole project's. */
+function FilterNote({ filter }: { filter: WidgetInput["filter"] }) {
+  const chips = filterChips("rollup", searchFromTraceFilter(filter), { entities: true });
+  if (chips.length === 0) return null;
+  const text = chips.map(({ field, value }) => `${field} ${value}`).join(", ");
+  return (
+    <p className="max-w-1/2 truncate text-xs text-fg-subtle" title={text}>
+      {text}
+    </p>
+  );
+}

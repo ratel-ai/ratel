@@ -46,8 +46,6 @@ export function movedPageDestination(url: Pick<URL, "pathname" | "searchParams">
       return query.get("view") === "crafts" ? `${root}/improvement/fixes` : `${root}/health/tasks`;
     case "/intents/asks":
       return withParams(`${root}/intents`, { peek: query.get("peek") });
-    case "/dashboards":
-      return `${root}?peek=context`;
     case "/runtime-events":
       return withQuery(`${root}/settings/developer`, query);
   }

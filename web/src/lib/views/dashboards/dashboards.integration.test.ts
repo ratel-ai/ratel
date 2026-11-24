@@ -83,6 +83,14 @@ test("add, edit, reorder and remove a widget", async () => {
 
   await ok({ action: "remove-widget", dashboardId: id, widgetId: b.id });
   assert.deepEqual(await titles(id), ["a", "c"]);
+  // The undo of a removal puts it back where it was.
+  await ok({
+    action: "add-widget",
+    dashboardId: id,
+    index: 1,
+    widget: { ...WIDGET, title: "B" },
+  });
+  assert.deepEqual(await titles(id), ["a", "B", "c"]);
   await refused(
     { action: "remove-widget", dashboardId: id, widgetId: b.id },
     /widget no longer exists/,

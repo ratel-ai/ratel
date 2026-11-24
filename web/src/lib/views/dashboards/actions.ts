@@ -16,7 +16,8 @@ export type DashboardActionInput = { projectId: string } & (
   | { action: "create-starter" }
   | { action: "rename"; dashboardId: string; name: string }
   | { action: "delete"; dashboardId: string }
-  | { action: "add-widget"; dashboardId: string; widget: WidgetInput }
+  /** At the end, or back where it was (`index`, the undo of a removal). */
+  | { action: "add-widget"; dashboardId: string; widget: WidgetInput; index?: number }
   | { action: "edit-widget"; dashboardId: string; widgetId: string; widget: WidgetInput }
   | { action: "move-widget"; dashboardId: string; widgetId: string; direction: "up" | "down" }
   | { action: "remove-widget"; dashboardId: string; widgetId: string }
@@ -136,10 +137,11 @@ async function apply(
 function widgetChange(input: Record<string, unknown>): (widgets: Widget[]) => Widget[] | null {
   if (input.action === "add-widget") {
     const widget = withId(checkedWidget(input.widget));
+    const index = Number.isSafeInteger(input.index) ? (input.index as number) : MAX_WIDGETS;
     return (widgets) => {
       if (widgets.length >= MAX_WIDGETS)
         throw new Refusal(`A dashboard can have ${MAX_WIDGETS} widgets.`);
-      return [...widgets, widget];
+      return widgets.toSpliced(index, 0, widget);
     };
   }
   const widgetId = text(input.widgetId);
