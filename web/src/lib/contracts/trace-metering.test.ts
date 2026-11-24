@@ -24,9 +24,9 @@ describe("trace metering default", () => {
 });
 
 describe("analysis filter default", () => {
-  it("filters nothing", () => {
+  it("filters nothing", async () => {
     const { analysisFilter } = createComposition("oss");
-    assert.equal(analysisFilter.analyzedTraceCondition("proj-1", sql`trace_id`), undefined);
+    assert.equal(await analysisFilter.analyzedTraceCondition("proj-1", sql`trace_id`), undefined);
   });
 });
 
@@ -37,7 +37,7 @@ describe("an edition", () => {
   it("keeps the defaults when it supplies neither port", async () => {
     const cloud = createComposition("cloud", { eeComposition: required });
     assert.equal(await cloud.traceMetering.isMetered(SCOPE), false);
-    assert.equal(cloud.analysisFilter.analyzedTraceCondition("p", sql`t`), undefined);
+    assert.equal(await cloud.analysisFilter.analyzedTraceCondition("p", sql`t`), undefined);
   });
 
   it("replaces each port", () => {
@@ -45,7 +45,7 @@ describe("an edition", () => {
       isMetered: async () => true,
       meterTraceBatch: async () => new Map(),
     };
-    const analysisFilter: AnalysisFilterPort = { analyzedTraceCondition: () => sql`true` };
+    const analysisFilter: AnalysisFilterPort = { analyzedTraceCondition: async () => sql`true` };
     const cloud = createComposition("cloud", {
       eeComposition: { ...required, traceMetering, analysisFilter },
     });

@@ -33,7 +33,7 @@ const WINDOW = { since: new Date(NOW.getTime() - 86_400_000), until: NOW };
 
 const skipping: AnalysisFilterPort = {
   // Correlated on the project, as an edition's lookup is: it also proves both project forms.
-  analyzedTraceCondition: (projectId, traceId) => {
+  analyzedTraceCondition: async (projectId, traceId) => {
     const project = typeof projectId === "string" ? sql`${projectId}::uuid` : projectId;
     return sql`not exists (
       select 1 from projects p where p.id = ${project} and ${traceId} = 'skipped'

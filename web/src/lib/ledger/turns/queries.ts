@@ -140,7 +140,7 @@ export async function listTurnEventsPage(
   types: readonly string[] = TURN_EVENT_TYPES,
 ): Promise<TurnEventPageRow[]> {
   const after = cursorValue(since);
-  const analyzed = analyzedTraceCondition(projectId, traceEvents.traceId);
+  const analyzed = await analyzedTraceCondition(projectId, traceEvents.traceId);
   const columns = {
     id: traceEvents.id,
     type: traceEvents.type,

@@ -10,12 +10,15 @@ import { composition } from "@/lib/composition/ports";
 export function analyzedTraceCondition(
   projectId: string | SQLWrapper,
   traceId: SQLWrapper,
-): SQL | undefined {
+): Promise<SQL | undefined> {
   return composition.analysisFilter.analyzedTraceCondition(projectId, traceId);
 }
 
 /** The condition as the tail of a raw `where`: `and …`, or nothing. */
-export function andAnalyzedTrace(projectId: string | SQLWrapper, traceId: SQLWrapper): SQL {
-  const condition = analyzedTraceCondition(projectId, traceId);
+export async function andAnalyzedTrace(
+  projectId: string | SQLWrapper,
+  traceId: SQLWrapper,
+): Promise<SQL> {
+  const condition = await analyzedTraceCondition(projectId, traceId);
   return condition ? sql`and ${condition}` : sql.empty();
 }

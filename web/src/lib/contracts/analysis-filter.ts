@@ -7,8 +7,12 @@ import type { SQL, SQLWrapper } from "drizzle-orm";
 export interface AnalysisFilterPort {
   /**
    * A SQL condition over the core database, true for a row whose trace analysis may read, or
-   * undefined for no filter. It must be true for a null trace id and never null: a caller may
-   * negate it. `projectId` is a value or a column.
+   * undefined for no filter. It must be true for a null trace id and never null, and a single SQL
+   * operand: a caller may negate it. `projectId` is a value or a column. Asked once per query,
+   * and async because an edition decides it per organization.
    */
-  analyzedTraceCondition(projectId: string | SQLWrapper, traceId: SQLWrapper): SQL | undefined;
+  analyzedTraceCondition(
+    projectId: string | SQLWrapper,
+    traceId: SQLWrapper,
+  ): Promise<SQL | undefined>;
 }
