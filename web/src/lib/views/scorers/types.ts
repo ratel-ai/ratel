@@ -59,10 +59,16 @@ export type ScorerDefinition =
   | { kind: "check"; config: CheckConfig }
   | { kind: "judge"; config: JudgeConfig };
 
+/** Which traces a scorer takes: the Traces filter, and the task whose runs it scores. */
+export interface ScorerFilter extends TraceFilter {
+  /** The traces of one task's turns (`trace_turns.workflow_id`); every task without it. */
+  taskId?: string;
+}
+
 /** What a person writes. */
 export type ScorerDraft = ScorerDefinition & {
   name: string;
-  filter: TraceFilter;
+  filter: ScorerFilter;
   /** Percent of the matching traces, 1 to 100. */
   sampleRate: number;
   enabled: boolean;

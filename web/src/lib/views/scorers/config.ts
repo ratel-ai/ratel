@@ -1,4 +1,3 @@
-import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import {
   ATTRIBUTE_PREFIX,
   CHECK_OPERATORS,
@@ -8,6 +7,7 @@ import {
   type JudgeConfig,
   type ScorerDefinition,
   type ScorerDraft,
+  type ScorerFilter,
   TRACE_FIELDS,
 } from "./types";
 
@@ -66,10 +66,10 @@ export function parseDefinition(kind: unknown, config: unknown): ScorerDefinitio
 }
 
 /** A stored or submitted trace filter with only known keys; null when a value is malformed. */
-export function parseFilter(raw: unknown): TraceFilter | null {
+export function parseFilter(raw: unknown): ScorerFilter | null {
   if (raw === undefined || raw === null) return {};
   if (!isRecord(raw)) return null;
-  const filter: TraceFilter = {};
+  const filter: ScorerFilter = {};
   for (const key of FILTER_LISTS) {
     const list = raw[key];
     if (list === undefined) continue;
@@ -87,6 +87,11 @@ export function parseFilter(raw: unknown): TraceFilter | null {
     if (min === undefined) continue;
     if (typeof min !== "number" || !Number.isFinite(min) || min < 0) return null;
     filter[key] = min;
+  }
+  if (raw.taskId !== undefined) {
+    const taskId = text(raw.taskId, MAX_VALUE_CHARS);
+    if (!taskId) return null;
+    filter.taskId = taskId;
   }
   return filter;
 }

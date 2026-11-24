@@ -15,8 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { projects } from "@/lib/platform/projects/schema";
-import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
-import type { CheckConfig, JudgeConfig, ScorerKind } from "./types";
+import type { CheckConfig, JudgeConfig, ScorerFilter, ScorerKind } from "./types";
 
 /** A project's scorers. Each row carries its own sweep cursor, so a new scorer starts at "now". */
 export const traceScorers = pgTable(
@@ -29,7 +28,7 @@ export const traceScorers = pgTable(
     name: text("name").notNull(),
     kind: text("kind").$type<ScorerKind>().notNull(),
     config: jsonb("config").$type<CheckConfig | JudgeConfig>().notNull(),
-    filter: jsonb("filter").$type<TraceFilter>().notNull().default({}),
+    filter: jsonb("filter").$type<ScorerFilter>().notNull().default({}),
     sampleRate: integer("sample_rate").notNull().default(100),
     enabled: boolean("enabled").notNull().default(true),
     // The last `(updated_at, trace_id)` of `otel_trace_summaries` the sweep read for this scorer.

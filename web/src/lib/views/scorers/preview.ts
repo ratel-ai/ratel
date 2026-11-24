@@ -1,8 +1,7 @@
-import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
 import { runCheck } from "./check";
 import { type JudgeDeps, judgeTraces } from "./judge";
 import { countMatchingTraces, latestMatchingTraces } from "./traces";
-import type { ScoreOutcome, ScorerDraft } from "./types";
+import type { ScoreOutcome, ScorerDraft, ScorerFilter } from "./types";
 
 /** How many traces a test runs on. */
 export const PREVIEW_TRACES = 5;
@@ -55,7 +54,7 @@ export async function previewScorer(
 /** How many traces of the last 7 days a filter matches. */
 export function countLastWeek(
   projectId: string,
-  filter: TraceFilter,
+  filter: ScorerFilter,
   now: Date = new Date(),
   deps: Pick<PreviewDeps, "count"> = defaults,
 ): Promise<number> {

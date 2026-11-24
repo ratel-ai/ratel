@@ -1,8 +1,8 @@
 import { type SQL, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
-import { type TraceFilter, traceFilterCondition } from "@/lib/synthesis/traces/trace-filters";
+import { traceFilterCondition } from "@/lib/synthesis/traces/trace-filters";
 import type { ScorerDb } from "./store";
-import type { ScorerTrace } from "./types";
+import type { ScorerFilter, ScorerTrace } from "./types";
 
 type SummaryRow = {
   trace_id: string;
@@ -20,6 +20,8 @@ type SummaryRow = {
   environment: string | null;
   attributes: Record<string, unknown> | null;
 };
+
+const OTLP_KEY = "otlp:";
 
 /** These traces as a scorer reads them, in the order of their ids. Unknown ids are left out. */
 export async function loadScorerTraces(
@@ -41,12 +43,12 @@ export async function loadScorerTraces(
 /** The newest traces that match a filter, newest first. */
 export async function latestMatchingTraces(
   projectId: string,
-  filter: TraceFilter,
+  filter: ScorerFilter,
   limit: number,
   db: Pick<ScorerDb, "execute"> = getDb(),
 ): Promise<ScorerTrace[]> {
   return readTraces(
-    sql`s.project_id = ${projectId} and ${filterCondition(filter)}
+    sql`s.project_id = ${projectId} and ${filterCondition(projectId, filter)}
       order by s.started_at desc, s.trace_id limit ${limit}`,
     db,
   );
@@ -55,25 +57,44 @@ export async function latestMatchingTraces(
 /** How many traces that started at or after `since` match a filter. */
 export async function countMatchingTraces(
   projectId: string,
-  filter: TraceFilter,
+  filter: ScorerFilter,
   since: Date,
   db: Pick<ScorerDb, "execute"> = getDb(),
 ): Promise<number> {
   const [row] = rowsOf<{ n: number }>(
     await db.execute(sql`select count(*)::int as n from otel_trace_summaries s
       where s.project_id = ${projectId} and s.started_at >= ${since.toISOString()}::timestamptz
-        and ${filterCondition(filter)}`),
+        and ${filterCondition(projectId, filter)}`),
   );
   return Number(row?.n ?? 0);
 }
 
-/** A filter on the summary row `s`; true when it filters nothing. */
-export function filterCondition(filter: TraceFilter): SQL {
-  return traceFilterCondition(filter) ?? sql`true`;
+/** A filter on the summary row `s` of this project; true when it filters nothing. */
+export function filterCondition(projectId: string, filter: ScorerFilter): SQL {
+  const condition = traceFilterCondition(filter) ?? sql`true`;
+  return filter.taskId
+    ? sql`(${condition} and s.trace_id in (${taskTraces(projectId, filter.taskId)}))`
+    : condition;
 }
 
 export function rowsOf<T>(result: unknown): T[] {
   return ((result as { rows?: T[] }).rows ?? result) as T[];
+}
+
+/**
+ * The traces of a task's turns. A turn's trace is its `otlp:<trace id>` key, and every trace its
+ * steps' events carry (a runtime-lane turn), as in the Sessions list (`synthesis/traces/v2`).
+ */
+function taskTraces(projectId: string, taskId: string): SQL {
+  return sql`
+    select substr(t.turn_key, ${OTLP_KEY.length + 1}) from trace_turns t
+    where t.project_id = ${projectId} and t.workflow_id = ${taskId}
+      and t.turn_key like ${`${OTLP_KEY}%`}
+    union
+    select e.trace_id from trace_turns t
+    join trace_turn_steps st on st.project_id = t.project_id and st.turn_id = t.id
+    join trace_events e on e.project_id = st.project_id and e.id = st.trace_event_id
+    where t.project_id = ${projectId} and t.workflow_id = ${taskId} and e.trace_id is not null`;
 }
 
 /** The summary rows with the attributes of each trace's representative span (the root). */

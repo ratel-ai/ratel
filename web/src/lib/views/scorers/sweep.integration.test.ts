@@ -8,6 +8,7 @@ import { scorerSweepStep } from "./register";
 import { createScorer, latestScores } from "./store";
 import { type SweepOptions, sweepScorers } from "./sweep";
 import { checkDraft } from "./test-support";
+import { countMatchingTraces } from "./traces";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -75,6 +76,54 @@ test("a root attribute is read, and a missing one is skipped", async () => {
     const result = await sweepScorers(on, db);
     assert.deepEqual([result.scoresWritten, result.skipped], [1, 1]);
     assert.deepEqual(await scored(id), ["with"]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("a scorer scoped to a task scores only the traces of that task's turns, once each turn has its task", async () => {
+  const { client, db, add, scored, turn, reading } = await setup();
+  try {
+    const scoped = await scorer(client, db, { filter: { taskId: "task-a" } });
+    const all = await scorer(client, db);
+    for (const id of ["otlp-a", "steps-a", "otlp-b", "no-task", "no-turn"])
+      await add(id, { ageS: 7200, receivedAgeS: 60 });
+    await add("other", { ageS: 7200, receivedAgeS: 60, project: OTHER_PROJECT });
+    await client.exec(
+      "update trace_scorers set cursor_at = now() - interval '3 hours'; update trace_scorers set created_at = now() - interval '3 hours'",
+    );
+    await turn({ key: "otlp:otlp-a" });
+    await turn({ key: "declared:1", stepTraces: ["steps-a"] });
+    await turn({ key: "otlp:otlp-b" });
+    await turn({ key: "otlp:no-task" });
+    await turn({ key: "otlp:other", project: OTHER_PROJECT });
+
+    // No turn has a task before a signal run: the scoped scorer waits and loses nothing.
+    await sweepScorers(on, db);
+    assert.deepEqual(await scored(scoped), []);
+    assert.equal((await scored(all)).length, 5);
+
+    await client.exec(`
+      update trace_turns set workflow_id = 'task-a' where turn_key in ('otlp:otlp-a', 'declared:1', 'otlp:other');
+      update trace_turns set workflow_id = 'task-b' where turn_key = 'otlp:otlp-b';
+    `);
+    await reading();
+    await sweepScorers(on, db);
+    assert.deepEqual(await scored(scoped), ["otlp-a", "steps-a"]);
+
+    // A trace that the last run did not place yet waits for the next one.
+    await add("late", { ageS: 60 });
+    await turn({ key: "otlp:late" });
+    await sweepScorers(on, db);
+    await client.exec("update trace_turns set workflow_id = 'task-a' where turn_key = 'otlp:late'");
+    await sweepScorers(on, db);
+    assert.deepEqual(await scored(scoped), ["otlp-a", "steps-a"]);
+    await client.exec(
+      "update otel_trace_summaries set updated_at = now() - interval '2 hours' where trace_id = 'late'; update trace_scorers set cursor_at = now() - interval '3 hours'",
+    );
+    await sweepScorers(on, db);
+    assert.deepEqual(await scored(scoped), ["late", "otlp-a", "steps-a"]);
+    assert.equal(await countMatchingTraces(PROJECT, { taskId: "task-a" }, new Date(0), db), 3);
   } finally {
     await client.close();
   }
@@ -218,7 +267,32 @@ async function setup() {
         [project, traceId, JSON.stringify(trace.attributes)],
       );
   };
+  const turn = async (input: { key: string; project?: string; stepTraces?: string[] }) => {
+    const project = input.project ?? PROJECT;
+    const { rows } = await client.query<{ id: string }>(
+      `insert into trace_turns (project_id, session_id, turn_key, turn_source, lane, status, started_at, ended_at, last_received_at)
+       values ($1, $2, $2, 'otlp', 'otlp', 'closed', now(), now(), now()) returning id`,
+      [project, input.key],
+    );
+    for (const [index, traceId] of (input.stepTraces ?? []).entries()) {
+      const event = crypto.randomUUID();
+      await client.query(
+        `insert into trace_events (id, project_id, client_event_id, type, occurred_at, trace_id, payload)
+         values ($1, $2, $3, 'invoke_end', now(), $3, '{}')`,
+        [event, project, traceId],
+      );
+      await client.query(
+        `insert into trace_turn_steps (turn_id, project_id, ordinal, kind, event_type, trace_event_id, occurred_at, received_at)
+         values ($1, $2, $3, 'invoke', 'invoke_end', $4, now(), now())`,
+        [rows[0]?.id, project, index + 1, event],
+      );
+    }
+  };
+  /** A completed signal run that read everything up to now. */
+  const reading = () =>
+    client.exec(`insert into trace_signal_runs (project_id, trigger, status, window_days, window_start, window_end, ledger_through)
+      values ('${PROJECT}', 'scheduled', 'completed', 7, now() - interval '7 days', now(), now())`);
   const scored = async (scorerId: string) =>
     (await latestScores(PROJECT, scorerId, 1000, db)).map((row) => row.traceId).sort();
-  return { client, db, add, scored };
+  return { client, db, add, scored, turn, reading };
 }

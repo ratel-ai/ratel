@@ -7,6 +7,7 @@ import { definitionSummary, hasVerdict } from "@/lib/views/scorers/format";
 import { getScorer, latestScores, scorerSummaries, scorerTrend } from "@/lib/views/scorers/store";
 import { dashboardsEnabled } from "../../dashboards/context";
 import { resolveScorersPage } from "../context";
+import { loadTaskOptions } from "../tasks";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Scorer" };
@@ -38,17 +39,19 @@ export default async function ScorerPage({
   const days = Array.from({ length: TREND_DAYS }, (_, index) =>
     new Date(now.getTime() - (TREND_DAYS - 1 - index) * DAY_MS).toISOString().slice(0, 10),
   );
-  const [trend, summaries, latest, dashboards] = await Promise.all([
+  const [trend, summaries, latest, dashboards, tasks] = await Promise.all([
     scorerTrend(projectId, scorer.id, new Date(`${days[0]}T00:00:00Z`)),
     scorerSummaries(projectId, new Date(now.getTime() - 7 * DAY_MS)),
     latestScores(projectId, scorer.id, LATEST),
     dashboardsEnabled(projectId).then((on) => (on ? listDashboards(projectId) : null)),
+    scorer.filter.taskId ? loadTaskOptions(projectId, scorer.filter.taskId) : [],
   ]);
   const byDay = new Map(trend.map((row) => [row.day, row]));
   return (
     <ScorerDetail
       projectId={projectId}
       dashboards={dashboards?.map(({ id, name }) => ({ id, name })) ?? null}
+      task={tasks.find(({ id }) => id === scorer.filter.taskId)?.name ?? null}
       scorer={{
         id: scorer.id,
         name: scorer.name,
