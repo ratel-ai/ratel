@@ -27,7 +27,7 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
     { MODEL_PROVIDER: "custom", MODEL_BASE_URL: "http://localhost:8000/v1" },
     "production",
   ],
-  ...["openai", "gcp", "bedrock", "ollama", "llama.cpp", "vllm", "litellm"].map(
+  ...["openai", "gcp", "bedrock", "ollama", "llama.cpp", "litellm"].map(
     (name): [string, Record<string, string>, string] => [
       `${name} named, only a Claude key present`,
       { MODEL_PROVIDER: name, ANTHROPIC_API_KEY: "k", MODEL: "m" },

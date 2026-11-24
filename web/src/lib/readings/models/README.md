@@ -64,7 +64,6 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | `openai.gpt-oss-120b-1:0`, `qwen.qwen3-32b-v1:0`; all three Claude models in `eu-central-1`, with an AWS login on an account that has Claude access |
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |
 | `llama.cpp` | `MODEL_BASE_URL`; start it with `--jinja` for tools | name one | `qwen2.5:0.5b` |
-| `vllm` | `MODEL_BASE_URL`; its tool flags for tools | name one | no |
 | `litellm` | `MODEL_BASE_URL`, usually `MODEL_API_KEY` | name one | v1.110.2, over `llama3.2:1b` and `qwen2.5:0.5b` |
 | `custom` | `MODEL_BASE_URL` with its path | name one | `qwen2.5:0.5b` |
 

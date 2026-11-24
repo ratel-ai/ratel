@@ -60,6 +60,7 @@ const TEXT_HINTS: Readonly<Record<string, string>> = {
   gemini: "gcp",
   aws: "bedrock",
   "openai-compatible": "custom",
+  vllm: "custom",
 };
 const DECISION_HINTS: Readonly<Record<string, string>> = {
   sage: "levanto",

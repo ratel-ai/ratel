@@ -28,6 +28,7 @@ const TEXT_CASES: Array<[Record<string, string>, RegExp | null]> = [
   [{ ANTHROPIC_BACKEND: "bedrock" }, null],
   [{ ANTHROPIC_BACKEND: "bedrock", AWS_BEARER_TOKEN_BEDROCK: "t" }, /AWS_BEARER_TOKEN_BEDROCK/],
   [{ MODEL_PROVIDER: "bedrok" }, /MODEL_PROVIDER=bedrok is not a vendor.*bedrock/],
+  [{ MODEL_PROVIDER: "vllm" }, /MODEL_PROVIDER=vllm is not a vendor\. Did you mean custom\?/],
   [{ MODEL_PROVIDER: "claude" }, /ANTHROPIC_API_KEY/],
   [{ MODEL_PROVIDER: "openai" }, /OPENAI_API_KEY/],
   [{ MODEL_PROVIDER: "openai", OPENAI_API_KEY: KEY }, null],

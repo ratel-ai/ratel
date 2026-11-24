@@ -70,7 +70,7 @@ test("MODEL_API_KEY is ahead of the vendor's own variable", () => {
 });
 
 test("a self-hosted server needs its address, and its key is optional", () => {
-  for (const name of ["ollama", "llama.cpp", "vllm", "litellm", "custom"] as const) {
+  for (const name of ["ollama", "llama.cpp", "litellm", "custom"] as const) {
     assert.equal(resolve({ MODEL_PROVIDER: name }), null, name);
     assert.equal(resolve({ MODEL_PROVIDER: name, MODEL_API_KEY: KEY }), null, name);
     assert.deepEqual(resolve({ MODEL_PROVIDER: name, MODEL_BASE_URL: "http://host:1234/v1/" }), {
@@ -80,14 +80,14 @@ test("a self-hosted server needs its address, and its key is optional", () => {
   }
   // Only a key set for it: a hosted vendor's key stays home.
   assert.equal(
-    resolve({ MODEL_PROVIDER: "vllm", MODEL_BASE_URL: "http://host/v1", OPENAI_API_KEY: KEY })
+    resolve({ MODEL_PROVIDER: "litellm", MODEL_BASE_URL: "http://host/v1", OPENAI_API_KEY: KEY })
       ?.apiKey,
     undefined,
   );
 });
 
 test("a server's plain address is enough; a custom one is used as given", () => {
-  for (const name of ["ollama", "llama.cpp", "vllm", "litellm"]) {
+  for (const name of ["ollama", "llama.cpp", "litellm"]) {
     assert.equal(
       resolve({ MODEL_PROVIDER: name, MODEL_BASE_URL: "http://host:11434" })?.baseUrl,
       "http://host:11434/v1",
@@ -145,6 +145,7 @@ test("an unknown vendor gives nothing, whatever else is set", () => {
   for (const name of [
     "openai-compatible",
     "groq",
+    "vllm",
     "grok",
     "mistral",
     "opena",

@@ -71,7 +71,7 @@ function context(overrides: Partial<ModelContext> = {}): ModelContext {
     model: "llama-3.3-70b",
     feature: "workflow_label",
     payer: "ratel",
-    vendor: { name: "vllm", baseUrl: "http://llm.test/v1", apiKey: "sk-test" },
+    vendor: { name: "litellm", baseUrl: "http://llm.test/v1", apiKey: "sk-test" },
     config: cfg({}),
     ...overrides,
   };
@@ -108,7 +108,7 @@ test("a plain completion: the request, the answer, the usage", async () => {
     model: "served-model",
     stop: "end",
   });
-  assert.equal(model.provider, "vllm");
+  assert.equal(model.provider, "litellm");
   assert.equal(model.model, "llama-3.3-70b");
   assert.equal(seen.length, 1);
   assert.equal(seen[0].url, "http://llm.test/v1/chat/completions");
@@ -127,7 +127,7 @@ test("a plain completion: the request, the answer, the usage", async () => {
 test("a server without a key gets no authorization header", async () => {
   const { seen, fetchImpl } = server(completion({ content: "ok" }));
   const model = textModel(fetchImpl, {
-    vendor: { name: "vllm", baseUrl: "http://localhost:8000/v1" },
+    vendor: { name: "litellm", baseUrl: "http://localhost:8000/v1" },
   });
   await model.complete({ system: "s", user: "u", maxTokens: 10 });
   assert.equal(seen[0].headers.authorization, undefined);
@@ -453,7 +453,7 @@ test("each call is one spend line, with the feature and the tokens", async () =>
   assert.equal(lines.length, 2);
   const { duration_ms: _first, ...ok } = lines[0];
   assert.deepEqual(ok, {
-    provider: "vllm",
+    provider: "litellm",
     model: "llama-3.3-70b",
     feature: "workflow_label",
     payer: "customer",

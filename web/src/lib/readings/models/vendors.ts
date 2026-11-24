@@ -21,7 +21,6 @@ export type VendorName =
   | "bedrock"
   | "ollama"
   | "llama.cpp"
-  | "vllm"
   | "litellm"
   | "custom"
   | "fake";
@@ -89,7 +88,6 @@ export const VENDORS: Readonly<Record<VendorName, Vendor>> = {
   },
   ollama: { ...SERVER, name: "ollama", label: "Ollama", provider: "ollama" },
   "llama.cpp": { ...SERVER, name: "llama.cpp", label: "llama.cpp", provider: "llama.cpp" },
-  vllm: { ...SERVER, name: "vllm", label: "vLLM", provider: "vllm" },
   litellm: { ...SERVER, name: "litellm", label: "LiteLLM", provider: "litellm" },
   custom: { name: "custom", label: "Another server", hosted: false, provider: "custom" },
   fake: { name: "fake", label: "Fake (tests)", hosted: false, provider: "fake" },

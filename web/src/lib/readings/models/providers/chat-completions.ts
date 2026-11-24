@@ -42,7 +42,7 @@ import {
 
 /**
  * A server that speaks chat completions (`POST {base}/chat/completions`): Ollama,
- * llama.cpp, vLLM, LiteLLM, Gemini on Vertex and the open models on Bedrock (ADR-0009). Written
+ * llama.cpp, LiteLLM, Gemini on Vertex and the open models on Bedrock (ADR-0009). Written
  * over `fetch`, with no vendor SDK. What a vendor does differently is its `Dialect`.
  *
  * Servers differ, so the adapter asks for the most and steps down:

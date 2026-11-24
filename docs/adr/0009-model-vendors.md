@@ -33,7 +33,7 @@ account with. Vendors share an adapter where they share a format; the vendor tab
 
 | Kind | Setting | Values |
 |---|---|---|
-| Text and chat | `MODEL_PROVIDER` | unset (Claude, as `ANTHROPIC_BACKEND` and `ANTHROPIC_API_KEY` say), `claude`, `openai`, `gcp`, `bedrock`, `ollama`, `llama.cpp`, `vllm`, `litellm`, `custom`, `fake` |
+| Text and chat | `MODEL_PROVIDER` | unset (Claude, as `ANTHROPIC_BACKEND` and `ANTHROPIC_API_KEY` say), `claude`, `openai`, `gcp`, `bedrock`, `ollama`, `llama.cpp`, `litellm`, `custom`, `fake` |
 | Decision | `DECISION_PROVIDER` | unset (OpenAI), `openai`, `typesafe`, `levanto`, `google`, `custom` |
 | Embedding | `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL` | unset: OpenAI when keyed, else the local hash |
 

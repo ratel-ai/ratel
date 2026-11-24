@@ -484,7 +484,7 @@ test("bedrock: a Bedrock API key signs in place of the AWS login", async () => {
 /* - Servers the customer runs ----------------------------------------------- */
 
 test("each self-hosted server is asked at its own address, with a key only when one is set", async () => {
-  for (const name of ["ollama", "llama.cpp", "vllm", "litellm", "custom"]) {
+  for (const name of ["ollama", "llama.cpp", "litellm", "custom"]) {
     const seen = await on(
       [completion({ content: "Hello" }), completion({ content: "Hello" })],
       async () => {
@@ -557,11 +557,11 @@ test("a server that redirects is not followed: the prompt goes to the address th
     }) as typeof fetch,
   });
   const vendor = resolveModelVendor(
-    cfg({ MODEL_PROVIDER: "vllm", MODEL_BASE_URL: "http://box/v1" }),
+    cfg({ MODEL_PROVIDER: "litellm", MODEL_BASE_URL: "http://box/v1" }),
     "production",
   );
   assert.ok(vendor);
-  await adapters.vllm
+  await adapters.litellm
     .text({ model: "m", feature: "workflow_label", payer: "ratel", vendor, config: cfg({}) })
     ?.complete(ASK);
   assert.equal(redirect, "error");

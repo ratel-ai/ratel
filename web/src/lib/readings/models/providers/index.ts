@@ -76,7 +76,6 @@ export function vendorAdapters(
     ),
     ollama: server,
     "llama.cpp": server,
-    vllm: server,
     litellm: server,
     custom: server,
   };
