@@ -71,13 +71,12 @@ export async function readTopology(
   deps: { agents: AgentStore; db: Pick<ReturnType<typeof getDb>, "execute"> },
 ): Promise<Topology> {
   const view = overrideView(await deps.agents.listOverrides(projectId));
-  const [list, handoffs, mcp, calls] = await Promise.all([
-    // Hidden agents count against the read's limit; the model drops them.
-    deps.agents.listAgents(projectId, window, { showHidden: true }),
-    deps.agents.listHandoffs(projectId, window),
-    listMcpServers(projectId, window, deps.db),
-    listAgentMcpCalls(projectId, window, view.merges, deps.db),
-  ]);
+  // One after another: `db` is a bounded transaction, and a connection runs one query at a time.
+  // Hidden agents count against the read's limit; the model drops them.
+  const list = await deps.agents.listAgents(projectId, window, { showHidden: true });
+  const handoffs = await deps.agents.listHandoffs(projectId, window);
+  const mcp = await listMcpServers(projectId, window, deps.db);
+  const calls = await listAgentMcpCalls(projectId, window, view.merges, deps.db);
   return topologyModel({
     agents: list.agents,
     handoffs,
