@@ -743,7 +743,6 @@
         "web/src/components/console/self-corrections/Hero.tsx",
         "web/src/components/console/self-corrections/Said.tsx",
         "web/src/components/console/self-corrections/SelfCorrectionsSkeleton.tsx",
-        "web/src/components/console/self-corrections/SelfCorrectionsView.tsx",
         "web/src/components/console/self-corrections/Where.tsx",
         "web/src/components/console/self-corrections/copy.ts",
         "web/src/components/console/self-corrections/fix-actions.ts",
