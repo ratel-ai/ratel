@@ -201,14 +201,42 @@ test("an API key reads the default layout and cannot change one", async () => {
   assert.ok(read.ok && read.layout.some(({ hidden }) => hidden), "nothing was reset");
 });
 
-test("a support session reads and cannot change", async () => {
-  const { call, store } = await setup({ restricted: async () => true });
-  assert.ok((await call("get_overview")).ok);
+test("a support session reads the default on both surfaces and cannot change, and the stored layout stays", async () => {
+  let restricted = false;
+  const { call, store, web } = await setup({ restricted: async () => restricted });
+  await call("change_overview_layout", { change: "hide", widget: "topology" });
+  const key = { projectId: PROJECT_ID, personId: "user_ana" };
+  const personal = await store().read(key);
+  assert.notDeepEqual(personal, DEFAULT_LAYOUT);
+
+  restricted = true;
+  const overview = dataOf(await call("get_overview"));
+  assert.equal(overview.layout.of, "default");
+  assert.ok(overview.topology, "the default shows the topology");
+  const support = {
+    ...web,
+    reader: webLayoutReader({
+      scope: async (id) => ({ project: { id }, user: { externalId: "user_ana" } }),
+      restricted: async () => true,
+    }),
+  };
+  assert.deepEqual(await readOverviewLayout(PROJECT_ID, support), {
+    ok: true,
+    layout: DEFAULT_LAYOUT,
+  });
   assert.deepEqual(
     refusal(await call("change_overview_layout", { change: "hide", widget: "health" })),
     ["forbidden", "support_session"],
   );
-  assert.equal(await store().read({ projectId: PROJECT_ID, personId: "user_ana" }), DEFAULT_LAYOUT);
+  assert.deepEqual(await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, support), {
+    ok: false,
+    reason: "support_session",
+  });
+  assert.deepEqual(await store().read(key), personal);
+
+  restricted = false;
+  assert.equal(dataOf(await call("get_overview")).layout.of, "person");
+  assert.equal(dataOf(await call("get_overview")).topology, null);
 });
 
 test("somebody without access to the project gets not_found for both", async () => {

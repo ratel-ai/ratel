@@ -3,7 +3,7 @@ import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
-import { defineOperation, type McpOperation, type OperationContext } from "@/lib/mcp/registry";
+import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
 import { getDb } from "@/lib/platform/db/client";
 import type { Organization } from "@/lib/platform/organizations";
@@ -105,7 +105,7 @@ export function overviewOperations(
         });
         const hidden = data.layout.filter((widget) => widget.hidden).map(({ id }) => id);
         return {
-          data: overviewData(data, ctx.auth),
+          data: overviewData(data, ctx.auth.kind === "api-key" || (await deps.restricted())),
           ...(hidden.length > 0
             ? {
                 hint: `These widgets are hidden and have no data: ${hidden.join(", ")}. Call change_overview_layout with change "show" to show one.`,
@@ -259,7 +259,7 @@ function layoutChange(params: ChangeParams): Record<string, unknown> {
   };
 }
 
-function overviewData(data: FocusedOverviewData, auth: OperationContext["auth"]) {
+function overviewData(data: FocusedOverviewData, defaultLayout: boolean) {
   return {
     project: { id: data.project.id, name: data.project.name },
     href: data.window === 7 ? data.root : `${data.root}?range=${data.rangeParam}`,
@@ -267,7 +267,7 @@ function overviewData(data: FocusedOverviewData, auth: OperationContext["auth"])
     lastEventAt: data.lastEventAt?.toISOString() ?? null,
     hasTelemetry: data.hasTelemetry,
     layout: {
-      of: auth.kind === "api-key" ? ("default" as const) : ("person" as const),
+      of: defaultLayout ? ("default" as const) : ("person" as const),
       ...layoutView(data.layout),
     },
     metrics: data.metrics && metricsView(data.metrics),

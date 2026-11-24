@@ -69,15 +69,19 @@ test("an API key reads the default and cannot write", async () => {
   assert.deepEqual(db.calls, []);
 });
 
-test("a support session reads and cannot write", async () => {
+test("a support session reads the default and cannot write, and the personal layout stays", async () => {
   const db = memory();
+  assert.ok((await changeOverviewLayout("p1", HIDE, deps(PERSON, db))).ok);
+  const personal = await readOverviewLayout("p1", deps(PERSON, db));
+  db.calls.length = 0;
   const support = deps({ ...PERSON, restricted: true }, db);
-  assert.ok((await readOverviewLayout("p1", support)).ok);
+  assert.deepEqual(await readOverviewLayout("p1", support), { ok: true, layout: DEFAULT_LAYOUT });
   assert.deepEqual(await changeOverviewLayout("p1", HIDE, support), {
     ok: false,
     reason: "support_session",
   });
-  assert.deepEqual(db.calls, ["read p1/user_1"]);
+  assert.deepEqual(db.calls, [], "the store is not read");
+  assert.deepEqual(await readOverviewLayout("p1", deps(PERSON, db)), personal);
 });
 
 test("a change that is not one writes nothing", async () => {

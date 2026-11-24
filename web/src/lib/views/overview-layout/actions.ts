@@ -8,7 +8,7 @@ import type { OverviewLayoutStore } from "./ports/store";
  */
 
 export type LayoutReader =
-  /** Somebody with access to the project. */
+  /** Somebody with access to the project. `restricted`: in a support session, which reads the default. */
   | { kind: "person"; projectId: string; personId: string; restricted: boolean }
   /** An API key is no person: it has no layout of its own. */
   | { kind: "api-key" };
@@ -39,7 +39,7 @@ export async function readOverviewLayout(
 ): Promise<LayoutResult> {
   const reader = await deps.reader(projectId);
   if (!reader) return { ok: false, reason: "not_found" };
-  if (reader.kind === "api-key") return { ok: true, layout: DEFAULT_LAYOUT };
+  if (reader.kind === "api-key" || reader.restricted) return { ok: true, layout: DEFAULT_LAYOUT };
   return { ok: true, layout: await deps.store().read(reader) };
 }
 
