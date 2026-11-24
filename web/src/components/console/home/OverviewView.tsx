@@ -141,7 +141,7 @@ export function WindowSwitch({ root, window }: { root: string; window: number })
   );
 }
 
-function DemoNotice({ projectId, projectName }: { projectId: string; projectName: string }) {
+export function DemoNotice({ projectId, projectName }: { projectId: string; projectName: string }) {
   return (
     <div data-tour="demo-notice">
       <Callout

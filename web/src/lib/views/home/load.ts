@@ -666,7 +666,7 @@ export async function latestSdkEventAt(
   return latest;
 }
 
-function newest(a: Date | null, b: Date | null): Date | null {
+export function newest(a: Date | null, b: Date | null): Date | null {
   if (a === null) return b;
   if (b === null) return a;
   return a > b ? a : b;
@@ -689,7 +689,7 @@ export async function countPendingRewrites(
   return row?.count ?? 0;
 }
 
-function latestEventAt({
+export function latestEventAt({
   latestEventAt: event,
   latestSpanAt: span,
 }: TracesIngestDiagnostics): Date | null {
