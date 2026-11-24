@@ -1388,8 +1388,6 @@
         "web/src/lib/readings/trace-signals/outcomes/reply-reading.ts",
         "web/src/lib/readings/trace-signals/outcomes/rows.ts",
         "web/src/lib/readings/trace-signals/outcomes/run-queries.ts",
-        "web/src/lib/readings/trace-signals/outcomes/run.integration.test.ts",
-        "web/src/lib/readings/trace-signals/outcomes/run.ts",
         "web/src/lib/readings/trace-signals/outcomes/summary.ts",
         "web/src/lib/readings/trace-signals/outcomes/task-question.ts",
         "web/src/lib/readings/trace-signals/outcomes/tasks.test.ts",

@@ -436,12 +436,14 @@ export async function recordOutcomes(
   );
   const sessions = await deps.replaceSessionRows(projectId, replaced.sessions, sessionRows, at);
 
-  // Tasks: every session folded, cut again from all of its turn rows.
+  // Tasks: every session folded, cut again from all of its turn rows. A session that lost its row
+  // above (its turns are gone, or sessions are no longer trusted) loses its tasks with it.
   let taskCounts: Record<TaskResult, number> | undefined;
-  if (deps.replaceTaskRows && turnsBySession.size > 0) {
+  if (deps.replaceTaskRows && replaced.sessions.length > 0) {
     const stored =
-      (await deps.loadTaskVerdicts?.(projectId, [...turnsBySession.keys()])) ??
-      new Map<string, TaskVerdict>();
+      (turnsBySession.size > 0
+        ? await deps.loadTaskVerdicts?.(projectId, [...turnsBySession.keys()])
+        : undefined) ?? new Map<string, TaskVerdict>();
     const taskRows = [...turnsBySession].flatMap(([sessionId, turns]) =>
       segmentTasks(turns).map((task): TaskOutcomeRowDraft => {
         const verdict = model?.tasks.get(task.taskId) ?? stored.get(task.taskId) ?? null;
@@ -464,12 +466,15 @@ export async function recordOutcomes(
         };
       }),
     );
-    await deps.replaceTaskRows(projectId, [...turnsBySession.keys()], taskRows, at);
-    taskCounts = Object.fromEntries(TASK_RESULTS.map((result) => [result, 0])) as Record<
-      TaskResult,
-      number
-    >;
-    for (const row of taskRows) taskCounts[row.result as TaskResult] += 1;
+    await deps.replaceTaskRows(projectId, replaced.sessions, taskRows, at);
+    if (turnsBySession.size > 0) {
+      const counts = Object.fromEntries(TASK_RESULTS.map((result) => [result, 0])) as Record<
+        TaskResult,
+        number
+      >;
+      for (const row of taskRows) counts[row.result as TaskResult] += 1;
+      taskCounts = counts;
+    }
   }
 
   const causes = tally.finish();

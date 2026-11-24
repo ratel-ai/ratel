@@ -405,10 +405,11 @@ test("once the error events are pruned, a row keeps the cause it read before", a
   await client.close();
 });
 
-test("a window read as several users' calls mixed together loses its turn rows and their sessions' rows", async () => {
+test("a window read as several users' calls mixed together loses its turn rows and their sessions' and tasks' rows", async () => {
   const { client, db } = await seeded();
   await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
   assert.equal(await count(client, `select count(*)::int as n from trace_turn_outcomes`), 30);
+  assert.equal(await count(client, `select count(*)::int as n from trace_task_outcomes`), 30);
 
   await computeProjectTraceSignals(
     PROJECT_ID,
@@ -438,6 +439,8 @@ test("a window read as several users' calls mixed together loses its turn rows a
   );
   assert.equal(await count(client, `select count(*)::int as n from trace_turn_outcomes`), 0);
   assert.equal(await count(client, `select count(*)::int as n from trace_session_outcomes`), 0);
+  // The page reads tasks by project and time: a task of a session no longer read would still count.
+  assert.equal(await count(client, `select count(*)::int as n from trace_task_outcomes`), 0);
   await client.close();
 });
 
