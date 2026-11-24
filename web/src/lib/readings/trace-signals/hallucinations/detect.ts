@@ -86,8 +86,19 @@ export function requestedOf(
 const errorOf = (step: StepDraft, errors: ReadonlyMap<string, string>): string | null =>
   errors.get(step.endTraceEventId ?? step.traceEventId) ?? null;
 
+/** Each catalog's names as they are compared (`toolName`: no namespace, lower case), built once per catalog. */
+const comparedNames = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
+function namesOf(catalog: ReadonlySet<string>): ReadonlySet<string> {
+  let names = comparedNames.get(catalog);
+  if (!names) {
+    names = new Set([...catalog].map(toolName));
+    comparedNames.set(catalog, names);
+  }
+  return names;
+}
+
 const inCatalog = (id: string, catalog: ReadonlySet<string> | null): boolean =>
-  catalog !== null && (catalog.has(id) || catalog.has(toolName(id)));
+  catalog !== null && (catalog.has(id) || namesOf(catalog).has(toolName(id)));
 
 /**
  * The turn's first failure streak of an acting tool (one that creates,

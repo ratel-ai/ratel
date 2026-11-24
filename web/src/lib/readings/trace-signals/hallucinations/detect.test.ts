@@ -211,6 +211,27 @@ test("asked for one tool, ran another: a reroute, or a changed action when the t
   );
 });
 
+test("a catalog's names compare without case or namespace, like the requested name", () => {
+  const steps = stepsOf(fresh().invoke("entity_lookup"));
+  const lookup = callsOf(steps, "entity_lookup")[0]!.traceEventId;
+  // The catalog holds camelCase names; the agent asked for the same tool with a server prefix.
+  assert.deepEqual(
+    detect(steps, {
+      requested: new Map([[lookup, "linear__createIssue"]]),
+      catalog: new Set(["createIssue", "entity_lookup"]),
+    }),
+    [],
+  );
+  // A name the catalog does not hold is still a reroute.
+  assert.equal(
+    detect(steps, {
+      requested: new Map([[lookup, "linear__deleteIssue"]]),
+      catalog: new Set(["createIssue", "entity_lookup"]),
+    }).length,
+    1,
+  );
+});
+
 test("a requested name the catalog holds, or one that only differs by namespace or case, is not a reroute", () => {
   const steps = stepsOf(fresh().invoke("entity_lookup").invoke("update_task"));
   const lookup = callsOf(steps, "entity_lookup")[0]!.traceEventId;
