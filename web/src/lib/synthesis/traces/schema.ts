@@ -78,6 +78,8 @@ export const otelTraceSummaries = pgTable(
     index("otel_trace_summaries_project_started_idx").on(t.projectId, t.startedAt),
     // The retention sweep's bounded batch.
     index("otel_trace_summaries_spans_max_received_idx").on(t.spansMaxReceivedAt),
+    // The scorers' sweep: a project's summaries in the order they were written.
+    index("otel_trace_summaries_project_updated_idx").on(t.projectId, t.updatedAt, t.traceId),
     // The model and tool filters (`models && $1`).
     index("otel_trace_summaries_models_idx").using("gin", t.models),
     index("otel_trace_summaries_tools_idx").using("gin", t.tools),

@@ -967,6 +967,7 @@
         "!web/src/lib/synthesis/traces/register.ts",
         "!web/src/lib/synthesis/traces/register.test.ts",
         "web/src/components/console/traces/**",
+        "!web/src/components/console/traces/TraceView.tsx",
         "web/src/components/console/stale-build-callout.tsx",
         "web/src/lib/console/stale-build.ts",
         "web/src/lib/console/stale-build.test.ts",
