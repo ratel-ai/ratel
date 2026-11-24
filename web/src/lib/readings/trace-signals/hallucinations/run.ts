@@ -20,6 +20,7 @@ import type {
 } from "@/lib/readings/trace-signals/hallucinations/run-queries";
 import { readsTurn, trustOf } from "@/lib/readings/trace-signals/self-corrections/detect";
 import type { SignalTurn } from "@/lib/readings/trace-signals/signals/types";
+import { stepCalls, stepEventIds } from "@/lib/readings/trace-signals/step-calls";
 import type { RunBasis } from "@/lib/readings/trace-signals/workflows/run-basis";
 
 /**
@@ -113,13 +114,7 @@ export interface HallucinationRunResult {
 
 /** The events of a turn's calls: a call's start, and its end when it has one. */
 const callEvents = (turn: SignalTurn): string[] =>
-  turn.steps.flatMap((step) =>
-    nodeIdOf(step) === null
-      ? []
-      : step.endTraceEventId
-        ? [step.traceEventId, step.endTraceEventId]
-        : [step.traceEventId],
-  );
+  stepCalls(turn.steps).flatMap(({ step }) => stepEventIds(step));
 
 /**
  * Run one reading for the window; null when the switch is off. Throws

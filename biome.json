@@ -1361,7 +1361,6 @@
         "web/src/lib/views/health/root-causes/completion-card.ts",
         "web/src/lib/readings/trace-signals/outcomes/error-cause.test.ts",
         "web/src/lib/readings/trace-signals/outcomes/error-cause.ts",
-        "web/src/lib/readings/trace-signals/outcomes/followed.ts",
         "web/src/lib/readings/trace-signals/outcomes/questions.test.ts",
         "web/src/lib/readings/trace-signals/outcomes/reply-reading.test.ts",
         "web/src/lib/readings/trace-signals/outcomes/reply-reading.ts",

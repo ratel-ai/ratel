@@ -1,5 +1,4 @@
 import type { StepDraft } from "@/lib/ledger/types";
-import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import {
   actionClassOf,
   isProbe,
@@ -12,6 +11,7 @@ import type {
   HallucinationKind,
 } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { type FailureStreak, failureStreaks } from "@/lib/readings/trace-signals/outcomes/followed";
+import { stepCalls, stepEventIds } from "@/lib/readings/trace-signals/step-calls";
 
 /**
  * The hallucinations of one turn, by rule. Pure.
@@ -69,14 +69,11 @@ export interface DetectInput {
 /** An id as a tool would have one: the agent's own string is kept only when it is one. */
 const ID_SHAPED = /^[\w.:/-]{1,120}$/;
 
-const eventIdsOf = (step: StepDraft): string[] =>
-  step.endTraceEventId ? [step.traceEventId, step.endTraceEventId] : [step.traceEventId];
-
 export function requestedOf(
   step: StepDraft,
   requested: ReadonlyMap<string, string>,
 ): string | null {
-  for (const id of eventIdsOf(step)) {
+  for (const id of stepEventIds(step)) {
     const asked = requested.get(id)?.trim();
     if (asked) return asked;
   }
@@ -106,10 +103,7 @@ const inCatalog = (id: string, catalog: ReadonlySet<string> | null): boolean =>
  * when there is none. A reply that says "done" over it is a false report.
  */
 export function unrecoveredActingFailure(steps: readonly StepDraft[]): FailureStreak | null {
-  const calls = steps.flatMap((step) => {
-    const node = nodeIdOf(step);
-    return node === null ? [] : [{ step, node }];
-  });
+  const calls = stepCalls(steps);
   for (const streak of failureStreaks(steps)) {
     const kind = actionClassOf(streak.tool);
     if (kind === null || kind === "read") continue;
@@ -127,10 +121,7 @@ export function unrecoveredActingFailure(steps: readonly StepDraft[]): FailureSt
 
 export function detectHallucinations(input: DetectInput): Finding[] {
   const { steps, errors, catalog } = input;
-  const calls = steps.flatMap((step) => {
-    const node = nodeIdOf(step);
-    return node === null ? [] : [{ step, node }];
-  });
+  const calls = stepCalls(steps);
   const findings: Finding[] = [];
   /** Ordinals a reroute finding already covers. */
   const rerouted = new Set<number>();
@@ -204,7 +195,7 @@ export function detectHallucinations(input: DetectInput): Finding[] {
   for (const { step, node } of calls) {
     if (step.outcome === "error" || rerouted.has(step.ordinal) || inCatalog(node, catalog))
       continue;
-    if (!eventIdsOf(step).some((id) => input.noSuchTool.has(id))) continue;
+    if (!stepEventIds(step).some((id) => input.noSuchTool.has(id))) continue;
     findings.push({
       kind: "unknown_tool",
       stepOrdinal: step.ordinal,
