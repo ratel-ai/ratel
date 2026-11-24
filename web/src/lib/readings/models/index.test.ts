@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { resolveConfig } from "@/config";
 import type { TextModel } from "@/lib/contracts/models";
 import { fakeTextModel } from "./fake";
-import { claudeFor, models, modelsConfigured, withProviders } from "./index";
+import { claudeFor, models, modelsConfigured, providerFor, withProviders } from "./index";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */
 const cfg = (env: Record<string, string | undefined> = {}) => resolveConfig({ env });
@@ -96,6 +96,27 @@ test("Claude has no chat model in the kit yet: a tool-using feature takes it thr
   assert.ok(models.text("workflow_label", options));
   assert.equal(models.chat("eval_gate_replay", options), null);
   assert.equal(claudeFor("eval_gate_replay", options)?.model, "claude-opus-5-5");
+});
+
+test("a spend line names who serves the model: Anthropic only where Claude itself is served", () => {
+  const at = (env: Record<string, string>) => ({ config: cfg(env), environment: "production" });
+  // A server that passes a Claude model on is still the one that is called and billed.
+  const gateway = at({
+    MODEL_PROVIDER: "litellm",
+    MODEL_BASE_URL: "http://gateway.test",
+    MODEL: "claude-sonnet-5-5",
+  });
+  assert.equal(models.text("workflow_label", gateway)?.provider, "litellm");
+  assert.equal(providerFor("workflow_label", gateway), "litellm");
+
+  const cloud = { MODEL_PROVIDER: "gcp", GOOGLE_CLOUD_PROJECT: "p", GOOGLE_CLOUD_LOCATION: "eu" };
+  assert.equal(providerFor("workflow_label", at(cloud)), "anthropic");
+  assert.equal(
+    providerFor("workflow_label", at({ ...cloud, MODEL: "gemini-4-carbon" })),
+    "gcp.vertex_ai",
+  );
+  // No vendor at all: the line is Claude's, as before the kit.
+  assert.equal(providerFor("workflow_label", at({})), "anthropic");
 });
 
 test("a feature is asked for by its own kind", () => {

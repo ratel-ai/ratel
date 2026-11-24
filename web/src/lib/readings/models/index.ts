@@ -154,11 +154,18 @@ export function replaysModel(recorded: string, options: Omit<ModelOptions, "mode
   return vendor !== null && (VENDORS[vendor.name].replays?.test(recorded) ?? false);
 }
 
-/** Who a feature's calls are billed to, as its spend lines name it; Claude's when there is no vendor. */
+/**
+ * Who a feature's calls are billed to, as its spend lines name it; Claude's when there is no
+ * vendor. A Claude model is Anthropic's only on a vendor that serves Claude itself: a server that
+ * passes one on is the one called, and its own lines say so.
+ */
 export function providerFor(feature: FeatureId, options: ModelOptions = {}): string {
   const context = contextFor(feature, options);
-  if (!context || isClaudeModel(context.model)) return VENDORS.claude.provider;
-  return VENDORS[context.vendor.name].provider;
+  if (!context) return VENDORS.claude.provider;
+  const vendor = VENDORS[context.vendor.name];
+  return vendor.servesClaude && isClaudeModel(context.model)
+    ? VENDORS.claude.provider
+    : vendor.provider;
 }
 
 /** Whether this deployment has a text vendor at all. */
