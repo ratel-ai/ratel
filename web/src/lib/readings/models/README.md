@@ -61,7 +61,7 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | unset, `claude` | `ANTHROPIC_API_KEY`, or `ANTHROPIC_BACKEND` | `claude-opus-5-5` · `claude-sonnet-5-5` · `claude-haiku-5-5` | all three, on the Anthropic API |
 | `openai` | `OPENAI_API_KEY` | `gpt-6.2-astra` · `gpt-6.2-sol` · `gpt-6-luna` | all three |
 | `gcp` | `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`, the Google login | as Claude, or a Gemini model by name | in `eu`: `gemini-4-hydrogen`, `gemini-4-carbon`, `gemini-3.5-flash-lite` and all three Claude models |
-| `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | `openai.gpt-oss-120b-1:0`, `qwen.qwen3-32b-v1:0`; Claude not yet (no access in the account) |
+| `bedrock` | `AWS_REGION`, the AWS login or `AWS_BEARER_TOKEN_BEDROCK` | as Claude, or another Bedrock model by name | `openai.gpt-oss-120b-1:0`, `qwen.qwen3-32b-v1:0`; all three Claude models in `eu-central-1`, with an AWS login on an account that has Claude access |
 | `ollama` | `MODEL_BASE_URL` | name one | `llama3.2:1b`, `qwen2.5:0.5b` |
 | `llama.cpp` | `MODEL_BASE_URL`; start it with `--jinja` for tools | name one | `qwen2.5:0.5b` |
 | `vllm` | `MODEL_BASE_URL`; its tool flags for tools | name one | no |

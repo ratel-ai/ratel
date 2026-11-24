@@ -577,7 +577,7 @@ function explain(failed: FailedCall, options: { config?: Config; environment?: s
     return `The Google login is missing or has expired, so ${label} can't be called. On this machine run: gcloud auth application-default login. On a server, give it a service account.`;
   if (
     isNamed(errors, /CredentialsProviderError|ExpiredToken/) ||
-    /could not load credentials|security token included in the request is (invalid|expired)|ExpiredTokenException/i.test(
+    /could not load credentials|failed to resolve aws credentials|credential provider chain|InvalidGrantException|security token included in the request is (invalid|expired)|ExpiredTokenException/i.test(
       words,
     )
   )

@@ -377,3 +377,16 @@ test("a sentence starts with a capital, whoever it names", () => {
     /^The embedding server refused the key in EMBEDDING_API_KEY \(401\)/,
   );
 });
+
+test("Bedrock with no AWS login says so, not that it cannot be reached", () => {
+  const error = new Anthropic.APIConnectionError({
+    message: "Failed to resolve AWS credentials from the credential provider chain.",
+  });
+  assert.match(
+    explainModelError(
+      { feature: "workflow_label", model: "claude-sonnet-5-5", error },
+      at(BEDROCK),
+    ),
+    /^The AWS login is missing or expired/,
+  );
+});
