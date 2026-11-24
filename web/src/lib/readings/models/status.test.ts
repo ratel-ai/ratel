@@ -90,7 +90,7 @@ test("a failed call is logged in one sentence and kept for the console; a later 
   }
 });
 
-test("the same failure is logged once a minute, but every one is kept", async () => {
+test("the same failure is logged and written once a minute; the ones between are counted on the next write", async () => {
   const h = harness({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: KEY });
   try {
     const fail = () =>
@@ -105,11 +105,49 @@ test("the same failure is logged once a minute, but every one is kept", async ()
       });
     fail();
     fail();
+    fail();
     h.advance(61_000);
     fail();
     await settle();
     assert.equal(h.lines.filter((line) => line.level === "warn").length, 2);
-    assert.equal(h.failed.length, 3);
+    // Four failures, two writes: the second carries the two it held back, and itself.
+    assert.deepEqual(
+      h.failed.map((failure) => failure.count ?? 1),
+      [1, 3],
+    );
+  } finally {
+    h.stop();
+  }
+});
+
+test("a different failure is written at once, and a call that works drops what was held back", async () => {
+  const h = harness({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: KEY });
+  try {
+    const call = (outcome: "ok" | "error", status = 429) =>
+      recordModelCall({
+        provider: "openai",
+        model: "gpt-6.2-sol",
+        feature: "topics_names",
+        payer: "ratel",
+        outcome,
+        durationMs: 1,
+        ...(outcome === "error" ? { error: new ModelHttpError(status, "x") } : {}),
+      });
+    call("error");
+    call("error", 401);
+    call("error", 401);
+    call("ok");
+    call("error", 401);
+    await settle();
+    assert.deepEqual(
+      h.failed.map((failure) => [failure.status, failure.count ?? 1]),
+      [
+        [429, 1],
+        [401, 1],
+        // The 401 held back came before the call that worked: it is not counted again.
+        [401, 1],
+      ],
+    );
   } finally {
     h.stop();
   }

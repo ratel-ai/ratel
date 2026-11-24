@@ -37,6 +37,16 @@ test("a failure is kept per feature, counted, and the next one replaces its word
   assert.equal(row.okAt, null);
 });
 
+test("a write can carry the failures held back since the last one", async () => {
+  const failures = await store();
+  await failures.failed({ ...FAILED, at: new Date("2026-11-24T10:00:00Z") });
+  await failures.failed({ ...FAILED, count: 5, at: new Date("2026-11-24T10:01:00Z") });
+  assert.equal((await failures.list())[0].failures, 6);
+  await failures.succeeded("workflow_label", new Date("2026-11-24T10:02:00Z"));
+  await failures.failed({ ...FAILED, count: 3, at: new Date("2026-11-24T10:03:00Z") });
+  assert.equal((await failures.list())[0].failures, 3);
+});
+
 test("a call that works afterwards marks the feature as working again, and resets the count", async () => {
   const failures = await store();
   await failures.failed({ ...FAILED, at: new Date("2026-11-24T10:00:00Z") });

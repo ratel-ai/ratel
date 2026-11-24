@@ -8,7 +8,7 @@ import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
  */
 export const modelFailures = pgTable("model_failures", {
   feature: text("feature").primaryKey(),
-  /** text, decision or embedding. */
+  /** text or decision. */
   kind: text("kind").notNull(),
   /** The spend line's provider. */
   provider: text("provider").notNull(),

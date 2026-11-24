@@ -17,11 +17,13 @@ import { type ModelFailureRow, modelFailures } from "./schema";
 
 export interface ModelFailure {
   feature: string;
-  kind: "text" | "decision" | "embedding";
+  kind: "text" | "decision";
   provider: string;
   model: string;
   message: string;
   status?: number;
+  /** How many failures this write stands for: itself and those held back since the last. */
+  count?: number;
   at?: Date;
 }
 
@@ -36,6 +38,7 @@ export function dbModelFailureStore(db: ReturnType<typeof getDb> = getDb()): Mod
   return {
     async failed(failure) {
       const at = failure.at ?? new Date();
+      const count = Math.max(1, Math.trunc(failure.count ?? 1));
       const values = {
         kind: failure.kind,
         provider: failure.provider,
@@ -46,13 +49,13 @@ export function dbModelFailureStore(db: ReturnType<typeof getDb> = getDb()): Mod
       };
       await db
         .insert(modelFailures)
-        .values({ feature: failure.feature, ...values, failures: 1 })
+        .values({ feature: failure.feature, ...values, failures: count })
         .onConflictDoUpdate({
           target: modelFailures.feature,
           set: {
             ...values,
             // A failure after a call that worked starts the count again.
-            failures: sql`case when ${modelFailures.okAt} is not null and ${modelFailures.okAt} > ${modelFailures.failedAt} then 1 else ${modelFailures.failures} + 1 end`,
+            failures: sql`case when ${modelFailures.okAt} is not null and ${modelFailures.okAt} > ${modelFailures.failedAt} then ${count} else ${modelFailures.failures} + ${count} end`,
           },
         });
     },
@@ -75,7 +78,10 @@ export interface ModelStatusOptions {
   log?: Log;
 }
 
-/** The same failure is logged at most this often; every one is still kept. */
+/**
+ * The same failure is logged and written at most this often per feature; those in between are
+ * added to the count of the next write. A different failure is news, and is written at once.
+ */
 const LOG_EVERY_MS = 60_000;
 /** A feature's working calls are written at most this often. */
 const OK_EVERY_MS = 10 * 60_000;
@@ -106,10 +112,16 @@ export function startModelStatus(options: ModelStatusOptions = {}): () => void {
 
   const logged = new Map<string, number>();
   const okWritten = new Map<string, number>();
+  /** Per feature: the last failure written, and the failures held back since. */
+  const written = new Map<string, { at: number; message: string }>();
+  const heldBack = new Map<string, number>();
   return onModelCall((record) => {
     // The console's check reports its own result, on the page that ran it.
     if (isCheck(record.feature)) return;
     if (record.outcome === "ok") {
+      // What was held back came before this call: the count starts again after it.
+      written.delete(record.feature);
+      heldBack.delete(record.feature);
       const last = okWritten.get(record.feature);
       if (last !== undefined && now() - last < OK_EVERY_MS) return;
       okWritten.set(record.feature, now());
@@ -145,6 +157,14 @@ export function startModelStatus(options: ModelStatusOptions = {}): () => void {
     }
     // A failure after a success is news again.
     okWritten.delete(record.feature);
+    const previous = written.get(record.feature);
+    if (previous && previous.message === message && now() - previous.at < LOG_EVERY_MS) {
+      heldBack.set(record.feature, (heldBack.get(record.feature) ?? 0) + 1);
+      return;
+    }
+    const count = 1 + (heldBack.get(record.feature) ?? 0);
+    heldBack.delete(record.feature);
+    written.set(record.feature, { at: now(), message });
     failures()
       .failed({
         feature: record.feature,
@@ -153,6 +173,7 @@ export function startModelStatus(options: ModelStatusOptions = {}): () => void {
         model: record.model,
         message,
         ...(status !== undefined ? { status } : {}),
+        ...(count > 1 ? { count } : {}),
         at: new Date(now()),
       })
       .catch(() => {});
