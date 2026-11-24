@@ -36,6 +36,7 @@ import {
   unavailableSelfCorrectionsCard,
 } from "@/lib/views/health/self-corrections/card";
 import { type Attention, buildAttention } from "@/lib/views/home/attention";
+import { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 import {
   applicableDescriptions,
   descriptionsHref,
@@ -87,6 +88,7 @@ import {
   type SdkDay,
 } from "@/lib/views/home/overview-reads";
 
+export { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 export type { FixesSlice } from "@/lib/views/home/glance";
 export {
   countPendingRewrites,
@@ -101,9 +103,6 @@ export {
 
 type FixesOrganization = Parameters<typeof loadFixes>[0]["organization"];
 type LimitOrganization = Parameters<typeof getAgentHealthLimits>[0];
-
-/** The Panel the Spend stat and the context rows open. */
-export const CONTEXT_PEEK = "context";
 
 export interface OverviewProject {
   id: string;

@@ -1085,6 +1085,7 @@
         "!web/src/lib/mcp/operations/loop/run-eval-gate.integration.test.ts",
         "!web/src/lib/mcp/operations/loop/task-simulation.ts",
         "!web/src/lib/mcp/operations/loop/tasks.test.ts",
+        "!web/src/lib/mcp/stages.test.ts",
         "!web/src/lib/mcp/stages.ts",
         "!web/src/lib/mcp/route-handler.ts",
         "!web/src/lib/mcp/server.ts",

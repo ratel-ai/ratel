@@ -17,10 +17,14 @@ import type {
 } from "@/lib/views/home/focused-load";
 import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
 
+type PeekHref = (peek: string) => string;
+
 /** What each card holds, drawn on the server. Null for a widget the loader did not read. */
 export function widgetBodies(
   data: FocusedOverviewData,
   linked: boolean,
+  /** Where a Panel opens from somewhere other than the page (an MCP App view); absent, in place. */
+  peekHref?: PeekHref,
 ): Record<OverviewWidgetId, WidgetBody | null> {
   const { metrics, topology, health, attention, root, rangeParam } = data;
   const reload = data.window === 7 ? root : `${root}?range=${rangeParam}`;
@@ -31,7 +35,7 @@ export function widgetBodies(
         metrics === "failed" ? (
           <NotLoaded title="These numbers did not load." href={reload} />
         ) : (
-          <Metrics data={metrics} />
+          <Metrics data={metrics} peekHref={peekHref} />
         ),
     },
     topology: topology && {
@@ -57,13 +61,15 @@ export function widgetBodies(
     },
     attention: attention && {
       link: { href: attention.healthHref, label: "Open Agent health" },
-      body: <NeedsAttention attention={attention} reload={reload} />,
+      body: <NeedsAttention attention={attention} reload={reload} peekHref={peekHref} />,
     },
   };
 }
 
-function Metrics({ data }: { data: MetricsData }) {
-  const stats = focusedStats(data);
+function Metrics({ data, peekHref }: { data: MetricsData; peekHref?: PeekHref }) {
+  const stats = focusedStats(data).map(({ peek, ...stat }) =>
+    peek && peekHref ? { ...stat, href: peekHref(peek) } : { ...stat, peek },
+  );
   return (
     <StatRow
       stats={stats}
@@ -73,8 +79,21 @@ function Metrics({ data }: { data: MetricsData }) {
   );
 }
 
-function NeedsAttention({ attention, reload }: { attention: FocusedAttention; reload: string }) {
-  const { items, moreIssues, healthHref, partial } = attention;
+function NeedsAttention({
+  attention,
+  reload,
+  peekHref,
+}: {
+  attention: FocusedAttention;
+  reload: string;
+  peekHref?: PeekHref;
+}) {
+  const { moreIssues, healthHref, partial } = attention;
+  const items = attention.items.map((item) =>
+    item.target.kind === "peek" && peekHref
+      ? { ...item, target: { kind: "link" as const, href: peekHref(item.target.peek) } }
+      : item,
+  );
   if (items.length === 0 && partial)
     return <NotLoaded title="Needs attention did not load." href={reload} />;
   return (

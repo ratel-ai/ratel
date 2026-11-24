@@ -5,8 +5,9 @@ import { fmtCost } from "@/lib/platform/format";
 import { formatSharePercent } from "@/lib/readings/trace-signals/claims";
 import { formatDuration } from "@/lib/synthesis/traces/format";
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
+import { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 import type { MetricsData } from "@/lib/views/home/focused-load";
-import { CONTEXT_PEEK, type OverviewData } from "@/lib/views/home/load";
+import type { OverviewData } from "@/lib/views/home/load";
 import {
   type Change,
   compactCount,

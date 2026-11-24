@@ -3,6 +3,7 @@ import type { McpAppCatalog } from "@/lib/mcp/apps/catalog";
 import { clientViews, viewSessionId } from "@/lib/mcp/apps/client-views";
 import { type McpAppsFlagOptions, mcpAppsEnabled } from "@/lib/mcp/apps/flag";
 import { mcpAppCatalog } from "@/lib/mcp/apps/load";
+import { viewsFor } from "@/lib/mcp/apps/views-for";
 import {
   authDistinctId,
   authenticateMcpRequest,
@@ -18,6 +19,7 @@ import {
   loopEvalSetWriteOperations,
 } from "@/lib/mcp/operations/loop/eval-sets";
 import { loopTaskReadOperations, loopTaskWriteOperations } from "@/lib/mcp/operations/loop/tasks";
+import { focusedConsoleForCaller } from "@/lib/mcp/operations/overview";
 import { describeCaller } from "@/lib/mcp/operations/scope";
 import { mcpOrigin, mcpResourceMetadataUrl } from "@/lib/mcp/public-origin";
 import { createRatelMcpServer } from "@/lib/mcp/server";
@@ -109,6 +111,8 @@ export interface McpRouteDeps {
    * `options.initialize` on the initialize of a client that shows views (upstream waits longer there; the switch has no wait).
    */
   mcpApps?: (auth: McpAuthContext, options?: McpAppsFlagOptions) => Promise<boolean>;
+  /** `focusedConsole`, for this caller: whether the recap Overview's tools exist. */
+  focusedConsole?: (auth: McpAuthContext) => Promise<boolean>;
   /** The built views, checked against the registry (lib/mcp/apps/load.ts). */
   appCatalog?: () => McpAppCatalog;
   now?: () => number;
@@ -427,11 +431,13 @@ async function runMessages(
   /** This app's own origin: a view's "Open in Ratel" links go there. */
   consoleOrigin: string | undefined,
   /** The views to publish (`mcpApps`), or undefined. */
-  apps: McpAppCatalog | undefined,
+  built: McpAppCatalog | undefined,
   /** The client shows views: the model is told the person already sees the data. */
   clientRendersViews: boolean,
 ): Promise<JSONRPCMessage[]> {
-  const registry = buildRequestRegistry();
+  const focusedConsole = await (deps.focusedConsole ?? focusedConsoleForCaller)(auth);
+  const registry = buildRequestRegistry({ focusedConsole });
+  const apps = built && viewsFor(built, (tool) => tool === "whoami" || registry.has(tool));
   const server = createRatelMcpServer({
     auth,
     registry,
