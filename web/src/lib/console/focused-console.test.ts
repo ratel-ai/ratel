@@ -24,3 +24,27 @@ test("a failed decision keeps today's rail for that organization only", async ()
   });
   assert.deepEqual(ids, ["org-2"]);
 });
+
+test("the flag decides when it is set; unset, the experimental umbrella does", async () => {
+  const cases = [
+    { flag: undefined, umbrella: "0", on: false },
+    { flag: undefined, umbrella: "1", on: true },
+    { flag: "1", umbrella: "0", on: true },
+    { flag: "1", umbrella: "1", on: true },
+    { flag: "0", umbrella: "0", on: false },
+    { flag: "0", umbrella: "1", on: false },
+  ];
+  for (const { flag, umbrella, on } of cases) {
+    const config = resolveConfig({
+      env: {
+        RATEL_EXPERIMENTAL_FEATURES: umbrella,
+        ...(flag === undefined ? {} : { FF_FOCUSED_CONSOLE: flag }),
+      },
+    });
+    assert.equal(
+      await focusedConsoleEnabled({ id: "org-1" }, config),
+      on,
+      `FF_FOCUSED_CONSOLE=${flag} RATEL_EXPERIMENTAL_FEATURES=${umbrella}`,
+    );
+  }
+});
