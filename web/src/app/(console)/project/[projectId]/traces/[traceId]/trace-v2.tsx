@@ -1,12 +1,16 @@
 import { notFound } from "next/navigation";
+import { TraceScores } from "@/components/console/scorers/TraceScores";
 import { TracesUnavailable } from "@/components/console/traces/TracesUnavailable";
 import { TraceView } from "@/components/console/traces/TraceView";
+import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { firstParam, searchFromParams } from "@/lib/synthesis/traces/v2/filters";
 import { runsListPath } from "@/lib/synthesis/traces/v2/run-noun";
 import type { TraceListSearchParams } from "@/lib/synthesis/traces/view";
+import { scoresOfTrace } from "@/lib/views/scorers/store";
 import { loadTraceSession } from "@/lib/views/session-chat/trace-session";
 import { contentOptIn } from "@/lib/views/session-replay/runs";
 import { loadTraceViewProps } from "@/lib/views/traces/trace-view-props";
@@ -59,7 +63,29 @@ export async function TracePageV2({
         { operation: "trace_session" },
       ),
   });
-  return <TraceView {...props} session={traceSession} />;
+  const scores = await loadOrFallback({
+    operation: "trace_scores",
+    distinctId: `project:${project.id}`,
+    fallback: [],
+    load: async () => ((await scorersEnabled(project.id)) ? scoresOfTrace(project.id, id) : []),
+  });
+  return (
+    <TraceView
+      {...props}
+      session={traceSession}
+      scores={<TraceScores projectId={project.id} scores={scores} />}
+    />
+  );
+}
+
+async function scorersEnabled(projectId: string): Promise<boolean> {
+  const scope = await findProjectScope(projectId);
+  if (!scope) return false;
+  return featureEnabled("scorers", {
+    projectId: scope.project.id,
+    organizationId: scope.organization.id,
+    actor: scope.user.externalId,
+  });
 }
 
 // Moved to lib so get_trace's MCP view reads a run the same way; the session replay page imports it from here.

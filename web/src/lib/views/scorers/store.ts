@@ -224,7 +224,7 @@ export async function scoredTraceIds(
 export function scorerOf(row: ScorerRow): Scorer | null {
   const definition = parseDefinition(row.kind, row.config);
   const filter = parseFilter(row.filter);
-  if (typeof definition === "string" || !filter) return null;
+  if ("ok" in definition || !filter) return null;
   return {
     id: row.id,
     projectId: row.projectId,
