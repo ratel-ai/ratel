@@ -4,9 +4,9 @@ import { messageOf } from "@/lib/readings/trace-signals/outcomes/error-cause";
 /**
  * What a failed call's error says the agent made up. Pure, and narrow on
  * purpose: a finding should be right when it fires, so a message that could
- * be about access, a limit or the tool itself reads as nothing here (it stays
- * a root cause). Read from the words as sent, in memory; only the shape's id
- * is kept.
+ * be about access, a limit, the setup (a missing key, config or file), a bare
+ * HTTP status or the tool itself reads as nothing here (it stays a root
+ * cause). Read from the words as sent, in memory; only the shape's id is kept.
  *
  *   unknown_tool        the error names a tool that does not exist;
  *   unknown_reference   "<record> not found" or "no <record> matched", with no
@@ -49,6 +49,20 @@ const NO_MATCH =
 const LISTS_VALUES =
   /\b(?:available|allowed|valid|supported|permitted|accepted)(?: (?:values?|options?|choices|statuses|types|keys))?(?: are| is)?:\s*\S|\bmust be one of\b|\bexpected one of\b|\bone of the following\b|\bis not a valid (?:\w+ )?(?:value|option|status|type|choice)\b|\binvalid enum\b/i;
 
+/** JSON-RPC's unknown method (-32601): the agent called something the server does not have. */
+const UNKNOWN_METHOD = /\bmethod not found\b/i;
+
+/** A limit or quota: "allowed: 100 requests" is the limit, not the values a field takes. */
+const LIMIT =
+  /\brate[ -]?limit|\bquota\b|\btoo many requests\b|\bthrottl|\blimit (?:exceeded|reached)\b/i;
+
+/** The setup is missing, not a record the agent named: a key, token, credential, config or file. */
+const SETUP =
+  /\b(?:api[ _-]?keys?|keys?|tokens?|credentials?|secrets?|passwords?|config(?:uration)?|settings|env(?:ironment)?(?: var(?:iable)?s?)?|certificates?|files?)\b/i;
+
+/** A bare HTTP status line: "404 Not Found", "HTTP 404: Not Found", "Not Found". */
+const STATUS_LINE = /^(?:http(?:\/[\d.]+)?\s*)?(?:\d{3}\s*[:—–-]?\s*)?not found\.?$/i;
+
 const firstSentence = (text: string): string => {
   const cut = text.search(/[.!?](?=\s)|\n|\s[—–-]\s/);
   return (cut < 0 ? text : text.slice(0, cut)).trim();
@@ -58,11 +72,13 @@ const firstSentence = (text: string): string => {
 export function errorShapeOf(raw: string | null | undefined): ErrorShapeReading | null {
   if (!raw || raw.trim() === "") return null;
   const text = messageOf(raw).slice(0, MAX_CHARS).replace(WRAPPER, "");
-  if (NAMES_TOOL.test(text)) return { shape: "unknown_tool", evidence: "error_names_tool" };
-  if (LISTS_VALUES.test(text))
+  if (NAMES_TOOL.test(text) || UNKNOWN_METHOD.test(text))
+    return { shape: "unknown_tool", evidence: "error_names_tool" };
+  if (!LIMIT.test(text) && LISTS_VALUES.test(text))
     return { shape: "value_not_allowed", evidence: "lists_allowed_values" };
-  if (ACCESS_HEDGE.test(text)) return null;
+  if (ACCESS_HEDGE.test(text) || STATUS_LINE.test(text.trim())) return null;
   const first = firstSentence(text);
+  if (SETUP.test(first)) return null;
   if (NO_MATCH.test(first)) return { shape: "unknown_reference", evidence: "no_entity_matched" };
   if (NOT_FOUND.test(first)) return { shape: "unknown_reference", evidence: "entity_not_found" };
   return null;

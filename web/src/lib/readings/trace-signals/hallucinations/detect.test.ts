@@ -154,6 +154,30 @@ test("an error a runtime wrapped is read after its wrapper: naming the tool that
   assert.equal(shape("No such tool: merge_tasks"), "unknown_tool");
 });
 
+test("setup, transport and limit errors are not made-up inputs; an unknown method is an unknown tool", () => {
+  const shape = (text: string) => errorShapeOf(text)?.shape ?? null;
+  for (const text of [
+    "API key not found",
+    "No API key found",
+    "No credentials found for this workspace",
+    "Access token not found. Sign in again.",
+    "Config file not found",
+    "File not found: /etc/app/config.yaml",
+    "404 Not Found",
+    "HTTP 404: Not Found",
+    "Not Found",
+    "Rate limit exceeded. Allowed: 100 requests per minute",
+    "Quota exceeded; allowed: 5000 calls per day",
+  ]) {
+    assert.equal(shape(text), null, text);
+  }
+  assert.equal(shape("Method not found"), "unknown_tool");
+  assert.equal(shape('{"code":-32601,"message":"Method not found"}'), "unknown_tool");
+  // A record still reads as one.
+  assert.equal(shape("Customer not found"), "unknown_reference");
+  assert.equal(shape("Invalid priority. Allowed: low, normal, urgent"), "value_not_allowed");
+});
+
 test("a reply claims completion when it says done and admits nothing", () => {
   for (const reply of [
     "Done. RS-202 is closed and Ada has been notified.",
