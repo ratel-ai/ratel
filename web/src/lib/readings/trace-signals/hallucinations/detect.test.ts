@@ -205,6 +205,25 @@ test("ordinary words do not cancel a claim; questions, conditions and instructio
   }
 });
 
+test("words that start or end with an accented letter are read as words", () => {
+  for (const reply of [
+    "J'ai créé la tâche.",
+    "J'ai envoyé le message à Léa.",
+    "La tâche a été créée.",
+    "Tamamlandı.",
+    "Görevi oluşturdum.",
+  ]) {
+    assert.equal(claimsCompletion(reply), true, reply);
+  }
+  for (const reply of [
+    "Désolé, j'ai mis à jour la mauvaise tâche.",
+    "Üzgünüm, görevi oluşturdum ama etiket eklenmedi.",
+    "Leider konnte ich die Aufgabe nicht erstellen.",
+  ]) {
+    assert.equal(claimsCompletion(reply), false, reply);
+  }
+});
+
 test("asked for one tool, ran another: a reroute, or a changed action when the tool that ran does something else", () => {
   const steps = stepsOf(
     fresh()
