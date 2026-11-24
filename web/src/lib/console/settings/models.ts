@@ -4,8 +4,9 @@ import type { OrgRole } from "@/lib/contracts/session";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { choiceClient } from "@/lib/readings/decisions/choice";
 import { resolveDecisionEngine } from "@/lib/readings/decisions/engine";
-import { decisionClient } from "@/lib/readings/decisions/openai";
-import { models } from "@/lib/readings/models";
+import { decisionClient, OPENAI_DECISIONS_MODEL } from "@/lib/readings/decisions/openai";
+import { DECISION_VENDORS } from "@/lib/readings/decisions/vendors";
+import { models, providerFor } from "@/lib/readings/models";
 import {
   explainDecisionSetup,
   explainEmbeddingSetup,
@@ -14,6 +15,7 @@ import {
   type KindSetup,
   type TextSetup,
 } from "@/lib/readings/models/explain";
+import { featureRow, isFeature } from "@/lib/readings/models/features";
 import type { ModelFailureRow } from "@/lib/readings/models/schema";
 import { dbModelFailureStore } from "@/lib/readings/models/status";
 
@@ -30,7 +32,10 @@ export interface ModelSettings {
   text: TextSetup;
   decisions: KindSetup;
   embeddings: KindSetup;
-  /** The last failure of each feature, by feature id. */
+  /**
+   * The last failure of each feature, by feature id, while the vendor and model that failed are
+   * still the setup: a failure of a setup that has since changed is not shown beside the new one.
+   */
   failures: Record<string, ModelFailureRow>;
   /** The failures could not be read; the rest of the page still can. */
   failuresUnreadable: boolean;
@@ -55,13 +60,40 @@ export async function loadModelSettings(
   } catch {
     failuresUnreadable = true;
   }
+  const text = explainTextSetup(config, environment);
+  const current = rows.filter((row) => failedOnThisSetup(row, text, config, environment));
   return {
-    text: explainTextSetup(config, environment),
+    text,
     decisions: explainDecisionSetup(config),
     embeddings: explainEmbeddingSetup(config),
-    failures: Object.fromEntries(rows.map((row) => [row.feature, row])),
+    failures: Object.fromEntries(current.map((row) => [row.feature, row])),
     failuresUnreadable,
   };
+}
+
+/**
+ * Whether a failure was of the vendor and model the deployment has now. A replay runs on the
+ * model its run recorded, so only its vendor is compared. A row of a feature this build does not
+ * know is shown as it is.
+ */
+function failedOnThisSetup(
+  row: ModelFailureRow,
+  text: TextSetup,
+  config: Config,
+  environment: string,
+): boolean {
+  if (!isFeature(row.feature)) return true;
+  const { kind } = featureRow(row.feature);
+  if (kind === "decision") {
+    const resolved = resolveDecisionEngine(config);
+    if (!resolved) return false;
+    const model = resolved.model ?? OPENAI_DECISIONS_MODEL;
+    return row.provider === DECISION_VENDORS[resolved.name].provider && row.model === model;
+  }
+  if (!text.on) return false;
+  if (row.provider !== providerFor(row.feature, { config, environment })) return false;
+  if (kind === "chat") return true;
+  return row.model === text.features.find((feature) => feature.feature === row.feature)?.model;
 }
 
 export interface ModelCheck {

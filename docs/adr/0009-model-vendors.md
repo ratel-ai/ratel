@@ -82,8 +82,8 @@ behaviour and their precedence. `fake` is for the tests of adapters and new feat
 model: its vendor, place and models, or why it is off (a name that is not a vendor, a missing key,
 region, project or address). Each failed call is logged as one sentence that names the vendor, the
 model, the status code and the setting to fix, at most once a minute per feature and sentence. The
-open-source edition keeps each feature's last failure (`model_failures`) and shows it in
-Organization settings > Models, read-only, with the setup and a check that asks each kind once.
+open-source edition keeps each feature's last failure (`model_failures`) and shows it, while the
+vendor and model that failed are still the setup, in Organization settings > Models, read-only, with the setup and a check that asks each kind once.
 The check is an admin's, runs at most every 30 seconds, and is counted as its own (`model_check`):
 its spend and its outcome are no feature's.
 The sentences are built from setting names, vendors, model ids, places and status codes, never a
