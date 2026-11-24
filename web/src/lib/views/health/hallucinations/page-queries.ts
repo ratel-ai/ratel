@@ -4,8 +4,11 @@ import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import type { StoredAlias } from "@/lib/readings/trace-signals/hallucinations/run";
-import { traceHallucinations, traceTurnOutcomes } from "@/lib/readings/trace-signals/schema";
-import { latestSignalRun } from "@/lib/readings/trace-signals/signals/queries";
+import {
+  traceHallucinations,
+  traceSignalRuns,
+  traceTurnOutcomes,
+} from "@/lib/readings/trace-signals/schema";
 import type { PageFinding } from "@/lib/views/health/hallucinations/page-model";
 
 /**
@@ -167,7 +170,19 @@ export async function loadLastRead(
   projectId: string,
   db: PageDb = getDb(),
 ): Promise<{ at: Date | null; aliases: StoredAlias[] }> {
-  const run = await latestSignalRun(projectId, db, "completed");
+  // A run whose reading failed or ran out of time has no `hallucinations` in its summary: skip it.
+  const [run] = await db
+    .select({ createdAt: traceSignalRuns.createdAt, summary: traceSignalRuns.summary })
+    .from(traceSignalRuns)
+    .where(
+      and(
+        eq(traceSignalRuns.projectId, projectId),
+        eq(traceSignalRuns.status, "completed"),
+        sql`${traceSignalRuns.summary} ? 'hallucinations'`,
+      ),
+    )
+    .orderBy(desc(traceSignalRuns.createdAt))
+    .limit(1);
   const summary = run?.summary as
     | { hallucinations?: { aliases?: StoredAlias[] } }
     | null
