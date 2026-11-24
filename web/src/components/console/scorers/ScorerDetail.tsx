@@ -4,6 +4,7 @@ import { Button } from "@ratel/design-system/button";
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { type Column, DataTable } from "@ratel/design-system/data-table";
 import { ConfirmDialog } from "@ratel/design-system/dialog";
+import { Menu, MenuContent, MenuLinkItem, MenuTrigger } from "@ratel/design-system/menu";
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
 import { Section } from "@ratel/design-system/section";
 import { StatRow } from "@ratel/design-system/stat-row";
@@ -14,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { changeScorerAction } from "@/app/(console)/project/[projectId]/scorers/actions";
 import { formatInteger, formatPercent, MISSING, shortId } from "@/lib/synthesis/traces/v2/format";
+import { addScorerHref, dashboardsHref } from "@/lib/views/dashboards/links";
 import { KIND_LABELS } from "@/lib/views/scorers/format";
 import { scorersHref, traceHref } from "@/lib/views/scorers/paths";
 import type { TraceScore } from "@/lib/views/scorers/types";
@@ -30,12 +32,15 @@ export interface LatestRow extends TraceScore {
 /** One scorer: its numbers, its trend, and its latest results, each a link to the trace. */
 export function ScorerDetail({
   projectId,
+  dashboards,
   scorer,
   trend,
   latest,
   now,
 }: {
   projectId: string;
+  /** The project's dashboards; null with `customDashboards` off. */
+  dashboards: readonly { id: string; name: string }[] | null;
   scorer: ScorerItem;
   trend: readonly TrendDay[];
   latest: readonly LatestRow[];
@@ -88,6 +93,7 @@ export function ScorerDetail({
         actions={
           <>
             <EnabledSwitch projectId={projectId} scorer={scorer} label="On" />
+            <AddToDashboard projectId={projectId} scorerId={scorer.id} dashboards={dashboards} />
             <Link
               href={`${root}/${scorer.id}/edit`}
               className={buttonVariants({ variant: "secondary" })}
@@ -135,6 +141,37 @@ export function ScorerDetail({
         </Section>
       </PageBody>
     </Page>
+  );
+}
+
+/** To a dashboard, with the editor open on this scorer. Without one, to where it is created. */
+function AddToDashboard({
+  projectId,
+  scorerId,
+  dashboards,
+}: {
+  projectId: string;
+  scorerId: string;
+  dashboards: readonly { id: string; name: string }[] | null;
+}) {
+  if (!dashboards) return null;
+  if (dashboards.length === 0)
+    return (
+      <Link href={dashboardsHref(projectId)} className={buttonVariants({ variant: "secondary" })}>
+        Add to dashboard
+      </Link>
+    );
+  return (
+    <Menu>
+      <MenuTrigger render={<Button variant="secondary" />}>Add to dashboard</MenuTrigger>
+      <MenuContent align="end">
+        {dashboards.map(({ id, name }) => (
+          <MenuLinkItem key={id} render={<Link href={addScorerHref(projectId, id, scorerId)} />}>
+            {name}
+          </MenuLinkItem>
+        ))}
+      </MenuContent>
+    </Menu>
   );
 }
 

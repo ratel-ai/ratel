@@ -26,5 +26,6 @@ soon after ingest. Behind the `scorers` flag. Core-owned; not the task scorers o
 | `preview.ts` | `previewScorer`: a draft run on the 5 newest matching traces, nothing stored; `countLastWeek` |
 | `format.ts` | a scorer and its results in words, and a stored filter as the filter bar's query string |
 | `paths.ts` | the console addresses of the Scorers pages and of a trace |
+| `metrics.ts` | `scorerMetricSource`: the results as a source of the metric catalog (`synthesis/metrics`). It fills `metricSeams.scores`, because the catalog is a lower layer |
 | `spend.ts` | the judge's spend, for the one daily budget (`evalGateSeams.spendSince`) |
 | `register.ts` | the drain's `scorers_sweep` step, after `trace_summary_refresh`; one `feature.scorers.swept` event per sweep that did work, and one `feature.scorers.judge_skipped` per scorer the budget stopped |

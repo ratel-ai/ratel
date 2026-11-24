@@ -14,6 +14,7 @@ import {
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { searchFromTraceFilter, widgetTracesHref } from "@/lib/views/dashboards/links";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
+import { scorerWidget } from "@/lib/views/dashboards/widget";
 
 const FILTER: TraceFilter = {
   models: ["gpt-4o", "a&b"],
@@ -79,7 +80,12 @@ test("stacked bars scale to their total; lines scale to their peak", () => {
 test("past six groups: the rest is Other when it adds up, and is said when it does not", () => {
   const result = grouped(Array.from({ length: 8 }, (_, index) => [`g${index}`, [8 - index, 1]]));
   const sum = chartModel(result, "sum", "usd", "bar");
-  assert.deepEqual(sum.series.at(-1), { label: "Other", slot: null, values: [3, 2] });
+  assert.deepEqual(sum.series.at(-1), {
+    key: "\u0000other",
+    label: "Other",
+    slot: null,
+    values: [3, 2],
+  });
   assert.equal(sum.note, null);
   const p95 = chartModel(result, "p95", "ms", "line");
   assert.equal(p95.series.length, 6);
@@ -134,6 +140,7 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
     "p1",
     widgets,
     { since: new Date(0), until: new Date(1) },
+    { scorers: false },
     async (_, widget) => {
       running += 1;
       most = Math.max(most, running);
@@ -147,6 +154,35 @@ test("widgets load in order, a few at a time, and a failed one leaves the rest",
     results.map((result) => result?.series[0].group ?? null),
     ["0", "1", "2", null, "4", "5", "6", "7", "8", "9"],
   );
+});
+
+test("a scorer widget reads nothing while scorers are off", async () => {
+  const widgets = [scorerWidget({ id: "s", verdict: true }), STARTER_WIDGETS[0]];
+  const read = async (scorers: boolean) => {
+    const asked: string[] = [];
+    await loadWidgets(
+      "p1",
+      widgets,
+      { since: new Date(0), until: new Date(1) },
+      { scorers },
+      async (_, widget) => {
+        asked.push(widget.metric);
+        return null;
+      },
+    );
+    return asked;
+  };
+  assert.deepEqual(await read(false), ["trace_count"]);
+  assert.deepEqual(await read(true), ["scorer_pass_rate", "trace_count"]);
+});
+
+test("a scorer average is drawn on its 1 to 5 scale, named after the scorer", () => {
+  const result = grouped([["id-1", [2.456]]]);
+  result.series[0].label = "Depth";
+  const model = chartModel(result, "avg", "score", "line");
+  assert.equal(model.scaleMax, 5);
+  assert.deepEqual([model.series[0].key, model.series[0].label], ["id-1", "Depth"]);
+  assert.equal(formatMetric(2.456, "score"), "2.46");
 });
 
 function grouped(series: [string, number[]][]): MetricResult {

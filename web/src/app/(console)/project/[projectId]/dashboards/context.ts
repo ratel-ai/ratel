@@ -1,6 +1,7 @@
 import { findProjectScope, type ProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
+import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 
 /** The reader's project, or null where no database is connected. The project layout already guarded the id. */
 export async function dashboardsScope(projectId: string): Promise<ProjectScope | null> {
@@ -11,4 +12,13 @@ export async function dashboardsScope(projectId: string): Promise<ProjectScope |
 export async function dashboardsEnabled(projectId: string): Promise<boolean> {
   const scope = await dashboardsScope(projectId);
   return featureEnabled("customDashboards", scope ? { organizationId: scope.organization.id } : {});
+}
+
+/** The switches that decide which metrics the project's widgets may use. */
+export async function metricFeatures(subject: {
+  projectId: string;
+  organizationId: string;
+  actor: string;
+}): Promise<MetricFeatures> {
+  return { scorers: await featureEnabled("scorers", subject) };
 }

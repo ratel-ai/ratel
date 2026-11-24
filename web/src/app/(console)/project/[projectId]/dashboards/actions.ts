@@ -19,6 +19,7 @@ import { loadWidget } from "@/lib/views/dashboards/data";
 import { dashboardsHref } from "@/lib/views/dashboards/links";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import * as store from "@/lib/views/dashboards/store";
+import { metricFeatures } from "./context";
 
 const logger = getLogger("dashboards/actions");
 
@@ -31,6 +32,7 @@ export async function changeDashboardAction(
       getSession: getSessionContext,
       findProjectScope,
       enabled: (subject) => featureEnabled("customDashboards", subject),
+      features: metricFeatures,
       isRestricted: isRestrictedBySupportSession,
       store,
       observe: async (fields) => {
@@ -63,7 +65,12 @@ export async function previewWidgetAction(
   if (!scope) return { ok: false, error: "You cannot read this project." };
   if (!(await featureEnabled("customDashboards", { organizationId: scope.organization.id })))
     return { ok: false, error: "Dashboards are off for this project." };
-  const parsed = parseWidget(widget);
+  const features = await metricFeatures({
+    projectId: scope.project.id,
+    organizationId: scope.organization.id,
+    actor: scope.user.externalId,
+  });
+  const parsed = parseWidget(widget, features);
   if (!parsed.ok) return parsed;
   const window = resolveTraceRange(
     { range: String(range.preset), from: String(range.from), to: String(range.to) },

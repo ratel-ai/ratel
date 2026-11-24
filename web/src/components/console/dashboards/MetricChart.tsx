@@ -248,7 +248,7 @@ function Lines({
     const point = (index: number) => [centerOf(index), yOf(item.values[index] ?? 0)] as const;
     const value = active === null ? null : item.values[active];
     return (
-      <g key={item.label}>
+      <g key={item.key}>
         {lineSegments(item.values).map((segment) =>
           segment.length === 1 ? (
             <circle
@@ -311,7 +311,7 @@ function Bars({
         const gap = position > 0 ? Math.min(SEGMENT_GAP, (bottom - top) / 2) : 0;
         return (
           <path
-            key={`${index}-${item.label}`}
+            key={`${index}-${item.key}`}
             d={barPath(
               layout.x(index),
               top,
@@ -332,7 +332,7 @@ function Bars({
       const top = Math.min(yOf(value), BASELINE - 2);
       return [
         <path
-          key={`${index}-${item.label}`}
+          key={`${index}-${item.key}`}
           d={barPath(
             layout.x(index) + each * position,
             top,
@@ -354,7 +354,7 @@ function Legend({ series }: { series: readonly ChartSeries[] }) {
       className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-fg-muted"
     >
       {series.map((item) => (
-        <li key={item.label} className="inline-flex max-w-full items-center gap-1.5">
+        <li key={item.key} className="inline-flex max-w-full items-center gap-1.5">
           <Swatch series={item} />
           <span className="truncate" title={item.label}>
             {item.label}
@@ -386,7 +386,7 @@ function Readout({
     >
       <p className="text-fg-subtle">{title}</p>
       {series.map((item) => (
-        <p key={item.label} className="mt-1 flex items-center gap-2">
+        <p key={item.key} className="mt-1 flex items-center gap-2">
           <Swatch series={item} />
           <span className="font-semibold text-fg tabular-nums">
             {formatMetric(item.values[index], unit)}

@@ -3,6 +3,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
+import type { MetricId } from "@/lib/synthesis/metrics/catalog";
 import { changeDashboard, type DashboardActionDeps } from "@/lib/views/dashboards/actions";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
@@ -16,7 +17,12 @@ import {
   renameDashboard,
 } from "@/lib/views/dashboards/store";
 import { MAX_WIDGETS } from "@/lib/views/dashboards/types";
-import { fitWidget, widgetName } from "@/lib/views/dashboards/widget";
+import {
+  fitWidget,
+  scorersOfMetric,
+  scorerWidget,
+  widgetName,
+} from "@/lib/views/dashboards/widget";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -130,6 +136,41 @@ test("a widget that does not fit the metric catalog or its chart is refused", as
   assert.deepEqual(await widgets(id), []);
 });
 
+test("a scorer widget is accepted with the scorers switch only", async () => {
+  const id = await created();
+  const widget = scorerWidget({ id: OTHER, verdict: true });
+  await refused({ action: "add-widget", dashboardId: id, widget }, /is off/);
+  const on = { features: async () => ({ scorers: true }) };
+  assert.ok((await run({ action: "add-widget", dashboardId: id, widget }, on)).ok);
+  const [stored] = await widgets(id);
+  assert.deepEqual(stored, { ...widget, id: stored.id });
+  await refused({ action: "edit-widget", dashboardId: id, widgetId: stored.id, widget }, /is off/);
+  const bad: [Record<string, unknown>, RegExp][] = [
+    [{ scorerId: "nope" }, /Unknown scorer/],
+    [{ groupBy: "tool" }, /be grouped/],
+    [{ metric: "trace_count", aggregation: "count" }, /filtered by scorer/],
+  ];
+  for (const [change, error] of bad) {
+    const changed = { ...widget, ...change };
+    await refused({ action: "add-widget", dashboardId: id, widget: changed }, error, on);
+  }
+});
+
+test("leaving the scorer metrics drops the scorer; each metric offers the scorers it reads", () => {
+  const widget = scorerWidget({ id: OTHER, verdict: false });
+  assert.equal(widget.metric, "scorer_average");
+  assert.equal(fitWidget({ ...widget, metric: "scorer_count" }).scorerId, OTHER);
+  assert.equal(fitWidget({ ...widget, metric: "cost" }).scorerId, undefined);
+  const scorers = [
+    { id: "a", name: "A", verdict: true },
+    { id: "b", name: "B", verdict: false },
+  ];
+  const ids = (metric: MetricId) => scorersOfMetric(metric, scorers).map(({ id }) => id);
+  assert.deepEqual(ids("scorer_pass_rate"), ["a"]);
+  assert.deepEqual(ids("scorer_average"), ["b"]);
+  assert.deepEqual(ids("scorer_count"), ["a", "b"]);
+});
+
 test("a caller without project access, the flag, a session or write access changes nothing", async () => {
   const id = await created();
   const denials: [Partial<DashboardActionDeps>, RegExp][] = [
@@ -207,6 +248,7 @@ function deps(overrides: Partial<DashboardActionDeps> = {}): DashboardActionDeps
       organization: { id: ORG },
     }),
     enabled: async () => true,
+    features: async () => ({ scorers: false }),
     isRestricted: async () => false,
     store: {
       listDashboards: (projectId) => listDashboards(projectId, db),

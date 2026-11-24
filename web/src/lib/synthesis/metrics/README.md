@@ -18,6 +18,9 @@ One metric catalog and its one query function. Dashboards and alerts both call i
 | `cost` | `otel_trace_summaries` | usd | sum, avg | same | yes | hour, day |
 | `context_tokens` | `event_metrics` | tokens | sum | none | no | day |
 | `context_cost` | `event_metrics` | usd | sum | none | no | day |
+| `scorer_pass_rate` | `trace_scores` | ratio | rate | scorer, model, service, environment | yes, and by scorer | hour, day |
+| `scorer_average` | `trace_scores` | score | avg | same | same | hour, day |
+| `scorer_count` | `trace_scores` | count | count | same | same | hour, day |
 
 ## Rules
 
@@ -29,11 +32,18 @@ One metric catalog and its one query function. Dashboards and alerts both call i
 - `total` is read over the whole window. It is not the sum of the buckets.
 - Nothing to read is 0 for a count or a sum, and null for a rate, an average or a percentile. `samples`
   says how many rows are behind a total.
+- The scorer entries carry `feature: "scorers"`. `offeredMetrics` leaves them out with the switch
+  off, and a caller checks `metricOffered` before it runs or stores a request.
+- The pass rate reads the pass or fail results, the average reads the 1 to 5 results. The time of a
+  result is its trace's start.
+- `trace_scores` belongs to a higher layer. `views/scorers/metrics` fills `metricSeams.scores`; a
+  caller that can read a scorer entry imports that module.
 - A request the entry does not allow throws `MetricRequestError`.
 
 ## Add an entry
 
 1. Add the id to `METRIC_IDS` and the entry to `METRIC_CATALOG` in `catalog.ts`.
-2. Add what it reads off one source row to `MEASURES` in `query.ts` (the compiler asks for it).
-3. A new table is a new `MetricSource`: add its table and time column to `SOURCES`.
+2. Add what it reads off one source row to its source's `measures` in `query.ts`.
+3. A new table is a new `MetricSource`: add it to `SOURCES`, or to `metricSeams` when a higher
+   layer owns the table.
 4. Add its expected series to `metrics.integration.test.ts`, and its row above.

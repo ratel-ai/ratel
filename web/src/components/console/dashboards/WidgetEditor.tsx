@@ -15,10 +15,10 @@ import {
 import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
 import {
   getMetric,
-  METRICS,
   type MetricAggregation,
   type MetricGroupBy,
   type MetricId,
+  offeredMetrics,
 } from "@/lib/synthesis/metrics/catalog";
 import {
   type TraceFilterBarFacets,
@@ -27,6 +27,7 @@ import {
 import { type DashboardRange, searchFromTraceFilter } from "@/lib/views/dashboards/links";
 import {
   MAX_WIDGET_TITLE,
+  type ScorerOption,
   WIDGET_CHARTS,
   type WidgetInput,
   type WidgetWidth,
@@ -36,11 +37,13 @@ import {
   CHART_LABELS,
   fitWidget,
   groupByLabel,
+  scorersOfMetric,
   widgetName,
 } from "@/lib/views/dashboards/widget";
 import { WidgetBody } from "./WidgetBody";
 
 const NO_GROUP = "none";
+const ALL_SCORERS = "all";
 const PREVIEW_DELAY_MS = 200;
 const WIDTHS: readonly { value: WidgetWidth; label: string }[] = [
   { value: "third", label: "Third" },
@@ -63,6 +66,8 @@ export function WidgetEditor({
   onOpenChange,
   projectId,
   initial,
+  start,
+  scorers,
   facets,
   range,
   saving,
@@ -73,6 +78,10 @@ export function WidgetEditor({
   projectId: string;
   /** The widget being edited; a new one without it. */
   initial: WidgetInput | null;
+  /** What a new one starts from, instead of the default. */
+  start: WidgetInput | null;
+  /** The project's scorers; null while scorers are off, and their metrics are then not offered. */
+  scorers: readonly ScorerOption[] | null;
   facets: TraceFilterBarFacets;
   range: DashboardRange;
   saving: boolean;
@@ -86,7 +95,8 @@ export function WidgetEditor({
       >
         <EditorForm
           projectId={projectId}
-          initial={initial ?? NEW_WIDGET}
+          initial={initial ?? start ?? NEW_WIDGET}
+          scorers={scorers}
           submitLabel={initial ? "Save widget" : "Add widget"}
           facets={facets}
           range={range}
@@ -102,6 +112,7 @@ export function WidgetEditor({
 function EditorForm({
   projectId,
   initial,
+  scorers,
   submitLabel,
   facets,
   range,
@@ -110,6 +121,7 @@ function EditorForm({
 }: {
   projectId: string;
   initial: WidgetInput;
+  scorers: readonly ScorerOption[] | null;
   submitLabel: string;
   facets: TraceFilterBarFacets;
   range: DashboardRange;
@@ -122,7 +134,14 @@ function EditorForm({
   if (!metric) return null;
   // Every change lands on a widget the rules allow, so Save never has to refuse one.
   const set = (change: Partial<WidgetInput>) =>
-    setWidget((current) => fitWidget({ ...current, ...change }));
+    setWidget((current) => {
+      const next = fitWidget({ ...current, ...change });
+      // A pass rate has no 1 to 5 scorer, and the average no pass or fail one.
+      const fits = scorersOfMetric(next.metric, scorers ?? []).some(
+        ({ id }) => id === next.scorerId,
+      );
+      return fits ? next : { ...next, scorerId: undefined };
+    });
   const groupable = metric.groupBys.length > 0;
 
   return (
@@ -139,7 +158,10 @@ function EditorForm({
             <Select
               {...control}
               className="w-full"
-              options={METRICS.map(({ id, label }) => ({ value: id, label }))}
+              options={offeredMetrics({ scorers: scorers !== null }).map(({ id, label }) => ({
+                value: id,
+                label,
+              }))}
               value={widget.metric}
               onValueChange={(value) => set({ metric: value as MetricId })}
             />
@@ -178,6 +200,27 @@ function EditorForm({
             />
           )}
         </Field>
+        {metric.source === "scores" ? (
+          <Field label="Scorer" className="min-w-40 flex-1">
+            {(control) => (
+              <Select
+                {...control}
+                className="w-full"
+                options={[
+                  { value: ALL_SCORERS, label: "All scorers" },
+                  ...scorersOfMetric(widget.metric, scorers ?? []).map(({ id, name }) => ({
+                    value: id,
+                    label: name,
+                  })),
+                ]}
+                value={widget.scorerId ?? ALL_SCORERS}
+                onValueChange={(value) =>
+                  set({ scorerId: value === ALL_SCORERS ? undefined : String(value) })
+                }
+              />
+            )}
+          </Field>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <Choice label="Chart">

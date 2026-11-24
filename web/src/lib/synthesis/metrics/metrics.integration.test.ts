@@ -7,9 +7,9 @@ import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { resolveRange } from "@/lib/synthesis/dashboard";
 import {
   METRIC_GROUP_LIMIT,
-  METRICS,
   type MetricRequest,
   MetricRequestError,
+  offeredMetrics,
 } from "@/lib/synthesis/metrics/catalog";
 import { type MetricsDb, queryMetric } from "@/lib/synthesis/metrics/query";
 import { otelTraceSummaries } from "@/lib/synthesis/traces/schema";
@@ -29,6 +29,9 @@ const WINDOW = resolveRange({ range: "custom", from: "2026-11-02", to: "2026-11-
 const DAYS = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"].map(
   (day) => `${day}T00:00:00.000Z`,
 );
+
+/** The scorer entries read another module's tables: `views/scorers/metrics.integration.test.ts`. */
+const METRICS = offeredMetrics({ scorers: false });
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
 let db: MetricsDb;
@@ -128,6 +131,14 @@ test("each metric returns its series by day, with the window's total", async () 
   assert.equal(
     cases.length,
     METRICS.reduce((sum, metric) => sum + metric.aggregations.length, 0),
+  );
+});
+
+test("the scorer entries are offered with the scorers switch only", () => {
+  const ids = (scorers: boolean) => offeredMetrics({ scorers }).map(({ id }) => id);
+  assert.deepEqual(
+    ids(true).filter((id) => !ids(false).includes(id)),
+    ["scorer_pass_rate", "scorer_average", "scorer_count"],
   );
 });
 
