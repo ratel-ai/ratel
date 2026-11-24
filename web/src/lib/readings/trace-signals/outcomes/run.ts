@@ -45,6 +45,11 @@ import type {
   TaskOutcomeRowDraft,
   TurnResultRow,
 } from "@/lib/readings/trace-signals/outcomes/run-queries";
+import {
+  NO_SEARCH_CONTEXT,
+  type SearchContext,
+  unmetSearches,
+} from "@/lib/readings/trace-signals/outcomes/search-fit";
 import { searchRuns } from "@/lib/readings/trace-signals/outcomes/search-runs";
 import {
   segmentTasks,
@@ -166,6 +171,16 @@ export interface OutcomeRunDeps {
     projectId: string,
     eventIds: readonly string[],
   ) => Promise<ReadonlyMap<string, string>>;
+  /** The words of these searches, by event id; absent where they were not sent. Absent: none are read. */
+  loadSearchQueries?: (
+    projectId: string,
+    eventIds: readonly string[],
+  ) => Promise<ReadonlyMap<string, string>>;
+  /** When each tool was last called in each of these sessions. Absent: what a search listed is never compared with what it asked. */
+  loadLastCalls?: (
+    projectId: string,
+    sessionIds: readonly string[],
+  ) => Promise<ReadonlyMap<string, ReadonlyMap<string, Date>>>;
   /** Replaces the rule layer's columns for the turns ending in `range`; returns the sessions whose turn rows changed. */
   replaceTurnRows: (
     projectId: string,
@@ -256,11 +271,12 @@ const failedCalls = (steps: readonly StepDraft[]): StepDraft[] =>
 /** The event that carries a failed call's error: its end, or the call itself when it is one event. */
 const errorEventOf = (step: StepDraft): string => step.endTraceEventId ?? step.traceEventId;
 
-/** One turn as the model layer reads it: its calls with their outcome, and the searches of an unmet run that ends it. */
+/** One turn as the model layer reads it: its calls with their outcome, and the searches no listed tool fits. */
 function modelTurn(
   turn: SignalTurn,
   row: TurnOutcomeRowDraft,
   messages: ReadonlyMap<string, string>,
+  context: SearchContext,
 ): ModelTurn {
   const calls = turn.steps.flatMap((step) => {
     const tool = nodeIdOf(step);
@@ -274,12 +290,6 @@ function modelTurn(
           },
         ];
   });
-  const unmet = searchRuns(turn.steps).findLast((run) => run.kind === "unmet");
-  const unmetSearchEvents = unmet
-    ? turn.steps
-        .filter((step) => step.kind === "search" && step.ordinal >= unmet.ordinal)
-        .map((step) => step.traceEventId)
-    : [];
   return {
     turnId: turn.id,
     sessionId: turn.sessionId,
@@ -289,7 +299,7 @@ function modelTurn(
       .map((step) => step.traceEventId),
     turnKey: turn.turnKey ?? null,
     calls,
-    unmetSearchEvents,
+    unmetSearchEvents: unmetSearches(turn.steps, context).at(-1)?.eventIds ?? [],
     rule: { failedCalls: row.failedCalls, unmetSearches: row.unmetSearches, cause: row.cause },
   };
 }
@@ -320,7 +330,9 @@ export async function recordOutcomes(
     const events = turns.flatMap((turn) => failedCalls(turn.steps).map(errorEventOf));
     const messages =
       events.length > 0 ? await deps.loadErrors(projectId, events) : new Map<string, string>();
+    const searched = await searchContexts(projectId, turns, trust.sessions, deps);
     for (const turn of turns) {
+      const context = searched.get(turn.id) ?? NO_SEARCH_CONTEXT;
       const causeAt = new Map<number, OutcomeCause>();
       for (const step of failedCalls(turn.steps)) {
         const reading = readError(messages.get(errorEventOf(step)));
@@ -328,14 +340,14 @@ export async function recordOutcomes(
         tally.add(reading);
         causeAt.set(step.ordinal, reading.cause);
       }
-      const row = turnOutcomeRow(turn, readTurnOutcome(turn.steps), causeAt);
+      const row = turnOutcomeRow(turn, readTurnOutcome(turn.steps, context), causeAt);
       rows.push(row);
       if (deps.loadReplyTexts)
         stepEvents.set(
           turn.id,
           turn.steps.slice(0, 3).map((step) => step.traceEventId),
         );
-      if (readModel) modelTurns.push(modelTurn(turn, row, messages));
+      if (readModel) modelTurns.push(modelTurn(turn, row, messages, context));
     }
   };
 
@@ -516,6 +528,41 @@ export async function recordOutcomes(
       ...(questionsOff ? { questionsOff } : {}),
     },
   };
+}
+
+/**
+ * What a page's turns need to tell a search no tool fits (`search-fit.ts`):
+ * the words of the runs nothing was run for, and, where sessions are one
+ * person's, what their sessions called. Nothing is loaded for the other turns.
+ */
+async function searchContexts(
+  projectId: string,
+  turns: readonly SignalTurn[],
+  sessions: boolean,
+  deps: Pick<OutcomeRunDeps, "loadSearchQueries" | "loadLastCalls">,
+): Promise<Map<string, SearchContext>> {
+  const open = turns.filter((turn) => searchRuns(turn.steps).some((run) => run.kind === "not_run"));
+  if (open.length === 0) return new Map();
+  const [queries, calls] = await Promise.all([
+    deps.loadSearchQueries?.(
+      projectId,
+      open.flatMap((turn) =>
+        turn.steps.flatMap((step) => (step.kind === "search" ? [step.traceEventId] : [])),
+      ),
+    ),
+    sessions
+      ? deps.loadLastCalls?.(projectId, [...new Set(open.map((turn) => turn.sessionId))])
+      : undefined,
+  ]);
+  return new Map(
+    open.map((turn) => [
+      turn.id,
+      {
+        queries: queries ?? NO_SEARCH_CONTEXT.queries,
+        lastCalls: calls ? (calls.get(turn.sessionId) ?? new Map()) : null,
+      },
+    ]),
+  );
 }
 
 /** The questions' switch, asked once. A switch that cannot be read is off: asking is never the fallback. */

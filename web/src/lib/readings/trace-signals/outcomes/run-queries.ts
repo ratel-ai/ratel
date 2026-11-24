@@ -1,6 +1,6 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lt, max, sql } from "drizzle-orm";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
-import { traceTurns } from "@/lib/ledger/schema";
+import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
 import type {
   FusionSource,
@@ -280,14 +280,52 @@ export async function loadSessionTurns(
         replyReaction: traceTurnOutcomes.replyReaction,
         replyReactionSource: traceTurnOutcomes.replyReactionSource,
         searches: traceTurns.searchCount,
+        calls: traceTurns.invokeCount,
       })
       .from(traceTurnOutcomes)
       .leftJoin(traceTurns, eq(traceTurns.id, traceTurnOutcomes.turnId))
       .where(
         and(eq(traceTurnOutcomes.projectId, projectId), inArray(traceTurnOutcomes.sessionId, ids)),
       );
-    for (const { sessionId, searches, ...turn } of rows)
-      out.set(sessionId, [...(out.get(sessionId) ?? []), { ...turn, searches: searches ?? 0 }]);
+    for (const { sessionId, searches, calls, ...turn } of rows)
+      out.set(sessionId, [
+        ...(out.get(sessionId) ?? []),
+        { ...turn, searches: searches ?? 0, calls: calls ?? 0 },
+      ]);
+  }
+  return out;
+}
+
+/** When each tool or skill was last called in each of these sessions, by session id. */
+export async function loadLastCalls(
+  projectId: string,
+  sessionIds: readonly string[],
+  db: Pick<OutcomesDb, "select"> = getDb(),
+): Promise<Map<string, Map<string, Date>>> {
+  const out = new Map<string, Map<string, Date>>();
+  for (const ids of chunks([...new Set(sessionIds)])) {
+    const rows = await db
+      .select({
+        sessionId: traceTurns.sessionId,
+        target: traceTurnSteps.targetId,
+        at: max(traceTurnSteps.occurredAt),
+      })
+      .from(traceTurnSteps)
+      .innerJoin(traceTurns, eq(traceTurns.id, traceTurnSteps.turnId))
+      .where(
+        and(
+          eq(traceTurns.projectId, projectId),
+          inArray(traceTurns.sessionId, ids),
+          eq(traceTurnSteps.projectId, projectId),
+          eq(traceTurnSteps.kind, "invoke"),
+        ),
+      )
+      .groupBy(traceTurns.sessionId, traceTurnSteps.targetId);
+    for (const { sessionId, target, at } of rows) {
+      if (target === null || at === null) continue;
+      const calls = out.get(sessionId) ?? new Map<string, Date>();
+      out.set(sessionId, calls.set(target, at));
+    }
   }
   return out;
 }

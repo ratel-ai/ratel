@@ -59,7 +59,7 @@ import {
 import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
-import { loadSentimentPage, sentimentMinSessions } from "@/lib/views/traces/sentiment/page-load";
+import { loadRootCauses, sentimentMinSessions } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
 import { parseRootCauseQuery } from "@/lib/views/traces/sentiment/page-paths";
 
@@ -185,7 +185,7 @@ export default async function AgentHealthPage({
           load: async () =>
             (await sentimentAnalysisEnabled(organization))
               ? {
-                  model: await loadSentimentPage({
+                  model: await loadRootCauses({
                     projectId: project.id,
                     windowDays,
                     query: rootCauseQuery,

@@ -7,10 +7,11 @@ import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
  * Pure.
  *
  * A run with a call after it found something to run. A run that ends the turn
- * is a need nothing was run for (`unmet`). A run longer than
+ * had nothing run for it there (`not_run`), which is not a missing tool by
+ * itself: `search-fit.ts` says when it is. A run longer than
  * {@link SEARCH_RUN_MAX_SEARCHES} is the agent listing the catalog, query
  * after query, not one need: it is a `catalog_listing` whether or not a call
- * follows, and never counts as unmet.
+ * follows, and is never read as a need.
  */
 
 /**
@@ -20,7 +21,7 @@ import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
  */
 export const SEARCH_RUN_MAX_SEARCHES = getConfig().traceOutcomes.searchRunMax;
 
-export type SearchRunKind = "answered" | "unmet" | "catalog_listing";
+export type SearchRunKind = "answered" | "not_run" | "catalog_listing";
 
 export interface SearchRun {
   /** 1-based ordinal, in the turn, of the run's first search. */
@@ -29,14 +30,17 @@ export interface SearchRun {
   kind: SearchRunKind;
 }
 
+/** What a run is read from in a step. */
+export type RunStep = Pick<StepDraft, "ordinal" | "kind" | "targetType" | "targetId">;
+
 /** The search runs of one turn, from its steps in ordinal order. */
 export function searchRuns(
-  steps: readonly StepDraft[],
+  steps: readonly RunStep[],
   maxSearches: number = SEARCH_RUN_MAX_SEARCHES,
 ): SearchRun[] {
   const runs: SearchRun[] = [];
   const kindOf = (searches: number, callAfter: boolean): SearchRunKind =>
-    searches > maxSearches ? "catalog_listing" : callAfter ? "answered" : "unmet";
+    searches > maxSearches ? "catalog_listing" : callAfter ? "answered" : "not_run";
   // The run being read: its first search's ordinal and its length so far; zero when none is open.
   let ordinal = 0;
   let searches = 0;

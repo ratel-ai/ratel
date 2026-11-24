@@ -78,6 +78,7 @@ export default async function TurnTracePage({
         sessionHref={view.sessionHref}
         conversation={view.conversation}
         hallucinations={view.hallucinations}
+        afterSearch={view.afterSearch}
       />
     </>
   );

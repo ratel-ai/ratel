@@ -238,7 +238,7 @@ test("a task result and a task reason are choices that narrow the page, and a re
     links.filters.map((f) => [f.field, f.value]),
     [
       ["task", "Not completed"],
-      ["reason", "No tool for it"],
+      ["reason", "No fitting tool"],
     ],
   );
   const fresh = sentimentLinks({ ...page(), tasks: withTasks.tasks });

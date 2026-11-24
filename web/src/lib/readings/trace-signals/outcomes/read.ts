@@ -2,6 +2,11 @@ import type { StepDraft } from "@/lib/ledger/types";
 import { nodeIdOf } from "@/lib/readings/tool-explorer/units";
 import { type FailureStreak, failureStreaks } from "@/lib/readings/trace-signals/outcomes/followed";
 import {
+  NO_SEARCH_CONTEXT,
+  type SearchContext,
+  unmetSearches,
+} from "@/lib/readings/trace-signals/outcomes/search-fit";
+import {
   SEARCH_RUN_MAX_SEARCHES,
   searchRuns,
 } from "@/lib/readings/trace-signals/outcomes/search-runs";
@@ -10,12 +15,12 @@ import {
  * What the trace alone says about one turn, and about a session from its
  * turns. Pure: text-free steps in, counts and closed values out.
  *
- * A session's friction is every failure streak and every search run nothing
- * was run for, over its turns. Its request is open when its last turn asked
- * for something and got no successful call: a call failed, or a search run
- * was left unmet, and nothing in that turn worked. A last turn that only
- * listed the catalog asked for nothing, and one whose calls never reported
- * an end cannot be told, so neither is an open request.
+ * A session's friction is every failure streak and every search run no listed
+ * tool fits (`search-fit.ts`), over its turns. Its request is open when its
+ * last turn asked for something and got no successful call: a call failed, or
+ * no tool fit its search, and nothing in that turn worked. A last turn that
+ * only searched or listed the catalog asked for nothing, and one whose calls
+ * never reported an end cannot be told, so neither is an open request.
  */
 
 export interface TurnOutcomeReading {
@@ -23,7 +28,7 @@ export interface TurnOutcomeReading {
   failedCalls: number;
   /** In step order. */
   streaks: FailureStreak[];
-  /** Search runs with no call after them (`search-runs.ts`). */
+  /** Search runs no listed tool fits (`search-fit.ts`). */
   unmetSearches: number;
   catalogListings: number;
 }
@@ -31,6 +36,7 @@ export interface TurnOutcomeReading {
 /** One turn read from its steps in ordinal order. */
 export function readTurnOutcome(
   steps: readonly StepDraft[],
+  context: SearchContext = NO_SEARCH_CONTEXT,
   maxSearches: number = SEARCH_RUN_MAX_SEARCHES,
 ): TurnOutcomeReading {
   const calls = steps.filter((step) => nodeIdOf(step) !== null);
@@ -39,7 +45,7 @@ export function readTurnOutcome(
     okCalls: calls.filter((step) => step.outcome === "ok").length,
     failedCalls: calls.filter((step) => step.outcome === "error").length,
     streaks: failureStreaks(steps),
-    unmetSearches: runs.filter((run) => run.kind === "unmet").length,
+    unmetSearches: unmetSearches(steps, context, maxSearches).length,
     catalogListings: runs.filter((run) => run.kind === "catalog_listing").length,
   };
 }
@@ -65,6 +71,8 @@ export interface SessionTurn {
   request?: boolean | null;
   /** Searches the turn ran: a trace-only task's goal. */
   searches?: number;
+  /** Calls the turn made, the ones that never reported an end included. */
+  calls?: number;
   /** How the person took the turn as the agent's next reply shows it, where their own message was not read. */
   replyReaction?: string | null;
   /** Whether a rule or the model read `replyReaction`. */
@@ -83,6 +91,33 @@ export interface SessionReading {
   openRequest: boolean;
   unmetSearches: number;
   catalogListings: number;
+}
+
+/**
+ * Whether a turn only searched: it made no call, every search of it listed
+ * something that may fit, and nothing else was read of it. Listing tools is a
+ * step towards work, not work: such a turn is no task and says nothing of how
+ * its session went.
+ */
+export function searchedOnly(
+  turn: Pick<SessionTurn, "okCalls" | "failedCalls" | "unmetSearches"> &
+    Partial<
+      Pick<
+        SessionTurn,
+        "searches" | "calls" | "request" | "result" | "satisfaction" | "reaction" | "replyReaction"
+      >
+    >,
+): boolean {
+  return (
+    (turn.searches ?? 0) > 0 &&
+    (turn.calls ?? 0) + turn.okCalls + turn.failedCalls === 0 &&
+    turn.unmetSearches === 0 &&
+    (turn.request ?? null) === null &&
+    (turn.result ?? null) === null &&
+    (turn.satisfaction ?? null) === null &&
+    (turn.reaction ?? null) === null &&
+    (turn.replyReaction ?? null) === null
+  );
 }
 
 /** Whether a turn asked for something and no call in it worked. */

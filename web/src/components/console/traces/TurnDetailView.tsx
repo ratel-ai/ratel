@@ -19,7 +19,9 @@ import {
   turnEventAnchor,
   turnTracesHref,
 } from "@/lib/readings/trace-signals/view";
+import { formatDuration as formatLongDuration } from "@/lib/synthesis/traces/v2/format";
 import type { TurnMarker } from "@/lib/views/health/hallucinations/turn-markers";
+import type { AfterSearch, CallAfterSearch } from "@/lib/views/traces/after-search";
 import type { TurnConversation as Conversation } from "@/lib/views/traces/sentiment/example";
 import type { TurnDetail, TurnDetailCall } from "@/lib/views/traces/turn-detail";
 
@@ -57,6 +59,8 @@ export interface TurnDetailViewProps {
   conversation?: Conversation | null;
   /** The turn's hallucinations, each on the call it sits on; empty while `cloud-hallucination-detection` is off. */
   hallucinations?: readonly TurnMarker[];
+  /** What the session ran next, when the turn ended on a search. */
+  afterSearch?: AfterSearch | null;
   /** Inside a Panel: without the page's own navigation, which would leave the list. */
   embedded?: boolean;
 }
@@ -68,6 +72,7 @@ export function TurnDetailView({
   sessionHref = null,
   conversation = null,
   hallucinations = [],
+  afterSearch = null,
   embedded = false,
 }: TurnDetailViewProps) {
   // A false "done" is about the reply: it shows there, when the reply is on the page; else on its call.
@@ -144,6 +149,7 @@ export function TurnDetailView({
             call={call}
             focused={call.eventId === focusEventId}
             markers={onCalls.filter((marker) => marker.stepOrdinal === call.ordinal)}
+            afterSearch={afterSearch?.ordinal === call.ordinal ? afterSearch : null}
             seeAll={!embedded}
           />
         ))}
@@ -240,12 +246,14 @@ function CallRow({
   call,
   focused,
   markers,
+  afterSearch,
   seeAll,
 }: {
   projectId: string;
   call: TurnDetailCall;
   focused: boolean;
   markers: readonly TurnMarker[];
+  afterSearch: AfterSearch | null;
   seeAll: boolean;
 }) {
   const glyph = call.kind === "search" ? "search" : call.targetType === "skill" ? "skill" : "tool";
@@ -312,6 +320,25 @@ function CallRow({
                 </ol>
               )}
             </dd>
+            {afterSearch && (
+              <>
+                <dt className="text-warm-muted">Next</dt>
+                <dd className="text-cream-dim" data-after-search="">
+                  {afterSearch.next ? (
+                    <>
+                      ran <AfterCall call={afterSearch.next} />
+                      {afterSearch.listed ? (
+                        <>
+                          , and <AfterCall call={afterSearch.listed} from=" from this list" />
+                        </>
+                      ) : null}
+                    </>
+                  ) : (
+                    "nothing more was run in this session"
+                  )}
+                </dd>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -360,6 +387,18 @@ function CallRow({
         </dd>
       </dl>
     </li>
+  );
+}
+
+/** To the minute from one minute on: how long after is a rough thing. */
+const wholeMinutes = (ms: number): number => (ms < 60_000 ? ms : Math.round(ms / 60_000) * 60_000);
+
+function AfterCall({ call, from = "" }: { call: CallAfterSearch; from?: string }) {
+  return (
+    <>
+      <span className="font-mono text-[11px] text-cream [overflow-wrap:anywhere]">{call.id}</span>
+      {`${from} ${formatLongDuration(wholeMinutes(call.afterMs))} later`}
+    </>
   );
 }
 

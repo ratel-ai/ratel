@@ -24,6 +24,7 @@ import {
   type TaskFilter,
   taskFilterOf,
 } from "@/lib/views/traces/sentiment/page-paths";
+import type { UnmetSearchView } from "@/lib/views/traces/sentiment/unmet-search";
 
 /**
  * The Sentiment analysis page's answer, in the order it reads (pure):
@@ -88,6 +89,8 @@ export interface TaskExample {
   endedAt: string;
   /** For a task completed after friction, the turns before the one that finished it. */
   extraTurns: number | null;
+  /** What was searched, offered and missing, for "No fitting tool"; only where it was read (`unmet-search.ts`). */
+  search?: UnmetSearchView | null;
 }
 
 /** Examples kept per root cause. */

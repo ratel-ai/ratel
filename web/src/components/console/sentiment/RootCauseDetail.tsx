@@ -11,6 +11,7 @@ import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
 import type { ReasonGroupView, ReasonRowView } from "@/lib/views/traces/sentiment/page-links";
+import type { UnmetSearchView } from "@/lib/views/traces/sentiment/unmet-search";
 
 const LINK =
   "rounded-sm text-ui font-medium text-fg-muted outline-none hover:text-fg hover:underline focus-visible:ring-2 focus-visible:ring-focus";
@@ -96,7 +97,7 @@ export function RootCauseDetail({
           {row.examples.map((example) => (
             <li
               key={example.taskId}
-              className="flex min-h-10 items-center justify-between gap-3 border-b border-line"
+              className="flex min-h-10 flex-wrap items-center justify-between gap-x-3 border-b border-line py-1.5"
             >
               <time
                 dateTime={example.endedAt}
@@ -114,6 +115,7 @@ export function RootCauseDetail({
                 Open in Traces
                 <ArrowRight aria-hidden />
               </Link>
+              {example.search ? <UnmetSearch search={example.search} /> : null}
             </li>
           ))}
         </ul>
@@ -124,5 +126,39 @@ export function RootCauseDetail({
         ) : null}
       </section>
     </div>
+  );
+}
+
+/** What happened where no tool fitted: what the agent searched for, what it was offered, what was missing. */
+function UnmetSearch({ search }: { search: UnmetSearchView }) {
+  return (
+    <dl
+      className="grid w-full grid-cols-[7rem_1fr] gap-x-3 gap-y-1 pt-1.5 pb-1 text-ui"
+      data-unmet-search=""
+    >
+      <dt className="text-fg-subtle">Searched</dt>
+      <dd className="text-fg [overflow-wrap:anywhere]">
+        {search.query ? (
+          <>&ldquo;{search.query}&rdquo;</>
+        ) : (
+          <span className="text-fg-subtle">Search text not sent</span>
+        )}
+      </dd>
+      <dt className="text-fg-subtle">Offered</dt>
+      <dd className="text-fg [overflow-wrap:anywhere]">
+        {search.offered.length === 0 ? (
+          <span className="text-fg-subtle">Nothing</span>
+        ) : (
+          <>
+            <span className="font-mono text-xs">{search.offered.join(", ")}</span>
+            {search.more > 0 ? (
+              <span className="text-fg-subtle">{` and ${formatCount(search.more)} more`}</span>
+            ) : null}
+          </>
+        )}
+      </dd>
+      <dt className="text-fg-subtle">Missing</dt>
+      <dd className="text-fg">{search.missing}</dd>
+    </dl>
   );
 }

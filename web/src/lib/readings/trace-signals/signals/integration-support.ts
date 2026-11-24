@@ -25,6 +25,7 @@ import { recordOutcomes } from "@/lib/readings/trace-signals/outcomes/run";
 import { outcomeRunDeps } from "@/lib/readings/trace-signals/outcomes/run-job";
 import {
   loadErrorMessages,
+  loadLastCalls,
   loadSessionTurns,
   loadTaskVerdicts,
   replaceSessionOutcomes,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/readings/trace-signals/outcomes/run-queries";
 import {
   loadNextScopeReplies,
+  loadSearchQueries,
   loadTurnReplies,
 } from "@/lib/readings/trace-signals/outcomes/text-queries";
 import { recordSelfCorrections } from "@/lib/readings/trace-signals/self-corrections/run";
@@ -198,6 +200,8 @@ export function jobDeps(
         listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
         loadBasis: async (p, w) => chooseRunBasis(await loadRunBasisCounts(p, w, db)),
         loadErrors: (p, ids) => loadErrorMessages(p, ids, db),
+        loadSearchQueries: (p, ids) => loadSearchQueries(p, ids, db),
+        loadLastCalls: (p, ids) => loadLastCalls(p, ids, db),
         replaceTurnRows: (p, range, rows, at) => replaceTurnOutcomes(p, range, rows, at, db),
         loadSessionTurns: (p, ids) => loadSessionTurns(p, ids, db),
         replaceSessionRows: (p, ids, rows, at) => replaceSessionOutcomes(p, ids, rows, at, db),

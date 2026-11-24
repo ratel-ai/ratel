@@ -39,6 +39,7 @@ export async function loadPanelTurn({
         sessionHref={view.sessionHref}
         conversation={view.conversation}
         hallucinations={view.hallucinations}
+        afterSearch={view.afterSearch}
         embedded
       />
     ) : null,

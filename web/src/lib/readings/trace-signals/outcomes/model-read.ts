@@ -84,7 +84,7 @@ export interface ModelTurn {
   /** The ledger's turn key: `declared:<turn id>` for an SDK turn scope, `otlp:<trace id>` for an OTel run. */
   turnKey: string | null;
   calls: QuestionCall[];
-  /** The `trace_events` ids of the searches of the run that ends the turn with no call after it. */
+  /** The `trace_events` ids of the searches of the last run no listed tool fits (`search-fit.ts`). */
   unmetSearchEvents: string[];
   /** The `trace_events` ids of every search of the turn, in order: a trace-only task's goal. */
   searchEvents: string[];
@@ -446,9 +446,10 @@ export function taskInputs(
         okCalls: 0,
         failedCalls: 0,
         streaks: 0,
-        unmetSearches: 0,
+        unmetSearches: turn.rule.unmetSearches,
         request: asks === "yes" ? true : asks === "no" ? false : null,
         searches: turn.searchEvents.length,
+        calls: turn.calls.length,
       };
     });
     const byId = new Map(list.map((turn) => [turn.turnId, turn]));

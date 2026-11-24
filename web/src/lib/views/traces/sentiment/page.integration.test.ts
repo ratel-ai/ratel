@@ -42,7 +42,7 @@ const LONE = "aaaaaaaa-0000-4000-8000-000000000003";
  * update_task fails once and works on the next try. 12-17: find_task fails and
  * the run switches to list_tasks. 18-20: send_report fails twice and nothing
  * follows. 21: archive_board fails with a message no pattern knows. 22: a
- * search and no call. 23-29: clean.
+ * search that lists nothing. 23-29: clean.
  */
 function fixtures() {
   return times(30, (i) => {
@@ -52,7 +52,7 @@ function fixtures() {
       session: `s-${i.toString().padStart(2, "0")}`,
       start: BASE + i * 60_000,
       turnId,
-    }).search(["find_task", "update_task"]);
+    }).search(i === 22 ? [] : ["find_task", "update_task"]);
     if (i < 12)
       return run
         .invoke("find_task")

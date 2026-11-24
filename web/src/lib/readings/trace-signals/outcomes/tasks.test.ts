@@ -44,11 +44,15 @@ test("a request starts a task, a message that is not one joins the task before i
 
   const searched = turn({ request: null, searches: 2 });
   const direct = turn({ request: null, searches: 0 });
+  // A turn that only searched is no task; one whose search no tool fits is.
+  const only = turn({ request: null, searches: 1, okCalls: 0 });
+  const unfit = turn({ request: null, searches: 1, okCalls: 0, unmetSearches: 1 });
   assert.deepEqual(
-    segmentTasks([searched, direct]).map((t) => [t.taskId, t.goalSource]),
+    segmentTasks([searched, direct, only, unfit]).map((t) => [t.taskId, t.goalSource]),
     [
       [searched.turnId, "search"],
       [direct.turnId, "none"],
+      [unfit.turnId, "search"],
     ],
   );
 });
@@ -224,11 +228,8 @@ test("a task completed after friction says what got in the way, the most telling
     "recovered_call",
     "tool_fault",
   ]);
-  assert.deepEqual(of([turn({ unmetSearches: 1, okCalls: 0 }), turn()]), [
-    "completed_after_friction",
-    "searched_again",
-    "missing_capability",
-  ]);
+  // Searching again is not friction.
+  assert.deepEqual(of([turn({ unmetSearches: 1, okCalls: 0 }), turn()]), ["completed", null, null]);
   assert.deepEqual(of([turn(), turn({ satisfaction: "satisfied" })]), ["completed", null, null]);
 });
 

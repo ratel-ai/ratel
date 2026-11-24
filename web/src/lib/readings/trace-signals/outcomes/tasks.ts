@@ -6,7 +6,7 @@ import type {
   TaskTier,
   TurnCause,
 } from "@/lib/readings/trace-signals/outcomes/kinds";
-import { leftOpen } from "@/lib/readings/trace-signals/outcomes/read";
+import { leftOpen, searchedOnly } from "@/lib/readings/trace-signals/outcomes/read";
 
 /**
  * TASKS: a session cut into goals and the work after each, and what each task
@@ -21,6 +21,8 @@ import { leftOpen } from "@/lib/readings/trace-signals/outcomes/read";
  *   - without the person's words (`request` null), every turn is its own
  *     task: its goal is the agent's own tool search when the turn has one,
  *     else there is none.
+ * A turn without the person's words that only searched (`searchedOnly`) is no
+ * task: nothing was done in it that could be done or not.
  * So the same rule cuts a chat with messages, a trace-only agent behind the
  * search gateway, and a trace-only agent with no searches.
  *
@@ -29,15 +31,15 @@ import { leftOpen } from "@/lib/readings/trace-signals/outcomes/read";
  *      any turn of the task (escalated, gave_up, took_over);
  *   2. not completed, refused: the last turn was a correct refusal;
  *   3. not completed: the last turn got no successful call (failed_call, or
- *      no_tool when it ended on a search with nothing run);
+ *      no_tool when it ended on a search no listed tool fits);
  *   4. not completed: the last turn failed or did the wrong thing by the
  *      fusion of its answers (`trace_turn_outcomes.result`), or the person's
  *      next message objected to it (wrong_action, failed_call, unsatisfied);
  *   5. the model's answer about the whole task, when it was asked: not
  *      achieved (goal_missed), partly (did_part); unsure or can't tell is
  *      `unknown`;
- *   6. completed after friction: a call failed, a search met nothing, or a
- *      turn was objected to on the way;
+ *   6. completed after friction: a call failed, or a turn was objected to on
+ *      the way. Searching again is not friction: it is how an agent looks;
  *   7. completed: a call worked, or a model said the work was done;
  *   8. otherwise `unknown`: nothing worked and nothing failed.
  * The person's words outrank the model, and the model outranks a trace that
@@ -62,8 +64,10 @@ export interface TaskTurn {
   cause?: string | null;
   /** The model read the person's message as a request (true), not one (false), or did not read it (null). */
   request?: boolean | null;
-  /** The turn ran at least one search. */
+  /** Searches the turn ran. */
   searches?: number;
+  /** Calls the turn made, the ones that never reported an end included. */
+  calls?: number;
   /** How the person took the turn as the agent's next reply shows it, where their own message was not read. */
   replyReaction?: string | null;
 }
@@ -111,6 +115,7 @@ export function segmentTasks(turns: readonly TaskTurn[]): Array<TaskDraft & { tu
   const ordered = [...turns].sort(byStart);
   const out: Array<TaskDraft & { turns: TaskTurn[] }> = [];
   for (const turn of ordered) {
+    if (searchedOnly(turn)) continue;
     const current = out.at(-1);
     // A message the model read as not a request belongs to the task before it.
     if (current && turn.request === false) {
@@ -241,8 +246,8 @@ export function taskOutcome(
 /**
  * What got in the way of a task that still ended working, the most telling
  * first: the person correcting the agent, then asking again, then a call that
- * failed before one worked, then a search that found nothing at first. Null
- * when nothing did. The cause is the turn's, where one was read.
+ * failed before one worked. Null when nothing did. The cause is the turn's,
+ * where one was read.
  */
 function frictionOf(
   turns: readonly TaskTurn[],
@@ -256,7 +261,5 @@ function frictionOf(
   if (repeated) return { reason: "repeated", cause: repeated.cause ?? null };
   const failed = turns.find((turn) => turn.streaks > 0 || turn.result === "failed");
   if (failed) return { reason: "recovered_call", cause: failed.cause ?? null };
-  if (turns.some((turn) => turn.unmetSearches > 0))
-    return { reason: "searched_again", cause: "missing_capability" };
   return null;
 }

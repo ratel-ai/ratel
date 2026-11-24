@@ -42,7 +42,7 @@ export { taskFilterOf };
  *
  * The page leads with root causes. A root cause is something that went wrong
  * in a turn: a failure streak (its tool and why its calls failed), a search
- * run nothing was run for, or, where the person's words were read, a turn
+ * no listed tool fits, or, where the person's words were read, a turn
  * they were not satisfied with although every call worked. A row is one
  * intent, one cause and one tool. Its unit is the session: how many sessions
  * it happened in, and in how many of those it was not recovered from (no later
@@ -465,7 +465,7 @@ export interface Occurrence {
  *     A streak the rules left open takes the cause a model chose for the
  *     turn, when it is the turn's leading failure (the one the model was
  *     asked about);
- *   - a search run nothing was run for: no tool for it, the same cause a
+ *   - a search no listed tool fits: no fitting tool, the same cause a
  *     model names when the agent says it cannot do something;
  *   - a cause a model chose for a turn in which no streak took it: a turn
  *     that went wrong with every call working;

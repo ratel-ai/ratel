@@ -52,7 +52,7 @@ const MESSAGES: Record<string, string> = {
  * 30 sessions of one run each. 0-11: update_task fails once and works on the
  * next try. 12-17: find_task fails and the run switches to list_tasks. 18-20:
  * send_report fails twice and nothing follows. 21: archive_board fails with a
- * message no pattern knows. 22: a search and no call. 23-29: clean.
+ * message no pattern knows. 22: a search that lists nothing. 23-29: clean.
  */
 function fixtures() {
   return times(30, (i) => {
@@ -71,7 +71,7 @@ function fixtures() {
         .invoke("send_report")
         .error("send_report");
     if (i === 21) return run.invoke("archive_board").error("archive_board");
-    if (i === 22) return run.search(["find_task", "list_tasks"]);
+    if (i === 22) return run.search([]);
     return run.invoke("find_task").invoke("update_task");
   });
 }
@@ -254,6 +254,65 @@ test("a run writes one row per turn and per session, and its counts into the run
 
   const run = await latestSignalRun(PROJECT_ID, db);
   assert.deepEqual((run?.summary as { outcomes?: StoredOutcomes }).outcomes, EXPECTED);
+  await client.close();
+});
+
+test("a search with no call after it: no fitting tool only when no listed tool does it and none was run later, else no task", async () => {
+  const { client, db } = await setupDb();
+  // Every turn is a search for deleting a task, offered only tools that do not.
+  const search = (session: string, query = "delete task", hits = ["create_task", "get_task"]) =>
+    fresh({ session, start: BASE }).search(hits, { query });
+  const later = search("ran-later");
+  await seedLedger(client, db, [
+    search("unfit"),
+    later,
+    // Its own turn: two hours after the search.
+    fresh({ after: later, gapMs: 7_200_000 }).invoke("get_task"),
+    search("fits", "delete task", ["delete_task"]),
+    search("no-verb", "task garbage"),
+  ]);
+  const result = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "manual" },
+    jobDeps(db, NOW),
+  );
+  assert.equal(result.outcome, "completed");
+
+  const turns = await client.query<{ session_id: string; unmet: number }>(
+    `select session_id, sum(unmet_searches)::int as unmet from trace_turn_outcomes group by 1 order by 1`,
+  );
+  assert.deepEqual(
+    turns.rows.map((row) => [row.session_id, row.unmet]),
+    [
+      ["fits", 0],
+      ["no-verb", 0],
+      ["ran-later", 0],
+      ["unfit", 1],
+    ],
+  );
+  // A turn that only searched is no task and gives its session no outcome.
+  const tasks = await client.query<{ session_id: string; result: string; reason: string | null }>(
+    `select session_id, result, reason from trace_task_outcomes order by 1`,
+  );
+  assert.deepEqual(
+    tasks.rows.map((row) => [row.session_id, row.result, row.reason]),
+    [
+      ["ran-later", "completed", null],
+      ["unfit", "not_completed", "no_tool"],
+    ],
+  );
+  const sessions = await client.query<{ session_id: string; outcome: string | null }>(
+    `select session_id, outcome from trace_session_outcomes order by 1`,
+  );
+  assert.deepEqual(
+    sessions.rows.map((row) => [row.session_id, row.outcome]),
+    [
+      ["fits", null],
+      ["no-verb", null],
+      ["ran-later", "resolved_clean"],
+      ["unfit", "blocked"],
+    ],
+  );
   await client.close();
 });
 

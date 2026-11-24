@@ -3,6 +3,7 @@ import { hallucinationDetectionEnabled } from "@/lib/readings/trace-signals/hall
 import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { loadTurnMarkers, type TurnMarker } from "@/lib/views/health/hallucinations/turn-markers";
 import { sessionReplayHref } from "@/lib/views/session-replay/view";
+import { type AfterSearch, loadAfterSearch } from "@/lib/views/traces/after-search";
 import { loadTurnConversation, type TurnConversation } from "@/lib/views/traces/sentiment/example";
 import { loadTurnDetail, type TurnDetail } from "@/lib/views/traces/turn-detail";
 
@@ -11,6 +12,8 @@ export interface TurnView {
   turn: TurnDetail;
   hallucinations: TurnMarker[];
   conversation: TurnConversation | null;
+  /** What the session ran next, when the turn ended on a search. */
+  afterSearch: AfterSearch | null;
   /** The session's replay; with a hallucination in the turn, opened on its bookmark. */
   sessionHref: string;
 }
@@ -58,12 +61,19 @@ export async function loadTurnView(
           operation: "trace_turn_conversation",
         }).catch(() => null)
       : null;
+  // Behind Sentiment analysis, whose "No fitting tool" it explains.
+  const afterSearch = sentimentOn
+    ? await withStatementTimeout((db) => loadAfterSearch(db, projectId, turn), {
+        operation: "trace_turn_after_search",
+      }).catch(() => null)
+    : null;
   const replay = sessionReplayHref(projectId, turn.sessionId);
   const focus = replayFocus(turn, hallucinations, focusEventId);
   return {
     turn,
     hallucinations,
     conversation,
+    afterSearch,
     sessionHref: focus ? `${replay}?focus=${encodeURIComponent(focus)}` : replay,
   };
 }

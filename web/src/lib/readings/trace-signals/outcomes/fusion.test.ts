@@ -521,7 +521,16 @@ test("with rules only, the outcome uses the classes the trace can support and sa
   );
 });
 
-test("with rules only, a session whose last turn is a search nothing was run for is blocked", () => {
+test("turns that only searched say nothing of a session", () => {
+  const only = turn({ okCalls: 0, searches: 1 });
+  assert.equal(sessionOutcome([only, only]), null);
+  assert.deepEqual(outcome(turn({ result: "completed", resultSource: "rule" }), only), [
+    "resolved_clean",
+    "rule",
+  ]);
+});
+
+test("with rules only, a session whose last turn is a search no tool fits is blocked", () => {
   const searched = turn({ result: "failed", resultSource: "rule", okCalls: 0, unmetSearches: 1 });
   assert.deepEqual(outcome(searched), ["blocked", "rule"]);
   assert.deepEqual(outcome(turn({ result: "completed", resultSource: "rule" }), searched), [
