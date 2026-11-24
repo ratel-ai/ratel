@@ -3,6 +3,8 @@ import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { TimeBudgetError } from "@/lib/ledger/turn-pages";
 import { HALLUCINATION_RULE_VERSION } from "@/lib/readings/trace-signals/hallucinations/kinds";
+import { recordHallucinations } from "@/lib/readings/trace-signals/hallucinations/run";
+import { hallucinationRunDeps } from "@/lib/readings/trace-signals/hallucinations/run-job";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
   count,
@@ -186,13 +188,32 @@ test("no message text reaches a row, and a second run gives the same rows", asyn
   assert.deepEqual(await rowsOf(client), first);
 });
 
-test("with the switch off the run completes and writes nothing", async () => {
+test("with the switch off the run completes and the reading reads and writes nothing", async () => {
   const { client, db } = await seeded();
   const deps = jobDeps(db, NOW);
+  const untouched = async (): Promise<never> => {
+    throw new Error("nothing is read or written with the switch off");
+  };
+  // The reading itself, with its switch off: it must stop before its first read.
+  // How the switch is read (the deployment's flag) is `switch.integration.test.ts`.
   const result = await computeProjectTraceSignals(
     PROJECT_ID,
     { trigger: "manual" },
-    { ...deps, recordHallucinations: async () => null },
+    {
+      ...deps,
+      recordHallucinations: (projectId, input, budget) =>
+        recordHallucinations(projectId, input, {
+          ...hallucinationRunDeps(budget),
+          enabled: async () => false,
+          listPage: untouched,
+          loadBasis: untouched,
+          loadCallFacts: untouched,
+          loadCatalog: untouched,
+          loadReplyTexts: untouched,
+          loadFalseSuccessTurns: untouched,
+          replaceRows: untouched,
+        }),
+    },
   );
   assert.equal(result.outcome, "completed");
   assert.deepEqual(await rowsOf(client), []);
