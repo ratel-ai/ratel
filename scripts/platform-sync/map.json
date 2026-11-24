@@ -899,7 +899,7 @@
     {"from":"apps/web/components/health/v2/IssueDetail.tsx","to":"web/src/components/console/health/v2/IssueDetail.tsx","mode":"owned", "$why": "local layout; the insight source link is upstream's"},
     {"from":"apps/web/components/health/v2/IssueExamples.tsx","to":"web/src/components/console/health/v2/IssueExamples.tsx","mode":"owned","$why":"the lock names the plan only with an edition's plans (lockedPlan), the limits otherwise"},
     {"from":"apps/web/components/health/v2/IssueTurn.tsx","to":"web/src/components/console/health/v2/IssueTurn.tsx","mode":"copy"},
-    {"from":"apps/web/components/health/v2/IssuesSection.tsx","to":"web/src/components/console/health/v2/IssuesSection.tsx","mode":"owned","$why":"the lock names the plan only with an edition's plans (lockedPlan), the limits otherwise"},
+    {"from":"apps/web/components/health/v2/IssuesSection.tsx","to":"web/src/components/console/health/v2/IssuesSection.tsx","mode":"owned","$why":"the lock names the plan only with an edition's plans (lockedPlan), the limits otherwise; the columns, the lines under the list and the Panel are in issue-list-parts and use-issue-panel, which the focused view shares"},
     { "from": "apps/web/components/health/v2/Calculating.tsx", "to": "web/src/components/console/health/v2/Calculating.tsx", "mode": "copy" },
     { "from": "apps/web/components/health/v2/HealthScore.tsx", "to": "web/src/components/console/health/v2/HealthScore.tsx", "mode": "owned", "$why": "a comment names the importer's vendor; the code is upstream's" },
     { "from": "apps/web/components/health/v2/PartialReading.tsx", "to": "web/src/components/console/health/v2/PartialReading.tsx", "mode": "copy" },
