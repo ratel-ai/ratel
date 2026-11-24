@@ -47,8 +47,9 @@ import {
  *
  * Servers differ, so the adapter asks for the most and steps down:
  *   - JSON output: by schema (`json_schema`, not strict), then as a JSON object, then by the
- *     prompt alone. A 400 or 422 to a request that carried a `response_format`, or an answer that
- *     ignored it, moves one step down. A refused format is remembered for that server and model at
+ *     prompt alone. A 400 or 422 to a request that carried a `response_format` (from a server that
+ *     answered before, only one whose words are about the format), or an answer that ignored it,
+ *     moves one step down. A refused format is remembered for that server and model at
  *     once; an ignored one only after it was ignored on that many calls in a row, so one odd
  *     answer does not cost a server its schemas.
  *   - Thinking a server writes into the answer (`<think>`, `<reasoning>`) is taken out of it.
@@ -81,6 +82,21 @@ const ignoredInARow = new Map<string, number>();
 
 /** A server that ignores its format on this many calls in a row is asked one step down from then on. */
 const IGNORED_TO_STEP_DOWN = 3;
+
+/** The words of a server that turns down the format it was asked for, not the request itself. */
+const ABOUT_THE_FORMAT =
+  /response_format|json_schema|json_object|schema|structured output|grammar|guided/i;
+
+/**
+ * Whether an error is the server turning down the format. A server that has answered before says
+ * so in its words; one never heard from may say no more than "Bad Request", so any 400 or 422
+ * counts. Anything else (a prompt too long, a model it does not have) is thrown at once.
+ */
+function refusesFormat(error: unknown, known: boolean): boolean {
+  if (!(error instanceof ModelHttpError) || (error.status !== 400 && error.status !== 422))
+    return false;
+  return !known || ABOUT_THE_FORMAT.test(error.message);
+}
 
 /** Forget what each server took (tests). */
 export function resetJsonModes(): void {
@@ -341,9 +357,7 @@ function textModel(context: ModelContext, server: Server): TextModel {
         const text = answer && !isJson(reply.text) ? JSON.stringify(answer) : reply.text;
         return { ...reply, text, usage };
       } catch (error) {
-        const refusedFormat =
-          error instanceof ModelHttpError && (error.status === 400 || error.status === 422);
-        if (!refusedFormat || mode === "prompt") throw error;
+        if (!refusesFormat(error, jsonModes.has(server.key)) || mode === "prompt") throw error;
         refused = true;
         index += 1;
       }

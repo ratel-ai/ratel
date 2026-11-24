@@ -205,6 +205,48 @@ test("a server that takes a schema and ignores it is asked again in words, and b
   assert.equal((seen[3].body.response_format as { type: string }).type, "json_schema");
 });
 
+test("a 400 that is not about the format, from a server that took a schema, is one request", async () => {
+  const tooLong = () =>
+    json({ error: { message: "This model's maximum context length is 8192 tokens." } }, 400);
+  const { seen, fetchImpl } = server(completion({ content: '{"name":"x"}' }), tooLong());
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  await model.complete(request);
+  await assert.rejects(model.complete(request), /maximum context length/);
+  assert.equal(seen.length, 2);
+});
+
+test("a 400 about the format still moves a server down, though it took a schema before", async () => {
+  const { seen, fetchImpl } = server(
+    completion({ content: '{"name":"x"}' }),
+    json(
+      { error: { message: "response_format json_schema is not supported for this model" } },
+      400,
+    ),
+    completion({ content: '{"name":"y"}' }),
+  );
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  await model.complete(request);
+  assert.equal((await model.complete(request)).text, '{"name":"y"}');
+  assert.deepEqual(seen[2].body.response_format, { type: "json_object" });
+});
+
+test("a server never heard from is walked down on any 400, since many say no more than that", async () => {
+  const { seen, fetchImpl } = server(
+    json({ error: "Bad Request" }, 400),
+    completion({ content: '{"name":"x"}' }),
+  );
+  const reply = await textModel(fetchImpl).complete({
+    system: "s",
+    user: "u",
+    maxTokens: 10,
+    schema: SCHEMA,
+  });
+  assert.equal(reply.text, '{"name":"x"}');
+  assert.deepEqual(seen[1].body.response_format, { type: "json_object" });
+});
+
 test("one answer that misses the schema does not move the server down for good", async () => {
   const { seen, fetchImpl } = server(
     completion({ content: '{"other":"x"}' }),
