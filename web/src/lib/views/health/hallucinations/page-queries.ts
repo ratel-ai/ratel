@@ -14,7 +14,7 @@ import {
   traceSignalRuns,
   traceTurnOutcomes,
 } from "@/lib/readings/trace-signals/schema";
-import type { PageFinding } from "@/lib/views/health/hallucinations/page-model";
+import type { PageCoverage, PageFinding } from "@/lib/views/health/hallucinations/page-model";
 
 /**
  * The Hallucinations page's reads: the window's findings with the turn they
@@ -94,20 +94,6 @@ export async function countWindowTurns(
   return row?.n ?? 0;
 }
 
-/**
- * What the window holds for each group's rules to read, as yes or no: the
- * tool name the agent asked for (`requested_tool_id`), an error in words (not
- * just a type id like `tool_error`), the agent's replies, and whether a model
- * read the window's turns (`trace_turn_outcomes.model_version`). A group
- * with nothing to read is not checked, whatever it finds.
- */
-export interface HallucinationCoverage {
-  requestedToolIds: boolean;
-  errorText: boolean;
-  replies: boolean;
-  modelReads: boolean;
-}
-
 const CALL_EVENT_TYPES = ["invoke_start", "invoke_end", "invoke_error"];
 
 type Bound = <T>(
@@ -132,11 +118,18 @@ export async function boundedExists(
   }
 }
 
+/**
+ * What the window holds for each group's rules to read (`PageCoverage`), as
+ * yes or no: the tool name the agent asked for (`requested_tool_id`), an error
+ * in words (not just a type id like `tool_error`), the agent's replies, and
+ * whether a model read the window's turns (`trace_turn_outcomes.model_version`).
+ * A group with nothing to read is not checked, whatever it finds.
+ */
 export async function loadCoverage(
   projectId: string,
   window: PageWindow,
   db: PageDb = getDb(),
-): Promise<HallucinationCoverage> {
+): Promise<PageCoverage> {
   const at = sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
   // Only call events carry an asked-for name or an error, and naming their types lets the
   // (project, type, time) index answer: without it a project that sends neither is scanned in full.
