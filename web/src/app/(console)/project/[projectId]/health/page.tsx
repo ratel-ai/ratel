@@ -1,9 +1,11 @@
 import {
   type SummaryImports,
   SummaryNoDatabase,
+  type SummaryRootCauses,
   type SummaryShare,
   SummaryView,
 } from "@/components/console/health/v2/SummaryView";
+import { loadPanelTurn } from "@/components/console/turn-panel/load";
 import { composition } from "@/lib/composition";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
@@ -57,6 +59,9 @@ import {
 import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
+import { loadSentimentPage, sentimentMinSessions } from "@/lib/views/traces/sentiment/page-load";
+import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
+import { parseRootCauseQuery } from "@/lib/views/traces/sentiment/page-paths";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Agent health" };
@@ -83,7 +88,10 @@ export default async function AgentHealthPage({
 
   const { project, organization, user } = await requireProjectScope(projectId);
   const limits = getAgentHealthLimits(organization);
-  const windowDays = parseWindowDays((await searchParams).days, limits.agentHealthWindowDays);
+  const search = await searchParams;
+  const windowDays = parseWindowDays(search.days, limits.agentHealthWindowDays);
+  // Root cause analysis, opened over this page (from task completion): read only then.
+  const rootCauseQuery = parseRootCauseQuery(search);
   const distinctId = `project:${project.id}`;
   // Kept by identity: a model that is this fallback is a failed read, not an empty project.
   const fallbackModel = pendingHealthModel(windowDays);
@@ -104,6 +112,7 @@ export default async function AgentHealthPage({
     corrections,
     taskCompletion,
     hallucinationRate,
+    rootCauses,
   ] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
@@ -160,6 +169,37 @@ export default async function AgentHealthPage({
           ? loadHallucinationRateCard(project.id, windowDays)
           : null,
     }),
+    rootCauseQuery
+      ? loadOrFallback<SummaryRootCauses | null>({
+          operation: "agent_health_root_causes",
+          distinctId,
+          fallback: {
+            model: unavailableSentimentPage(
+              project.id,
+              windowDays,
+              rootCauseQuery,
+              sentimentMinSessions(),
+            ),
+            turn: null,
+          },
+          load: async () =>
+            (await sentimentAnalysisEnabled(organization))
+              ? {
+                  model: await loadSentimentPage({
+                    projectId: project.id,
+                    windowDays,
+                    query: rootCauseQuery,
+                  }),
+                  turn: await loadPanelTurn({
+                    projectId: project.id,
+                    organization,
+                    search,
+                    operation: "agent_health_root_cause_turn",
+                  }),
+                }
+              : null,
+        })
+      : null,
   ]);
   // The example allowance, kept for when an issue is opened (the model carries none).
   const model = {
@@ -245,6 +285,7 @@ export default async function AgentHealthPage({
       inferredTools={inferredTools}
       taskCompletion={taskCompletion}
       hallucinationRate={hallucinationRate}
+      rootCauses={rootCauses}
     />
   );
 }

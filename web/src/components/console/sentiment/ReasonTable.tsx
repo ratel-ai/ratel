@@ -6,7 +6,7 @@ import { usePeek } from "@ratel/design-system/panel";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ChevronRight } from "lucide-react";
 import { money, NO_CAUSE_LABEL, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
-import { ROOT_CAUSE_PEEK, rootCauseKey } from "@/components/console/sentiment/RootCausePanel";
+import { rootCauseKey } from "@/components/console/sentiment/RootCauseDetail";
 import { REVEAL_ROW, Reveal, useReveal } from "@/components/console/sentiment/reveal";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import {
@@ -17,7 +17,7 @@ import {
 } from "@/lib/synthesis/traces/v2/format";
 import { CAUSE_LABEL, CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
 import type { ReasonGroupView, ReasonRowView } from "@/lib/views/traces/sentiment/page-links";
-import type { SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
+import { ROOT_CAUSE_PEEK, type SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
 
 /**
  * Why tasks were not completed, and what got in the way of the ones completed
@@ -26,7 +26,7 @@ import type { SentimentSort } from "@/lib/views/traces/sentiment/page-paths";
  * what the trouble cost and took (a task not completed whole, a task completed
  * after friction only its friction). A column header orders the reasons and
  * their root causes alike. A heading row folds its reason; a root cause opens
- * in the Panel (`?open=`), with its sessions and the way to them in Traces.
+ * in this same panel (`?rc_open=`), with its sessions and the way to them in Traces.
  */
 
 const QUIET = "text-fg-subtle";

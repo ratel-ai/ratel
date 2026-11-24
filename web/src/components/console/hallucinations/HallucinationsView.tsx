@@ -120,7 +120,7 @@ function Body({
         />
       )}
       {totals.occurrences === 0 ? (
-        <NothingFound model={model} />
+        <NothingFound model={model} span={span} />
       ) : (
         <>
           <Section
@@ -150,23 +150,25 @@ function Body({
 }
 
 /** No finding in the window (`cleanResult`): good news, large, where something was checked. */
-function NothingFound({ model }: { model: HallucinationsPageModel }) {
-  const result = cleanResult({ groups: model.groups, toolNames: model.toolNames });
+function NothingFound({ model, span }: { model: HallucinationsPageModel; span: string }) {
+  const result = cleanResult({
+    groups: model.groups,
+    toolNames: model.toolNames,
+    turns: model.totals.turns,
+    span,
+  });
   if (result.state === "unchecked")
-    return (
-      <EmptyState
-        icon={CircleDashed}
-        title={result.title}
-        description="Your agent's traces carry no finished tool calls, error text or replies."
-      />
-    );
+    return <EmptyState icon={CircleDashed} title={result.title} description={result.info} />;
   return (
     <div
       className="flex flex-col items-center gap-4 px-6 py-20 text-center"
       data-hallucination-result={result.state}
     >
       <CircleCheck className="size-14 text-success" strokeWidth={1.25} aria-hidden />
-      <p className="text-3xl font-semibold text-balance text-fg">{result.title}</p>
+      <div className="flex flex-col gap-2">
+        <p className="text-3xl font-semibold text-balance text-fg">{result.title}</p>
+        <p className="text-sm text-fg-muted">{result.info}</p>
+      </div>
     </div>
   );
 }

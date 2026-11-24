@@ -8,6 +8,7 @@ import {
 } from "@/lib/readings/trace-signals/outcomes/kinds";
 import { WINDOW_DAY_OPTIONS, type WindowDays } from "@/lib/readings/trace-signals/view";
 import { ROOT_CAUSES, type RootCause } from "@/lib/views/traces/sentiment/page-kinds";
+import { CALL_PEEK, TURN_PEEK } from "@/lib/views/traces/turn-peek";
 
 /**
  * The Sentiment analysis page's address: its window, its four cuts, the
@@ -156,17 +157,51 @@ export function hasSentimentFilters(filters: SentimentFilters): boolean {
 
 /** The page on a window, filters, sort, page and open row; every default is left out, so the bare path is the default page. */
 /**
- * The two pages that read the same outcome rows: Sentiment analysis (how
- * people took it) and Root cause analysis (why tasks were not completed, or
- * completed only after friction). They share the address's parameters.
+ * The two surfaces that read the same outcome rows: Sentiment analysis (a page
+ * under Traces: how people took it) and Root cause analysis (a panel: why
+ * tasks were not completed, or completed only after friction). The panel
+ * opens over a host page, Agent health by default, and keeps its state in the
+ * host's address under its own prefix, so neither reads the other's filters.
  */
 export type OutcomeSurface = "sentiment" | "root-causes";
 
-/** Where each lives: Sentiment analysis under Traces, Root cause analysis under Agent health. */
-const SURFACE_PATH: Record<OutcomeSurface, string> = {
-  sentiment: "traces/sentiment",
-  "root-causes": "health/root-causes",
-};
+/** The page the panel opens over: its path and its own query. */
+export interface RootCauseHost {
+  path: string;
+  query: string;
+}
+
+/** The parameter that says the panel is open, and the prefix of its state. */
+export const ROOT_CAUSES_PARAM = "rc";
+const ROOT_CAUSES_PREFIX = "rc_";
+/** The parameter that holds the root cause open in the panel. */
+export const ROOT_CAUSE_PEEK = `${ROOT_CAUSES_PREFIX}open`;
+
+/** A host page's query without the panel and the turn open in it. */
+export function withoutRootCauses(search: string): string {
+  const query = new URLSearchParams(search);
+  for (const key of [...query.keys()])
+    if (
+      key === ROOT_CAUSES_PARAM ||
+      key.startsWith(ROOT_CAUSES_PREFIX) ||
+      key === TURN_PEEK ||
+      key === CALL_PEEK
+    )
+      query.delete(key);
+  return query.toString();
+}
+
+/** The state of the panel a page URL opens; null when it opens none. */
+export function parseRootCauseQuery(search: Search): SentimentQuery | null {
+  if (first(search[ROOT_CAUSES_PARAM]) !== "1") return null;
+  return parseSentimentQuery(
+    Object.fromEntries(
+      Object.entries(search).flatMap(([key, value]) =>
+        key.startsWith(ROOT_CAUSES_PREFIX) ? [[key.slice(ROOT_CAUSES_PREFIX.length), value]] : [],
+      ),
+    ),
+  );
+}
 
 export function sentimentHref(
   projectId: string,
@@ -178,17 +213,23 @@ export function sentimentHref(
     page?: number;
     open?: string | null;
     surface?: OutcomeSurface;
+    /** Where the root causes panel opens; Agent health when absent. */
+    host?: RootCauseHost;
   } = {},
 ): string {
   const filters = { ...NO_SENTIMENT_FILTERS, ...options.filters };
-  const query = new URLSearchParams();
+  const panel = options.surface === "root-causes";
+  const query = new URLSearchParams(panel ? withoutRootCauses(options.host?.query ?? "") : "");
   const set = (key: string, value: string | null | undefined) => {
-    if (value) query.set(key, value);
+    if (value) query.set(panel ? `${ROOT_CAUSES_PREFIX}${key}` : key, value);
   };
-  set(
-    "days",
-    options.days && options.days !== SENTIMENT_DEFAULT_WINDOW_DAYS ? String(options.days) : null,
-  );
+  if (panel) {
+    // The panel reads its host's window. Agent health opens on another default, so it is always named.
+    if (!options.host && options.days) query.set("days", String(options.days));
+    query.set(ROOT_CAUSES_PARAM, "1");
+  } else if (options.days && options.days !== SENTIMENT_DEFAULT_WINDOW_DAYS) {
+    query.set("days", String(options.days));
+  }
   set("intent", filters.intent);
   set("cause", filters.cause);
   set("tool", filters.tool);
@@ -202,7 +243,8 @@ export function sentimentHref(
   set("page", options.page && options.page > 1 ? String(options.page) : null);
   set("open", options.open);
   const text = query.toString();
-  const path = `/project/${encodeURIComponent(projectId)}/${SURFACE_PATH[options.surface ?? "sentiment"]}`;
+  const root = `/project/${encodeURIComponent(projectId)}`;
+  const path = panel ? (options.host?.path ?? `${root}/health`) : `${root}/traces/sentiment`;
   return text ? `${path}?${text}` : path;
 }
 

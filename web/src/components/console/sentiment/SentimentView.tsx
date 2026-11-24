@@ -10,18 +10,25 @@ import {
 } from "@/components/console/sentiment/copy";
 import { DailyTrend } from "@/components/console/sentiment/DailyTrend";
 import { DissatisfactionPareto } from "@/components/console/sentiment/DissatisfactionPareto";
+import { RootCauses } from "@/components/console/sentiment/RootCauses";
 import { SatisfactionBreakdown } from "@/components/console/sentiment/SatisfactionBreakdown";
 import { SatisfactionByStatus } from "@/components/console/sentiment/SatisfactionByStatus";
-import { SatisfactionFace } from "@/components/console/sentiment/SatisfactionFace";
+import { SatisfactionScore } from "@/components/console/sentiment/SatisfactionScore";
 import { SentimentFilters } from "@/components/console/sentiment/SentimentFilters";
 import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
 import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { projectRoot } from "@/lib/console/navigation";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
+import { CAUSE_PEEK } from "@/lib/views/traces/sentiment/cause-peek";
 import type { Overview } from "@/lib/views/traces/sentiment/overview";
 import { type SentimentLinks, sentimentLinks } from "@/lib/views/traces/sentiment/page-links";
 import type { SentimentPageModel } from "@/lib/views/traces/sentiment/page-model";
+import {
+  type RootCauseHost,
+  rootCausesHref,
+  sentimentHref,
+} from "@/lib/views/traces/sentiment/page-paths";
 
 /**
  * Sentiment analysis (Traces): how people took the agent's work, and
@@ -38,6 +45,7 @@ export function SentimentView({
   windows,
   now,
   turn = null,
+  rootCauses = null,
 }: {
   model: SentimentPageModel;
   /** The time windows the plan allows, as links. */
@@ -46,21 +54,45 @@ export function SentimentView({
   now: string;
   /** The turn the address opens in the Panel, with what Traces shows of it. */
   turn?: PanelTurn | null;
+  /** The root causes the address opens over the page; null while closed. */
+  rootCauses?: SentimentPageModel | null;
 }) {
   const links = sentimentLinks(model);
   return (
-    <Page>
-      <PageHeader
-        title="Sentiment analysis"
-        crumbs={[{ label: "Traces", href: `${projectRoot(model.projectId)}/traces` }]}
-        description={SENTIMENT_DESCRIPTION}
-        actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
-      />
-      <PageBody wide>
-        <Body model={model} links={links} now={now} turn={turn} />
-      </PageBody>
-    </Page>
+    <RootCauses
+      projectId={model.projectId}
+      windowDays={model.windowDays}
+      model={rootCauses}
+      host={hostOf(model)}
+      otherParam={CAUSE_PEEK}
+      now={now}
+      turn={turn}
+    >
+      <Page>
+        <PageHeader
+          title="Sentiment analysis"
+          crumbs={[{ label: "Traces", href: `${projectRoot(model.projectId)}/traces` }]}
+          description={SENTIMENT_DESCRIPTION}
+          actions={windows.length > 1 ? <LinkSwitch label="Time window" options={windows} /> : null}
+        />
+        <PageBody wide>
+          <Body model={model} links={links} now={now} turn={turn} />
+        </PageBody>
+      </Page>
+    </RootCauses>
   );
+}
+
+/** This page with its window and filters, as the host of the root causes panel. */
+function hostOf(model: SentimentPageModel): RootCauseHost {
+  const { filters, sort, thin } = model.query;
+  const [path = "", query = ""] = sentimentHref(model.projectId, {
+    days: model.windowDays,
+    filters,
+    sort,
+    thin,
+  }).split("?");
+  return { path, query };
 }
 
 function Body({
@@ -106,7 +138,18 @@ function Body({
       {/* Filters narrow every section below them, so they sit first. */}
       <SentimentFilters filters={links.filters} clearHref={links.clearHref} />
       <StatRow stats={headline(model.overview, read)} />
-      <SatisfactionByStatus overview={model.overview} />
+      <SatisfactionByStatus
+        overview={model.overview}
+        hrefOf={(filter) =>
+          filter === "completed" ||
+          !model.overview.statuses.some((status) => status.filter === filter && status.tasks > 0)
+            ? null
+            : rootCausesHref(model.projectId, {
+                filters: { ...model.query.filters, task: filter, reason: null },
+                host: hostOf(model),
+              })
+        }
+      />
       <DissatisfactionPareto
         projectId={model.projectId}
         dissatisfaction={model.overview.dissatisfaction}
@@ -122,7 +165,7 @@ function Body({
   );
 }
 
-/** Three numbers: the satisfaction score (with its face), and the satisfied and unsatisfied turns it stands on. */
+/** Three numbers: the satisfaction score (with its meter), and the satisfied and unsatisfied turns it stands on. */
 function headline(overview: Overview, read: boolean): StatProps[] {
   const { satisfaction } = overview;
   const allInferred = satisfaction.answers > 0 && satisfaction.inferred === satisfaction.answers;
@@ -139,7 +182,7 @@ function headline(overview: Overview, read: boolean): StatProps[] {
         satisfaction.score === null ? (
           "None"
         ) : (
-          <SatisfactionFace score={satisfaction.score} size="lg" />
+          <SatisfactionScore score={satisfaction.score} size="lg" />
         ),
       hint:
         satisfaction.score === null

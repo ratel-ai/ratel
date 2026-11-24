@@ -3,17 +3,14 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { ToolPin } from "@ratel/design-system/entity";
-import { Panel, usePeek } from "@ratel/design-system/panel";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { NO_CAUSE_LABEL, percent, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
+import { percent, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
+import type { useTurnPanel } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
-import { CAUSE_LABEL, CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
+import { CAUSE_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
 import type { ReasonGroupView, ReasonRowView } from "@/lib/views/traces/sentiment/page-links";
-
-/** The URL parameter that holds the open root cause: its reason's key and its own, `<reason>:<cause>|<tool>`. */
-export const ROOT_CAUSE_PEEK = "open";
 
 const LINK =
   "rounded-sm text-ui font-medium text-fg-muted outline-none hover:text-fg hover:underline focus-visible:ring-2 focus-visible:ring-focus";
@@ -24,49 +21,20 @@ export const rootCauseKey = (group: ReasonGroupView, row: ReasonRowView) =>
 /**
  * One root cause, opened from its row in Root causes by reason: what it is
  * (the cause, its meaning, the reason, how often it happened and the tool),
- * and where it happened (its newest tasks, each a date and the turn in
- * Traces). `j` and `k` step through the rows listed.
+ * and where it happened (its newest tasks, each a date and its turn, which
+ * opens in this same panel).
  */
-export function RootCausePanel({
-  groups,
+export function RootCauseDetail({
+  group,
+  row,
   now,
+  onOpenTurn,
 }: {
-  groups: readonly ReasonGroupView[];
+  group: ReasonGroupView;
+  row: ReasonRowView;
   now: string;
+  onOpenTurn: ReturnType<typeof useTurnPanel>["onOpen"];
 }) {
-  const peek = usePeek(ROOT_CAUSE_PEEK);
-  const entries = groups.flatMap((group) =>
-    group.rows.map((row) => ({ group, row, key: rootCauseKey(group, row) })),
-  );
-  const index = entries.findIndex((entry) => entry.key === peek.id);
-  const entry = index >= 0 ? entries[index] : undefined;
-  const step = (by: 1 | -1) => {
-    const next = entries[index + by];
-    if (next) peek.open(next.key);
-  };
-  return (
-    <Panel
-      open={entry !== undefined}
-      onOpenChange={(next) => {
-        if (!next) peek.close();
-      }}
-      title={
-        entry ? (entry.row.cause ? CAUSE_LABEL[entry.row.cause] : NO_CAUSE_LABEL) : "Root cause"
-      }
-      subtitle={
-        entry
-          ? `${entry.group.label} · ${entry.group.result === "not_completed" ? "Not completed" : "Completed after friction"}`
-          : undefined
-      }
-      onPrevious={index > 0 ? () => step(-1) : undefined}
-      onNext={index >= 0 && index < entries.length - 1 ? () => step(1) : undefined}
-    >
-      {entry ? <Body group={entry.group} row={entry.row} now={now} /> : null}
-    </Panel>
-  );
-}
-
-function Body({ group, row, now }: { group: ReasonGroupView; row: ReasonRowView; now: string }) {
   const share = group.tasks === 0 ? 0 : row.tasks / group.tasks;
   return (
     <div className="flex flex-col gap-6" data-root-cause-panel={row.key}>
@@ -141,16 +109,17 @@ function Body({ group, row, now }: { group: ReasonGroupView; row: ReasonRowView;
                 href={example.traceHref}
                 className={buttonVariants({ variant: "secondary", size: "sm" })}
                 data-root-cause-open-trace=""
+                onClick={onOpenTurn({ turnId: example.turnId, eventId: null })}
               >
                 Open in Traces
-                <ArrowUpRight aria-hidden />
+                <ArrowRight aria-hidden />
               </Link>
             </li>
           ))}
         </ul>
         {row.causeHref ? (
           <Link href={row.causeHref} scroll={false} className={cn(LINK, "self-start")}>
-            Show only this cause on the page
+            Show only this cause
           </Link>
         ) : null}
       </section>

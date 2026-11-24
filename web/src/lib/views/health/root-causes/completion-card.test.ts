@@ -18,12 +18,12 @@ test("task completion: shares of the tasks that can be told, and the two that ne
         "completed_after_friction",
         2,
         0.2,
-        "/project/p1/health/root-causes?days=7&task=completed_after_friction",
+        "/project/p1/health?days=7&rc=1&rc_task=completed_after_friction",
       ],
-      ["not_completed", 2, 0.2, "/project/p1/health/root-causes?days=7&task=not_completed"],
+      ["not_completed", 2, 0.2, "/project/p1/health?days=7&rc=1&rc_task=not_completed"],
     ],
   );
-  assert.equal(card.href, "/project/p1/health/root-causes?days=7");
+  assert.equal(card.href, "/project/p1/health?days=7&rc=1");
 });
 
 test("a status with no tasks opens nothing, and no tasks is an empty card", () => {

@@ -1,4 +1,5 @@
 import { Page, PageBody, PageHeader } from "@ratel/design-system/page-header";
+import { PEEK_PARAM } from "@ratel/design-system/peek";
 import { Callout } from "@ratel/design-system/states";
 import type { ComponentType } from "react";
 import { AnalysisStatus } from "@/components/console/freshness/AnalysisStatus";
@@ -32,6 +33,8 @@ import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLoo
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
 import { WindowSwitch } from "@/components/console/health/v2/WindowSwitch";
+import { RootCauses } from "@/components/console/sentiment/RootCauses";
+import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import type {
   HealthImporterProps,
   HealthShareLink,
@@ -54,6 +57,7 @@ import type { TaskCompletionCard } from "@/lib/views/health/root-causes/completi
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
+import type { SentimentPageModel } from "@/lib/views/traces/sentiment/page-model";
 
 /**
  * Agent health's Summary, the hub of Agent health. One question above the
@@ -83,6 +87,12 @@ export interface SummaryShare {
   Dialog: ComponentType<HealthShareProps>;
 }
 
+/** Root cause analysis as the address opens it over the page, with the turn open in it. */
+export interface SummaryRootCauses {
+  model: SentimentPageModel;
+  turn: PanelTurn | null;
+}
+
 export interface SummaryViewProps {
   projectId: string;
   projectName: string;
@@ -108,6 +118,8 @@ export interface SummaryViewProps {
   taskCompletion?: TaskCompletionCard | null;
   /** `cloud-hallucination-detection`: the hallucination rate beside task completion; null hides it. */
   hallucinationRate?: HallucinationRateCard | null;
+  /** Root cause analysis, opened from task completion; null while closed. */
+  rootCauses?: SummaryRootCauses | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;
   /**
@@ -146,7 +158,7 @@ export function SummaryView(props: SummaryViewProps) {
         }
       />
     ) : null;
-  return (
+  const page = (
     <Page>
       <PageHeader
         title={SUMMARY_TITLE}
@@ -196,6 +208,25 @@ export function SummaryView(props: SummaryViewProps) {
         {ready ? importer("dialog") : importer("history")}
       </PageBody>
     </Page>
+  );
+  // Task completion opens its root causes in a panel over this page.
+  return props.taskCompletion ? (
+    <RootCauses
+      projectId={projectId}
+      windowDays={model.windowDays}
+      model={props.rootCauses?.model ?? null}
+      host={{
+        path: `/project/${encodeURIComponent(projectId)}/health`,
+        query: `days=${model.windowDays}`,
+      }}
+      otherParam={PEEK_PARAM}
+      now={(props.now ?? new Date()).toISOString()}
+      turn={props.rootCauses?.turn ?? null}
+    >
+      {page}
+    </RootCauses>
+  ) : (
+    page
   );
 }
 

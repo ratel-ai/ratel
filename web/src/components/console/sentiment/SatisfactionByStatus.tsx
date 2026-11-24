@@ -1,24 +1,32 @@
 import { cn } from "@ratel/design-system/cn";
-import { DotMeter } from "@ratel/design-system/dot-matrix";
 import { Section } from "@ratel/design-system/section";
 import { Tooltip } from "@ratel/design-system/tooltip";
 import { ListChecks } from "lucide-react";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { percent, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
-import { SatisfactionFace } from "@/components/console/sentiment/SatisfactionFace";
+import { RootCauseLink } from "@/components/console/sentiment/RootCausesHost";
+import { SatisfactionScore } from "@/components/console/sentiment/SatisfactionScore";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import type { Overview } from "@/lib/views/traces/sentiment/overview";
 import { TASK_FILTER_LABEL, TASK_FILTER_MEANING } from "@/lib/views/traces/sentiment/page-kinds";
+import type { TaskFilter } from "@/lib/views/traces/sentiment/page-paths";
 
 const HEAD = "py-2 font-medium";
 
 /**
  * How satisfied people were in each task status: satisfied of the turns
  * people said how it went in tasks that were completed, completed after
- * friction, or not completed. Why they ended that way opens from task
- * completion on Agent health.
+ * friction, or not completed. Why they ended that way opens in the Root cause
+ * analysis panel, as from task completion on Agent health.
  */
-export function SatisfactionByStatus({ overview }: { overview: Overview }) {
+export function SatisfactionByStatus({
+  overview,
+  hrefOf,
+}: {
+  overview: Overview;
+  /** The root causes of a status, for the two that need explaining; null for the rest. */
+  hrefOf: (filter: TaskFilter) => string | null;
+}) {
   if (overview.satisfaction.answers === 0) return null;
   return (
     <Section title={<NounTitle icon={ListChecks}>Satisfaction by task status</NounTitle>}>
@@ -44,7 +52,10 @@ export function SatisfactionByStatus({ overview }: { overview: Overview }) {
           {overview.statuses.map((status) => (
             <tr
               key={status.filter}
-              className="border-b border-line"
+              className={cn(
+                "relative border-b border-line",
+                hrefOf(status.filter) && "transition-colors duration-120 hover:bg-hover",
+              )}
               data-satisfaction-status={status.filter}
             >
               <td className="py-2">
@@ -54,7 +65,7 @@ export function SatisfactionByStatus({ overview }: { overview: Overview }) {
                     className={cn("size-2 shrink-0 rounded-[2px]", STATUS_COLOR[status.filter].bg)}
                   />
                   <Tooltip content={TASK_FILTER_MEANING[status.filter]}>
-                    <span className="truncate text-fg">{TASK_FILTER_LABEL[status.filter]}</span>
+                    <StatusLabel filter={status.filter} href={hrefOf(status.filter)} />
                   </Tooltip>
                 </span>
               </td>
@@ -65,16 +76,7 @@ export function SatisfactionByStatus({ overview }: { overview: Overview }) {
                 {status.score === null ? (
                   <span className="text-xs text-fg-subtle">No answers</span>
                 ) : (
-                  <span className="inline-flex items-center gap-3">
-                    <span className="max-sm:hidden">
-                      <DotMeter
-                        value={status.score}
-                        cells={8}
-                        label={`${percent(status.score)} satisfied`}
-                      />
-                    </span>
-                    <SatisfactionFace score={status.score} />
-                  </span>
+                  <SatisfactionScore score={status.score} />
                 )}
               </td>
               <td className="py-2 pl-3 text-right text-xs text-fg-subtle tabular-nums max-sm:hidden">
@@ -85,5 +87,23 @@ export function SatisfactionByStatus({ overview }: { overview: Overview }) {
         </tbody>
       </table>
     </Section>
+  );
+}
+
+/** A status, as on Agent health: the two that need explaining open their root causes, the whole row with them. */
+function StatusLabel({ filter, href, ...rest }: { filter: TaskFilter; href: string | null }) {
+  return href ? (
+    <RootCauseLink
+      {...rest}
+      href={href}
+      className="truncate rounded-sm text-fg outline-none after:absolute after:inset-0 focus-visible:ring-2 focus-visible:ring-focus"
+      data-satisfaction-status-open={filter}
+    >
+      {TASK_FILTER_LABEL[filter]}
+    </RootCauseLink>
+  ) : (
+    <span {...rest} className="truncate text-fg">
+      {TASK_FILTER_LABEL[filter]}
+    </span>
   );
 }

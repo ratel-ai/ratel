@@ -1,8 +1,8 @@
 "use client";
 
 import { cn } from "@ratel/design-system/cn";
-import Link from "next/link";
 import { useState } from "react";
+import { RootCauseLink } from "@/components/console/sentiment/RootCausesHost";
 
 /** One slice of the ring: its share of the whole, its colour (an SVG paint), and where it leads, if anywhere. */
 export interface RingSlice {
@@ -89,7 +89,7 @@ export function StatusRing({
             onBlur: () => setPointed(null),
           };
           return slice.href ? (
-            <Link
+            <RootCauseLink
               key={slice.key}
               href={slice.href}
               aria-label={`${slice.label}: ${percent(slice.share)}`}
@@ -98,7 +98,7 @@ export function StatusRing({
               {...point}
             >
               {circle}
-            </Link>
+            </RootCauseLink>
           ) : (
             <g
               key={slice.key}

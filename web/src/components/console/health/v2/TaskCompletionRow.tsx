@@ -7,6 +7,7 @@ import { GROUP_COLOR, GROUP_SHORT } from "@/components/console/hallucinations/co
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { StatusRing } from "@/components/console/health/v2/StatusRing";
 import { percent, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
+import { RootCauseLink } from "@/components/console/sentiment/RootCausesHost";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import { GROUP_LABEL } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { windowPhrase } from "@/lib/readings/trace-signals/view";
@@ -24,7 +25,7 @@ const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-focus";
  * beside it with its share, and, when hallucination detection is on, the
  * hallucination rate next to them. A task is a goal (the person's request,
  * or the agent's own tool search) and the work after it. Completed after
- * friction and not completed open Root cause analysis narrowed to them.
+ * friction and not completed open Root cause analysis, a panel, narrowed to them.
  */
 export function TaskCompletionRow({
   card,
@@ -50,14 +51,14 @@ export function TaskCompletionRow({
             {/* Root causes belong to task completion: the link sits on its own part, not over the hallucination rate. */}
             <div className="flex items-center justify-between gap-3">
               <span className="text-ui text-fg-muted">{`${plural(card.total, "task")} ${windowPhrase(card.windowDays)}`}</span>
-              <Link
+              <RootCauseLink
                 href={card.href}
                 className={buttonVariants({ variant: "ghost", size: "sm" })}
                 data-task-completion-open=""
               >
                 See root causes
                 <ArrowRight aria-hidden />
-              </Link>
+              </RootCauseLink>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-4">
               <StatusRing
@@ -104,7 +105,7 @@ export function TaskCompletionRow({
                       data-task-status={status.filter}
                     >
                       {status.href ? (
-                        <Link
+                        <RootCauseLink
                           href={status.href}
                           className={cn(
                             row,
@@ -113,7 +114,7 @@ export function TaskCompletionRow({
                           )}
                         >
                           {cells}
-                        </Link>
+                        </RootCauseLink>
                       ) : (
                         <div className={row}>{cells}</div>
                       )}
@@ -134,8 +135,7 @@ export function TaskCompletionRow({
 
 /**
  * The hallucination rate beside task completion: the share of turns with
- * one, and each group's part as a bar (a group that could not be checked
- * says so). It takes the rest of the row, with no box: a heading line and
+ * one, and each checked group's part as a bar. It takes the rest of the row, with no box: a heading line and
  * its link, like task completion beside it.
  */
 function HallucinationRateTile({
@@ -164,7 +164,9 @@ function HallucinationRateTile({
       : card.turns === 0
         ? `No turns ${windowPhrase(windowDays)}`
         : `${formatCount(card.turnsAffected)} of ${plural(card.turns, "turn")} had at least one`;
-  const found = card.groups.filter((group) => group.occurrences > 0);
+  // Only what was checked: a group the traces carry nothing for says nothing here (the Hallucinations page does).
+  const checked = card.groups.filter((group) => group.checked);
+  const found = checked.filter((group) => group.occurrences > 0);
   // Read, checked and nothing found: good news, said as such.
   const clean = card.read && card.checked && card.turns > 0 && card.occurrences === 0;
   return (
@@ -207,7 +209,7 @@ function HallucinationRateTile({
           <span className="flex flex-col gap-1.5" data-health-hallucination-groups="">
             <span
               role="img"
-              aria-label={`By group: ${card.groups.map((group) => `${GROUP_LABEL[group.group]} ${group.checked ? group.occurrences : "not checked"}`).join(", ")}`}
+              aria-label={`By group: ${checked.map((group) => `${GROUP_LABEL[group.group]} ${group.occurrences}`).join(", ")}`}
               className="flex h-2 w-full gap-[2px] overflow-hidden rounded-[4px] bg-hover"
             >
               {found.map((group) => (
@@ -220,25 +222,14 @@ function HallucinationRateTile({
               ))}
             </span>
             <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
-              {card.groups.map((group) => (
-                <span
-                  key={group.group}
-                  className={cn(
-                    "inline-flex items-center gap-1.5",
-                    group.checked ? "text-fg-muted" : "text-fg-subtle",
-                  )}
-                >
+              {checked.map((group) => (
+                <span key={group.group} className="inline-flex items-center gap-1.5 text-fg-muted">
                   <span
                     aria-hidden
-                    className={cn(
-                      "size-2 rounded-[2px]",
-                      group.checked ? GROUP_COLOR[group.group] : "border border-line-strong",
-                    )}
+                    className={cn("size-2 rounded-[2px]", GROUP_COLOR[group.group])}
                   />
                   {GROUP_SHORT[group.group]}
-                  <span className="tabular-nums">
-                    {group.checked ? formatCount(group.occurrences) : "not checked"}
-                  </span>
+                  <span className="tabular-nums">{formatCount(group.occurrences)}</span>
                 </span>
               ))}
             </span>
