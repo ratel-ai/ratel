@@ -7,9 +7,10 @@
 /**
  * The version of the rules (the cause patterns, the streak and search-run
  * readings). Stored on every row; raise it when a rule changes what it would
- * write, so rows of an older version are told apart and read again.
+ * write: the next reading rewrites its window and drops older rows elsewhere
+ * (`run-queries.ts`), so no page shows an older meaning.
  */
-export const OUTCOME_RULE_VERSION = 2;
+export const OUTCOME_RULE_VERSION = 3;
 
 /** Why a call failed, sorted from its error message (`error-cause.ts`). */
 export const OUTCOME_CAUSES = [
@@ -239,7 +240,7 @@ export const FRICTION_REASONS = ["corrected", "repeated", "recovered_call"] as c
 export type FrictionReason = (typeof FRICTION_REASONS)[number];
 
 /** The version of the task rules (segmentation and fusion): stored on every task row. */
-export const TASK_RULE_VERSION = 3;
+export const TASK_RULE_VERSION = 4;
 
 /**
  * What the agent's next reply shows about the message it answers, where the

@@ -111,7 +111,7 @@ export interface HallucinationRowDraft {
 /**
  * Replace the findings of the closed turns ending in `range` with `rows`, in
  * one transaction, so a page never reads a half-written window. Rows of older
- * turns stay: they are the history.
+ * turns stay: they are the history, unless older rules wrote them.
  */
 export async function replaceHallucinations(
   projectId: string,
@@ -137,6 +137,15 @@ export async function replaceHallucinations(
         and(
           eq(traceHallucinations.projectId, projectId),
           inArray(traceHallucinations.turnId, window),
+        ),
+      );
+    // Findings read under older rules mean something else now: drop them, wherever they are.
+    await tx
+      .delete(traceHallucinations)
+      .where(
+        and(
+          eq(traceHallucinations.projectId, projectId),
+          lt(traceHallucinations.ruleVersion, HALLUCINATION_RULE_VERSION),
         ),
       );
     for (const chunk of chunks(rows, INSERT_CHUNK)) {

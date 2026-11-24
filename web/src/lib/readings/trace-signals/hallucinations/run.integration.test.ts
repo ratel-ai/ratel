@@ -5,6 +5,7 @@ import { TimeBudgetError } from "@/lib/ledger/turn-pages";
 import { HALLUCINATION_RULE_VERSION } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
+  count,
   type Db,
   jobDeps,
   PROJECT_ID,
@@ -218,4 +219,26 @@ test("a reading that runs out of time marks the run partial and writes nothing",
   assert.deepEqual((run?.summary as { hallucinations?: unknown }).hallucinations, {
     partial: true,
   });
+});
+
+test("findings read under older rules are gone after the next run, wherever they are", async () => {
+  const { client, db } = await seeded();
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  const written = (await rowsOf(client)).length;
+  assert.ok(written > 0);
+  // As if one finding were written before the rules changed, on a turn this run will not read.
+  await client.query(`update trace_hallucinations set rule_version = rule_version - 1`);
+  await client.query(
+    `update trace_turns set ended_at = ended_at - interval '400 days', started_at = started_at - interval '400 days'
+      where id = (select turn_id from trace_hallucinations limit 1)`,
+  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  assert.equal(
+    await count(
+      client,
+      `select count(*)::int as n from trace_hallucinations where rule_version < ${HALLUCINATION_RULE_VERSION}`,
+    ),
+    0,
+  );
+  assert.ok((await rowsOf(client)).length > 0, "the window's findings are read again");
 });

@@ -49,8 +49,8 @@ export const HALLUCINATION_EVIDENCE = [
 ] as const;
 export type HallucinationEvidence = (typeof HALLUCINATION_EVIDENCE)[number];
 
-/** Bump when a rule changes what it finds: a row of an older version is rewritten by the next reading. */
-export const HALLUCINATION_RULE_VERSION = 2;
+/** Bump when a rule changes what it finds: the next reading rewrites its window and drops older rows elsewhere. */
+export const HALLUCINATION_RULE_VERSION = 3;
 
 export const GROUP_LABEL: Record<HallucinationGroup, string> = {
   tool: "Tool hallucinations",

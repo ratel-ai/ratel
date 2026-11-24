@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { TimeBudgetError } from "@/lib/ledger/turn-pages";
-import { OUTCOME_RULE_VERSION } from "@/lib/readings/trace-signals/outcomes/kinds";
+import {
+  OUTCOME_RULE_VERSION,
+  TASK_RULE_VERSION,
+} from "@/lib/readings/trace-signals/outcomes/kinds";
 import {
   type OutcomeRunDeps,
   recordOutcomes,
@@ -631,4 +634,34 @@ test("where only the agent's replies are captured, the next reply says how the p
     ["declared:r2", null, null],
   ]);
   await client.close();
+});
+
+test("rows read under older rules are gone after the next run: no page shows an old meaning", async () => {
+  const { client, db } = await seeded();
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  // As if the rows were written before the rules changed.
+  for (const table of ["trace_turn_outcomes", "trace_session_outcomes", "trace_task_outcomes"])
+    await client.query(`update ${table} set rule_version = rule_version - 1`);
+  // And one task row of a session this run will not read again.
+  await client.query(
+    `insert into trace_task_outcomes (project_id, task_id, session_id, turn_ids, started_at, ended_at, tier, goal_source, result, result_source, reason, rule_version, read_at)
+     select project_id, gen_random_uuid(), 'old-session', turn_ids, started_at - interval '200 days', ended_at - interval '200 days', tier, goal_source, result, result_source, 'searched_again', rule_version, read_at
+       from trace_task_outcomes limit 1`,
+  );
+  await computeProjectTraceSignals(PROJECT_ID, { trigger: "manual" }, jobDeps(db, NOW));
+  for (const table of ["trace_turn_outcomes", "trace_session_outcomes", "trace_task_outcomes"]) {
+    const current = table === "trace_task_outcomes" ? TASK_RULE_VERSION : OUTCOME_RULE_VERSION;
+    assert.equal(
+      await count(
+        client,
+        `select count(*)::int as n from ${table} where rule_version < ${current}`,
+      ),
+      0,
+      table,
+    );
+  }
+  assert.ok(
+    (await count(client, `select count(*)::int as n from trace_turn_outcomes`)) > 0,
+    "the window's rows are read again, not only dropped",
+  );
 });

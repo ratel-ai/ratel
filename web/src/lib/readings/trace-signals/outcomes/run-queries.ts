@@ -107,6 +107,17 @@ export async function replaceTurnOutcomes(
   db: OutcomesDb = getDb(),
 ): Promise<{ written: number; sessions: string[] }> {
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop those outside the window too (the
+    // window's own are written again below). Their sessions' rows are older too, and go with them.
+    await tx
+      .delete(traceTurnOutcomes)
+      .where(
+        and(
+          eq(traceTurnOutcomes.projectId, projectId),
+          lt(traceTurnOutcomes.ruleVersion, OUTCOME_RULE_VERSION),
+          sql`${traceTurnOutcomes.turnId} not in (select ${traceTurns.id} from ${traceTurns} where ${traceTurns.projectId} = ${projectId} and ${traceTurns.status} = 'closed' and ${traceTurns.endedAt} >= ${range.from} and ${traceTurns.endedAt} < ${range.to})`,
+        ),
+      );
     const window = tx
       .select({ id: traceTurns.id })
       .from(traceTurns)
@@ -346,6 +357,15 @@ export async function replaceSessionOutcomes(
   const kept = new Set(rows.map((row) => row.sessionId));
   const gone = [...new Set(sessionIds)].filter((id) => !kept.has(id));
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop them, wherever they are.
+    await tx
+      .delete(traceSessionOutcomes)
+      .where(
+        and(
+          eq(traceSessionOutcomes.projectId, projectId),
+          lt(traceSessionOutcomes.ruleVersion, OUTCOME_RULE_VERSION),
+        ),
+      );
     for (const ids of chunks(gone)) {
       await tx
         .delete(traceSessionOutcomes)
@@ -443,6 +463,15 @@ export async function replaceTaskOutcomes(
   db: OutcomesDb = getDb(),
 ): Promise<number> {
   return db.transaction(async (tx) => {
+    // Rows read under older rules mean something else now: drop them, wherever they are.
+    await tx
+      .delete(traceTaskOutcomes)
+      .where(
+        and(
+          eq(traceTaskOutcomes.projectId, projectId),
+          lt(traceTaskOutcomes.ruleVersion, TASK_RULE_VERSION),
+        ),
+      );
     for (const ids of chunks([...new Set(sessionIds)])) {
       await tx
         .delete(traceTaskOutcomes)
