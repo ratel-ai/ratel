@@ -50,6 +50,7 @@ export async function loadHallucinationsPage(
       findings: found.findings,
       turns,
       lastReadAt: lastRead.at,
+      partialAt: lastRead.partialAt,
       capped: found.capped,
       coverage,
       aliases: lastRead.aliases,

@@ -1373,7 +1373,6 @@
         "web/src/lib/readings/trace-signals/hallucinations/kinds.ts",
         "web/src/lib/readings/trace-signals/hallucinations/run-job.ts",
         "web/src/lib/readings/trace-signals/hallucinations/run-queries.ts",
-        "web/src/lib/readings/trace-signals/hallucinations/run.integration.test.ts",
         "web/src/lib/views/health/hallucinations/turn-markers.ts",
         "web/src/app/(console)/project/\\[projectId\\]/health/hallucinations/loading.tsx",
         "web/src/components/console/hallucinations/GroupDonut.tsx",

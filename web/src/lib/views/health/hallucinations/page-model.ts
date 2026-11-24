@@ -138,8 +138,10 @@ export interface HallucinationsPageInput {
   findings: readonly PageFinding[];
   /** Closed turns that ended in the window. */
   turns: number;
-  /** When the reading last ran; null when it never has. */
+  /** When the reading last ran in full; null when it never has. */
   lastReadAt: Date | null;
+  /** When a newer run ran out of time before the reading was done; null when none did. */
+  partialAt?: Date | null;
   capped: boolean;
   /** What the window held to read. Absent: everything (every group checked). */
   coverage?: PageCoverage;
@@ -161,6 +163,8 @@ export interface HallucinationsPageModel {
   /** Kinds of a checked group that could not be checked, with why (`uncheckedKinds`). */
   uncheckedKinds: Array<{ kind: HallucinationKind; reason: string }>;
   lastReadAt: string | null;
+  /** A newer run ran out of time before the reading was done: the rows are the last full check's. */
+  partialAt: string | null;
   capped: boolean;
   /** Names the runtime steadily maps to a tool: left out of the findings as naming mismatches. */
   aliases: StoredAlias[];
@@ -281,6 +285,7 @@ export function buildHallucinationsPage(
     groups,
     uncheckedKinds: uncheckedKinds(input.coverage ?? EVERYTHING, findings),
     lastReadAt: input.lastReadAt?.toISOString() ?? null,
+    partialAt: input.partialAt?.toISOString() ?? null,
     capped: input.capped,
     aliases: [...(input.aliases ?? [])],
     toolNames: (input.toolNames?.callsOnWorking ?? 0) > 0 ? (input.toolNames ?? null) : null,
@@ -311,6 +316,7 @@ export function unavailableHallucinationsPage(
     })),
     uncheckedKinds: [],
     lastReadAt: null,
+    partialAt: null,
     capped: false,
     aliases: [],
     toolNames: null,

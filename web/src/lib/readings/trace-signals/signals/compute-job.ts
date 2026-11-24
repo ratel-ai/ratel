@@ -463,7 +463,11 @@ export async function computeProjectTraceSignals(
         ...(earlyReading ? { earlyReading } : {}),
         ...(corrections ? { selfCorrections: corrections.stored } : {}),
         ...(outcomes ? { outcomes: outcomes.stored } : {}),
-        ...(hallucinations ? { hallucinations: hallucinations.stored } : {}),
+        ...(hallucinations === "partial"
+          ? { hallucinations: { partial: true } }
+          : hallucinations
+            ? { hallucinations: hallucinations.stored }
+            : {}),
       },
       turnsScanned: result.turnsScanned,
       turnSourceMix: result.turnSourceMix,
@@ -489,8 +493,11 @@ export async function computeProjectTraceSignals(
       outcome_failed_calls: outcomes?.stored.failedCalls ?? null,
       outcome_errors_unread: outcomes?.stored.errorsUnread ?? null,
       outcome_other_causes: outcomes?.stored.causes.other ?? null,
-      hallucinations: hallucinations?.stored.findings ?? null,
-      hallucination_turns: hallucinations?.stored.turnsAffected ?? null,
+      hallucinations:
+        hallucinations === "partial" ? null : (hallucinations?.stored.findings ?? null),
+      hallucination_turns:
+        hallucinations === "partial" ? null : (hallucinations?.stored.turnsAffected ?? null),
+      hallucinations_partial: hallucinations === "partial",
       duration_ms: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
     };
     if (result.queriesEvicted > 0) {
@@ -636,14 +643,15 @@ async function outcomesFor(
  * Best-effort, last, and behind its own switch: one more reading of the same
  * window under the same budget. It writes nothing until its walk is done, so
  * a failure or an overrun leaves the window's earlier rows and never fails
- * the run.
+ * the run. An overrun is said in the run summary (`hallucinations.partial`),
+ * so the pages can tell the last full check from this one.
  */
 async function hallucinationsFor(
   projectId: string,
   window: { start: Date; end: Date },
   startedAt: Date,
   deps: Pick<ComputeJobDeps, "recordHallucinations" | "now" | "timeBudgetMs">,
-): Promise<HallucinationRunResult | null> {
+): Promise<HallucinationRunResult | "partial" | null> {
   if (!deps.recordHallucinations) return null;
   try {
     return await deps.recordHallucinations(
@@ -654,7 +662,7 @@ async function hallucinationsFor(
   } catch (err) {
     if (err instanceof TimeBudgetError) {
       logger.warn({ project_id: projectId }, "hallucination reading over time budget");
-      return null;
+      return "partial";
     }
     logger.error({ err, project_id: projectId }, "hallucination reading failed");
     reportServerException(err, `project:${projectId}`, {

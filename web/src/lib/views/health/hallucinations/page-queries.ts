@@ -162,34 +162,37 @@ export async function loadCoverage(
 }
 
 /**
- * When the reading last ran for the project (the newest signal run whose
- * summary carries it; null when it never has), and the name aliases it left
- * out of the findings.
+ * When the reading last ran in full for the project (the newest completed
+ * signal run whose summary carries its counts; null when it never has), the
+ * name aliases it left out of the findings, and when a newer run ran out of
+ * time before it was done (`partialAt`; null when none did).
  */
 export async function loadLastRead(
   projectId: string,
   db: PageDb = getDb(),
-): Promise<{ at: Date | null; aliases: StoredAlias[] }> {
-  // A run whose reading failed or ran out of time has no `hallucinations` in its summary: skip it.
-  const [run] = await db
-    .select({ createdAt: traceSignalRuns.createdAt, summary: traceSignalRuns.summary })
-    .from(traceSignalRuns)
-    .where(
-      and(
-        eq(traceSignalRuns.projectId, projectId),
-        eq(traceSignalRuns.status, "completed"),
-        sql`${traceSignalRuns.summary} ? 'hallucinations'`,
-      ),
-    )
-    .orderBy(desc(traceSignalRuns.createdAt))
-    .limit(1);
-  const summary = run?.summary as
-    | { hallucinations?: { aliases?: StoredAlias[] } }
-    | null
-    | undefined;
-  if (!run || !summary?.hallucinations) return { at: null, aliases: [] };
-  return {
-    at: run.createdAt,
-    aliases: Array.isArray(summary.hallucinations.aliases) ? summary.hallucinations.aliases : [],
-  };
+): Promise<{ at: Date | null; aliases: StoredAlias[]; partialAt: Date | null }> {
+  // A run whose reading failed has no `hallucinations` in its summary; one that ran out of time has `partial`.
+  const newestWith = (full: boolean) =>
+    db
+      .select({ createdAt: traceSignalRuns.createdAt, summary: traceSignalRuns.summary })
+      .from(traceSignalRuns)
+      .where(
+        and(
+          eq(traceSignalRuns.projectId, projectId),
+          eq(traceSignalRuns.status, "completed"),
+          sql`${traceSignalRuns.summary} ? 'hallucinations'`,
+          full
+            ? sql`not coalesce((${traceSignalRuns.summary} -> 'hallucinations' ->> 'partial')::boolean, false)`
+            : undefined,
+        ),
+      )
+      .orderBy(desc(traceSignalRuns.createdAt))
+      .limit(1);
+  const [[full], [newest]] = await Promise.all([newestWith(true), newestWith(false)]);
+  const partialAt =
+    newest && (!full || newest.createdAt > full.createdAt) ? newest.createdAt : null;
+  if (!full) return { at: null, aliases: [], partialAt };
+  const aliases = (full.summary as { hallucinations?: { aliases?: StoredAlias[] } } | null)
+    ?.hallucinations?.aliases;
+  return { at: full.createdAt, aliases: Array.isArray(aliases) ? aliases : [], partialAt };
 }

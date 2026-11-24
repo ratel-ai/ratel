@@ -48,5 +48,21 @@ test("the last read is the newest run that read hallucinations, not the newest r
 test("a project no run has read hallucinations for is not read yet", async () => {
   const { client, db } = await setupDb();
   await addRun(client, { outcomes: {} }, "2026-09-02T00:00:00Z");
-  assert.deepEqual(await loadLastRead(PROJECT_ID, db as never), { at: null, aliases: [] });
+  assert.deepEqual(await loadLastRead(PROJECT_ID, db as never), {
+    at: null,
+    aliases: [],
+    partialAt: null,
+  });
+});
+
+test("a run that ran out of time is not a read, and says the last full check is older", async () => {
+  const { client, db } = await setupDb();
+  await addRun(client, { hallucinations: { findings: 1, aliases: [] } }, "2026-09-01T00:00:00Z");
+  await addRun(client, { hallucinations: { partial: true } }, "2026-09-02T00:00:00Z");
+  const last = await loadLastRead(PROJECT_ID, db as never);
+  assert.equal(last.at?.toISOString(), "2026-09-01T00:00:00.000Z");
+  assert.equal(last.partialAt?.toISOString(), "2026-09-02T00:00:00.000Z");
+  // A full check after it: nothing partial to say.
+  await addRun(client, { hallucinations: { findings: 0, aliases: [] } }, "2026-09-03T00:00:00Z");
+  assert.equal((await loadLastRead(PROJECT_ID, db as never)).partialAt, null);
 });

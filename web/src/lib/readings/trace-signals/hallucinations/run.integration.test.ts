@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
+import { TimeBudgetError } from "@/lib/ledger/turn-pages";
 import { HALLUCINATION_RULE_VERSION } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { computeProjectTraceSignals } from "@/lib/readings/trace-signals/signals/compute-job";
 import {
@@ -196,4 +197,25 @@ test("with the switch off the run completes and writes nothing", async () => {
   assert.deepEqual(await rowsOf(client), []);
   const run = await latestSignalRun(PROJECT_ID, db);
   assert.equal((run?.summary as { hallucinations?: unknown }).hallucinations, undefined);
+});
+
+test("a reading that runs out of time marks the run partial and writes nothing", async () => {
+  const { client, db } = await seeded();
+  const deps = jobDeps(db, NOW);
+  const result = await computeProjectTraceSignals(
+    PROJECT_ID,
+    { trigger: "manual" },
+    {
+      ...deps,
+      recordHallucinations: async () => {
+        throw new TimeBudgetError();
+      },
+    },
+  );
+  assert.equal(result.outcome, "completed");
+  assert.deepEqual(await rowsOf(client), []);
+  const run = await latestSignalRun(PROJECT_ID, db);
+  assert.deepEqual((run?.summary as { hallucinations?: unknown }).hallucinations, {
+    partial: true,
+  });
 });

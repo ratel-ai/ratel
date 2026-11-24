@@ -334,3 +334,22 @@ test("the kind a model reads is not checked where no model reads the project's r
     [],
   );
 });
+
+test("a newer run that ran out of time is carried, so the page can say the rows are the last full check's", () => {
+  const build = (partialAt: Date | null) =>
+    buildHallucinationsPage(
+      {
+        projectId: "p1",
+        windowDays: 30,
+        findings: [finding()],
+        turns: 100,
+        lastReadAt: new Date("2026-09-01T00:00:00Z"),
+        partialAt,
+        capped: false,
+      },
+      parseHallucinationsQuery({}),
+    );
+  assert.equal(build(new Date("2026-09-02T00:00:00Z")).partialAt, "2026-09-02T00:00:00.000Z");
+  assert.equal(build(null).partialAt, null);
+  assert.equal(build(null).lastReadAt, "2026-09-01T00:00:00.000Z");
+});

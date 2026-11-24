@@ -242,6 +242,16 @@ function Footnotes({ model, now }: { model: HallucinationsPageModel; now: string
           , with the last reading of your agent&apos;s runs.
         </p>
       ) : null}
+      {model.partialAt ? (
+        <p data-hallucination-partial="">
+          The newest reading,{" "}
+          <time dateTime={model.partialAt} title={formatTimestamp(model.partialAt)}>
+            {formatRelativeTime(model.partialAt, now)}
+          </time>
+          , ran out of time before it checked for hallucinations: these are from the last full
+          check.
+        </p>
+      ) : null}
       {model.aliases.length > 0 ? (
         <p data-hallucination-aliases="">
           Not counted, as names your runtime steadily maps to a tool:{" "}
