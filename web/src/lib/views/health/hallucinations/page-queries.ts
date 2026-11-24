@@ -1,8 +1,13 @@
-import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, sql } from "drizzle-orm";
 import { events } from "@/lib/ingest/otlp/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
 import { getDb } from "@/lib/platform/db/client";
+import {
+  type BoundReadDb,
+  supplementaryReadTimeoutMs,
+  withStatementTimeout,
+} from "@/lib/platform/db/statement-timeout";
 import type { StoredAlias } from "@/lib/readings/trace-signals/hallucinations/run";
 import {
   traceHallucinations,
@@ -103,31 +108,64 @@ export interface HallucinationCoverage {
   modelReads: boolean;
 }
 
+const CALL_EVENT_TYPES = ["invoke_start", "invoke_end", "invoke_error"];
+
+type Bound = <T>(
+  read: (db: BoundReadDb) => Promise<T>,
+  options: { operation: string; timeoutMs: number | null },
+) => Promise<T>;
+
+/**
+ * Whether `read` finds a row, under the supplementary read timeout. A probe
+ * that runs out of time reads as no: an `exists` that found no row early
+ * has scanned a lot and found nothing.
+ */
+export async function boundedExists(
+  operation: string,
+  read: (db: BoundReadDb) => Promise<unknown[]>,
+  bound: Bound,
+): Promise<boolean> {
+  try {
+    return (await bound(read, { operation, timeoutMs: supplementaryReadTimeoutMs() })).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadCoverage(
   projectId: string,
   window: PageWindow,
   db: PageDb = getDb(),
 ): Promise<HallucinationCoverage> {
   const at = sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
+  // Only call events carry an asked-for name or an error, and naming their types lets the
+  // (project, type, time) index answer: without it a project that sends neither is scanned in full.
   const inWindow = and(
     eq(traceEvents.projectId, projectId),
+    inArray(traceEvents.type, CALL_EVENT_TYPES),
     sql`${at} >= ${window.from} and ${at} < ${window.to}`,
   );
   const exists = async (query: Promise<unknown[]>) => (await query).length > 0;
   const [requestedToolIds, errorText, replies, modelReads] = await Promise.all([
-    exists(
-      db
-        .select({ one: sql`1` })
-        .from(traceEvents)
-        .where(and(inWindow, sql`${traceEvents.payload} ? 'requested_tool_id'`))
-        .limit(1),
+    boundedExists(
+      "hallucinations_coverage_requested",
+      (bound) =>
+        bound
+          .select({ one: sql`1` })
+          .from(traceEvents)
+          .where(and(inWindow, sql`${traceEvents.payload} ? 'requested_tool_id'`))
+          .limit(1),
+      (read, options) => withStatementTimeout(read, { ...options, db: db as never }),
     ),
-    exists(
-      db
-        .select({ one: sql`1` })
-        .from(traceEvents)
-        .where(and(inWindow, sql`${traceEvents.errorMessage} ~ '\\s'`))
-        .limit(1),
+    boundedExists(
+      "hallucinations_coverage_error_text",
+      (bound) =>
+        bound
+          .select({ one: sql`1` })
+          .from(traceEvents)
+          .where(and(inWindow, sql`${traceEvents.errorMessage} ~ '\\s'`))
+          .limit(1),
+      (read, options) => withStatementTimeout(read, { ...options, db: db as never }),
     ),
     exists(
       db
