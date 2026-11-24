@@ -86,6 +86,29 @@ function backendOf(meta: Pick<ModelCallMeta, "provider" | "backend">): string {
   return meta.provider === "anthropic" ? anthropicBackend() : "api";
 }
 
+/** Hears every call's outcome, its error included (the console's model status, ADR-0009 §13). */
+export type ModelCallListener = (record: ModelCallRecord) => void;
+
+const listeners = new Set<ModelCallListener>();
+
+/** Listen to every recorded call; returns a function that stops listening. */
+export function onModelCall(listener: ModelCallListener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function tell(record: ModelCallRecord): void {
+  for (const listener of listeners) {
+    try {
+      listener(record);
+    } catch {
+      // A listener's failure is not the call's failure.
+    }
+  }
+}
+
 /**
  * Report one model call. An edition that accounts for spend takes the raw record with the log
  * context (`TelemetryPort.recordModelCall`) and writes its own line; otherwise one `model_call`
@@ -93,6 +116,7 @@ function backendOf(meta: Pick<ModelCallMeta, "provider" | "backend">): string {
  * describes.
  */
 export function recordModelCall(record: ModelCallRecord): void {
+  tell(record);
   try {
     const recorder = composition.telemetry.recordModelCall;
     if (recorder) {

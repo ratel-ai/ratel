@@ -16,3 +16,19 @@ test("a member sees General only, as upstream's layout passes danger: isAdmin", 
 test("without the edition's page nobody gets the tab, an admin neither", () => {
   assert.deepEqual(labels("admin", false), ["General"]);
 });
+
+test("Models comes after General where the edition has the page, for every reader", () => {
+  const tabs = (role: "admin" | "member") =>
+    organizationSettingsTabsFor("acme", { role, hasDangerPage: true, hasModelsPage: true }).map(
+      (tab) => [tab.label, tab.href],
+    );
+  assert.deepEqual(tabs("admin"), [
+    ["General", "/org/acme/settings"],
+    ["Models", "/org/acme/settings/models"],
+    ["Danger zone", "/org/acme/settings/danger"],
+  ]);
+  assert.deepEqual(
+    tabs("member").map(([label]) => label),
+    ["General", "Models"],
+  );
+});

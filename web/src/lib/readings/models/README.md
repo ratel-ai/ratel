@@ -49,6 +49,8 @@ A row in `vendors.ts` (its address, its key variable, a model per tier) and a li
 | `providers/responses.ts` | The Responses API: OpenAI |
 | `providers/chat-completions.ts` | Chat completions: Gemini on Vertex AI, the other models on Bedrock, every server |
 | `providers/http.ts`, `cloud-auth.ts` | The request with its retries; the Google and AWS logins |
+| `explain.ts` | What a self-hoster reads when models do not work (ADR-0009 §13): each kind's setup or why it is off, and one sentence per failed call naming the setting to fix. Never a key or a provider's words |
+| `status.ts`, `schema.ts` | At boot (open-source edition): the setup in the log, then each failed call logged and kept per feature in `model_failures` for Organization settings > Models |
 
 The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts/models.ts`.
 

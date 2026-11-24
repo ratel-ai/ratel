@@ -77,6 +77,16 @@ recorded on a model the vendor serves is replayed on it.
 **12. The stand-ins stay.** `EVAL_GATE_MOCK_MODEL` and `MATCH_QUALITY_MOCK_ANALYST` keep their
 behaviour and their precedence. `fake` is for the tests of adapters and new features.
 
+**13. A wrong setup and a failed call say what to fix.** At start the log has one line per kind of
+model: its vendor, place and models, or why it is off (a name that is not a vendor, a missing key,
+region, project or address). Each failed call is logged as one sentence that names the vendor, the
+model, the status code and the setting to fix, at most once a minute per feature and sentence. The
+open-source edition keeps each feature's last failure (`model_failures`) and shows it in
+Organization settings > Models, read-only, with the setup and a check that asks each kind once.
+The sentences are built from setting names, vendors, model ids, places and status codes, never a
+key or a provider's own words. A model error never fails the health check: Ratel runs without
+models. Another edition reports its own models and gets neither the page nor the table writes.
+
 ## Consequences
 
 - A self-hoster can run every model feature on one vendor of their choice, with no outbound call at

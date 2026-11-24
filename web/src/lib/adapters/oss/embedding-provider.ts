@@ -22,6 +22,9 @@ export const LOCAL_EMBEDDING_DIMENSIONS = 256;
 export const LOCAL_EMBEDDING_MODEL = "local-hash-256";
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 
+/** OpenAI's embeddings, when no other address is set. */
+export const OPENAI_EMBEDDINGS_BASE_URL = "https://api.openai.com/v1";
+
 /** Lowercase word-ish runs. Matches nothing clever on purpose. */
 function tokenize(text: string): string[] {
   return text.toLowerCase().match(/[a-z0-9_]+/g) ?? [];
@@ -66,7 +69,7 @@ export function createOpenAiEmbeddingProvider(
   options: OpenAiEmbeddingOptions,
 ): EmbeddingProviderPort {
   const model = options.model ?? DEFAULT_OPENAI_EMBEDDING_MODEL;
-  const baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/+$/, "");
+  const baseUrl = (options.baseUrl ?? OPENAI_EMBEDDINGS_BASE_URL).replace(/\/+$/, "");
   const doFetch = options.fetch ?? fetch;
   return {
     model,
@@ -83,7 +86,10 @@ export function createOpenAiEmbeddingProvider(
         body: JSON.stringify({ model, input: texts }),
       });
       if (!response.ok) {
-        throw new Error(`embeddings endpoint answered ${response.status}`);
+        // The status alone: the console's model status reads it (ADR-0009 §13).
+        throw Object.assign(new Error(`embeddings endpoint answered ${response.status}`), {
+          status: response.status,
+        });
       }
       const body = (await response.json()) as {
         data?: Array<{ index: number; embedding: number[] }>;

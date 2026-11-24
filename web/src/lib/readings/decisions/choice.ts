@@ -184,6 +184,7 @@ export function choiceClient(config: ChoiceConfig): DecisionClient {
         throw new DecisionCallError(
           "credentials",
           `${vendor.label} rejected the API key (${response.status})`,
+          { status: response.status },
         );
       }
       if (response.status === 429) {
@@ -191,6 +192,7 @@ export function choiceClient(config: ChoiceConfig): DecisionClient {
         lastFailure = new DecisionCallError(
           "rate_limited",
           `${vendor.label} rate limited the request`,
+          { status: 429 },
         );
         if (!config.retryRateLimit) throw lastFailure;
         await sleep(retryAfterMs(response, attempt));
@@ -203,6 +205,7 @@ export function choiceClient(config: ChoiceConfig): DecisionClient {
         lastFailure = new DecisionCallError(
           "unavailable",
           `${vendor.label} returned ${response.status}: ${detail.slice(0, 200)}`,
+          { status: response.status },
         );
         // A 4xx is our request's shape, or a plan's usage running out: a retry will not change it.
         if (response.status < 500) break;
