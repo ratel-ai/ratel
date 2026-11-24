@@ -1,8 +1,6 @@
-import { getConfig } from "@/config";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
 import type { TextModel } from "@/lib/contracts/models";
-import { models } from "@/lib/readings/models";
 import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 import { type AnalystContext, buildAnalystPrompt } from "./context";
 import type { AnalystDiagnosis, AnalystProposal, AnalystResult } from "./types";
@@ -252,13 +250,6 @@ export function anthropicAnalystDeps(model: string): AnalystDeps {
   if (!text)
     throw new Error("No Claude backend is configured: set ANTHROPIC_BACKEND or ANTHROPIC_API_KEY");
   return analystDepsOver(text);
-}
-
-/** The deployment's analyst, whoever serves it. Throws when it has no model for it. */
-export function defaultAnalystDeps(): AnalystDeps {
-  const text = models.text("match_quality_analyst");
-  if (text) return analystDepsOver(text);
-  return anthropicAnalystDeps(getConfig().models.analyst || DEFAULT_ANALYST_MODEL);
 }
 
 /** Run the analyst over one assembled context. */
