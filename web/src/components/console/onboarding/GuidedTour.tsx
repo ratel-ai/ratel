@@ -14,8 +14,8 @@ import type { OnboardingTourStatus } from "@/lib/console/onboarding/tour-state";
 import {
   isSpotlightable,
   resolveTourSteps,
-  TOUR_STEPS,
   type TourStep,
+  tourSteps,
 } from "@/lib/console/onboarding/tour-steps";
 import { track } from "@/lib/platform/track-client";
 
@@ -53,6 +53,8 @@ export interface GuidedTourProps {
   isDemoProject: boolean;
   /** Analytics label for where the tour ran. */
   surface: string;
+  /** The Overview under the tour is the recap. */
+  focusedConsole: boolean;
   /** Persists the outcome. Resolves once the write lands. */
   onFinish: (
     status: OnboardingTourStatus,
@@ -127,7 +129,13 @@ function useTweenedRect(goal: Rect | null, from: () => Rect, duration: number): 
   return rect;
 }
 
-export function GuidedTour({ offer, isDemoProject, surface, onFinish }: GuidedTourProps) {
+export function GuidedTour({
+  offer,
+  isDemoProject,
+  surface,
+  focusedConsole,
+  onFinish,
+}: GuidedTourProps) {
   const [steps, setSteps] = useState<TourStep[] | null>(null);
   const [index, setIndex] = useState(0);
   const [target, setTarget] = useState<Rect | null>(null);
@@ -147,7 +155,7 @@ export function GuidedTour({ offer, isDemoProject, surface, onFinish }: GuidedTo
     if (!offer) return;
     let cancelled = false;
     let frame = 0;
-    const candidates = TOUR_STEPS.filter((step) => !step.demoOnly || isDemoProject);
+    const candidates = tourSteps(focusedConsole).filter((step) => !step.demoOnly || isDemoProject);
     const measure = () =>
       candidates
         .map((step) =>

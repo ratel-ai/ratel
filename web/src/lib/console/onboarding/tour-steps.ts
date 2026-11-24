@@ -95,6 +95,19 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
 ];
 
+/** The tour's steps; with `focusedConsole`, the first one says what the recap Overview shows. */
+export function tourSteps(focusedConsole: boolean): readonly TourStep[] {
+  if (!focusedConsole) return TOUR_STEPS;
+  return TOUR_STEPS.map((step) =>
+    step.id === "v2-overview"
+      ? {
+          ...step,
+          body: "The Health score, and your agents and MCP servers with the work that flows between them.",
+        }
+      : step,
+  );
+}
+
 /**
  * The steps that can actually run: those whose target is on the page, in
  * definition order. A tour that spotlights a missing element renders a hole in
