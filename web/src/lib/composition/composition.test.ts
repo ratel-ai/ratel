@@ -288,6 +288,7 @@ describe("registry root", () => {
         "before:intent_graph_fold_enqueue",
         "before:intent_engine_enqueue",
         "before:task_scores_enqueue",
+        "before:alerts_evaluate",
         "after:runtime_events_prune:retention",
         "after:runtime_event_rejects_prune:retention",
         "after:intent_graph_revisions_prune:retention",
@@ -301,6 +302,7 @@ describe("registry root", () => {
         "after:quality_snapshot_refresh",
         "after:match_quality_sweep",
         "after:what_if_prune",
+        "after:scorers_sweep",
       ],
     );
   });
