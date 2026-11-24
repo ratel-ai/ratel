@@ -537,7 +537,6 @@
         "web/src/lib/views/health/workflows-view.test.ts",
         "web/src/lib/views/health/workflows-view-fixtures.ts",
         "web/src/lib/views/traces/turn-detail.ts",
-        "web/src/lib/views/traces/turn-detail.test.ts",
         "web/src/lib/views/traces/turn-detail.integration.test.ts",
         "web/src/lib/views/traces/turn-detail-linked.ts",
         "web/src/lib/views/traces/turn-linked.ts",

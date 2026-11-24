@@ -13,6 +13,7 @@ import { StepGlyph } from "@/components/console/health/kinds";
 import { TurnAfter, TurnAsked } from "@/components/console/traces/TurnConversation";
 import { TurnLinkedPanel } from "@/components/console/traces/TurnLinkedPanel";
 import { formatDuration } from "@/lib/readings/trace-signals/claims";
+import { GROUP_OF } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import {
   agentHealthHref,
   evidenceTraceHref,
@@ -75,9 +76,10 @@ export function TurnDetailView({
   afterSearch = null,
   embedded = false,
 }: TurnDetailViewProps) {
-  // A false "done" is about the reply: it shows there, when the reply is on the page; else on its call.
+  // A false "done" (either completion kind) is about the reply: it shows there, when the reply is on the
+  // page; else on the call it was stored on.
   const onReply = conversation?.reply
-    ? hallucinations.filter((marker) => marker.kind === "claimed_done_after_failure")
+    ? hallucinations.filter((marker) => GROUP_OF[marker.kind] === "completion")
     : [];
   const onCalls = hallucinations.filter((marker) => !onReply.includes(marker));
   const started = new Date(turn.startedAt);

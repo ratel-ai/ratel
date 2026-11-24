@@ -121,3 +121,38 @@ test("the turn page rings the focused call, links the trace only when held, and 
   assert.doesNotMatch(unheld, /Open trace/);
   assert.doesNotMatch(unheld, /data-focused/);
 });
+
+test("both completion hallucinations sit under the reply, not on a call", () => {
+  const marker = (
+    kind: "claimed_done_after_failure" | "done_but_person_says_not" | "unknown_reference",
+  ) => ({
+    stepOrdinal: 2,
+    kind,
+    group: kind === "unknown_reference" ? "input" : "completion",
+    label: kind,
+    detail: `detail of ${kind}`,
+    href: `/project/${PROJECT_ID}/health/hallucinations?open=${kind}`,
+  });
+  const html = renderToStaticMarkup(
+    createElement(TurnDetailView, {
+      projectId: PROJECT_ID,
+      turn: detail(),
+      focusEventId: null,
+      conversation: { request: "move RC-40", reply: "Done, RC-40 is moved.", next: null },
+      hallucinations: [
+        marker("claimed_done_after_failure"),
+        marker("done_but_person_says_not"),
+        marker("unknown_reference"),
+      ],
+    }),
+  );
+  const reply = html.slice(html.indexOf('aria-label="Hallucinations in the reply"'));
+  assert.ok(reply.length < html.length, "the reply has its own list");
+  assert.match(reply, /data-hallucination-marker="claimed_done_after_failure"/);
+  assert.match(reply, /data-hallucination-marker="done_but_person_says_not"/);
+  assert.doesNotMatch(
+    reply,
+    /data-hallucination-marker="unknown_reference"/,
+    "an input one stays on its call",
+  );
+});
