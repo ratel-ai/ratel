@@ -46,11 +46,13 @@ defaults to localhost, a cloud region or a worldwide endpoint, and no request fo
 `fake` works only in local environments. `DECISION_ENGINE` is the private edition's and selects
 nothing in the core.
 
-**5. Tiers, and every default can be changed.** A feature asks for `deep`, `standard` or `fast`.
+**5. Defaults per feature, and every one can be changed.** A feature's row asks for a tier (`deep`,
+`standard` or `fast`), which is Ratel's own and not a setting.
 On Claude each keeps its model (Opus 5.5, Sonnet 5.5, Haiku 5.5) and its own setting. A vendor that
 serves Claude (`gcp`, `bedrock`) runs the same models; another hosted vendor has its nearest
-equivalents; a server has none until one is named. `MODEL_DEEP`, `MODEL_STANDARD` and `MODEL_FAST`
-change a tier and `MODEL_FEATURE_<FEATURE>` one feature.
+equivalents; a server has none until one is named. `MODEL_FEATURE_<FEATURE>` names
+one feature's model and `MODEL` every other's; one variable per tier was dropped, since a customer
+knows Ratel's features and not its tiers.
 
 **6. What a vendor lacks degrades.** Effort is sent where a model takes it. JSON is asked for by
 schema, then as an object, then by prompt. A model that thinks gets at least 4,096 tokens, since

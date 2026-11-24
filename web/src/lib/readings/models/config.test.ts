@@ -220,26 +220,33 @@ test("a vendor that serves Claude runs the same model as today", () => {
   }
 });
 
-test("a tier variable changes the tier on every vendor", () => {
+test("MODEL is the model of every feature, on every vendor", () => {
+  for (const vendor of [claude, openai, ollama, { name: "gcp" }, { name: "bedrock" }] as const) {
+    for (const row of FEATURES.filter((r) => r.kind !== "decision"))
+      assert.equal(modelIdFor(row, vendor, cfg({ MODEL: "one" })), "one", vendor.name);
+  }
+});
+
+test("the settings a feature has always read on Claude are ahead of MODEL", () => {
   const analyst = featureRow("match_quality_analyst");
-  assert.equal(modelIdFor(analyst, openai, cfg({ MODEL_DEEP: "gpt-next" })), "gpt-next");
-  assert.equal(modelIdFor(analyst, claude, cfg({ MODEL_DEEP: "claude-opus-5" })), "claude-opus-5");
-  assert.equal(
-    modelIdFor(analyst, { name: "gcp" }, cfg({ MODEL_DEEP: "gemini-4-carbon" })),
-    "gemini-4-carbon",
-  );
-  // The other tiers keep the vendor's own.
-  assert.equal(
-    modelIdFor(featureRow("workflow_label"), openai, cfg({ MODEL_DEEP: "gpt-next" })),
-    VENDORS.openai.models?.standard,
-  );
+  const env = { MODEL: "one", ANTHROPIC_MODEL: "claude-opus-5" };
+  assert.equal(modelIdFor(analyst, claude, cfg(env)), "claude-opus-5");
+  assert.equal(modelIdFor(analyst, openai, cfg(env)), "one");
+});
+
+test("a feature's size is Ratel's own: MODEL_DEEP, MODEL_STANDARD and MODEL_FAST are not settings", () => {
+  const env = { MODEL_DEEP: "x", MODEL_STANDARD: "x", MODEL_FAST: "x" };
+  for (const row of FEATURES.filter((r) => r.kind !== "decision")) {
+    assert.equal(modelIdFor(row, openai, cfg(env)), modelIdFor(row, openai, cfg({})), row.id);
+    assert.equal(modelIdFor(row, ollama, cfg(env)), null, row.id);
+  }
 });
 
 test("a feature's own variable changes that feature alone, ahead of everything", () => {
   const env = {
     MODEL_FEATURE_EVAL_GATE_JUDGE: "picked",
     EVAL_GATE_JUDGE_MODEL: "claude-haiku-4-5",
-    MODEL_FAST: "tier",
+    MODEL: "one",
   };
   for (const vendor of [claude, openai, ollama])
     assert.equal(
@@ -247,7 +254,7 @@ test("a feature's own variable changes that feature alone, ahead of everything",
       "picked",
       vendor.name,
     );
-  assert.equal(modelIdFor(featureRow("eval_gate_task_judge"), openai, cfg(env)), "tier");
+  assert.equal(modelIdFor(featureRow("eval_gate_task_judge"), openai, cfg(env)), "one");
 });
 
 test("a Claude model named for a feature is not sent to a vendor that has no Claude", () => {
@@ -257,14 +264,15 @@ test("a Claude model named for a feature is not sent to a vendor that has no Cla
   assert.equal(modelIdFor(analyst, { name: "bedrock" }, cfg(env)), "claude-opus-5");
 });
 
-test("a self-hosted server has no model until one is named; MODEL_STANDARD covers every tier", () => {
+test("a self-hosted server has no model until one is named: for every feature, or for one", () => {
   const analyst = featureRow("match_quality_analyst");
+  const label = featureRow("workflow_label");
   assert.equal(modelIdFor(analyst, ollama, cfg({})), null);
-  assert.equal(modelIdFor(analyst, ollama, cfg({ MODEL_STANDARD: "llama3.3" })), "llama3.3");
-  assert.equal(
-    modelIdFor(analyst, ollama, cfg({ MODEL_STANDARD: "llama3.3", MODEL_DEEP: "qwen-big" })),
-    "qwen-big",
-  );
+  const own = { MODEL_FEATURE_MATCH_QUALITY_ANALYST: "qwen-big" };
+  assert.equal(modelIdFor(analyst, ollama, cfg(own)), "qwen-big");
+  assert.equal(modelIdFor(label, ollama, cfg(own)), null);
+  assert.equal(modelIdFor(label, ollama, cfg({ ...own, MODEL: "llama3.3" })), "llama3.3");
+  assert.equal(modelIdFor(analyst, ollama, cfg({ ...own, MODEL: "llama3.3" })), "qwen-big");
 });
 
 test("the fake vendor names one model", () => {
@@ -286,7 +294,7 @@ test("MODEL_MAX_OUTPUT_TOKENS is a positive whole number; anything else stops th
 test("the settings need not come from the environment", () => {
   const config = resolveConfig({
     override: {
-      modelVendor: { name: "ollama", baseUrl: "http://box:11434", standard: "llama3.3" },
+      modelVendor: { name: "ollama", baseUrl: "http://box:11434", model: "llama3.3" },
     },
   });
   assert.equal(resolveModelVendor(config, "production")?.baseUrl, "http://box:11434/v1");

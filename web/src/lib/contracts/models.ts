@@ -4,7 +4,7 @@
  * per provider implements them. Types only: nothing here knows a vendor's request shape.
  */
 
-/** How strong a model a feature wants. The deployment maps each tier to a model. */
+/** How strong a model a feature wants. A vendor has a model per tier; a deployment sets none. */
 export type ModelTier = "deep" | "standard" | "fast";
 
 /** How hard to think, where the model takes the setting. Dropped where it does not. */

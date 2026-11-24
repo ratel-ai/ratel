@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
-import { FEATURES, type FeatureRow, featureRow, isFeature } from "./features";
+import { FEATURES, type FeatureRow, featureRow, featureVariable, isFeature } from "./features";
 
 const LIB = join(import.meta.dirname, "..", "..");
 
@@ -87,4 +87,10 @@ test("the Claude defaults are the ones the call sites use today", () => {
 test("an unknown feature is refused by name", () => {
   assert.equal(isFeature("nope"), false);
   assert.throws(() => featureRow("nope" as never), /nope/);
+});
+
+test("the sample environment lists every feature's own model variable", () => {
+  const sample = readFileSync(join(LIB, "..", "..", ".env.example"), "utf8");
+  for (const row of FEATURES.filter((feature) => feature.kind !== "decision"))
+    assert.match(sample, new RegExp(`^#   ${featureVariable(row.id)} `, "m"), row.id);
 });

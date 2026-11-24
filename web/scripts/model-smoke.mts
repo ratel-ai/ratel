@@ -5,7 +5,7 @@
  * A kind the environment selects nothing for is skipped. It exits non-zero when a step did not
  * behave. Nothing is stored. It costs a few cents on a hosted vendor.
  *
- *   MODEL_PROVIDER=ollama MODEL_BASE_URL=http://localhost:11434 MODEL_STANDARD=llama3.2:1b \
+ *   MODEL_PROVIDER=ollama MODEL_BASE_URL=http://localhost:11434 MODEL=llama3.2:1b \
  *   pnpm --filter @ratel/platform models:smoke
  */
 import { getConfig } from "@/config";

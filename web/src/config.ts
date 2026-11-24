@@ -276,11 +276,9 @@ const CONFIG_SCHEMA = schema({
     baseUrl: optional("MODEL_BASE_URL", configured),
     /** Ahead of the vendor's own key, and the only one sent to `baseUrl`. */
     apiKey: optional("MODEL_API_KEY", configured, { sensitive: true }),
-    /** The model of each tier; unset, the vendor's own. */
-    deep: optional("MODEL_DEEP", configured),
-    standard: optional("MODEL_STANDARD", configured),
-    fast: optional("MODEL_FAST", configured),
-    /** The model of one feature, by its id. */
+    /** The model of every feature; unset, the vendor's own for each. */
+    model: optional("MODEL", configured),
+    /** The model of one feature, by its id; ahead of `model`. */
     features: Object.fromEntries(
       FEATURES.filter((row) => row.kind !== "decision").map((row) => [
         row.id,

@@ -117,7 +117,7 @@ test("a provider without a model for the feature's tier gives no model", () => {
       null,
     );
     const model = models.text("workflow_label", {
-      config: cfg({ ...env, MODEL_STANDARD: "llama-3.3-70b" }),
+      config: cfg({ ...env, MODEL: "llama-3.3-70b" }),
       environment: "production",
     });
     assert.equal(model?.model, "llama-3.3-70b");
@@ -142,7 +142,7 @@ test("the adapter is told the feature, the payer and the provider's settings", (
       MODEL_PROVIDER: "custom",
       MODEL_BASE_URL: "http://x/v1",
       MODEL_API_KEY: "sk-test",
-      MODEL_FAST: "small",
+      MODEL: "small",
     };
     models.text("eval_gate_judge", {
       config: cfg(env),
@@ -176,7 +176,7 @@ test("MODEL_MAX_OUTPUT_TOKENS caps what a feature asks for", async () => {
     const env = {
       MODEL_PROVIDER: "custom",
       MODEL_BASE_URL: "http://x/v1",
-      MODEL_STANDARD: "m",
+      MODEL: "m",
       MODEL_MAX_OUTPUT_TOKENS: "4096",
     };
     const model = models.text("workflow_label", { config: cfg(env), environment: "production" });

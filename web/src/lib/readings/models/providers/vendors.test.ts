@@ -119,7 +119,7 @@ const TOOLS = [
 const LITELLM = {
   MODEL_PROVIDER: "litellm",
   MODEL_BASE_URL: "http://gateway.test",
-  MODEL_STANDARD: "gateway-model",
+  MODEL: "gateway-model",
 };
 const OPENAI = { MODEL_PROVIDER: "openai", OPENAI_API_KEY: "sk-openai" };
 
@@ -377,7 +377,7 @@ test("gcp: a Gemini model by name, on Vertex's chat completions", async () => {
   const seen = await on([completion({ content: "Hello" })], async () => {
     const model = models.text(
       "workflow_label",
-      at({ ...GCP, MODEL_STANDARD: "gemini-4-hydrogen", GOOGLE_CLOUD_LOCATION: "global" }),
+      at({ ...GCP, MODEL: "gemini-4-hydrogen", GOOGLE_CLOUD_LOCATION: "global" }),
     );
     assert.equal(model?.provider, "gcp.vertex_ai");
     await model?.complete({ ...ASK, effort: "xhigh" });
@@ -404,7 +404,7 @@ test("gcp: Gemini's thought signature goes back with the call it signed", async 
       },
     ],
   };
-  const env = { ...GCP, MODEL_DEEP: "gemini-4-carbon" };
+  const env = { ...GCP, MODEL: "gemini-4-carbon" };
   const seen = await on([completion(written), completion({ content: "done" })], async () => {
     const chat = models.chat("eval_gate_replay", at(env));
     const messages = [{ role: "user" as const, text: "go" }];
@@ -446,7 +446,7 @@ test("bedrock: another model by name, signed the same way over the body that is 
   const seen = await on([completion({ content: "Hello" })], async () => {
     const model = models.text(
       "workflow_label",
-      at({ ...BEDROCK, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }),
+      at({ ...BEDROCK, MODEL: "openai.gpt-oss-120b-1:0" }),
     );
     assert.equal(model?.provider, "aws.bedrock");
     await model?.complete(ASK);
@@ -463,7 +463,7 @@ test("bedrock: another model by name, signed the same way over the body that is 
 test("bedrock: an OpenAI model thinks within its cap, so a small cap is raised", async () => {
   const seen = await on([completion({ content: "Hello" })], async () => {
     await models
-      .text("workflow_label", at({ ...BEDROCK, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }))
+      .text("workflow_label", at({ ...BEDROCK, MODEL: "openai.gpt-oss-120b-1:0" }))
       ?.complete(ASK);
   });
   assert.equal(seen[0].body.max_completion_tokens, 4096);
@@ -475,7 +475,7 @@ test("bedrock: a Bedrock API key signs in place of the AWS login", async () => {
   const env = { ...BEDROCK, AWS_BEARER_TOKEN_BEDROCK: "bedrock-key" };
   const seen = await on([completion({ content: "Hello" })], async () => {
     await models
-      .text("workflow_label", at({ ...env, MODEL_STANDARD: "openai.gpt-oss-120b-1:0" }))
+      .text("workflow_label", at({ ...env, MODEL: "openai.gpt-oss-120b-1:0" }))
       ?.complete(ASK);
   });
   assert.equal(seen[0].headers.authorization, "Bearer bedrock-key");
@@ -491,7 +491,7 @@ test("each self-hosted server is asked at its own address, with a key only when 
         const env = {
           MODEL_PROVIDER: name,
           MODEL_BASE_URL: "http://box:9000/v1",
-          MODEL_STANDARD: "llama3.3",
+          MODEL: "llama3.3",
           OPENAI_API_KEY: "sk-openai",
         };
         await models.text("workflow_label", at(env))?.complete(ASK);
@@ -543,7 +543,7 @@ test("the cloud login is asked for on a call, not when a model is built", async 
   logins = 0;
   await on([], async () => {
     models.text("workflow_label", at(GCP));
-    models.text("workflow_label", at({ ...GCP, MODEL_STANDARD: "gemini-4-hydrogen" }));
+    models.text("workflow_label", at({ ...GCP, MODEL: "gemini-4-hydrogen" }));
   });
   assert.equal(logins, 0);
 });

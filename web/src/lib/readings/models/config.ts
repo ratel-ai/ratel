@@ -110,8 +110,8 @@ function claudeSetting(config: Config, setting: ClaudeModelSetting): string | un
 /**
  * The model a feature runs on with this vendor, or null when the deployment names none: the
  * feature's own setting; on a vendor that serves Claude, the settings the feature has always read;
- * the tier's setting; the vendor's model for the tier (on one that serves Claude, the feature's own
- * Claude model); and, on a vendor with no models of its own, the standard tier's setting.
+ * the model set for every feature (MODEL); the vendor's model for the feature's tier (on one that
+ * serves Claude, the feature's own Claude model). A server has no models of its own.
  */
 export function modelIdFor(
   feature: FeatureRow,
@@ -126,10 +126,10 @@ export function modelIdFor(
     ...(vendor.servesClaude
       ? (feature.settings ?? []).map((setting) => claudeSetting(config, setting))
       : []),
-    feature.tier ? modelVendor[feature.tier] : undefined,
+    modelVendor.model,
   ].find(Boolean);
   if (named) return named;
   if (vendor.servesClaude) return feature.claudeDefault ?? null;
   if (vendor.models) return feature.tier ? vendor.models[feature.tier] : null;
-  return modelVendor.standard ?? null;
+  return null;
 }

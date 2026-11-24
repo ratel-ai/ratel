@@ -30,7 +30,7 @@ const NO_MODEL: ReadonlyArray<[string, Record<string, string>, string]> = [
   ...["openai", "gcp", "bedrock", "ollama", "llama.cpp", "vllm", "litellm"].map(
     (name): [string, Record<string, string>, string] => [
       `${name} named, only a Claude key present`,
-      { MODEL_PROVIDER: name, ANTHROPIC_API_KEY: "k", MODEL_STANDARD: "m" },
+      { MODEL_PROVIDER: name, ANTHROPIC_API_KEY: "k", MODEL: "m" },
       "production",
     ],
   ),

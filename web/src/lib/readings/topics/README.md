@@ -21,7 +21,7 @@ queued by each signal run through `computeSeams.enqueueTopics`, which `register.
 (`OPENAI_API_KEY`; `TOPICS_MAX_JUDGE_TOKENS` caps a reading); names need
 a text model from the model kit (`readings/models`, ADR-0009): Claude with `ANTHROPIC_API_KEY`
 (`TOPICS_LABEL_MODEL`, else `TRACE_WORKFLOW_LABEL_MODEL`, else `readings/model-defaults.ts`), or
-the provider `MODEL_PROVIDER` names (its `MODEL_STANDARD`). With no key every ask is placed by wording, sentiment comes from
+the provider `MODEL_PROVIDER` names (its model for the feature). With no key every ask is placed by wording, sentiment comes from
 the lexicon and topics are named from their own asks (`label_source = 'words'`); nothing leaves
 the process (`readings/no-outbound-without-key.test.ts`).
 

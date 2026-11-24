@@ -10,8 +10,8 @@ type VendorKeys = Pick<Config, "openai" | "vendors">;
  *
  * `models` are the vendor's nearest equivalents of the Claude models each tier runs on today
  * (deep Opus 5.5, standard Sonnet 5.5, fast Haiku 5.5). A vendor that serves Claude itself
- * (`servesClaude`) keeps the very same models. Every one can be changed: `MODEL_DEEP`,
- * `MODEL_STANDARD`, `MODEL_FAST`, and `MODEL_FEATURE_<FEATURE>` for one feature.
+ * (`servesClaude`) keeps the very same models. Tiers are Ratel's own: a
+ * deployment names one model for everything (`MODEL`) or a feature's (`MODEL_FEATURE_<FEATURE>`).
  */
 
 export type VendorName =

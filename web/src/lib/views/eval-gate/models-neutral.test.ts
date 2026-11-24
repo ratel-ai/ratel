@@ -27,9 +27,8 @@ const cfg = (env: Record<string, string | undefined> = {}) => resolveConfig({ en
 const LITELLM = {
   MODEL_PROVIDER: "litellm",
   MODEL_BASE_URL: "http://gateway.test",
-  MODEL_DEEP: "big",
-  MODEL_STANDARD: "middle",
-  MODEL_FAST: "small",
+  MODEL: "small",
+  MODEL_FEATURE_EVAL_GATE_REPLAY: "big",
   ANTHROPIC_API_KEY: "sk-ant",
 };
 const OPENAI = {

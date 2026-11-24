@@ -42,7 +42,7 @@ function recording(text: string, stop: ModelStop = "end") {
 const OTHER = {
   MODEL_PROVIDER: "custom",
   MODEL_BASE_URL: "http://llm.test/v1",
-  MODEL_STANDARD: "llama-3.3-70b",
+  MODEL: "llama-3.3-70b",
 };
 
 test("a workflow label asks for the label schema, and a refusal throws", async () => {
@@ -130,10 +130,7 @@ test("the match-quality analyst asks for a long answer at high effort, and names
 test("a fix draft runs on another provider, end to end", async () => {
   resetJsonModes();
   assert.equal(draftModelAvailable(cfg(OTHER), "production"), true);
-  assert.equal(
-    draftModelAvailable(cfg({ ...OTHER, MODEL_STANDARD: undefined }), "production"),
-    false,
-  );
+  assert.equal(draftModelAvailable(cfg({ ...OTHER, MODEL: undefined }), "production"), false);
 
   const draft = draftModelFromEnv(cfg(OTHER), "production");
   assert.equal(draft?.model, "llama-3.3-70b");

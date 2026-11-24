@@ -66,10 +66,10 @@ The contracts (`TextModel`, `ChatModel`, `DecisionClient`) are in `lib/contracts
 | `litellm` | `MODEL_BASE_URL`, usually `MODEL_API_KEY` | name one | v1.110.2, over `llama3.2:1b` and `qwen2.5:0.5b` |
 | `custom` | `MODEL_BASE_URL` with its path | name one | `qwen2.5:0.5b` |
 
-The model of a feature, in order: `MODEL_FEATURE_<FEATURE>`; on a vendor that serves Claude, the
-feature's own settings (the `settings` column of `features.ts`); `MODEL_DEEP`, `MODEL_STANDARD`
-or `MODEL_FAST`; the vendor's model for the tier. A server has none of its own, and there
-`MODEL_STANDARD` serves every tier.
+The model of a feature, in order: `MODEL_FEATURE_<FEATURE>` (its id in capitals); on a vendor that
+serves Claude, the feature's own settings (the `settings` column of `features.ts`); `MODEL`; the
+vendor's model for the feature's tier. The tier (deep, standard or fast) is Ratel's own and not a
+setting. A server has no models of its own, so it needs `MODEL`, or a feature's own for that one.
 
 `MODEL_API_KEY` is ahead of a vendor's own key variable, and the only key sent to a
 `MODEL_BASE_URL`. `MODEL_MAX_OUTPUT_TOKENS` caps any call. `MODEL_PRICES` is JSON of model id to
