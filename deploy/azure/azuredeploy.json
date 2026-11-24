@@ -63,11 +63,18 @@
         "description": "2 vCPU and 8 GB of RAM or more."
       }
     },
+    "version": {
+      "type": "string",
+      "defaultValue": "latest",
+      "metadata": {
+        "description": "The Ratel release to run: X.Y.Z, latest or edge. The VM pins what latest is at its first boot."
+      }
+    },
     "ref": {
       "type": "string",
-      "defaultValue": "main",
+      "defaultValue": "",
       "metadata": {
-        "description": "The branch, tag or commit that install.sh checks out. Letters, digits and . _ / - only."
+        "description": "A branch or commit to build from source instead of the version. Empty for the release. Letters, digits and . _ / - only."
       }
     },
     "location": {
@@ -122,7 +129,7 @@
         }
       }
     ],
-    "bootstrap": "[concat('#!/bin/sh\n# Ratel bootstrap (deploy/azure): checks the inputs, hashes the password, then runs install.sh.\n# The inputs arrive base64-encoded, so no value can break out of the script.\nset -eu\nexport HOME=/root\nd() { echo \"$1\" | base64 -d; }\naccess=$(d ''', base64(parameters('accessMode')), '''); ref=$(d ''', base64(parameters('ref')), '''); domain=$(d ''', base64(concat(parameters('domain'), '')), '''); password=$(d ''', base64(concat(parameters('loginPassword'), '')), ''')\ncase \"$ref\" in \"\" | *[!A-Za-z0-9._/-]* | -* | *..*) echo \"ratel: bad ref\" >&2; exit 1 ;; esac\ncase \"$domain\" in *[!A-Za-z0-9.-]* | -* | .*) echo \"ratel: bad domain\" >&2; exit 1 ;; esac\nset -- --access private\nif [ \"$access\" = public ]; then\n  [ \"${#password}\" -ge 12 ] || { echo \"ratel: the public mode needs a password of 12 characters or more\" >&2; exit 1; }\n  apt-get update -q && apt-get install -yq apache2-utils\n  hash=$(htpasswd -nbBC 12 ratel \"$password\" | cut -d: -f2 | sed ''s/^[$]2y[$]/$2a$/'')\n  set -- --access public --tls ', variables('tls'), ' --auth-hash \"$hash\"\n  [ -z \"$domain\" ] || set -- \"$@\" --domain \"$domain\"\nfi\ncurl -fsSL \"https://raw.githubusercontent.com/ratel-ai/ratel/$ref/install.sh\" | sh -s -- --yes --ref \"$ref\" --dir /opt/ratel \"$@\"\n')]"
+    "bootstrap": "[concat('#!/bin/sh\n# Ratel bootstrap (deploy/azure): checks the inputs, hashes the password, then runs install.sh.\n# The inputs arrive base64-encoded, so no value can break out of the script.\nset -eu\nexport HOME=/root\nd() { echo \"$1\" | base64 -d; }\naccess=$(d ''', base64(parameters('accessMode')), '''); version=$(d ''', base64(concat(parameters('version'), '')), '''); ref=$(d ''', base64(concat(parameters('ref'), '')), '''); domain=$(d ''', base64(concat(parameters('domain'), '')), '''); password=$(d ''', base64(concat(parameters('loginPassword'), '')), ''')\ncase \"$version\" in \"\" | *[!A-Za-z0-9.-]* | -*) echo \"ratel: bad version\" >&2; exit 1 ;; esac\ncase \"$ref\" in *[!A-Za-z0-9._/-]* | -* | *..*) echo \"ratel: bad ref\" >&2; exit 1 ;; esac\ncase \"$domain\" in *[!A-Za-z0-9.-]* | -* | .*) echo \"ratel: bad domain\" >&2; exit 1 ;; esac\nset -- --access private\nif [ \"$access\" = public ]; then\n  [ \"${#password}\" -ge 12 ] || { echo \"ratel: the public mode needs a password of 12 characters or more\" >&2; exit 1; }\n  apt-get update -q && apt-get install -yq apache2-utils\n  hash=$(htpasswd -nbBC 12 ratel \"$password\" | cut -d: -f2 | sed ''s/^[$]2y[$]/$2a$/'')\n  set -- --access public --tls ', variables('tls'), ' --auth-hash \"$hash\"\n  [ -z \"$domain\" ] || set -- \"$@\" --domain \"$domain\"\nfi\nbranch=main\nif [ -n \"$ref\" ]; then branch=$ref; set -- --ref \"$ref\" --dir /opt/ratel \"$@\"; else set -- --version \"$version\" --dir /opt/ratel \"$@\"; fi\ncurl -fsSL \"https://raw.githubusercontent.com/ratel-ai/ratel/$branch/install.sh\" | sh -s -- --yes \"$@\"\n')]"
   },
   "resources": [
     {

@@ -51,7 +51,7 @@ pnpm install
 docker compose up db                       # Postgres 16 on localhost:5432
 cp web/.env.example web/.env.local
 pnpm --filter @ratel/platform dev          # http://localhost:3000; migrates on boot, then serves
-docker compose up --build                  # or the whole OSS edition in containers, http://localhost:3000
+docker compose -f docker-compose.yml -f docker-compose.build.yml up --build  # or the whole OSS edition in containers, http://localhost:3000
 ```
 
 ## Configuration
