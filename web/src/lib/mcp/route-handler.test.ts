@@ -338,6 +338,7 @@ test("get_flag_status lists every live flag, and still answers when one cannot b
   assert.deepEqual(keys, [
     "agentsPages",
     "evalGate",
+    "focusedConsole",
     "mcpApps",
     "rankingCatalogDrift",
     "toolRunInsights",

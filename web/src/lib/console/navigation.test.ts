@@ -93,6 +93,15 @@ test("with a project, the rail links every core destination to that project", ()
   );
 });
 
+test("focusedConsole off: the rail is the one without the flag", () => {
+  for (const projectId of [P1, undefined]) {
+    assert.deepEqual(
+      consoleNav({ projectId, additions: [], focusedConsole: false }),
+      consoleNav({ projectId, additions: [] }),
+    );
+  }
+});
+
 test("without a project, project-scoped destinations are absent, not disabled", () => {
   assert.deepEqual(consoleNav({ projectId: undefined, additions: [] }), []);
 });
