@@ -545,8 +545,8 @@ export function buildOverview(input: {
     taskOfTurn,
   );
 
-  // Day by day over the window.
-  const from = Date.parse(dayOf(new Date(input.now.getTime() - (input.windowDays - 1) * DAY_MS)));
+  // Day by day over the window, from its first (partial) day, so every answer counted above is on a day.
+  const from = Date.parse(dayOf(new Date(input.now.getTime() - input.windowDays * DAY_MS)));
   const days: string[] = [];
   for (let at = from; at <= input.now.getTime(); at += DAY_MS) days.push(dayOf(new Date(at)));
   const perDay = days.map((day) => {

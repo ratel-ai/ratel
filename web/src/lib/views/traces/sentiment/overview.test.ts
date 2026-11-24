@@ -252,6 +252,8 @@ test("satisfaction day by day averages each day with the days before it, so a da
       day.windowAnswers,
     ]),
     [
+      // The window's first day is partial (it opens at noon three days back) and has no answer here.
+      ["2026-08-31", 0, 0, null, 0],
       ["2026-09-01", 2, 1, 0.5, 2],
       // No answer that day: the line carries the days before it.
       ["2026-09-02", 0, 0, 0.5, 2],
@@ -261,11 +263,30 @@ test("satisfaction day by day averages each day with the days before it, so a da
   assert.deepEqual(page.reasons, [{ result: "not_completed", reason: "gave_up", tasks: 1 }]);
 });
 
+test("an answer on the window's partial first day is on the line, so the days add up to the headline", () => {
+  const early = task({ endedAt: new Date("2026-08-31T18:00:00Z") });
+  const later = task();
+  const page = overview([early, later], {
+    answers: [answer(early, false), answer(later, true)],
+  });
+  assert.deepEqual(page.daily[0], {
+    day: "2026-08-31",
+    answers: 1,
+    satisfied: 0,
+    satisfaction: 0,
+    windowAnswers: 1,
+  });
+  assert.equal(
+    page.daily.reduce((total, day) => total + day.answers, 0),
+    page.satisfaction.answers,
+  );
+});
+
 test("a day with no answer in its window is a gap", () => {
   const page = overview([task()]);
   assert.deepEqual(
     page.daily.map((day) => day.satisfaction),
-    [null, null, null],
+    [null, null, null, null],
   );
 });
 
