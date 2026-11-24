@@ -6,6 +6,7 @@ import {
   commandEntries,
   consoleNav,
   entryHref,
+  FEATURE_PAGES,
   findProject,
   ONBOARDING_ROUTE,
   organizationRoot,
@@ -433,6 +434,47 @@ test("an item is lit on every path it has absorbed, old URLs included", () => {
   assert.equal(active("/improvement/match-quality"), "quality");
   assert.equal(active("/runtime-events"), "settings");
   assert.equal(active("/calibrations"), null, "an absorbed path matches whole segments");
+});
+
+test("Scorers, Dashboards and Alerts each show under Overview only with their own flag on", () => {
+  const off = consoleNav({ projectId: P1, additions: [] });
+  assert.deepEqual(consoleNav({ projectId: P1, additions: [], featurePages: [] }), off);
+  assert.equal(off.find(({ id }) => id === "overview")?.children, undefined);
+  const items = {
+    scorers: ["scorers", "Scorers", `/project/${P1}/scorers`],
+    customDashboards: ["dashboards", "Dashboards", `/project/${P1}/dashboards`],
+    alerts: ["alerts", "Alerts", `/project/${P1}/alerts`],
+  };
+  for (const page of FEATURE_PAGES) {
+    const on = consoleNav({ projectId: P1, additions: [], featurePages: [page] });
+    const overview = on.find(({ id }) => id === "overview");
+    assert.equal(overview?.section, "group:monitor");
+    assert.deepEqual(
+      overview?.children?.map(({ id, label, href }) => [id, label, href]),
+      [["overview-summary", "Summary", `/project/${P1}`], items[page]],
+    );
+    // Everything else on the rail is as it was.
+    assert.deepEqual(
+      on.map((item) => (item.id === "overview" ? { ...item, children: undefined } : item)),
+      off.map((item) => (item.id === "overview" ? { ...item, children: undefined } : item)),
+    );
+  }
+});
+
+test("with every feature page on, the rail keeps 9 items and lights the open page", () => {
+  const on = consoleNav({ projectId: P1, additions: [], featurePages: FEATURE_PAGES });
+  assert.equal(on.length, 9);
+  assert.equal(activeNavItemId(`/project/${P1}`, on), "overview");
+  assert.equal(activeNavItemId(`/project/${P1}/insights`, on), "overview");
+  assert.equal(activeNavItemId(`/project/${P1}/scorers/s1`, on), "scorers");
+  assert.equal(activeNavItemId(`/project/${P1}/dashboards`, on), "dashboards");
+  assert.equal(activeNavItemId(`/project/${P1}/dashboards/d1`, on), "dashboards");
+  assert.equal(activeNavItemId(`/project/${P1}/alerts`, on), "alerts");
+});
+
+test("the organization rail has no feature page", () => {
+  const rail = { projectId: undefined, organizationSlug: "acme", additions: [] };
+  assert.deepEqual(consoleNav({ ...rail, featurePages: FEATURE_PAGES }), consoleNav(rail));
 });
 
 test("switching project keeps the section the reader is on", () => {

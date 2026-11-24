@@ -15,6 +15,12 @@ export const CORE_FLAGS = [
   "mcpApps",
   "agentsPages",
   "toolRunInsights",
+  // Owner: rstagi. Remove with the Scorers pages' stacked flag-removal PR, once on for all users.
+  "scorers",
+  // Owner: rstagi. Remove with the dashboards pages' stacked flag-removal PR, once on for all users.
+  "customDashboards",
+  // Owner: rstagi. Remove with the Alerts pages' stacked flag-removal PR, once on for all users.
+  "alerts",
 ] as const;
 
 export type CoreFlag = (typeof CORE_FLAGS)[number];
