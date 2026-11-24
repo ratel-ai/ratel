@@ -955,6 +955,7 @@
         "web/src/lib/synthesis/dashboard.test.ts",
         "web/src/lib/synthesis/dashboard-prompt-cache.test.ts",
         "web/src/lib/synthesis/traces/**",
+        "!web/src/lib/synthesis/traces/payload-content.ts",
         "!web/src/lib/synthesis/traces/queries.ts",
         "!web/src/lib/synthesis/traces/trace-filters.integration.test.ts",
         "!web/src/lib/synthesis/traces/summary-refresh.ts",

@@ -1284,6 +1284,7 @@
     { "from": "apps/web/lib/dashboard-prompt-cache.test.ts", "to": "web/src/lib/synthesis/dashboard-prompt-cache.test.ts", "mode": "copy" },
     { "from": "apps/web/lib/traces", "to": "web/src/lib/synthesis/traces", "mode": "copy" },
     { "from": "apps/web/lib/traces/content-view.ts", "to": "web/src/lib/ingest/otlp/content-view.ts", "mode": "copy" },
+    { "from": "apps/web/lib/traces/payload-content.ts", "to": "web/src/lib/synthesis/traces/payload-content.ts", "mode": "owned", "$why": "cites this repository's ADR-0007 (SDK wire contracts) for the payload; upstream names its own ADR-0013, which does not exist here" },
     { "from": "apps/web/lib/traces/queries.ts", "to": "web/src/lib/synthesis/traces/queries.ts", "mode": "owned", "$why": "settings and flags read through web/src/config.ts (RP-169)" },
     { "from": "apps/web/lib/traces/trace-filters.integration.test.ts", "to": "web/src/lib/synthesis/traces/trace-filters.integration.test.ts", "mode": "owned", "$why": "the entity fixture sets received_at a second in the past: PGlite's now() has millisecond resolution, so received_at = now() often equals the sweep's now() and the strict received_at < now() bound skips the span (a flaky test upstream too); back to copy once upstream fixes it" },
     { "from": "apps/web/lib/traces/summary-refresh.ts", "to": "web/src/lib/synthesis/traces/summary-refresh.ts", "mode": "owned", "$why": "the sweep cursor keeps microsecond precision (a string, not a Date); upstream rounds it to milliseconds and re-reads spans that share a receipt time forever" },
