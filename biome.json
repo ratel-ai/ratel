@@ -951,7 +951,6 @@
         "web/src/components/console/org/ProjectsList.tsx",
         "web/src/components/console/org/NewProjectButton.tsx",
         "web/src/components/console/org/OrgSkeleton.tsx",
-        "web/src/app/(console)/project/\\[projectId\\]/settings/layout.tsx",
         "web/src/lib/platform/chart.ts",
         "web/src/lib/synthesis/dashboard.ts",
         "web/src/lib/synthesis/dashboard.test.ts",

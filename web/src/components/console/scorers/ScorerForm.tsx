@@ -18,6 +18,7 @@ import {
   countScorerTracesAction,
   testScorerAction,
 } from "@/app/(console)/project/[projectId]/scorers/actions";
+import type { TaskOption } from "@/app/(console)/project/[projectId]/scorers/tasks";
 import type { TraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
 import { traceFilterFromSearch } from "@/lib/synthesis/traces/v2/filters";
 import {
@@ -43,6 +44,7 @@ import {
   type JudgeOutput,
   SCORER_KINDS,
   type ScorerDraft,
+  type ScorerFilter,
   type ScorerKind,
   TRACE_FIELDS,
 } from "@/lib/views/scorers/types";
@@ -50,6 +52,7 @@ import { TraceFilterBar } from "../traces/TraceFilterBar";
 import { ScoreValue } from "./parts";
 
 const ATTRIBUTE = "attribute";
+const ANY_TASK = "";
 const COUNT_DEBOUNCE_MS = 250;
 const FIELD_OPTIONS = [
   ...TRACE_FIELDS.map((field) => ({ value: field as string, label: FIELD_LABELS[field] })),
@@ -67,6 +70,8 @@ interface FormState {
   prompt: string;
   output: JudgeOutput;
   search: string;
+  /** A task id, or `ANY_TASK`. */
+  task: string;
   sampleRate: string;
 }
 
@@ -76,22 +81,27 @@ type FormErrors = { field?: DraftField; error: string } | null;
 export function ScorerForm({
   projectId,
   facets,
+  tasks,
+  initialTask,
   scorer,
 }: {
   projectId: string;
   facets: TraceFilterFacets;
+  tasks: readonly TaskOption[];
+  /** The task a new scorer starts from. */
+  initialTask?: string;
   /** Null: a new one. */
   scorer: (ScorerDraft & { id: string }) | null;
 }) {
   const router = useRouter();
   const root = scorersHref(projectId);
-  const [state, setState] = useState(() => stateOf(scorer));
+  const [state, setState] = useState(() => stateOf(scorer, initialTask));
   const [problem, setProblem] = useState<FormErrors>(null);
   const [saving, startSave] = useTransition();
   const [testing, startTest] = useTransition();
   const [results, setResults] = useState<PreviewResult[] | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
-  const matching = useMatchingCount(projectId, state.search);
+  const matching = useMatchingCount(projectId, state.search, state.task);
 
   const set = (change: Partial<FormState>) => {
     setState((current) => ({ ...current, ...change }));
@@ -190,9 +200,31 @@ export function ScorerForm({
 
           <Section
             title="2. Which traces"
-            description="Every new trace, or only the ones that match a filter."
+            description="Every new trace, or only the ones of a task or that match a filter."
           >
             <div className="flex flex-col gap-4">
+              <Field
+                label="Task"
+                description={
+                  scorer
+                    ? "A scorer keeps its task."
+                    : "With a task, a trace gets its result after the next Agent health reading, which runs once a day."
+                }
+              >
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    className="w-full max-w-96"
+                    options={[
+                      { value: ANY_TASK, label: "Any task" },
+                      ...tasks.map((task) => ({ value: task.id, label: task.name })),
+                    ]}
+                    value={state.task}
+                    disabled={scorer !== null}
+                    onValueChange={(task) => set({ task })}
+                  />
+                )}
+              </Field>
               <TraceFilterBar
                 tab="rollup"
                 search={state.search}
@@ -497,25 +529,33 @@ function TestResults({
 }
 
 /** How many traces of the last 7 days the filter matches; null while it counts. */
-function useMatchingCount(projectId: string, search: string): number | "failed" | null {
-  const [counted, setCounted] = useState<{ search: string; count: number | "failed" } | null>(null);
+function useMatchingCount(
+  projectId: string,
+  search: string,
+  task: string,
+): number | "failed" | null {
+  const [counted, setCounted] = useState<{
+    search: string;
+    task: string;
+    count: number | "failed";
+  } | null>(null);
   useEffect(() => {
     let current = true;
     const timer = setTimeout(async () => {
-      const result = await countScorerTracesAction(projectId, traceFilterFromSearch(search)).catch(
+      const result = await countScorerTracesAction(projectId, filterOf(search, task)).catch(
         () => null,
       );
-      if (current) setCounted({ search, count: result?.ok ? result.count : "failed" });
+      if (current) setCounted({ search, task, count: result?.ok ? result.count : "failed" });
     }, COUNT_DEBOUNCE_MS);
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, [projectId, search]);
-  return counted?.search === search ? counted.count : null;
+  }, [projectId, search, task]);
+  return counted?.search === search && counted.task === task ? counted.count : null;
 }
 
-function stateOf(scorer: ScorerDraft | null): FormState {
+function stateOf(scorer: ScorerDraft | null, initialTask: string = ANY_TASK): FormState {
   const blank: FormState = {
     name: "",
     kind: "check",
@@ -526,6 +566,7 @@ function stateOf(scorer: ScorerDraft | null): FormState {
     prompt: "",
     output: "boolean",
     search: "",
+    task: initialTask,
     sampleRate: "100",
   };
   if (!scorer) return blank;
@@ -534,6 +575,7 @@ function stateOf(scorer: ScorerDraft | null): FormState {
     name: scorer.name,
     kind: scorer.kind,
     search: searchOfFilter(scorer.filter),
+    task: scorer.filter.taskId ?? ANY_TASK,
     sampleRate: String(scorer.sampleRate),
   };
   if (scorer.kind === "judge") return { ...common, ...scorer.config };
@@ -548,6 +590,10 @@ function stateOf(scorer: ScorerDraft | null): FormState {
   };
 }
 
+function filterOf(search: string, task: string): ScorerFilter {
+  return { ...traceFilterFromSearch(search), ...(task === ANY_TASK ? {} : { taskId: task }) };
+}
+
 /** The form as `parseScorerDraft` reads it. */
 function draftOf(state: FormState, enabled: boolean) {
   const path =
@@ -559,7 +605,7 @@ function draftOf(state: FormState, enabled: boolean) {
       state.kind === "check"
         ? { path, op: state.op, ...(state.op === "exists" ? {} : { value: state.value }) }
         : { prompt: state.prompt, output: state.output },
-    filter: traceFilterFromSearch(state.search),
+    filter: filterOf(state.search, state.task),
     sampleRate: state.sampleRate.trim() === "" ? Number.NaN : Number(state.sampleRate),
     enabled,
   };

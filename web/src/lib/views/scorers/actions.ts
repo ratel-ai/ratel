@@ -68,6 +68,8 @@ export async function changeScorer(
         ok: false,
         error: "A scorer keeps its kind and its answer. Create a new scorer instead.",
       };
+    if (change.action === "update" && current.filter.taskId !== change.draft.filter.taskId)
+      return { ok: false, error: "A scorer keeps its task. Create a new scorer instead." };
     const done =
       change.action === "update"
         ? await deps.update(projectId, scorerId, change.draft, actor)

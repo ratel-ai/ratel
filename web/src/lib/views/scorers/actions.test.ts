@@ -33,6 +33,7 @@ test("an invalid scorer is refused and nothing is written", async () => {
     create({ ...checkDraft(), filter: { models: "gpt" } }),
     create({ ...checkDraft(), filter: { status: "slow" } }),
     create({ ...checkDraft(), filter: { minCostUsd: -1 } }),
+    create({ ...checkDraft(), filter: { taskId: " " } }),
     ...["", " ", "x".repeat(5001)].map((prompt) =>
       create(judgeDraft({ config: { prompt, output: "boolean" } })),
     ),
@@ -109,6 +110,18 @@ test("a scorer keeps its kind and its answer, and a scorer of another project is
     ).ok,
     false,
   );
+  const task = setup(checkDraft({ filter: { taskId: "task-a" } }));
+  for (const filter of [{}, { taskId: "task-b" }])
+    assert.equal((await changeScorer(update(checkDraft({ filter })), task.deps)).ok, false);
+  assert.equal(
+    (
+      await changeScorer(
+        update(checkDraft({ filter: { taskId: "task-a" } })),
+        setup(checkDraft({ filter: { taskId: "task-a" } })).deps,
+      )
+    ).ok,
+    true,
+  );
   const missing = setup();
   missing.deps.get = async () => null;
   for (const input of changes.slice(1))
@@ -116,7 +129,7 @@ test("a scorer keeps its kind and its answer, and a scorer of another project is
       ok: false,
       error: "The scorer does not exist.",
     });
-  for (const { writes } of [kind, scale, missing]) assert.equal(writes.length, 0);
+  for (const { writes } of [kind, scale, task, missing]) assert.equal(writes.length, 0);
 });
 
 function setup(current: ScorerDraft = checkDraft()) {

@@ -34,6 +34,7 @@ export function ScorerDetail({
   projectId,
   dashboards,
   scorer,
+  task,
   trend,
   latest,
   now,
@@ -42,6 +43,8 @@ export function ScorerDetail({
   /** The project's dashboards; null with `customDashboards` off. */
   dashboards: readonly { id: string; name: string }[] | null;
   scorer: ScorerItem;
+  /** The name of the task it is scoped to; null for every task. */
+  task: string | null;
   trend: readonly TrendDay[];
   latest: readonly LatestRow[];
   now: string;
@@ -114,6 +117,7 @@ export function ScorerDetail({
             { label: "Traces scored, 7 days", value: formatInteger(scorer.week?.scored ?? 0) },
             { label: "Sample", value: `${scorer.sampleRate}%` },
             { label: "Kind", value: KIND_LABELS[scorer.kind] },
+            ...(task ? [{ label: "Task", value: task }] : []),
           ]}
         />
         <Section title={scorer.verdict ? "Pass rate by day" : "Average by day"}>
@@ -131,9 +135,11 @@ export function ScorerDetail({
                 emblem
                 title="No results yet"
                 description={
-                  scorer.enabled
-                    ? "New matching traces get a result about two minutes after their last span."
-                    : "This scorer is off. Turn it on to score new traces."
+                  scorer.enabled && task
+                    ? "New traces of the task get a result after the next Agent health reading, which runs once a day."
+                    : scorer.enabled
+                      ? "New matching traces get a result about two minutes after their last span."
+                      : "This scorer is off. Turn it on to score new traces."
                 }
               />
             }

@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/platform/db/client";
 import { featureEnabled } from "@/lib/platform/experimental-features";
 import { getLogger } from "@/lib/platform/logger";
+import { CLOSED_SINCE_SLACK_MS } from "@/lib/readings/trace-signals/sweep";
 import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
 import { runCheck } from "./check";
 import { JUDGE_BATCH_SIZE, type JudgeDeps, judgeTraces } from "./judge";
@@ -78,7 +79,7 @@ const logger = getLogger("scorers/sweep");
  * no transaction is open during one, and no two ticks pay for the same trace; a crash in between
  * loses at most one batch of results. A result is unique per scorer and trace, so a repeated tick or
  * a summary written again adds nothing. Scorers take turns, one batch each, so a busy project does
- * not hold up the others.
+ * not hold up the others. A scorer of one task waits at the traces whose turns have no task yet.
  */
 export async function sweepScorers(
   options: SweepOptions = {},
@@ -145,12 +146,13 @@ async function sweepOneBatch(
   const slice = rowsOf<{ trace_id: string; updated_at: string; matches: boolean }>(
     await tx.execute(sql`
       select s.trace_id, s.updated_at::text as updated_at,
-        (s.spans_max_received_at >= c.created_at and ${filterCondition(scorer.filter)}) as matches
+        (s.spans_max_received_at >= c.created_at and ${filterCondition(scorer.projectId, scorer.filter)}) as matches
       from otel_trace_summaries s
       join trace_scorers c on c.id = ${scorer.id} and c.enabled
       where s.project_id = ${scorer.projectId}
         and (s.updated_at, s.trace_id) > (c.cursor_at, c.cursor_trace_id)
         and s.updated_at < ${settledBefore(settleMs)}
+        ${scorer.filter.taskId ? sql`and s.updated_at < ${placedBefore(scorer.projectId)}` : sql``}
       order by s.updated_at, s.trace_id
       limit ${batchSize}`),
   );
@@ -194,6 +196,17 @@ async function sweepOneBatch(
   );
   const written = await insertTraceScores(scores, tx);
   return { ...batch, written, skipped: traces.length - scores.length, toJudge: [] };
+}
+
+/**
+ * Up to when a trace's turn has its task, if it belongs to one: a signal run writes the task of
+ * each turn that closed before it (`trace_turns.workflow_id`). Null, so nothing, before the first.
+ */
+function placedBefore(projectId: string) {
+  return sql`(
+    select max(least(r.window_end, r.ledger_through)) - ${sql.raw(String(CLOSED_SINCE_SLACK_MS))} * interval '1 millisecond'
+    from trace_signal_runs r
+    where r.project_id = ${projectId} and r.status = 'completed')`;
 }
 
 /** Judge a claimed batch and store its results. False when the model answered none of it. */

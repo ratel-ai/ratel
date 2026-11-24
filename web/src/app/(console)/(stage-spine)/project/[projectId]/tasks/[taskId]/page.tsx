@@ -3,12 +3,17 @@ import { Section } from "@ratel/design-system/section";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TaskEvals } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskEvals";
-import { TaskScoring } from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskScoring";
+import {
+  SimulationScoring,
+  TaskLiveScoring,
+  TaskScoring,
+} from "@/app/(console)/(stage-spine)/project/[projectId]/tasks/[taskId]/TaskScoring";
 import { TaskGone } from "@/components/console/tasks/TaskGone";
 import { TasksNoDatabase } from "@/components/console/tasks/TasksView";
 import { TaskView } from "@/components/console/tasks/TaskView";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
+import { featureEnabled } from "@/lib/platform/experimental-features";
 import { evalGateEnabledFor } from "@/lib/views/eval-gate/gate";
 import { taskEvalSetFor } from "@/lib/views/task-evals/store";
 import { buildTaskDetail, taskNames } from "@/lib/views/tasks/model";
@@ -29,7 +34,7 @@ export default async function TaskPage({
 }) {
   if (!isDbConfigured()) return <TasksNoDatabase />;
   const { projectId, taskId } = await params;
-  const { project, organization } = await requireProjectScope(projectId);
+  const { project, organization, user } = await requireProjectScope(projectId);
   const [inputs, fixes] = await Promise.all([
     loadTasksInputs(project.id),
     loadTaskFixes(project.id, organization),
@@ -45,7 +50,14 @@ export default async function TaskPage({
         listHref={listHref}
       />
     );
-  const evalGate = await evalGateEnabledFor(organization);
+  const [evalGate, scorersOn] = await Promise.all([
+    evalGateEnabledFor(organization),
+    featureEnabled("scorers", {
+      projectId: project.id,
+      organizationId: organization.id,
+      actor: user.externalId,
+    }),
+  ]);
   const examples = await loadTaskExamples(project.id, task, {}, inputs.names);
   const testRuns = evalGate
     ? (await taskEvalSetFor(project.id, taskId)).cases
@@ -62,32 +74,39 @@ export default async function TaskPage({
       now={now}
       listHref={listHref}
       scoring={
-        evalGate ? (
-          <>
-            <TaskScoring
-              projectId={project.id}
-              taskId={taskId}
-              today={now.toISOString().slice(0, 10)}
-            />
-            <TaskEvals projectId={project.id} taskId={taskId} />
-            <Section
-              title="Simulations"
-              description="Test fixes on this task's past runs."
-              actions={
-                <Link
-                  href={`${topLevelTasksHref(project.id, taskId)}/simulations`}
-                  className={buttonVariants({ variant: "secondary" })}
-                >
-                  Open simulations
-                </Link>
-              }
-            >
-              <p className="text-ui text-fg-muted">
-                Edit a fix, add tests, and compare each scorer before and after.
-              </p>
-            </Section>
-          </>
-        ) : null
+        <>
+          {scorersOn ? <TaskLiveScoring projectId={project.id} taskId={taskId} now={now} /> : null}
+          {evalGate ? (
+            <>
+              {scorersOn ? (
+                <SimulationScoring projectId={project.id} taskId={taskId} />
+              ) : (
+                <TaskScoring
+                  projectId={project.id}
+                  taskId={taskId}
+                  today={now.toISOString().slice(0, 10)}
+                />
+              )}
+              <TaskEvals projectId={project.id} taskId={taskId} />
+              <Section
+                title="Simulations"
+                description="Test fixes on this task's past runs."
+                actions={
+                  <Link
+                    href={`${topLevelTasksHref(project.id, taskId)}/simulations`}
+                    className={buttonVariants({ variant: "secondary" })}
+                  >
+                    Open simulations
+                  </Link>
+                }
+              >
+                <p className="text-ui text-fg-muted">
+                  Edit a fix, add tests, and compare each scorer before and after.
+                </p>
+              </Section>
+            </>
+          ) : null}
+        </>
       }
     />
   );

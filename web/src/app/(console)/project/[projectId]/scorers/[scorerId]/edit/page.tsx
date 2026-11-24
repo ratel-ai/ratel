@@ -5,6 +5,7 @@ import { parseProjectUuid } from "@/lib/console/scope/cookie";
 import { getTraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
 import { getScorer } from "@/lib/views/scorers/store";
 import { resolveScorersPage } from "../../context";
+import { loadTaskOptions } from "../../tasks";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Edit scorer" };
@@ -28,7 +29,10 @@ export default async function EditScorerPage({
   const id = parseProjectUuid(scorerId);
   const scorer = id ? await getScorer(projectId, id) : null;
   if (!scorer) notFound();
-  const facets = await getTraceFilterFacets(projectId, { since: new Date(Date.now() - WEEK_MS) });
+  const [facets, tasks] = await Promise.all([
+    getTraceFilterFacets(projectId, { since: new Date(Date.now() - WEEK_MS) }),
+    loadTaskOptions(projectId, scorer.filter.taskId),
+  ]);
   const { createdAt: _created, updatedAt: _updated, projectId: _project, ...draft } = scorer;
-  return <ScorerForm projectId={projectId} facets={facets} scorer={draft} />;
+  return <ScorerForm projectId={projectId} facets={facets} tasks={tasks} scorer={draft} />;
 }
