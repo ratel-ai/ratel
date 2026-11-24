@@ -1,4 +1,5 @@
 import { gunzipSync, inflateSync } from "node:zlib";
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import {
   ingestRateLimitedResponse,
   type PublishableIngestLimits,
@@ -106,6 +107,8 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   checkEventQuota?: CheckEventQuota;
   incrementEventUsage?: IncrementEventUsage;
+  /** The edition's trace meters; absent, or not metering the organization, every trace is analyzed. */
+  traceMetering?: TraceMeteringPort;
   reportServerException?: ReportServerException;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
@@ -227,11 +230,17 @@ export async function handleTracesRequest(
     project_id: apiKey.projectId,
     ...(organization ? { org_id: organization.id } : {}),
   });
+  // A metered organization is never rejected here: over an allowance its traces are stored
+  // ingested-only or dropped, and the export still succeeds (no 429).
+  const meterTraces =
+    organization && deps.traceMetering
+      ? await deps.traceMetering.isMetered({ organization, projectId: apiKey.projectId })
+      : false;
   let quotaOrgId: string | undefined;
   if (organization && deps.checkEventQuota) {
     quotaOrgId = organization.id;
     const quota = await deps.checkEventQuota(organization);
-    if (!quota.ok) {
+    if (!meterTraces && !quota.ok) {
       return rejectTraceRequest(
         json({ error: quota.message }, 429),
         "quota",
@@ -336,6 +345,7 @@ export async function handleTracesRequest(
       quotaOrgId,
       endpoint: "/v1/traces",
       foldIntentGraph: true,
+      meterTraces,
     },
     {
       ...deps,

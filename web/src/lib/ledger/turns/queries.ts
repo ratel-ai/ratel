@@ -15,6 +15,7 @@ import {
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { traceEventHits, traceEvents } from "@/lib/ingest/trace-events/schema";
 import { jobs } from "@/lib/jobs/schema";
+import { analyzedTraceCondition } from "@/lib/platform/analysis-filter";
 import { getDb } from "@/lib/platform/db/client";
 import { projects } from "@/lib/platform/projects/schema";
 import {
@@ -109,6 +110,11 @@ function advanceCursorSet(through: Date | string) {
 export interface TurnEventPageRow extends TurnEventRow {
   /** `received_at` as Postgres text, for the cursor. */
   receivedAtRaw: string;
+  /**
+   * The edition stored this event's trace without analyzing it: no turn is built from it. Read in
+   * the page's own query, so the cursor still moves past it. Absent: not skipped.
+   */
+  analysisSkipped?: boolean;
 }
 
 /**
@@ -134,6 +140,7 @@ export async function listTurnEventsPage(
   types: readonly string[] = TURN_EVENT_TYPES,
 ): Promise<TurnEventPageRow[]> {
   const after = cursorValue(since);
+  const analyzed = analyzedTraceCondition(projectId, traceEvents.traceId);
   const columns = {
     id: traceEvents.id,
     type: traceEvents.type,
@@ -162,6 +169,7 @@ export async function listTurnEventsPage(
     agent: sql<
       string | null
     >`case when ${traceEvents.type} = ${AGENT_RUN_EVENT_TYPE} then ${traceEvents.payload} ->> 'agent' end`,
+    analysisSkipped: analyzed ? sql<boolean>`not ${analyzed}` : sql<boolean>`false`,
   };
   const inTypes = inArray(traceEvents.type, [...types]);
   const eventTime = sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { andAnalyzedTrace } from "@/lib/platform/analysis-filter";
 import { getDb } from "@/lib/platform/db/client";
 import type { WindowDays } from "@/lib/readings/trace-signals/view";
 
@@ -29,7 +30,8 @@ export async function loadInferredToolShare(
     select count(*)::int as tool_spans,
       count(*) filter (where attributes->>'ratel.tool.inferred' = 'true')::int as inferred
     from otel_spans
-    where project_id = ${projectId} and started_at >= ${since} and operation_name = 'execute_tool'`);
+    where project_id = ${projectId} and started_at >= ${since} and operation_name = 'execute_tool'
+      ${andAnalyzedTrace(projectId, sql`otel_spans.trace_id`)}`);
   const row = result.rows[0] as { tool_spans?: unknown; inferred?: unknown } | undefined;
   return { toolSpans: Number(row?.tool_spans ?? 0), inferred: Number(row?.inferred ?? 0) };
 }

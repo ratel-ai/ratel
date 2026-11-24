@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { andAnalyzedTrace } from "@/lib/platform/analysis-filter";
 import { getDb } from "@/lib/platform/db/client";
 import type {
   ModelFact,
@@ -33,6 +34,7 @@ export async function loadPartialFacts(
     runs as (
       select trace_id, duration_ms, status_code from otel_spans
       where project_id = ${projectId} and parent_span_id is null and started_at >= ${since}
+        ${andAnalyzedTrace(projectId, sql`otel_spans.trace_id`)}
     ),
     spans as (
       select s.* from otel_spans s join (select distinct trace_id from runs) r using (trace_id)

@@ -1,3 +1,4 @@
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import type {
   EventWithMetric,
   insertEventsWithMetrics as insertEventsWithMetricsFn,
@@ -71,6 +72,11 @@ export interface PersistSpansContext {
    * values, so an import reprocessed after a mapper fix reaches `otel_spans`.
    */
   spanConflict?: OtelSpanConflict;
+  /**
+   * Meter the batch's traces: the port's `isMetered` for this organization, read by the caller.
+   * Omitted or false, no trace is metered (the importer leaves it off).
+   */
+  meterTraces?: boolean;
 }
 
 export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
@@ -78,6 +84,8 @@ export interface PersistSpansDeps extends IntentGraphFoldScheduleDeps {
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
   incrementEventUsage?: IncrementEventUsage;
+  /** Decides each trace's outcome; used only when the context sets `meterTraces`. */
+  traceMetering?: Pick<TraceMeteringPort, "meterTraceBatch">;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** The span dimension derivation (`lib/ingest/otlp/dimensions`). Absent, the real one; a test passes one that throws. */
   deriveSpanDimensions?: typeof deriveSpanDimensions;
@@ -124,6 +132,7 @@ export async function persistDecodedSpans(
     endpoint,
     foldIntentGraph = false,
     spanConflict = "ignore",
+    meterTraces = false,
   }: PersistSpansContext,
   deps: PersistSpansDeps,
 ): Promise<PersistSpansResult> {
@@ -142,6 +151,32 @@ export async function persistDecodedSpans(
     });
     deps.captureFailure(err);
   }
+
+  // Trace meters before anything is stored: a trace's first batch decides it for every later one.
+  // A dropped trace stores nothing; an ingested-only one stores its spans and calls but writes no
+  // analysis ledger rows, so no analysis job reads it. Best-effort: when the meter fails, the
+  // batch is analyzed.
+  const skipAnalysis = new Set<string>();
+  if (meterTraces && organization && deps.traceMetering) {
+    try {
+      const outcomes = await deps.traceMetering.meterTraceBatch(
+        { organization, projectId },
+        distinctTraceIds(spans),
+      );
+      for (const [traceId, outcome] of outcomes)
+        if (outcome !== "analyzed") skipAnalysis.add(traceId);
+      spans = spans.filter((span) => outcomes.get(span.traceId) !== "dropped");
+      if (spans.length === 0) return { ok: true, accepted: 0, calls: 0, rows: [] };
+    } catch (err) {
+      logError("trace meter write failed", err, {
+        organization_id: organization.id,
+        project_id: projectId,
+      });
+      deps.captureFailure(err);
+    }
+  }
+  const analyzedSpans =
+    skipAnalysis.size === 0 ? spans : spans.filter((span) => !skipAnalysis.has(span.traceId));
 
   // Logs before spans: content sent as `gen_ai` log records that are already
   // stored joins its span as span events. Fail open: the call stays without them.
@@ -208,7 +243,7 @@ export async function persistDecodedSpans(
   // SDK funnel's anchor-less `ratel.search` spans into native search events (those
   // batches carry no LLM calls at all, so this must not hide behind rows.length).
   // Idempotent: every derived row's id is deterministic.
-  const ratelDerived = deriveRatelSearches(spans);
+  const ratelDerived = deriveRatelSearches(analyzedSpans);
   // When the SDK's spans ride the same trace as the host's LLM call (capture on
   // for both), the same search appears twice in one batch: as a captured
   // search_capabilities tool_call AND as a ratel.search span. Keep the span row
@@ -217,7 +252,7 @@ export async function persistDecodedSpans(
   const derived = [
     ...rows
       .flatMap((r, index) =>
-        r.event.payload && r.event.dedupeHash
+        r.event.payload && r.event.dedupeHash && !skipAnalysis.has(r.event.traceId ?? "")
           ? deriveGatewaySearches(r.event.payload, {
               dedupeHash: r.event.dedupeHash,
               occurredAt: r.event.occurredAt ?? r.metric.eventTime,
@@ -231,7 +266,7 @@ export async function persistDecodedSpans(
     ...ratelDerived,
     // Agent health: the host's own tool-call spans as ledger invocations.
     ...(await agentHealthToolRows(
-      spans,
+      analyzedSpans,
       projectId,
       {
         traceTurns: deps.traceTurns,
@@ -309,6 +344,11 @@ export async function persistDecodedSpans(
   await rejoinLateGenAiLogs(spans, genAiLogsRead, projectId, organization, deps);
 
   return { ok: true, accepted, calls: calls.length, rows };
+}
+
+/** The batch's trace ids, each once, in first-seen order. An empty id is not a trace. */
+function distinctTraceIds(spans: readonly DecodedSpan[]): string[] {
+  return [...new Set(spans.map((span) => span.traceId).filter((id) => id.length > 0))];
 }
 
 /**

@@ -1,0 +1,55 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { sql } from "drizzle-orm";
+import { createComposition } from "@/lib/composition";
+import { composition } from "@/lib/composition/ports";
+import type { AnalysisFilterPort } from "@/lib/contracts/analysis-filter";
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
+
+const SCOPE = { organization: { id: "org-1" }, projectId: "proj-1" };
+
+describe("trace metering default", () => {
+  it("meters nothing and analyzes every trace", async () => {
+    const { traceMetering } = createComposition("oss");
+    assert.equal(await traceMetering.isMetered(SCOPE), false);
+    assert.deepEqual(
+      [...(await traceMetering.meterTraceBatch(SCOPE, ["a", "b"]))],
+      [
+        ["a", "analyzed"],
+        ["b", "analyzed"],
+      ],
+    );
+    assert.equal((await traceMetering.meterTraceBatch(SCOPE, [])).size, 0);
+  });
+});
+
+describe("analysis filter default", () => {
+  it("filters nothing", () => {
+    const { analysisFilter } = createComposition("oss");
+    assert.equal(analysisFilter.analyzedTraceCondition("proj-1", sql`trace_id`), undefined);
+  });
+});
+
+describe("an edition", () => {
+  // Any complete port set: only the two ports under test matter here.
+  const { traceMetering: _m, analysisFilter: _f, ...required } = composition;
+
+  it("keeps the defaults when it supplies neither port", async () => {
+    const cloud = createComposition("cloud", { eeComposition: required });
+    assert.equal(await cloud.traceMetering.isMetered(SCOPE), false);
+    assert.equal(cloud.analysisFilter.analyzedTraceCondition("p", sql`t`), undefined);
+  });
+
+  it("replaces each port", () => {
+    const traceMetering: TraceMeteringPort = {
+      isMetered: async () => true,
+      meterTraceBatch: async () => new Map(),
+    };
+    const analysisFilter: AnalysisFilterPort = { analyzedTraceCondition: () => sql`true` };
+    const cloud = createComposition("cloud", {
+      eeComposition: { ...required, traceMetering, analysisFilter },
+    });
+    assert.equal(cloud.traceMetering, traceMetering);
+    assert.equal(cloud.analysisFilter, analysisFilter);
+  });
+});
