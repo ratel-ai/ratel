@@ -99,5 +99,5 @@ environment selects.
 `call-sites.test.ts` runs the features on a model that is not Claude, and
 `views/eval-gate/models-neutral.test.ts` the eval gate. The golden tests beside each site
 (`*.golden.test.ts`) hold the Claude path to the requests it sent before the kit. Decisions are in
-`readings/decisions` (`vendors.ts`, `DECISION_PROVIDER`); OpenAI, Levanto (Sage 2) and
-TypeSafe (Jev 1.14) were run live, and `custom` against Sage; Google was not. A reranker or an LLM as the judge is not built.
+`readings/decisions` (`vendors.ts`, `DECISION_PROVIDER`); OpenAI, Levanto (Sage 2),
+TypeSafe (Jev 1.14) and Google (Gemini Decision 1) were run live, and `custom` against Sage. A reranker or an LLM as the judge is not built.
