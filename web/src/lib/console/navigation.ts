@@ -105,7 +105,7 @@ export function consoleNav({
   entityPages?: boolean;
   /** `sentimentAnalysis` on for the shown organization (RC-357): Sentiment analysis under Traces. */
   sentiment?: boolean;
-  /** `hallucinationDetection` on for the shown organization (`cloud-hallucination-detection`): Hallucinations under Agent health. */
+  /** `hallucinationDetection` on for the shown organization: Hallucinations under Agent health. */
   hallucinations?: boolean;
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;

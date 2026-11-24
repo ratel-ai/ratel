@@ -4,7 +4,7 @@ import type { Organization } from "@/lib/platform/organizations";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 
 /**
- * Whether hallucination detection (`cloud-hallucination-detection`) is on:
+ * Whether hallucination detection (`hallucinationDetection`) is on:
  * the page under Agent health, its markers in Traces, and the reading that
  * fills them. Decided for the PROJECT's organization, never a person's active
  * one, so a rollout targets organizations by `organization_id`.
@@ -13,9 +13,8 @@ import { getOrganizationByProjectId } from "@/lib/platform/organizations";
  * default. Without the edition's flags port it is one switch for the
  * deployment, read from the configuration (or `experimentalFeatures` in the
  * open-source edition); with it, the edition decides it for the organization
- * (`featureEnabled`), after any value the operator forced. Upstream's names
- * and arguments are kept so call sites stay identical; the last argument is
- * the flag read's deps.
+ * (`featureEnabled`), after any value the operator forced. The last argument
+ * of each check is the flag read's deps.
  */
 export const HALLUCINATION_DETECTION_FLAG = "hallucinationDetection" as const;
 

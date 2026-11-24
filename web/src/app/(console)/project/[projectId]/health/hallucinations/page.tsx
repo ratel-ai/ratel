@@ -22,7 +22,7 @@ export const metadata = { title: "Hallucinations" };
  * Agent health, Hallucinations: what the agent made up (a tool that does not
  * exist, an input that does not, work it said was done), by group with each
  * group's share, each kind opening its tools and its calls in Traces. 404
- * unless `cloud-hallucination-detection` is on for the project's
+ * unless `hallucinationDetection` is on for the project's
  * organization. The window, the group and the open kind live in the URL.
  *
  * Owned (ADR-0004): the project comes from the console scope, and the switch is

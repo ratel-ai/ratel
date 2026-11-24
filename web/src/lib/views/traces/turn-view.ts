@@ -44,7 +44,7 @@ export async function loadTurnView(
     operation: "trace_turn_detail",
   });
   if (!turn) return null;
-  // Behind `cloud-hallucination-detection`: the turn's hallucinations, marked on the calls they sit on.
+  // Behind `hallucinationDetection`: the turn's hallucinations, marked on the calls they sit on.
   const [sentimentOn, hallucinationsOn] = await Promise.all([
     sentimentAnalysisEnabled(organization).catch(() => false),
     hallucinationDetectionEnabled(organization).catch(() => false),

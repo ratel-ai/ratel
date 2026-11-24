@@ -58,7 +58,7 @@ export interface TurnDetailViewProps {
   sessionHref?: string | null;
   /** What was asked, replied and said next; null while both flags that show it are off, or nothing was read. */
   conversation?: Conversation | null;
-  /** The turn's hallucinations, each on the call it sits on; empty while `cloud-hallucination-detection` is off. */
+  /** The turn's hallucinations, each on the call it sits on; empty while `hallucinationDetection` is off. */
   hallucinations?: readonly TurnMarker[];
   /** What the session ran next, when the turn ended on a search. */
   afterSearch?: AfterSearch | null;

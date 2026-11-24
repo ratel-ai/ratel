@@ -159,7 +159,7 @@ export default async function AgentHealthPage({
           ? loadTaskCompletionCard(project.id, windowDays)
           : null,
     }),
-    // Behind `cloud-hallucination-detection`, beside task completion. A failed read hides the tile.
+    // Behind `hallucinationDetection`, beside task completion. A failed read hides the tile.
     loadOrFallback<HallucinationRateCard | null>({
       operation: "agent_health_hallucination_rate",
       distinctId,

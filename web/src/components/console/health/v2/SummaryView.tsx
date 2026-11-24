@@ -119,7 +119,7 @@ export interface SummaryViewProps {
   imports: SummaryImports | null;
   /** `sentimentAnalysis`: task completion right above the issues; null hides it (off, or its read failed). */
   taskCompletion?: TaskCompletionCard | null;
-  /** `cloud-hallucination-detection`: the hallucination rate beside task completion; null hides it. */
+  /** `hallucinationDetection`: the hallucination rate beside task completion; null hides it. */
   hallucinationRate?: HallucinationRateCard | null;
   /** Root cause analysis, opened from task completion; null while closed. */
   rootCauses?: SummaryRootCauses | null;

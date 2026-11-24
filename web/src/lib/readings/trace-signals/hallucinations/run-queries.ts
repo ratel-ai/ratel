@@ -26,7 +26,6 @@ function chunks<T>(items: readonly T[], size: number = ID_CHUNK): T[][] {
   return out;
 }
 
-/** What the events of a page's calls say, by `trace_events` id. Text is read here and never stored. */
 /**
  * The window's turns whose cause a model read as a false success from the
  * person's next message (`outcomes/questions.ts`), with each one's end. Ids
@@ -60,7 +59,10 @@ export interface CallFacts {
   noSuchTool: Set<string>;
 }
 
-/** The facts of these events. An event that is pruned, or says none of this, is absent. */
+/**
+ * What the events of a page's calls say, by `trace_events` id: text is read
+ * here and never stored. An event that is pruned, or says none of this, is absent.
+ */
 export async function loadCallFacts(
   projectId: string,
   eventIds: readonly string[],

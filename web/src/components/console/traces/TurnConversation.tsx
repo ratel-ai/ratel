@@ -14,7 +14,8 @@ export function TurnAsked({
   conversation,
   fallback,
 }: {
-  conversation: Conversation /** The ask the model calls carry, when no message of the user's was read. */;
+  conversation: Conversation;
+  /** The ask the model calls carry, when no message of the user's was read. */
   fallback: string | null;
 }) {
   const asked = conversation.request ?? fallback;
@@ -30,7 +31,8 @@ export function TurnAfter({
   conversation,
   afterReply,
 }: {
-  conversation: Conversation /** What is about the reply itself, shown right under it. */;
+  conversation: Conversation;
+  /** What is about the reply itself, shown right under it. */
   afterReply?: ReactNode;
 }) {
   const { reply, next } = conversation;

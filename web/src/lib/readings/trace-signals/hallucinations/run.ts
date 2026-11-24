@@ -28,7 +28,7 @@ import type { RunBasis } from "@/lib/readings/trace-signals/workflows/run-basis"
  * run trusts, a page at a time, through the rules (`detect.ts`), then the two
  * guards that need the whole window, then one replace of the window's rows.
  *
- * Behind its switch (`cloud-hallucination-detection` for the project's
+ * Behind its switch (`hallucinationDetection` for the project's
  * organization, `gate.ts`): off, the reading loads nothing and writes
  * nothing. It shares the signal run's time budget and writes only after its
  * walk, so an overrun leaves the window's earlier rows as they were.

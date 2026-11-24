@@ -176,7 +176,7 @@ export interface ComputeJobDeps {
   /**
    * The window's hallucinations (`hallucinations/run.ts`): rewrites its
    * `trace_hallucinations` rows. Null when its switch is off for the
-   * project's organization (`cloud-hallucination-detection`).
+   * project's organization (`hallucinationDetection`).
    */
   recordHallucinations?: (
     projectId: string,
