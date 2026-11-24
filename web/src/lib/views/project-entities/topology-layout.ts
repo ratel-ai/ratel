@@ -124,12 +124,21 @@ function placeEdges(edges: readonly TopologyEdge[], nodes: readonly PlacedNode[]
     const to = byId.get(edge.to);
     return from && to && from !== to ? [{ edge, from, to }] : [];
   });
-  const leaving = ports(drawn.map(({ edge, from, to }) => [edge.from, side(from, to), to.y]));
-  const arriving = ports(drawn.map(({ edge, from, to }) => [edge.to, side(to, from), from.y]));
+  // Both ends of every edge, so what leaves a side and what arrives at it never meet.
+  const offsets = ports(
+    drawn.flatMap(({ edge, from, to }) => {
+      // An edge that goes back runs under the boxes, so it meets both of them lowest.
+      const back = to.x < from.x;
+      return [
+        [edge.from, side(from, to), back ? Number.POSITIVE_INFINITY : to.y] as const,
+        [edge.to, side(to, from), back ? Number.POSITIVE_INFINITY : from.y] as const,
+      ];
+    }),
+  );
   const labels: Point[] = [];
   return drawn.map(({ edge, from, to }, index) => {
-    const start = { x: edgeX(from, to), y: middle(from) + leaving[index] };
-    const end = { x: edgeX(to, from), y: middle(to) + arriving[index] };
+    const start = { x: edgeX(from, to), y: middle(from) + offsets[index * 2] };
+    const end = { x: edgeX(to, from), y: middle(to) + offsets[index * 2 + 1] };
     const sameColumn = from.x === to.x;
     const points = sameColumn ? [start, end] : route(start, end, from, to, nodes, index);
     const segments = points.slice(1).map((point, at) => ({ from: points[at], to: point }));
@@ -171,12 +180,17 @@ function ports(ends: readonly (readonly [id: string, side: string, otherY: numbe
   });
   const offsets = new Array<number>(ends.length).fill(0);
   for (const group of groups.values()) {
-    const ordered = [...group].sort((a, b) => ends[a][2] - ends[b][2] || a - b);
+    const ordered = [...group].sort((a, b) => compare(ends[a][2], ends[b][2]) || a - b);
     ordered.forEach((index, at) => {
       offsets[index] = spread(at, ordered.length);
     });
   }
   return offsets;
+}
+
+/** Infinity minus itself is no order. */
+function compare(a: number, b: number): number {
+  return a === b ? 0 : a - b;
 }
 
 function spread(index: number, count: number): number {
@@ -200,14 +214,14 @@ function route(
     .sort((a, b) => (forward ? a - b : b - a));
   const points = [start];
   for (const x of between) {
+    const column = nodes.filter((node) => node.x === x);
     const at = (x - start.x) / (end.x - start.x);
-    const wanted = start.y + (end.y - start.y) * at;
-    const y = nearestLane(
-      wanted,
-      nodes.filter((node) => node.x === x),
-    );
+    // An edge that goes back runs under the column, apart from the work that goes forward.
+    const y = forward
+      ? nearestLane(start.y + (end.y - start.y) * at, column)
+      : Math.max(...column.map((node) => node.y + node.height)) + TOPOLOGY_BOX.rowGap / 2;
     // Edges that share a lane run beside each other.
-    const lane = y + ((index % 5) - 2) * 3;
+    const lane = y + ((index % 5) - 2) * 4;
     const [near, far] = forward ? [x, x + TOPOLOGY_BOX.width] : [x + TOPOLOGY_BOX.width, x];
     points.push({ x: near, y: lane }, { x: far, y: lane });
   }
@@ -232,11 +246,11 @@ function labelPoint(
   nodes: readonly PlacedNode[],
   taken: readonly Point[],
 ): Point {
-  const open = segments.filter(
-    (segment) => segment.from.y !== segment.to.y || segments.length === 1,
-  );
-  const candidates = LABEL_STOPS.flatMap((at) =>
-    (open.length > 0 ? open : segments).map((s) => pointAt(s, at)),
+  // The gaps between the columns first, then the straight runs through them.
+  const gaps = segments.filter((_, at) => at % 2 === 0);
+  const runs = segments.filter((_, at) => at % 2 === 1);
+  const candidates = [...gaps, ...runs].flatMap((segment) =>
+    LABEL_STOPS.map((at) => pointAt(segment, at)),
   );
   const free = candidates.find(
     (point) =>
