@@ -103,7 +103,7 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
-  /** `sentimentAnalysis` on for the shown organization (`cloud-sentiment-analysis`, RC-357): Sentiment analysis under Traces. */
+  /** `sentimentAnalysis` on for the shown organization (RC-357): Sentiment analysis under Traces. */
   sentiment?: boolean;
   /** `hallucinationDetection` on for the shown organization (`cloud-hallucination-detection`): Hallucinations under Agent health. */
   hallucinations?: boolean;
@@ -494,7 +494,7 @@ function stageRailNav(
   ];
 }
 
-/** Sentiment analysis (`cloud-sentiment-analysis`, RC-357), a child of Traces. */
+/** Sentiment analysis (`sentimentAnalysis`, RC-357), a child of Traces. */
 function sentimentItem(root: string): NavItem {
   return {
     id: "traces-sentiment",

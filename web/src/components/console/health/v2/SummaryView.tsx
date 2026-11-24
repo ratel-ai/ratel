@@ -114,7 +114,7 @@ export interface SummaryViewProps {
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
   imports: SummaryImports | null;
-  /** `cloud-sentiment-analysis`: task completion right above the issues; null hides it (off, or its read failed). */
+  /** `sentimentAnalysis`: task completion right above the issues; null hides it (off, or its read failed). */
   taskCompletion?: TaskCompletionCard | null;
   /** `cloud-hallucination-detection`: the hallucination rate beside task completion; null hides it. */
   hallucinationRate?: HallucinationRateCard | null;

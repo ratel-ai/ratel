@@ -85,12 +85,11 @@ export function SentimentView({
 
 /** This page with its window and filters, as the host of the root causes panel. */
 function hostOf(model: SentimentPageModel): RootCauseHost {
-  const { filters, sort, thin } = model.query;
+  const { filters, sort } = model.query;
   const [path = "", query = ""] = sentimentHref(model.projectId, {
     days: model.windowDays,
     filters,
     sort,
-    thin,
   }).split("?");
   return { path, query };
 }

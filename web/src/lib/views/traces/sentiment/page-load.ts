@@ -23,20 +23,17 @@ import {
   loadTurnTimes,
   loadTurnTotals,
   loadTurnUsage,
-  loadTurnVersions,
   type PageDb,
 } from "@/lib/views/traces/sentiment/page-queries";
 import { loadUnmetSearches, withUnmetSearches } from "@/lib/views/traces/sentiment/unmet-search";
 
 /**
  * The Sentiment analysis page for one project and window: the stored outcome
- * rows, each turn's intent and catalog version, and whether the person's
- * words are there to read, built into the page (`page-model.ts`).
+ * rows, each turn's intent, and whether the person's words are there to read,
+ * built into the page (`page-model.ts`).
  */
 
-/** A row seen in fewer sessions than this is hidden. `TRACE_SIGNALS_OUTCOMES_MIN_SESSIONS` overrides it, as the signal floors do. */
-export const DEFAULT_MIN_SESSIONS = 3;
-
+/** An intent with fewer answers than this is ranked but marked as a hint (`traceOutcomes.minSessions`). */
 export function sentimentMinSessions(config: Pick<Config, "traceOutcomes"> = getConfig()): number {
   return config.traceOutcomes.minSessions;
 }
@@ -84,7 +81,7 @@ export async function readSentimentPageInput(
   const frictionTurnIds = explained
     .filter((task) => task.result === "completed_after_friction")
     .flatMap((task) => task.turnIds);
-  const [intents, versions, usage, times, failedCalls] = await Promise.all([
+  const [intents, usage, times, failedCalls] = await Promise.all([
     // One intent lookup for the turns with something to explain, the turns the person said how it went, and each task's first turn.
     loadTurnIntents(
       options.projectId,
@@ -95,7 +92,6 @@ export async function readSentimentPageInput(
       ],
       db,
     ),
-    loadTurnVersions(options.projectId, turnIds, db),
     loadTurnUsage(
       options.projectId,
       [...turnIds, ...explained.flatMap((task) => task.turnIds)],
@@ -127,7 +123,6 @@ export async function readSentimentPageInput(
           : null,
     })),
     intents,
-    versions,
     totals: { ...totals, textTurns: text.turns, messages: text.messages },
     modelConfigured: options.modelConfigured ?? outcomeModelConfigured(),
     costKnown,

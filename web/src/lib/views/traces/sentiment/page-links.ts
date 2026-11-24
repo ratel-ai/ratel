@@ -15,17 +15,10 @@ import {
   TASK_REASON_LABEL,
   TASK_REASON_MEANING,
 } from "@/lib/views/traces/sentiment/page-kinds";
-import {
-  type Cut,
-  type CutValue,
-  type IntentScore,
-  type IntentScores,
-  NO_INTENT,
-  OTHER_INTENTS,
-  type PageGroup,
-  type RootCauseRow,
-  type SentimentPageModel,
-  versionLabel,
+import type {
+  IntentScore,
+  IntentScores,
+  SentimentPageModel,
 } from "@/lib/views/traces/sentiment/page-model";
 import type { TaskFilter } from "@/lib/views/traces/sentiment/page-paths";
 import {
@@ -40,9 +33,8 @@ import {
 
 /**
  * The page model with every link built, so the client components take plain
- * data: where a row's intent, cause and tool filter to, where a cut's value
- * goes, how each filter is removed, and the pages either side. A new filter,
- * sort or thin switch starts again on the first page. Pure.
+ * data: where each status, reason, cause, tool and intent narrows the page
+ * to, how each filter is removed, and each sort. Pure.
  */
 
 /** A week by the Monday it starts on: "Aug 31". */
@@ -53,49 +45,11 @@ export function weekLabel(week: string): string {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-export interface RowView extends RootCauseRow {
-  /** The page narrowed to this row's intent, cause or tool. A folded row ("Other intents") has no one intent to narrow to. */
-  intentHref: string | null;
-  causeHref: string;
-  toolHref: string | null;
-  /** The tool in Catalog. */
-  catalogHref: string | null;
-  toolName: string | null;
-  toolKind: "tool" | "skill";
-  /** Each example's turn on Traces. */
-  exampleHrefs: string[];
-}
-
 export interface FilterChipView {
   field: keyof SentimentFilters;
   label: string;
   value: string;
   removeHref: string;
-}
-
-export interface CutValueView extends CutValue {
-  /** The page narrowed to this value, or without the filter when it is the active one. */
-  href: string;
-}
-
-export interface CutView {
-  values: CutValueView[];
-  more: number;
-}
-
-export interface GroupView extends Omit<PageGroup, "rows"> {
-  rows: RowView[];
-  /** The page narrowed to this cause. */
-  causeHref: string;
-}
-
-/** One way sessions ended, as a choice above the root causes; `outcome` null is every session. */
-export interface EndedView {
-  outcome: SessionOutcome | null;
-  label: string;
-  sessions: number;
-  href: string;
-  active: boolean;
 }
 
 export interface IntentScoreView extends IntentScore {
@@ -106,16 +60,6 @@ export interface IntentScoreView extends IntentScore {
 export interface IntentScoresView extends Omit<IntentScores, "satisfied" | "unsatisfied"> {
   satisfied: IntentScoreView[];
   unsatisfied: IntentScoreView[];
-}
-
-/** One task result or reason with the page narrowed to it, or back out when it is the active one. */
-export interface TaskChoiceView {
-  key: string;
-  label: string;
-  tasks: number;
-  share: number;
-  href: string;
-  active: boolean;
 }
 
 /** A task status with the page narrowed to it, or back out when it is the active one. */
@@ -210,25 +154,11 @@ export interface SentimentLinks {
   reasonStatuses: ReasonChoiceView[];
   /** Each reason of the picked result (of both, with none picked): picking one narrows the table to it. */
   reasonChoices: ReasonChoiceView[];
-  /** This page's rows, in the order listed. */
-  rows: RowView[];
-  groups: GroupView[];
-  /** The previous and next page; null at either end. */
-  prevHref: string | null;
-  nextHref: string | null;
   filters: FilterChipView[];
-  /** Every session, then each way a session can end: picking one narrows the root causes to its sessions. */
-  ended: EndedView[];
-  /** Each task result, and each reason a task was not completed: picking one narrows the root causes to those tasks. */
-  taskClasses: TaskChoiceView[];
-  taskReasons: TaskChoiceView[];
   /** The intents people were most and least satisfied with; null when messages were not read. */
   intentScores: IntentScoresView | null;
   clearHref: string;
-  /** The page with thin rows shown, or hidden again. */
-  thinHref: string;
   sortHrefs: Record<SentimentSort, string>;
-  cuts: { intent: CutView; tool: CutView; week: CutView; version: CutView };
 }
 
 const FILTER_LABEL: Record<keyof SentimentFilters, string> = {
@@ -236,7 +166,6 @@ const FILTER_LABEL: Record<keyof SentimentFilters, string> = {
   cause: "Cause",
   tool: "Tool",
   week: "Week of",
-  version: "Catalog version",
   outcome: "Sessions that ended",
   task: "Status",
   reason: "Reason",
@@ -249,47 +178,15 @@ export function sentimentLinks(
   host?: RootCauseHost,
 ): SentimentLinks {
   const { projectId, windowDays: days, query } = model;
-  const base = { days, sort: query.sort, thin: query.thin, surface, host };
+  const base = { days, sort: query.sort, surface, host };
   const here = (filters: Partial<SentimentFilters>) =>
     sentimentHref(projectId, { ...base, filters: { ...query.filters, ...filters } });
 
-  const view = (row: RootCauseRow): RowView => {
-    const entry = row.tool ? catalogEntryOf(row.tool) : null;
-    return {
-      ...row,
-      intentHref:
-        row.intent?.id === OTHER_INTENTS.id ? null : here({ intent: row.intent?.id ?? NO_INTENT }),
-      causeHref: here({ cause: row.cause }),
-      toolHref: row.tool ? here({ tool: row.tool }) : null,
-      catalogHref: row.tool ? catalogHref(projectId, row.tool) : null,
-      toolName: entry?.id ?? null,
-      toolKind: entry?.kind ?? "tool",
-      exampleHrefs: row.examples.map(
-        (example) =>
-          `/project/${encodeURIComponent(projectId)}/traces/turns/${encodeURIComponent(example.turnId)}`,
-      ),
-    };
-  };
-  const rows = model.rows.map(view);
-  const groups = model.groups.map(
-    (group): GroupView => ({
-      ...group,
-      rows: group.rows.map(view),
-      causeHref: here({ cause: group.cause }),
-    }),
-  );
-  const { page, pages } = model.pagination;
-  const pageHref = (to: number) =>
-    sentimentHref(projectId, { ...base, filters: query.filters, page: to });
-
   const valueOf: Record<keyof SentimentFilters, (value: string) => string> = {
-    intent: (value) =>
-      model.cuts.intent.values.find((v) => v.key === value)?.label ??
-      (value === NO_INTENT ? "No intent" : value),
+    intent: (value) => model.intentLabel ?? value,
     cause: (value) => CAUSE_LABEL[value as keyof typeof CAUSE_LABEL] ?? value,
     tool: (value) => catalogEntryOf(value).id,
     week: weekLabel,
-    version: versionLabel,
     outcome: (value) => SESSION_OUTCOME_LABEL[value as SessionOutcome] ?? value,
     task: (value) => TASK_FILTER_LABEL[value as keyof typeof TASK_FILTER_LABEL] ?? value,
     reason: (value) =>
@@ -313,31 +210,6 @@ export function sentimentLinks(
     },
   );
 
-  const cut = (field: "intent" | "tool" | "week" | "version", source: Cut): CutView => ({
-    more: source.more,
-    values: source.values.map((value) => ({
-      ...value,
-      href: here({ [field]: value.active ? null : value.key }),
-    })),
-  });
-
-  const ended: EndedView[] = [
-    {
-      outcome: null,
-      label: "All sessions",
-      sessions: model.split.total,
-      href: here({ outcome: null }),
-      active: query.filters.outcome === null,
-    },
-    ...model.split.classes.map((entry) => ({
-      outcome: entry.outcome,
-      label: SESSION_OUTCOME_LABEL[entry.outcome],
-      sessions: entry.sessions,
-      href: here({ outcome: entry.outcome }),
-      active: query.filters.outcome === entry.outcome,
-    })),
-  ];
-
   const scored = (list: readonly IntentScore[]) =>
     list.map((entry) => ({ ...entry, href: here({ intent: entry.intent.id }) }));
   const intentScores = model.intentScores
@@ -347,31 +219,6 @@ export function sentimentLinks(
         unsatisfied: scored(model.intentScores.unsatisfied),
       }
     : null;
-
-  const taskClasses = model.tasks.classes.map((entry): TaskChoiceView => {
-    const active = query.filters.task === entry.filter && query.filters.reason === null;
-    return {
-      key: entry.filter,
-      label: TASK_FILTER_LABEL[entry.filter],
-      tasks: entry.tasks,
-      share: entry.share,
-      href: here({ task: active ? null : (entry.filter as TaskFilter), reason: null }),
-      active,
-    };
-  });
-  const taskReasons = model.tasks.reasons.map((entry): TaskChoiceView => {
-    const active = query.filters.reason === entry.reason;
-    return {
-      key: entry.reason,
-      label: TASK_REASON_LABEL[entry.reason],
-      tasks: entry.tasks,
-      share: entry.share,
-      href: here(
-        active ? { task: null, reason: null } : { task: "not_completed", reason: entry.reason },
-      ),
-      active,
-    };
-  });
 
   const statuses = model.overview.statuses.map((entry): StatusView => {
     const active = query.filters.task === entry.filter && query.filters.reason === null;
@@ -497,28 +344,14 @@ export function sentimentLinks(
     reasonGroups,
     reasonStatuses,
     reasonChoices,
-    rows,
-    groups,
-    ended,
-    taskClasses,
-    taskReasons,
     intentScores,
-    prevHref: page > 1 ? pageHref(page - 1) : null,
-    nextHref: page < pages ? pageHref(page + 1) : null,
     filters,
     clearHref: sentimentHref(projectId, { ...base, filters: NO_SENTIMENT_FILTERS }),
-    thinHref: sentimentHref(projectId, { ...base, filters: query.filters, thin: !query.thin }),
     sortHrefs: Object.fromEntries(
       SENTIMENT_SORTS.map((sort) => [
         sort,
         sentimentHref(projectId, { ...base, filters: query.filters, sort }),
       ]),
     ) as Record<SentimentSort, string>,
-    cuts: {
-      intent: cut("intent", model.cuts.intent),
-      tool: cut("tool", model.cuts.tool),
-      week: cut("week", model.cuts.week),
-      version: cut("version", model.cuts.version),
-    },
   };
 }

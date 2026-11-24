@@ -417,7 +417,7 @@ const CONFIG_SCHEMA = schema({
       positive.min(1).transform(Math.floor),
       D.traceOutcomes.searchRunMax,
     ),
-    /** A Sentiment analysis row seen in fewer sessions than this is hidden. */
+    /** An intent with fewer answers than this is still ranked on Sentiment analysis, its score marked as a hint. */
     minSessions: setting(
       "TRACE_SIGNALS_OUTCOMES_MIN_SESSIONS",
       positive.min(1).transform(Math.floor),

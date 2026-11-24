@@ -21,7 +21,7 @@ import {
   loadFalseSuccessTurns,
   replaceHallucinations,
 } from "@/lib/readings/trace-signals/hallucinations/run-queries";
-import { recordOutcomes } from "@/lib/readings/trace-signals/outcomes/run";
+import { type OutcomeRunDeps, recordOutcomes } from "@/lib/readings/trace-signals/outcomes/run";
 import { outcomeRunDeps } from "@/lib/readings/trace-signals/outcomes/run-job";
 import {
   loadErrorMessages,
@@ -134,6 +134,32 @@ export interface Tracked {
   properties: Record<string, unknown>;
 }
 
+/** The outcome reading's deps on this database, rule-only: the suite asks no model, whatever the environment holds. */
+export function outcomeTestDeps(
+  db: Db,
+  budget: Parameters<typeof outcomeRunDeps>[0],
+  over: Partial<OutcomeRunDeps> = {},
+): OutcomeRunDeps {
+  return {
+    ...outcomeRunDeps(budget, null),
+    listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
+    loadBasis: async (p, w) => chooseRunBasis(await loadRunBasisCounts(p, w, db)),
+    loadErrors: (p, ids) => loadErrorMessages(p, ids, db),
+    loadSearchQueries: (p, ids) => loadSearchQueries(p, ids, db),
+    loadLastCalls: (p, ids) => loadLastCalls(p, ids, db),
+    replaceTurnRows: (p, range, rows, at) => replaceTurnOutcomes(p, range, rows, at, db),
+    loadSessionTurns: (p, ids) => loadSessionTurns(p, ids, db),
+    replaceSessionRows: (p, ids, rows, at) => replaceSessionOutcomes(p, ids, rows, at, db),
+    loadTaskVerdicts: (p, ids) => loadTaskVerdicts(p, ids, db),
+    replaceTaskRows: (p, ids, rows, at) => replaceTaskOutcomes(p, ids, rows, at, db),
+    loadReplyTexts: (p, turns) => loadTurnReplies(p, turns, db),
+    loadNextScopeReplies: (p, turns) => loadNextScopeReplies(p, turns, db),
+    writeReplyReactions: (p, rows) => writeReplyReactions(p, rows, db),
+    writeTurnResults: (p, rows) => writeTurnResults(p, rows, db),
+    ...over,
+  };
+}
+
 export function jobDeps(
   db: Db,
   now: Date,
@@ -194,24 +220,7 @@ export function jobDeps(
     // `outcomes/switch.integration.test.ts` runs the job with it off and on.
     outcomesEnabled: async () => true,
     recordOutcomes: (projectId, input, budget) =>
-      recordOutcomes(projectId, input, {
-        // Rule-only: the suite asks no model, whatever the environment holds.
-        ...outcomeRunDeps(budget, null),
-        listPage: (p, range, _db, limit) => listClosedTurnsPage(p, range, db, limit),
-        loadBasis: async (p, w) => chooseRunBasis(await loadRunBasisCounts(p, w, db)),
-        loadErrors: (p, ids) => loadErrorMessages(p, ids, db),
-        loadSearchQueries: (p, ids) => loadSearchQueries(p, ids, db),
-        loadLastCalls: (p, ids) => loadLastCalls(p, ids, db),
-        replaceTurnRows: (p, range, rows, at) => replaceTurnOutcomes(p, range, rows, at, db),
-        loadSessionTurns: (p, ids) => loadSessionTurns(p, ids, db),
-        replaceSessionRows: (p, ids, rows, at) => replaceSessionOutcomes(p, ids, rows, at, db),
-        loadTaskVerdicts: (p, ids) => loadTaskVerdicts(p, ids, db),
-        replaceTaskRows: (p, ids, rows, at) => replaceTaskOutcomes(p, ids, rows, at, db),
-        loadReplyTexts: (p, turns) => loadTurnReplies(p, turns, db),
-        loadNextScopeReplies: (p, turns) => loadNextScopeReplies(p, turns, db),
-        writeReplyReactions: (p, rows) => writeReplyReactions(p, rows, db),
-        writeTurnResults: (p, rows) => writeTurnResults(p, rows, db),
-      }),
+      recordOutcomes(projectId, input, outcomeTestDeps(db, budget)),
     enqueueTopics: async () => null,
     enqueueTaskScores: async () => null,
     enqueueExplore: async () => null,

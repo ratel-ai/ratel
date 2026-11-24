@@ -49,7 +49,7 @@ const inWindow = (projectId: string, window: PageWindow) =>
     lt(traceTurnOutcomes.endedAt, window.to),
   );
 
-/** The window's turns with something to explain, newest first, at most `max`. Their cost is read apart (`loadTurnCosts`). */
+/** The window's turns with something to explain, newest first, at most `max`. Their cost is read apart (`loadTurnUsage`). */
 export async function loadPageTurns(
   projectId: string,
   window: PageWindow,
@@ -108,29 +108,11 @@ export async function hasCostedModelCalls(
 }
 
 /**
- * What each turn's model calls cost: the calls of the traces its steps belong
- * to (or, for an OpenTelemetry turn, its own trace). A trace two turns share
- * is split evenly between them, so a cost is never counted twice. A turn with
- * no costed call is absent.
- */
-export async function loadTurnCosts(
-  projectId: string,
-  turnIds: readonly string[],
-  db: PageDb = getDb(),
-): Promise<Map<string, number>> {
-  const usage = await loadTurnUsage(projectId, turnIds, db);
-  return new Map(
-    [...usage]
-      .filter(([, used]) => used.costUsd !== null)
-      .map(([turnId, used]) => [turnId, used.costUsd!]),
-  );
-}
-
-/**
  * What each turn's model calls cost and how many tokens they used (input and
- * output), split between turns as `loadTurnCosts` does. A turn whose calls
- * were sent with neither is absent; one sent with tokens and no cost has a
- * null cost.
+ * output): the calls of the traces its steps belong to (or, for an
+ * OpenTelemetry turn, its own trace). A trace two turns share is split evenly
+ * between them, so a cost is never counted twice. A turn whose calls were sent
+ * with neither is absent; one sent with tokens and no cost has a null cost.
  */
 export async function loadTurnUsage(
   projectId: string,
@@ -512,7 +494,6 @@ export async function loadTurnIntents(
   return out;
 }
 
-/** The catalog version each turn ran on: the first of its steps' events that carries one. A turn that sent none is absent. */
 /**
  * The calls of each of these turns that failed, its calls in all, and the
  * time a failure wasted: the failed call itself and the wait before the next
@@ -571,26 +552,6 @@ export async function loadTurnTimes(
         and(eq(traceTurnOutcomes.projectId, projectId), inArray(traceTurnOutcomes.turnId, ids)),
       );
     for (const row of rows) out.set(row.turnId, { startedAt: row.startedAt, endedAt: row.endedAt });
-  }
-  return out;
-}
-
-export async function loadTurnVersions(
-  projectId: string,
-  turnIds: readonly string[],
-  db: PageDb = getDb(),
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const ids of chunks([...new Set(turnIds)])) {
-    const result = await db.execute<{ turn_id: string; catalog_version: string }>(sql`
-      select distinct on (s.turn_id) s.turn_id, e.catalog_version
-        from trace_turn_steps s
-        join trace_events e on e.id = s.trace_event_id
-       where s.turn_id in (${uuids(ids)}) and e.project_id = ${projectId}::uuid
-         and e.catalog_version is not null and e.catalog_version <> ''
-       order by s.turn_id, s.ordinal
-    `);
-    for (const row of result.rows) out.set(row.turn_id, row.catalog_version);
   }
   return out;
 }

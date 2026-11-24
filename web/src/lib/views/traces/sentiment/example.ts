@@ -14,19 +14,15 @@ import {
 import { loadAskSourcesByTurn } from "@/lib/readings/trace-signals/workflows/label-queries";
 
 /**
- * One example turn of a root cause, read on demand (`GET /api/projects/
- * :projectId/sentiment/turns/:turnId/example`): the person's request, what the
- * agent ran with each call's outcome and error, the agent's reply and the
- * person's next message, for a signed-in member of the project.
+ * One turn read on demand for the Traces turn view (`loadTurnConversation`):
+ * the person's request, what the agent ran with each call's outcome and
+ * error, the agent's reply and the person's next message.
  *
  * Nothing here is stored. The outcome rows hold closed values and ids; the
- * words are read from the turn's own events at the moment the Panel shows
- * them, cut to a bounded length, and never logged. A project that sends no
- * messages gets the steps and the errors only. Captured events are pruned
- * after 30 days, so an older turn may have its steps and no words.
- *
- * A route rather than a Server Action: a plain GET under `/api` is a read and
- * never re-renders the page.
+ * words are read from the turn's own events at the moment the turn is shown,
+ * cut to a bounded length, and never logged. A project that sends no messages
+ * gets the steps and the errors only. Captured events are pruned after 30
+ * days, so an older turn may have its steps and no words.
  */
 
 /** Steps listed at most; a turn with more says how many were left out. */
@@ -65,8 +61,6 @@ export interface TurnExample {
   next: string | null;
 }
 
-export type ExampleResult = { ok: true; example: TurnExample } | { ok: false; message: string };
-
 function cut(text: string | null | undefined, max: number): string | null {
   const trimmed = text?.trim();
   if (!trimmed) return null;
@@ -97,7 +91,6 @@ async function nextMessage(
   return result.rows[0]?.message ?? null;
 }
 
-/** The person's next message after any other turn: the ask of the session's next turn, when it is the person's own words. */
 /**
  * An OTel turn's next message: the person's next prompt in the session, as
  * the reading pairs them. It may have started no turn (no call after it), so
@@ -119,6 +112,7 @@ async function nextPrompt(
   return own < 0 ? null : (prompts[own + 1]?.text ?? null);
 }
 
+/** The person's next message after any other turn: the ask of the session's next turn, when it is the person's own words. */
 async function nextTurnAsk(
   db: BoundReadDb,
   projectId: string,
@@ -141,7 +135,6 @@ async function nextTurnAsk(
   return ask && ask.source !== "search" ? ask.text : null;
 }
 
-/** One turn's example, only within the project; null when the turn is not the project's. */
 /** The agent's last reply in a turn, from its stored model calls; null when none was kept. */
 async function replyOfTurn(
   db: BoundReadDb,
@@ -174,7 +167,7 @@ export interface TurnConversation {
 
 /**
  * The words around a turn, for the Traces turn view (behind
- * `cloud-sentiment-analysis`): read on demand like an example, cut to
+ * `sentimentAnalysis`): read on demand like an example, cut to
  * `EXAMPLE_MAX_TEXT_CHARS`, never stored or logged. Null for an unknown turn.
  */
 export async function loadTurnConversation(
@@ -231,6 +224,7 @@ export async function loadTurnConversation(
   };
 }
 
+/** One turn's example, only within the project; null when the turn is not the project's. */
 export async function loadTurnExample(
   db: BoundReadDb,
   projectId: string,
@@ -312,57 +306,4 @@ export async function loadTurnExample(
     ...example,
     text: example.request !== null || example.reply !== null || example.next !== null,
   };
-}
-
-export interface ExampleRouteDeps {
-  getSession: () => Promise<{ userId: string; externalId: string } | null>;
-  /** The project when the person is a member of it, with whether the page is on for its organization. */
-  findProject: (
-    projectId: string,
-    userId: string,
-  ) => Promise<{ projectId: string; organizationId: string; enabled: boolean } | null>;
-  loadExample: (projectId: string, turnId: string) => Promise<TurnExample | null>;
-  setLogContext: (context: { project_id: string; org_id: string; distinct_id: string }) => void;
-  logError: (fields: Record<string, unknown>, message: string) => void;
-  reportException: (
-    error: unknown,
-    distinctId: string,
-    properties: Record<string, unknown>,
-  ) => void;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const NOT_FOUND: ExampleResult = { ok: false, message: "This example isn't available." };
-
-export async function sentimentExampleResponse(
-  params: { projectId: string; turnId: string },
-  deps: ExampleRouteDeps,
-): Promise<Response> {
-  if (!UUID.test(params.turnId)) return json(404, NOT_FOUND);
-  const session = await deps.getSession();
-  if (!session) return json(401, { ok: false, message: "Sign in to see this example." });
-  // Not a member, or the page is off for the organization, reads exactly like a missing project: nothing to probe.
-  const project = await deps.findProject(params.projectId, session.userId);
-  if (!project || !project.enabled) return json(404, NOT_FOUND);
-  deps.setLogContext({
-    project_id: project.projectId,
-    org_id: project.organizationId,
-    distinct_id: session.externalId,
-  });
-  try {
-    const example = await deps.loadExample(project.projectId, params.turnId);
-    return example ? json(200, { ok: true, example }) : json(404, NOT_FOUND);
-  } catch (err) {
-    deps.logError({ err, project_id: project.projectId }, "sentiment example load failed");
-    deps.reportException(err, `project:${project.projectId}`, {
-      operation: "sentiment_example",
-      project_id: project.projectId,
-    });
-    return json(500, { ok: false, message: "Couldn't load this example. Try again in a moment." });
-  }
-}
-
-function json(status: number, body: ExampleResult): Response {
-  // People's and the agent's own words, per member: never shared, never stored.
-  return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
 }

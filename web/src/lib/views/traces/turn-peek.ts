@@ -17,6 +17,11 @@ const uuidOf = (raw: string | readonly string[] | undefined): string | null => {
   return value && UUID.test(value) ? value : null;
 };
 
+/** The turn id in an address's `turn` value, read as `parseTurnPeek` reads it; null when it is not one. */
+export function peekedTurnId(raw: string | null | undefined): string | null {
+  return uuidOf(raw ?? undefined);
+}
+
 /** The turn a page URL opens beside its list; null when it names none. */
 export function parseTurnPeek(
   search: Readonly<Record<string, string | string[] | undefined>>,

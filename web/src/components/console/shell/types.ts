@@ -28,7 +28,7 @@ export type ShellData = {
   projectNav: ProjectNavGroup[];
   /** The organizations with `agentsPages` on: their rail shows Agents and MCP servers under Traces. */
   entityPagesOrganizations?: readonly string[];
-  /** `cloud-sentiment-analysis` (RC-357): the organizations whose projects show Sentiment analysis under Traces. */
+  /** `sentimentAnalysis` (RC-357): the organizations whose projects show Sentiment analysis under Traces. */
   sentimentOrganizations?: readonly string[];
   /** `cloud-hallucination-detection`: the organizations whose projects show Hallucinations under Agent health. */
   hallucinationOrganizations?: readonly string[];

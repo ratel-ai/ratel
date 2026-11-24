@@ -6,7 +6,6 @@ import {
   NEGATIVE_REACTIONS,
   OUTCOME_CAUSES,
   REACTIONS,
-  RULE_SESSION_OUTCOMES,
   SATISFACTIONS,
   SESSION_OUTCOMES,
   type StoredFailureStreak,
@@ -16,20 +15,16 @@ import {
   CAUSE_MEANING,
   CAUSE_OWNER,
   CAUSE_OWNERS,
-  OWNER_LABEL,
   PAGE_CAUSES,
-  REACTION_LABEL,
   ROOT_CAUSES,
   rootCauseOf,
-  SATISFACTION_LABEL,
   SESSION_OUTCOME_LABEL,
   STORED_REACTIONS,
   sessionOutcomeOf,
-  TEXT_ONLY_OUTCOMES,
 } from "@/lib/views/traces/sentiment/page-kinds";
 import {
   buildSentimentPage,
-  type PageSession,
+  occurrencesOf,
   type PageTurn,
   type SentimentPageInput,
 } from "@/lib/views/traces/sentiment/page-model";
@@ -65,7 +60,6 @@ test("every stored cause reads as itself, with a label, a meaning and who fixes 
     ROOT_CAUSES.length,
     "no two causes share a label",
   );
-  for (const owner of CAUSE_OWNERS) assert.ok(OWNER_LABEL[owner].trim());
   assert.deepEqual(
     MODEL_CAUSES.map((cause) => [cause, CAUSE_OWNER[cause]]),
     [
@@ -88,17 +82,11 @@ test("every stored cause reads as itself, with a label, a meaning and who fixes 
   assert.equal(rootCauseOf(null), null);
 });
 
-test("every stored outcome, satisfaction and reaction has a label, under its stored name", () => {
+test("every stored outcome has a label and reads as stored; every reaction is counted under its stored name", () => {
   for (const outcome of SESSION_OUTCOMES) assert.ok(SESSION_OUTCOME_LABEL[outcome].trim(), outcome);
-  for (const satisfaction of SATISFACTIONS)
-    assert.ok(SATISFACTION_LABEL[satisfaction].trim(), satisfaction);
-  for (const reaction of STORED_REACTIONS) assert.ok(REACTION_LABEL[reaction].trim(), reaction);
   // The model layer stores a reaction it asked for and did not get as `unknown`.
   assert.deepEqual(STORED_REACTIONS, [...REACTIONS, "unknown"]);
-  assert.equal(REACTION_LABEL.unknown, "Not decided");
   assert.equal(SESSION_OUTCOME_LABEL.resolved_clean, "Resolved cleanly");
-  assert.equal(REACTION_LABEL.asks_human, "Asks for a human");
-  assert.equal(SATISFACTION_LABEL.unknown, "Not decided");
   for (const outcome of SESSION_OUTCOMES) {
     for (const source of ["rule", "model"] as const) {
       assert.deepEqual(
@@ -108,9 +96,6 @@ test("every stored outcome, satisfaction and reaction has a label, under its sto
       );
     }
   }
-  // The note under the split names only what the rules never write.
-  assert.deepEqual(TEXT_ONLY_OUTCOMES, ["escalated"]);
-  assert.ok(RULE_SESSION_OUTCOMES.includes("gave_up"), "the rules write gave up");
 });
 
 function streak(
@@ -127,7 +112,7 @@ function streak(
   };
 }
 
-test("the page model drops nothing the reading can write: every outcome, satisfaction, reaction, cause and follow-up is counted", () => {
+test("the page model drops nothing the reading can write: every satisfaction, reaction, cause and follow-up is counted", () => {
   const turns: PageTurn[] = [];
   const add = (over: Partial<PageTurn>) =>
     turns.push({
@@ -149,25 +134,14 @@ test("the page model drops nothing the reading can write: every outcome, satisfa
     for (const followed of FAILURE_FOLLOWED)
       add({ cause, causeSource: "rule", failures: [streak(cause, followed)] });
   // The model layer and the fusion: every cause a model can choose, with every satisfaction and reaction.
-  MODEL_CAUSES.forEach((cause, i) =>
+  for (const [i, cause] of MODEL_CAUSES.entries())
     add({
       cause,
       causeSource: "model",
       satisfaction: SATISFACTIONS[i % SATISFACTIONS.length]!,
       reaction: STORED_REACTIONS[i % STORED_REACTIONS.length]!,
-    }),
-  );
+    });
 
-  const sessions: PageSession[] = SESSION_OUTCOMES.flatMap((outcome) =>
-    (["rule", "model"] as const).map((source) => ({
-      sessionId: `o-${outcome}-${source}`,
-      outcome,
-      outcomeSource: source,
-      frictionCount: 0,
-      openRequest: false,
-      endedAt: AT,
-    })),
-  );
   const satisfaction = Object.fromEntries(SATISFACTIONS.map((value, i) => [value, i + 1]));
   const reactions = Object.fromEntries(STORED_REACTIONS.map((value, i) => [value, i + 1]));
   const input: SentimentPageInput = {
@@ -175,9 +149,8 @@ test("the page model drops nothing the reading can write: every outcome, satisfa
     windowDays: 30,
     now: NOW,
     turns,
-    sessions,
+    sessions: [],
     intents: new Map(),
-    versions: new Map(),
     totals: {
       turns: turns.length,
       answered: turns.length,
@@ -193,48 +166,33 @@ test("the page model drops nothing the reading can write: every outcome, satisfa
     capped: false,
     minSessions: 1,
   };
-  const page = buildSentimentPage(input, { ...DEFAULT_SENTIMENT_QUERY, thin: true });
-
-  // Sessions: each stored outcome is its own class, counted in full.
-  assert.deepEqual(
-    page.split.classes.map((entry) => [entry.outcome, entry.sessions]),
-    SESSION_OUTCOMES.map((outcome) => [outcome, 2]),
-  );
-  assert.equal(page.split.total, sessions.length);
+  const page = buildSentimentPage(input, DEFAULT_SENTIMENT_QUERY);
 
   // Answers: every stored satisfaction and reaction keeps its count.
   assert.deepEqual(page.text.satisfaction, satisfaction);
   assert.deepEqual(page.text.reactions, reactions);
 
-  // Causes: one row per stored cause, none folded into another, and only the rules' own `other` reads as other.
-  const causes = page.rows.map((row) => row.cause).sort();
-  assert.deepEqual(causes, [...OUTCOME_CAUSES, ...MODEL_CAUSES].sort());
-  assert.equal(page.rows.find((row) => row.cause === "other")?.sessions, FAILURE_FOLLOWED.length);
+  // Causes: each stored cause is its own root cause, none folded into another, and only the rules' own `other` reads as other.
+  const found = turns.flatMap(occurrencesOf);
+  assert.deepEqual(
+    [...new Set(found.map((occurrence) => occurrence.cause))].sort(),
+    [...OUTCOME_CAUSES, ...MODEL_CAUSES].sort(),
+  );
+  assert.equal(
+    found.filter((occurrence) => occurrence.cause === "other").length,
+    FAILURE_FOLLOWED.length,
+  );
   for (const cause of MODEL_CAUSES) {
-    const row = page.rows.find((r) => r.cause === cause);
+    const occurrence = found.find((o) => o.cause === cause);
     assert.deepEqual(
-      [row?.sessions, row?.readBy, row?.owner],
-      [1, "model", CAUSE_OWNER[cause]],
+      [occurrence?.source, occurrence?.unresolved],
+      [
+        "model",
+        // A correct refusal is never unresolved.
+        cause !== "correct_refusal",
+      ],
       cause,
     );
   }
-  assert.equal(
-    page.rows.find((row) => row.cause === "correct_refusal")?.unresolved,
-    0,
-    "a correct refusal is never unresolved",
-  );
-  assert.ok(
-    MODEL_CAUSES.filter((cause) => cause !== "correct_refusal").every(
-      (cause) => page.rows.find((row) => row.cause === cause)?.unresolved === 1,
-    ),
-  );
-
-  // Reactions on rows: every reaction a row's turns carry is counted under its stored name.
-  const onRows = page.rows.flatMap((row) => Object.keys(row.reactions));
-  assert.deepEqual(
-    [...new Set(onRows)].sort(),
-    [...STORED_REACTIONS].sort(),
-    "every stored reaction, the undecided one included, is counted on a row",
-  );
   assert.ok(NEGATIVE_REACTIONS.every((reaction) => REACTIONS.includes(reaction)));
 });

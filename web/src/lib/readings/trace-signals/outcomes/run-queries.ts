@@ -464,23 +464,6 @@ export async function replaceTaskOutcomes(
   });
 }
 
-/** The trace each of these `trace_events` ids belongs to, by event id; an event with none is absent. */
-export async function loadEventTraces(
-  projectId: string,
-  eventIds: readonly string[],
-  db: OutcomesDb = getDb(),
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const ids of chunks([...new Set(eventIds)])) {
-    const rows = await db
-      .select({ id: traceEvents.id, traceId: traceEvents.traceId })
-      .from(traceEvents)
-      .where(and(eq(traceEvents.projectId, projectId), inArray(traceEvents.id, ids)));
-    for (const row of rows) if (row.traceId) out.set(row.id, row.traceId);
-  }
-  return out;
-}
-
 /** One turn's reaction inferred from the agent's next reply; null clears it. */
 export interface ReplyReactionRow {
   turnId: string;
@@ -488,7 +471,11 @@ export interface ReplyReactionRow {
   source: "rule" | "model" | null;
 }
 
-/** Writes the inferred reactions on the turns' rows: every turn read gets its value, or null. */
+/**
+ * Writes the inferred reactions on the turns' rows: every turn read gets its
+ * value, or null. A model's reading is kept when this reading has only the
+ * rules to go by, as `writeTurnResults` keeps a model's result.
+ */
 export async function writeReplyReactions(
   projectId: string,
   rows: readonly ReplyReactionRow[],
@@ -503,7 +490,8 @@ export async function writeReplyReactions(
       );
       await tx.execute(sql`
         update trace_turn_outcomes as o
-           set reply_reaction = v.reaction, reply_reaction_source = v.source
+           set reply_reaction = case when o.reply_reaction_source = 'model' and v.source is distinct from 'model' then o.reply_reaction else v.reaction end,
+               reply_reaction_source = case when o.reply_reaction_source = 'model' and v.source is distinct from 'model' then o.reply_reaction_source else v.source end
           from (values ${values}) as v(turn_id, reaction, source)
          where o.project_id = ${projectId}::uuid and o.turn_id = v.turn_id
       `);

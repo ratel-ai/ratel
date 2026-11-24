@@ -197,3 +197,15 @@ test("the shell decides hallucinationDetection per organization and the rail rea
     /hallucinationOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*hallucinations,/,
   );
 });
+
+test("Sentiment analysis is not found unless sentimentPageScope gives a project", () => {
+  // The decision itself is tested in `views/traces/sentiment/page-scope.test.ts`. Root cause
+  // analysis is a panel: its page only redirects to Agent health, which reads the switch itself.
+  const page = "app/(console)/project/[projectId]/traces/sentiment/page.tsx";
+  const text = source(page);
+  assert.match(
+    text,
+    /const scope = await sentimentPageScope\(projectId\);\s*if \(!scope\) notFound\(\);/,
+  );
+  assert.doesNotMatch(text, /getProjectScope\(/, "it reads its project only through the check");
+});

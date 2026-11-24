@@ -1,17 +1,10 @@
 import { notFound } from "next/navigation";
 import { SentimentView } from "@/components/console/sentiment/SentimentView";
 import { loadPanelTurn } from "@/components/console/turn-panel/load";
-import { getProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
-import {
-  loadRootCauses,
-  loadSentimentPage,
-  sentimentMinSessions,
-} from "@/lib/views/traces/sentiment/page-load";
+import { loadRootCauses, loadSentimentPage } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
 import {
   parseRootCauseQuery,
@@ -19,13 +12,14 @@ import {
   parseSentimentWindow,
   sentimentHref,
 } from "@/lib/views/traces/sentiment/page-paths";
+import { sentimentPageScope } from "@/lib/views/traces/sentiment/page-scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sentiment analysis" };
 
 /**
  * Traces, Sentiment analysis (RC-357): how people took the agent's work, by
- * task status, cause, intent and day. 404 unless `cloud-sentiment-analysis`
+ * task status, cause, intent and day. 404 unless `sentimentAnalysis`
  * is on for the project's organization. Window and filters live in the URL.
  *
  * Owned (ADR-0004): the project comes from the console scope, and the switch is
@@ -38,10 +32,10 @@ export default async function SentimentAnalysisPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) notFound();
   const { projectId } = await params;
-  const { project, organization } = await getProjectScope(projectId);
-  if (!(await sentimentAnalysisEnabled(organization))) notFound();
+  const scope = await sentimentPageScope(projectId);
+  if (!scope) notFound();
+  const { project, organization } = scope;
 
   const search = await searchParams;
   const limits = getAgentHealthLimits(organization);
@@ -52,7 +46,7 @@ export default async function SentimentAnalysisPage({
   const model = await loadOrFallback({
     operation: "sentiment_page",
     distinctId: `project:${project.id}`,
-    fallback: unavailableSentimentPage(project.id, windowDays, query, sentimentMinSessions()),
+    fallback: unavailableSentimentPage(project.id, windowDays, query),
     load: () => loadSentimentPage({ projectId: project.id, windowDays, query, now }),
   });
 
@@ -63,7 +57,6 @@ export default async function SentimentAnalysisPage({
         days: option.days,
         filters: query.filters,
         sort: query.sort,
-        thin: query.thin,
       }),
       label: `${option.days} days`,
       active: option.days === windowDays,
@@ -75,12 +68,7 @@ export default async function SentimentAnalysisPage({
     ? await loadOrFallback({
         operation: "sentiment_root_causes",
         distinctId: `project:${project.id}`,
-        fallback: unavailableSentimentPage(
-          project.id,
-          windowDays,
-          rootCauseQuery,
-          sentimentMinSessions(),
-        ),
+        fallback: unavailableSentimentPage(project.id, windowDays, rootCauseQuery),
         load: () =>
           loadRootCauses({ projectId: project.id, windowDays, query: rootCauseQuery, now }),
       })

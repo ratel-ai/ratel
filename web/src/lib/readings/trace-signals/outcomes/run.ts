@@ -90,8 +90,10 @@ import type { RunBasis } from "@/lib/readings/trace-signals/workflows/run-basis"
  * project's organization has Sentiment analysis on (`questions-gate.ts`), the
  * model layer (`model-read.ts`) then asks its closed questions about the same
  * turns, capped and cached, and its answers go on the rows the rules just
- * wrote. Without either, no text is loaded, no call is made and the rows are
- * rule-only; the summary says which was missing (`questionsOff`). The model
+ * wrote. Without either, no message or error text is kept past its page, no
+ * call is made and the rows are rule-only (the agent's replies are still read
+ * by rules, REPLIES below); the summary says which was missing
+ * (`questionsOff`). The model
  * layer is best-effort: when it fails, the rule rows and the summary stand.
  *
  * REPLIES. Where the project captures the agent's replies, each turn's
@@ -373,9 +375,11 @@ export async function recordOutcomes(
   const at = deps.now();
   const replaced = await deps.replaceTurnRows(projectId, range, rows, at);
   // The reply in the turn after each turn, in session order, where replies are captured and sessions are one person's.
-  const nextReplies = trust.sessions
+  // Null when they could not be read: the reactions read before stay.
+  const readReplies = trust.sessions
     ? await nextReplyByTurn(projectId, rows, stepEvents, deps)
     : new Map<string, string>();
+  const nextReplies = readReplies ?? new Map<string, string>();
   const asked = await modelLayer(
     projectId,
     modelTurns,
@@ -395,7 +399,7 @@ export async function recordOutcomes(
       fused.map(({ turnId, result, source, cause }) => ({ turnId, result, source, cause })),
     );
   // How the person took each turn, from the next reply: the model's answer, else the rules'.
-  if (deps.writeReplyReactions && deps.loadReplyTexts) {
+  if (deps.writeReplyReactions && deps.loadReplyTexts && readReplies) {
     const inferred = rows.map((row): ReplyReactionRow => {
       const byModel = model?.replyReactions.get(row.turnId) ?? null;
       const byRule: ReplyReaction | null = byModel
@@ -448,12 +452,14 @@ export async function recordOutcomes(
   );
   const sessions = await deps.replaceSessionRows(projectId, replaced.sessions, sessionRows, at);
 
-  // Tasks: every session folded, cut again from all of its turn rows.
+  // Tasks: every session folded, cut again from all of its turn rows. A session that lost its row
+  // above (its turns are gone, or sessions are no longer trusted) loses its tasks with it.
   let taskCounts: Record<TaskResult, number> | undefined;
-  if (deps.replaceTaskRows && turnsBySession.size > 0) {
+  if (deps.replaceTaskRows && replaced.sessions.length > 0) {
     const stored =
-      (await deps.loadTaskVerdicts?.(projectId, [...turnsBySession.keys()])) ??
-      new Map<string, TaskVerdict>();
+      (turnsBySession.size > 0
+        ? await deps.loadTaskVerdicts?.(projectId, [...turnsBySession.keys()])
+        : undefined) ?? new Map<string, TaskVerdict>();
     const taskRows = [...turnsBySession].flatMap(([sessionId, turns]) =>
       segmentTasks(turns).map((task): TaskOutcomeRowDraft => {
         const verdict = model?.tasks.get(task.taskId) ?? stored.get(task.taskId) ?? null;
@@ -476,12 +482,15 @@ export async function recordOutcomes(
         };
       }),
     );
-    await deps.replaceTaskRows(projectId, [...turnsBySession.keys()], taskRows, at);
-    taskCounts = Object.fromEntries(TASK_RESULTS.map((result) => [result, 0])) as Record<
-      TaskResult,
-      number
-    >;
-    for (const row of taskRows) taskCounts[row.result as TaskResult] += 1;
+    await deps.replaceTaskRows(projectId, replaced.sessions, taskRows, at);
+    if (turnsBySession.size > 0) {
+      const counts = Object.fromEntries(TASK_RESULTS.map((result) => [result, 0])) as Record<
+        TaskResult,
+        number
+      >;
+      for (const row of taskRows) counts[row.result as TaskResult] += 1;
+      taskCounts = counts;
+    }
   }
 
   const causes = tally.finish();
@@ -610,14 +619,15 @@ async function modelLayer(
  * The agent's reply in the turn after each turn of the window, by turn id:
  * turns of one session in order, each paired with the reply of the next. A
  * session's last turn has none. Empty when replies are not read or none was
- * captured. Never throws: replies are a hint, and the rows stand without them.
+ * captured, null when they could not be read. Never throws: replies are a
+ * hint, and the rows stand without them.
  */
 async function nextReplyByTurn(
   projectId: string,
   rows: readonly { turnId: string; sessionId: string; startedAt: Date }[],
   stepEvents: ReadonlyMap<string, string[]>,
   deps: Pick<OutcomeRunDeps, "loadReplyTexts" | "loadNextScopeReplies">,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string> | null> {
   const out = new Map<string, string>();
   if (!deps.loadReplyTexts || stepEvents.size === 0) return out;
   let replies: ReadonlyMap<string, string>;
@@ -640,7 +650,7 @@ async function nextReplyByTurn(
   } catch (err) {
     logger.error({ err, project_id: projectId }, "outcome replies failed");
     reportServerException(err, `project:${projectId}`, { operation: "trace_outcomes_replies" });
-    return out;
+    return null;
   }
   // "" marks a turn of a session that reports scopes but has nothing to read: no fallback pairing for it.
   for (const [turnId, reply] of byScope) if (reply) out.set(turnId, reply);

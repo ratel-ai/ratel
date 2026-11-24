@@ -59,7 +59,7 @@ import {
 import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
-import { loadRootCauses, sentimentMinSessions } from "@/lib/views/traces/sentiment/page-load";
+import { loadRootCauses } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
 import { parseRootCauseQuery } from "@/lib/views/traces/sentiment/page-paths";
 
@@ -149,7 +149,7 @@ export default async function AgentHealthPage({
       fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
       load: () => loadSelfCorrectionsCard(project.id, windowDays),
     }),
-    // Behind `cloud-sentiment-analysis`, with Root cause analysis it leads to. A failed read hides the row.
+    // Behind `sentimentAnalysis`, with Root cause analysis it leads to. A failed read hides the row.
     loadOrFallback<TaskCompletionCard | null>({
       operation: "agent_health_task_completion",
       distinctId,
@@ -174,12 +174,7 @@ export default async function AgentHealthPage({
           operation: "agent_health_root_causes",
           distinctId,
           fallback: {
-            model: unavailableSentimentPage(
-              project.id,
-              windowDays,
-              rootCauseQuery,
-              sentimentMinSessions(),
-            ),
+            model: unavailableSentimentPage(project.id, windowDays, rootCauseQuery),
             turn: null,
           },
           load: async () =>
