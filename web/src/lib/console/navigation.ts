@@ -4,6 +4,7 @@ import type {
   OrganizationNavItem,
   ProjectNavGroup,
 } from "@/lib/composition/ports";
+import type { CoreFlag } from "@/lib/contracts/feature-flags";
 
 export type { NavIconName };
 
@@ -38,6 +39,15 @@ export interface NavItem {
   /** Sub-pages folded under this item; its own href is the group's landing page. */
   children?: readonly NavItem[];
 }
+
+/** The flags that each gate one item under Overview, in rail order. */
+export const FEATURE_PAGES = [
+  "scorers",
+  "customDashboards",
+  "alerts",
+] as const satisfies readonly CoreFlag[];
+
+export type FeaturePage = (typeof FEATURE_PAGES)[number];
 
 /** Every item, children included, in rail order. */
 export function flattenNav(items: readonly NavItem[]): NavItem[] {
@@ -84,6 +94,7 @@ export function consoleNav({
   organizationAdditions = [],
   projectGroups = [],
   entityPages = false,
+  featurePages = [],
 }: {
   projectId: string | undefined;
   organizationSlug?: string;
@@ -101,6 +112,8 @@ export function consoleNav({
    * whenever the flag is on, and each page has its own empty state.
    */
   entityPages?: boolean;
+  /** The feature flags on for the shown organization (`feature-nav.ts`), each with its own item. */
+  featurePages?: readonly FeaturePage[];
 }): NavItem[] {
   const root = projectId ? projectRoot(projectId) : null;
   const projectPage = (item: ProjectNavGroup["items"][number]): NavItem => ({
@@ -378,7 +391,7 @@ export function consoleNav({
       })
     : [];
   return [
-    ...(root ? stageRailNav(root, core, setupRows, entityPages) : core),
+    ...(root ? stageRailNav(root, core, setupRows, entityPages, featurePages) : core),
     ...additions.map((item) => ({
       id: `edition:${item.href}`,
       label: item.label,
@@ -401,6 +414,7 @@ function stageRailNav(
   classic: readonly NavItem[],
   setupRows: readonly NavItem[],
   entityPages: boolean,
+  featurePages: readonly FeaturePage[],
 ): NavItem[] {
   const pick = (id: string): NavItem => {
     const item = classic.find((candidate) => candidate.id === id);
@@ -468,7 +482,11 @@ function stageRailNav(
       }
     : classicTraces;
   return [
-    ...stage("monitor", "Monitor", [pick("overview"), health, traces]),
+    ...stage("monitor", "Monitor", [
+      withFeaturePages(root, pick("overview"), featurePages),
+      health,
+      traces,
+    ]),
     ...stage("insights", "Insights", [tasks, pick("intents")]),
     ...stage("improve", "Improve", [pick("improvements")]),
     ...stage("ship", "Ship", [ship]),
@@ -477,6 +495,55 @@ function stageRailNav(
     ...setupRows.map((item) => ({ ...item, section: "settings" as const })),
     pick("settings"),
   ];
+}
+
+/**
+ * Overview with the feature pages that are on. They fold under it because the rail is already at
+ * the 9 items DESIGN.md allows. Without any, Overview is returned as it is.
+ */
+function withFeaturePages(
+  root: string,
+  overview: NavItem,
+  featurePages: readonly FeaturePage[],
+): NavItem {
+  if (featurePages.length === 0) return overview;
+  const pages: Record<FeaturePage, NavItem> = {
+    scorers: {
+      id: "scorers",
+      label: "Scorers",
+      href: `${root}/scorers`,
+      icon: "overview",
+      keywords: ["scores", "judge", "checks", "evaluation"],
+    },
+    customDashboards: {
+      id: "dashboards",
+      label: "Dashboards",
+      href: `${root}/dashboards`,
+      icon: "overview",
+      keywords: ["dashboards", "widgets", "charts", "metrics"],
+    },
+    alerts: {
+      id: "alerts",
+      label: "Alerts",
+      href: `${root}/alerts`,
+      icon: "overview",
+      keywords: ["threshold", "notifications", "slack", "monitors"],
+    },
+  };
+  return {
+    ...overview,
+    children: [
+      {
+        id: "overview-summary",
+        label: "Summary",
+        href: overview.href,
+        icon: "overview",
+        exact: true,
+        activeId: overview.id,
+      },
+      ...FEATURE_PAGES.filter((page) => featurePages.includes(page)).map((page) => pages[page]),
+    ],
+  };
 }
 
 export type CommandEntry = {

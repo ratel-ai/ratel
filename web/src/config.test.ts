@@ -150,6 +150,9 @@ test("each flag has its own env var and file key", () => {
     FF_MCP_APPS: "1",
     FF_AGENTS_PAGES: "1",
     FF_TOOL_RUN_INSIGHTS: "1",
+    FF_SCORERS: "1",
+    FF_CUSTOM_DASHBOARDS: "1",
+    FF_ALERTS: "1",
   };
   const fromEnv = resolveConfig({ env }).flags;
   const fromFile = resolveConfig({

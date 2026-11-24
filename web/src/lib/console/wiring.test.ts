@@ -165,6 +165,17 @@ test("the shell hands the edition's overlays and palette actions to the frame, w
   assert.match(frame, /<ShortcutsDialog [^\n]*\/>\s*\{data\.overlays\}\s*<Toaster \/>/);
 });
 
+test("the shell decides the feature pages per organization and the rail reads them", () => {
+  assert.match(
+    source("components/console/shell/ConsoleShell.tsx"),
+    /featurePagesByOrganization\(organizations\)/,
+  );
+  assert.match(
+    source("components/console/shell/AppFrame.tsx"),
+    /data\.featurePages\?\.\[organization\.id\][\s\S]*consoleNav\(\{[\s\S]*featurePages,/,
+  );
+});
+
 test("the shell decides agentsPages per organization and the rail reads it (RP-28)", () => {
   assert.match(
     source("components/console/shell/ConsoleShell.tsx"),

@@ -4,6 +4,7 @@ import type {
   OrganizationNavItem,
   ProjectNavGroup,
 } from "@/lib/composition/ports";
+import type { FeaturePage } from "@/lib/console/navigation";
 import type { ConsoleAccount, ConsoleOrganization, ConsoleProject } from "@/lib/console/shell-data";
 import type { EditionCommandAction } from "@/lib/contracts/composition";
 
@@ -28,6 +29,8 @@ export type ShellData = {
   projectNav: ProjectNavGroup[];
   /** The organizations with `agentsPages` on: their rail shows Agents and MCP servers under Traces. */
   entityPagesOrganizations?: readonly string[];
+  /** The feature pages on (`scorers`, `customDashboards`, `alerts`), per organization id. */
+  featurePages?: Readonly<Record<string, readonly FeaturePage[]>>;
   /** The edition's rail switcher, rendered on the server for each rail width; the project switcher otherwise. */
   scopeSwitcher: { expanded: ReactNode; collapsed: ReactNode } | null;
   /** Menu items the edition adds to the account menu, rendered on the server. */

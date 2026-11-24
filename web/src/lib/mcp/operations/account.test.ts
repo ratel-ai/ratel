@@ -290,6 +290,9 @@ test("get_flag_status reports each switch as the flags port decides it for this 
       ["mcpApps", false],
       ["agentsPages", false],
       ["toolRunInsights", false],
+      ["scorers", false],
+      ["customDashboards", false],
+      ["alerts", false],
     ],
   );
   const subject = { organizationId: "org-1", projectId: PROJECT, actor: `project:${PROJECT}` };
@@ -299,6 +302,9 @@ test("get_flag_status reports each switch as the flags port decides it for this 
     ["mcpApps", subject],
     ["agentsPages", subject],
     ["toolRunInsights", subject],
+    ["scorers", subject],
+    ["customDashboards", subject],
+    ["alerts", subject],
   ]);
 });
 
