@@ -195,6 +195,22 @@ test("group by each property: a trace counts once in each of its groups", async 
   assert.deepEqual(gpt, { group: "haiku", total: 170, samples: 2, values: [70, 100, 0, 0] });
 });
 
+test("cost grouped by model, by day and in total", async () => {
+  const { series } = await run({ metric: "cost", aggregation: "sum", groupBy: "model" });
+  // Written by hand from the seed. haiku: t2 $0.3 on 11-02 and t3 $0.6 on 11-03.
+  // gpt-4o: t1 $0.1 and t2 $0.3, both on 11-02.
+  assert.deepEqual(
+    series.map((s) => [s.group, s.samples]),
+    [
+      ["haiku", 2],
+      ["gpt-4o", 2],
+    ],
+  );
+  assertClose(series[0].values, [0.3, 0.6, 0, 0], "haiku");
+  assertClose(series[1].values, [0.4, 0, 0, 0], "gpt-4o");
+  assertClose([series[0].total, series[1].total], [0.9, 0.4], "totals");
+});
+
 test("a filter on the grouped property keeps only the groups it names", async () => {
   const { series } = await run({
     metric: "trace_count",
