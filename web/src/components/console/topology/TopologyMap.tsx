@@ -1,3 +1,4 @@
+import { cn } from "@ratel/design-system/cn";
 import { EmptyState } from "@ratel/design-system/states";
 import { Bot, Box, type LucideIcon, Server, Waypoints } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +30,7 @@ export function TopologyMap({
   graph,
   range,
   linked,
+  bare = false,
 }: {
   projectId: string;
   graph: Topology;
@@ -36,14 +38,27 @@ export function TopologyMap({
   range: string;
   /** The Agents and MCP servers pages exist (`agentsPages`). */
   linked: boolean;
+  /** Inside a card, which is the frame: the map fills it and scrolls both ways. */
+  bare?: boolean;
 }) {
   const layout = topologyLayout(graph);
   const hrefOf = (node: TopologyNode) => (linked ? nodeHref(projectId, node, range) : null);
   const has = (kind: TopologyNodeKind) => graph.nodes.some((node) => node.kind === kind);
-  if (graph.nodes.length === 0) return <TopologyEmpty />;
+  if (graph.nodes.length === 0) return <TopologyEmpty bare={bare} />;
   return (
-    <div className="flex min-w-0 flex-col rounded-lg border border-line bg-raised" data-topology="">
-      <div className="flex flex-1 items-center overflow-x-auto p-3">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        bare ? "min-h-0 flex-1 border-t border-line" : "rounded-lg border border-line bg-raised",
+      )}
+      data-topology=""
+    >
+      <div
+        className={cn(
+          "flex flex-1 p-3",
+          bare ? "min-h-0 overflow-auto" : "items-center overflow-x-auto",
+        )}
+      >
         {/* biome-ignore lint/a11y/useSemanticElements: an SVG has no fieldset; it groups the linked boxes. */}
         <svg
           role="group"
@@ -51,7 +66,7 @@ export function TopologyMap({
           viewBox={`0 0 ${layout.width} ${layout.height}`}
           width={layout.width}
           height={layout.height}
-          className="mx-auto block shrink-0"
+          className={cn("block shrink-0", bare ? "m-auto" : "mx-auto")}
         >
           <defs>
             <Arrow id="topology-arrow" color="var(--color-fg-subtle)" />
@@ -99,9 +114,16 @@ export function TopologyMap({
   );
 }
 
-function TopologyEmpty() {
+function TopologyEmpty({ bare }: { bare: boolean }) {
   return (
-    <div className="rounded-lg border border-line" data-topology="empty">
+    <div
+      className={
+        bare
+          ? "flex min-h-0 flex-1 flex-col justify-center overflow-auto border-t border-line"
+          : "rounded-lg border border-line"
+      }
+      data-topology="empty"
+    >
       <EmptyState
         icon={Waypoints}
         title="No agents or MCP servers in this window"

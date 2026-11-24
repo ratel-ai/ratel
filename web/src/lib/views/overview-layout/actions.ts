@@ -1,9 +1,5 @@
-import {
-  changeLayout,
-  DEFAULT_LAYOUT,
-  layoutChangeSchema,
-  type OverviewLayout,
-} from "./domain/layout";
+import { changeLayout, DEFAULT_LAYOUT, type OverviewLayout } from "./domain/layout";
+import { layoutChangeSchema } from "./domain/stored";
 import type { OverviewLayoutStore } from "./ports/store";
 
 /**

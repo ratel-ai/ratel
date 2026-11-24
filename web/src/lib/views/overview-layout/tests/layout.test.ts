@@ -3,15 +3,13 @@ import { test } from "node:test";
 import {
   changeLayout,
   DEFAULT_LAYOUT,
-  layoutChangeSchema,
   OVERVIEW_WIDGETS,
   type OverviewLayout,
-  readLayout,
   sameLayout,
   stepChange,
-  storeLayout,
   visibleWidgets,
 } from "../domain/layout";
+import { layoutChangeSchema, readLayout, storeLayout } from "../domain/stored";
 
 const places = (layout: OverviewLayout) =>
   Object.fromEntries(
@@ -56,7 +54,7 @@ test("an unknown widget is dropped; a missing one is at the end and visible", ()
     ],
   });
   assert.deepEqual(order(layout), ["topology", "health", "attention", "metrics"]);
-  assert.deepEqual(places(layout).topology, [0, 0, 12, 9], "the gap it left is closed");
+  assert.deepEqual(places(layout).topology, [0, 0, 12, 8], "the gap it left is closed");
   // With nothing known, all of them are new.
   assert.deepEqual(
     order(readLayout({ version: 1, widgets: [] })).toSorted(),
@@ -72,20 +70,20 @@ test("a stored size below the minimum, or over the edge, is made whole", () => {
       widget.id === "metrics" ? { ...widget, x: 10, w: 2, h: 1 } : widget,
     ),
   });
-  assert.deepEqual(places(layout).metrics, [6, 0, 6, 3]);
+  assert.deepEqual(places(layout).metrics, [4, 0, 8, 4]);
 });
 
 test("hide closes the gap, and show puts the widget back where it was", () => {
   const hidden = changeLayout(DEFAULT_LAYOUT, { kind: "hide", widget: "topology" });
   assert.deepEqual(places(hidden), {
-    metrics: [0, 0, 12, 3],
-    health: [0, 3, 4, 7],
-    attention: [4, 3, 8, 7],
+    metrics: [0, 0, 12, 4],
+    health: [0, 4, 4, 7],
+    attention: [4, 4, 8, 7],
     topology: "hidden",
   });
   const reread = readLayout(storeLayout(hidden));
   const shown = changeLayout(reread, { kind: "show", widget: "topology" });
-  assert.deepEqual(order(shown).toSorted(), [...OVERVIEW_WIDGETS].toSorted());
+  assert.deepEqual(places(shown), places(DEFAULT_LAYOUT));
   assert.equal(changeLayout(DEFAULT_LAYOUT, { kind: "hide", widget: "health" }).length, 4);
 });
 
@@ -101,8 +99,8 @@ test("all widgets can be hidden", () => {
 test("move and resize are those of the grid; a hidden widget has no place to move", () => {
   const moved = changeLayout(DEFAULT_LAYOUT, { kind: "move", widget: "attention", x: 4, y: 0 });
   assert.deepEqual(places(moved).attention, [4, 0, 8, 7]);
-  const resized = changeLayout(DEFAULT_LAYOUT, { kind: "resize", widget: "metrics", w: 1, h: 4 });
-  assert.deepEqual(places(resized).metrics, [0, 0, 6, 4], "no smaller than its minimum");
+  const resized = changeLayout(DEFAULT_LAYOUT, { kind: "resize", widget: "metrics", w: 1, h: 1 });
+  assert.deepEqual(places(resized).metrics, [0, 0, 8, 4], "no smaller than its minimum");
   const hidden = changeLayout(DEFAULT_LAYOUT, { kind: "hide", widget: "health" });
   assert.ok(
     sameLayout(changeLayout(hidden, { kind: "move", widget: "health", x: 0, y: 0 }), hidden),
@@ -115,8 +113,8 @@ test("arrange takes the browser's places, and leaves the hidden ones alone", () 
     kind: "arrange",
     places: [
       { id: "attention", x: 0, y: 0, w: 12, h: 4 },
-      { id: "metrics", x: 0, y: 4, w: 12, h: 3 },
-      { id: "topology", x: 0, y: 7, w: 12, h: 9 },
+      { id: "metrics", x: 0, y: 4, w: 12, h: 4 },
+      { id: "topology", x: 0, y: 8, w: 12, h: 8 },
       { id: "health", x: 0, y: 0, w: 12, h: 12 },
     ],
   });

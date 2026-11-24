@@ -102,7 +102,7 @@ export function tourSteps(focusedConsole: boolean): readonly TourStep[] {
     step.id === "v2-overview"
       ? {
           ...step,
-          body: "The Health score, and your agents and MCP servers with the work that flows between them.",
+          body: "The numbers, your agents and MCP servers, the Health score and what needs attention. Drag, resize and hide the widgets as you like.",
         }
       : step,
   );

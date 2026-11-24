@@ -6,6 +6,7 @@ import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.sha
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
+import type { SaveLayout } from "@/components/console/home/focused/OverviewLayout";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
 import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
 import { FocusedConsoleProvider } from "@/components/console/shell/focused-console-context";
@@ -24,6 +25,13 @@ import {
   healthCard,
   loadFocusedOverview,
 } from "@/lib/views/home/focused-load";
+import {
+  changeLayout,
+  DEFAULT_LAYOUT,
+  OVERVIEW_WIDGETS,
+  type OverviewLayout,
+  type OverviewWidgetId,
+} from "@/lib/views/overview-layout/domain/layout";
 import { topologyModel } from "@/lib/views/project-entities/topology";
 import { PROJECT_ID, render, visibleText } from "@/lib/views/tasks/test-support";
 import { findDsViolations } from "../../../../eslint-rules/ds-tokens.mjs";
@@ -135,9 +143,14 @@ const NO_SPANS = async () => ({
   latestSpanAt: null,
 });
 
-function page(data: FocusedOverviewData, linked = true): string {
+const SAVE: SaveLayout = async () => ({ ok: true, layout: DEFAULT_LAYOUT });
+
+function page(
+  data: FocusedOverviewData,
+  { linked = true, save = SAVE }: { linked?: boolean; save?: SaveLayout | null } = {},
+): string {
   const html = render(
-    createElement(FocusedOverviewView, { data, now: NOW, linked, setup: "SETUP GUIDE" }),
+    createElement(FocusedOverviewView, { data, now: NOW, linked, save, setup: "SETUP GUIDE" }),
     { pathname: `/project/${PROJECT_ID}` },
   );
   const violations = [...html.matchAll(/class="([^"]*)"/g)].flatMap((m) => findDsViolations(m[1]));
@@ -156,18 +169,82 @@ test("reads the context only for its Panel", async () => {
   assert.deepEqual(open.ran.sort(), [...closed.ran, "context"].sort());
 });
 
-test("the page is the header, the health card and the topology", async () => {
+const order = (html: string) =>
+  [...html.matchAll(/data-overview-widget="(\w+)"/g)].map((match) => match[1]);
+const hide = (...ids: OverviewWidgetId[]) =>
+  ids.reduce<OverviewLayout>(
+    (layout, widget) => changeLayout(layout, { kind: "hide", widget }),
+    DEFAULT_LAYOUT,
+  );
+
+test("without a stored layout: Metrics, Topology, then Health with Needs attention beside it", async () => {
   const html = page(await load());
+  assert.deepEqual(order(html), ["metrics", "topology", "health", "attention"]);
   const headings = [...html.matchAll(/<h2[^>]*>([^<]+)</g)].map((match) => match[1]);
-  assert.deepEqual(headings, ["Health score", "Agents and MCP servers"]);
+  assert.deepEqual(headings, [
+    "Metrics",
+    "Agents and MCP servers",
+    "Health score",
+    "Needs attention",
+  ]);
+  const places = [...html.matchAll(/--cell-column:([^;"]+);--cell-row:([^;"]+)/g)];
+  assert.equal(places.length, 4, "the server draws the places");
+  assert.equal(places[2][2], places[3][2], "Health and Needs attention share their rows");
   const text = visibleText(html);
   assert.match(text, /Receiving data/);
-  assert.match(text, /7 days/);
-  for (const dropped of ["Needs attention", "Recent runs", "Spend", "Intents", "Self-corrections"])
+  assert.match(text, /Runs .*Failed runs .*Median duration .*Spend/);
+  for (const dropped of ["Recent runs", "Intents", "Self-corrections"])
     assert.ok(!text.includes(dropped), `no "${dropped}"`);
 });
 
-test("the card shows Agent health's value, change and points, and opens it in its window", async () => {
+test("the page is the person's layout: their order, and no hidden widget", async () => {
+  const moved = changeLayout(hide("topology"), { kind: "move", widget: "attention", x: 4, y: 0 });
+  assert.deepEqual(order(page(await load({}, { layout: moved }))), [
+    "attention",
+    "metrics",
+    "health",
+  ]);
+  for (const id of OVERVIEW_WIDGETS) {
+    const others = OVERVIEW_WIDGETS.filter((other) => other !== id);
+    assert.deepEqual(order(page(await load({}, { layout: hide(...others) }))), [id], "alone");
+  }
+});
+
+test("all hidden is one quiet line with Customize", async () => {
+  const html = page(await load({}, { layout: hide(...OVERVIEW_WIDGETS) }));
+  assert.deepEqual(order(html), []);
+  assert.match(html, /data-overview-hidden="all"[^>]*>Every widget is hidden\.<button/);
+});
+
+test("a person arranges by the header, the menu and Customize; a support session has none of them", async () => {
+  const data = await load();
+  const html = page(data);
+  assert.equal((html.match(/data-grid-handle/g) ?? []).length, 4);
+  for (const title of ["Metrics", "Agents and MCP servers", "Health score", "Needs attention"])
+    assert.match(html, new RegExp(`aria-label="Arrange ${title}"`));
+  assert.match(visibleText(html), /Customize/);
+  const support = page(data, { save: null });
+  assert.deepEqual(order(support), order(html));
+  assert.doesNotMatch(support, /data-grid-handle|aria-label="Arrange|Customize/);
+});
+
+test("each widget links to the page behind it", async () => {
+  const html = page(await load());
+  for (const [label, path] of [
+    ["Open Traces", "traces\\?range=7d"],
+    ["Open Agents", "agents"],
+    ["Open Agent health", "health\\?days=7"],
+  ])
+    assert.match(
+      html,
+      new RegExp(
+        `aria-label="${label}"[^>]*href="/project/${PROJECT_ID}/${path}|href="/project/${PROJECT_ID}/${path}[^"]*"[^>]*aria-label="${label}"|aria-label="${label}"`,
+      ),
+    );
+  assert.doesNotMatch(page(await load(), { linked: false }), /Open Agents"/);
+});
+
+test("the gauge shows Agent health's value and opens it in its window", async () => {
   const html = page(await load({}, { window: 30 }));
   assert.match(html, new RegExp(`href="/project/${PROJECT_ID}/health\\?days=30"`));
   const health = render(
@@ -187,13 +264,7 @@ test("the card shows Agent health's value, change and points, and opens it in it
   const value = (of: string) => of.match(/data-health-score="(\d+)"/)?.[1];
   assert.equal(value(html), String(SCORE.value));
   assert.equal(value(html), value(health));
-  const lost = [...html.matchAll(/data-health-lost="\w+".*?<span[^>]*>(?:−(\d+) pts|0)</g)];
-  assert.equal(lost.length, 4);
-  assert.equal(
-    lost.reduce((sum, match) => sum + Number(match[1] ?? 0), 0),
-    100 - SCORE.value,
-  );
-  assert.match(visibleText(html), /since the last reading/);
+  assert.doesNotMatch(html, /data-health-lost|since the last reading/, "the gauge only");
 });
 
 test("a plan that caps the health window says which window the score is for", async () => {
@@ -279,6 +350,14 @@ test("each failed read costs its own part only", async () => {
   assert.match(visibleText(noHealth), /The Health score did not load/);
   assert.match(noHealth, /data-topology-node="agent"/);
 
+  const noRuns = visibleText(page(await load({ traces: fail })));
+  assert.match(noRuns, /These numbers did not load/);
+  assert.match(noRuns, /of 100/);
+
+  const unread = { traces: fail, health: fail, intents: fail };
+  assert.match(visibleText(page(await load(unread))), /Needs attention did not load/);
+  assert.match(visibleText(page(await load({ intents: fail }))), /Some checks did not load/);
+
   for (const over of [{ telemetry: fail }, { telemetry: NO_SPANS, sdkLatestAt: fail }]) {
     const html = page(await load(over));
     assert.doesNotMatch(html, /SETUP GUIDE|No data yet/, "unread is not empty");
@@ -312,6 +391,6 @@ test("the skeleton and the tour say the recap with the flag, today's Overview wi
   assert.doesNotMatch(skeleton(false), /data-skeleton="focused"/);
   assert.equal(render(createElement(OverviewSkeleton)), skeleton(false));
   assert.equal(tourSteps(false), TOUR_STEPS);
-  assert.match(tourSteps(true)[0].body, /Health score/);
+  assert.match(tourSteps(true)[0].body, /Drag, resize and hide the widgets/);
   assert.deepEqual(tourSteps(true).slice(1), TOUR_STEPS.slice(1));
 });

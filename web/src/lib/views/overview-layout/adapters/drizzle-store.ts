@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
-import { readLayout, storeLayout } from "../domain/layout";
+import { readLayout, storeLayout } from "../domain/stored";
 import type { LayoutKey, OverviewLayoutStore } from "../ports/store";
 import { overviewLayouts } from "../schema";
 

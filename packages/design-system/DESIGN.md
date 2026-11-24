@@ -40,12 +40,12 @@ edition lacks are not rendered; moved pages redirect.
 | Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
 | Settings | Project configuration | General, API keys, Developer, Danger zone |
 
-With `focusedConsole` on, Overview is a recap (the Health score and the topology), Agent health is
+With `focusedConsole` on, Overview is a recap of widgets that each person arranges, Agent health is
 one page (the Health score, then the issues under the four categories it counts by) and Self-corrections is an item of its own in Insights:
 
 | Item | Answers | Contains |
 |---|---|---|
-| Overview | How is this project doing? | The Health score, agents and MCP servers with their flows |
+| Overview | How is this project doing? | Widgets: Metrics, Agents and MCP servers, Health score, Needs attention |
 | Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
 | Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
 
@@ -215,6 +215,12 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 
 **Page anatomy.** PageHeader, at most one Callout, the answer (StatRow or the primary list),
 then drill-downs.
+
+**Widgets.** Only on a page that a person arranges (Overview with `focusedConsole`). A widget is one
+card: a 44 px header (title, link, menu) and a body that fills it with no frame of its own, scrolls
+inside, and is whole at the widget's minimum size. Drag by the header, resize by the corner, and the
+same steps in the menu for the keyboard. `Customize` in the page header opens a Panel with a switch
+per widget and "Reset to default". Below `lg`, one column in reading order.
 
 **Lists.** FilterBar above, DataTable below; a row click or `Enter` opens the Panel; bulk actions
 in a bar at the bottom.
