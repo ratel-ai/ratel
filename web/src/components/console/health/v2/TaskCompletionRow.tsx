@@ -3,7 +3,11 @@ import { cn } from "@ratel/design-system/cn";
 import { Section } from "@ratel/design-system/section";
 import { ArrowRight, CircleCheck, ListChecks, ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { GROUP_COLOR, GROUP_SHORT } from "@/components/console/hallucinations/copy";
+import {
+  formatHallucinationRate,
+  GROUP_COLOR,
+  GROUP_SHORT,
+} from "@/components/console/hallucinations/copy";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { StatusRing } from "@/components/console/health/v2/StatusRing";
 import { percent, plural, STATUS_COLOR } from "@/components/console/sentiment/copy";
@@ -165,18 +169,7 @@ function HallucinationRateTile({
   card: HallucinationRateCard;
   windowDays: TaskCompletionCard["windowDays"];
 }) {
-  const value =
-    !card.checked && card.read
-      ? "Not checked yet"
-      : card.rate === null
-        ? "None"
-        : card.rate === 0
-          ? "0%"
-          : card.rate > 0 && card.rate < 0.001
-            ? "<0.1%"
-            : card.rate < 0.1
-              ? `${(card.rate * 100).toFixed(1)}%`
-              : percent(card.rate);
+  const value = !card.checked && card.read ? "Not checked yet" : formatHallucinationRate(card.rate);
   const hint = !card.read
     ? "Not read yet"
     : !card.checked

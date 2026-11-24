@@ -5,7 +5,10 @@ import { type StatProps, StatRow } from "@ratel/design-system/stat-row";
 import { Callout, EmptyState } from "@ratel/design-system/states";
 import { ChartBarBig, CircleCheck, CircleDashed, TriangleAlert } from "lucide-react";
 import Link from "next/link";
-import { HALLUCINATIONS_DESCRIPTION } from "@/components/console/hallucinations/copy";
+import {
+  formatHallucinationRate,
+  HALLUCINATIONS_DESCRIPTION,
+} from "@/components/console/hallucinations/copy";
 import { GroupDonut } from "@/components/console/hallucinations/GroupDonut";
 import { KindPanel } from "@/components/console/hallucinations/KindPanel";
 import { KindTable } from "@/components/console/hallucinations/KindTable";
@@ -201,16 +204,7 @@ function headline(model: HallucinationsPageModel): StatProps[] {
   return [
     {
       label: "Hallucination rate",
-      value:
-        totals.rate === null
-          ? "None"
-          : totals.rate === 0
-            ? "0%"
-            : totals.rate > 0 && totals.rate < 0.001
-              ? "<0.1%"
-              : totals.rate < 0.1
-                ? `${(totals.rate * 100).toFixed(1)}%`
-                : percent(totals.rate),
+      value: formatHallucinationRate(totals.rate),
       hint: `${formatCount(totals.turnsAffected)} of ${plural(totals.turns, "turn")} had at least one`,
     },
     {
@@ -223,7 +217,7 @@ function headline(model: HallucinationsPageModel): StatProps[] {
       value: top && top.occurrences > 0 ? percent(top.share) : "None",
       hint:
         top && top.occurrences > 0
-          ? hallucinationsLinks(model).groups.find((group) => group.group === top.group)!.label
+          ? hallucinationsLinks(model).groups.find((group) => group.group === top.group)?.label
           : "No hallucinations",
     },
   ];

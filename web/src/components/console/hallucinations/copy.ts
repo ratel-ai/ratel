@@ -24,3 +24,16 @@ export const GROUP_SHORT: Record<HallucinationGroup, string> = {
   input: "Input",
   completion: "Completion",
 };
+
+/**
+ * A hallucination rate, as the page and the Summary say it: to one decimal
+ * under 10%, "<0.1%" rather than a few rounded to nothing, "None" before the
+ * reading has run or with no turn.
+ */
+export function formatHallucinationRate(rate: number | null): string {
+  if (rate === null) return "None";
+  if (rate === 0) return "0%";
+  if (rate < 0.001) return "<0.1%";
+  if (rate < 0.1) return `${(rate * 100).toFixed(1)}%`;
+  return `${Math.round(rate * 100)}%`;
+}

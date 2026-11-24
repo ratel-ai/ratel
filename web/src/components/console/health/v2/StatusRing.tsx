@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@ratel/design-system/cn";
 import { useState } from "react";
 import { RING_SIZE, RingArc, RingTrack, ringArcs } from "@/components/console/health/v2/ring";
 import { percent } from "@/components/console/sentiment/copy";
