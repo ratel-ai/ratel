@@ -97,7 +97,8 @@ as an agent run with its own turn and task, and an Agent health reading from 10 
 confidence), and Sentiment analysis (the page under Traces, task completion on Agent health with
 its Root cause analysis, a turn's User / Agent chat; read by rules and the sentiment lexicon, since
 this edition has no question engine), and Hallucination detection (the Hallucinations page under
-Agent health, the hallucination rate on Agent health, a turn's markers in Traces; read by rules
+Agent health, the hallucination rate on Agent health, a turn's markers in Traces, bookmarks in
+session replay; read by rules
 with every signal run, except one kind that stands on the outcome reading's model answers and is
 shown as not checked without them). Cloud ignores it and reads each flag (`evalGate`,
 `rankingCatalogDrift`, `mcpApps`, `toolRunInsights`, `sentimentAnalysis`, `hallucinationDetection`)

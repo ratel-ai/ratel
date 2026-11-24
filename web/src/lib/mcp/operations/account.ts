@@ -70,7 +70,7 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
   },
   {
     key: "hallucinationDetection",
-    note: "The console's Hallucinations page under Agent health, and its markers in Traces. No tool reads it yet.",
+    note: "The console's Hallucinations page under Agent health, its rate on the Summary, its markers in Traces and its bookmarks in session replay. No tool reads it yet.",
   },
 ];
 
