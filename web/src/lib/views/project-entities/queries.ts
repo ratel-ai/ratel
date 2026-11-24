@@ -35,6 +35,15 @@ export interface AgentListExtras {
   mcpServers: Map<string, number>;
 }
 
+/** The calls of one agent to one MCP server, client side. */
+export interface AgentMcpCalls {
+  /** The agent's key after merges; null when the span names no agent. */
+  agent: string | null;
+  server: string;
+  calls: number;
+  errors: number;
+}
+
 export interface McpServerExtras {
   /** Calls per day of the window, oldest first. */
   daily: number[];
@@ -111,6 +120,18 @@ export async function listAgentExtras(
     daily: series(daily, windowDays(window)),
     mcpServers: new Map(servers.map((row) => [row.key, Number(row.count)])),
   };
+}
+
+/** Who calls which MCP server, busiest first. Merged keys read as their target. */
+export async function listAgentMcpCalls(
+  projectId: string,
+  window: EntityWindow,
+  merges: ReadonlyMap<string, string>,
+  db: ReadDb,
+): Promise<AgentMcpCalls[]> {
+  return rowsOf<AgentMcpCallsRow>(
+    await db.execute(agentMcpCallsQuery(projectId, window, merges)),
+  ).map((row) => ({ ...row, calls: Number(row.calls), errors: Number(row.errors) }));
 }
 
 /** One agent's tools with the MCP server each belongs to and the newest error text. */
@@ -260,6 +281,28 @@ export function agentMcpServerCountsQuery(
   `;
 }
 
+/**
+ * Client-side calls and errors per (agent, MCP server). It starts from the MCP
+ * spans, not the agent spans, so the calls with no agent come back too.
+ */
+export function agentMcpCallsQuery(
+  projectId: string,
+  window: EntityWindow,
+  merges: ReadonlyMap<string, string> = new Map(),
+): SQL {
+  const merge = mergeJoin(merges);
+  return sql`
+    select ${merge.key} as agent, s.mcp_server as server,
+      count(*)::int as calls,
+      count(*) filter (where ${IS_ERROR})::int as errors
+    from otel_spans s${merge.join}
+    where ${serverSpans(projectId, window)} and s.mcp_role = 'consumed'
+    group by 1, 2
+    order by calls desc, 1, 2
+    limit ${MAX_ROWS}
+  `;
+}
+
 /** The agent's tool spans per (tool, MCP server), the `mcp__<server>__` prefix dropped. */
 export function agentToolsQuery(
   projectId: string,
@@ -389,6 +432,13 @@ interface DailyRow {
 interface CountRow {
   key: string;
   count: number | string;
+}
+
+interface AgentMcpCallsRow {
+  agent: string | null;
+  server: string;
+  calls: number | string;
+  errors: number | string;
 }
 
 interface AgentToolRow {
