@@ -45,7 +45,7 @@ export interface TurnDetailViewProps {
   focusEventId: string | null;
   /** The session replay of this turn's session. */
   sessionHref?: string | null;
-  /** What was asked, replied and said next; null while `cloud-sentiment-analysis` is off or nothing was read. */
+  /** What was asked, replied and said next; null while `sentimentAnalysis` is off or nothing was read. */
   conversation?: Conversation | null;
   /** Inside a Panel: without the page's own navigation, which would leave the list. */
   embedded?: boolean;

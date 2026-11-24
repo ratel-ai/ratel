@@ -103,7 +103,7 @@ export interface SummaryViewProps {
   reportHref: string | null;
   /** Null when the importer is off (no edition importer, or its read failed). */
   imports: SummaryImports | null;
-  /** `cloud-sentiment-analysis`: task completion right above the issues; null hides it (off, or its read failed). */
+  /** `sentimentAnalysis`: task completion right above the issues; null hides it (off, or its read failed). */
   taskCompletion?: TaskCompletionCard | null;
   /** Null when sharing is not offered (no edition dialog, or its read failed). */
   share?: SummaryShare | null;

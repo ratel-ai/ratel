@@ -126,7 +126,7 @@ export default async function AgentHealthPage({
         fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
         load: () => loadSelfCorrectionsCard(project.id, windowDays),
       }),
-      // Behind `cloud-sentiment-analysis`, with Root cause analysis it leads to. A failed read hides the row.
+      // Behind `sentimentAnalysis`, with Root cause analysis it leads to. A failed read hides the row.
       loadOrFallback<TaskCompletionCard | null>({
         operation: "agent_health_task_completion",
         distinctId,

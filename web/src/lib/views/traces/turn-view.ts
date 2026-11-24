@@ -24,7 +24,7 @@ export async function loadTurnView(
     operation: "trace_turn_detail",
   });
   if (!turn) return null;
-  // Behind `cloud-sentiment-analysis`: the words around the turn. A failed read leaves the page as it was.
+  // Behind `sentimentAnalysis`: the words around the turn. A failed read leaves the page as it was.
   const conversation = (await sentimentAnalysisEnabled(organization).catch(() => false))
     ? await withStatementTimeout((db) => loadTurnConversation(db, projectId, turnId), {
         operation: "trace_turn_conversation",

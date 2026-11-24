@@ -7,7 +7,7 @@ import type { TurnConversation as Conversation } from "@/lib/views/traces/sentim
  * them (`TurnAfter`): the user's next message, or, when no messages are sent,
  * the agent's next reply, which is how a reaction shows. The user's messages
  * sit on the right, the agent's on the left. Read when the page is opened,
- * never stored. Behind `cloud-sentiment-analysis`.
+ * never stored. Behind `sentimentAnalysis`.
  */
 export function TurnAsked({
   conversation,

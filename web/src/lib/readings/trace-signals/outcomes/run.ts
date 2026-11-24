@@ -85,8 +85,10 @@ import type { RunBasis } from "@/lib/readings/trace-signals/workflows/run-basis"
  * project's organization has Sentiment analysis on (`questions-gate.ts`), the
  * model layer (`model-read.ts`) then asks its closed questions about the same
  * turns, capped and cached, and its answers go on the rows the rules just
- * wrote. Without either, no text is loaded, no call is made and the rows are
- * rule-only; the summary says which was missing (`questionsOff`). The model
+ * wrote. Without either, no message or error text is kept past its page, no
+ * call is made and the rows are rule-only (the agent's replies are still read
+ * by rules, REPLIES below); the summary says which was missing
+ * (`questionsOff`). The model
  * layer is best-effort: when it fails, the rule rows and the summary stand.
  *
  * REPLIES. Where the project captures the agent's replies, each turn's

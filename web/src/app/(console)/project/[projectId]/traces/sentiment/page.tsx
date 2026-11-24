@@ -20,7 +20,7 @@ export const metadata = { title: "Sentiment analysis" };
 
 /**
  * Traces, Sentiment analysis (RC-357): how people took the agent's work, by
- * task status, cause, intent and day. 404 unless `cloud-sentiment-analysis`
+ * task status, cause, intent and day. 404 unless `sentimentAnalysis`
  * is on for the project's organization. Window and filters live in the URL.
  *
  * Owned (ADR-0004): the project comes from the console scope, and the switch is

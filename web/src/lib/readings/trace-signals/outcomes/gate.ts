@@ -3,8 +3,9 @@ import { type FeatureFlagDeps, featureEnabled } from "@/lib/platform/experimenta
 import type { Organization } from "@/lib/platform/organizations";
 
 /**
- * Whether Sentiment analysis (`cloud-sentiment-analysis`, RC-357) is on: the
- * page under Agent health and the routes behind it. Decided for the signed-in
+ * Whether Sentiment analysis (`sentimentAnalysis`, RC-357) is on: the page
+ * under Traces, Root cause analysis and task completion on Agent health, and
+ * a turn's User / Agent chat. Decided for the signed-in
  * person acting in the PROJECT's organization, never their active one, so a
  * rollout targets organizations by `organization_id`.
  *

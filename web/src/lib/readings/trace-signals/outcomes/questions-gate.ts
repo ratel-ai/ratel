@@ -5,12 +5,13 @@ import { getOrganizationByProjectId } from "@/lib/platform/organizations";
 /**
  * The switch of the model questions (`model-read.ts`): they are asked only
  * for a project whose organization has Sentiment analysis on, the same flag
- * the page sits behind (`cloud-sentiment-analysis`, `gate.ts`). A key alone
+ * the page sits behind (`sentimentAnalysis`, `gate.ts`). A key alone
  * never turns them on: with the switch off the reading loads no text, makes
  * no call and writes rule-only rows.
  *
  * Decided for a background job, not a request: there is no signed-in person,
- * so the identity is the project and only the organization is sent. A rollout
+ * so the identity is the project: its organization, the project and a
+ * `project:<id>` actor are sent, and no person. A rollout
  * that targets the organization turns the questions on for that
  * organization's projects; one that targets a person does not. A value the
  * configuration forces wins as everywhere. Without an edition's flags port,

@@ -167,7 +167,7 @@ export interface TurnConversation {
 
 /**
  * The words around a turn, for the Traces turn view (behind
- * `cloud-sentiment-analysis`): read on demand like an example, cut to
+ * `sentimentAnalysis`): read on demand like an example, cut to
  * `EXAMPLE_MAX_TEXT_CHARS`, never stored or logged. Null for an unknown turn.
  */
 export async function loadTurnConversation(

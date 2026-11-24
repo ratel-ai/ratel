@@ -21,7 +21,7 @@ export const metadata = { title: "Root cause analysis" };
  * Agent health, Root cause analysis: why tasks were not completed, and what
  * got in the way of the ones completed after friction, each reason with its
  * root causes ranked by tasks, cost or time. Task completion on the Summary
- * opens it. 404 unless `cloud-sentiment-analysis` is on for the project's
+ * opens it. 404 unless `sentimentAnalysis` is on for the project's
  * organization; the window, filters and sort live in the URL.
  *
  * Owned (ADR-0004): the project comes from the console scope, and the switch is
