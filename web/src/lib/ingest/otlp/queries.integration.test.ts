@@ -4,7 +4,14 @@ import type { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
-import { getDailyAggregates, getToolMetrics, hasProjectIngestedEvents } from "./queries";
+import {
+  type EventsDb,
+  type EventWithMetric,
+  getDailyAggregates,
+  getToolMetrics,
+  hasProjectIngestedEvents,
+  insertEventsWithMetrics,
+} from "./queries";
 
 /**
  * The event reads behind the project overview and the cost tools, against the real
@@ -223,6 +230,92 @@ test("otel ingest tables use fixed-threshold planner maintenance", async () => {
       { relname: "otel_spans", reloptions },
       { relname: "otel_trace_summaries", reloptions },
     ]);
+  } finally {
+    await client.close();
+  }
+});
+
+test("a failed metrics insert rolls back events and allows an idempotent retry", async () => {
+  const { client, db } = await setup();
+  const writeDb = db as unknown as EventsDb;
+  try {
+    const eventTime = new Date("2026-07-01T10:00:00Z");
+    const row: EventWithMetric = {
+      event: {
+        projectId: PROJECT_ID,
+        dedupeHash: "atomic-ingest-regression",
+        occurredAt: eventTime,
+      },
+      metric: {
+        eventTime,
+        tokensByCategory: {
+          skills: 0,
+          tools: 0,
+          history: 0,
+          memory: 0,
+          user_input: 100,
+        },
+        splits: {
+          history_cached: 0,
+          history_uncached: 0,
+          tools_used: 0,
+          tools_unused: 0,
+        },
+        outputTokens: 50,
+        costUsd: "0.010000",
+        categorizerVersion: 1,
+      },
+    };
+
+    await client.exec(`
+      create function fail_metric_insert() returns trigger
+      language plpgsql as $$
+      begin
+        raise exception 'injected metrics insert failure';
+      end;
+      $$;
+
+      create trigger fail_metric_insert
+      before insert on event_metrics
+      for each row execute function fail_metric_insert();
+    `);
+
+    await assert.rejects(
+      insertEventsWithMetrics(PROJECT_ID, [row], writeDb),
+      (error: unknown) =>
+        error instanceof Error &&
+        (error.message.includes("injected metrics insert failure") ||
+          (error.cause instanceof Error &&
+            error.cause.message.includes("injected metrics insert failure"))),
+    );
+
+    const counts = async () => {
+      const result = await client.query<{
+        events: number;
+        metrics: number;
+      }>(`
+        select
+          (select count(*)::int from events) as events,
+          (select count(*)::int from event_metrics) as metrics
+      `);
+      return result.rows[0];
+    };
+
+    assert.deepEqual(await counts(), { events: 0, metrics: 0 });
+
+    await client.exec(`
+      drop trigger fail_metric_insert on event_metrics;
+      drop function fail_metric_insert();
+    `);
+
+    assert.equal(
+      await writeDb.transaction((tx) => insertEventsWithMetrics(PROJECT_ID, [row], tx)),
+      1,
+    );
+    assert.deepEqual(await counts(), { events: 1, metrics: 1 });
+
+    assert.equal(await insertEventsWithMetrics(PROJECT_ID, [row], writeDb), 0);
+    assert.deepEqual(await counts(), { events: 1, metrics: 1 });
   } finally {
     await client.close();
   }
