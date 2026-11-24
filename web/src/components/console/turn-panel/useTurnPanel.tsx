@@ -7,7 +7,13 @@ import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState, useTransition } from "react";
-import { CALL_PEEK, TURN_PEEK, type TurnPeek, withTurnPeek } from "@/lib/views/traces/turn-peek";
+import {
+  CALL_PEEK,
+  peekedTurnId,
+  TURN_PEEK,
+  type TurnPeek,
+  withTurnPeek,
+} from "@/lib/views/traces/turn-peek";
 
 /** A turn opened beside a list: what Traces shows of it, and its own page. */
 export interface PanelTurn {
@@ -34,7 +40,8 @@ export function useTurnPanel({
   backLabel: string;
 }) {
   const pathname = usePathname() ?? "";
-  const turnId = useSearchParams()?.get(TURN_PEEK) ?? null;
+  // Read as the server reads it: an id that is not one opens no turn, so the Panel never waits for it.
+  const turnId = peekedTurnId(useSearchParams()?.get(TURN_PEEK));
   const router = useRouter();
   const [loading, startLoading] = useTransition();
   const body = useRef<HTMLDivElement>(null);
