@@ -3,7 +3,11 @@ import { test } from "node:test";
 import type { PGlite } from "@electric-sql/pglite";
 import { TimeBudgetError } from "@/lib/ledger/turn-pages";
 import { OUTCOME_RULE_VERSION } from "@/lib/readings/trace-signals/outcomes/kinds";
-import { recordOutcomes, type StoredOutcomes } from "@/lib/readings/trace-signals/outcomes/run";
+import {
+  type OutcomeRunDeps,
+  recordOutcomes,
+  type StoredOutcomes,
+} from "@/lib/readings/trace-signals/outcomes/run";
 import { outcomeRunDeps } from "@/lib/readings/trace-signals/outcomes/run-job";
 import {
   loadSessionTurns,
@@ -22,6 +26,7 @@ import {
   count,
   type Db,
   jobDeps,
+  outcomeTestDeps,
   PROJECT_ID,
   seedLedger,
   setupDb,
@@ -526,5 +531,45 @@ test("where only the agent's replies are captured, the next reply says how the p
     "resolved_after_friction",
     "corrected on the way, then the last turn stood",
   );
+
+  const reactions = async () =>
+    (
+      await client.query<{
+        turn_key: string;
+        reply_reaction: string | null;
+        source: string | null;
+      }>(
+        `select t.turn_key, o.reply_reaction, o.reply_reaction_source as source from trace_turn_outcomes o join trace_turns t on t.id = o.turn_id order by o.started_at`,
+      )
+    ).rows.map((row) => [row.turn_key, row.reply_reaction, row.source]);
+  const settled = await reactions();
+  const rerun = (at: number, over: Partial<OutcomeRunDeps> = {}) =>
+    computeProjectTraceSignals(
+      PROJECT_ID,
+      { trigger: "manual" },
+      {
+        ...jobDeps(db, new Date(NOW.getTime() + at)),
+        recordOutcomes: (projectId, input, budget) =>
+          recordOutcomes(projectId, input, outcomeTestDeps(db, budget, over)),
+      },
+    );
+
+  // Replies that cannot be read this time leave what was read before.
+  await rerun(3_600_000, {
+    loadReplyTexts: async () => {
+      throw new Error("boom");
+    },
+  });
+  assert.deepEqual(await reactions(), settled);
+
+  // A reading with only the rules to go by keeps the model's reading of a reply, as it keeps a model's result.
+  await client.query(
+    `update trace_turn_outcomes o set reply_reaction = 'repeats', reply_reaction_source = 'model' from trace_turns t where t.id = o.turn_id and t.turn_key = 'declared:r1'`,
+  );
+  await rerun(7_200_000);
+  assert.deepEqual(await reactions(), [
+    ["declared:r1", "repeats", "model"],
+    ["declared:r2", null, null],
+  ]);
   await client.close();
 });

@@ -361,9 +361,11 @@ export async function recordOutcomes(
   const at = deps.now();
   const replaced = await deps.replaceTurnRows(projectId, range, rows, at);
   // The reply in the turn after each turn, in session order, where replies are captured and sessions are one person's.
-  const nextReplies = trust.sessions
+  // Null when they could not be read: the reactions read before stay.
+  const readReplies = trust.sessions
     ? await nextReplyByTurn(projectId, rows, stepEvents, deps)
     : new Map<string, string>();
+  const nextReplies = readReplies ?? new Map<string, string>();
   const asked = await modelLayer(
     projectId,
     modelTurns,
@@ -383,7 +385,7 @@ export async function recordOutcomes(
       fused.map(({ turnId, result, source, cause }) => ({ turnId, result, source, cause })),
     );
   // How the person took each turn, from the next reply: the model's answer, else the rules'.
-  if (deps.writeReplyReactions && deps.loadReplyTexts) {
+  if (deps.writeReplyReactions && deps.loadReplyTexts && readReplies) {
     const inferred = rows.map((row): ReplyReactionRow => {
       const byModel = model?.replyReactions.get(row.turnId) ?? null;
       const byRule: ReplyReaction | null = byModel
@@ -568,14 +570,15 @@ async function modelLayer(
  * The agent's reply in the turn after each turn of the window, by turn id:
  * turns of one session in order, each paired with the reply of the next. A
  * session's last turn has none. Empty when replies are not read or none was
- * captured. Never throws: replies are a hint, and the rows stand without them.
+ * captured, null when they could not be read. Never throws: replies are a
+ * hint, and the rows stand without them.
  */
 async function nextReplyByTurn(
   projectId: string,
   rows: readonly { turnId: string; sessionId: string; startedAt: Date }[],
   stepEvents: ReadonlyMap<string, string[]>,
   deps: Pick<OutcomeRunDeps, "loadReplyTexts" | "loadNextScopeReplies">,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string> | null> {
   const out = new Map<string, string>();
   if (!deps.loadReplyTexts || stepEvents.size === 0) return out;
   let replies: ReadonlyMap<string, string>;
@@ -598,7 +601,7 @@ async function nextReplyByTurn(
   } catch (err) {
     logger.error({ err, project_id: projectId }, "outcome replies failed");
     reportServerException(err, `project:${projectId}`, { operation: "trace_outcomes_replies" });
-    return out;
+    return null;
   }
   // "" marks a turn of a session that reports scopes but has nothing to read: no fallback pairing for it.
   for (const [turnId, reply] of byScope) if (reply) out.set(turnId, reply);
