@@ -1369,7 +1369,6 @@
         "web/src/lib/readings/trace-signals/outcomes/reply-reading.ts",
         "web/src/lib/readings/trace-signals/outcomes/rows.ts",
         "web/src/lib/readings/trace-signals/outcomes/task-question.ts",
-        "web/src/lib/readings/trace-signals/hallucinations/action-class.ts",
         "web/src/lib/readings/trace-signals/hallucinations/kinds.ts",
         "web/src/lib/readings/trace-signals/hallucinations/run-job.ts",
         "web/src/lib/readings/trace-signals/hallucinations/run-queries.ts",

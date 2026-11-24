@@ -47,6 +47,25 @@ const errorsFor = (steps: readonly StepDraft[], tool: string, text: string) =>
       .map((step) => [step.endTraceEventId ?? step.traceEventId, text]),
   );
 
+test("a tool's verb is read from every part of its name, the tool's own part first, and from runs of capitals", () => {
+  assert.deepEqual(
+    [
+      "create.issue",
+      "users.create",
+      "issues/delete",
+      "HTTPGet",
+      "getHTTPStatus",
+      "XMLUpload",
+      // The server's part names no action; the tool's own part wins over it.
+      "notify__list_users",
+      "github__get_issue",
+    ].map(actionClassOf),
+    ["create", "create", "remove", "read", "read", "create", "read", "read"],
+  );
+  // Comparing names is unchanged: the tool's own part, lowercased.
+  assert.deepEqual(["create.issue", "HTTPGet"].map(toolName), ["issue", "httpget"]);
+});
+
 test("a tool's action is its first known verb; a name without one has none", () => {
   assert.deepEqual(
     [

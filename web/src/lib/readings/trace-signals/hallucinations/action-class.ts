@@ -1,6 +1,6 @@
 /**
  * What kind of thing a tool does, read from its name: the first known verb
- * among its tokens. Pure. A name with no known verb has no class, and a rule
+ * among its words, the tool's own part of the name first. Pure. A name with no known verb has no class, and a rule
  * that compares classes never fires on it.
  */
 
@@ -91,13 +91,28 @@ export function toolName(id: string): string {
   return last.trim().toLowerCase();
 }
 
-const tokensOf = (id: string): string[] =>
-  toolName(id.replace(/([a-z0-9])([A-Z])/g, "$1_$2"))
+/** One part of a name as words: `getHTTPStatus` → get, http, status. */
+const wordsOf = (part: string): string[] =>
+  part
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
 
-const firstVerb = (id: string): string | null =>
-  tokensOf(id).find((token) => CLASS_OF.has(token)) ?? null;
+/**
+ * The first known verb of a name, looking at the tool's own part first and
+ * then the namespace parts from the nearest: `create.issue` is a create, and
+ * `notify__list_users` a read, not a notify.
+ */
+const firstVerb = (id: string): string | null => {
+  const parts = id.split(/__|[./:]/).filter(Boolean);
+  for (const part of parts.reverse()) {
+    const verb = wordsOf(part).find((word) => CLASS_OF.has(word));
+    if (verb) return verb;
+  }
+  return null;
+};
 
 export function actionClassOf(id: string): ActionClass | null {
   const verb = firstVerb(id);
