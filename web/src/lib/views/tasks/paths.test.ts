@@ -28,10 +28,7 @@ test("task pages and their neighbours", () => {
     taskSessionHref(P, "s 1", { tools: ["a", "b"], task: "t1" }),
     `/project/${P}/health/tasks/sessions/s%201?tools=a%2Cb&task=t1`,
   );
-  assert.equal(
-    selfCorrectionsHref(P, { task: "t1" }),
-    `/project/${P}/health/self-corrections?task=t1`,
-  );
+  assert.equal(selfCorrectionsHref(P, { task: "t1" }), `/project/${P}/self-corrections?task=t1`);
   assert.equal(fixesHref(P, { task: "t1" }), `/project/${P}/improvement/fixes?task=t1`);
   assert.equal(fixesHref(P, { peek: "fix-1" }), `/project/${P}/improvement/fixes?peek=fix-1`);
   assert.equal(topicHref(P, "topic-7"), `/project/${P}/intents?peek=topic-7`);
@@ -95,6 +92,6 @@ test("the neighbours a task's page links to by contract", () => {
   assert.equal(healthIssueHref(P, "sig-1"), `/project/${P}/health?peek=issue%3Asig-1`);
   assert.equal(
     selfCorrectionsHref(P, { tool: "lookup", task: "wf-1" }),
-    `/project/${P}/health/self-corrections?tool=lookup&task=wf-1`,
+    `/project/${P}/self-corrections?tool=lookup&task=wf-1`,
   );
 });

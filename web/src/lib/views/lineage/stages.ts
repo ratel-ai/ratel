@@ -16,6 +16,7 @@ export const STAGE_ROUTES: Readonly<Record<LineageStage, readonly string[]>> = {
   monitor: ["", "/dashboards", "/traces", "/runtime-events"],
   insights: [
     "/health",
+    "/self-corrections",
     "/insights",
     "/intents",
     "/improvement/health",

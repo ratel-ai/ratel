@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   catalogHref,
   fixesHref,
+  movedSelfCorrectionsHref,
   parseFilters,
   selfCorrectionsHref,
   taskHref,
@@ -10,11 +11,11 @@ import {
 } from "@/lib/views/health/self-corrections/paths";
 
 test("the page's own link drops the default window and empty filters", () => {
-  assert.equal(selfCorrectionsHref("p 1"), "/project/p%201/health/self-corrections");
-  assert.equal(selfCorrectionsHref("p1", { days: 7 }), "/project/p1/health/self-corrections");
+  assert.equal(selfCorrectionsHref("p 1"), "/project/p%201/self-corrections");
+  assert.equal(selfCorrectionsHref("p1", { days: 7 }), "/project/p1/self-corrections");
   assert.equal(
     selfCorrectionsHref("p1", { days: 30, filters: { tool: "skill:triage" } }),
-    "/project/p1/health/self-corrections?days=30&tool=skill%3Atriage",
+    "/project/p1/self-corrections?days=30&tool=skill%3Atriage",
   );
 });
 
@@ -49,4 +50,18 @@ test("filters from the URL: trimmed, first of repeats, blanks and oversized valu
     topic: null,
   });
   assert.deepEqual(parseFilters({}), { tool: null, task: null, topic: null });
+});
+
+test("an old Agent health address moves to this page with its whole query", () => {
+  assert.equal(movedSelfCorrectionsHref("p 1", {}), "/project/p%201/self-corrections");
+  assert.equal(
+    movedSelfCorrectionsHref("p1", {
+      days: "30",
+      tool: "skill:x",
+      task: "wf 1",
+      topic: ["t-1", "t-2"],
+      peek: undefined,
+    }),
+    "/project/p1/self-corrections?days=30&tool=skill%3Ax&task=wf+1&topic=t-1&topic=t-2",
+  );
 });

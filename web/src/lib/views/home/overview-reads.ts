@@ -22,21 +22,18 @@ import {
   getTraceAggregates,
   getTraceDailyAggregatesFromSummaries,
   getTracesIngestDiagnostics,
-  listTraces,
   type TraceAggregateSummary,
   type TraceDailyAggregate,
-  type TraceSummary,
   type TracesIngestDiagnostics,
 } from "@/lib/synthesis/traces/queries";
 import { loadFixes } from "@/lib/views/fixes/load";
 import { loadHealthPageModel } from "@/lib/views/health/page-model";
 import type { FixesSlice, IntentsRead, TasksRead } from "@/lib/views/home/glance";
-import { readIntents, readRunTasks, readTasks } from "@/lib/views/home/glance-queries";
+import { readIntents, readTasks } from "@/lib/views/home/glance-queries";
 
 /**
  * The Overview's reads, one function each, under a statement timeout. Every one may throw: the
- * page that calls it decides what a failure costs. Both Overviews (`load`, `focused-load`) read
- * through here, so a number is the same on both.
+ * loader (`focused-load`) decides what a failure costs.
  */
 
 export interface OverviewReadScope {
@@ -62,25 +59,11 @@ export interface SdkDay extends SdkActivity {
   day: string;
 }
 
-const RECENT_RUNS = 5;
-
 export const readTraces = (at: OverviewReadScope): Promise<TraceAggregateSummary> =>
   withStatementTimeout((db) => getTraceAggregates(at.projectId, at.current, db), {
     operation: "overview_trace_aggregate",
     db: at.db,
   });
-
-export const readRecentRuns = (at: OverviewReadScope): Promise<TraceSummary[]> =>
-  withStatementTimeout(
-    async (db) => (await listTraces(at.projectId, { ...at.current, limit: RECENT_RUNS }, db)).items,
-    { operation: "overview_recent_runs", db: at.db },
-  );
-
-export const readTasksOfRuns = (
-  at: OverviewReadScope,
-  runs: TraceSummary[],
-): Promise<ReadonlyMap<string, string>> =>
-  supplementary(at, "overview_run_tasks", (db) => readRunTasks(db, at.projectId, runs));
 
 export const readTelemetry = (at: OverviewReadScope): Promise<TracesIngestDiagnostics> =>
   supplementary(at, "overview_telemetry", (db) => getTracesIngestDiagnostics(at.projectId, db));

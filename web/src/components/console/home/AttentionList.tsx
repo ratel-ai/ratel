@@ -1,72 +1,17 @@
 import { cn } from "@ratel/design-system/cn";
 import { IntentPin, NOUN_ICONS, TaskPin, ToolPin } from "@ratel/design-system/entity";
 import { PeekLink } from "@ratel/design-system/panel";
-import { Section } from "@ratel/design-system/section";
-import { EmptyState } from "@ratel/design-system/states";
-import {
-  Activity,
-  ArrowRight,
-  ChevronRight,
-  CircleCheck,
-  Layers,
-  type LucideIcon,
-} from "lucide-react";
+import { Activity, ChevronRight, Layers, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { fmtCount } from "@/lib/platform/format";
 import {
   ATTENTION_TONE_LABEL,
-  type Attention,
   type AttentionItem,
   type AttentionMark,
   type AttentionSubject,
   type AttentionTone,
 } from "@/lib/views/home/attention";
-
-/**
- * "Needs attention": one short list across the product, a row per thing
- * that needs a look. A row is its noun's mark (tinted by how urgent it is),
- * a few words, the pins it is about, one number and a chevron; the
- * explanation is on the page it opens.
- */
-export function AttentionSection({
-  attention,
-  healthHref,
-}: {
-  attention: Attention;
-  healthHref: string | null;
-}) {
-  const { items, moreIssues } = attention;
-  return (
-    <Section
-      title="Needs attention"
-      actions={
-        moreIssues > 0 && healthHref ? (
-          <Link
-            href={healthHref}
-            className="inline-flex items-center gap-1 rounded-md text-ui text-fg-muted outline-none hover:text-fg focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            {fmtCount(moreIssues)} more in Agent health
-            <ArrowRight className="size-3.5" aria-hidden />
-          </Link>
-        ) : null
-      }
-    >
-      {items.length === 0 ? (
-        <div className="rounded-lg border border-line">
-          <EmptyState
-            icon={CircleCheck}
-            title="Nothing needs you right now"
-            description="Failed runs, issues and fixes show up here."
-            className="py-10"
-          />
-        </div>
-      ) : (
-        <AttentionList items={items} />
-      )}
-    </Section>
-  );
-}
 
 /** Each mark's icon: the product's nouns (DESIGN.md), runs as on Traces, and context. */
 const MARK_ICONS: Record<AttentionMark, LucideIcon> = {
@@ -88,21 +33,14 @@ const TONE_TEXT: Record<AttentionTone, string> = {
 const ROW =
   "group flex min-h-11 items-center gap-3 px-4 py-2 outline-none transition-colors duration-120 hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset";
 
-export function AttentionList({
-  items,
-  bare = false,
-}: {
-  items: readonly AttentionItem[];
-  /** Inside a card, which is the frame. */
-  bare?: boolean;
-}) {
+/**
+ * "Needs attention": one short list across the product, a row per thing that needs a look. A row
+ * is its noun's mark (tinted by how urgent it is), a few words, the pins it is about, one number
+ * and a chevron; the explanation is on the page it opens. The card around it is the frame.
+ */
+export function AttentionList({ items }: { items: readonly AttentionItem[] }) {
   return (
-    <ul
-      className={cn(
-        "divide-y divide-line",
-        !bare && "overflow-hidden rounded-lg border border-line",
-      )}
-    >
+    <ul className="divide-y divide-line">
       {items.map((item) => {
         const Icon = MARK_ICONS[item.mark];
         return (

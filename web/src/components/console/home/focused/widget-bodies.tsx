@@ -103,7 +103,7 @@ function NeedsAttention({
           className="py-6"
         />
       ) : (
-        <AttentionList items={items} bare />
+        <AttentionList items={items} />
       )}
       {partial ? (
         <p className="border-t border-line px-4 py-2.5 text-xs text-fg-subtle">

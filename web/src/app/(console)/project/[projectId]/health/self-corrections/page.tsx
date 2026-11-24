@@ -1,12 +1,14 @@
-import { SelfCorrectionsRoute } from "../../self-corrections/SelfCorrectionsRoute";
+import { permanentRedirect } from "next/navigation";
+import { movedSelfCorrectionsHref } from "@/lib/views/health/self-corrections/paths";
 
-export const dynamic = "force-dynamic";
-export const metadata = { title: "Self-corrections" };
-
-/** Agent health › Self-corrections, until `focusedConsole` moves it to Insights. */
-export default function SelfCorrectionsPage(props: {
+/** Self-corrections stands in Insights now; an old link lands there, its query kept. */
+export default async function MovedSelfCorrectionsPage({
+  params,
+  searchParams,
+}: {
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return <SelfCorrectionsRoute address="health" {...props} />;
+  const [{ projectId }, query] = await Promise.all([params, searchParams]);
+  permanentRedirect(movedSelfCorrectionsHref(projectId, query));
 }

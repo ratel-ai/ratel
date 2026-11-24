@@ -144,6 +144,7 @@ test("every project page has one stage, or none when it is setup", () => {
     ["/project/p1/insights", "insights"],
     ["/project/p1/health/tasks/wf_1", "insights"],
     ["/project/p1/health/self-corrections", "insights"],
+    ["/project/p1/self-corrections", "insights"],
     ["/project/p1/intents/flows", "insights"],
     ["/project/p1/improvement/tool-explorer", "insights"],
     ["/project/p1/improvement", "improve"],

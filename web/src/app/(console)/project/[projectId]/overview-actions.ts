@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { findProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { getLogger } from "@/lib/platform/logger";
@@ -100,7 +99,7 @@ async function run<T extends { ok: true }>(
 ): Promise<T | OverviewLayoutFailure> {
   const scope =
     typeof projectId === "string" && isDbConfigured() ? await findProjectScope(projectId) : null;
-  if (!scope || !(await focusedConsoleEnabled(scope.organization))) return failure("not_found");
+  if (!scope) return failure("not_found");
   try {
     return await work(scope.project.id);
   } catch (err) {

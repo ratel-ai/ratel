@@ -1,6 +1,6 @@
 # `lib/views/overview-layout`
 
-Where each person put the Overview's widgets, and which ones they removed, per project (`focusedConsole`).
+Where each person put the Overview's widgets, and which ones they removed, per project.
 
 | File | Holds |
 |---|---|

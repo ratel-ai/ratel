@@ -10,15 +10,16 @@ import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOv
 import { SetupGuide } from "@/components/console/home/SetupGuide";
 import { TourLauncher } from "@/components/console/onboarding/TourLauncher";
 import { BASE_URL } from "@/lib/platform/app-config";
+import { CONTEXT_PEEK } from "@/lib/views/home/context-peek";
 import { loadFocusedOverview } from "@/lib/views/home/focused-load";
-import { CONTEXT_PEEK, type OverviewProject } from "@/lib/views/home/load";
+import type { OverviewProject } from "@/lib/views/home/load";
 import { parseOverviewWindow } from "@/lib/views/home/overview-model";
 import { pageLayout } from "@/lib/views/overview-layout/readers";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 
 type LoadOrganization = Parameters<typeof loadFocusedOverview>[0]["organization"];
 
-/** Overview with `focusedConsole`: the widgets, as this person arranged them. */
+/** Overview: the widgets, as this person arranged them. */
 export async function FocusedOverviewPage({
   project,
   organization,
@@ -72,7 +73,6 @@ export async function FocusedOverviewPage({
             isDemoProject={project.isDemo}
             surface="project_home"
             record={!inSupportSession}
-            focusedConsole
           />
         </span>
       }

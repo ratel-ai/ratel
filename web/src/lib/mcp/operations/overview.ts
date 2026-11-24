@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { projectRoot } from "@/lib/console/navigation";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
@@ -51,20 +50,17 @@ import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 import type { Topology } from "@/lib/views/project-entities/topology";
 
 /**
- * The recap Overview over MCP (`focusedConsole`): `get_overview` reads what the person sees on the
+ * The Overview over MCP: `get_overview` reads what the person sees on the
  * web, through the page's own loader and layout, or one widget of it through the same loader, and
  * `change_overview_layout` arranges it through the web's own action. `list_overview_changes`,
  * `undo_overview_change` and `restore_overview_layout` are the web's History, Undo and Restore. All
  * draw the overview view.
- * A later widget needs an entry in `WIDGET_DATA`, and no operation. With the flag off none is
- * listed (`operations/index.ts`), and a caller that reaches a project whose organization has it off
- * is refused.
+ * A later widget needs an entry in `WIDGET_DATA`, and no operation.
  */
 
 export interface OverviewOperationDeps {
   getProject: typeof getProjectById;
   getOrganization: (projectId: string) => Promise<Organization | null>;
-  focusedConsole: (organization: Pick<Organization, "id">) => Promise<boolean>;
   loadOverview: typeof loadFocusedOverview;
   layoutStore: () => OverviewLayoutStore;
   /** Every widget there is, which the parameter lists. A project may be offered fewer. */
@@ -93,7 +89,6 @@ export const WIDGET_DATA: Readonly<Record<OverviewWidgetId, WidgetData>> = {
 export const defaultOverviewDeps: OverviewOperationDeps = {
   getProject: getProjectById,
   getOrganization: getOrganizationByProjectId,
-  focusedConsole: (organization) => focusedConsoleEnabled(organization),
   loadOverview: loadFocusedOverview,
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
   widgets: WIDGET_CATALOG,
@@ -357,21 +352,6 @@ export function mcpLayoutReader(
         };
 }
 
-/** `focusedConsole` for the connection: an API key's organization, or any of a person's. */
-export async function focusedConsoleForCaller(
-  auth: McpAuthContext,
-  focused: (organization: Pick<Organization, "id">) => Promise<boolean> = (organization) =>
-    focusedConsoleEnabled(organization),
-): Promise<boolean> {
-  const ids =
-    auth.kind === "api-key"
-      ? auth.organization
-        ? [auth.organization.id]
-        : []
-      : auth.memberships.map(({ organizationId }) => organizationId);
-  return (await Promise.all(ids.map((id) => focused({ id })))).some(Boolean);
-}
-
 // — Helpers ——————————————————————————————————————————————————————————————————
 
 function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDeps {
@@ -389,11 +369,6 @@ async function requireOverview(deps: OverviewOperationDeps, projectId: string) {
     deps.getOrganization(projectId),
   ]);
   if (!project || !organization) throw notFound("project");
-  if (!(await deps.focusedConsole(organization))) {
-    throw new McpOperationError("forbidden", "The Overview is not available for this project.", {
-      reason: "focused_console_off",
-    });
-  }
   return { project, organization };
 }
 

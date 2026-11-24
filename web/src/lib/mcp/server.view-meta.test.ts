@@ -63,9 +63,7 @@ function stubbed(operation: McpOperation): McpOperation {
   };
 }
 
-const registry = buildRegistry(
-  [...buildRequestRegistry({ focusedConsole: true }).values()].map(stubbed),
-);
+const registry = buildRegistry([...buildRequestRegistry().values()].map(stubbed));
 const catalog = buildMcpAppCatalog(VIEWS, new Set(["whoami", ...registry.keys()]));
 
 async function callTool(flagOn: boolean, name: string, clientRendersViews = true) {

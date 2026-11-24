@@ -42,7 +42,7 @@ const COPY: Readonly<Record<SetupKey, FactCopy>> = {
   otel_model_calls: { label: "Model spans", unlocks: "Model calls per run, and tokens." },
   otel_conversation_id: {
     label: "Conversation id",
-    unlocks: "What each tool needs first, across runs of one conversation.",
+    unlocks: "Which runs belong to one conversation.",
   },
   otel_user_id: { label: "User id", unlocks: "Patterns per user." },
   otel_content: {
@@ -60,7 +60,7 @@ const COPY: Readonly<Record<SetupKey, FactCopy>> = {
   },
   sdk_tool_calls: {
     label: "Tool calls",
-    unlocks: "Run shapes, tasks and what comes before each tool all start from tool calls.",
+    unlocks: "Tasks and issues all start from tool calls.",
   },
   sdk_search_queries: {
     label: "Search queries",

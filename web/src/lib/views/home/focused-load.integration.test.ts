@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { focusedStats, overviewStats } from "@/components/console/home/overview-stats";
+import { focusedStats } from "@/components/console/home/overview-stats";
 import { resetConfigForTests } from "@/config";
 import { insertOtelSpans } from "@/lib/ingest/otlp/queries";
 import type { NewOtelSpan } from "@/lib/ingest/otlp/schema";
@@ -24,10 +24,10 @@ import {
   loadFocusedOverview,
   withoutLowConfidence,
 } from "@/lib/views/home/focused-load";
-import { firstTryTile, loadOverview } from "@/lib/views/home/load";
+import { firstTryTile } from "@/lib/views/home/load";
 import { readHealth } from "@/lib/views/home/overview-reads";
 
-/** The recap Overview says what the old Overview says: one seeded project, the same window. */
+/** The Overview's numbers and rows, over one seeded project. */
 
 const NOW = new Date("2026-09-02T12:00:00Z");
 const ORGANIZATION = { id: ORGANIZATION_ID, name: "Acme", slug: "acme" };
@@ -97,29 +97,26 @@ async function seeded(): Promise<Db> {
   return db;
 }
 
-test("the four values and the attention rows are the old Overview's", async () => {
+test("the four values and the attention rows, for both windows", async () => {
   const db = await seeded();
-  for (const window of [7, 30] as const) {
+  for (const [window, runs] of [
+    [7, "40"],
+    [30, "65"],
+  ] as const) {
     const input = { project: PROJECT, organization: ORGANIZATION, window, now: NOW, db };
-    const before = await loadOverview(input);
-    const after = await loadFocusedOverview(input);
-    assert.ok(before.traces && after.metrics && after.metrics !== "failed");
-    assert.ok(before.traces.count >= 40 && before.traces.errorCount > 0);
-
-    const old = overviewStats({ ...before, health: null }, before.traces);
+    const { metrics, attention } = await loadFocusedOverview(input);
+    assert.ok(metrics && metrics !== "failed" && attention);
+    const stats = focusedStats(metrics);
     assert.deepEqual(
-      old.map(({ label }) => label),
+      stats.map(({ label }) => label),
       ["Runs", "Failed runs", "Median duration", "Spend"],
     );
-    assert.deepEqual(focusedStats(after.metrics), old);
-
-    assert.ok(after.attention);
-    const { items, moreIssues, healthHref, partial } = after.attention;
-    assert.ok(items.some(({ key }) => key === "errors"));
-    assert.ok(items.some(({ key }) => key.startsWith("issue:")));
-    assert.deepEqual({ items, moreIssues }, before.attention);
-    assert.equal(healthHref, before.health?.href);
-    assert.equal(partial, false);
+    assert.equal(stats[0]!.value, runs);
+    assert.equal(stats[1]!.value, "20%");
+    assert.equal(stats[3]!.value, window === 7 ? "$0.40" : "$0.65");
+    assert.equal(attention.items[0]!.key, "errors");
+    assert.ok(attention.items.some(({ key }) => key.startsWith("issue:")));
+    assert.equal(attention.partial, false);
   }
 });
 
@@ -149,32 +146,26 @@ async function small(runs: boolean): Promise<Db> {
   return db;
 }
 
-for (const insights of ["1", "0"]) {
-  test(`a small project, toolRunInsights=${insights}: the attention rows and the stats are the old Overview's`, async () => {
-    setInsights(insights);
-    for (const runs of [true, false]) {
-      const db = await small(runs);
-      for (const window of [7, 30] as const) {
-        const input = { project: PROJECT, organization: ORGANIZATION, window, now: NOW, db };
-        const before = await loadOverview(input);
-        const after = await loadFocusedOverview(input);
-        assert.ok(after.attention && after.health && after.metrics && after.metrics !== "failed");
-        const { items, moreIssues } = after.attention;
-        assert.ok(items.some(({ key }) => key.startsWith("issue:")));
-        assert.deepEqual({ items, moreIssues }, before.attention);
-        assert.equal(after.health.card.kind, insights === "1" ? "score" : "state");
-        assert.ok(before.traces);
-        assert.deepEqual(
-          focusedStats(after.metrics),
-          overviewStats(runs ? { ...before, health: null } : before, before.traces),
-          runs ? "runs" : "SDK only",
-        );
-      }
+test("a small project: toolRunInsights changes the gauge only, not the attention rows and the stats", async () => {
+  for (const runs of [true, false]) {
+    const db = await small(runs);
+    for (const window of [7, 30] as const) {
+      const input = { project: PROJECT, organization: ORGANIZATION, window, now: NOW, db };
+      setInsights("0");
+      const off = await loadFocusedOverview(input);
+      setInsights("1");
+      const on = await loadFocusedOverview(input);
+      assert.ok(off.metrics && off.metrics !== "failed" && on.metrics && on.metrics !== "failed");
+      assert.ok(on.attention?.items.some(({ key }) => key.startsWith("issue:")));
+      assert.deepEqual(on.attention, off.attention);
+      assert.deepEqual(focusedStats(on.metrics), focusedStats(off.metrics));
+      assert.equal(off.health?.card.kind, "state");
+      assert.equal(on.health?.card.kind, "score");
     }
-  });
-}
+  }
+});
 
-test("a small project: the gauge is Agent health's reading, and the old reading is the one without the floor", async () => {
+test("a small project: the gauge is Agent health's reading, and the numbers' reading is the one without the floor", async () => {
   const db = await small(true);
   for (const windowDays of [7, 30] as const) {
     const scope = {
@@ -225,7 +216,6 @@ test("get_overview has the attention rows of the web loader for a small project"
         ...defaultOverviewDeps,
         getProject: (async () => PROJECT) as never,
         getOrganization: async () => ORGANIZATION,
-        focusedConsole: async () => true,
         loadOverview: (input) => loadFocusedOverview({ ...input, db }),
         now: () => NOW,
       });

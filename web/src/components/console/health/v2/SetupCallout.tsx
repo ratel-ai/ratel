@@ -29,7 +29,7 @@ import { CAPTURE_GUIDE, setupPeek } from "@/components/console/health/v2/setup-p
 
 /** The one thing the data shows is wrong: runs that hold several users' calls. */
 const MIXED_RUNS_LINE =
-  "Calls from different users land in the same run, so turn shapes, tasks and the issues read per run are hidden until turn ids arrive.";
+  "Calls from different users land in the same run, so the score, tasks and the issues read per run are hidden until turn ids arrive.";
 
 const CHIP =
   "inline-flex h-6 items-center gap-1.5 rounded-md border border-line-strong bg-app px-2 text-xs text-fg outline-none transition-colors duration-120 hover:border-line-active hover:bg-hover focus-visible:ring-2 focus-visible:ring-focus";

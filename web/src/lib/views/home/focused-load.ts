@@ -44,8 +44,10 @@ import {
 } from "@/lib/views/home/glance";
 import {
   firstTryTile,
-  type OverviewData,
+  type OverviewDaily,
+  type OverviewHealth,
   type OverviewProject,
+  type OverviewSdk,
   overviewAttention,
   overviewDaily,
   overviewSdk,
@@ -87,7 +89,7 @@ import {
 import { readTopology, type Topology } from "@/lib/views/project-entities/topology";
 
 /**
- * The recap Overview's reads (`focusedConsole`): when telemetry last arrived, and what the widgets
+ * The recap Overview's reads: when telemetry last arrived, and what the widgets
  * a person keeps need. A removed widget reads nothing. Each read degrades on its own, and one that
  * several widgets share runs once. The context Panel's read runs only when the Panel is asked for.
  */
@@ -115,10 +117,22 @@ export interface FocusedHealth {
 }
 
 /** What the stat row draws from (`focusedStats`). */
-export type MetricsData = Pick<
-  OverviewData,
-  "root" | "window" | "rangeParam" | "previous" | "series" | "daily" | "sdk" | "health"
-> & { traces: TraceAggregateSummary };
+export interface MetricsData {
+  root: string;
+  window: OverviewWindow;
+  rangeParam: `${OverviewWindow}d`;
+  traces: TraceAggregateSummary;
+  /** Null without a comparison: no change figures. */
+  previous: TraceAggregateSummary | null;
+  /** Runs per day across the window, oldest first. */
+  series: number[];
+  /** The other stats' days; every day null when they could not be read. */
+  daily: OverviewDaily;
+  /** Null when it could not be read. */
+  sdk: OverviewSdk | null;
+  /** Read only for a project without runs. */
+  health: OverviewHealth | null;
+}
 
 export interface FocusedAttention extends Attention {
   healthHref: string;
@@ -233,7 +247,7 @@ export async function loadFocusedOverview({
       return model === FAILED ? FAILED : applyPlanLimits(model, limits);
     }),
   };
-  // The gauge is Agent health's reading; the numbers and Needs attention are the old Overview's.
+  // The gauge is Agent health's reading; the numbers and Needs attention keep the usual floor.
   const usualHealth = once(async () => {
     const model = await shared.health();
     return model === FAILED ? FAILED : withoutLowConfidence(model);

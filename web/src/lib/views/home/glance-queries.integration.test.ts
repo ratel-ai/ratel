@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { BoundReadDb } from "@/lib/platform/db/statement-timeout";
 import { PROJECT_ID, setupDb } from "@/lib/readings/trace-signals/signals/integration-support";
 import { WORKFLOW_NAME_SEPARATOR } from "@/lib/readings/trace-signals/workflows/name";
-import { readIntents, readRunTasks, readTasks } from "@/lib/views/home/glance-queries";
+import { readIntents, readTasks } from "@/lib/views/home/glance-queries";
 
 type Client = Awaited<ReturnType<typeof setupDb>>["client"];
 
@@ -198,39 +198,4 @@ test("tasks: asks placed in a task that ran no tool count as unfinished, from in
     0.75,
     "older insights read as none",
   );
-});
-
-test("a run's task comes from its turn, for runs sent as OpenTelemetry", async () => {
-  const { client, db } = await setup();
-  const turn = (n: number, key: string, task: string | null, endedAt: string, status = "closed") =>
-    client.query(
-      `insert into trace_turns (id, project_id, session_id, turn_key, turn_source, lane, status, started_at, ended_at, last_received_at, workflow_id)
-       values ($1, $2, 's', $3, 'otlp', 'otlp', $4, $5, $5, $5, $6)`,
-      [
-        `00000000-0000-4000-8000-${n.toString().padStart(12, "0")}`,
-        PROJECT_ID,
-        key,
-        status,
-        endedAt,
-        task,
-      ],
-    );
-  await turn(1, "otlp:aaa", "task-a", "2026-10-15T10:00:02Z");
-  await turn(2, "otlp:bbb", null, "2026-10-15T10:05:02Z");
-  await turn(3, "otlp:ccc", "task-b", "2026-10-15T10:06:02Z", "open");
-  await turn(4, "otlp:ddd", "task-b", "2026-09-01T10:00:00Z");
-  const run = (traceId: string, at: string) => ({
-    traceId,
-    startedAt: new Date(at),
-    endedAt: new Date(new Date(at).getTime() + 3_000),
-  });
-  const tasks = await readRunTasks(db, PROJECT_ID, [
-    run("aaa", "2026-10-15T10:00:00Z"),
-    run("bbb", "2026-10-15T10:05:00Z"),
-    run("ccc", "2026-10-15T10:06:00Z"),
-    run("eee", "2026-10-15T10:07:00Z"),
-  ]);
-  // No task, still open, or no turn at all: no pin.
-  assert.deepEqual(Object.fromEntries(tasks), { aaa: "task-a" });
-  assert.equal((await readRunTasks(db, PROJECT_ID, [])).size, 0);
 });

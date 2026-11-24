@@ -174,7 +174,7 @@ function render(
       actions,
     }),
     {
-      pathname: `${ROOT}/health/self-corrections`,
+      pathname: `${ROOT}/self-corrections`,
       search,
     },
   );
@@ -293,21 +293,21 @@ test("where it happens: tools, tasks and intents as pins with bars, each narrowi
   assert.match(
     where,
     new RegExp(
-      `<a (?=[^>]*href="${ROOT}/health/self-corrections\\?tool=update_task")[^>]*>[^]*?lucide-wrench[^]*?Update task`,
+      `<a (?=[^>]*href="${ROOT}/self-corrections\\?tool=update_task")[^>]*>[^]*?lucide-wrench[^]*?Update task`,
     ),
     "a tool as its pin",
   );
   assert.match(
     where,
     new RegExp(
-      `<a (?=[^>]*href="${ROOT}/health/self-corrections\\?task=wf-a")[^>]*>[^]*?bg-chart-1[^]*?Update work`,
+      `<a (?=[^>]*href="${ROOT}/self-corrections\\?task=wf-a")[^>]*>[^]*?bg-chart-1[^]*?Update work`,
     ),
     "a task as its pin, in its color",
   );
   assert.match(
     where,
     new RegExp(
-      `<a (?=[^>]*href="${ROOT}/health/self-corrections\\?topic=t-1")[^>]*>[^]*?lucide-message-square-text[^]*?Release tracking`,
+      `<a (?=[^>]*href="${ROOT}/self-corrections\\?topic=t-1")[^>]*>[^]*?lucide-message-square-text[^]*?Release tracking`,
     ),
     "an intent as its pin",
   );

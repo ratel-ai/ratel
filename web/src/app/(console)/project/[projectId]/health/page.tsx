@@ -3,11 +3,8 @@ import {
   type SummaryImports,
   SummaryNoDatabase,
   type SummaryShare,
-  SummaryView,
-  type SummaryViewProps,
 } from "@/components/console/health/v2/SummaryView";
 import { composition } from "@/lib/composition";
-import { focusedConsoleEnabled } from "@/lib/console/focused-console";
 import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import type { EditionUi } from "@/lib/contracts/composition";
 import { isDbConfigured } from "@/lib/platform/db/client";
@@ -43,10 +40,6 @@ import { turnsPerIssue } from "@/lib/views/health/issue-examples";
 import { loadHealthPageModel, pendingHealthModel } from "@/lib/views/health/page-model";
 import { loadHealthPageState } from "@/lib/views/health/page-state-load";
 import { healthReportHref } from "@/lib/views/health/report-href";
-import {
-  loadSelfCorrectionsCard,
-  unavailableSelfCorrectionsCard,
-} from "@/lib/views/health/self-corrections/card";
 import { shareLinkOnPlan } from "@/lib/views/health/share-window";
 import { buildTaskList, type TaskListModel } from "@/lib/views/tasks/model";
 import { loadTasksInputs } from "@/lib/views/tasks/page-model";
@@ -55,15 +48,14 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Agent health" };
 
 /**
- * Agent health's Summary: what the agent gets wrong and what to change. The
- * reading (without example turns: an issue reads its own when it is opened),
- * the decided state of the window, and its neighbours: the tasks, the fixes
- * the issues open, and self-corrections. Each read degrades on its own.
+ * Agent health: the Health score and what costs its points. The reading (without
+ * example turns: an issue reads its own when it is opened), the decided state of
+ * the window, the tasks the issues name and the fixes they open. Each read
+ * degrades on its own.
  *
  * Owned (ADR-0004): the project comes from the console scope (the session's
  * organization, a 404 otherwise); the limits and plans from the entitlements port.
- * The importer and the share dialog are the edition's. With `focusedConsole`, the score and its
- * categories only (`FocusedHealthView`).
+ * The importer and the share dialog are the edition's.
  */
 export default async function AgentHealthPage({
   params,
@@ -84,12 +76,11 @@ export default async function AgentHealthPage({
   const billingEnabled = billingSelfServe(organization);
   const editionUi = await composition.ui?.();
   const importsSlot = editionUi?.HealthImports;
-  const focused = await focusedConsoleEnabled(organization);
   // toolRunInsights (RC-828): a reading from 10 turns on shows, marked low confidence.
   const lowConfidenceFloor = (await toolRunInsightsEnabled(project.id, organization))
     ? LOW_CONFIDENCE_FLOOR
     : undefined;
-  const [loaded, imports, share, inSupportSession, tasks, fixes, corrections] = await Promise.all([
+  const [loaded, imports, share, inSupportSession, tasks, fixes] = await Promise.all([
     loadOrFallback({
       operation: "agent_health_model",
       distinctId,
@@ -119,14 +110,6 @@ export default async function AgentHealthPage({
       fallback: null,
       load: () => loadFixes({ projectId: project.id, organization, topics: false }),
     }),
-    focused
-      ? null
-      : loadOrFallback({
-          operation: "agent_health_self_corrections_card",
-          distinctId,
-          fallback: unavailableSelfCorrectionsCard(project.id, windowDays),
-          load: () => loadSelfCorrectionsCard(project.id, windowDays),
-        }),
   ]);
   // The example allowance, kept for when an issue is opened (the model carries none).
   const model = {
@@ -193,26 +176,23 @@ export default async function AgentHealthPage({
     ),
   );
 
-  const view: Omit<SummaryViewProps, "corrections"> = {
-    projectId: project.id,
-    projectName: project.name,
-    model,
-    state,
-    windowOptions: windowOptionsForPlan(limits.agentHealthWindowDays),
-    billingHref: billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null,
-    lockedPlan: fullAgentHealthPlanName(),
-    tasks,
-    fixes,
-    reportHref: healthReportHref(project.id, windowDays),
-    imports,
-    share,
-    partial,
-    inferredTools,
-  };
-  return focused ? (
-    <FocusedHealthView {...view} />
-  ) : (
-    <SummaryView {...view} corrections={corrections} />
+  return (
+    <FocusedHealthView
+      projectId={project.id}
+      projectName={project.name}
+      model={model}
+      state={state}
+      windowOptions={windowOptionsForPlan(limits.agentHealthWindowDays)}
+      billingHref={billingEnabled ? `/org/${encodeURIComponent(organization.slug)}/billing` : null}
+      lockedPlan={fullAgentHealthPlanName()}
+      tasks={tasks}
+      fixes={fixes}
+      reportHref={healthReportHref(project.id, windowDays)}
+      imports={imports}
+      share={share}
+      partial={partial}
+      inferredTools={inferredTools}
+    />
   );
 }
 

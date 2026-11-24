@@ -41,8 +41,6 @@ import { buildRegistry, type McpOperation, type Registry } from "@/lib/mcp/regis
 export interface AssembleOptions {
   /** Omit write operations, for a read-only deployment or a read-only test. */
   includeWrites?: boolean;
-  /** List the recap Overview's tools too (`focusedConsole`). Off, they do not exist. */
-  focusedConsole?: boolean;
 }
 
 /**
@@ -61,7 +59,7 @@ export function assembleOperations(
   const includeWrites = options.includeWrites ?? true;
   const core = [
     ...scopeOperations(),
-    ...(options.focusedConsole ? overviewOperations() : []),
+    ...overviewOperations(),
     ...catalogOperations(),
     ...observabilityOperations(),
     ...runsOperations(),
@@ -85,7 +83,7 @@ export function assembleOperations(
     ...loopTaskReadOperations(),
     ...loopEvalSetReadOperations(),
     ...writeOperations(),
-    ...(options.focusedConsole ? overviewWriteOperations() : []),
+    ...overviewWriteOperations(),
     ...runtimeWriteOperations(),
     ...toolCrafterWriteOperations(),
     ...loopWriteOperations(),
@@ -102,8 +100,8 @@ export function assembleOperations(
  * `whoami`. The Integrations page states it; flag-off.test.ts pins it to the
  * server's own tools/list.
  */
-export function agentToolCount(options: AssembleOptions = {}): number {
-  return assembleOperations(options).filter((operation) => !operation.appOnly).length + 1;
+export function agentToolCount(): number {
+  return assembleOperations().filter((operation) => !operation.appOnly).length + 1;
 }
 
 /** Build a registry for one request. */

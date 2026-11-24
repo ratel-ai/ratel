@@ -7,7 +7,6 @@ import { Section } from "@ratel/design-system/section";
 import { ChevronRight, CircleCheck } from "lucide-react";
 import { useId, useState } from "react";
 import { Calculating } from "@/components/console/health/v2/Calculating";
-import type { IssuesSectionProps } from "@/components/console/health/v2/IssuesSection";
 import {
   Dismissed,
   issueColumns,
@@ -16,9 +15,34 @@ import {
 } from "@/components/console/health/v2/issue-list-parts";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
 import { useIssuePanel } from "@/components/console/health/v2/use-issue-panel";
+import type { DismissedSignal } from "@/lib/readings/trace-signals/dismiss";
 import type { IssueHarm } from "@/lib/readings/trace-signals/health-score";
+import type { EarlyProgress } from "@/lib/readings/trace-signals/signals/early-reading";
 import type { CategoryRate, IssueCategory } from "@/lib/views/health/issue-categories";
 import type { IssueRow } from "@/lib/views/health/issue-rows";
+
+interface IssueCategoriesProps {
+  projectId: string;
+  categories: readonly IssueCategory[];
+  /** Every issue that counts is known, so an empty category is a healthy one. */
+  complete: boolean;
+  /** "9 issues across 17 tools, worst first." */
+  line: string;
+  /** The span the issues were read over when it is not the selected window: "last 31 days". */
+  windowLabel: string | null;
+  /** False on a plan without example turns. */
+  examplesAllowed: boolean;
+  /** Issues the plan hides. */
+  lockedCount: number;
+  /** Where a plan can be picked; null when billing is off. */
+  upgradeHref: string | null;
+  /** The plan that shows every issue and its turns ("Plus"); null names the limits instead. */
+  lockedPlan?: string | null;
+  /** Slow tools hidden as slow by design, each with "Show again". */
+  dismissed: readonly DismissedSignal[];
+  /** The reading is early (RC-225): the list is as of now, more may come. */
+  calculating?: { progress: EarlyProgress | null } | null;
+}
 
 /**
  * The issues under the score's four categories, worst first. A category that costs points is
@@ -38,11 +62,7 @@ export function IssueCategories({
   lockedPlan = null,
   dismissed,
   calculating = null,
-}: Omit<IssuesSectionProps, "rows"> & {
-  categories: readonly IssueCategory[];
-  /** Every issue that counts is known, so an empty category is a healthy one. */
-  complete: boolean;
-}) {
+}: IssueCategoriesProps) {
   const rows = categories.flatMap((category) => category.rows);
   const { open, openRow, panel } = useIssuePanel({
     projectId,

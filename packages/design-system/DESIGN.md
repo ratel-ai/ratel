@@ -27,27 +27,19 @@ Every UI change in the platform, in both editions, follows this document and is 
 
 ## Information architecture
 
-At most 9 project items; nothing "Soon"; one home per concept and per editable field; items the
+At most 10 project items; nothing "Soon"; one home per concept and per editable field; items the
 edition lacks are not rendered; moved pages redirect.
-
-| Item | Answers | Contains |
-|---|---|---|
-| Overview | How is this project doing? | Numbers, "Needs attention", recent runs |
-| Agent health | What does my agent get wrong? | Summary, Tasks, Self-corrections |
-| Traces | What happened in a run? | Runs, Spans, Logs |
-| Catalog | What can my agent use? | Tools, Skills, Test |
-| Intents | What do people want, and what next? | All intents, Flows, Map |
-| Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
-| Settings | Project configuration | General, API keys, Developer, Danger zone |
-
-With `focusedConsole` on, Overview is a recap of widgets that each person arranges, Agent health is
-one page (the Health score, then the issues under the four categories it counts by) and Self-corrections is an item of its own in Insights:
 
 | Item | Answers | Contains |
 |---|---|---|
 | Overview | How is this project doing? | Widgets: Metrics, Agents and MCP servers, Health score, Needs attention. View mode to read, Edit to arrange |
 | Agent health | What does my agent get wrong? | The Health score, Failing turns, Detours and corrections, Wasted calls and time, Tidying |
 | Self-corrections | Where does my agent go back on itself? | How often, where, what it said, what to change |
+| Traces | What happened in a run? | Runs, Spans, Logs |
+| Catalog | What can my agent use? | Tools, Skills, Test |
+| Intents | What do people want, and what next? | All intents, Flows, Map |
+| Improvements | What should I change? | Fixes, Quality, Adaptive ranking |
+| Settings | Project configuration | General, API keys, Developer, Danger zone |
 
 ## Layout
 
@@ -217,7 +209,7 @@ Built on Base UI where it has the part, styled with the tokens, merged with `cn`
 **Page anatomy.** PageHeader, at most one Callout, the answer (StatRow or the primary list),
 then drill-downs.
 
-**Arrangeable pages.** Only Overview with `focusedConsole`. A page that a person arranges has two modes, and a reload is
+**Arrangeable pages.** Only Overview. A page that a person arranges has two modes, and a reload is
 view mode. View mode is content only: a widget has no title bar, border or control, also on hover. A
 heading for screen readers names it, its content links to the page behind it, and the gap between
 widgets is clear. `Edit` in the header starts edit mode, which is state of the page and not in its
@@ -282,7 +274,7 @@ Intents, then Tasks, then Issues and Self-corrections, then Fixes: one word per 
 | **Steps** | A task's tools in order | `Footprints` | A task's page, an intent's panel |
 | **Tool**, **Skill** | What the agent can call | `Wrench`, `BookOpen` | Catalog |
 | **Issue** | Something going wrong, with numbers and a fix | `CircleAlert` | Agent health |
-| **Self-correction** | The agent retried, switched tools, gave up or apologized | `RotateCcw` | Agent health › Self-corrections |
+| **Self-correction** | The agent retried, switched tools, gave up or apologized | `RotateCcw` | Self-corrections |
 | **Fix** | A concrete change that resolves an issue | `Hammer` | Improvements › Fixes |
 
 An intent opens onto **What they ask for**, then **Ways people ask it**. Nouns appear as pins

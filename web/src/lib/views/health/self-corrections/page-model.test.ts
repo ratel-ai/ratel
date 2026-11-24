@@ -263,7 +263,7 @@ test("after which tool call: most first, its main kind, its task, and links to C
   );
   assert.equal(
     first?.filterHref,
-    "/project/p1/health/self-corrections?days=30&tool=update_task&topic=topic-1",
+    "/project/p1/self-corrections?days=30&tool=update_task&topic=topic-1",
   );
   assert.deepEqual(
     [first?.entryId, first?.entryKind],
@@ -565,21 +565,21 @@ test("filters read in plain words, each with the page without it and the way to 
       field: "tool",
       label: "After",
       value: "Triage",
-      removeHref: "/project/p1/health/self-corrections?days=30&task=wf-a&topic=topic-1",
+      removeHref: "/project/p1/self-corrections?days=30&task=wf-a&topic=topic-1",
       href: "/project/p1/catalogs/skills?skill=triage",
     },
     {
       field: "task",
       label: "Task",
       value: "Update work",
-      removeHref: "/project/p1/health/self-corrections?days=30&tool=skill%3Atriage&topic=topic-1",
+      removeHref: "/project/p1/self-corrections?days=30&tool=skill%3Atriage&topic=topic-1",
       href: "/project/p1/health/tasks/wf-a",
     },
     {
       field: "topic",
       label: "Intent",
       value: "Release tracking",
-      removeHref: "/project/p1/health/self-corrections?days=30&tool=skill%3Atriage&task=wf-a",
+      removeHref: "/project/p1/self-corrections?days=30&tool=skill%3Atriage&task=wf-a",
       href: "/project/p1/intents?peek=topic-1",
     },
   ]);

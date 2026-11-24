@@ -36,19 +36,6 @@ export async function featureEnabled(
   }
 }
 
-/** The organizations a per-organization decision is on for. A failed decision counts as off. */
-export async function organizationIdsWith<O extends { id: string }>(
-  organizations: readonly O[],
-  enabled: (organization: O) => Promise<boolean>,
-): Promise<string[]> {
-  const decided = await Promise.all(
-    organizations.map(async (organization) =>
-      (await enabled(organization).catch(() => false)) ? [organization.id] : [],
-    ),
-  );
-  return decided.flat();
-}
-
 /**
  * Whether an experimental feature is on: its own flag, or, in the open-source edition,
  * `experimentalFeatures`, the one switch for all of them. Cloud ignores the switch and keeps

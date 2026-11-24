@@ -47,7 +47,7 @@ export const TOUR_STEPS: readonly TourStep[] = [
     id: "v2-overview",
     target: "nav-overview",
     title: "Overview: how this project is doing",
-    body: "Runs, first try, latency and cost at a glance, and the few things that need you right now.",
+    body: "The numbers, your agents and MCP servers, the Health score and what needs attention. Edit to add, remove, move and resize the widgets.",
     placement: "right",
   },
   {
@@ -94,19 +94,6 @@ export const TOUR_STEPS: readonly TourStep[] = [
     placement: "right",
   },
 ];
-
-/** The tour's steps; with `focusedConsole`, the first one says what the recap Overview shows. */
-export function tourSteps(focusedConsole: boolean): readonly TourStep[] {
-  if (!focusedConsole) return TOUR_STEPS;
-  return TOUR_STEPS.map((step) =>
-    step.id === "v2-overview"
-      ? {
-          ...step,
-          body: "The numbers, your agents and MCP servers, the Health score and what needs attention. Edit to add, remove, move and resize the widgets.",
-        }
-      : step,
-  );
-}
 
 /**
  * The steps that can actually run: those whose target is on the page, in

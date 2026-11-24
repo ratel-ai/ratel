@@ -167,7 +167,7 @@ test("an intent row carries its numbers, its tasks with their colors and names, 
     ],
   );
   assert.deepEqual(pay.links, {
-    selfCorrections: "/project/p1/health/self-corrections?topic=t_pay",
+    selfCorrections: "/project/p1/self-corrections?topic=t_pay",
     fixes: "/project/p1/improvement/fixes?topic=t_pay",
     flows: "/project/p1/intents/flows?start=t_pay",
   });
