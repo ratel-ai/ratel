@@ -222,7 +222,6 @@
         "!web/src/app/api/v1/skills/route.ts",
         "web/src/lib/console/seed/site-copilot-rng.ts",
         "web/src/lib/console/seed/site-copilot-catalog.ts",
-        "web/src/lib/console/seed/site-copilot-turns.ts",
         "web/src/lib/console/seed/site-copilot-plan.ts",
         "web/src/lib/console/seed/site-copilot-otlp.ts",
         "web/src/lib/ingest/trace-events/maintenance.ts",
