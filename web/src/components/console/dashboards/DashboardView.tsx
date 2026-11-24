@@ -17,6 +17,7 @@ import { toast } from "@ratel/design-system/toast";
 import {
   ArrowDown,
   ArrowUp,
+  Bell,
   ChartColumn,
   Ellipsis,
   ListTree,
@@ -37,6 +38,7 @@ import {
   withRangePreset,
 } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
+import { newAlertHref } from "@/lib/views/alerts/links";
 import {
   ADD_SCORER_PARAM,
   dashboardsHref,
@@ -64,6 +66,7 @@ export function DashboardView({
   facets,
   timeWindow,
   scorers,
+  alerts,
   draft,
 }: {
   projectId: string;
@@ -73,6 +76,8 @@ export function DashboardView({
   timeWindow: TimeWindow;
   /** The project's scorers; null while scorers are off. */
   scorers: readonly ScorerOption[] | null;
+  /** Alerts are on: a widget can start one. */
+  alerts: boolean;
   /** A widget to start adding as the page opens, from a scorer's page. */
   draft: WidgetInput | null;
 }) {
@@ -262,6 +267,14 @@ export function DashboardView({
                       >
                         View traces
                       </MenuLinkItem>
+                      {alerts && available(widget) ? (
+                        <MenuLinkItem
+                          icon={<Bell />}
+                          render={<Link href={newAlertHref(projectId, widget)} />}
+                        >
+                          Create alert
+                        </MenuLinkItem>
+                      ) : null}
                       <MenuSeparator />
                       <MenuItem
                         icon={<Trash2 />}

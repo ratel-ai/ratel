@@ -12,19 +12,9 @@ import {
   previewWidgetAction,
   type WidgetPreview,
 } from "@/app/(console)/project/[projectId]/dashboards/actions";
-import { TraceFilterBar } from "@/components/console/traces/TraceFilterBar";
-import {
-  getMetric,
-  type MetricAggregation,
-  type MetricGroupBy,
-  type MetricId,
-  offeredMetrics,
-} from "@/lib/synthesis/metrics/catalog";
-import {
-  type TraceFilterBarFacets,
-  traceFilterFromSearch,
-} from "@/lib/synthesis/traces/v2/filters";
-import { type DashboardRange, searchFromTraceFilter } from "@/lib/views/dashboards/links";
+import { getMetric, type MetricGroupBy } from "@/lib/synthesis/metrics/catalog";
+import type { TraceFilterBarFacets } from "@/lib/synthesis/traces/v2/filters";
+import type { DashboardRange } from "@/lib/views/dashboards/links";
 import {
   MAX_WIDGET_TITLE,
   type ScorerOption,
@@ -32,18 +22,11 @@ import {
   type WidgetInput,
   type WidgetWidth,
 } from "@/lib/views/dashboards/types";
-import {
-  aggregationLabel,
-  CHART_LABELS,
-  fitWidget,
-  groupByLabel,
-  scorersOfMetric,
-  widgetName,
-} from "@/lib/views/dashboards/widget";
+import { CHART_LABELS, groupByLabel, widgetName } from "@/lib/views/dashboards/widget";
+import { Choice, changedWidget, MetricFields, MetricFilter } from "./MetricFields";
 import { WidgetBody } from "./WidgetBody";
 
 const NO_GROUP = "none";
-const ALL_SCORERS = "all";
 const PREVIEW_DELAY_MS = 200;
 const WIDTHS: readonly { value: WidgetWidth; label: string }[] = [
   { value: "third", label: "Third" },
@@ -132,16 +115,8 @@ function EditorForm({
   const { preview, pending } = usePreview(projectId, widget, range);
   const metric = getMetric(widget.metric);
   if (!metric) return null;
-  // Every change lands on a widget the rules allow, so Save never has to refuse one.
   const set = (change: Partial<WidgetInput>) =>
-    setWidget((current) => {
-      const next = fitWidget({ ...current, ...change });
-      // A pass rate has no 1 to 5 scorer, and the average no pass or fail one.
-      const fits = scorersOfMetric(next.metric, scorers ?? []).some(
-        ({ id }) => id === next.scorerId,
-      );
-      return fits ? next : { ...next, scorerId: undefined };
-    });
+    setWidget((current) => changedWidget(current, change, scorers ?? []));
   const groupable = metric.groupBys.length > 0;
 
   return (
@@ -152,36 +127,7 @@ function EditorForm({
         onSave(widget);
       }}
     >
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
-        <Field label="Metric" className="min-w-40 flex-1">
-          {(control) => (
-            <Select
-              {...control}
-              className="w-full"
-              options={offeredMetrics({ scorers: scorers !== null }).map(({ id, label }) => ({
-                value: id,
-                label,
-              }))}
-              value={widget.metric}
-              onValueChange={(value) => set({ metric: value as MetricId })}
-            />
-          )}
-        </Field>
-        <Field label="Aggregation" className="min-w-40 flex-1">
-          {(control) => (
-            <Select
-              {...control}
-              className="w-full"
-              disabled={metric.aggregations.length === 1}
-              options={metric.aggregations.map((value) => ({
-                value,
-                label: aggregationLabel(value),
-              }))}
-              value={widget.aggregation}
-              onValueChange={(value) => set({ aggregation: value as MetricAggregation })}
-            />
-          )}
-        </Field>
+      <MetricFields query={widget} scorers={scorers} onChange={set}>
         <Field label="Group by" className="min-w-40 flex-1">
           {(control) => (
             <Select
@@ -200,28 +146,7 @@ function EditorForm({
             />
           )}
         </Field>
-        {metric.source === "scores" ? (
-          <Field label="Scorer" className="min-w-40 flex-1">
-            {(control) => (
-              <Select
-                {...control}
-                className="w-full"
-                options={[
-                  { value: ALL_SCORERS, label: "All scorers" },
-                  ...scorersOfMetric(widget.metric, scorers ?? []).map(({ id, name }) => ({
-                    value: id,
-                    label: name,
-                  })),
-                ]}
-                value={widget.scorerId ?? ALL_SCORERS}
-                onValueChange={(value) =>
-                  set({ scorerId: value === ALL_SCORERS ? undefined : String(value) })
-                }
-              />
-            )}
-          </Field>
-        ) : null}
-      </div>
+      </MetricFields>
       <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
         <Choice label="Chart">
           <SegmentedControl
@@ -256,29 +181,11 @@ function EditorForm({
           )}
         </Field>
       </div>
-      {metric.filterable ? (
-        <Choice label="Filter">
-          <TraceFilterBar
-            tab="rollup"
-            entities
-            searchable={false}
-            pending={false}
-            facets={facets}
-            search={searchFromTraceFilter(widget.filter)}
-            onSearchChange={(next) =>
-              setWidget((current) => {
-                const search = searchFromTraceFilter(current.filter);
-                return {
-                  ...current,
-                  filter: traceFilterFromSearch(typeof next === "function" ? next(search) : next, {
-                    entities: true,
-                  }),
-                };
-              })
-            }
-          />
-        </Choice>
-      ) : null}
+      <MetricFilter
+        query={widget}
+        facets={facets}
+        onChange={(next) => setWidget((current) => ({ ...current, filter: next(current.filter) }))}
+      />
       <section
         aria-label="Preview"
         aria-busy={pending || undefined}
@@ -312,18 +219,6 @@ function EditorForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-/** A labelled control that is not one input: a segmented control, the filter bar. */
-function Choice({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span aria-hidden className="text-xs font-medium text-fg-muted">
-        {label}
-      </span>
-      {children}
-    </div>
   );
 }
 
