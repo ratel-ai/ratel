@@ -8,7 +8,7 @@ test("a condition reads as a sentence, in the metric's unit", () => {
   const query = { metric: "latency", aggregation: "p95", filter: {} } as const;
   assert.equal(
     conditionText({ query }, { operator: "above", threshold: 2000, windowMinutes: 60 }),
-    "Latency p95 is above 2 s over 1 hour",
+    "Latency p95 is above 2\u00a0s over 1 hour",
   );
   assert.equal(measuredText(0.5004, "ratio"), "50%");
   assert.equal(measuredText(0.667, "ratio"), "66.7%");
