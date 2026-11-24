@@ -187,6 +187,28 @@ test("the shell decides sentimentAnalysis per organization and the rail reads it
   );
 });
 
+test("with hallucinationDetection off the Hallucinations page is not found, before anything is read", () => {
+  const text = source("app/(console)/project/[projectId]/health/hallucinations/page.tsx");
+  const gate = text.search(
+    /if \(!\(await hallucinationDetectionEnabled\(organization\)\)\) notFound\(\);/,
+  );
+  assert.ok(gate > 0, "the page checks the switch and is not found when it is off");
+  assert.ok(gate < text.indexOf("loadOrFallback("), "the check comes before the page's read");
+});
+
+test("with hallucinationDetection off no turn marker or session bookmark is read", () => {
+  // The turn page (Traces and the panels): markers only behind the switch; a failed check reads as off.
+  assert.match(
+    source("lib/views/traces/turn-view.ts"),
+    /hallucinationDetectionEnabled\(organization\)\.catch\(\(\) => false\)[\s\S]*const hallucinations = hallucinationsOn\s*\?\s*await withStatementTimeout\(\(db\) => loadTurnMarkers\([\s\S]*?: \[\];/,
+  );
+  // Session replay: the bookmarks' findings only behind the switch.
+  assert.match(
+    source("app/(console)/(session-replay)/project/[projectId]/sessions/[sessionId]/page.tsx"),
+    /const findings = \(await hallucinationDetectionEnabled\(organization\)\.catch\(\(\) => false\)\)\s*\?\s*await withStatementTimeout\(\(db\) => loadSessionFindings\([\s\S]*?: \[\];/,
+  );
+});
+
 test("the shell decides hallucinationDetection per organization and the rail reads it", () => {
   assert.match(
     source("components/console/shell/ConsoleShell.tsx"),
