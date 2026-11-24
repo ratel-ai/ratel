@@ -24,6 +24,7 @@ soon after ingest. Behind the `scorers` flag. Core-owned; not the task scorers o
 | `conversation.ts` | a trace's input and output, read as `get_trace_conversation` reads them; null without captured content, or when the project does not let the product read it |
 | `judge.ts` | `judgeTraces`: one closed question per trace to the decision engine (`readings/decisions`), behind `JudgeEngine`. Input and output are cut to 8,000 characters each. The worst cost of a batch is held on the organization's daily budget before any call, then settled. No engine, no content, no budget or no answer: the trace gets no result |
 | `preview.ts` | `previewScorer`: a draft run on the 5 newest matching traces, nothing stored; `countLastWeek` |
+| `task-scores.ts` | `loadTaskScorers`: a task's live scoring on its page, from the scorers scoped to it |
 | `format.ts` | a scorer and its results in words, and a stored filter as the filter bar's query string |
 | `paths.ts` | the console addresses of the Scorers pages and of a trace |
 | `metrics.ts` | `scorerMetricSource`: the results as a source of the metric catalog (`synthesis/metrics`). It fills `metricSeams.scores`, because the catalog is a lower layer |
