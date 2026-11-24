@@ -109,6 +109,9 @@ export const SERVER_EVENT_NAMES = [
   "agent_override_updated",
   "mcp_servers_viewed",
   "agents_viewed",
+  "feature.scorers.changed",
+  "feature.scorers.swept",
+  "feature.scorers.judge_skipped",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

@@ -44,6 +44,8 @@ export type BackgroundEventName = Extract<
   | "task_eval_simulation_requested"
   | "task_eval_simulation_finished"
   | "fix_draft_finished"
+  | "feature.scorers.swept"
+  | "feature.scorers.judge_skipped"
 >;
 
 export interface BackgroundObservabilityDeps {

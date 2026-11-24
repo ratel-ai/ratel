@@ -361,7 +361,7 @@ function distinctTraces(spans: ReadonlyArray<ChangedTrace>): ChangedTrace[] {
  * every connection uses the same role), those rows read NULL and drop out of the
  * `min`, leaving the lag as the bound.
  */
-function settledBefore(visibilityLagMs: number) {
+export function settledBefore(visibilityLagMs: number) {
   // Lag inlined rather than bound: an integer we just validated, and a literal
   // keeps the interval's type unambiguous.
   return sql`least(
