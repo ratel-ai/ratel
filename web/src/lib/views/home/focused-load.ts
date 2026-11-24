@@ -233,6 +233,11 @@ export async function loadFocusedOverview({
       return model === FAILED ? FAILED : applyPlanLimits(model, limits);
     }),
   };
+  // The gauge is Agent health's reading; the numbers and Needs attention are the old Overview's.
+  const usualHealth = once(async () => {
+    const model = await shared.health();
+    return model === FAILED ? FAILED : withoutLowConfidence(model);
+  });
   const widgets = new Set(visibleWidgets(layout).map(({ id }) => id));
   const shown = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
     widgets.has(id) ? load() : null;
@@ -286,7 +291,7 @@ export async function loadFocusedOverview({
     };
     const sdk = overviewSdk(rows, range.days);
     // Only the numbers of a project without runs show the first try tile.
-    const model = sdk && traces.count === 0 ? await shared.health() : FAILED;
+    const model = sdk && traces.count === 0 ? await usualHealth() : FAILED;
     return {
       root: projectRoot(project.id),
       window,
@@ -319,7 +324,7 @@ export async function loadFocusedOverview({
     const fixesRead = read("fixes", (run) => run(scope));
     const [traces, health, fixes, pendingRewrites, intents, tasks, aggregates] = await Promise.all([
       shared.traces(),
-      shared.health(),
+      usualHealth(),
       fixesRead,
       // Fixes counts them, when it could be read.
       fixesRead.then((fixes) =>
@@ -350,6 +355,17 @@ export async function loadFocusedOverview({
       partial: [traces, health, pendingRewrites, intents, tasks, aggregates].includes(FAILED),
     };
   }
+}
+
+/**
+ * The reading by the usual floor, from one that may show a small project's numbers early
+ * (`toolRunInsights`): the same issues, and not ready until its turns reach the floor. The low
+ * floor changes nothing else that the Overview reads, so this costs no second read.
+ */
+export function withoutLowConfidence(model: HealthPageModel): HealthPageModel {
+  if (!model.lowConfidence) return model;
+  const { lowConfidence, ...usual } = model;
+  return { ...usual, floor: lowConfidence.firmsUpAt };
 }
 
 /** The score as Agent health shows it, or in one line why there is none. Null: the read failed. */

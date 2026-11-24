@@ -228,3 +228,24 @@ test("the issue rows open the issue on Agent health", async () => {
     `/project/p1/health?peek=${encodeURIComponent(`issue:${id}`)}#signal-${id}`,
   );
 });
+
+test("a low-confidence reading is read once, whichever widgets share it", async () => {
+  const health = async () => ({
+    ...MOCK_HEALTH_MODEL,
+    turns: 24,
+    floor: 10,
+    lowConfidence: { turns: 24, firmsUpAt: 50 },
+  });
+  for (const ids of [
+    OVERVIEW_WIDGETS,
+    ["health", "metrics"],
+    ["attention", "metrics"],
+    ["health", "attention"],
+  ] as const) {
+    const { ran } = await load(
+      { health, traces: async () => NO_RUNS, sdkDays: async () => [SDK_DAY] },
+      only(...ids),
+    );
+    assert.equal(ran.filter((name) => name === "health").length, 1, ids.join("+"));
+  }
+});
