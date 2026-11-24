@@ -1,6 +1,7 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { type SweepResult, sweepScorers } from "./sweep";
+import "./spend";
 
 type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackSystemEvent"];
 
@@ -25,6 +26,14 @@ export function scorerSweepStep(
           lock_contended: result.lockContended,
         });
       }
+      for (const skip of result.budgetSkips) {
+        await track("feature.scorers.judge_skipped", "system:cron", {
+          project_id: skip.projectId,
+          scorer_id: skip.scorerId,
+          traces: skip.traces,
+          reason: "budget_spent",
+        });
+      }
       return {
         scorerTracesScanned: result.tracesScanned,
         scorerScoresWritten: result.scoresWritten,
@@ -34,7 +43,7 @@ export function scorerSweepStep(
   };
 }
 
-/** The scorers' registration. */
+/** The scorers' registration. Loads the judge's spend reader, so every budget check counts it. */
 export const scorersRegistration: Registration = {
   drainSteps: [scorerSweepStep()],
 };

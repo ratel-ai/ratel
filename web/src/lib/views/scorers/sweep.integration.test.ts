@@ -152,6 +152,7 @@ test("the step emits one event per sweep that did work", async () => {
     scoresWritten: 0,
     skipped: 0,
     failedScorers: 0,
+    budgetSkips: [],
     caughtUp: true,
     lockContended: false,
   };
@@ -160,7 +161,16 @@ test("the step emits one event per sweep that did work", async () => {
   await step.run();
   assert.deepEqual(events, []);
   await scorerSweepStep(async () => ({ ...idle, tracesScanned: 3 }), track).run();
-  assert.deepEqual(events, ["feature.scorers.swept"]);
+  const skip = { projectId: PROJECT, scorerId: "s", traces: 2 };
+  await scorerSweepStep(
+    async () => ({ ...idle, tracesScanned: 2, budgetSkips: [skip] }),
+    track,
+  ).run();
+  assert.deepEqual(events, [
+    "feature.scorers.swept",
+    "feature.scorers.swept",
+    "feature.scorers.judge_skipped",
+  ]);
 });
 
 async function scorer(
