@@ -39,6 +39,24 @@ test("a search that returned nothing met no fitting tool, with or without its wo
   assert.deepEqual(unmet(fresh().search([]), [null]), [[null, null, []]]);
 });
 
+test("a search whose hits were not sent did not return nothing: it cannot be told", () => {
+  // OpenTelemetry searches with no hit count arrive as an empty list and no count.
+  const turn = one(fresh().search(["create_task"]));
+  const unsent = turn.steps.map((step) =>
+    step.kind === "search" ? { ...step, hitIds: [], hitCount: null } : step,
+  );
+  const context: SearchContext = {
+    queries: new Map([[turn.steps[0]!.traceEventId, "create task"]]),
+    lastCalls: new Map(),
+  };
+  assert.deepEqual(unmetSearches(unsent, context), []);
+  // A count of zero is a search that returned nothing.
+  const none = turn.steps.map((step) =>
+    step.kind === "search" ? { ...step, hitIds: [], hitCount: 0 } : step,
+  );
+  assert.equal(unmetSearches(none, context).length, 1);
+});
+
 test("no listed tool does the kind of action asked, and none was run later", () => {
   assert.deepEqual(unmet(fresh().search(["crop_photo", "upload_photo"]), ["delete photo"]), [
     ["delete photo", "remove", ["crop_photo", "upload_photo"]],

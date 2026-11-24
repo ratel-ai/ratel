@@ -266,8 +266,8 @@ test("a turn's markers say what the trace shows, from stored values alone", () =
 });
 
 test("a group whose rules had nothing to read is not checked, with the reason; one with findings always was", () => {
-  // People's reactions alone do not check completion: the claim is in the reply.
-  const coverage = { requestedToolIds: false, errorText: false, replies: false, reactions: true };
+  // A model reading people's messages alone does not check completion: the claim is in the reply.
+  const coverage = { requestedToolIds: false, errorText: false, replies: false, modelReads: true };
   const model = buildHallucinationsPage(
     {
       projectId: "p1",
@@ -303,4 +303,34 @@ test("a group whose rules had nothing to read is not checked, with the reason; o
     parseHallucinationsQuery({}),
   );
   assert.equal(found.groups.find((group) => group.group === "tool")!.unchecked, null);
+});
+
+test("the kind a model reads is not checked where no model reads the project's replies", () => {
+  const input = (modelReads: boolean, findings: PageFinding[] = []) =>
+    buildHallucinationsPage(
+      {
+        projectId: "p1",
+        windowDays: 30,
+        findings,
+        turns: 100,
+        lastReadAt: new Date("2026-09-02T00:00:00Z"),
+        capped: false,
+        coverage: { requestedToolIds: true, errorText: true, replies: true, modelReads },
+      },
+      parseHallucinationsQuery({}),
+    );
+  const off = input(false);
+  assert.deepEqual(
+    off.uncheckedKinds.map((entry) => entry.kind),
+    ["done_but_person_says_not"],
+  );
+  assert.match(off.uncheckedKinds[0]!.reason, /no model reads/i);
+  // The rest of the completion group was checked: the reply is read by rules.
+  assert.equal(off.groups.find((group) => group.group === "completion")!.unchecked, null);
+  assert.deepEqual(input(true).uncheckedKinds, []);
+  // A kind with findings was checked, whatever the coverage reads.
+  assert.deepEqual(
+    input(false, [finding({ kind: "done_but_person_says_not" })]).uncheckedKinds,
+    [],
+  );
 });

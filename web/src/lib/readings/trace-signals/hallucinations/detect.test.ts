@@ -111,6 +111,30 @@ test("an error's shape: a tool that does not exist, a record that does not, the 
   }
 });
 
+test("an error a runtime wrapped is read after its wrapper: naming the tool that ran is not saying it does not exist", () => {
+  const shape = (text: string) => errorShapeOf(text)?.shape ?? null;
+  assert.equal(
+    shape("Error executing tool get_issue: Issue ENG-999 not found"),
+    "unknown_reference",
+  );
+  assert.equal(shape("Tool execution failed: record does not exist"), "unknown_reference");
+  assert.equal(
+    shape("Error calling tool set_status: Invalid status. Must be one of: open, closed"),
+    "value_not_allowed",
+  );
+  assert.equal(
+    shape("Error executing tool merge_tasks: Unknown tool: merge_tasks"),
+    "unknown_tool",
+  );
+  // The tool word near "not found" is not enough: the error must name a tool as missing.
+  assert.equal(shape("The function timed out; the upstream host was not found"), null);
+  assert.equal(shape("Tool get_issue failed: upstream returned 500"), null);
+  // A tool named as missing, in the words runtimes use.
+  assert.equal(shape("Tool merge_tasks not found"), "unknown_tool");
+  assert.equal(shape("Function 'merge_tasks' is not registered"), "unknown_tool");
+  assert.equal(shape("No such tool: merge_tasks"), "unknown_tool");
+});
+
 test("a reply claims completion when it says done and admits nothing", () => {
   for (const reply of [
     "Done. RS-202 is closed and Ada has been notified.",
@@ -133,6 +157,32 @@ test("a reply claims completion when it says done and admits nothing", () => {
     null,
   ]) {
     assert.equal(claimsCompletion(reply), false, String(reply));
+  }
+});
+
+test("ordinary words do not cancel a claim; questions, conditions and instructions are no claim", () => {
+  for (const reply of [
+    "I've created the issue ENG-12 and assigned it to you.",
+    "Done. The issue is closed.",
+    "I sent it, no problem!",
+    "Done, but let me know if you want a different label.",
+    "I've created the task. Anything else?",
+    "Only one task matched, and I've closed it.",
+  ]) {
+    assert.equal(claimsCompletion(reply), true, reply);
+  }
+  for (const reply of [
+    "There was a problem creating the issue.",
+    "I ran into an issue while updating the record.",
+    "I could only create two of the three tasks.",
+    "Created the task, but the label was not added.",
+    "Should I have created it in the other project?",
+    "Once I have updated the record I'll confirm. Shall I go ahead?",
+    "If you want, I've set up a draft you can review first?",
+    "Complete the form and I will send it.",
+    "Tamam, şimdi bakıyorum.",
+  ]) {
+    assert.equal(claimsCompletion(reply), false, reply);
   }
 });
 

@@ -1,7 +1,7 @@
 import { buttonVariants } from "@ratel/design-system/button-variants";
 import { cn } from "@ratel/design-system/cn";
 import { Section } from "@ratel/design-system/section";
-import { ArrowRight, CircleCheck, ListChecks } from "lucide-react";
+import { ArrowRight, CircleCheck, ListChecks, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { GROUP_COLOR, GROUP_SHORT } from "@/components/console/hallucinations/copy";
 import { NounTitle } from "@/components/console/health/v2/NounTitle";
@@ -128,6 +128,26 @@ export function TaskCompletionRow({
         {hallucinations ? (
           <HallucinationRateTile card={hallucinations} windowDays={card.windowDays} />
         ) : null}
+      </div>
+    </Section>
+  );
+}
+
+/**
+ * The hallucination rate on its own, where task completion is off (its
+ * switch is `sentimentAnalysis`): the same tile under its own heading.
+ */
+export function HallucinationRateRow({
+  card,
+  windowDays,
+}: {
+  card: HallucinationRateCard;
+  windowDays: TaskCompletionCard["windowDays"];
+}) {
+  return (
+    <Section title={<NounTitle icon={ShieldAlert}>Hallucinations</NounTitle>}>
+      <div className="flex flex-wrap items-stretch gap-6">
+        <HallucinationRateTile card={card} windowDays={windowDays} />
       </div>
     </Section>
   );

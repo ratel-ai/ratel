@@ -23,8 +23,18 @@ export interface ErrorShapeReading {
 
 const MAX_CHARS = 2_000;
 
+/**
+ * The error names a tool as missing: "unknown tool", "no such function",
+ * "tool_not_found", or a sentence that opens with the tool and says it is
+ * missing. A tool word somewhere near "not found" is not enough: runtimes
+ * name the tool that ran when they pass on its own error.
+ */
 const NAMES_TOOL =
-  /\b(?:unknown|invalid|unrecogni[sz]ed) (?:tool|function)\b|\bno such (?:tool|function)\b|\b(?:tool|function)\b[^.\n]{0,80}\b(?:not found|does not exist|doesn'?t exist|is not (?:available|registered|defined))\b|\b(?:tool|function)[ _]not[ _]found\b/i;
+  /\b(?:unknown|invalid|unrecogni[sz]ed) (?:tool|function)\b|\bno such (?:tool|function)\b|\b(?:tool|function)[ _]not[ _]found\b|^(?:the )?(?:tool|function) [`'"]?[\w.:/-]+[`'"]? (?:was |is )?(?:not found|does not exist|doesn'?t exist|not (?:available|registered|defined)|is not (?:available|registered|defined))\b/i;
+
+/** A runtime's wrapper around the tool's own error: "Error executing tool get_issue: …", "Tool execution failed: …". */
+const WRAPPER =
+  /^(?:error (?:executing|calling|running|invoking) (?:tool|function)(?: [`'"]?[\w.:/-]+[`'"]?)?|(?:tool|function)(?: [`'"]?[\w.:/-]+[`'"]?)? (?:execution |call )?(?:failed|error)(?: for [`'"]?[\w.:/-]+[`'"]?)?)\s*[:—–-]\s*/i;
 
 /** "Not found" that may be about access: a missing record and a hidden one are reported the same way. */
 const ACCESS_HEDGE =
@@ -47,7 +57,7 @@ const firstSentence = (text: string): string => {
 /** The shape of one error message; null when it says nothing a rule can stand on. */
 export function errorShapeOf(raw: string | null | undefined): ErrorShapeReading | null {
   if (!raw || raw.trim() === "") return null;
-  const text = messageOf(raw).slice(0, MAX_CHARS);
+  const text = messageOf(raw).slice(0, MAX_CHARS).replace(WRAPPER, "");
   if (NAMES_TOOL.test(text)) return { shape: "unknown_tool", evidence: "error_names_tool" };
   if (LISTS_VALUES.test(text))
     return { shape: "value_not_allowed", evidence: "lists_allowed_values" };

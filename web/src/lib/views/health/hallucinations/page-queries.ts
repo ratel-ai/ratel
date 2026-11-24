@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, sql } from "drizzle-orm";
 import { events } from "@/lib/ingest/otlp/schema";
 import { traceEvents } from "@/lib/ingest/trace-events/schema";
 import { traceTurnSteps, traceTurns } from "@/lib/ledger/schema";
@@ -89,14 +89,15 @@ export async function countWindowTurns(
 /**
  * What the window holds for each group's rules to read, as yes or no: the
  * tool name the agent asked for (`requested_tool_id`), an error in words (not
- * just a type id like `tool_error`), and the agent's replies or the person's
- * reactions. A group with nothing to read is not checked, whatever it finds.
+ * just a type id like `tool_error`), the agent's replies, and whether a model
+ * read the window's turns (`trace_turn_outcomes.model_version`). A group
+ * with nothing to read is not checked, whatever it finds.
  */
 export interface HallucinationCoverage {
   requestedToolIds: boolean;
   errorText: boolean;
   replies: boolean;
-  reactions: boolean;
+  modelReads: boolean;
 }
 
 export async function loadCoverage(
@@ -110,7 +111,7 @@ export async function loadCoverage(
     sql`${at} >= ${window.from} and ${at} < ${window.to}`,
   );
   const exists = async (query: Promise<unknown[]>) => (await query).length > 0;
-  const [requestedToolIds, errorText, replies, reactions] = await Promise.all([
+  const [requestedToolIds, errorText, replies, modelReads] = await Promise.all([
     exists(
       db
         .select({ one: sql`1` })
@@ -148,13 +149,13 @@ export async function loadCoverage(
             eq(traceTurnOutcomes.projectId, projectId),
             gte(traceTurnOutcomes.endedAt, window.from),
             lt(traceTurnOutcomes.endedAt, window.to),
-            sql`(${traceTurnOutcomes.modelVersion} is not null or ${traceTurnOutcomes.replyReaction} is not null)`,
+            isNotNull(traceTurnOutcomes.modelVersion),
           ),
         )
         .limit(1),
     ),
   ]);
-  return { requestedToolIds, errorText, replies, reactions };
+  return { requestedToolIds, errorText, replies, modelReads };
 }
 
 /**

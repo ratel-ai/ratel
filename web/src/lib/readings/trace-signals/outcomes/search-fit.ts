@@ -60,10 +60,15 @@ export const queryClass = (query: string): ActionClass | null =>
       .replace(/[^a-z0-9]+/g, "_"),
   );
 
-/** What a search listed, best first; null when it cannot be told in full. */
+/**
+ * What a search listed, best first; null when it cannot be told in full. An
+ * empty list is a search that returned nothing only when its count says 0:
+ * OpenTelemetry searches with no hit count arrive as an empty list too.
+ */
 function listed(step: SearchStep): string[] | null {
-  const ids = step.hitIds ?? (step.hitCount === 0 ? [] : null);
-  return ids === null || (step.hitCount ?? ids.length) > ids.length ? null : ids;
+  const ids = step.hitIds ?? [];
+  if (ids.length === 0) return step.hitCount === 0 ? [] : null;
+  return (step.hitCount ?? ids.length) > ids.length ? null : ids;
 }
 
 /** The runs of one turn no listed tool fits, from its steps in ordinal order. */

@@ -14,6 +14,7 @@ import { percent, plural } from "@/components/console/sentiment/copy";
 import { LinkSwitch, type LinkSwitchOption } from "@/components/console/settings/LinkSwitch";
 import type { PanelTurn } from "@/components/console/turn-panel/useTurnPanel";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
+import { KIND_LABEL } from "@/lib/readings/trace-signals/hallucinations/kinds";
 import { agentHealthHref, windowPhrase } from "@/lib/readings/trace-signals/view";
 import { formatRelativeTime, formatTimestamp } from "@/lib/synthesis/traces/v2/format";
 import { cleanResult } from "@/lib/views/health/hallucinations/clean";
@@ -263,9 +264,16 @@ function Footnotes({ model, now }: { model: HallucinationsPageModel; now: string
       ) : null}
       <p>
         Read from the trace by rules: the tool each call asked for, each failed call&apos;s error,
-        and the agent&apos;s reply where it is sent. Where people&apos;s messages are read, a model
-        also reads from the person&apos;s next message when work reported done was not.
+        and the agent&apos;s reply where it is sent.
+        {model.uncheckedKinds.length === 0
+          ? " A model also reads the reply over a failed call, for work reported done that was not."
+          : null}
       </p>
+      {model.uncheckedKinds.map((entry) => (
+        <p key={entry.kind} data-hallucination-kind-unchecked={entry.kind}>
+          Not checked: {KIND_LABEL[entry.kind]}. {entry.reason}
+        </p>
+      ))}
     </div>
   );
 }

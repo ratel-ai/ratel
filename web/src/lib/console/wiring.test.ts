@@ -198,14 +198,29 @@ test("the shell decides hallucinationDetection per organization and the rail rea
   );
 });
 
-test("Sentiment analysis is not found unless sentimentPageScope gives a project", () => {
-  // The decision itself is tested in `views/traces/sentiment/page-scope.test.ts`. Root cause
-  // analysis is a panel: its page only redirects to Agent health, which reads the switch itself.
-  const page = "app/(console)/project/[projectId]/traces/sentiment/page.tsx";
-  const text = source(page);
+test("Sentiment analysis and Root cause analysis's old address are not found unless sentimentPageScope gives a project", () => {
+  // The decision itself is tested in `views/traces/sentiment/page-scope.test.ts`.
+  for (const page of [
+    "app/(console)/project/[projectId]/traces/sentiment/page.tsx",
+    "app/(console)/project/[projectId]/health/root-causes/page.tsx",
+  ]) {
+    const text = source(page);
+    assert.match(
+      text,
+      /const scope = await sentimentPageScope\(projectId\);\s*if \(!scope\) notFound\(\);/,
+      page,
+    );
+    assert.doesNotMatch(
+      text,
+      /getProjectScope\(/,
+      `${page} reads its project only through the check`,
+    );
+  }
+});
+
+test("Root cause analysis's old address opens the panel with the row it named", () => {
   assert.match(
-    text,
-    /const scope = await sentimentPageScope\(projectId\);\s*if \(!scope\) notFound\(\);/,
+    source("app/(console)/project/[projectId]/health/root-causes/page.tsx"),
+    /rootCausesHref\([\s\S]*open: query\.open/,
   );
-  assert.doesNotMatch(text, /getProjectScope\(/, "it reads its project only through the check");
 });

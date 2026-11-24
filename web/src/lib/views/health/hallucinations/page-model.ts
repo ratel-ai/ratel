@@ -89,7 +89,8 @@ export interface PageCoverage {
   requestedToolIds: boolean;
   errorText: boolean;
   replies: boolean;
-  reactions: boolean;
+  /** A model read turns in the window (the outcome reading's questions, `model_version`). */
+  modelReads: boolean;
 }
 
 /** Why a group could not be checked with what the project sends; null when it could. */
@@ -106,6 +107,29 @@ export function uncheckedReason(group: HallucinationGroup, coverage: PageCoverag
         ? null
         : "This project sends no agent replies, so no claim that work was done can be read.";
   }
+}
+
+/**
+ * Kinds whose group was checked but which need more than rules, with why
+ * they were not: `done_but_person_says_not` stands on the outcome reading's
+ * model answer that a reply over a failed trace says the work is done
+ * (`outcomes/fusion.ts`, cause `false_success`), so without a model reading
+ * replies it cannot be found.
+ */
+export function uncheckedKinds(
+  coverage: PageCoverage,
+  findings: readonly PageFinding[],
+): Array<{ kind: HallucinationKind; reason: string }> {
+  const found = (kind: HallucinationKind) => findings.some((finding) => finding.kind === kind);
+  return !coverage.modelReads && coverage.replies && !found("done_but_person_says_not")
+    ? [
+        {
+          kind: "done_but_person_says_not",
+          reason:
+            "No model reads this project's replies, so a reply a model reads as done over a failure is not checked.",
+        },
+      ]
+    : [];
 }
 
 export interface HallucinationsPageInput {
@@ -134,6 +158,8 @@ export interface HallucinationsPageModel {
   totals: { turns: number; turnsAffected: number; rate: number | null; occurrences: number };
   /** Every group, in their fixed order; one with no occurrence has no kinds. */
   groups: GroupRow[];
+  /** Kinds of a checked group that could not be checked, with why (`uncheckedKinds`). */
+  uncheckedKinds: Array<{ kind: HallucinationKind; reason: string }>;
   lastReadAt: string | null;
   capped: boolean;
   /** Names the runtime steadily maps to a tool: left out of the findings as naming mismatches. */
@@ -198,6 +224,14 @@ function kindRow(
   };
 }
 
+/** Coverage when none was read: everything (every group and kind checked). */
+const EVERYTHING: PageCoverage = {
+  requestedToolIds: true,
+  errorText: true,
+  replies: true,
+  modelReads: true,
+};
+
 export function buildHallucinationsPage(
   input: HallucinationsPageInput,
   query: HallucinationsQuery,
@@ -224,15 +258,7 @@ export function buildHallucinationsPage(
       unchecked:
         inGroup.length > 0 || (group === "tool" && (input.toolNames?.callsOnWorking ?? 0) > 0)
           ? null
-          : uncheckedReason(
-              group,
-              input.coverage ?? {
-                requestedToolIds: true,
-                errorText: true,
-                replies: true,
-                reactions: true,
-              },
-            ),
+          : uncheckedReason(group, input.coverage ?? EVERYTHING),
     };
   });
   const turnsAffected = distinct(findings.map((finding) => finding.turnId));
@@ -253,6 +279,7 @@ export function buildHallucinationsPage(
       occurrences: total,
     },
     groups,
+    uncheckedKinds: uncheckedKinds(input.coverage ?? EVERYTHING, findings),
     lastReadAt: input.lastReadAt?.toISOString() ?? null,
     capped: input.capped,
     aliases: [...(input.aliases ?? [])],
@@ -282,6 +309,7 @@ export function unavailableHallucinationsPage(
       kinds: [],
       unchecked: null,
     })),
+    uncheckedKinds: [],
     lastReadAt: null,
     capped: false,
     aliases: [],

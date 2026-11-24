@@ -28,7 +28,10 @@ import {
   summaryState,
   taskLookups,
 } from "@/components/console/health/v2/summary-model";
-import { TaskCompletionRow } from "@/components/console/health/v2/TaskCompletionRow";
+import {
+  HallucinationRateRow,
+  TaskCompletionRow,
+} from "@/components/console/health/v2/TaskCompletionRow";
 import { TasksNeedingLook } from "@/components/console/health/v2/TasksNeedingLook";
 import { ToolSpansBlock } from "@/components/console/health/v2/ToolSpansBlock";
 import { UnservedSection } from "@/components/console/health/v2/UnservedSection";
@@ -300,6 +303,8 @@ function Ready({
     <>
       {taskCompletion ? (
         <TaskCompletionRow card={taskCompletion} hallucinations={hallucinationRate} />
+      ) : hallucinationRate ? (
+        <HallucinationRateRow card={hallucinationRate} windowDays={model.windowDays} />
       ) : null}
       <IssuesSection
         projectId={projectId}
