@@ -6,7 +6,7 @@ import { percent } from "@/components/console/sentiment/copy";
 import { RootCauseLink } from "@/components/console/sentiment/RootCausesHost";
 
 /** One slice of the ring: its share of the whole, its colour (an SVG paint), and where it leads, if anywhere. */
-export interface RingSlice {
+interface RingSlice {
   key: string;
   label: string;
   value: number;

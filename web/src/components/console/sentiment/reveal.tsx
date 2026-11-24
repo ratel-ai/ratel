@@ -13,7 +13,7 @@ import { type ReactNode, useRef, useState } from "react";
  */
 
 /** How long a group folds or opens, in ms; the CSS uses the same. */
-export const REVEAL_MS = 200;
+const REVEAL_MS = 200;
 
 /** Classes for a revealed row: its cells take their content's height, so it can animate. A closed one also drops its rule (`[&>td]:border-b-transparent`). */
 export const REVEAL_ROW = "[&>td]:h-auto [&>td]:transition-[border-color] [&>td]:duration-200";

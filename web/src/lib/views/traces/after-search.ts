@@ -22,7 +22,7 @@ export interface AfterSearch {
 type AfterSearchDb = Pick<ReturnType<typeof getDb>, "select">;
 
 /** The search a turn ended on, when it ran nothing after it. */
-export function endingSearch(turn: Pick<TurnDetail, "calls">): TurnDetail["calls"][number] | null {
+function endingSearch(turn: Pick<TurnDetail, "calls">): TurnDetail["calls"][number] | null {
   const last = turn.calls.at(-1);
   return last?.kind === "search" ? last : null;
 }

@@ -142,7 +142,6 @@ function Body({
               key={links.activeKind ?? links.activeGroup ?? "all"}
               groups={links.listed}
               now={now}
-              empty={null}
             />
             <Footnotes model={model} now={now} />
           </Section>

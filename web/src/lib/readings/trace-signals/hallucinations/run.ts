@@ -45,9 +45,9 @@ import type { RunBasis } from "@/lib/readings/trace-signals/workflows/run-basis"
  * mismatch to tidy, not a made-up tool, and it is left out of the findings.
  * A pair that fails (a read rerouted to a create that never works) stays.
  */
-export const ALIAS_MIN_SESSIONS = 3;
-export const ALIAS_MIN_CALLS = 5;
-export const ALIAS_MIN_WORKED = 0.9;
+const ALIAS_MIN_SESSIONS = 3;
+const ALIAS_MIN_CALLS = 5;
+const ALIAS_MIN_WORKED = 0.9;
 
 /** A name pair read as an alias: ids and counts only. */
 export interface StoredAlias {

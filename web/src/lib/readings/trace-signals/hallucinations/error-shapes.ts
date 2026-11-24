@@ -14,9 +14,9 @@ import { messageOf } from "@/lib/readings/trace-signals/outcomes/error-cause";
  *   value_not_allowed   the error lists the values it does take.
  */
 
-export type ErrorShape = "unknown_tool" | "unknown_reference" | "value_not_allowed";
+type ErrorShape = "unknown_tool" | "unknown_reference" | "value_not_allowed";
 
-export interface ErrorShapeReading {
+interface ErrorShapeReading {
   shape: ErrorShape;
   evidence: HallucinationEvidence;
 }

@@ -15,7 +15,7 @@ import { traceHallucinations, traceTurnOutcomes } from "@/lib/readings/trace-sig
  * no such tool exists), and the replace of a window's findings.
  */
 
-export type HallucinationsDb = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
+type HallucinationsDb = Pick<ReturnType<typeof getDb>, "select" | "transaction">;
 
 const ID_CHUNK = 500;
 const INSERT_CHUNK = 500;

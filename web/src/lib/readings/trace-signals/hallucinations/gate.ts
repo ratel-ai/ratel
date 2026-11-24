@@ -54,7 +54,7 @@ export interface ReadingGateDeps {
   flags: Partial<FeatureFlagDeps>;
 }
 
-export const defaultReadingGateDeps: ReadingGateDeps = {
+const defaultReadingGateDeps: ReadingGateDeps = {
   getOrganization: getOrganizationByProjectId,
   flags: {},
 };

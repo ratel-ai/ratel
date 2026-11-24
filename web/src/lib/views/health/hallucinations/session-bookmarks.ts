@@ -9,7 +9,7 @@ import { catalogEntryOf } from "@/lib/readings/trace-signals/self-corrections/is
  * A session's hallucinations as bookmarks on the replay bar, each on the
  * step of the call it sits on. Closed values and ids only.
  */
-export interface SessionFinding {
+interface SessionFinding {
   /** The call's own event (`trace_events.id`). */
   eventId: string;
   kind: string;

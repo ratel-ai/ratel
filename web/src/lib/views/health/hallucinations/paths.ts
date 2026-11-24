@@ -16,7 +16,7 @@ import { CALL_PEEK, TURN_PEEK } from "@/lib/views/traces/turn-peek";
  */
 
 /** The page opens on a month, as the other Agent health readings of outcomes do. */
-export const HALLUCINATIONS_DEFAULT_WINDOW_DAYS: WindowDays = 30;
+const HALLUCINATIONS_DEFAULT_WINDOW_DAYS: WindowDays = 30;
 
 /** The URL parameter that holds the open kind. */
 export const KIND_PEEK = "open";

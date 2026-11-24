@@ -10,7 +10,7 @@ import type { PageDb, PageWindow } from "@/lib/views/health/hallucinations/page-
  * tool that only failed. Used where the traces carry neither the tool name
  * the agent asked for nor error text (`uncheckedReason`).
  */
-export interface ToolNameRow {
+interface ToolNameRow {
   name: string;
   calls: number;
   worked: number;

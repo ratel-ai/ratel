@@ -25,15 +25,7 @@ type Line =
   | { kind: "group"; group: GroupView; open: boolean }
   | { kind: "row"; row: KindView; shown: boolean };
 
-export function KindTable({
-  groups,
-  now,
-  empty,
-}: {
-  groups: readonly GroupView[];
-  now: string;
-  empty: React.ReactNode;
-}) {
+export function KindTable({ groups, now }: { groups: readonly GroupView[]; now: string }) {
   const folds = useReveal(groups.length === 1);
   const peek = usePeek(KIND_PEEK);
   const lines: Line[] = groups.flatMap((group): Line[] => {
@@ -158,7 +150,8 @@ export function KindTable({
         if (line.kind === "group") folds.toggle(line.group.group);
         else peek.open(line.row.kind);
       }}
-      empty={empty}
+      // The page shows its own good news when nothing was found: the table is never empty.
+      empty={null}
     />
   );
 }

@@ -23,7 +23,7 @@ export interface UnmetSearchView {
   missing: string;
 }
 
-export const MAX_OFFERED = 5;
+const MAX_OFFERED = 5;
 
 type UnmetDb = Pick<ReturnType<typeof getDb>, "select">;
 
