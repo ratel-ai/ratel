@@ -138,7 +138,10 @@ function readCompletion(text: string): Completion {
   };
 }
 
-/** A streamed completion, put back together from its server-sent events. */
+/**
+ * A streamed completion, put back together from its server-sent events. A stream that ends
+ * before its last chunk said why it stopped was dropped on the way: half an answer is no answer.
+ */
 function readStream(text: string): Completion {
   let content = "";
   let refusal = "";
@@ -156,6 +159,7 @@ function readStream(text: string): Completion {
     content += contentOf(delta.content);
     if (typeof delta.refusal === "string") refusal += delta.refusal;
   }
+  if (finish === undefined) throw new Error("the answer's stream was cut short");
   return {
     message: { role: "assistant", content, ...(refusal ? { refusal } : {}) },
     finish,

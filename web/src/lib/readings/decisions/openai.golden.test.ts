@@ -211,6 +211,21 @@ test("the base URL, model, feature and payer given are the ones sent and recorde
   });
 });
 
+test("a server that redirects is not followed: the question and the key stay at the address set", async () => {
+  const { fetchImpl } = scriptedFetch([choiceResponse("t1", { t1: 1 }, 10)]);
+  let redirect: unknown;
+  const client = decisionClient({
+    apiKey: "test-key",
+    fetchImpl: ((url: string, init: RequestInit) => {
+      redirect = init.redirect;
+      return fetchImpl(url, init);
+    }) as unknown as typeof fetch,
+    sleep: noSleep,
+  });
+  await client.decideChoice("q", OPTIONS.slice(0, 2), FRAMING);
+  assert.equal(redirect, "error");
+});
+
 test("a server error is tried three times and recorded once as an error", async () => {
   const failure = () => new Response("boom", { status: 500 });
   const { fetchImpl, calls } = recordingFetch([failure(), failure(), failure()]);

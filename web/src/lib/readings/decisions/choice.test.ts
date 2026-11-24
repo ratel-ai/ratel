@@ -115,6 +115,17 @@ test("one question: the request, and the answer mapped back to the options' ids"
   });
 });
 
+test("a server that redirects is not followed: the question and the key stay at the address set", async () => {
+  const { fetchImpl } = server(answer({ t0: 0.9, t1: 0.1 }));
+  let redirect: unknown;
+  const watched = ((url: string, init: RequestInit) => {
+    redirect = init.redirect;
+    return fetchImpl(url, init);
+  }) as unknown as typeof fetch;
+  await client(watched).decideChoice("q", OPTIONS.slice(0, 2), FRAMING);
+  assert.equal(redirect, "error");
+});
+
 test("a server's own choice and confidence are used when it gives them", async () => {
   const { fetchImpl } = server(answer({ t0: 0.5, t1: 0.5 }, { choice: "t1", confidence: 0.61 }));
   const result = await client(fetchImpl).decideChoice("q", OPTIONS.slice(0, 2), FRAMING);

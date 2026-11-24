@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { resolveConfig } from "@/config";
 import type { TextModel } from "@/lib/contracts/models";
 import { fakeTextModel } from "./fake";
-import { models, modelsConfigured, withProviders } from "./index";
+import { claudeFor, models, modelsConfigured, withProviders } from "./index";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */
 const cfg = (env: Record<string, string | undefined> = {}) => resolveConfig({ env });
@@ -87,6 +87,15 @@ test("no provider, no model: nothing is built in production without a setting", 
   );
   assert.equal(modelsConfigured({ config: cfg({}), environment: "production" }), false);
   assert.equal(modelsConfigured({ config: cfg(FAKE_ENV), environment: "test" }), true);
+});
+
+test("Claude has no chat model in the kit yet: a tool-using feature takes it through claudeFor", () => {
+  // The README and AGENTS.md say so (ADR-0009 §11). When Claude gets a chat adapter, they change.
+  const claude = cfg({ ANTHROPIC_API_KEY: "sk-ant-test" });
+  const options = { config: claude, environment: "production" };
+  assert.ok(models.text("workflow_label", options));
+  assert.equal(models.chat("eval_gate_replay", options), null);
+  assert.equal(claudeFor("eval_gate_replay", options)?.model, "claude-opus-5-5");
 });
 
 test("a feature is asked for by its own kind", () => {

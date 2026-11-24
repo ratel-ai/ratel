@@ -84,6 +84,8 @@ export function createOpenAiEmbeddingProvider(
           "content-type": "application/json",
         },
         body: JSON.stringify({ model, input: texts }),
+        // A redirect would carry the texts, and the key, to another address.
+        redirect: "error",
       });
       if (!response.ok) {
         // The status alone: the console's model status reads it (ADR-0009 §13).

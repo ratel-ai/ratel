@@ -285,6 +285,8 @@ export function decisionClient(config: DecisionClientConfig) {
           method: "POST",
           headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
           body,
+          // A redirect would carry the question, and the key, to another address.
+          redirect: "error",
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (err) {

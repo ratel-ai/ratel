@@ -71,7 +71,8 @@ embedding endpoint's vendor stays private.
 until `DECISION_MIN_CONFIDENCE` says it was measured.
 
 **11. The eval gate keeps its Claude code**, wherever Claude is hosted, and has the same on any
-other model (`models-neutral.ts`). Naming another vendor is enough to keep Claude out. A run
+other model (`models-neutral.ts`). Until that code moves into the kit, `models.chat` gives no
+Claude model: a tool-using feature takes Claude through `claudeFor`. Naming another vendor is enough to keep Claude out. A run
 recorded on a model the vendor serves is replayed on it.
 
 **12. The stand-ins stay.** `EVAL_GATE_MOCK_MODEL` and `MATCH_QUALITY_MOCK_ANALYST` keep their

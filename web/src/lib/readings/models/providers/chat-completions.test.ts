@@ -401,6 +401,20 @@ test("a long answer is streamed, with its usage", async () => {
   assert.deepEqual(seen[0].body.stream_options, { include_usage: true });
 });
 
+test("a stream dropped before it said why it stopped is an error, not half an answer", async () => {
+  const chunk = (delta: unknown) => ({
+    model: "served-model",
+    choices: [{ index: 0, delta, finish_reason: null }],
+  });
+  const { fetchImpl } = server(
+    sse(chunk({ role: "assistant", content: "" }), chunk({ content: '{"proposals": [' })),
+  );
+  await assert.rejects(
+    textModel(fetchImpl).complete({ system: "s", user: "u", maxTokens: 64_000, longOutput: true }),
+    /stream was cut short/,
+  );
+});
+
 test("effort is dropped unless the model is named as a reasoning model", async () => {
   const plain = server(completion({ content: "ok" }));
   await textModel(plain.fetchImpl).complete({

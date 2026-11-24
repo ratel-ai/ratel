@@ -20,6 +20,10 @@ if (reply.stop === "cut_off") throw new LabelCutOffError();
    `chat` for tool calls, `decision`), its tier (`deep`, `standard`, `fast`) and one line on what
    it does. `features.test.ts` fails when a call names a feature that has no row.
 2. Ask the kit: `models.text(id)` or `models.chat(id)`. Handle `null`.
+   `models.chat` has no Claude model yet: it is `null` on `claude`, and on `gcp` and `bedrock`
+   while the feature's model is a Claude one. A tool-using feature takes Claude through
+   `claudeFor(id)` and its own Messages code, as the eval gate does (`views/eval-gate/models.ts`),
+   and every other model through `models.chat` (ADR-0009 §11).
 3. Read `reply.stop`. A stop is returned, never thrown: `end`, `cut_off` (ran out of `maxTokens`)
    or `refused`.
 4. Test it with `MODEL_PROVIDER=fake` (pass `{ config: resolveConfig({ env: { MODEL_PROVIDER: "fake" } }), environment: "test" }`), or hand your code a

@@ -257,6 +257,24 @@ describe("oss embedding provider", () => {
     });
   });
 
+  it("a server that redirects is not followed: the texts and the key stay at the address set", async () => {
+    let redirect: unknown;
+    const fakeFetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+      redirect = init?.redirect;
+      return new Response(JSON.stringify({ data: [{ index: 0, embedding: [1] }] }), {
+        status: 200,
+      });
+    }) as typeof fetch;
+    const provider = embeddingProviderFromConfig(
+      resolveConfig({
+        env: { EMBEDDING_BASE_URL: "http://embed.internal/v1", EMBEDDING_API_KEY: "sk-embed" },
+      }),
+      fakeFetch,
+    );
+    await provider.embed(["a"]);
+    assert.equal(redirect, "error");
+  });
+
   it("the OpenAI key is never sent to another embeddings server", async () => {
     const { call } = await embedOnce({
       EMBEDDING_BASE_URL: "http://embed.internal/v1",

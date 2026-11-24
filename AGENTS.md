@@ -69,7 +69,8 @@ visible and minimal.
 A feature in `web/` never talks to a vendor. It asks the model kit (`models.text("…")`,
 `models.chat("…")`, or `judgeFromConfig` for a closed-set choice) and handles having none, so it runs on
 every vendor a self-hoster can name (ADR-0009). Add its row to `web/src/lib/readings/models/features.ts`, ask
-for a tier and not a model id, and test it on the fake vendor. Tests fail when code outside the
+for a tier and not a model id, and test it on the fake vendor. `models.chat` has no Claude model yet
+(it is null there): a tool-using feature takes Claude through `claudeFor`, as the eval gate does. Tests fail when code outside the
 adapters imports a vendor SDK, names a vendor's address, or calls with a feature that has no row.
 How-to: [`web/src/lib/readings/models/README.md`](web/src/lib/readings/models/README.md).
 
