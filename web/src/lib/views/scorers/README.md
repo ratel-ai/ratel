@@ -6,8 +6,8 @@ soon after ingest. Behind the `scorers` flag. Core-owned; not the task scorers o
 
 | Table | Holds |
 |---|---|
-| `scorers` | a scorer: kind (`check` or `judge`), config, trace filter, sample rate, enabled, and its own sweep cursor |
-| `trace_scores` | one result per scorer and trace (the primary key): `value`, `passed` (null for a numeric judge), `confidence` (judge only), the trace's start. No trace content. Removed with the scorer |
+| `trace_scorers` | a scorer: kind (`check` or `judge`), config, trace filter, sample rate, enabled, and its own sweep cursor |
+| `trace_scores` | one result per scorer and trace (the primary key): `value`, `passed` (null for a numeric judge), `confidence` (judge only), the trace's start. `scorer_id` references `trace_scorers`. No trace content. Removed with the scorer |
 | `scorer_judge_spend` | what judge scorers spent per project and UTC day, held reservations included |
 
 | File | What it holds |

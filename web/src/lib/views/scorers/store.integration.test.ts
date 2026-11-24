@@ -58,11 +58,11 @@ test("a scorer is created, updated, disabled and deleted inside its project", as
 test("the cursor moves to now only when a disabled scorer is enabled", async () => {
   const { client, db } = await setup();
   const cursor = async () =>
-    (await client.query<{ at: string }>("select cursor_at::text as at from scorers")).rows[0]?.at ??
-    "";
+    (await client.query<{ at: string }>("select cursor_at::text as at from trace_scorers")).rows[0]
+      ?.at ?? "";
   try {
     const id = await createScorer(PROJECT, checkDraft(), "u1", db);
-    await client.exec("update scorers set cursor_at = '2026-01-01T00:00:00Z'");
+    await client.exec("update trace_scorers set cursor_at = '2026-01-01T00:00:00Z'");
     await setScorerEnabled(PROJECT, id, true, "u1", db);
     await updateScorer(PROJECT, id, checkDraft({ name: "B" }), "u1", db);
     await setScorerEnabled(PROJECT, id, false, "u1", db);

@@ -54,7 +54,7 @@ test("the filter, the sample and the creation time limit the traces; a second sw
     const taken = await scored(sampled);
     assert.ok(taken.length > 160 && taken.length < 240, `${taken.length} of 400`);
 
-    await client.exec("update scorers set cursor_at = now() - interval '1 hour'");
+    await client.exec("update trace_scorers set cursor_at = now() - interval '1 hour'");
     const second = await sweepScorers(on, db);
     assert.ok(second.tracesScanned > 0);
     assert.equal(second.scoresWritten, 0);
@@ -108,11 +108,11 @@ test("with the flag off, or the scorer disabled, nothing is written and no curso
     const id = await scorer(client, db);
     const disabled = await scorer(client, db, { enabled: false });
     await add("t", { ageS: 60 });
-    const before = await client.query("select id, cursor_at from scorers order by id");
+    const before = await client.query("select id, cursor_at from trace_scorers order by id");
     const result = await sweepScorers({ flagOn: async () => false }, db);
     assert.deepEqual([result.scorers, result.tracesScanned], [0, 0]);
     assert.deepEqual(
-      (await client.query("select id, cursor_at from scorers order by id")).rows,
+      (await client.query("select id, cursor_at from trace_scorers order by id")).rows,
       before.rows,
     );
     await sweepScorers(on, db);
@@ -180,7 +180,7 @@ async function scorer(
 ) {
   const id = await createScorer(PROJECT, checkDraft(overrides), "u1", db);
   await client.exec(
-    `update scorers set cursor_at = now() - interval '1 hour', created_at = now() - interval '1 hour' where id = '${id}'`,
+    `update trace_scorers set cursor_at = now() - interval '1 hour', created_at = now() - interval '1 hour' where id = '${id}'`,
   );
   return id;
 }

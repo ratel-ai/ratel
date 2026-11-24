@@ -5,7 +5,7 @@ CREATE TABLE "scorer_judge_spend" (
 	CONSTRAINT "scorer_judge_spend_project_id_day_pk" PRIMARY KEY("project_id","day")
 );
 --> statement-breakpoint
-CREATE TABLE "scorers" (
+CREATE TABLE "trace_scorers" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"project_id" uuid NOT NULL,
 	"name" text NOT NULL,
@@ -20,8 +20,8 @@ CREATE TABLE "scorers" (
 	"updated_by" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "scorers_kind_check" CHECK ("scorers"."kind" in ('check', 'judge')),
-	CONSTRAINT "scorers_sample_rate_check" CHECK ("scorers"."sample_rate" between 1 and 100)
+	CONSTRAINT "trace_scorers_kind_check" CHECK ("trace_scorers"."kind" in ('check', 'judge')),
+	CONSTRAINT "trace_scorers_sample_rate_check" CHECK ("trace_scorers"."sample_rate" between 1 and 100)
 );
 --> statement-breakpoint
 CREATE TABLE "trace_scores" (
@@ -37,11 +37,11 @@ CREATE TABLE "trace_scores" (
 );
 --> statement-breakpoint
 ALTER TABLE "scorer_judge_spend" ADD CONSTRAINT "scorer_judge_spend_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "scorers" ADD CONSTRAINT "scorers_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "trace_scores" ADD CONSTRAINT "trace_scores_scorer_id_scorers_id_fk" FOREIGN KEY ("scorer_id") REFERENCES "public"."scorers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trace_scorers" ADD CONSTRAINT "trace_scorers_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "trace_scores" ADD CONSTRAINT "trace_scores_scorer_id_trace_scorers_id_fk" FOREIGN KEY ("scorer_id") REFERENCES "public"."trace_scorers"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "trace_scores" ADD CONSTRAINT "trace_scores_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "scorers_project_idx" ON "scorers" USING btree ("project_id","created_at");--> statement-breakpoint
-CREATE INDEX "scorers_enabled_idx" ON "scorers" USING btree ("cursor_at") WHERE "scorers"."enabled";--> statement-breakpoint
+CREATE INDEX "trace_scorers_project_idx" ON "trace_scorers" USING btree ("project_id","created_at");--> statement-breakpoint
+CREATE INDEX "trace_scorers_enabled_idx" ON "trace_scorers" USING btree ("cursor_at") WHERE "trace_scorers"."enabled";--> statement-breakpoint
 CREATE INDEX "trace_scores_project_trace_idx" ON "trace_scores" USING btree ("project_id","trace_id");--> statement-breakpoint
 CREATE INDEX "trace_scores_scorer_started_idx" ON "trace_scores" USING btree ("scorer_id","trace_started_at");--> statement-breakpoint
 CREATE INDEX "trace_scores_project_started_idx" ON "trace_scores" USING btree ("project_id","trace_started_at");--> statement-breakpoint

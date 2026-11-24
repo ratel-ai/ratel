@@ -149,7 +149,7 @@ test("a sweep judges each trace once, in small batches", async () => {
     assert.equal(rows.length, 25);
     assert.deepEqual([rows[0]?.passed, rows[0]?.confidence], [true, 0.8]);
     assert.equal((await latestScores(PROJECT, checkId, 100, db)).length, 25);
-    await client.exec("update scorers set cursor_at = now() - interval '1 hour'");
+    await client.exec("update trace_scorers set cursor_at = now() - interval '1 hour'");
     await sweepScorers(options, db);
     assert.equal(questions.length, 25);
   } finally {
@@ -165,7 +165,7 @@ test("without an engine, checks still score; with no budget, the skip is reporte
     assert.equal((await latestScores(PROJECT, checkId, 100, db)).length, 12);
     assert.equal((await latestScores(PROJECT, judgeId, 100, db)).length, 0);
 
-    await client.exec("update scorers set cursor_at = now() - interval '1 hour'");
+    await client.exec("update trace_scorers set cursor_at = now() - interval '1 hour'");
     const { engine, questions } = fakeEngine("pass");
     const result = await sweepScorers(
       { flagOn, judge: { engine, loadConversation, dailyBudgetUsd: 0 } },
@@ -223,7 +223,7 @@ async function setupSweep(traces: number) {
   const judgeId = await createScorer(PROJECT, judgeDraft(), "u1", db);
   const checkId = await createScorer(PROJECT, checkDraft(), "u1", db);
   await client.exec(`
-    update scorers set cursor_at = now() - interval '1 hour', created_at = now() - interval '1 hour';
+    update trace_scorers set cursor_at = now() - interval '1 hour', created_at = now() - interval '1 hour';
     insert into otel_trace_summaries (project_id, trace_id, started_at, duration_ms, has_error,
       input_tokens, output_tokens, cost_usd, spans_max_received_at, updated_at)
     select '${PROJECT}', 't' || n, now(), 500, false, 1, 1, 0, now(), now() - interval '60 seconds'

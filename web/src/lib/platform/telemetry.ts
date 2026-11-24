@@ -112,6 +112,7 @@ export const SERVER_EVENT_NAMES = [
   "feature.scorers.changed",
   "feature.scorers.swept",
   "feature.scorers.judge_skipped",
+  "dashboard_changed",
 ] as const;
 
 export type ServerEventName = (typeof SERVER_EVENT_NAMES)[number];

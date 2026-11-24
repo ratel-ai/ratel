@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/platform/db/client";
 import { parseDefinition, parseFilter } from "./config";
-import { type ScorerRow, scorers, traceScores } from "./schema";
+import { type ScorerRow, traceScorers, traceScores } from "./schema";
 import type { Scorer, ScorerDraft, TraceScore } from "./types";
 
 type Db = ReturnType<typeof getDb>;
@@ -26,9 +26,9 @@ export interface ScorerSummary {
 export async function listScorers(projectId: string, db: ScorerDb = getDb()): Promise<Scorer[]> {
   const rows = await db
     .select()
-    .from(scorers)
-    .where(eq(scorers.projectId, projectId))
-    .orderBy(asc(scorers.createdAt), asc(scorers.id));
+    .from(traceScorers)
+    .where(eq(traceScorers.projectId, projectId))
+    .orderBy(asc(traceScorers.createdAt), asc(traceScorers.id));
   return rows.flatMap((row) => scorerOf(row) ?? []);
 }
 
@@ -39,8 +39,8 @@ export async function getScorer(
 ): Promise<Scorer | null> {
   const [row] = await db
     .select()
-    .from(scorers)
-    .where(and(eq(scorers.projectId, projectId), eq(scorers.id, scorerId)));
+    .from(traceScorers)
+    .where(and(eq(traceScorers.projectId, projectId), eq(traceScorers.id, scorerId)));
   return row ? scorerOf(row) : null;
 }
 
@@ -51,9 +51,9 @@ export async function createScorer(
   db: ScorerDb = getDb(),
 ): Promise<string> {
   const [row] = await db
-    .insert(scorers)
+    .insert(traceScorers)
     .values({ projectId, ...draft, createdBy: actor, updatedBy: actor })
-    .returning({ id: scorers.id });
+    .returning({ id: traceScorers.id });
   if (!row) throw new Error("the scorer insert returned no row");
   return row.id;
 }
@@ -68,10 +68,16 @@ export async function updateScorer(
 ): Promise<boolean> {
   const { kind, enabled, ...settings } = draft;
   const rows = await db
-    .update(scorers)
+    .update(traceScorers)
     .set({ ...settings, ...enabledChange(enabled), updatedBy: actor, updatedAt: new Date() })
-    .where(and(eq(scorers.projectId, projectId), eq(scorers.id, scorerId), eq(scorers.kind, kind)))
-    .returning({ id: scorers.id });
+    .where(
+      and(
+        eq(traceScorers.projectId, projectId),
+        eq(traceScorers.id, scorerId),
+        eq(traceScorers.kind, kind),
+      ),
+    )
+    .returning({ id: traceScorers.id });
   return rows.length > 0;
 }
 
@@ -84,10 +90,10 @@ export async function setScorerEnabled(
   db: ScorerDb = getDb(),
 ): Promise<boolean> {
   const rows = await db
-    .update(scorers)
+    .update(traceScorers)
     .set({ ...enabledChange(enabled), updatedBy: actor, updatedAt: new Date() })
-    .where(and(eq(scorers.projectId, projectId), eq(scorers.id, scorerId)))
-    .returning({ id: scorers.id });
+    .where(and(eq(traceScorers.projectId, projectId), eq(traceScorers.id, scorerId)))
+    .returning({ id: traceScorers.id });
   return rows.length > 0;
 }
 
@@ -98,9 +104,9 @@ export async function deleteScorer(
   db: ScorerDb = getDb(),
 ): Promise<boolean> {
   const rows = await db
-    .delete(scorers)
-    .where(and(eq(scorers.projectId, projectId), eq(scorers.id, scorerId)))
-    .returning({ id: scorers.id });
+    .delete(traceScorers)
+    .where(and(eq(traceScorers.projectId, projectId), eq(traceScorers.id, scorerId)))
+    .returning({ id: traceScorers.id });
   return rows.length > 0;
 }
 
@@ -194,16 +200,16 @@ export async function scoresOfTrace(
 ): Promise<ScoreOfTrace[]> {
   return db
     .select({
-      scorerId: scorers.id,
-      scorerName: scorers.name,
+      scorerId: traceScorers.id,
+      scorerName: traceScorers.name,
       value: traceScores.value,
       passed: traceScores.passed,
       confidence: traceScores.confidence,
     })
     .from(traceScores)
-    .innerJoin(scorers, eq(scorers.id, traceScores.scorerId))
+    .innerJoin(traceScorers, eq(traceScorers.id, traceScores.scorerId))
     .where(and(eq(traceScores.projectId, projectId), eq(traceScores.traceId, traceId)))
-    .orderBy(asc(scorers.name), asc(scorers.id));
+    .orderBy(asc(traceScorers.name), asc(traceScorers.id));
 }
 
 /** Which of these traces the scorer already scored. */
@@ -250,7 +256,7 @@ const summaryColumns = {
 function enabledChange(enabled: boolean) {
   return {
     enabled,
-    cursorAt: sql`case when ${enabled} and not ${scorers.enabled} then now() else ${scorers.cursorAt} end`,
-    cursorTraceId: sql`case when ${enabled} and not ${scorers.enabled} then '' else ${scorers.cursorTraceId} end`,
+    cursorAt: sql`case when ${enabled} and not ${traceScorers.enabled} then now() else ${traceScorers.cursorAt} end`,
+    cursorTraceId: sql`case when ${enabled} and not ${traceScorers.enabled} then '' else ${traceScorers.cursorTraceId} end`,
   };
 }

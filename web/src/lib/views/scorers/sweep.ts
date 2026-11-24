@@ -6,7 +6,7 @@ import { settledBefore } from "@/lib/synthesis/traces/summary-refresh";
 import { runCheck } from "./check";
 import { JUDGE_BATCH_SIZE, type JudgeDeps, judgeTraces } from "./judge";
 import { inSample } from "./sample";
-import { scorers } from "./schema";
+import { traceScorers } from "./schema";
 import {
   insertTraceScores,
   type NewTraceScore,
@@ -147,7 +147,7 @@ async function sweepOneBatch(
       select s.trace_id, s.updated_at::text as updated_at,
         (s.spans_max_received_at >= c.created_at and ${filterCondition(scorer.filter)}) as matches
       from otel_trace_summaries s
-      join scorers c on c.id = ${scorer.id} and c.enabled
+      join trace_scorers c on c.id = ${scorer.id} and c.enabled
       where s.project_id = ${scorer.projectId}
         and (s.updated_at, s.trace_id) > (c.cursor_at, c.cursor_trace_id)
         and s.updated_at < ${settledBefore(settleMs)}
@@ -170,9 +170,9 @@ async function sweepOneBatch(
     tx,
   );
   await tx
-    .update(scorers)
+    .update(traceScorers)
     .set({ cursorAt: last.updated_at, cursorTraceId: last.trace_id })
-    .where(eq(scorers.id, scorer.id));
+    .where(eq(traceScorers.id, scorer.id));
   const batch = {
     scanned: taken.length,
     more: overflow !== undefined || slice.length === batchSize,
@@ -247,9 +247,9 @@ async function activeScorers(
 ): Promise<Scorer[]> {
   const rows = await db
     .select()
-    .from(scorers)
-    .where(eq(scorers.enabled, true))
-    .orderBy(asc(scorers.cursorAt), asc(scorers.id));
+    .from(traceScorers)
+    .where(eq(traceScorers.enabled, true))
+    .orderBy(asc(traceScorers.cursorAt), asc(traceScorers.id));
   const on = new Map<string, boolean>();
   for (const { projectId } of rows)
     if (!on.has(projectId)) on.set(projectId, await flagOn(projectId));
