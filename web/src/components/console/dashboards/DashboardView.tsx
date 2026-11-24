@@ -29,6 +29,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTraceNavigation } from "@/components/console/traces/navigation";
 import { type TimeWindow, TimeWindowMenu } from "@/components/console/traces/TracesHeader";
+import { getMetric, metricOffered } from "@/lib/synthesis/metrics/catalog";
 import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import {
   filterChips,
@@ -37,11 +38,12 @@ import {
 } from "@/lib/synthesis/traces/v2/filters";
 import { withSelectedDays } from "@/lib/synthesis/traces/v2/volume";
 import {
+  ADD_SCORER_PARAM,
   dashboardsHref,
   searchFromTraceFilter,
   widgetTracesHref,
 } from "@/lib/views/dashboards/links";
-import type { Widget, WidgetInput, WidgetWidth } from "@/lib/views/dashboards/types";
+import type { ScorerOption, Widget, WidgetInput, WidgetWidth } from "@/lib/views/dashboards/types";
 import { widgetName } from "@/lib/views/dashboards/widget";
 import { NameDialog } from "./NameDialog";
 import { useDashboardAction } from "./use-dashboard-action";
@@ -61,18 +63,25 @@ export function DashboardView({
   widgets,
   facets,
   timeWindow,
+  scorers,
+  draft,
 }: {
   projectId: string;
   dashboard: { id: string; name: string };
   widgets: readonly { widget: Widget; result: MetricResult | null }[];
   facets: TraceFilterBarFacets;
   timeWindow: TimeWindow;
+  /** The project's scorers; null while scorers are off. */
+  scorers: readonly ScorerOption[] | null;
+  /** A widget to start adding as the page opens, from a scorer's page. */
+  draft: WidgetInput | null;
 }) {
   const router = useRouter();
   const { pending, go } = useTraceNavigation();
   const { change, saving } = useDashboardAction(projectId);
   // The editor's widget outlives `editing`, so the dialog keeps its content as it closes.
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(draft !== null);
+  const [start, setStart] = useState(draft);
   const [edited, setEdited] = useState<{ id: string; widget: WidgetInput } | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -88,13 +97,23 @@ export function DashboardView({
     setEditing(true);
   }
 
+  /** The draft is taken once: the address and the next "Add widget" start clean. */
+  function onEditorOpenChange(open: boolean) {
+    setEditing(open);
+    if (open || !start) return;
+    setStart(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete(ADD_SCORER_PARAM);
+    window.history.replaceState(null, "", url);
+  }
+
   async function save(widget: WidgetInput) {
     const saved = await change(
       edited
         ? { action: "edit-widget", dashboardId, widgetId: edited.id, widget }
         : { action: "add-widget", dashboardId, widget },
     );
-    if (saved) setEditing(false);
+    if (saved) onEditorOpenChange(false);
   }
 
   async function remove({ id, ...widget }: Widget, index: number) {
@@ -106,6 +125,11 @@ export function DashboardView({
         onClick: () => void change({ action: "add-widget", dashboardId, widget, index }),
       },
     });
+  }
+
+  function available(widget: Widget) {
+    const metric = getMetric(widget.metric);
+    return !metric || metricOffered(metric, { scorers: scorers !== null });
   }
 
   const addWidget = (
@@ -180,7 +204,10 @@ export function DashboardView({
                   >
                     {widgetName(widget)}
                   </h2>
-                  <FilterNote filter={widget.filter} />
+                  <FilterNote
+                    filter={widget.filter}
+                    scorer={scorers?.find(({ id }) => id === widget.scorerId)?.name}
+                  />
                   <Menu>
                     <MenuTrigger
                       render={
@@ -192,7 +219,11 @@ export function DashboardView({
                       }
                     />
                     <MenuContent align="end">
-                      <MenuItem icon={<Pencil />} onClick={() => openEditor(widget)}>
+                      <MenuItem
+                        icon={<Pencil />}
+                        disabled={!available(widget)}
+                        onClick={() => openEditor(widget)}
+                      >
                         Edit
                       </MenuItem>
                       <MenuItem
@@ -248,6 +279,7 @@ export function DashboardView({
                   widget={widget}
                   result={result}
                   range={timeWindow}
+                  available={available(widget)}
                 />
               </section>
             ))}
@@ -256,9 +288,11 @@ export function DashboardView({
       </PageBody>
       <WidgetEditor
         open={editing}
-        onOpenChange={setEditing}
+        onOpenChange={onEditorOpenChange}
         projectId={projectId}
         initial={edited?.widget ?? null}
+        start={start}
+        scorers={scorers}
         facets={facets}
         range={timeWindow}
         saving={saving}
@@ -292,10 +326,12 @@ export function DashboardView({
 }
 
 /** A filtered widget says so: its number is not the whole project's. */
-function FilterNote({ filter }: { filter: WidgetInput["filter"] }) {
+function FilterNote({ filter, scorer }: { filter: WidgetInput["filter"]; scorer?: string }) {
   const chips = filterChips("rollup", searchFromTraceFilter(filter), { entities: true });
-  if (chips.length === 0) return null;
-  const text = chips.map(({ field, value }) => `${field} ${value}`).join(", ");
+  const parts = chips.map(({ field, value }) => `${field} ${value}`);
+  if (scorer) parts.unshift(scorer);
+  if (parts.length === 0) return null;
+  const text = parts.join(", ");
   return (
     <p className="max-w-1/2 truncate text-xs text-fg-subtle" title={text}>
       {text}

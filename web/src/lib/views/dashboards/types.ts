@@ -15,8 +15,18 @@ export interface WidgetInput {
   aggregation: MetricAggregation;
   groupBy: MetricGroupBy | null;
   filter: TraceFilter;
+  /** A scorer metric: that scorer's results only. Absent, every scorer's. */
+  scorerId?: string;
   chart: WidgetChart;
   width: WidgetWidth;
+}
+
+/** A scorer as the widget form offers it. */
+export interface ScorerOption {
+  id: string;
+  name: string;
+  /** Pass or fail; false: 1 to 5. */
+  verdict: boolean;
 }
 
 export type Widget = WidgetInput & { id: string };

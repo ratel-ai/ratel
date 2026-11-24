@@ -1,6 +1,7 @@
 import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { type SweepResult, sweepScorers } from "./sweep";
+import "./metrics";
 import "./spend";
 
 type TrackSystemEvent = ReturnType<typeof createBackgroundObservability>["trackSystemEvent"];
@@ -43,7 +44,7 @@ export function scorerSweepStep(
   };
 }
 
-/** The scorers' registration. Loads the judge's spend reader, so every budget check counts it. */
+/** The scorers' registration. Loads the judge's spend reader, so every budget check counts it, and the metric source. */
 export const scorersRegistration: Registration = {
   drainSteps: [scorerSweepStep()],
 };

@@ -14,8 +14,12 @@ import {
 } from "@/lib/synthesis/traces/trace-filters";
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { loadWidgets } from "@/lib/views/dashboards/data";
+import { ADD_SCORER_PARAM } from "@/lib/views/dashboards/links";
 import { getDashboard } from "@/lib/views/dashboards/store";
-import { dashboardsEnabled, dashboardsScope } from "../context";
+import { scorerWidget } from "@/lib/views/dashboards/widget";
+import { hasVerdict } from "@/lib/views/scorers/format";
+import { listScorers } from "@/lib/views/scorers/store";
+import { dashboardsEnabled, dashboardsScope, metricFeatures } from "../context";
 
 export const metadata = { title: "Dashboard" };
 
@@ -25,7 +29,7 @@ export default async function ScopedDashboardPage({
   searchParams,
 }: {
   params: Promise<{ projectId: string; dashboardId: string }>;
-  searchParams: Promise<TraceListSearchParams>;
+  searchParams: Promise<TraceListSearchParams & { [ADD_SCORER_PARAM]?: string | string[] }>;
 }) {
   const { projectId, dashboardId } = await params;
   if (!(await dashboardsEnabled(projectId)))
@@ -42,9 +46,15 @@ export default async function ScopedDashboardPage({
   if (!dashboard) notFound();
 
   const now = new Date();
-  const range = resolveTraceRange(await searchParams, now);
-  const [results, facets] = await Promise.all([
-    loadWidgets(scope.project.id, dashboard.widgets, range),
+  const search = await searchParams;
+  const range = resolveTraceRange(search, now);
+  const features = await metricFeatures({
+    projectId: scope.project.id,
+    organizationId: scope.organization.id,
+    actor: scope.user.externalId,
+  });
+  const [results, facets, scorers] = await Promise.all([
+    loadWidgets(scope.project.id, dashboard.widgets, range, features),
     loadOrFallback({
       operation: "dashboard_facets",
       distinctId: `project:${scope.project.id}`,
@@ -55,9 +65,25 @@ export default async function ScopedDashboardPage({
           { operation: "dashboard_facets", timeoutMs: supplementaryReadTimeoutMs() },
         ),
     }),
+    features.scorers
+      ? loadOrFallback({
+          operation: "dashboard_scorers",
+          distinctId: `project:${scope.project.id}`,
+          fallback: [],
+          load: () => listScorers(scope.project.id),
+        })
+      : null,
   ]);
+  const options = scorers?.map((scorer) => ({
+    id: scorer.id,
+    name: scorer.name,
+    verdict: hasVerdict(scorer),
+  }));
+  const added = options?.find(({ id }) => id === search[ADD_SCORER_PARAM]);
   return (
     <DashboardView
+      scorers={options ?? null}
+      draft={added ? scorerWidget(added) : null}
       projectId={scope.project.id}
       dashboard={{ id: dashboard.id, name: dashboard.name }}
       widgets={dashboard.widgets.map((widget, index) => ({ widget, result: results[index] }))}

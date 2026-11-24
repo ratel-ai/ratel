@@ -5,7 +5,7 @@ import { StatRow } from "@ratel/design-system/stat-row";
 import { EmptyState } from "@ratel/design-system/states";
 import { ChartColumn, CircleAlert } from "lucide-react";
 import Link from "next/link";
-import { getMetric } from "@/lib/synthesis/metrics/catalog";
+import { getMetric, type MetricSource } from "@/lib/synthesis/metrics/catalog";
 import type { MetricResult } from "@/lib/synthesis/metrics/query";
 import { formatInteger } from "@/lib/synthesis/traces/v2/format";
 import {
@@ -17,7 +17,14 @@ import {
 import { type DashboardRange, widgetTracesHref } from "@/lib/views/dashboards/links";
 import type { WidgetInput } from "@/lib/views/dashboards/types";
 import { aggregationLabel, groupByLabel, widgetName } from "@/lib/views/dashboards/widget";
+import { scorersHref } from "@/lib/views/scorers/paths";
 import { MetricChart } from "./MetricChart";
+
+const SAMPLE_NOUN: Readonly<Record<MetricSource, string>> = {
+  traces: "trace",
+  context: "captured prompt",
+  scores: "result",
+};
 
 /** A widget's numbers in its chart type, or why there are none. */
 export function WidgetBody({
@@ -25,13 +32,24 @@ export function WidgetBody({
   widget,
   result,
   range,
+  available = true,
 }: {
   projectId: string;
   widget: WidgetInput;
   result: MetricResult | null;
   range: DashboardRange;
+  /** False while the metric's switch is off. */
+  available?: boolean;
 }) {
   const metric = getMetric(widget.metric);
+  if (!available)
+    return (
+      <EmptyState
+        icon={CircleAlert}
+        title="Scorers are off for this project"
+        description="The widget shows its numbers again when they are on."
+      />
+    );
   if (!result || !metric)
     return (
       <EmptyState
@@ -51,7 +69,7 @@ export function WidgetBody({
   const { unit } = metric;
   if (widget.chart === "number") {
     const [{ total, samples }] = result.series;
-    const noun = metric.source === "traces" ? "trace" : "captured prompt";
+    const noun = SAMPLE_NOUN[metric.source];
     return (
       <StatRow
         className="grid-cols-1 rounded-none border-0 lg:grid-cols-1 [&>*]:p-0"
@@ -80,23 +98,27 @@ export function WidgetBody({
             className: "max-w-0 truncate",
             cell: (row) => (
               <Link
-                href={widgetTracesHref(projectId, widget.filter, range, {
-                  by,
-                  value: row.group ?? "",
-                })}
+                href={
+                  by === "scorer"
+                    ? `${scorersHref(projectId)}/${row.group}`
+                    : widgetTracesHref(projectId, widget.filter, range, {
+                        by,
+                        value: row.group ?? "",
+                      })
+                }
                 className="text-fg hover:underline"
-                title={row.group ?? undefined}
+                title={row.label ?? row.group ?? undefined}
               >
-                {row.group}
+                {row.label ?? row.group}
               </Link>
             ),
           },
-          ...(widget.metric === "trace_count"
+          ...(metric.unit === "count"
             ? []
             : [
                 {
                   id: "traces",
-                  header: "Traces",
+                  header: metric.source === "scores" ? "Results" : "Traces",
                   align: "right" as const,
                   width: "6rem",
                   cell: (row: MetricResult["series"][number]) => formatInteger(row.samples),
@@ -105,7 +127,8 @@ export function WidgetBody({
           {
             id: "value",
             header:
-              widget.aggregation === "avg" || widget.aggregation.startsWith("p")
+              (widget.aggregation === "avg" && metric.source !== "scores") ||
+              widget.aggregation.startsWith("p")
                 ? aggregationLabel(widget.aggregation)
                 : metric.label,
             align: "right",

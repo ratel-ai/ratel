@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { ScorerDetail } from "@/components/console/scorers/ScorerDetail";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
+import { listDashboards } from "@/lib/views/dashboards/store";
 import { definitionSummary, hasVerdict } from "@/lib/views/scorers/format";
 import { getScorer, latestScores, scorerSummaries, scorerTrend } from "@/lib/views/scorers/store";
+import { dashboardsEnabled } from "../../dashboards/context";
 import { resolveScorersPage } from "../context";
 
 export const dynamic = "force-dynamic";
@@ -36,15 +38,17 @@ export default async function ScorerPage({
   const days = Array.from({ length: TREND_DAYS }, (_, index) =>
     new Date(now.getTime() - (TREND_DAYS - 1 - index) * DAY_MS).toISOString().slice(0, 10),
   );
-  const [trend, summaries, latest] = await Promise.all([
+  const [trend, summaries, latest, dashboards] = await Promise.all([
     scorerTrend(projectId, scorer.id, new Date(`${days[0]}T00:00:00Z`)),
     scorerSummaries(projectId, new Date(now.getTime() - 7 * DAY_MS)),
     latestScores(projectId, scorer.id, LATEST),
+    dashboardsEnabled(projectId).then((on) => (on ? listDashboards(projectId) : null)),
   ]);
   const byDay = new Map(trend.map((row) => [row.day, row]));
   return (
     <ScorerDetail
       projectId={projectId}
+      dashboards={dashboards?.map(({ id, name }) => ({ id, name })) ?? null}
       scorer={{
         id: scorer.id,
         name: scorer.name,

@@ -2,9 +2,10 @@ import {
   getMetric,
   type MetricAggregation,
   type MetricGroupBy,
+  type MetricId,
 } from "@/lib/synthesis/metrics/catalog";
 import type { TraceFilter } from "@/lib/synthesis/traces/trace-filters";
-import type { WidgetChart, WidgetInput } from "@/lib/views/dashboards/types";
+import type { ScorerOption, WidgetChart, WidgetInput } from "@/lib/views/dashboards/types";
 
 /** What fits a widget, and how it is named. Safe for the browser. */
 
@@ -30,6 +31,7 @@ const GROUP_BY_LABELS: Readonly<Record<MetricGroupBy, string>> = {
   environment: "Environment",
   agent: "Agent",
   tool: "Tool",
+  scorer: "Scorer",
 };
 
 /** Why a chart does not fit the grouping, or null. */
@@ -52,8 +54,10 @@ export function fitWidget(widget: WidgetInput): WidgetInput {
     if (!groupBy) chart = "line";
   }
   const aggregations = metric.aggregations as readonly MetricAggregation[];
+  const { scorerId, ...rest } = widget;
   return {
-    ...widget,
+    ...rest,
+    ...(scorerId && metric.source === "scores" ? { scorerId } : {}),
     chart,
     groupBy,
     aggregation: aggregations.includes(widget.aggregation) ? widget.aggregation : aggregations[0],
@@ -67,6 +71,29 @@ export function aggregationLabel(aggregation: MetricAggregation): string {
 
 export function groupByLabel(groupBy: MetricGroupBy): string {
   return GROUP_BY_LABELS[groupBy];
+}
+
+/** The scorers a metric can read: pass or fail for the pass rate, 1 to 5 for the average. */
+export function scorersOfMetric(
+  metric: MetricId,
+  scorers: readonly ScorerOption[],
+): readonly ScorerOption[] {
+  if (metric === "scorer_count") return scorers;
+  return scorers.filter(({ verdict }) => verdict === (metric === "scorer_pass_rate"));
+}
+
+/** The widget "Add to dashboard" starts from on a scorer's page. */
+export function scorerWidget({ id, verdict }: Pick<ScorerOption, "id" | "verdict">): WidgetInput {
+  return {
+    title: "",
+    metric: verdict ? "scorer_pass_rate" : "scorer_average",
+    aggregation: verdict ? "rate" : "avg",
+    groupBy: null,
+    filter: {},
+    scorerId: id,
+    chart: "line",
+    width: "half",
+  };
 }
 
 /** "Latency p95 by model": the name of a widget without its own title. */

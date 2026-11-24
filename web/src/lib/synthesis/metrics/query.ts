@@ -12,7 +12,6 @@ import {
   type MetricId,
   type MetricRequest,
   MetricRequestError,
-  type MetricSource,
   metricBucket,
   metricSelectionProblem,
 } from "@/lib/synthesis/metrics/catalog";
@@ -23,6 +22,8 @@ export type MetricsDb = Pick<ReturnType<typeof getDb>, "execute">;
 export interface MetricSeries {
   /** The group's value, or null for an ungrouped request. */
   group: string | null;
+  /** The group as people read it, when its value is an id. */
+  label?: string;
   /** The whole window's value: never the sum of `values`, which a percentile does not allow. */
   total: number | null;
   /** Rows behind `total`: traces, or captured prompts. */
@@ -39,8 +40,32 @@ export interface MetricResult {
   series: MetricSeries[];
 }
 
+/** A group-by is a column, or an array whose every value counts the row once. */
+export interface MetricGroup {
+  column: SQL;
+  array: boolean;
+  /** The values a trace filter keeps of this property. */
+  filtered?: (filter: TraceFilter) => readonly string[] | undefined;
+  /** The group's name, when the column is an id. */
+  label?: SQL;
+}
+
+/** Where a source's rows are, and what each of its metrics reads off one. */
+export interface MetricSourceQuery {
+  /** Aliases the trace's summary as `s` when the source is filterable. */
+  table: SQL;
+  project: SQL;
+  time: SQL;
+  /** The scorer of a row, where there is one. */
+  scorer?: SQL;
+  /** A count needs no more than the row. `where` keeps the rows the metric applies to. */
+  measures: Partial<Record<MetricId, { value: SQL; where?: SQL }>>;
+  groups: Partial<Record<MetricGroupBy, MetricGroup>>;
+}
+
 type Row = {
   grp: string;
+  label: string | null;
   bucket: string | null;
   value: number | string | null;
   samples: number | string;
@@ -54,17 +79,6 @@ const CONTEXT_TOKENS = sql.join(
   sql` + `,
 );
 
-/** What each metric reads off one source row `s`. A count needs no more than the row. */
-const MEASURES: Record<MetricId, SQL> = {
-  trace_count: sql`1`,
-  error_rate: sql`case when coalesce(s.root_error, s.has_error) then 1 else 0 end`,
-  latency: sql`s.duration_ms`,
-  tokens: TRACE_TOKENS,
-  cost: sql`s.cost_usd`,
-  context_tokens: CONTEXT_TOKENS,
-  context_cost: sql`coalesce(s.cost_usd, 0)`,
-};
-
 const AGGREGATES: Record<MetricAggregation, SQL> = {
   count: sql`count(*)`,
   rate: sql`avg(m)`,
@@ -74,22 +88,46 @@ const AGGREGATES: Record<MetricAggregation, SQL> = {
   p95: sql`percentile_cont(0.95) within group (order by m)`,
 };
 
-const SOURCES: Record<MetricSource, { table: SQL; time: SQL }> = {
-  traces: { table: sql`otel_trace_summaries s`, time: sql`s.started_at` },
-  context: { table: sql`event_metrics s`, time: sql`s.event_time` },
-};
-
-/** A group-by is a column, or an array whose every value counts the trace once. */
-const GROUPS: Record<
-  MetricGroupBy,
-  { column: SQL; array: boolean; filtered: (filter: TraceFilter) => readonly string[] | undefined }
-> = {
+/** The trace properties a row can be grouped by: columns of the trace's summary `s`. */
+export const SUMMARY_GROUPS = {
   model: { column: sql`s.models`, array: true, filtered: (f) => f.models },
   tool: { column: sql`s.tools`, array: true, filtered: (f) => f.tools },
   agent: { column: sql`s.agents`, array: true, filtered: (f) => f.agents },
   service: { column: sql`s.service_name`, array: false, filtered: (f) => f.services },
   environment: { column: sql`s.environment`, array: false, filtered: (f) => f.environments },
+} as const satisfies Partial<Record<MetricGroupBy, MetricGroup>>;
+
+const SOURCES: Record<"traces" | "context", MetricSourceQuery> = {
+  traces: {
+    table: sql`otel_trace_summaries s`,
+    project: sql`s.project_id`,
+    time: sql`s.started_at`,
+    measures: {
+      trace_count: { value: sql`1` },
+      error_rate: { value: sql`case when coalesce(s.root_error, s.has_error) then 1 else 0 end` },
+      latency: { value: sql`s.duration_ms` },
+      tokens: { value: TRACE_TOKENS },
+      cost: { value: sql`s.cost_usd` },
+    },
+    groups: SUMMARY_GROUPS,
+  },
+  context: {
+    table: sql`event_metrics s`,
+    project: sql`s.project_id`,
+    time: sql`s.event_time`,
+    measures: {
+      context_tokens: { value: CONTEXT_TOKENS },
+      context_cost: { value: sql`coalesce(s.cost_usd, 0)` },
+    },
+    groups: {},
+  },
 };
+
+/**
+ * The sources whose tables a higher layer owns. Empty until that module fills it: the scorers
+ * (`views/scorers/metrics`) fill `scores`.
+ */
+export const metricSeams: { scores?: MetricSourceQuery } = {};
 
 /**
  * The one metric query: any catalog entry over a window, filtered and grouped. Dashboards and
@@ -139,25 +177,33 @@ function metricQuery(
   aggregation: MetricAggregation,
   groupBy: MetricGroupBy | null,
   bucket: MetricBucket,
-  { window, filter }: MetricRequest,
+  { window, filter, scorerId }: MetricRequest,
 ): SQL {
-  const { table, time } = SOURCES[metric.source];
-  const group = groupBy ? GROUPS[groupBy] : null;
+  const source = metric.source === "scores" ? metricSeams.scores : SOURCES[metric.source];
+  const measure = source?.measures[metric.id];
+  const group = groupBy ? source?.groups[groupBy] : null;
+  // The catalog allowed the request, so a hole here is a module that was not loaded.
+  if (!source || !measure || group === undefined) {
+    throw new Error(`the metric source "${metric.source}" cannot answer "${metric.id}"`);
+  }
+  const { table, time } = source;
   const join = group?.array
     ? sql`cross join lateral (select distinct v from unnest(${group.column}) v) g`
     : sql``;
   const grp = group ? (group.array ? sql`g.v` : group.column) : sql`''::text`;
   const condition = metric.filterable ? traceFilterCondition(filter) : null;
-  const only = [...(group?.filtered(filter ?? {}) ?? [])];
+  const only = [...(group?.filtered?.(filter ?? {}) ?? [])];
   return sql`
     with measured as (
-      select ${grp} as grp,
+      select ${grp} as grp, ${group?.label ?? sql`null::text`} as label,
         to_char(date_trunc(${sql.raw(`'${bucket}'`)}, ${time} at time zone 'UTC'), 'YYYY-MM-DD"T"HH24:MI:SS".000Z"') as bucket,
-        ${MEASURES[metric.id]} as m
+        ${measure.value} as m
       from ${table} ${join}
-      where s.project_id = ${projectId}
+      where ${source.project} = ${projectId}
         and ${time} >= ${window.since.toISOString()}::timestamptz
         and ${time} < ${window.until.toISOString()}::timestamptz
+        ${measure.where ? sql`and ${measure.where}` : sql``}
+        ${scorerId && source.scorer ? sql`and ${source.scorer} = ${scorerId}::uuid` : sql``}
         ${condition ? sql`and ${condition}` : sql``}
         ${group ? sql`and ${grp} is not null` : sql``}
         ${
@@ -170,7 +216,7 @@ function metricQuery(
         }
     ),
     aggregated as (
-      select grp, bucket, (${AGGREGATES[aggregation]})::float8 as value, count(*)::int as samples
+      select grp, bucket, max(label) as label, (${AGGREGATES[aggregation]})::float8 as value, count(*)::int as samples
       from measured
       group by grouping sets ((grp, bucket), (grp))
     ),
@@ -178,7 +224,7 @@ function metricQuery(
       select grp, row_number() over (order by value desc nulls last, grp collate "C") as rank
       from aggregated where bucket is null
     )
-    select a.grp, a.bucket, a.value, a.samples
+    select a.grp, a.label, a.bucket, a.value, a.samples
     from aggregated a join top t on t.grp = a.grp
     where t.rank <= ${METRIC_GROUP_LIMIT}
     order by t.rank, a.bucket nulls first`;
@@ -194,11 +240,12 @@ function toSeries(
   const nothing = aggregation === "count" || aggregation === "sum" ? 0 : null;
   const indexOf = new Map(buckets.map((start, index) => [start, index]));
   const byGroup = new Map<string, MetricSeries>();
-  const seriesOf = (grp: string) => {
+  const seriesOf = (grp: string, label: string | null = null) => {
     let series = byGroup.get(grp);
     if (!series) {
       series = {
         group: grouped ? grp : null,
+        ...(label ? { label } : {}),
         total: nothing,
         samples: 0,
         values: buckets.map(() => nothing),
@@ -209,7 +256,7 @@ function toSeries(
   };
   if (!grouped) seriesOf("");
   for (const row of rows) {
-    const series = seriesOf(row.grp);
+    const series = seriesOf(row.grp, row.label);
     const value = row.value === null ? nothing : Number(row.value);
     if (row.bucket === null) {
       series.total = value;
@@ -219,7 +266,18 @@ function toSeries(
     const index = indexOf.get(row.bucket);
     if (index !== undefined) series.values[index] = value;
   }
-  return [...byGroup.values()];
+  return withDistinctLabels([...byGroup.values()]);
+}
+
+/** Two groups of one name are told apart by the start of their id. */
+function withDistinctLabels(series: MetricSeries[]): MetricSeries[] {
+  const counts = new Map<string, number>();
+  for (const { label } of series) if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+  return series.map((item) =>
+    item.label && (counts.get(item.label) ?? 0) > 1
+      ? { ...item, label: `${item.label} (${item.group?.slice(0, 8)})` }
+      : item,
+  );
 }
 
 /** Every bucket the window touches, so a gap in the data is a gap in the series. */

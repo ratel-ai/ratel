@@ -9,6 +9,8 @@ export interface DashboardRange {
   to: string;
 }
 
+export const ADD_SCORER_PARAM = "addScorer";
+
 const LIST_PARAMS = {
   models: "facetModel",
   tools: "facetTool",
@@ -24,7 +26,7 @@ const GROUP_FILTERS = {
   service: "services",
   environment: "environments",
   agent: "agents",
-} as const satisfies Record<MetricGroupBy, keyof TraceFilter>;
+} as const satisfies Record<Exclude<MetricGroupBy, "scorer">, keyof TraceFilter>;
 
 export function dashboardsHref(projectId: string): string {
   return `/project/${encodeURIComponent(projectId)}/dashboards`;
@@ -34,12 +36,17 @@ export function dashboardHref(projectId: string, dashboardId: string): string {
   return `${dashboardsHref(projectId)}/${dashboardId}`;
 }
 
+/** The dashboard with the editor open on a widget of that scorer. */
+export function addScorerHref(projectId: string, dashboardId: string, scorerId: string): string {
+  return `${dashboardHref(projectId, dashboardId)}?${ADD_SCORER_PARAM}=${encodeURIComponent(scorerId)}`;
+}
+
 /** The Traces page with a widget's filter and time range; with a group, that group's traces only. */
 export function widgetTracesHref(
   projectId: string,
   filter: TraceFilter,
   range: DashboardRange,
-  group?: { by: MetricGroupBy; value: string },
+  group?: { by: keyof typeof GROUP_FILTERS; value: string },
 ): string {
   const narrowed = group ? { ...filter, [GROUP_FILTERS[group.by]]: [group.value] } : filter;
   const params = new URLSearchParams(searchFromTraceFilter(narrowed));

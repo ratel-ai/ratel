@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
+import type { MetricFeatures } from "@/lib/synthesis/metrics/catalog";
 import { parseWidget } from "@/lib/views/dashboards/parse-widget";
 import { STARTER_NAME, STARTER_WIDGETS } from "@/lib/views/dashboards/starter";
 import type * as store from "@/lib/views/dashboards/store";
@@ -34,6 +35,12 @@ export interface DashboardActionDeps {
     userId: string,
   ): Promise<{ project: { id: string }; organization: { id: string } } | null>;
   enabled(subject: { organizationId: string }): Promise<boolean>;
+  /** The switches that decide which metrics a widget may use. */
+  features(subject: {
+    projectId: string;
+    organizationId: string;
+    actor: string;
+  }): Promise<MetricFeatures>;
   /** An admin support session may look but not change. */
   isRestricted(): Promise<boolean>;
   store: Pick<
@@ -74,7 +81,13 @@ export async function changeDashboard(
 
   const actor = session.user.externalId;
   try {
-    const dashboardId = await apply(input, scope.project.id, actor, deps);
+    const dashboardId = await apply(input, scope.project.id, actor, deps, () =>
+      deps.features({
+        projectId: scope.project.id,
+        organizationId: scope.organization.id,
+        actor,
+      }),
+    );
     await deps.observe({
       project_id: scope.project.id,
       organization_id: scope.organization.id,
@@ -95,6 +108,7 @@ async function apply(
   projectId: string,
   updatedBy: string,
   { store }: DashboardActionDeps,
+  features: () => Promise<MetricFeatures>,
 ): Promise<string> {
   switch (input.action) {
     case "create":
@@ -123,7 +137,7 @@ async function apply(
     case "move-widget":
     case "remove-widget": {
       const id = dashboardIdOf(input);
-      const change = widgetChange(input);
+      const change = await widgetChange(input, features);
       const outcome = await store.changeWidgets({ projectId, id, updatedBy, change });
       if (outcome === "missing") throw new Refusal(MISSING);
       return id;
@@ -134,9 +148,12 @@ async function apply(
 }
 
 /** The next widget list, or null when the change leaves it as it is (a move past an end). */
-function widgetChange(input: Record<string, unknown>): (widgets: Widget[]) => Widget[] | null {
+async function widgetChange(
+  input: Record<string, unknown>,
+  features: () => Promise<MetricFeatures>,
+): Promise<(widgets: Widget[]) => Widget[] | null> {
   if (input.action === "add-widget") {
-    const widget = withId(checkedWidget(input.widget));
+    const widget = withId(checkedWidget(input.widget, await features()));
     const index = Number.isSafeInteger(input.index) ? (input.index as number) : MAX_WIDGETS;
     return (widgets) => {
       if (widgets.length >= MAX_WIDGETS)
@@ -151,7 +168,7 @@ function widgetChange(input: Record<string, unknown>): (widgets: Widget[]) => Wi
     return index;
   };
   if (input.action === "edit-widget") {
-    const widget = { ...checkedWidget(input.widget), id: widgetId };
+    const widget = { ...checkedWidget(input.widget, await features()), id: widgetId };
     return (widgets) => widgets.with(indexIn(widgets), widget);
   }
   if (input.action === "remove-widget") return (widgets) => widgets.toSpliced(indexIn(widgets), 1);
@@ -165,8 +182,8 @@ function widgetChange(input: Record<string, unknown>): (widgets: Widget[]) => Wi
   };
 }
 
-function checkedWidget(raw: unknown): WidgetInput {
-  const parsed = parseWidget(raw);
+function checkedWidget(raw: unknown, features: MetricFeatures): WidgetInput {
+  const parsed = parseWidget(raw, features);
   if (!parsed.ok) throw new Refusal(parsed.error);
   return parsed.widget;
 }

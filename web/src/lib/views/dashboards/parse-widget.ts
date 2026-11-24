@@ -4,6 +4,8 @@ import {
   METRIC_AGGREGATIONS,
   METRIC_GROUP_BYS,
   METRIC_IDS,
+  type MetricFeatures,
+  metricOffered,
   metricSelectionProblem,
 } from "@/lib/synthesis/metrics/catalog";
 import {
@@ -38,6 +40,7 @@ const widgetShape = z
     aggregation: z.enum(METRIC_AGGREGATIONS),
     groupBy: z.enum(METRIC_GROUP_BYS).nullable().default(null),
     filter: filterShape.default({}),
+    scorerId: z.string().optional(),
     chart: z.enum(WIDGET_CHARTS),
     width: z.enum(WIDGET_WIDTHS),
   })
@@ -45,11 +48,17 @@ const widgetShape = z
 
 export type ParsedWidget = { ok: true; widget: WidgetInput } | { ok: false; error: string };
 
-/** A widget from outside: its shape, then the metric catalog's and the chart's rules. */
-export function parseWidget(raw: unknown): ParsedWidget {
-  const metric = (raw as { metric?: unknown } | null)?.metric;
-  if (typeof metric === "string" && !getMetric(metric)) {
-    return { ok: false, error: `Unknown metric "${metric}".` };
+/** A widget from outside: its shape, the project's switches (all off unless given), then the metric catalog's and the chart's rules. */
+export function parseWidget(
+  raw: unknown,
+  features: MetricFeatures = { scorers: false },
+): ParsedWidget {
+  const id = (raw as { metric?: unknown } | null)?.metric;
+  if (typeof id === "string") {
+    const metric = getMetric(id);
+    if (!metric) return { ok: false, error: `Unknown metric "${id}".` };
+    if (!metricOffered(metric, features))
+      return { ok: false, error: `${metric.label} is off for this project.` };
   }
   const parsed = widgetShape.safeParse(raw);
   if (!parsed.success) return { ok: false, error: "The widget settings are invalid." };

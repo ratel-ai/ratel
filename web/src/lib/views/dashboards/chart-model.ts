@@ -8,6 +8,7 @@ import {
   formatInteger,
   formatMoney,
   formatPercent,
+  MISSING,
 } from "@/lib/synthesis/traces/v2/format";
 
 /** What a widget draws, from its metric result. Pure, so the charts only place marks. */
@@ -15,7 +16,12 @@ import {
 /** Series with a color of their own (DESIGN.md, Data visualization: six slots, never cycled). */
 export const CHART_SLOTS = 6;
 
+/** The top of a scorer's 1 to 5 scale. */
+const SCORE_MAX = 5;
+
 export interface ChartSeries {
+  /** The group's value: what its color and key follow. */
+  key: string;
   label: string;
   /** 1 to 6, or null for "Other". */
   slot: number | null;
@@ -47,13 +53,15 @@ export function chartModel(
   const rest = result.series.slice(CHART_SLOTS);
   // Slots go by name, so a group keeps its color when the ranking moves.
   const order = shown.map((series) => series.group ?? "").sort();
-  const series: ChartSeries[] = shown.map(({ group, values }) => ({
-    label: group ?? "",
+  const series: ChartSeries[] = shown.map(({ group, label, values }) => ({
+    key: group ?? "",
+    label: label ?? group ?? "",
     slot: order.indexOf(group ?? "") + 1,
     values,
   }));
   if (rest.length > 0 && additive) {
     series.push({
+      key: "\u0000other",
       label: "Other",
       slot: null,
       values: result.buckets.map((_, index) =>
@@ -69,7 +77,7 @@ export function chartModel(
   const scaleMax = niceCeil(peak);
   return {
     series,
-    scaleMax: unit === "ratio" ? Math.min(1, scaleMax) : scaleMax,
+    scaleMax: unit === "ratio" ? Math.min(1, scaleMax) : unit === "score" ? SCORE_MAX : scaleMax,
     stacked,
     note:
       rest.length > 0 && !additive
@@ -83,7 +91,13 @@ export function formatMetric(value: number | null, unit: MetricUnit): string {
   if (unit === "usd") return formatMoney(value);
   if (unit === "ms") return formatDuration(value);
   if (unit === "ratio") return formatPercent(value);
+  if (unit === "score") return value === null ? MISSING : trimmedScore(value);
   return formatCompact(value);
+}
+
+/** A 1 to 5 average, with two decimals at most. */
+function trimmedScore(value: number): string {
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 /** Exact, for a table. */
