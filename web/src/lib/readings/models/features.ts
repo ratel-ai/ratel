@@ -32,6 +32,12 @@ export interface FeatureRow {
   claudeDefault?: string;
   /** What the feature does, for the docs. */
   does: string;
+  /**
+   * Ratel's own check of the setup, not a feature: it runs on the model of the feature it checks,
+   * has no setting of its own, is not listed with the features, and its calls change no feature's
+   * status. Its calls carry its id, so their spend is not a feature's.
+   */
+  check?: true;
 }
 
 const SONNET = "claude-sonnet-5-5";
@@ -125,6 +131,14 @@ export const FEATURES = [
     claudeDefault: HAIKU,
     does: "Drafts a test from a run",
   },
+  {
+    id: "model_check",
+    kind: "text",
+    tier: "fast",
+    claudeDefault: HAIKU,
+    check: true,
+    does: "The Check now button of Organization settings > Models, for every kind of model",
+  },
   { id: "decision", kind: "decision", does: "A closed-set choice with no surface of its own" },
   { id: "match_quality_judge", kind: "decision", does: "Judges which tool a query wanted" },
   { id: "workflow_decide", kind: "decision", does: "Decides what a workflow was for" },
@@ -139,6 +153,11 @@ export type TextFeatureId = Extract<Row, { kind: "text" }>["id"];
 export type ChatFeatureId = Extract<Row, { kind: "chat" }>["id"];
 export type DecisionFeatureId = Extract<Row, { kind: "decision" }>["id"];
 
+/** The text and chat features, each with a model of its own and its own variable to name it. */
+export const MODEL_FEATURES: readonly FeatureRow[] = (FEATURES as readonly FeatureRow[]).filter(
+  (row) => row.kind !== "decision" && !row.check,
+);
+
 /** The variable that names one feature's model on any vendor. */
 export function featureVariable(id: string): string {
   return `MODEL_FEATURE_${id.toUpperCase()}`;
@@ -148,6 +167,11 @@ const BY_ID: ReadonlyMap<string, FeatureRow> = new Map(FEATURES.map((row) => [ro
 
 export function isFeature(id: string): id is FeatureId {
   return BY_ID.has(id);
+}
+
+/** Whether these calls are the console's check of the setup, not a feature's. */
+export function isCheck(id: string): boolean {
+  return BY_ID.get(id)?.check === true;
 }
 
 /** A feature's row. Throws on an id that is not in the table: a call site named it wrong. */

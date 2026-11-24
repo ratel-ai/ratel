@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveConfig } from "@/config";
+import { setModelCallSink } from "@/lib/platform/model-call";
 import { withProviders } from "@/lib/readings/models";
+import { explainTextSetup } from "@/lib/readings/models/explain";
 import { fakeTextModel } from "@/lib/readings/models/fake";
 import { ModelHttpError } from "@/lib/readings/models/providers/http";
-import { checkModels, loadModelSettings } from "./models";
+import {
+  canCheckModels,
+  checkModels,
+  checkModelsAtMostEvery,
+  loadModelSettings,
+  MODEL_CHECK_EVERY_MS,
+  resetModelCheck,
+} from "./models";
 
 const KEY = "sk-secret-value-1234567890";
 const cfg = (env: Record<string, string>) => resolveConfig({ env });
@@ -113,5 +122,99 @@ test("a kind that works says so, and one that is off is not called", async () =>
     assert.equal(called, 0);
   } finally {
     restore();
+  }
+});
+
+/** A text vendor that records which feature and model each call was made as. */
+function recordingVendor() {
+  const calls: Array<{ feature: string; model: string }> = [];
+  const restore = withProviders({
+    litellm: {
+      text: (context) => ({
+        provider: "litellm",
+        model: context.model,
+        complete: async () => {
+          calls.push({ feature: context.feature, model: context.model });
+          return {
+            text: "OK",
+            usage: { inputTokens: 1, outputTokens: 1 },
+            model: context.model,
+            stop: "end",
+          };
+        },
+      }),
+    },
+  });
+  return { calls, restore };
+}
+
+const GATEWAY = {
+  MODEL_PROVIDER: "litellm",
+  MODEL_BASE_URL: "http://gateway.test",
+  MODEL: "small",
+  MODEL_FEATURE_WORKFLOW_LABEL: "labeller",
+};
+
+test("the check runs on a feature's model but is counted as the check, not as that feature", async () => {
+  const { calls, restore } = recordingVendor();
+  try {
+    const results = await checkModels({ config: cfg(GATEWAY), environment: "production" });
+    assert.equal(results.find((result) => result.kind === "text")?.ok, true);
+    assert.deepEqual(calls, [{ feature: "model_check", model: "labeller" }]);
+  } finally {
+    restore();
+  }
+});
+
+test("the check is not a feature of the page, and has no model setting of its own", () => {
+  const setup = explainTextSetup(cfg(GATEWAY), "production");
+  assert.ok(setup.features.every((row) => row.feature !== "model_check"));
+  assert.equal(cfg({}).modelVendor.features.model_check, undefined);
+  assert.equal(cfg({ MODEL_FEATURE_MODEL_CHECK: "x" }).modelVendor.features.model_check, undefined);
+});
+
+test("the decision check is counted as the check too", async () => {
+  const lines: Record<string, unknown>[] = [];
+  const restoreSink = setModelCallSink({
+    info: (fields) => void lines.push(fields),
+    warn: (fields) => void lines.push(fields),
+  });
+  try {
+    await checkModels({
+      config: cfg({ DECISION_PROVIDER: "levanto", SAGE_API_KEY: KEY }),
+      environment: "production",
+      fetch: answering(500),
+    });
+  } finally {
+    restoreSink();
+  }
+  assert.deepEqual(
+    lines.map((line) => line.feature),
+    ["model_check"],
+  );
+});
+
+test("only an organization's admins may run the check", () => {
+  assert.equal(canCheckModels("admin"), true);
+  assert.equal(canCheckModels("member"), false);
+});
+
+test("the check runs at most once in its window: a click inside it gets the last results", async () => {
+  const { calls, restore } = recordingVendor();
+  resetModelCheck();
+  let clock = Date.parse("2026-11-24T10:00:00Z");
+  const options = { config: cfg(GATEWAY), environment: "production", now: () => clock };
+  try {
+    const first = await checkModelsAtMostEvery(options);
+    clock += MODEL_CHECK_EVERY_MS - 1;
+    const second = await checkModelsAtMostEvery(options);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(second, first);
+    clock += 1;
+    await checkModelsAtMostEvery(options);
+    assert.equal(calls.length, 2);
+  } finally {
+    restore();
+    resetModelCheck();
   }
 });

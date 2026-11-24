@@ -144,6 +144,27 @@ test("a decision feature's failure is a decision failure, and outcomes that are 
   }
 });
 
+test("the console's check is not a feature: its calls change no feature's status", async () => {
+  const h = harness({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: KEY });
+  try {
+    for (const outcome of ["error", "ok"] as const)
+      recordModelCall({
+        provider: "openai",
+        model: "gpt-6.2-sol",
+        feature: "model_check",
+        payer: "ratel",
+        outcome,
+        durationMs: 1,
+        ...(outcome === "error" ? { error: new ModelHttpError(401, "no") } : {}),
+      });
+    await settle();
+    assert.deepEqual([h.failed.length, h.succeeded.length], [0, 0]);
+    assert.equal(h.lines.filter((line) => line.level === "warn").length, 0);
+  } finally {
+    h.stop();
+  }
+});
+
 test("after stop nothing is heard", async () => {
   const h = harness({ MODEL_PROVIDER: "openai", OPENAI_API_KEY: KEY });
   h.stop();

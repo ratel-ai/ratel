@@ -1,5 +1,6 @@
 import { type Config, getConfig } from "@/config";
 import { embeddingProviderFromConfig } from "@/lib/adapters/oss/embedding-provider";
+import type { OrgRole } from "@/lib/contracts/session";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { choiceClient } from "@/lib/readings/decisions/choice";
 import { resolveDecisionEngine } from "@/lib/readings/decisions/engine";
@@ -78,9 +79,15 @@ export interface CheckOptions {
   fetch?: typeof fetch;
 }
 
-/** The feature each check's call is counted under. */
+/** Who may run the check: it calls each vendor, so it costs a little on a hosted one. */
+export function canCheckModels(role: OrgRole): boolean {
+  return role === "admin";
+}
+
+/** The feature whose model the text check runs on. */
 const TEXT_FEATURE = "workflow_label";
-const DECISION_FEATURE = "decision";
+/** What every check's calls are counted under: the check's, not a feature's (`features.ts`). */
+const CHECK_FEATURE = "model_check";
 /** Embeddings have no row in the feature table: they are not a model call the kit makes. */
 const EMBEDDINGS = "embeddings";
 
@@ -95,7 +102,9 @@ async function timed<T>(call: () => Promise<T>): Promise<{ value: T; ms: number 
 async function checkText(config: Config, environment: string): Promise<ModelCheck> {
   const setup = explainTextSetup(config, environment);
   if (!setup.on) return { kind: "text", ok: null, message: setup.reason ?? "No text model." };
-  const model = models.text(TEXT_FEATURE, { config, environment });
+  const featureModel = models.text(TEXT_FEATURE, { config, environment });
+  const model =
+    featureModel && models.text(CHECK_FEATURE, { config, environment, model: featureModel.model });
   if (!model)
     return {
       kind: "text",
@@ -120,7 +129,7 @@ async function checkText(config: Config, environment: string): Promise<ModelChec
       ok: false,
       model: model.model,
       message: explainModelError(
-        { feature: TEXT_FEATURE, model: model.model, error, kind: "text" },
+        { feature: CHECK_FEATURE, model: model.model, error, kind: "text" },
         { config, environment },
       ),
     };
@@ -144,7 +153,7 @@ async function checkDecision(config: Config, environment: string, fetchImpl?: ty
   }
   const shared = {
     ...(fetchImpl ? { fetchImpl } : {}),
-    feature: DECISION_FEATURE,
+    feature: CHECK_FEATURE,
     attempts: 1,
     retryRateLimit: false,
     timeoutMs: CHECK_TIMEOUT_MS,
@@ -181,7 +190,7 @@ async function checkDecision(config: Config, environment: string, fetchImpl?: ty
       ok: false,
       model: client.model,
       message: explainModelError(
-        { feature: DECISION_FEATURE, model: client.model, error, kind: "decision" },
+        { feature: CHECK_FEATURE, model: client.model, error, kind: "decision" },
         { config, environment },
       ),
     } satisfies ModelCheck;
@@ -227,4 +236,32 @@ export async function checkModels(options: CheckOptions = {}): Promise<ModelChec
     checkDecision(config, environment, options.fetch),
     checkEmbedding(config, environment, options.fetch),
   ]);
+}
+
+/** A check runs at most this often: a click inside the window gets the last results. */
+export const MODEL_CHECK_EVERY_MS = 30_000;
+
+let lastCheck: { at: number; results: Promise<ModelCheck[]> } | null = null;
+
+/** Forget the last check (tests). */
+export function resetModelCheck(): void {
+  lastCheck = null;
+}
+
+/**
+ * `checkModels`, at most once a window for the deployment (its models are the deployment's, not
+ * an organization's). A click while one runs waits for it.
+ */
+export function checkModelsAtMostEvery(
+  options: CheckOptions & { now?: () => number } = {},
+): Promise<ModelCheck[]> {
+  const now = (options.now ?? Date.now)();
+  if (lastCheck && now - lastCheck.at < MODEL_CHECK_EVERY_MS) return lastCheck.results;
+  const results = checkModels(options);
+  const check = { at: now, results };
+  lastCheck = check;
+  results.catch(() => {
+    if (lastCheck === check) lastCheck = null;
+  });
+  return results;
 }

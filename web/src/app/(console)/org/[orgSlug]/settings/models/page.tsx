@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { ModelSettingsView } from "@/components/console/org/ModelSettings";
 import { composition } from "@/lib/composition";
 import { requireOrganizationScope } from "@/lib/console/scope/organization-scope";
-import { loadModelSettings, OSS_EDITION } from "@/lib/console/settings/models";
+import { canCheckModels, loadModelSettings, OSS_EDITION } from "@/lib/console/settings/models";
 
 export const metadata = { title: "Models" };
 export const dynamic = "force-dynamic";
@@ -15,7 +15,14 @@ export default async function OrganizationModelsPage({
 }) {
   if (composition.edition !== OSS_EDITION) notFound();
   const { orgSlug } = await params;
-  await requireOrganizationScope(orgSlug);
+  const { role } = await requireOrganizationScope(orgSlug);
   const settings = await loadModelSettings();
-  return <ModelSettingsView slug={orgSlug} settings={settings} now={new Date()} />;
+  return (
+    <ModelSettingsView
+      slug={orgSlug}
+      settings={settings}
+      now={new Date()}
+      canCheck={canCheckModels(role)}
+    />
+  );
 }

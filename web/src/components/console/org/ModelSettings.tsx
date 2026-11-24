@@ -62,10 +62,13 @@ export function ModelSettingsView({
   slug,
   settings,
   now,
+  canCheck,
 }: {
   slug: string;
   settings: ModelSettings;
   now: Date;
+  /** The check calls each vendor: an admin's. */
+  canCheck: boolean;
 }) {
   const { text, decisions, embeddings, failures } = settings;
   const decisionFailure = Object.values(failures)
@@ -144,7 +147,13 @@ export function ModelSettingsView({
         <KindSummary setup={embeddings} offTitle="No embeddings" />
       </Section>
 
-      <ModelCheckPanel slug={slug} />
+      {canCheck ? (
+        <ModelCheckPanel slug={slug} />
+      ) : (
+        <p className="max-w-2xl text-ui text-fg-muted">
+          An admin of this organization can check that each kind of model answers.
+        </p>
+      )}
     </PageBody>
   );
 }

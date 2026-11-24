@@ -9,7 +9,7 @@ import { type DecisionEngineName, resolveDecisionEngine } from "@/lib/readings/d
 import { OPENAI_DECISIONS_MODEL, OPENAI_DEFAULT_BASE_URL } from "@/lib/readings/decisions/openai";
 import { DECISION_VENDORS, decisionVendorNamed } from "@/lib/readings/decisions/vendors";
 import { modelIdFor, type ResolvedVendor, resolveModelVendor } from "./config";
-import { FEATURES, featureRow, featureVariable, isFeature } from "./features";
+import { featureRow, featureVariable, isFeature, MODEL_FEATURES } from "./features";
 import { VENDORS, type VendorName, vendorNamed } from "./vendors";
 
 /**
@@ -207,7 +207,7 @@ export function explainTextSetup(
     config.modelVendor.name !== undefined ||
     config.anthropic.backend !== undefined ||
     config.anthropic.apiKey !== undefined;
-  const rows = FEATURES.filter((row) => row.kind !== "decision");
+  const rows = MODEL_FEATURES;
   const vendor = resolveModelVendor(config, environment);
   if (!vendor) {
     return {

@@ -19,7 +19,7 @@ import { ConfigError, field, type InferSchema, resolve, schema } from "zfig";
 import { z } from "zod";
 import { CONFIG_DEFAULTS as D } from "@/config-defaults";
 import type { CoreFlag } from "@/lib/contracts/feature-flags";
-import { FEATURES, featureVariable } from "@/lib/readings/models/features";
+import { featureVariable, MODEL_FEATURES } from "@/lib/readings/models/features";
 
 type Env = Readonly<Record<string, string | undefined>>;
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
@@ -280,10 +280,7 @@ const CONFIG_SCHEMA = schema({
     model: optional("MODEL", configured),
     /** The model of one feature, by its id; ahead of `model`. */
     features: Object.fromEntries(
-      FEATURES.filter((row) => row.kind !== "decision").map((row) => [
-        row.id,
-        optional(featureVariable(row.id), configured),
-      ]),
+      MODEL_FEATURES.map((row) => [row.id, optional(featureVariable(row.id), configured)]),
     ) as Record<string, ReturnType<typeof optional<typeof configured>>>,
     /** Comma-separated id prefixes of a server's models that think. */
     reasoningModels: optional("MODEL_REASONING_MODELS", configured),

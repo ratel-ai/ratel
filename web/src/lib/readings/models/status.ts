@@ -5,7 +5,7 @@ import { deploymentEnvironment } from "@/lib/platform/environment";
 import { getLogger } from "@/lib/platform/logger";
 import { onModelCall } from "@/lib/platform/model-call";
 import { explainModelError, setupLines } from "./explain";
-import { featureRow, isFeature } from "./features";
+import { featureRow, isCheck, isFeature } from "./features";
 import { type ModelFailureRow, modelFailures } from "./schema";
 
 /**
@@ -107,6 +107,8 @@ export function startModelStatus(options: ModelStatusOptions = {}): () => void {
   const logged = new Map<string, number>();
   const okWritten = new Map<string, number>();
   return onModelCall((record) => {
+    // The console's check reports its own result, on the page that ran it.
+    if (isCheck(record.feature)) return;
     if (record.outcome === "ok") {
       const last = okWritten.get(record.feature);
       if (last !== undefined && now() - last < OK_EVERY_MS) return;

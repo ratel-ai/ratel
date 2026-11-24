@@ -13,7 +13,10 @@ const KIND_LABEL: Record<ModelCheck["kind"], string> = {
   embedding: "Embeddings",
 };
 
-/** Asks each kind of model once, on request: a few tokens on a hosted vendor. */
+/**
+ * Asks each kind of model once, on request: a few tokens on a hosted vendor. An admin's; a click
+ * within 30 seconds of the last check shows that check's results.
+ */
 export function ModelCheckPanel({ slug }: { slug: string }) {
   const [results, setResults] = useState<ModelCheck[] | null>(null);
   const [failed, setFailed] = useState(false);
