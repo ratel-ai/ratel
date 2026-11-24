@@ -36,6 +36,7 @@ import {
  */
 
 type Options = Pick<ModelOptions, "config" | "environment">;
+type SmallOptions = Options & Pick<ModelOptions, "model">;
 
 /** Turns a refused key into `ModelRefused`, as the Claude code does: no further call can succeed. */
 async function guarded<T>(call: () => Promise<T>): Promise<T> {
@@ -102,7 +103,7 @@ export function neutralAgent(
   };
 }
 
-function small(feature: TextFeatureId, options: Options) {
+function small(feature: TextFeatureId, options: SmallOptions) {
   const text = models.text(feature, options);
   if (!text) return null;
   return {
@@ -146,11 +147,18 @@ export function neutralPerson(options: Options): PersonModel | null {
   };
 }
 
+/**
+ * `feature` names the spend line. `modelOf` is the feature whose model answers: a task's eval is
+ * judged on the judge's own model under the task's feature, as the Claude code does.
+ */
 export function neutralJudge(
   feature: "eval_gate_judge" | "eval_gate_task_judge",
   options: Options,
+  modelOf: "eval_gate_judge" | "eval_gate_task_judge" = feature,
 ): JudgeModel | null {
-  const model = small(feature, options);
+  const asked = modelOf === feature ? undefined : models.text(modelOf, options)?.model;
+  if (modelOf !== feature && !asked) return null;
+  const model = small(feature, asked ? { ...options, model: asked } : options);
   if (!model) return null;
   return {
     ...model.identity,

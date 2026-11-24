@@ -292,7 +292,7 @@ export function mockModelsEnabled(
  */
 export function resolveEvalModels(
   config: Config = getConfig(),
-  judgeFeature: EvalGateFeature = "eval_gate_judge",
+  judgeFeature: JudgeFeature = "eval_gate_judge",
   environment: string = deploymentEnvironment(),
   agentFeature: AgentFeature = "eval_gate_replay",
 ): EvalModels {
@@ -325,7 +325,7 @@ export function resolveEvalModels(
       : neutralToolStandIn(options),
     judge: judge
       ? anthropicJudge(judge.client, judge.model, judgeFeature, judge.backend)
-      : neutralJudge(judgeFeature as "eval_gate_judge", options),
+      : neutralJudge(judgeFeature, options, "eval_gate_judge"),
     ...(person ? { person } : {}),
     standIn: false,
   };
@@ -525,6 +525,9 @@ export type EvalGateFeature =
 
 /** The features an agent call may be logged under: a fix replay, or a What-if sample (RC-176). */
 export type AgentFeature = Extract<EvalGateFeature, "eval_gate_replay" | "eval_gate_what_if">;
+
+/** Owned (ADR-0009): the features a judge's spend line can carry. */
+export type JudgeFeature = Extract<EvalGateFeature, "eval_gate_judge" | "eval_gate_task_judge">;
 
 /** One Messages API call, reported through the model-call seam. */
 function tracked(

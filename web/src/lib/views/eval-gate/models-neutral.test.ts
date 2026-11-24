@@ -259,6 +259,22 @@ test("one feature can run on another of the vendor's models", () => {
   assert.equal(models.tool?.model, "small");
 });
 
+test("a task's eval is judged on the judge's own model, under the task's feature, as on Claude", async () => {
+  answers.push(completion({ content: '{"pass":true}' }));
+  const models = resolveEvalModels(
+    cfg({ ...LITELLM, MODEL_FEATURE_EVAL_GATE_JUDGE: "big" }),
+    "eval_gate_task_judge",
+    "production",
+  );
+  assert.equal(models.judge?.model, "big");
+  await models.judge?.judge({ criteria: "c", run: "r" });
+  assert.equal(seen[0].body.model, "big");
+  assert.deepEqual(
+    lines.map((line) => [line.feature, line.model]),
+    [["eval_gate_task_judge", "big"]],
+  );
+});
+
 test("a call refused for its budget, or never made, names the vendor", () => {
   const judge = resolve().judge;
   assert.ok(judge);
