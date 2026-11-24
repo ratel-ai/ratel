@@ -1,6 +1,5 @@
-import { HALLUCINATIONS_DESCRIPTION } from "@/components/console/hallucinations/copy";
-import { SentimentSkeleton } from "@/components/console/sentiment/SentimentSkeleton";
+import { HallucinationsSkeleton } from "@/components/console/hallucinations/HallucinationsSkeleton";
 
 export default function HallucinationsLoading() {
-  return <SentimentSkeleton title="Hallucinations" description={HALLUCINATIONS_DESCRIPTION} />;
+  return <HallucinationsSkeleton />;
 }
