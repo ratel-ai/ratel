@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uuid,
@@ -51,6 +52,39 @@ export const alertRules = pgTable(
     check("alert_rules_operator_check", sql`${t.operator} in ('above', 'below')`),
     check("alert_rules_window_check", sql`${t.windowMinutes} in (5, 15, 60, 1440)`),
     check("alert_rules_state_check", sql`${t.state} in ('ok', 'alerting', 'no_data')`),
+  ],
+);
+
+/** Where a project's messages go. The webhook URL is sealed (`platform/secret-box`) for this row's id. */
+export const alertDestinations = pgTable(
+  "alert_destinations",
+  {
+    id: uuid("id").primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sealedUrl: text("sealed_url").notNull(),
+    lastFour: text("last_four").notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("alert_destinations_project_idx").on(t.projectId, t.createdAt)],
+);
+
+export const alertRuleDestinations = pgTable(
+  "alert_rule_destinations",
+  {
+    ruleId: uuid("rule_id")
+      .notNull()
+      .references(() => alertRules.id, { onDelete: "cascade" }),
+    destinationId: uuid("destination_id")
+      .notNull()
+      .references(() => alertDestinations.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ruleId, t.destinationId] }),
+    index("alert_rule_destinations_destination_idx").on(t.destinationId),
   ],
 );
 

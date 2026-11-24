@@ -6,22 +6,25 @@ import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
 import { type AlertActionDeps, changeAlert } from "./actions";
 import { deliverAlerts, MAX_ATTEMPTS } from "./deliver";
+import { createDestination, deleteDestination, listDestinations } from "./destinations";
 import { evaluateAlerts } from "./evaluate";
 import { type AlertNotifier, memoryNotifier } from "./notifier";
 import { alertsStep } from "./register";
 import * as store from "./store";
+import type { AlertDraft } from "./types";
 
 const ORG = "22222222-2222-4222-8222-222222222222";
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const OTHER = "33333333-3333-4333-8333-333333333333";
 const START = new Date("2026-11-24T10:00:00Z");
-const DRAFT = {
+const DRAFT: AlertDraft = {
   name: "Too many errors",
   query: { metric: "error_rate", aggregation: "rate", filter: {} },
   operator: "above",
   threshold: 0.5,
   windowMinutes: 5,
-} as const;
+  destinationIds: [],
+};
 
 let client: Awaited<ReturnType<typeof createMigratedPGlite>>;
 let db: ReturnType<typeof getDb>;
@@ -201,6 +204,28 @@ test("a failed message is tried again, 3 times at most, and never in two ticks a
     (await store.listAlertEvents(PROJECT, id, db))[0].error ?? "",
     /hooks\.slack/,
   );
+});
+
+test("a rule keeps its project's destinations only; a removed one leaves the rule", async () => {
+  const input = {
+    name: "Ops",
+    url: new URL("https://hooks.slack.com/services/T/B/wxyz"),
+    actor: "u",
+    key: "k",
+  };
+  const mine = await createDestination({ ...input, projectId: PROJECT }, db);
+  const foreign = await createDestination({ ...input, projectId: OTHER }, db);
+  const id = await rule({ destinationIds: [mine, foreign] });
+  const ids = async () => (await store.getAlertRule(PROJECT, id, db))?.destinationIds;
+  assert.deepEqual(await ids(), [mine]);
+  assert.deepEqual(await listDestinations(PROJECT, db), [
+    { id: mine, name: "Ops", lastFour: "wxyz" },
+  ]);
+  const stored = await client.query("select * from alert_destinations");
+  assert.doesNotMatch(JSON.stringify(stored.rows), /hooks\.slack/);
+  assert.equal(await deleteDestination(OTHER, mine, db), false);
+  assert.equal(await deleteDestination(PROJECT, mine, db), true);
+  assert.deepEqual(await ids(), []);
 });
 
 test("a person creates, edits, pauses and deletes a rule; others cannot", async () => {

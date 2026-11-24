@@ -80,6 +80,7 @@ test("a rule from outside is checked like a widget", () => {
     operator: "above",
     threshold: 1000,
     windowMinutes: 5,
+    destinationIds: [],
   };
   const off = { scorers: false };
   const parsed = parseRule(draft, off);

@@ -43,8 +43,3 @@ export function memoryNotifier(): AlertNotifier & { notices: AlertNotice[]; fail
   };
   return notifier;
 }
-
-/** Reaches nobody. */
-export const silentNotifier: AlertNotifier = {
-  send: async ({ sentTo }) => ({ sentTo: [...sentTo], error: null }),
-};

@@ -23,6 +23,8 @@ export interface AlertCondition {
 export interface AlertDraft extends AlertCondition {
   name: string;
   query: AlertQuery;
+  /** Where its messages go. Empty: it notifies nobody. */
+  destinationIds: string[];
 }
 
 export interface AlertRule extends AlertDraft {
@@ -36,8 +38,17 @@ export interface AlertRule extends AlertDraft {
   stateChangedAt: Date | null;
 }
 
+/** A Slack channel as the pages show it: its webhook URL is never read back. */
+export interface AlertDestination {
+  id: string;
+  name: string;
+  /** The end of the URL. */
+  lastFour: string;
+}
+
 /** What a state change tells people. A change to or from "no data" may tell nothing. */
 export type AlertNoticeKind = "fire" | "recovery";
 
 export const MAX_ALERT_RULES = 100;
 export const MAX_ALERT_NAME = 80;
+export const MAX_DESTINATION_NAME = 80;

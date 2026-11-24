@@ -15,6 +15,7 @@ const draftShape = z
     operator: z.enum(ALERT_OPERATORS),
     threshold: z.number().finite().nonnegative(),
     windowMinutes: z.literal(ALERT_WINDOWS),
+    destinationIds: z.array(z.guid()).max(100).default([]),
   })
   .strict();
 

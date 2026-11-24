@@ -2,7 +2,7 @@ import type { DrainStep, Registration } from "@/lib/contracts/registry";
 import { createBackgroundObservability } from "@/lib/jobs/observability";
 import { deliverAlerts } from "@/lib/views/alerts/deliver";
 import { evaluateAlerts } from "@/lib/views/alerts/evaluate";
-import { silentNotifier } from "@/lib/views/alerts/notifier";
+import { slackNotifier } from "@/lib/views/alerts/slack";
 
 type TrackProjectEvent = ReturnType<typeof createBackgroundObservability>["trackProjectEvent"];
 
@@ -14,7 +14,7 @@ export interface AlertsStepDeps {
 
 const defaultDeps: AlertsStepDeps = {
   evaluate: () => evaluateAlerts(),
-  deliver: () => deliverAlerts(silentNotifier),
+  deliver: () => deliverAlerts(slackNotifier()),
   track: createBackgroundObservability().trackProjectEvent,
 };
 
