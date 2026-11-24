@@ -2244,7 +2244,7 @@
     {"from": "apps/web/lib/trace-signals/outcomes/task-question.ts", "to": "web/src/lib/readings/trace-signals/outcomes/task-question.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/outcomes/tasks.test.ts", "to": "web/src/lib/readings/trace-signals/outcomes/tasks.test.ts", "mode": "copy"},
     {"from": "apps/web/lib/trace-signals/outcomes/tasks.ts", "to": "web/src/lib/readings/trace-signals/outcomes/tasks.ts", "mode": "copy"},
-    {"from": "apps/web/lib/trace-signals/outcomes/text-queries.ts", "to": "web/src/lib/readings/trace-signals/outcomes/text-queries.ts", "mode": "copy"},
+    {"from": "apps/web/lib/trace-signals/outcomes/text-queries.ts", "to": "web/src/lib/readings/trace-signals/outcomes/text-queries.ts", "mode": "owned", "$why": "bounded reads: a reply is read from each model call's last message instead of its whole history, and the next scope's reply from the turn scopes within a day of the turns instead of every scope the session reported (changed here after ratel-cloud froze, 2026-11-24)"},
     {"from": "apps/web/lib/decisions/sage2.ts", "to": "web/src/lib/contracts/closed-questions.ts", "mode": "owned", "$why": "the contract half only: the request, answer and usage types, the failure, the request sizing and the port an edition fills; the vendor's HTTP client stays in the edition, and the names are neutral"},
     {"from": "apps/web/lib/decisions/sage2.test.ts", "mode": "excluded", "$why": "tests the Cloud decision vendor's HTTP client, which lives in the edition"},
     {"from": "Makefile", "mode": "excluded", "$why": "upstream's developer targets; this repository runs through pnpm scripts"}

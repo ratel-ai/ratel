@@ -39,6 +39,8 @@ const CHUNK = 500;
 const BEFORE_MS = 24 * 60 * 60 * 1000;
 /** How far after the window a person's next message is still read. */
 const AFTER_MS = 60 * 60 * 1000;
+/** How far around the turns' steps a session's turn scopes are read for the next scope's reply. */
+const SCOPE_MARGIN_MS = 24 * 60 * 60 * 1000;
 
 function chunks<T>(items: readonly T[]): T[][] {
   const out: T[][] = [];
@@ -164,13 +166,17 @@ export async function loadReplies(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   for (const ids of chunks([...new Set(traceIds)])) {
+    // Each call's last message alone: its reply is there, and the input it carries along is not read.
     const calls = await db
-      .select({ traceId: events.traceId, messages: sql<unknown>`${events.payload} -> 'messages'` })
+      .select({
+        traceId: events.traceId,
+        last: sql<unknown>`${events.payload} -> 'messages' -> -1`,
+      })
       .from(events)
       .where(and(eq(events.projectId, projectId), inArray(events.traceId, ids)))
       .orderBy(asc(sql`coalesce(${events.occurredAt}, ${events.receivedAt})`), asc(events.id));
     for (const call of calls) {
-      const reply = call.traceId ? finalReplyOf(call.messages) : null;
+      const reply = call.traceId && call.last != null ? finalReplyOf([call.last]) : null;
       // Oldest first, so the last call that wrote text is the one kept.
       if (reply && call.traceId) out.set(call.traceId, reply);
     }
@@ -282,14 +288,31 @@ export async function loadNextScopeReplies(
 ): Promise<Map<string, string>> {
   const eventIds = [...new Set(turns.flatMap(([, , ids]) => ids))];
   const traceOf = new Map<string, string>();
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  const stepAt = sql<Date>`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
   for (const ids of chunks(eventIds)) {
     const rows = await db
-      .select({ id: traceEvents.id, traceId: traceEvents.traceId })
+      .select({
+        id: traceEvents.id,
+        traceId: traceEvents.traceId,
+        at: stepAt.mapWith((value: string | Date) => new Date(value)),
+      })
       .from(traceEvents)
       .where(and(eq(traceEvents.projectId, projectId), inArray(traceEvents.id, ids)));
-    for (const row of rows) if (row.traceId) traceOf.set(row.id, row.traceId);
+    for (const row of rows) {
+      if (!row.traceId) continue;
+      traceOf.set(row.id, row.traceId);
+      first = Math.min(first, row.at.getTime());
+      last = Math.max(last, row.at.getTime());
+    }
   }
-  const scopes = new Map<string, string[]>();
+  if (traceOf.size === 0) return new Map();
+  // Only the scopes around the turns: a turn's own scope opens before its steps, and the next one follows.
+  const from = new Date(first - SCOPE_MARGIN_MS);
+  const to = new Date(last + SCOPE_MARGIN_MS);
+  // Per session: its scopes in order, and each scope's place in that order.
+  const scopes = new Map<string, { list: string[]; at: Map<string, number> }>();
   const worded = new Set<string>();
   for (const ids of chunks([...new Set(turns.map(([, sessionId]) => sessionId))])) {
     const rows = await db
@@ -304,29 +327,31 @@ export async function loadNextScopeReplies(
           eq(traceEvents.projectId, projectId),
           eq(traceEvents.type, "turn_start"),
           inArray(traceEvents.sessionId, ids),
+          sql`${stepAt} >= ${from} and ${stepAt} <= ${to}`,
         ),
       )
-      .orderBy(
-        asc(sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`),
-        asc(traceEvents.id),
-      );
+      .orderBy(asc(stepAt), asc(traceEvents.id));
     for (const row of rows) {
       if (!row.sessionId || !row.traceId) continue;
       if (row.worded) worded.add(row.traceId);
-      const list = scopes.get(row.sessionId) ?? [];
+      const session = scopes.get(row.sessionId) ?? { list: [], at: new Map<string, number>() };
       // A scope reported twice keeps its first place.
-      if (!list.includes(row.traceId)) list.push(row.traceId);
-      scopes.set(row.sessionId, list);
+      if (!session.at.has(row.traceId)) {
+        session.at.set(row.traceId, session.list.length);
+        session.list.push(row.traceId);
+      }
+      scopes.set(row.sessionId, session);
     }
   }
   const nextTrace = new Map<string, string>();
   const scoped = new Set<string>();
   for (const [turnId, sessionId, ids] of turns) {
     const trace = ids.map((id) => traceOf.get(id)).find((id) => id !== undefined);
-    const list = scopes.get(sessionId);
-    if (!trace || !list || !list.includes(trace)) continue;
+    const session = scopes.get(sessionId);
+    const place = trace ? session?.at.get(trace) : undefined;
+    if (!session || place === undefined) continue;
     scoped.add(turnId);
-    const next = list[list.indexOf(trace) + 1];
+    const next = session.list[place + 1];
     if (next && !worded.has(next)) nextTrace.set(turnId, next);
   }
   const replies =
