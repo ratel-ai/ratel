@@ -39,6 +39,31 @@ test("platform-compose scans the image it built, pinned by digest", () => {
   assert.match(body, /aquasec\/trivy:[\d.]+@sha256:[0-9a-f]{64}/);
 });
 
+test("platform-compose builds from source through the override", () => {
+  assert.match(jobBody(ciWorkflow, "platform-compose"), /COMPOSE_FILE: docker-compose\.yml:docker-compose\.build\.yml/);
+});
+
+test("image.yml publishes the app image and the demo image with the same tags", () => {
+  const image = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
+  assert.match(image, /\{ target: oss, image: ratelai\/ratel, /);
+  assert.match(image, /\{ target: demo, image: ratelai\/ratel-demo, /);
+});
+
+// Next accepts only letters, digits, - and _ in a deployment id: `0.3.0` fails the build.
+test("image.yml makes a valid Next deployment id from any image version", () => {
+  const image = readFileSync(new URL("../.github/workflows/image.yml", import.meta.url), "utf8");
+  assert.match(image, /build-args: NEXT_DEPLOYMENT_ID=\$\{\{ steps\.deployment\.outputs\.id \}\}/);
+  const script = image.match(/- id: deployment\n(?: {8}.*\n)*? {8}run: (.*)\n/);
+  assert.ok(script, "image.yml must have a deployment step");
+  for (const [version, id] of [["0.3.1", "0-3-1"], ["1.0.0-rc.1", "1-0-0-rc-1"], ["edge", "edge"]]) {
+    const result = spawnSync("bash", ["-c", script[1].replace('>> "$GITHUB_OUTPUT"', "")], {
+      encoding: "utf8",
+      env: { ...process.env, VERSION: version },
+    });
+    assert.equal(result.stdout.trim(), `id=${id}`);
+  }
+});
+
 // ci-gate is the only required check, so a job missing from its `needs` cannot block a merge.
 test("ci-gate needs every other job", () => {
   const jobs = [...ciWorkflow.matchAll(/^ {2}([a-z][a-z0-9-]*):\s*$/gm)]

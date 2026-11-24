@@ -45,13 +45,24 @@ variable "tls" {
   type        = string
 }
 
-variable "ref" {
-  description = "The branch, tag or commit that install.sh checks out."
+variable "ratel_version" {
+  description = "The release to run: X.Y.Z, latest or edge. Empty: ref, else latest."
   type        = string
 
   # The value goes into a shell command in the user data: the same rule as deploy.sh.
   validation {
-    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.ref)) && !strcontains(var.ref, "..")
+    condition     = can(regex("^$|^latest$|^edge$|^[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.]+)?$", var.ratel_version))
+    error_message = "ratel_version is X.Y.Z, latest or edge."
+  }
+}
+
+variable "ref" {
+  description = "A branch or commit to build from source, when ratel_version is empty."
+  type        = string
+
+  # The value goes into a shell command in the user data: the same rule as deploy.sh.
+  validation {
+    condition     = can(regex("^$|^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.ref)) && !strcontains(var.ref, "..")
     error_message = "ref has characters it cannot have, or contains \"..\"."
   }
 }
@@ -75,6 +86,9 @@ resource "random_password" "console" {
 
 locals {
   domain = var.access != "public" ? "" : (var.domain != "" ? var.domain : "${var.public_ip}.sslip.io")
+  # An image by default; a source build only for a ref alone.
+  source_build = var.ratel_version == "" && var.ref != ""
+  install_args = local.source_build ? "--ref '${var.ref}'" : "--version '${coalesce(var.ratel_version, "latest")}'"
   access_args = var.access != "public" ? "--access private" : join(" ", [
     "--access public",
     "--domain '${local.domain}'",
@@ -89,7 +103,7 @@ output "user_data" {
   value = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     ssh_public_key = var.ssh_public_key
     install_url    = var.install_url
-    ref            = var.ref
+    install_args   = local.install_args
     install_dir    = "/opt/ratel"
     access_args    = local.access_args
   })

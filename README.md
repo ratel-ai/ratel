@@ -34,7 +34,7 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 
 ## Quick Start
 
-**You need** Docker with Compose 2.24 or later, network access to pull images and packages, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). The first build takes about 5 minutes.
+**You need** Docker with Compose 2.24 or later, network access to pull images, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). There is no build on your machine.
 
 ### One command
 
@@ -42,9 +42,9 @@ Model keys are optional. With no key, Ratel makes no outbound model call. The re
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh
 ```
 
-The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it fetches the ref, rebuilds and restarts, keeps the values in your `.env` and stops if the checkout has local changes.
+The installer works on macOS and Linux, on your machine or on a cloud VM. It checks Docker, Compose, RAM and disk, clones the repo at the latest release into `~/ratel` (`/opt/ratel` as root), creates `.env` with random secrets, pulls the published image of that release, starts the stack and waits for `/api/health`. On a Linux server with no Docker it offers to install Docker with Docker's `get.docker.com` script. On a cloud VM it prints the `ssh -L` tunnel command to reach the console. Run it again to upgrade: it pulls the image of the latest release and restarts. This also upgrades an install that was built from source. It keeps the data volume and the values in your `.env` (it sets `RATEL_VERSION` and `COMPOSE_FILE`), and it stops if the checkout has local changes or is newer than the release.
 
-Options, after `sh -s --`: `--ref <branch|tag|sha>` (default `main`), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
+Options, after `sh -s --`: `--version <X.Y.Z>` (default: the latest release; `edge` is the last build of `main`), `--ref <branch|sha>` (build that from source instead, about 5 minutes), `--dir <path>`, `--yes` (ask nothing) and `--demo` (load the demo data). For example:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/install.sh | sh -s -- --yes --demo
@@ -67,19 +67,19 @@ There are two access modes:
 - **`--access public`** (default): Caddy with TLS and a login, as above. Ports 80 and 443 are open to all, or only to the `--allow-cidr` ranges (for example a VPN), and then Caddy uses its own CA because Let's Encrypt cannot reach port 80. SSH is open only to your current IP. The certificate is for `--domain`, or for `<ip>.sslip.io` with no domain. The login password is printed once, and stays only on your laptop, in `~/.ratel/deploy/<name>/login`.
 - **`--access private`**: no web port. SSH is open to your current IP and the `--allow-cidr` ranges, and you reach the console through a tunnel: `ssh -i ~/.ratel/deploy/ratel/id_ed25519 -N -L 3000:127.0.0.1:3000 ratel@<ip>`.
 
-Other options, after `sh -s --`: `--region`, `--size`, `--name` (default `ratel`, for more than one deploy), `--ref` (passed to `install.sh`), `--iac terraform|tofu` and `--yes`. The state, the SSH key and the password stay on your laptop in `~/.ratel/deploy/<name>/` (owner-only), so the other commands need no flags:
+Other options, after `sh -s --`: `--region`, `--size`, `--name` (default `ratel`, for more than one deploy), `--version` or `--ref` (passed to `install.sh`; the default is the latest release), `--iac terraform|tofu` and `--yes`. The state, the SSH key and the password stay on your laptop in `~/.ratel/deploy/<name>/` (owner-only), so the other commands need no flags:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- status
-curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- up --ref <tag>   # upgrade
+curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- up   # upgrade to the latest release
 curl -fsSL https://raw.githubusercontent.com/ratel-ai/ratel/main/deploy.sh | sh -s -- destroy
 ```
 
-`up` on an existing deploy upgrades it: it reruns `install.sh` on the VM over SSH with the new `--ref`. If your IP changed, it first opens SSH to the new one. `destroy` deletes the VM, its disk with all Ratel data and its IP, then the local state. Back up first (see [On a server](#on-a-server)).
+`up` on an existing deploy upgrades it: it reruns `install.sh` on the VM over SSH with `--version`, or with the latest release. A deploy made with `--ref <branch>` stays on that branch. If your IP changed, it first opens SSH to the new one. `destroy` deletes the VM, its disk with all Ratel data and its IP, then the local state. Back up first (see [On a server](#on-a-server)).
 
 ### One-click deploy
 
-Each button opens your cloud's console with Ratel's template, in your account. Nothing is created until you confirm there. The VM runs `install.sh`, as `deploy.sh` does, in the public mode (Caddy with TLS and a login for user `ratel`, with the password that you type) or in the private mode (no web port, an SSH tunnel). The install takes 5 to 10 minutes after the VM starts.
+Each button opens your cloud's console with Ratel's template, in your account. Nothing is created until you confirm there. The VM runs `install.sh`, as `deploy.sh` does, in the public mode (Caddy with TLS and a login for user `ratel`, with the password that you type) or in the private mode (no web port, an SSH tunnel). The template's version parameter (default `latest`) sets the release; its ref parameter builds a branch or commit from source instead.
 
 | Cloud | Button | What it opens |
 |---|---|---|
@@ -96,23 +96,31 @@ The manual steps:
 ```sh
 git clone https://github.com/ratel-ai/ratel.git
 cd ratel
-docker compose up -d --build --wait
+docker compose up -d --wait
 ```
 
-Open `http://localhost:3000`. No configuration is needed.
+This pulls `ratelai/ratel` at `RATEL_VERSION`: the value in `.env`, else the default in `docker-compose.yml`, which each release sets. Open `http://localhost:3000`. No configuration is needed.
+
+To run your own changes, build from the checkout with the override file:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build --wait
+```
+
+Or put `COMPOSE_FILE=docker-compose.yml:docker-compose.build.yml` in `.env`, and each `docker compose` command uses it.
 
 If port 3000 or 5432 is taken, set `RATEL_PORT` and `RATEL_DB_PORT` in `.env` (copy `.env.example`) and set `BASE_URL` to the address you open, such as `http://localhost:3950`. The console's snippets and the demo's links use `BASE_URL`.
 
 If `docker compose up --wait` fails, read `docker compose logs db web worker`. A full Docker disk shows up only in the `db` log (`No space left on device`). On a small machine the worker can report unhealthy for the first minutes after a restart, while it catches up on queued jobs; it usually settles by itself.
 
-### From the published image
+### The image alone
 
-Each release publishes the image `docker.io/ratelai/ratel` for linux/amd64 and linux/arm64, tagged with its version (`0.1.0`), its minor (`0.1`) and `latest`. `edge` follows `main`. The image needs a Postgres 16 database:
+Each release publishes the image `docker.io/ratelai/ratel` for linux/amd64 and linux/arm64, tagged with its version (`0.3.0`), its minor (`0.3`) and `latest`. `edge` follows `main`. The image needs a Postgres 16 database:
 
 ```sh
 docker run -d -p 127.0.0.1:3000:3000 \
   -e DATABASE_URL=postgres://ratel:ratel@<db-host>:5432/ratel -e DATABASE_SSL=disable \
-  -e DATABASE_MIGRATE_ON_BOOT=1 ratelai/ratel:0.1
+  -e DATABASE_MIGRATE_ON_BOOT=1 ratelai/ratel:0.3
 ```
 
 Without `APP_ROLE`, the one container serves the console and runs the jobs. `GET /api/health` answers `200` when it is ready. [RELEASING.md](RELEASING.md) tells how releases and images are made.
@@ -125,7 +133,7 @@ Without `APP_ROLE`, the one container serves the console and runs the jobs. `GET
 
 ### Experimental features
 
-Tasks and Ship, testing a fix before it ships, session replay and the improvement-loop MCP tools are off by default. Add `RATEL_EXPERIMENTAL_FEATURES=1` to `.env` and run `docker compose up -d --build --wait` to turn them on; remove the line (or set `0`) and run it again to turn them off. With them on, **Tasks** becomes a page of its own in the rail and replaces the Tasks tab under Agent health, and the MCP server lists 9 more tools (40 without).
+Tasks and Ship, testing a fix before it ships, session replay and the improvement-loop MCP tools are off by default. Add `RATEL_EXPERIMENTAL_FEATURES=1` to `.env` and run `docker compose up -d --wait` to turn them on; remove the line (or set `0`) and run it again to turn them off. With them on, **Tasks** becomes a page of its own in the rail and replaces the Tasks tab under Agent health, and the MCP server lists 9 more tools (40 without).
 
 ### Explore with demo data (optional)
 
@@ -156,7 +164,7 @@ POSTGRES_PASSWORD=<generated>
 TRACE_SIGNALS_HASH_SALT=<generated>
 ```
 
-Then start it with `docker compose up -d --build --wait`. Point your proxy at `127.0.0.1:3000`, and configure it so that:
+Then start it with `docker compose up -d --wait`. Point your proxy at `127.0.0.1:3000`, and configure it so that:
 
 - `/v1`, `/v2`, `/api/v1`, `/api/v2` and `/api/mcp` pass through without your login, because the SDKs and MCP clients authenticate with API keys (bearer project keys). `/api/health` can pass too, for your monitor.
 - Everything else requires your login. That includes `/api/cron/drain`, which only matters if you set `RATEL_CRON=external`; it takes `CRON_SECRET` as a bearer, so give your scheduler that route and nothing else.
@@ -168,12 +176,12 @@ Model keys are optional, and every field is explained in `.env.example`.
 
 **Backups.** All state is in the Postgres volume (`ratel_pgdata`). Dump it with `docker compose exec -T db pg_dump -U ratel ratel > ratel.sql`, and restore into an empty database with `docker compose exec -T db psql -U ratel ratel < ratel.sql`. Keep `.env` too: a lost `TRACE_SIGNALS_HASH_SALT` splits old hashes from new.
 
-**Upgrades.** Check out a tag or a commit rather than following a moving branch, then run `docker compose up -d --build --wait`. Migrations run on boot and only add to the schema, so a rollback means restoring the dump you took before the upgrade and checking out the earlier version.
+**Upgrades.** Rerun the installer. By hand: check out the release's tag, set `RATEL_VERSION` in `.env` to the same version and run `docker compose up -d --wait`. The volume stays, also when the running version was built from source: its old `ratel-web` and `ratel-worker` images can then be deleted. Migrations run on boot and only add to the schema, so a rollback means restoring the dump you took before the upgrade and running the earlier version.
 
 ### Everyday commands
 
 ```sh
-docker compose up -d --build --wait    # start, or update after a git pull; migrations run on boot
+docker compose up -d --wait            # start, or move to a new RATEL_VERSION; migrations run on boot
 docker compose down                    # stop, keeping your data
 docker compose logs -f web worker      # follow the logs
 docker compose down --volumes          # stop and DELETE ALL DATA
