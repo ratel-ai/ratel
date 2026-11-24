@@ -4,7 +4,6 @@ import type { StoredFailureStreak } from "@/lib/readings/trace-signals/outcomes/
 import { sentimentLinks, weekLabel } from "@/lib/views/traces/sentiment/page-links";
 import {
   buildSentimentPage,
-  OTHER_INTENTS,
   type PageTurn,
   type SentimentPageInput,
 } from "@/lib/views/traces/sentiment/page-model";
@@ -58,7 +57,6 @@ function page(query: Partial<SentimentQuery> = {}) {
     intents: new Map(
       turns.slice(3, 6).map((t) => [t.turnId, { id: "i-1", label: "Update a task" }]),
     ),
-    versions: new Map(turns.map((t) => [t.turnId, "v2"])),
     totals: {
       turns: turns.length,
       answered: 0,
@@ -76,33 +74,6 @@ function page(query: Partial<SentimentQuery> = {}) {
   };
   return buildSentimentPage(input, { ...DEFAULT_SENTIMENT_QUERY, ...query });
 }
-
-test("a row links to the page narrowed to its intent, cause and tool, to its tool in Catalog and to its examples' traces", () => {
-  const links = sentimentLinks(page());
-  const row = links.rows.find((r) => r.tool === "update_task")!;
-  assert.equal(row.intentHref, `${BASE}?intent=i-1`);
-  assert.equal(row.causeHref, `${BASE}?cause=bad_arguments`);
-  assert.equal(row.toolHref, `${BASE}?tool=update_task`);
-  assert.deepEqual([row.toolName, row.toolKind], ["update_task", "tool"]);
-  assert.ok(row.catalogHref?.startsWith("/project/p1/catalogs"));
-  assert.equal(row.exampleHrefs.length, 3);
-  assert.match(row.exampleHrefs[0]!, /^\/project\/p1\/traces\/turns\/t-[def]-update_task$/);
-
-  const skill = links.rows.find((r) => r.tool === "skill:report")!;
-  assert.deepEqual([skill.toolName, skill.toolKind], ["report", "skill"]);
-  assert.equal(
-    skill.intentHref,
-    `${BASE}?intent=none`,
-    "a row with no intent narrows to turns placed nowhere",
-  );
-});
-
-test("a folded row has no one intent to narrow to", () => {
-  const model = page();
-  const folded = { ...model.rows[0]!, intent: OTHER_INTENTS };
-  const links = sentimentLinks({ ...model, rows: [folded] });
-  assert.equal(links.rows[0]?.intentHref, null);
-});
 
 test("filters read as chips that remove themselves, and every link keeps the window, the sort and the other filters", () => {
   const filters = { ...NO_SENTIMENT_FILTERS, intent: "i-1", week: "2026-08-31" };
@@ -122,7 +93,6 @@ test("filters read as chips that remove themselves, and every link keeps the win
     },
   ]);
   assert.equal(links.clearHref, `${BASE}?days=90&sort=share`);
-  assert.equal(links.thinHref, `${BASE}?days=90&intent=i-1&week=2026-08-31&sort=share&thin=1`);
   assert.equal(
     links.sortHrefs.sessions,
     `${BASE}?days=90&intent=i-1&week=2026-08-31&sort=sessions`,
@@ -134,115 +104,18 @@ test("filters read as chips that remove themselves, and every link keeps the win
   );
 });
 
-test("a cut's value narrows the page to it, and the active one removes its filter", () => {
-  const links = sentimentLinks(page({ filters: { ...NO_SENTIMENT_FILTERS, tool: "update_task" } }));
-  const tools = Object.fromEntries(links.cuts.tool.values.map((value) => [value.key, value.href]));
-  assert.equal(tools.update_task, BASE, "the active tool removes the filter");
-  assert.equal(tools["skill:report"], `${BASE}?tool=skill%3Areport`);
-  assert.equal(links.cuts.version.values[0]?.href, `${BASE}?tool=update_task&version=v2`);
-  assert.equal(
-    sentimentLinks(page({ thin: true })).thinHref,
-    BASE,
-    "showing thin rows links back to hiding them",
-  );
-});
-
 test("a week reads by the Monday it starts on", () => {
   assert.equal(weekLabel("2026-08-31"), "Aug 31");
   assert.equal(weekLabel("not a date"), "not a date");
 });
 
-test("the pager links keep the window, sort and filters; a new sort or filter starts on the first page", () => {
-  const turns = Array.from({ length: 25 }, (_, i) =>
-    ["a", "b", "c"].map((s) => turn(`${s}${i}`, `tool_${String(i).padStart(2, "0")}`)),
-  ).flat();
-  const input: SentimentPageInput = {
-    projectId: "p1",
-    windowDays: 90,
-    now: NOW,
-    turns,
-    sessions: [],
-    intents: new Map(),
-    versions: new Map(),
-    totals: {
-      turns: turns.length,
-      answered: 0,
-      textTurns: 0,
-      messages: 0,
-      satisfaction: {},
-      reactions: {},
-    },
-    modelConfigured: false,
-    costKnown: false,
-    answers: [],
-    tasks: [],
-    capped: false,
-    minSessions: 3,
-  };
-  const second = sentimentLinks(
-    buildSentimentPage(input, { ...DEFAULT_SENTIMENT_QUERY, sort: "time", page: 2 }),
-  );
-  assert.equal(second.prevHref, `${BASE}?days=90&sort=time`);
-  assert.equal(second.nextHref, null);
-  assert.equal(second.sortHrefs.sessions, `${BASE}?days=90&sort=sessions`);
-  assert.equal(second.groups[0]?.causeHref, `${BASE}?days=90&cause=bad_arguments&sort=time`);
-  const first = sentimentLinks(
-    buildSentimentPage(input, { ...DEFAULT_SENTIMENT_QUERY, sort: "time" }),
-  );
-  assert.deepEqual([first.prevHref, first.nextHref], [null, `${BASE}?days=90&sort=time&page=2`]);
-});
-
-test("how sessions ended is a choice above the root causes, a chip, and part of every other link", () => {
+test("how sessions ended reads as a chip, and is part of every other link", () => {
   const model = page({ filters: { ...NO_SENTIMENT_FILTERS, outcome: "blocked" } });
   const links = sentimentLinks(model);
-  assert.deepEqual(
-    links.ended.map((choice) => [choice.outcome, choice.active, choice.href]),
-    [
-      [null, false, BASE],
-      ["resolved_clean", false, `${BASE}?ended=resolved_clean`],
-      ["resolved_after_friction", false, `${BASE}?ended=resolved_after_friction`],
-      ["gave_up", false, `${BASE}?ended=gave_up`],
-      ["blocked", true, `${BASE}?ended=blocked`],
-      ["escalated", false, `${BASE}?ended=escalated`],
-    ],
-  );
   assert.deepEqual(links.filters, [
     { field: "outcome", label: "Sessions that ended", value: "Blocked", removeHref: BASE },
   ]);
   assert.equal(links.sortHrefs.time, `${BASE}?ended=blocked&sort=time`);
-});
-
-test("a task result and a task reason are choices that narrow the page, and a reason sets not completed with it", () => {
-  const model = page({
-    filters: { ...NO_SENTIMENT_FILTERS, task: "not_completed", reason: "no_tool" },
-  });
-  const withTasks = {
-    ...model,
-    tasks: { ...model.tasks, reasons: [{ reason: "no_tool" as const, tasks: 2, share: 1 }] },
-  };
-  const links = sentimentLinks(withTasks);
-  assert.equal(
-    links.taskClasses.find((c) => c.key === "completed")?.href,
-    `${BASE}?task=completed`,
-  );
-  assert.equal(
-    links.taskClasses.find((c) => c.key === "not_completed")?.active,
-    false,
-    "a reason is picked, not the result alone",
-  );
-  assert.deepEqual(
-    links.taskReasons.map((r) => [r.key, r.active, r.href]),
-    [["no_tool", true, BASE]],
-  );
-  assert.deepEqual(
-    links.filters.map((f) => [f.field, f.value]),
-    [
-      ["task", "Not completed"],
-      ["reason", "No tool for it"],
-    ],
-  );
-  const fresh = sentimentLinks({ ...page(), tasks: withTasks.tasks });
-  assert.equal(fresh.taskReasons[0]?.href, `${BASE}?task=not_completed&why=no_tool`);
 });
 
 test("a task status and a reason group narrow the page; a friction reason sets its own result, and reads as a chip", () => {

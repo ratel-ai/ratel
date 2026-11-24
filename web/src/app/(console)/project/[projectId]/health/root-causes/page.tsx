@@ -6,7 +6,7 @@ import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
-import { loadSentimentPage, sentimentMinSessions } from "@/lib/views/traces/sentiment/page-load";
+import { loadSentimentPage } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
 import {
   parseSentimentQuery,
@@ -48,7 +48,7 @@ export default async function RootCauseAnalysisPage({
   const model = await loadOrFallback({
     operation: "root_cause_page",
     distinctId: `project:${project.id}`,
-    fallback: unavailableSentimentPage(project.id, windowDays, query, sentimentMinSessions()),
+    fallback: unavailableSentimentPage(project.id, windowDays, query),
     load: () => loadSentimentPage({ projectId: project.id, windowDays, query, now }),
   });
 
@@ -59,7 +59,6 @@ export default async function RootCauseAnalysisPage({
         days: option.days,
         filters: query.filters,
         sort: query.sort,
-        thin: query.thin,
         surface: "root-causes",
       }),
       label: `${option.days} days`,

@@ -426,23 +426,6 @@ export async function replaceTaskOutcomes(
   });
 }
 
-/** The trace each of these `trace_events` ids belongs to, by event id; an event with none is absent. */
-export async function loadEventTraces(
-  projectId: string,
-  eventIds: readonly string[],
-  db: OutcomesDb = getDb(),
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (const ids of chunks([...new Set(eventIds)])) {
-    const rows = await db
-      .select({ id: traceEvents.id, traceId: traceEvents.traceId })
-      .from(traceEvents)
-      .where(and(eq(traceEvents.projectId, projectId), inArray(traceEvents.id, ids)));
-    for (const row of rows) if (row.traceId) out.set(row.id, row.traceId);
-  }
-  return out;
-}
-
 /** One turn's reaction inferred from the agent's next reply; null clears it. */
 export interface ReplyReactionRow {
   turnId: string;

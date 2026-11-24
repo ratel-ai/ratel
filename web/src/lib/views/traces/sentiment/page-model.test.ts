@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StoredFailureStreak } from "@/lib/readings/trace-signals/outcomes/kinds";
-import { sessionOutcomeOf } from "@/lib/views/traces/sentiment/page-kinds";
 import {
   buildSentimentPage,
-  OTHER_INTENTS,
   occurrencesOf,
   type PageSession,
   type PageTask,
   type PageTurn,
-  parseRowKey,
-  rowKey,
   type SentimentPageInput,
+  unavailableSentimentPage,
   weekOf,
-  weeksBetween,
 } from "@/lib/views/traces/sentiment/page-model";
 import {
   DEFAULT_SENTIMENT_QUERY,
@@ -79,7 +75,6 @@ function input(turns: PageTurn[], over: Partial<SentimentPageInput> = {}): Senti
     turns,
     sessions: ids.map((id) => session(id, { frictionCount: 1 })),
     intents: new Map(),
-    versions: new Map(),
     totals: {
       turns: turns.length,
       answered: 0,
@@ -107,13 +102,6 @@ test("weeks start on Monday, UTC", () => {
   assert.equal(weekOf(new Date("2026-09-02T00:00:00Z")), "2026-08-31");
   assert.equal(weekOf(new Date("2026-08-31T00:00:00Z")), "2026-08-31");
   assert.equal(weekOf(new Date("2026-08-30T23:59:59Z")), "2026-08-24", "Sunday closes the week");
-  assert.deepEqual(weeksBetween(new Date("2026-08-03T00:00:00Z"), NOW), [
-    "2026-08-03",
-    "2026-08-10",
-    "2026-08-17",
-    "2026-08-24",
-    "2026-08-31",
-  ]);
 });
 
 test("a turn's occurrences: one per cause and tool, a search nothing was run for, and an unsatisfied turn with no failed call", () => {
@@ -236,266 +224,6 @@ test("a cause a model chose is a root cause even when every call worked, and a c
     beside.map((o) => o.cause),
     ["missing_capability", "incomplete"],
   );
-
-  const page = buildSentimentPage(
-    input(
-      ["a", "b", "c"].map((id) =>
-        turn(id, { cause: "correct_refusal", causeSource: "model", satisfaction: "unsatisfied" }),
-      ),
-    ),
-    query(),
-  );
-  assert.deepEqual(
-    page.rows.map((row) => [row.cause, row.owner, row.sessions, row.unresolved, row.readBy]),
-    [["correct_refusal", "nobody", 3, 0, "model"]],
-  );
-  assert.equal(page.totals.unresolved, 0);
-});
-
-test("a row is an intent, a cause and a tool; thin rows are hidden and counted; the rest rank by sessions not recovered", () => {
-  const turns = [
-    ...["a", "b", "c", "d"].map((id) => turn(id, { failures: [streak("update_task")] })),
-    ...["e", "f", "g"].map((id) =>
-      turn(id, { failures: [streak("send_report", { cause: "tool_fault", recovered: false })] }),
-    ),
-    turn("h", { failures: [streak("archive_board", { cause: "other", recovered: false })] }),
-    turn("a", { unmetSearches: 1 }),
-  ];
-  const intents = new Map(
-    turns.slice(0, 4).map((t) => [t.turnId, { id: "i-1", label: "Update a task" }]),
-  );
-  const page = buildSentimentPage(input(turns, { intents }), query());
-
-  assert.equal(page.state, "ready");
-  assert.deepEqual(
-    page.rows.map((row) => [
-      row.intent?.label ?? null,
-      row.cause,
-      row.tool,
-      row.sessions,
-      row.unresolved,
-      row.owner,
-      row.readBy,
-    ]),
-    [
-      [null, "tool_fault", "send_report", 3, 3, "tool_owner", "rule"],
-      ["Update a task", "bad_arguments", "update_task", 4, 0, "prompt", "rule"],
-    ],
-  );
-  assert.equal(page.rows[0]?.unresolvedShare, 1);
-  // Session `a` is also in a shown row, so only `h` is held by hidden rows alone.
-  assert.deepEqual(page.hidden, { rows: 2, sessions: 1, folded: 0 });
-  assert.equal(page.minSessions, 3);
-  assert.deepEqual(page.totals, { sessions: 8, turns: 9, affected: 8, unresolved: 5 });
-
-  const all = buildSentimentPage(input(turns, { intents }), query({ thin: true }));
-  assert.deepEqual(
-    all.rows.map((row) => [row.cause, row.thin]),
-    [
-      ["tool_fault", false],
-      ["missing_capability", true],
-      ["other", true],
-      ["bad_arguments", false],
-    ],
-  );
-
-  const bySessions = buildSentimentPage(input(turns, { intents }), query({ sort: "sessions" }));
-  assert.deepEqual(
-    bySessions.rows.map((row) => row.tool),
-    ["update_task", "send_report"],
-  );
-  const byShare = buildSentimentPage(input(turns, { intents }), query({ sort: "share" }));
-  assert.deepEqual(
-    byShare.rows.map((row) => row.tool),
-    ["send_report", "update_task"],
-  );
-});
-
-test("thin rows that share a cause and a tool fold into Other intents; asking for thin rows or one intent shows them as they are", () => {
-  // Five intents, one session each, all failing update_task on bad arguments; one lone tool fault.
-  const turns = [
-    ...["a", "b", "c", "d", "e"].map((id) => turn(id, { failures: [streak("update_task")] })),
-    turn("f", { failures: [streak("send_report", { cause: "tool_fault", recovered: false })] }),
-  ];
-  const intents = new Map(
-    turns.slice(0, 5).map((t, i) => [t.turnId, { id: `i-${i}`, label: `Intent ${i}` }]),
-  );
-  const page = buildSentimentPage(input(turns, { intents }), query());
-
-  assert.deepEqual(
-    page.rows.map((row) => [row.intent, row.cause, row.tool, row.sessions, row.thin]),
-    [[OTHER_INTENTS, "bad_arguments", "update_task", 5, false]],
-  );
-  assert.equal(page.rows[0]?.key, rowKey(OTHER_INTENTS.id, "bad_arguments", "update_task"));
-  // The lone tool fault has nothing to fold with: still hidden and counted.
-  assert.deepEqual(page.hidden, { rows: 1, sessions: 1, folded: 5 });
-
-  const thin = buildSentimentPage(input(turns, { intents }), query({ thin: true }));
-  assert.equal(thin.rows.length, 6);
-  assert.ok(thin.rows.every((row) => row.thin && row.intent?.id !== OTHER_INTENTS.id));
-  assert.equal(thin.hidden.folded, 0);
-
-  // One intent is a slice: its row shows however few sessions, and the page says why.
-  const one = buildSentimentPage(
-    input(turns, { intents }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, intent: "i-0" } }),
-  );
-  assert.deepEqual(
-    [one.rows.length, one.hidden.rows, one.hidden.folded, one.thinForced],
-    [1, 1, 0, true],
-  );
-  assert.equal(one.rows[0]?.thin, true);
-});
-
-test("a row key reads back as its intent, cause and tool", () => {
-  const key = rowKey("i-1", "bad_arguments", "skill:crm/update|task");
-  assert.deepEqual(parseRowKey(key), {
-    intent: "i-1",
-    cause: "bad_arguments",
-    tool: "skill:crm/update|task",
-  });
-  assert.deepEqual(parseRowKey(rowKey(null, "missing_capability", null)), {
-    intent: null,
-    cause: "missing_capability",
-    tool: null,
-  });
-  assert.equal(parseRowKey("nonsense"), null);
-  assert.equal(parseRowKey("none|made_up|x"), null);
-});
-
-test("trends are weekly, and a row starts on the catalog version of its first turn", () => {
-  const old = new Date("2026-08-18T10:00:00Z");
-  const turns = [
-    ...["a", "b"].map((id) => turn(id, { failures: [streak("update_task")], endedAt: old })),
-    ...["c", "d", "e"].map((id) => turn(id, { failures: [streak("update_task")] })),
-  ];
-  const versions = new Map(turns.map((t, i) => [t.turnId, i < 2 ? "v1" : "v2"]));
-  const page = buildSentimentPage(input(turns, { versions }), query());
-
-  assert.deepEqual(page.weeks, [
-    "2026-08-03",
-    "2026-08-10",
-    "2026-08-17",
-    "2026-08-24",
-    "2026-08-31",
-  ]);
-  const [row] = page.rows;
-  assert.deepEqual(row?.trend, [0, 0, 2, 0, 3]);
-  assert.equal(row?.startedVersion, "v1");
-  assert.equal(row?.firstSeen, old.toISOString());
-  assert.equal(row?.lastSeen, "2026-09-01T10:00:00.000Z");
-  assert.deepEqual(
-    page.cuts.version.values.map((value) => [value.key, value.sessions]),
-    [
-      ["v1", 2],
-      ["v2", 3],
-    ],
-  );
-  assert.deepEqual(
-    page.cuts.week.values.map((value) => [value.key, value.sessions]),
-    [
-      ["2026-08-03", 0],
-      ["2026-08-10", 0],
-      ["2026-08-17", 2],
-      ["2026-08-24", 0],
-      ["2026-08-31", 3],
-    ],
-  );
-});
-
-test("a filter narrows the rows and the sessions, and each cut still lists its other values", () => {
-  const turns = [
-    ...["a", "b", "c"].map((id) => turn(id, { failures: [streak("update_task")] })),
-    ...["d", "e", "f"].map((id) =>
-      turn(id, { failures: [streak("send_report", { cause: "tool_fault", recovered: false })] }),
-    ),
-  ];
-  const page = buildSentimentPage(
-    input(turns),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, tool: "send_report" } }),
-  );
-
-  assert.deepEqual(
-    page.rows.map((row) => row.tool),
-    ["send_report"],
-  );
-  assert.equal(page.totals.sessions, 3);
-  assert.equal(page.split.total, 3);
-  assert.deepEqual(
-    page.cuts.tool.values.map((value) => [value.key, value.sessions, value.active]),
-    [
-      ["send_report", 3, true],
-      ["update_task", 3, false],
-    ],
-  );
-  // The intent cut is under the tool filter: only the filtered tool's sessions.
-  assert.deepEqual(
-    page.cuts.intent.values.map((value) => [value.key, value.label, value.sessions]),
-    [["none", "No intent", 3]],
-  );
-
-  const byCause = buildSentimentPage(
-    input(turns),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, cause: "bad_arguments", intent: "none" } }),
-  );
-  assert.deepEqual(
-    byCause.rows.map((row) => row.tool),
-    ["update_task"],
-  );
-});
-
-test("the session split uses the stored outcome, and reads a row the fusion has not reached from its rule columns", () => {
-  assert.deepEqual(sessionOutcomeOf(session("s")), { outcome: "resolved_clean", source: "rule" });
-  assert.deepEqual(sessionOutcomeOf(session("s", { frictionCount: 2 })), {
-    outcome: "resolved_after_friction",
-    source: "rule",
-  });
-  assert.deepEqual(sessionOutcomeOf(session("s", { frictionCount: 2, openRequest: true })), {
-    outcome: "gave_up",
-    source: "rule",
-  });
-  assert.deepEqual(
-    sessionOutcomeOf(
-      session("s", { outcome: "gave_up", outcomeSource: "model", openRequest: true }),
-    ),
-    { outcome: "gave_up", source: "model" },
-  );
-  assert.deepEqual(
-    sessionOutcomeOf(
-      session("s", { outcome: "blocked", outcomeSource: "rule", openRequest: true }),
-    ),
-    { outcome: "blocked", source: "rule" },
-  );
-  assert.deepEqual(
-    sessionOutcomeOf(session("s", { outcome: "a class not known here", outcomeSource: "model" })),
-    { outcome: "resolved_clean", source: "rule" },
-  );
-
-  const sessions = [
-    session("a"),
-    session("b", { frictionCount: 1 }),
-    session("c", { openRequest: true }),
-    session("d", { outcome: "escalated", outcomeSource: "model" }),
-  ];
-  const page = buildSentimentPage(
-    input([], {
-      sessions,
-      totals: { turns: 4, answered: 0, textTurns: 0, messages: 0, satisfaction: {}, reactions: {} },
-    }),
-    query(),
-  );
-  assert.deepEqual(
-    page.split.classes.map((c) => [c.outcome, c.sessions]),
-    [
-      ["resolved_clean", 1],
-      ["resolved_after_friction", 1],
-      ["gave_up", 1],
-      ["blocked", 0],
-      ["escalated", 1],
-    ],
-  );
-  assert.equal(page.split.readBy, "mixed");
-  assert.equal(page.split.classes[0]?.share, 0.25);
 });
 
 test("the text state: none sent, the model off, partly read, read", () => {
@@ -584,38 +312,6 @@ test("the satisfaction count is the turns with a satisfaction answer, not the tu
   assert.deepEqual([unread.state, unread.textTurns, unread.satisfactionTurns], ["capped", 8, 0]);
 });
 
-test("a row counts what the person did next on the turns a model answered about", () => {
-  const turns = [
-    turn("a", {
-      failures: [streak("update_task")],
-      satisfaction: "unsatisfied",
-      reaction: "repeats",
-    }),
-    turn("b", {
-      failures: [streak("update_task")],
-      satisfaction: "unsatisfied",
-      reaction: "repeats",
-    }),
-    turn("c", {
-      failures: [streak("update_task")],
-      satisfaction: "satisfied",
-      reaction: "new_request",
-    }),
-    turn("d", { failures: [streak("update_task")] }),
-  ];
-  const [row] = buildSentimentPage(input(turns), query()).rows;
-  assert.deepEqual([row?.sessions, row?.unresolved, row?.answered, row?.unsatisfied], [4, 2, 3, 2]);
-  assert.deepEqual(row?.reactions, { repeats: 2, new_request: 1 });
-  assert.deepEqual(
-    row?.examples
-      .slice(0, 2)
-      .map((example) => example.sessionId)
-      .sort(),
-    ["a", "b"],
-    "unresolved sessions lead the examples",
-  );
-});
-
 test("no rows and no sessions is the empty page", () => {
   const page = buildSentimentPage(
     input([], {
@@ -625,7 +321,7 @@ test("no rows and no sessions is the empty page", () => {
     query(),
   );
   assert.equal(page.state, "empty");
-  assert.deepEqual(page.rows, []);
+  assert.equal(page.overview.tasks, 0);
 });
 
 test("sort and filters live in the URL and read back", () => {
@@ -634,7 +330,6 @@ test("sort and filters live in the URL and read back", () => {
     cause: "tool_fault" as const,
     tool: "skill:report",
     week: "2026-08-31",
-    version: "v2",
     outcome: "gave_up" as const,
     task: "not_completed" as const,
     reason: "failed_call" as const,
@@ -643,8 +338,7 @@ test("sort and filters live in the URL and read back", () => {
     days: 90,
     filters,
     sort: "share",
-    thin: true,
-    open: rowKey("i-1", "tool_fault", "skill:report"),
+    open: "i-1|tool_fault|skill%3Areport",
   });
   const url = new URL(href, "https://cloud.ratel.sh");
   assert.equal(url.pathname, "/project/p1/traces/sentiment");
@@ -652,8 +346,6 @@ test("sort and filters live in the URL and read back", () => {
   assert.deepEqual(parsed, {
     filters,
     sort: "share",
-    thin: true,
-    page: 1,
     open: "i-1|tool_fault|skill%3Areport",
   });
   assert.equal(parseSentimentWindow(url.searchParams.get("days") ?? undefined, 90), 90);
@@ -668,7 +360,6 @@ test("sort and filters live in the URL and read back", () => {
       cause: "made_up",
       sort: "sideways",
       week: "last week",
-      thin: "yes",
       ended: "happily",
       task: "maybe",
       why: "because",
@@ -712,198 +403,20 @@ test("the satisfaction score is the satisfied share of turns the person said how
   );
 });
 
-/** Three sessions of one cause and tool, each turn taking `seconds` and costing `cost`. */
-function spent(
-  tool: string,
-  cause: StoredFailureStreak["cause"],
-  seconds: number,
-  cost: number | null,
-  recovered = true,
-): PageTurn[] {
-  return ["1", "2", "3"].map((s) =>
-    turn(`${tool}-${s}`, {
-      startedAt: new Date(new Date("2026-09-01T10:00:00Z").getTime() - seconds * 1000),
-      endedAt: new Date("2026-09-01T10:00:00Z"),
-      costUsd: cost,
-      failures: [streak(tool, { cause, recovered })],
-    }),
-  );
-}
-
-test("rows group by cause; groups and their rows follow the order, cost and time each count a turn once", () => {
-  const turns = [
-    ...spent("update_task", "bad_arguments", 10, 0.01, false),
-    ...spent("create_task", "bad_arguments", 60, 0.002),
-    ...spent("send_report", "tool_fault", 120, 0.5),
-  ];
-  const page = buildSentimentPage(input(turns, { costKnown: true }), query());
-  assert.deepEqual(
-    page.groups.map((g) => [
-      g.cause,
-      g.sessions,
-      g.unresolved,
-      g.rowCount,
-      g.rows.map((r) => r.tool),
-      g.continued,
-    ]),
-    [
-      ["bad_arguments", 6, 3, 2, ["update_task", "create_task"], false],
-      ["tool_fault", 3, 0, 1, ["send_report"], false],
-    ],
-  );
-  assert.deepEqual(
-    page.rows.map((r) => r.tool),
-    ["update_task", "create_task", "send_report"],
-    "the page's rows in the order listed",
-  );
-  const [bad] = page.groups;
-  assert.equal(bad?.timeMs, 3 * 10_000 + 3 * 60_000);
-  assert.ok(Math.abs((bad?.costUsd ?? 0) - 0.036) < 1e-9);
-  assert.equal(
-    page.top?.tool,
-    "update_task",
-    "the top row is the one left unresolved most, whatever the order",
-  );
-
-  const byCost = buildSentimentPage(input(turns, { costKnown: true }), query({ sort: "cost" }));
-  assert.deepEqual(
-    byCost.groups.map((g) => g.cause),
-    ["tool_fault", "bad_arguments"],
-  );
-  assert.deepEqual(
-    byCost.groups[1]?.rows.map((r) => r.tool),
-    ["update_task", "create_task"],
-  );
-  const byTime = buildSentimentPage(input(turns, { costKnown: true }), query({ sort: "time" }));
-  assert.deepEqual(
-    byTime.groups.map((g) => g.cause),
-    ["tool_fault", "bad_arguments"],
-  );
-  assert.deepEqual(
-    byTime.groups[1]?.rows.map((r) => r.tool),
-    ["create_task", "update_task"],
-  );
-  assert.equal(byTime.top?.tool, "update_task");
-});
-
 test("without a costed model call there is no cost, and ordering by cost falls back to unresolved", () => {
-  const turns = [
-    ...spent("update_task", "bad_arguments", 10, null, false),
-    ...spent("send_report", "tool_fault", 120, null),
-  ];
-  const page = buildSentimentPage(input(turns), query({ sort: "cost" }));
+  const page = buildSentimentPage(
+    input([turn("a", { failures: [streak("update_task")] })]),
+    query({ sort: "cost" }),
+  );
   assert.equal(page.costKnown, false);
   assert.equal(page.query.sort, "impact");
-  assert.deepEqual(
-    page.rows.map((r) => [r.tool, r.costUsd]),
-    [
-      ["update_task", null],
-      ["send_report", null],
-    ],
-  );
-});
-
-test("root causes come a page at a time; a group split across pages says it continues, and a page past the end reads as the last", () => {
-  const tools = Array.from({ length: 25 }, (_, i) => `tool_${String(i).padStart(2, "0")}`);
-  const turns = tools.flatMap((tool, i) =>
-    spent(tool, i < 22 ? "bad_arguments" : "tool_fault", 1, null),
-  );
-  const first = buildSentimentPage(input(turns), query());
-  assert.deepEqual(first.pagination, { page: 1, pages: 2, size: 20, total: 25, from: 1, to: 20 });
-  assert.deepEqual(
-    first.groups.map((g) => [g.cause, g.rows.length, g.rowCount, g.continued]),
-    [["bad_arguments", 20, 22, false]],
-  );
-
-  const second = buildSentimentPage(input(turns), query({ page: 2 }));
-  assert.deepEqual([second.pagination.from, second.pagination.to], [21, 25]);
-  assert.deepEqual(
-    second.groups.map((g) => [g.cause, g.rows.length, g.continued]),
-    [
-      ["bad_arguments", 2, true],
-      ["tool_fault", 3, false],
-    ],
-  );
-  const past = buildSentimentPage(input(turns), query({ page: 9 }));
-  assert.equal(past.pagination.page, 2);
-  assert.equal(past.query.page, 2);
-});
-
-test("the page number lives in the URL; the first page is the bare path", () => {
-  assert.equal(sentimentHref(P, { page: 1 }), "/project/p1/traces/sentiment");
   assert.equal(
-    sentimentHref(P, { sort: "cost", page: 3 }),
-    "/project/p1/traces/sentiment?sort=cost&page=3",
-  );
-  assert.equal(parseSentimentQuery({ page: "3", sort: "time" }).page, 3);
-  assert.equal(parseSentimentQuery({ sort: "time" }).sort, "time");
-  for (const odd of ["0", "-2", "two", "99999999"])
-    assert.equal(parseSentimentQuery({ page: odd }).page, 1, odd);
-});
-
-test("picking how sessions ended narrows the root causes to those sessions; the split still counts every way they ended", () => {
-  const turns = [
-    ...["a", "b", "c"].map((id) =>
-      turn(id, { failures: [streak("update_task", { recovered: false })] }),
-    ),
-    ...["d", "e", "f"].map((id) =>
-      turn(id, { failures: [streak("send_report", { cause: "tool_fault" })] }),
-    ),
-  ];
-  const sessions = [
-    ...["a", "b", "c"].map((id) => session(id, { outcome: "gave_up", outcomeSource: "rule" })),
-    ...["d", "e", "f"].map((id) =>
-      session(id, { outcome: "resolved_after_friction", outcomeSource: "rule" }),
-    ),
-    session("g", { outcome: "gave_up", outcomeSource: "rule" }),
-    session("h", { outcome: "resolved_clean", outcomeSource: "rule" }),
-  ];
-  const all = buildSentimentPage(input(turns, { sessions }), query());
-  assert.deepEqual(all.groups.map((g) => g.cause).sort(), ["bad_arguments", "tool_fault"]);
-
-  const gaveUp = buildSentimentPage(
-    input(turns, { sessions }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, outcome: "gave_up" } }),
-  );
-  assert.deepEqual(
-    gaveUp.rows.map((r) => [r.cause, r.tool, r.sessions]),
-    [["bad_arguments", "update_task", 3]],
-  );
-  // Of the 4 sessions that gave up, 3 hit something; the split is the whole window's.
-  assert.deepEqual([gaveUp.totals.sessions, gaveUp.totals.affected], [4, 3]);
-  assert.deepEqual(
-    gaveUp.split.classes.map((c) => [c.outcome, c.sessions]),
-    [
-      ["resolved_clean", 1],
-      ["resolved_after_friction", 3],
-      ["gave_up", 4],
-      ["blocked", 0],
-      ["escalated", 0],
-    ],
-  );
-
-  const friction = buildSentimentPage(
-    input(turns, { sessions }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, outcome: "resolved_after_friction" } }),
-  );
-  assert.deepEqual(
-    friction.groups.map((g) => [g.cause, g.sessions]),
-    [["tool_fault", 3]],
-  );
-
-  // Another filter narrows the split too, but never by the outcome picked.
-  const tool = buildSentimentPage(
-    input(turns, { sessions }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, tool: "send_report", outcome: "gave_up" } }),
-  );
-  assert.equal(tool.rows.length, 0);
-  assert.deepEqual(
-    tool.split.classes.filter((c) => c.sessions > 0).map((c) => [c.outcome, c.sessions]),
-    [["resolved_after_friction", 3]],
+    buildSentimentPage(input([], { costKnown: true }), query({ sort: "cost" })).query.sort,
+    "cost",
   );
 });
 
-test("each way sessions ended carries its satisfaction score, and intents rank by theirs, five a side, few answers marked not dropped", () => {
+test("intents rank by their satisfaction score, few answers marked not dropped; a session outcome narrows them", () => {
   const sessions = [
     session("a", { outcome: "gave_up", outcomeSource: "model" }),
     session("b", { outcome: "gave_up", outcomeSource: "model" }),
@@ -945,13 +458,6 @@ test("each way sessions ended carries its satisfaction score, and intents rank b
     input([], { sessions, answers, intents, totals, modelConfigured: true }),
     query(),
   );
-
-  const byOutcome = Object.fromEntries(
-    page.split.classes.map((c) => [c.outcome, [c.score, c.said]]),
-  );
-  assert.deepEqual(byOutcome.gave_up, [0.25, 4]);
-  assert.deepEqual(byOutcome.resolved_clean, [1, 4]);
-  assert.deepEqual(byOutcome.blocked, [null, 0]);
 
   const scores = page.intentScores!;
   // Archive project scores 1 on one answer: ranked, after the intent with the same score on more answers.
@@ -1025,78 +531,6 @@ test("five intents a side at most, the most satisfied first and the least satisf
   );
 });
 
-test("task completion: completed tasks whose goal nothing read count as completed, reasons of the ones not completed, and a task result or reason narrows the root causes", () => {
-  const failing = turn("a", { failures: [streak("update_task", { recovered: false })] });
-  const objected = turn("b", {
-    satisfaction: "unsatisfied",
-    cause: "misread_request",
-    causeSource: "model",
-  });
-  const fine = turn("c", { failures: [streak("send_report", { cause: "tool_fault" })] });
-  const task = (t: PageTurn, over: Partial<PageTask>): PageTask => ({
-    taskId: t.turnId,
-    sessionId: t.sessionId,
-    turnIds: [t.turnId],
-    startedAt: t.startedAt,
-    endedAt: t.endedAt,
-    costUsd: null,
-    tokens: null,
-    friction: null,
-    tier: "t3",
-    goalSource: "request",
-    result: "completed",
-    reason: null,
-    cause: null,
-    checked: true,
-    ...over,
-  });
-  const tasks = [
-    task(failing, { result: "not_completed", reason: "failed_call", cause: "bad_arguments" }),
-    task(objected, { result: "not_completed", reason: "wrong_action", cause: "misread_request" }),
-    task(fine, { result: "completed_after_friction" }),
-    { ...task(turn("d"), { result: "completed", checked: false, tier: "t0", goalSource: "none" }) },
-    {
-      ...task(turn("e"), { result: "completed", checked: false, tier: "t1", goalSource: "search" }),
-    },
-  ];
-  const turns = [failing, objected, fine];
-  const page = buildSentimentPage(input(turns, { tasks }), query());
-  assert.deepEqual(
-    page.tasks.classes.map((c) => [c.filter, c.tasks]),
-    [
-      ["completed", 2],
-      ["completed_after_friction", 1],
-      ["not_completed", 2],
-    ],
-  );
-  assert.deepEqual(
-    page.tasks.reasons.map((r) => [r.reason, r.tasks, r.share]),
-    [
-      ["failed_call", 1, 0.5],
-      ["wrong_action", 1, 0.5],
-    ],
-  );
-  assert.deepEqual(page.tasks.tiers, { t0: 1, t1: 1, tr: 0, t2: 0, t3: 3 });
-
-  // A reason narrows the root causes to its tasks' turns, and every row of that slice shows.
-  const byReason = buildSentimentPage(
-    input(turns, { tasks }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, task: "not_completed", reason: "failed_call" } }),
-  );
-  assert.deepEqual(
-    byReason.rows.map((r) => [r.cause, r.tool]),
-    [["bad_arguments", "update_task"]],
-  );
-  assert.equal(byReason.thinForced, true);
-  // The split is not narrowed by its own filters.
-  assert.equal(byReason.tasks.total, 5);
-  const notDone = buildSentimentPage(
-    input(turns, { tasks }),
-    query({ filters: { ...NO_SENTIMENT_FILTERS, task: "not_completed" } }),
-  );
-  assert.deepEqual(notDone.rows.map((r) => r.cause).sort(), ["bad_arguments", "misread_request"]);
-});
-
 test("task completion follows an intent: the tasks whose first turn is that intent", () => {
   const a = turn("a", { failures: [streak("update_task", { recovered: false })] });
   const b = turn("b", { failures: [streak("create_task", { recovered: false })] });
@@ -1121,9 +555,28 @@ test("task completion follows an intent: the tasks whose first turn is that inte
     input([a, b], { tasks, intents }),
     query({ filters: { ...NO_SENTIMENT_FILTERS, intent: "area-1" } }),
   );
-  assert.equal(page.tasks.total, 1);
+  assert.equal(page.overview.tasks, 1);
   assert.deepEqual(
-    page.tasks.reasons.map((r) => r.reason),
+    page.overview.reasons.map((r) => r.reason),
     ["failed_call"],
   );
+});
+
+test("an intent filter names its intent for the chip; turns placed nowhere read as no intent", () => {
+  const a = turn("a");
+  const intents = new Map([[a.turnId, { id: "area-1", label: "Task operations" }]]);
+  const named = (intent: string | null) =>
+    buildSentimentPage(
+      input([a], { intents }),
+      query({ filters: { ...NO_SENTIMENT_FILTERS, intent } }),
+    ).intentLabel;
+  assert.equal(named("area-1"), "Task operations");
+  assert.equal(named("none"), "No intent");
+  assert.equal(
+    named("gone"),
+    "gone",
+    "an intent no turn of the window is placed in reads as its id",
+  );
+  assert.equal(named(null), null);
+  assert.equal(unavailableSentimentPage(P, 30, query()).intentLabel, null);
 });

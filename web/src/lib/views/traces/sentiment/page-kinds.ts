@@ -5,12 +5,10 @@ import {
   OUTCOME_CAUSES,
   REACTIONS,
   type Reaction,
-  RULE_SESSION_OUTCOMES,
   type Satisfaction,
   SESSION_OUTCOMES,
   type SessionOutcome,
   type TaskReason,
-  type TaskTier,
   type TurnCause,
 } from "@/lib/readings/trace-signals/outcomes/kinds";
 import type { TaskFilter } from "@/lib/views/traces/sentiment/page-paths";
@@ -175,14 +173,6 @@ export const CAUSE_MEANING: Record<RootCause, string> = {
   unread: "The call failed and its error message was not kept.",
 };
 
-export const OWNER_LABEL: Record<CauseOwner, string> = {
-  prompt: "Prompt",
-  tool_owner: "Tool owner",
-  integration_setup: "Integration setup",
-  roadmap: "Roadmap",
-  nobody: "Nobody",
-};
-
 /** Causes that never count as unresolved: the agent was right. */
 export const BLAMELESS_CAUSES: readonly RootCause[] = ["correct_refusal"];
 
@@ -204,14 +194,6 @@ export const SESSION_OUTCOME_LABEL: Record<SessionOutcome, string> = {
   blocked: "Blocked",
   escalated: "Escalated",
 };
-
-/** The outcomes that count against the agent. */
-export const UNRESOLVED_OUTCOMES: readonly SessionOutcome[] = ["gave_up", "blocked", "escalated"];
-
-/** The outcomes only people's messages can show: the ones the rules never write. */
-export const TEXT_ONLY_OUTCOMES: readonly SessionOutcome[] = SESSION_OUTCOMES.filter(
-  (outcome) => !RULE_SESSION_OUTCOMES.includes(outcome),
-);
 
 /**
  * A session's outcome: the stored one, as the fusion wrote it. A row the
@@ -237,13 +219,6 @@ export function sessionOutcomeOf(row: {
   };
 }
 
-export const SATISFACTION_LABEL: Record<Satisfaction, string> = {
-  satisfied: "Satisfied",
-  neutral: "Neutral",
-  unsatisfied: "Unsatisfied",
-  unknown: "Not decided",
-};
-
 /**
  * A reaction as a row holds it: one of the shared list's, or the reaction
  * question asked and not decided, which the model layer stores under the
@@ -254,17 +229,6 @@ export const UNDECIDED = "unknown" satisfies Satisfaction;
 export type StoredReaction = Reaction | typeof UNDECIDED;
 
 export const STORED_REACTIONS: readonly StoredReaction[] = [...REACTIONS, UNDECIDED];
-
-export const REACTION_LABEL: Record<StoredReaction, string> = {
-  satisfied: "Satisfied",
-  corrects: "Corrects",
-  repeats: "Repeats",
-  gives_up: "Gives up",
-  asks_human: "Asks for a human",
-  takes_over: "Takes over",
-  new_request: "New request",
-  unknown: "Not decided",
-};
 
 export function countsOf<K extends string>(
   keys: readonly K[],
@@ -328,13 +292,4 @@ export const TASK_REASON_MEANING: Record<TaskReason, string> = {
   did_part: "Part of what was asked was done.",
   goal_missed: "The calls worked, and the model read that they did not achieve the goal.",
   unsatisfied: "The person was not satisfied, with no clearer reason.",
-};
-
-/** A tier as a sentence part: how a task's result was read. */
-export const TASK_TIER_LABEL: Record<TaskTier, string> = {
-  t0: "from the trace alone",
-  t1: "against the agent's own search",
-  tr: "with how the person took it inferred from the agent's replies",
-  t2: "against the person's request",
-  t3: "against the request and what the person said next",
 };

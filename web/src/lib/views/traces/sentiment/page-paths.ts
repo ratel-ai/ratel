@@ -10,10 +10,10 @@ import { WINDOW_DAY_OPTIONS, type WindowDays } from "@/lib/readings/trace-signal
 import { ROOT_CAUSES, type RootCause } from "@/lib/views/traces/sentiment/page-kinds";
 
 /**
- * The Sentiment analysis page's address: its window, its four cuts, the
- * cause and how sessions ended as filters, the sort, whether thin rows show, the page of root causes
- * and the row that is open. Everything the page shows is in the URL, so a
- * link reproduces it.
+ * The Sentiment analysis page's address: its window, its filters (intent,
+ * cause, tool, week, how sessions ended, the task's status and reason), the
+ * sort and the row that is open. Everything the page shows is in the URL, so
+ * a link reproduces it.
  */
 
 /** Weekly trends need several weeks, so the page opens on a month, not Agent health's week. */
@@ -38,8 +38,6 @@ export interface SentimentFilters {
   tool: string | null;
   /** The Monday a week starts on, `YYYY-MM-DD` (UTC). */
   week: string | null;
-  /** A catalog version as the SDK sent it. */
-  version: string | null;
   /** How the session ended: root causes of sessions that ended this way only. */
   outcome: SessionOutcome | null;
   /** What the task came to: root causes of tasks with this result only (`TASK_FILTERS`). */
@@ -67,7 +65,6 @@ export const NO_SENTIMENT_FILTERS: SentimentFilters = {
   cause: null,
   tool: null,
   week: null,
-  version: null,
   outcome: null,
   task: null,
   reason: null,
@@ -76,24 +73,15 @@ export const NO_SENTIMENT_FILTERS: SentimentFilters = {
 export interface SentimentQuery {
   filters: SentimentFilters;
   sort: SentimentSort;
-  /** Rows under the minimum count show too. */
-  thin: boolean;
-  /** The page of root causes, from 1. */
-  page: number;
-  /** The open row's key (`RootCauseRow.key`). */
+  /** The open row's key. */
   open: string | null;
 }
 
 export const DEFAULT_SENTIMENT_QUERY: SentimentQuery = {
   filters: NO_SENTIMENT_FILTERS,
   sort: SENTIMENT_DEFAULT_SORT,
-  thin: false,
-  page: 1,
   open: null,
 };
-
-/** Pages asked for past this read as the first: no window holds that many root causes. */
-const MAX_PAGE = 10_000;
 
 type Search = Readonly<Record<string, string | readonly string[] | undefined>>;
 
@@ -117,22 +105,17 @@ export function parseSentimentQuery(search: Search): SentimentQuery {
   const why = first(search.why);
   const week = first(search.week);
   const sort = first(search.sort);
-  const page = first(search.page);
-  const pageNumber = page && /^\d+$/.test(page) ? Number(page) : 1;
   return {
     filters: {
       intent: first(search.intent),
       cause: ROOT_CAUSES.find((known) => known === cause) ?? null,
       tool: first(search.tool),
       week: week && WEEK.test(week) ? week : null,
-      version: first(search.version),
       outcome: SESSION_OUTCOMES.find((known) => known === ended) ?? null,
       task: TASK_FILTERS.find((known) => known === task) ?? null,
       reason: [...TASK_REASONS, ...FRICTION_REASONS].find((known) => known === why) ?? null,
     },
     sort: SENTIMENT_SORTS.find((known) => known === sort) ?? SENTIMENT_DEFAULT_SORT,
-    thin: first(search.thin) === "1",
-    page: pageNumber >= 1 && pageNumber <= MAX_PAGE ? pageNumber : 1,
     open: first(search.open, 600),
   };
 }
@@ -150,11 +133,6 @@ export function parseSentimentWindow(
   return WINDOW_DAY_OPTIONS.filter((days) => days <= maxDays).at(-1) ?? WINDOW_DAY_OPTIONS[0];
 }
 
-export function hasSentimentFilters(filters: SentimentFilters): boolean {
-  return Object.values(filters).some((value) => value !== null);
-}
-
-/** The page on a window, filters, sort, page and open row; every default is left out, so the bare path is the default page. */
 /**
  * The two pages that read the same outcome rows: Sentiment analysis (how
  * people took it) and Root cause analysis (why tasks were not completed, or
@@ -168,14 +146,13 @@ const SURFACE_PATH: Record<OutcomeSurface, string> = {
   "root-causes": "health/root-causes",
 };
 
+/** The page on a window, filters, sort and open row; every default is left out, so the bare path is the default page. */
 export function sentimentHref(
   projectId: string,
   options: {
     days?: WindowDays;
     filters?: Partial<SentimentFilters>;
     sort?: SentimentSort;
-    thin?: boolean;
-    page?: number;
     open?: string | null;
     surface?: OutcomeSurface;
   } = {},
@@ -193,13 +170,10 @@ export function sentimentHref(
   set("cause", filters.cause);
   set("tool", filters.tool);
   set("week", filters.week);
-  set("version", filters.version);
   set("ended", filters.outcome);
   set("task", filters.task);
   set("why", filters.reason);
   set("sort", options.sort && options.sort !== SENTIMENT_DEFAULT_SORT ? options.sort : null);
-  set("thin", options.thin ? "1" : null);
-  set("page", options.page && options.page > 1 ? String(options.page) : null);
   set("open", options.open);
   const text = query.toString();
   const path = `/project/${encodeURIComponent(projectId)}/${SURFACE_PATH[options.surface ?? "sentiment"]}`;
