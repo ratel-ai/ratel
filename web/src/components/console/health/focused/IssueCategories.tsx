@@ -58,7 +58,7 @@ export function IssueCategories({
     const level = categories.find((category) =>
       category.rows.some((row) => row.key === openRow?.key),
     )?.level;
-    if (level) setToggled({ ...toggled, [level]: true });
+    if (level) setToggled((previous) => ({ ...previous, [level]: true }));
   }
   const columns = issueColumns(rows, (row) => open(row, true));
   return (
@@ -86,7 +86,9 @@ export function IssueCategories({
               columns={columns}
               selectedKey={openRow?.key ?? null}
               open={toggled[category.level] ?? startsOpen(category)}
-              onToggle={(next) => setToggled({ ...toggled, [category.level]: next })}
+              onToggle={(next) =>
+                setToggled((previous) => ({ ...previous, [category.level]: next }))
+              }
               onRowOpen={open}
             />
           ))}
