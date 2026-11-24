@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createElement } from "react";
 import { GroupDonut } from "@/components/console/hallucinations/GroupDonut";
+import { ringArcs } from "@/components/console/health/v2/ring";
 import { StatusRing } from "@/components/console/health/v2/StatusRing";
 import { hallucinationsLinks } from "@/lib/views/health/hallucinations/page-links";
 import {
@@ -125,4 +126,16 @@ test("the group ring: a linked slice per group with findings, the groups beside 
   const [tool, input] = arcs(html);
   assert.ok(Math.abs(tool! - (0.25 * CIRCUMFERENCE - 2)) < 0.01);
   assert.ok(Math.abs(input! - (0.75 * CIRCUMFERENCE - 2)) < 0.01);
+});
+
+test("the rings' arcs: each starts where the ones before it end, less a gap between two slices", () => {
+  const arcs = ringArcs([0.5, 0.25, 0.25], (share) => share);
+  assert.deepEqual(
+    arcs.map(({ offset }) => Math.round(offset * 100) / 100),
+    [0, Math.round(0.5 * CIRCUMFERENCE * 100) / 100, Math.round(0.75 * CIRCUMFERENCE * 100) / 100],
+  );
+  assert.ok(Math.abs(arcs[0]!.length - (0.5 * CIRCUMFERENCE - 2)) < 0.01);
+  // One slice has no gap to leave; a sliver still shows.
+  assert.ok(Math.abs(ringArcs([1], (share) => share)[0]!.length - CIRCUMFERENCE) < 0.01);
+  assert.equal(ringArcs([0.0001, 0.9999], (share) => share)[0]!.length, 0.5);
 });

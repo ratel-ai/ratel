@@ -2,6 +2,8 @@
 
 import { cn } from "@ratel/design-system/cn";
 import { useState } from "react";
+import { RING_SIZE, RingArc, RingTrack, ringArcs } from "@/components/console/health/v2/ring";
+import { percent } from "@/components/console/sentiment/copy";
 import { RootCauseLink } from "@/components/console/sentiment/RootCausesHost";
 
 /** One slice of the ring: its share of the whole, its colour (an SVG paint), and where it leads, if anywhere. */
@@ -13,15 +15,6 @@ export interface RingSlice {
   color: string;
   href: string | null;
 }
-
-const SIZE = 120;
-const RADIUS = 46;
-const WIDTH = 16;
-const POINTED_WIDTH = 20;
-const GAP = 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 /**
  * A ring with a hole: each slice its share of the whole, the total in the
@@ -42,44 +35,25 @@ export function StatusRing({
 }) {
   const [pointed, setPointed] = useState<string | null>(null);
   const shown = slices.filter((slice) => slice.value > 0);
-  const gap = shown.length > 1 ? GAP : 0;
-  // Each slice starts where the ones before it end.
-  const arcs = shown.map((slice, i) => {
-    const offset = shown.slice(0, i).reduce((sum, before) => sum + before.share * CIRCUMFERENCE, 0);
-    return { slice, length: Math.max(0.5, slice.share * CIRCUMFERENCE - gap), offset };
-  });
+  const arcs = ringArcs(shown, (slice) => slice.share);
   const active = shown.find((slice) => slice.key === pointed) ?? null;
   return (
     <div className="relative size-40 shrink-0" data-status-ring="">
       <svg
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
         className="size-full -rotate-90 overflow-visible"
         role="img"
         aria-label={`${label}: ${shown.map((slice) => `${slice.label} ${percent(slice.share)}`).join(", ")}`}
       >
-        <circle
-          cx={SIZE / 2}
-          cy={SIZE / 2}
-          r={RADIUS}
-          fill="none"
-          strokeWidth={WIDTH}
-          className="stroke-raised"
-        />
+        <RingTrack />
         {arcs.map(({ slice, length, offset }) => {
           const circle = (
-            <circle
-              cx={SIZE / 2}
-              cy={SIZE / 2}
-              r={RADIUS}
-              fill="none"
+            <RingArc
+              length={length}
+              offset={offset}
+              pointed={active?.key === slice.key}
               stroke={slice.color}
-              strokeWidth={active?.key === slice.key ? POINTED_WIDTH : WIDTH}
-              strokeDasharray={`${length} ${CIRCUMFERENCE - length}`}
-              strokeDashoffset={-offset}
-              className={cn(
-                "transition-[stroke-width] duration-200 motion-reduce:transition-none",
-                slice.href && "cursor-pointer",
-              )}
+              className={slice.href ? "cursor-pointer" : undefined}
             />
           );
           const point = {

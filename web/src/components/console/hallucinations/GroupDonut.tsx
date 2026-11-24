@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { GROUP_COLOR, GROUP_SHORT, GROUP_STROKE } from "@/components/console/hallucinations/copy";
+import { RING_SIZE, RingArc, RingTrack, ringArcs } from "@/components/console/health/v2/ring";
 import { percent, plural } from "@/components/console/sentiment/copy";
 import { formatCount } from "@/lib/readings/trace-signals/claims";
 import type { HallucinationGroup } from "@/lib/readings/trace-signals/hallucinations/kinds";
@@ -17,14 +18,6 @@ import type {
 
 const FOCUS = "outline-none focus-visible:ring-2 focus-visible:ring-focus";
 
-/** The ring, in SVG units: its radius, its width (and a pointed-at slice's), and the gap between two slices. */
-const SIZE = 120;
-const RADIUS = 46;
-const WIDTH = 16;
-const POINTED_WIDTH = 20;
-const GAP = 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
 /**
  * The groups as a ring: each group's slice is its share of every
  * hallucination in the window, with the total in the middle. Pointing at a
@@ -35,10 +28,10 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
  * Picking the active one again lets go, as does "All groups".
  */
 export function GroupDonut({ links, total }: { links: HallucinationsLinks; total: number }) {
-  const slices = slicesOf(
+  const slices = ringArcs(
     links.groups.filter((group) => group.occurrences > 0),
-    total,
-  );
+    (group) => (total === 0 ? 0 : group.occurrences / total),
+  ).map(({ slice, length, offset }) => ({ group: slice, length, offset }));
   const picked = links.activeGroup !== null;
   const [pointed, setPointed] = useState<HallucinationGroup | null>(null);
   // The group whose kinds are open follows the address. A click opens or
@@ -95,19 +88,12 @@ export function GroupDonut({ links, total }: { links: HallucinationsLinks; total
       <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
         <div className="relative size-44 shrink-0" data-hallucination-donut="">
           <svg
-            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
             className="size-full -rotate-90 overflow-visible"
             role="img"
             aria-label={`Hallucinations by group: ${slices.map(({ group }) => `${group.label} ${percent(group.share)}`).join(", ")}`}
           >
-            <circle
-              cx={SIZE / 2}
-              cy={SIZE / 2}
-              r={RADIUS}
-              fill="none"
-              strokeWidth={WIDTH}
-              className="stroke-raised"
-            />
+            <RingTrack />
             {slices.map(({ group, length, offset }) => (
               <Link
                 key={group.group}
@@ -119,16 +105,12 @@ export function GroupDonut({ links, total }: { links: HallucinationsLinks; total
                 data-hallucination-slice={group.group}
                 {...point(group.group)}
               >
-                <circle
-                  cx={SIZE / 2}
-                  cy={SIZE / 2}
-                  r={RADIUS}
-                  fill="none"
-                  strokeWidth={shown?.group === group.group ? POINTED_WIDTH : WIDTH}
-                  strokeDasharray={`${length} ${CIRCUMFERENCE - length}`}
-                  strokeDashoffset={-offset}
+                <RingArc
+                  length={length}
+                  offset={offset}
+                  pointed={shown?.group === group.group}
                   className={cn(
-                    "cursor-pointer transition-[opacity,stroke-width] duration-200 motion-reduce:transition-none",
+                    "cursor-pointer",
                     GROUP_STROKE[group.group],
                     shown
                       ? shown.group !== group.group && "opacity-35"
@@ -329,19 +311,4 @@ function KindChoice({ kind }: { kind: KindView }) {
       </Link>
     </Tooltip>
   );
-}
-
-/** Each group's arc along the ring, in order: its length (less the gap to the next slice) and where it starts. */
-function slicesOf(
-  groups: readonly GroupView[],
-  total: number,
-): Array<{ group: GroupView; length: number; offset: number }> {
-  const gap = groups.length > 1 ? GAP : 0;
-  let start = 0;
-  return groups.map((group) => {
-    const arc = total === 0 ? 0 : (group.occurrences / total) * CIRCUMFERENCE;
-    const slice = { group, length: Math.max(0.5, arc - gap), offset: start };
-    start += arc;
-    return slice;
-  });
 }
