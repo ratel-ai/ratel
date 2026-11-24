@@ -1297,6 +1297,7 @@
     { "from": "apps/web/lib/traces/navigation-links.test.ts", "mode": "excluded", "$why": "asserts an older trace component this tree does not have" },
     { "from": "apps/web/lib/traces/events-empty-state.test.ts", "mode": "excluded", "$why": "asserts an older trace component this tree does not have" },
     { "from": "apps/web/components/traces/v2", "to": "web/src/components/console/traces", "mode": "copy" },
+    { "from": "apps/web/components/traces/v2/TraceView.tsx", "to": "web/src/components/console/traces/TraceView.tsx", "mode": "owned", "$why": "the scorers' results of the trace, under its numbers" },
     { "from": "apps/web/components/stale-build-callout.tsx", "to": "web/src/components/console/stale-build-callout.tsx", "mode": "copy" },
     { "from": "apps/web/lib/stale-build.ts", "to": "web/src/lib/console/stale-build.ts", "mode": "copy" },
     { "from": "apps/web/lib/stale-build.test.ts", "to": "web/src/lib/console/stale-build.test.ts", "mode": "copy" },

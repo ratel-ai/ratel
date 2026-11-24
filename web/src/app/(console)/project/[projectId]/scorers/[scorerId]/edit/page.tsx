@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { ScorerForm } from "@/components/console/scorers/ScorerForm";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
 import { parseProjectUuid } from "@/lib/console/scope/cookie";
-import { isDbConfigured } from "@/lib/platform/db/client";
 import { getTraceFilterFacets } from "@/lib/synthesis/traces/trace-filters";
 import { getScorer } from "@/lib/views/scorers/store";
 import { resolveScorersPage } from "../../context";
@@ -17,14 +16,15 @@ export default async function EditScorerPage({
 }: {
   params: Promise<{ projectId: string; scorerId: string }>;
 }) {
-  if (!isDbConfigured())
+  const { projectId: rawProjectId, scorerId } = await params;
+  const page = await resolveScorersPage(rawProjectId);
+  if (!page)
     return (
       <DatabaseUnavailable title="Edit scorer">
         Scorers need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { projectId: rawProjectId, scorerId } = await params;
-  const { projectId } = await resolveScorersPage(rawProjectId);
+  const { projectId } = page;
   const id = parseProjectUuid(scorerId);
   const scorer = id ? await getScorer(projectId, id) : null;
   if (!scorer) notFound();

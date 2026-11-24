@@ -1,6 +1,5 @@
 import { ScorersList } from "@/components/console/scorers/ScorersList";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { isDbConfigured } from "@/lib/platform/db/client";
 import { definitionSummary, hasVerdict } from "@/lib/views/scorers/format";
 import { listScorers, scorerSummaries } from "@/lib/views/scorers/store";
 import { resolveScorersPage } from "./context";
@@ -12,13 +11,14 @@ const WEEK_MS = 7 * 86_400_000;
 
 /** A project's scorers with what they measured in the last 7 days. */
 export default async function ScorersPage({ params }: { params: Promise<{ projectId: string }> }) {
-  if (!isDbConfigured())
+  const page = await resolveScorersPage((await params).projectId);
+  if (!page)
     return (
       <DatabaseUnavailable title="Scorers">
         Scorers need a database. Set DATABASE_URL to connect one.
       </DatabaseUnavailable>
     );
-  const { projectId } = await resolveScorersPage((await params).projectId);
+  const { projectId } = page;
   const [scorers, summaries] = await Promise.all([
     listScorers(projectId),
     scorerSummaries(projectId, new Date(Date.now() - WEEK_MS)),
