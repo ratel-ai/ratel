@@ -1508,16 +1508,6 @@
           }
         }
       }
-    },
-    {
-      "includes": ["web/src/components/console/health/v2/StatusRing.tsx"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "useJsxKeyInIterable": "off"
-          }
-        }
-      }
     }
   ],
   "javascript": {

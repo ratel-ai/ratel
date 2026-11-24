@@ -49,6 +49,7 @@ export function StatusRing({
         {arcs.map(({ slice, length, offset }) => {
           const circle = (
             <RingArc
+              key={slice.key}
               length={length}
               offset={offset}
               pointed={active?.key === slice.key}
