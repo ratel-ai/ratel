@@ -1,35 +1,20 @@
-import { DashboardsListView } from "@/components/console/dashboards/DashboardsListView";
-import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
-import { listDashboards } from "@/lib/views/dashboards/store";
-import { dashboardsScope } from "./context";
+import { permanentRedirect } from "next/navigation";
+import { projectRoot } from "@/lib/console/navigation";
+import { dashboardsEnabled } from "./context";
+import { DashboardsList } from "./list";
 
 export const metadata = { title: "Dashboards" };
 
-/** The project's dashboards, behind `customDashboards`. */
+/**
+ * Unless `customDashboards` is on, dashboards are gone: Overview carries the numbers, and its Spend opens the
+ * context split this page used to show.
+ */
 export default async function ScopedDashboardsPage({
   params,
 }: {
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = await params;
-  const scope = await dashboardsScope(projectId);
-  if (!scope)
-    return (
-      <DatabaseUnavailable title="Dashboards">
-        Dashboards become available once setup finishes.
-      </DatabaseUnavailable>
-    );
-  const dashboards = await listDashboards(scope.project.id);
-  return (
-    <DashboardsListView
-      projectId={scope.project.id}
-      now={new Date().toISOString()}
-      dashboards={dashboards.map(({ id, name, widgets, updatedAt }) => ({
-        id,
-        name,
-        widgets: widgets.length,
-        updatedAt: updatedAt.toISOString(),
-      }))}
-    />
-  );
+  if (await dashboardsEnabled(projectId)) return <DashboardsList projectId={projectId} />;
+  permanentRedirect(`${projectRoot(projectId)}?peek=context`);
 }

@@ -1217,6 +1217,8 @@
         "web/src/lib/console/scope/cookie.test.ts",
         "web/src/lib/console/scope/legacy-redirects.ts",
         "web/src/lib/console/scope/legacy-redirects.test.ts",
+        "web/src/lib/console/scope/moved-pages.ts",
+        "web/src/lib/console/scope/moved-pages.test.ts",
         "web/src/lib/console/scope/sentinel.ts",
         "web/src/lib/console/scope/landing.test.ts",
         "web/src/app/(console)/project/%5F/\\[\\[...path\\]\\]/page.tsx",

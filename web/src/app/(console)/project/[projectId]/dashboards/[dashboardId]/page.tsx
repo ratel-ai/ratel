@@ -1,6 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { DashboardView } from "@/components/console/dashboards/DashboardView";
 import { DatabaseUnavailable } from "@/components/console/shell/DatabaseUnavailable";
+import { projectRoot } from "@/lib/console/navigation";
 import {
   supplementaryReadTimeoutMs,
   withStatementTimeout,
@@ -14,7 +15,7 @@ import {
 import { resolveTraceRange, type TraceListSearchParams } from "@/lib/synthesis/traces/view";
 import { loadWidgets } from "@/lib/views/dashboards/data";
 import { getDashboard } from "@/lib/views/dashboards/store";
-import { dashboardsScope } from "../context";
+import { dashboardsEnabled, dashboardsScope } from "../context";
 
 export const metadata = { title: "Dashboard" };
 
@@ -27,6 +28,8 @@ export default async function ScopedDashboardPage({
   searchParams: Promise<TraceListSearchParams>;
 }) {
   const { projectId, dashboardId } = await params;
+  if (!(await dashboardsEnabled(projectId)))
+    permanentRedirect(`${projectRoot(projectId)}?peek=context`);
   const scope = await dashboardsScope(projectId);
   if (!scope)
     return (
