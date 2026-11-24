@@ -54,9 +54,9 @@ export function FocusedOverviewView({
         {project.isDemo ? <DemoNotice projectId={project.id} projectName={project.name} /> : null}
         {hasTelemetry ? (
           <div className="flex flex-col gap-8">
-            <HealthCard health={data.health} window={data.window} />
+            {data.health ? <HealthCard health={data.health} window={data.window} /> : null}
             <Section title="Agents and MCP servers" className="min-w-0">
-              {topology ? (
+              {topology && topology !== "failed" ? (
                 <TopologyMap
                   projectId={project.id}
                   graph={topology}

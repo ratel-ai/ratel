@@ -5,6 +5,7 @@ import { fmtCost } from "@/lib/platform/format";
 import { formatSharePercent } from "@/lib/readings/trace-signals/claims";
 import { formatDuration } from "@/lib/synthesis/traces/format";
 import type { TraceAggregateSummary } from "@/lib/synthesis/traces/queries";
+import type { MetricsData } from "@/lib/views/home/focused-load";
 import { CONTEXT_PEEK, type OverviewData } from "@/lib/views/home/load";
 import {
   type Change,
@@ -53,7 +54,7 @@ function spark(values: readonly (number | null)[], label: string): ReactNode {
 }
 
 /** The right tool in the top 5 (first try on older readings), from Agent health, once it has a reading; null before. */
-function firstTryStat(data: OverviewData): StatProps | null {
+function firstTryStat(data: Pick<OverviewData, "health" | "window">): StatProps | null {
   const health = data.health;
   const tile = health?.firstTry;
   if (!health || !tile || tile.value === null) return null;
@@ -77,6 +78,25 @@ function firstTryStat(data: OverviewData): StatProps | null {
 
 /** Runs, first try (or failures), median duration and spend, each with its change and its days. */
 export function overviewStats(data: OverviewData, traces: TraceAggregateSummary): StatProps[] {
+  return stats(data, traces, firstTryStat(data));
+}
+
+/** The recap Overview's: runs, failed runs, median duration and spend. The Health score has its own widget. */
+export function focusedStats(data: MetricsData): StatProps[] {
+  return stats(data, data.traces, null);
+}
+
+type StatsData = Pick<
+  OverviewData,
+  "root" | "rangeParam" | "window" | "previous" | "series" | "daily" | "sdk" | "health" | "traces"
+>;
+
+/** `quality` in place of the failed runs. */
+function stats(
+  data: StatsData,
+  traces: TraceAggregateSummary,
+  quality: StatProps | null,
+): StatProps[] {
   if (isSdkOnly(data) && data.sdk) return sdkStats(data, data.sdk);
   const { previous, root, rangeParam, window, daily } = data;
   const versus = `vs the same time ${window} days earlier`;
@@ -93,7 +113,7 @@ export function overviewStats(data: OverviewData, traces: TraceAggregateSummary)
     href: tracesHref,
   };
 
-  const quality: StatProps = firstTryStat(data) ?? {
+  const failed: StatProps = {
     label: "Failed runs",
     value: hasRuns ? formatSharePercent(traces.errorRate) : NO_VALUE,
     delta: toDelta(
@@ -129,7 +149,7 @@ export function overviewStats(data: OverviewData, traces: TraceAggregateSummary)
     peek: CONTEXT_PEEK,
   };
 
-  return [runs, quality, duration, spend];
+  return [runs, quality ?? failed, duration, spend];
 }
 
 /**
@@ -137,7 +157,7 @@ export function overviewStats(data: OverviewData, traces: TraceAggregateSummary)
  * first try when Agent health has a reading, tool calls (or skill runs).
  * Duration and spend need traces, so they are left out rather than shown as 0.
  */
-function sdkStats(data: OverviewData, sdk: NonNullable<OverviewData["sdk"]>): StatProps[] {
+function sdkStats(data: StatsData, sdk: NonNullable<OverviewData["sdk"]>): StatProps[] {
   const { root, rangeParam, window } = data;
   const versus = `vs the same time ${window} days earlier`;
   const eventsHref = `${root}/traces/logs?range=${rangeParam}`;

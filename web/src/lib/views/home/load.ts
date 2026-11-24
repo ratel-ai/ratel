@@ -1,18 +1,6 @@
-import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { projectRoot } from "@/lib/console/navigation";
-import {
-  type DailyAggregateRow,
-  getDailyAggregates,
-  getPromptCacheTotals,
-  type PromptCacheTotals,
-} from "@/lib/ingest/otlp/queries";
-import { traceEvents } from "@/lib/ingest/trace-events/schema";
-import { getDb } from "@/lib/platform/db/client";
-import {
-  type BoundReadDb,
-  supplementaryReadTimeoutMs,
-  withStatementTimeout,
-} from "@/lib/platform/db/statement-timeout";
+import type { DailyAggregateRow, PromptCacheTotals } from "@/lib/ingest/otlp/queries";
+import type { getDb } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
 import {
@@ -31,22 +19,17 @@ import {
   promptCacheHitRate,
   type Suggestion,
 } from "@/lib/synthesis/dashboard";
-import { matchQualityProposals } from "@/lib/synthesis/match-quality/schema";
-import {
-  getTraceAggregates,
-  getTraceDailyAggregatesFromSummaries,
-  getTracesIngestDiagnostics,
-  listTraces,
-  type TraceAggregateSummary,
-  type TraceDailyAggregate,
-  type TraceSummary,
-  type TracesIngestDiagnostics,
+import type {
+  TraceAggregateSummary,
+  TraceDailyAggregate,
+  TraceSummary,
+  TracesIngestDiagnostics,
 } from "@/lib/synthesis/traces/queries";
 import { resolveTraceListView } from "@/lib/synthesis/traces/view";
 import { fixHref } from "@/lib/views/fixes/href";
-import { loadFixes } from "@/lib/views/fixes/load";
+import type { loadFixes } from "@/lib/views/fixes/load";
 import type { Fix } from "@/lib/views/fixes/types";
-import { loadHealthPageModel, pendingHealthModel } from "@/lib/views/health/page-model";
+import { pendingHealthModel } from "@/lib/views/health/page-model";
 import {
   loadSelfCorrectionsCard,
   type SelfCorrectionsCardModel,
@@ -65,10 +48,11 @@ import {
   READ_FAILED,
   selfCorrectionsGlance,
   type TaskRef,
+  type TasksGlance,
   type TasksRead,
   tasksGlance,
+  type UnansweredIntent,
 } from "@/lib/views/home/glance";
-import { readIntents, readRunTasks, readTasks } from "@/lib/views/home/glance-queries";
 import {
   buildContextSplit,
   type ContextSplit,
@@ -79,8 +63,41 @@ import {
   overviewRangeParam,
   previousWindow,
 } from "@/lib/views/home/overview-model";
+import {
+  latestEventAt,
+  newest,
+  type OverviewReadScope,
+  readDailyAggregates,
+  readDailyTraces,
+  readFixes,
+  readHealth,
+  readIntentsGlance,
+  readPendingRewrites,
+  readPreviousTraces,
+  readPromptCache,
+  readRecentRuns,
+  readSdkDays,
+  readSdkLatestAt,
+  readSdkPrevious,
+  readTasksGlance,
+  readTasksOfRuns,
+  readTelemetry,
+  readTraces,
+  type SdkActivity,
+  type SdkDay,
+} from "@/lib/views/home/overview-reads";
 
 export type { FixesSlice } from "@/lib/views/home/glance";
+export {
+  countPendingRewrites,
+  countSdkActivity,
+  countSdkActivityByDay,
+  latestEventAt,
+  latestSdkEventAt,
+  newest,
+  type SdkActivity,
+  type SdkDay,
+} from "@/lib/views/home/overview-reads";
 
 type FixesOrganization = Parameters<typeof loadFixes>[0]["organization"];
 type LimitOrganization = Parameters<typeof getAgentHealthLimits>[0];
@@ -101,18 +118,6 @@ export interface OverviewHealth {
   windowDays: WindowDays;
   /** The first try tile once there is a reading; null while collecting. */
   firstTry: HealthTile | null;
-}
-
-/** What the Ratel SDK reported in a window: searches, tool calls and skill runs. */
-export interface SdkActivity {
-  searches: number;
-  toolCalls: number;
-  skillRuns: number;
-}
-
-/** One UTC day of SDK activity. */
-export interface SdkDay extends SdkActivity {
-  day: string;
 }
 
 /** The readings under the stats, one per day of the window; null on a day without one. */
@@ -197,8 +202,6 @@ export interface OverviewReads {
   corrections: SelfCorrectionsCardModel;
 }
 
-const RECENT_RUNS = 5;
-
 /**
  * Overview v2's reads, in one round. Every read runs under a statement
  * timeout and degrades on its own (logged and reported by `loadOrFallback`),
@@ -213,51 +216,40 @@ export async function loadOverview({
   organization,
   window,
   now = new Date(),
+  db,
 }: {
   project: OverviewProject;
   organization: FixesOrganization & LimitOrganization;
   window: OverviewWindow;
   now?: Date;
+  /** Another database than the pool's, in tests. */
+  db?: ReturnType<typeof getDb>;
 }): Promise<OverviewData> {
   const { range } = resolveTraceListView({ range: overviewRangeParam(window) }, now);
-  const current = { since: range.since, until: range.until };
-  const before = previousWindow(range, window, now);
   const distinctId = `project:${project.id}`;
-  const supplementary = supplementaryReadTimeoutMs();
   const healthLimits = getAgentHealthLimits(organization);
   const healthWindow = parseWindowDays(String(window), healthLimits.agentHealthWindowDays);
-
-  function bounded<T>(
+  const scope: OverviewReadScope = {
+    projectId: project.id,
+    organization,
+    current: { since: range.since, until: range.until },
+    before: previousWindow(range, window, now),
+    now,
+    db,
+  };
+  const or = <T, F = T>(
     operation: string,
-    fallback: T,
-    read: (db: BoundReadDb) => Promise<T>,
-    timeoutMs?: number | null,
-  ): Promise<T> {
-    return loadOrFallback({
-      operation,
-      distinctId,
-      fallback,
-      load: () =>
-        withStatementTimeout(read, {
-          operation,
-          ...(timeoutMs === undefined ? {} : { timeoutMs }),
-        }),
-    });
-  }
+    fallback: F,
+    read: (scope: OverviewReadScope) => Promise<T>,
+  ): Promise<T | F> =>
+    loadOrFallback<T | F>({ operation, distinctId, fallback, load: () => read(scope) });
 
-  const recentRuns = bounded<TraceSummary[] | null>(
-    "overview_recent_runs",
-    null,
-    async (db) => (await listTraces(project.id, { ...current, limit: RECENT_RUNS }, db)).items,
-  );
+  const recentRuns = or("overview_recent_runs", null, readRecentRuns);
   // Starts as soon as the runs are in, alongside the rest of the round.
   const runTasks = recentRuns.then((runs) =>
     runs && runs.length > 0
-      ? bounded<ReadonlyMap<string, string>>(
-          "overview_run_tasks",
-          new Map(),
-          (db) => readRunTasks(db, project.id, runs),
-          supplementary,
+      ? or<ReadonlyMap<string, string>>("overview_run_tasks", new Map(), (at) =>
+          readTasksOfRuns(at, runs),
         )
       : new Map<string, string>(),
   );
@@ -282,106 +274,28 @@ export async function loadOverview({
     corrections,
     promptCache,
   ] = await Promise.all([
-    bounded<TraceAggregateSummary | null>("overview_trace_aggregate", null, (db) =>
-      getTraceAggregates(project.id, current, db),
-    ),
+    or("overview_trace_aggregate", null, readTraces),
     recentRuns,
     runTasks,
-    bounded<TracesIngestDiagnostics | null>(
-      "overview_telemetry",
-      null,
-      (db) => getTracesIngestDiagnostics(project.id, db),
-      supplementary,
+    or("overview_telemetry", null, readTelemetry),
+    or("overview_agent_health", pendingHealthModel(healthWindow), (at) =>
+      readHealth(at, healthWindow, healthLimits),
     ),
-    loadOrFallback({
-      operation: "overview_agent_health",
-      distinctId,
-      fallback: pendingHealthModel(healthWindow),
-      // The Overview shows no example turns: none are read.
-      load: () =>
-        loadHealthPageModel(
-          { projectId: project.id, windowDays: healthWindow },
-          process.env.NODE_ENV,
-          {
-            getLimits: async () => ({ ...healthLimits, agentHealthEvidenceTurns: 0 }),
-          },
-        ),
-    }),
     // Each of its sources degrades on its own; this fallback covers the rest.
-    loadOrFallback<FixesSlice | null>({
-      operation: "overview_fixes",
-      distinctId,
-      fallback: null,
-      load: () => loadFixes({ projectId: project.id, organization, now, topics: false }),
-    }),
-    bounded<TraceAggregateSummary | null>(
-      "overview_previous_aggregate",
-      null,
-      (db) => getTraceAggregates(project.id, before, db),
-      supplementary,
+    or("overview_fixes", null, readFixes),
+    or("overview_previous_aggregate", null, readPreviousTraces),
+    or("overview_trace_daily", null, readDailyTraces),
+    or<DailyAggregateRow[]>("overview_daily_aggregates", [], readDailyAggregates),
+    or("overview_pending_rewrites", 0, readPendingRewrites),
+    or("overview_sdk_activity", null, readSdkDays),
+    or("overview_sdk_previous", null, readSdkPrevious),
+    or("overview_sdk_latest", null, readSdkLatestAt),
+    or("overview_intents", READ_FAILED, readIntentsGlance),
+    or("overview_tasks", READ_FAILED, readTasksGlance),
+    or("overview_self_corrections", unavailableSelfCorrectionsCard(project.id, healthWindow), () =>
+      loadSelfCorrectionsCard(project.id, healthWindow),
     ),
-    // Off the per-trace summary table, not another pass over the spans: a
-    // spark is worth a sweep interval of lag, never a second rollup.
-    bounded<TraceDailyAggregate[] | null>(
-      "overview_trace_daily",
-      null,
-      (db) => getTraceDailyAggregatesFromSummaries(project.id, current, db),
-      supplementary,
-    ),
-    loadOrFallback({
-      operation: "overview_daily_aggregates",
-      distinctId,
-      fallback: [] as DailyAggregateRow[],
-      load: () => getDailyAggregates(project.id, range.since, range.until),
-    }),
-    bounded<number>(
-      "overview_pending_rewrites",
-      0,
-      (db) => countPendingRewrites(project.id, db),
-      supplementary,
-    ),
-    bounded<SdkDay[] | null>(
-      "overview_sdk_activity",
-      null,
-      (db) => countSdkActivityByDay(project.id, current, db),
-      supplementary,
-    ),
-    bounded<SdkActivity | null>(
-      "overview_sdk_previous",
-      null,
-      (db) => countSdkActivity(project.id, before, db),
-      supplementary,
-    ),
-    bounded<Date | null>(
-      "overview_sdk_latest",
-      null,
-      (db) => latestSdkEventAt(project.id, db),
-      supplementary,
-    ),
-    bounded<GlanceRead<IntentsRead>>(
-      "overview_intents",
-      READ_FAILED,
-      (db) => readIntents(db, project.id),
-      supplementary,
-    ),
-    bounded<GlanceRead<TasksRead>>(
-      "overview_tasks",
-      READ_FAILED,
-      (db) => readTasks(db, project.id),
-      supplementary,
-    ),
-    loadOrFallback({
-      operation: "overview_self_corrections",
-      distinctId,
-      fallback: unavailableSelfCorrectionsCard(project.id, healthWindow),
-      load: () => loadSelfCorrectionsCard(project.id, healthWindow),
-    }),
-    bounded<PromptCacheTotals | null>(
-      "overview_prompt_cache",
-      null,
-      (db) => getPromptCacheTotals(project.id, range.since, range.until, db),
-      supplementary,
-    ),
+    or("overview_prompt_cache", null, readPromptCache),
   ]);
 
   return assembleOverview({
@@ -458,57 +372,30 @@ export function assembleOverview({
   const context = buildContextSplit(dashboard);
   const health = reads.health ? applyPlanLimits(reads.health, reads.healthLimits) : null;
   const healthHref = health ? agentHealthHref(project.id, reads.healthWindow) : null;
-  const tracesHref = `${root}/traces?range=${rangeParam}`;
   const lastEventAt = newest(
     reads.telemetry ? latestEventAt(reads.telemetry) : null,
     reads.sdkLatestAt,
   );
 
-  // An issue opens the fix that resolves it, when Fixes has one.
-  const fixLinks = new Map<string, string>();
-  for (const fix of [...(reads.fixes?.open ?? []), ...(reads.fixes?.applied ?? [])]) {
-    for (const issue of fix.issues)
-      if (!fixLinks.has(issue.id)) fixLinks.set(issue.id, fixTarget(project.id, fix));
-  }
-  // What Fixes can apply, plan included; Quality's own count when Fixes could not be read.
-  const pendingRewrites = reads.fixes
-    ? reads.fixes.rewritesOn
-      ? applicableDescriptions(reads.fixes)
-      : null
-    : reads.pendingRewrites;
   const glance: Glance = {
     intents: intentsGlance(project.id, reads.intents),
     tasks: tasksGlance(project.id, reads.tasks),
     selfCorrections: selfCorrectionsGlance(reads.corrections),
     fixes: fixesGlance(project.id, reads.fixes),
   };
-  const attention = buildAttention({
-    errors: {
-      count: reads.traces?.errorCount ?? 0,
-      total: reads.traces?.count ?? 0,
-      href: `${tracesHref}&errorOnly=1`,
-    },
-    issues: health?.signals ?? [],
-    lockedIssues: health?.lockedCount ?? 0,
-    issueHref: (issueId) => (healthHref ? issuePanelHref(healthHref, issueId) : root),
-    fixHref: (issueId) => fixLinks.get(issueId) ?? null,
-    healthHref,
-    tasks: glance.tasks.byId,
-    taskSteps: glance.tasks.steps,
+  const attention = overviewAttention({
+    projectId: project.id,
+    window,
+    traces: reads.traces,
+    health,
+    healthWindow: reads.healthWindow,
+    fixes: reads.fixes,
+    pendingRewrites: reads.pendingRewrites,
+    tasks: glance.tasks,
     unanswered: glance.intents.unanswered,
-    pendingRewrites:
-      pendingRewrites === null
-        ? null
-        : { count: pendingRewrites, href: descriptionsHref(project.id) },
     contextSuggestions,
     contextSplit: context,
-    contextPeek: CONTEXT_PEEK,
   });
-
-  const sdkDays = reads.sdkDays;
-  const sdkCurrent = sdkDays ? sumSdk(sdkDays) : null;
-  const sdkByDay = new Map((sdkDays ?? []).map((row) => [row.day, row]));
-  const dailyTraces = reads.dailyTraces ?? [];
 
   return {
     project,
@@ -519,30 +406,11 @@ export function assembleOverview({
     // A failed diagnostics read must not pass for an empty project.
     hasTelemetry:
       reads.telemetry === null || lastEventAt !== null || (reads.traces?.count ?? 0) > 0,
-    sdk: sdkCurrent
-      ? {
-          current: sdkCurrent,
-          previous: reads.sdkPrevious,
-          days: days.map((day) => {
-            const row = sdkByDay.get(day);
-            return {
-              searches: row?.searches ?? 0,
-              toolCalls: row?.toolCalls ?? 0,
-              skillRuns: row?.skillRuns ?? 0,
-            };
-          }),
-        }
-      : null,
+    sdk: overviewSdk(reads, days),
     traces: reads.traces,
     previous: reads.previous,
     series: dailyCounts(reads.traces?.volume ?? [], days),
-    daily: {
-      failedShare: dailyFailureShares(reads.traces?.volume ?? [], days),
-      duration: dailyReadings(dailyTraces, days, (row) =>
-        row.traceCount > 0 ? row.averageLatencyMs : null,
-      ),
-      spend: dailyReadings(dailyTraces, days, (row) => (row.traceCount > 0 ? row.costUsd : null)),
-    },
+    daily: overviewDaily(reads, days),
     recentRuns: reads.recentRuns,
     runTasks: Object.fromEntries(
       [...reads.runTasks].flatMap(([traceId, taskId]) => {
@@ -555,13 +423,7 @@ export function assembleOverview({
         ? {
             href: healthHref,
             windowDays: reads.healthWindow,
-            firstTry:
-              healthReadiness(health) === "ready"
-                ? (health.tiles.find(
-                    (tile) =>
-                      (tile.key === "top_5" || tile.key === "first_try") && tile.value !== null,
-                  ) ?? null)
-                : null,
+            firstTry: firstTryTile(health),
           }
         : null,
     attention,
@@ -570,6 +432,115 @@ export function assembleOverview({
     contextSuggestions,
     promptCacheHitRate: promptCacheHitRate(reads.promptCache ?? null),
   };
+}
+
+/** "Needs attention" from its reads. `fixes` is null when it could not be read. */
+export function overviewAttention({
+  projectId,
+  window,
+  traces,
+  health,
+  healthWindow,
+  fixes,
+  pendingRewrites,
+  tasks,
+  unanswered,
+  contextSuggestions,
+  contextSplit,
+}: {
+  projectId: string;
+  window: OverviewWindow;
+  traces: Pick<TraceAggregateSummary, "count" | "errorCount"> | null;
+  /** Cut to the plan; null when Agent health is off. */
+  health: Pick<HealthPageModel, "signals" | "lockedCount"> | null;
+  healthWindow: WindowDays;
+  fixes: FixesSlice | null;
+  pendingRewrites: number | null;
+  tasks: Pick<TasksGlance, "byId" | "steps">;
+  unanswered: readonly UnansweredIntent[];
+  contextSuggestions: readonly Suggestion[];
+  contextSplit: ContextSplit | null;
+}): Attention {
+  const root = projectRoot(projectId);
+  const healthHref = health ? agentHealthHref(projectId, healthWindow) : null;
+  // An issue opens the fix that resolves it, when Fixes has one.
+  const fixLinks = new Map<string, string>();
+  for (const fix of [...(fixes?.open ?? []), ...(fixes?.applied ?? [])]) {
+    for (const issue of fix.issues)
+      if (!fixLinks.has(issue.id)) fixLinks.set(issue.id, fixTarget(projectId, fix));
+  }
+  // What Fixes can apply, plan included; Quality's own count when Fixes could not be read.
+  const rewrites = fixes
+    ? fixes.rewritesOn
+      ? applicableDescriptions(fixes)
+      : null
+    : pendingRewrites;
+  return buildAttention({
+    errors: {
+      count: traces?.errorCount ?? 0,
+      total: traces?.count ?? 0,
+      href: `${root}/traces?range=${overviewRangeParam(window)}&errorOnly=1`,
+    },
+    issues: health?.signals ?? [],
+    lockedIssues: health?.lockedCount ?? 0,
+    issueHref: (issueId) => (healthHref ? issuePanelHref(healthHref, issueId) : root),
+    fixHref: (issueId) => fixLinks.get(issueId) ?? null,
+    healthHref,
+    tasks: tasks.byId,
+    taskSteps: tasks.steps,
+    unanswered,
+    pendingRewrites:
+      rewrites === null ? null : { count: rewrites, href: descriptionsHref(projectId) },
+    contextSuggestions,
+    contextSplit,
+    contextPeek: CONTEXT_PEEK,
+  });
+}
+
+/** The SDK activity under the stats; null when it could not be read. */
+export function overviewSdk(
+  { sdkDays, sdkPrevious }: Pick<OverviewReads, "sdkDays" | "sdkPrevious">,
+  days: readonly string[],
+): OverviewData["sdk"] {
+  if (!sdkDays) return null;
+  const byDay = new Map(sdkDays.map((row) => [row.day, row]));
+  return {
+    current: sumSdk(sdkDays),
+    previous: sdkPrevious,
+    days: days.map((day) => {
+      const row = byDay.get(day);
+      return {
+        searches: row?.searches ?? 0,
+        toolCalls: row?.toolCalls ?? 0,
+        skillRuns: row?.skillRuns ?? 0,
+      };
+    }),
+  };
+}
+
+/** The days under the trace stats. */
+export function overviewDaily(
+  { traces, dailyTraces }: Pick<OverviewReads, "traces" | "dailyTraces">,
+  days: readonly string[],
+): OverviewDaily {
+  const rows = dailyTraces ?? [];
+  return {
+    failedShare: dailyFailureShares(traces?.volume ?? [], days),
+    duration: dailyReadings(rows, days, (row) =>
+      row.traceCount > 0 ? row.averageLatencyMs : null,
+    ),
+    spend: dailyReadings(rows, days, (row) => (row.traceCount > 0 ? row.costUsd : null)),
+  };
+}
+
+/** The first try tile once there is a reading, for the stat row. */
+export function firstTryTile(health: HealthPageModel): HealthTile | null {
+  if (healthReadiness(health) !== "ready") return null;
+  return (
+    health.tiles.find(
+      (tile) => (tile.key === "top_5" || tile.key === "first_try") && tile.value !== null,
+    ) ?? null
+  );
 }
 
 function sumSdk(days: readonly SdkActivity[]): SdkActivity {
@@ -581,119 +552,4 @@ function sumSdk(days: readonly SdkActivity[]): SdkActivity {
     }),
     { searches: 0, toolCalls: 0, skillRuns: 0 },
   );
-}
-
-/** The SDK event types Overview counts: a search, a tool call, a skill run. */
-const SDK_TYPES = {
-  search: "searches",
-  invoke_start: "toolCalls",
-  skill_invoke: "skillRuns",
-} as const;
-type SdkType = keyof typeof SDK_TYPES;
-
-const sdkAt = () => sql`coalesce(${traceEvents.occurredAt}, ${traceEvents.receivedAt})`;
-
-function sdkWhere(projectId: string, window: { since: Date; until: Date }) {
-  const at = sdkAt();
-  return and(
-    eq(traceEvents.projectId, projectId),
-    inArray(traceEvents.type, Object.keys(SDK_TYPES)),
-    gte(at, window.since),
-    lt(at, window.until),
-  );
-}
-
-/** SDK events in a window, by kind. Uses the (project, type, time) index. */
-export async function countSdkActivity(
-  projectId: string,
-  window: { since: Date; until: Date },
-  db: BoundReadDb = getDb(),
-): Promise<SdkActivity> {
-  const rows = await db
-    .select({ type: traceEvents.type, count: sql<number>`count(*)::int` })
-    .from(traceEvents)
-    .where(sdkWhere(projectId, window))
-    .groupBy(traceEvents.type);
-  const activity: SdkActivity = { searches: 0, toolCalls: 0, skillRuns: 0 };
-  for (const row of rows) {
-    const key = SDK_TYPES[row.type as SdkType];
-    if (key) activity[key] = row.count;
-  }
-  return activity;
-}
-
-/** SDK events in a window, by UTC day and kind, oldest day first; days without any are left out. */
-export async function countSdkActivityByDay(
-  projectId: string,
-  window: { since: Date; until: Date },
-  db: BoundReadDb = getDb(),
-): Promise<SdkDay[]> {
-  const day = sql<string>`to_char(date_trunc('day', ${sdkAt()} at time zone 'UTC'), 'YYYY-MM-DD')`;
-  const rows = await db
-    .select({ day, type: traceEvents.type, count: sql<number>`count(*)::int` })
-    .from(traceEvents)
-    .where(sdkWhere(projectId, window))
-    .groupBy(day, traceEvents.type);
-  const byDay = new Map<string, SdkDay>();
-  for (const row of rows) {
-    const key = SDK_TYPES[row.type as SdkType];
-    if (!key) continue;
-    const entry = byDay.get(row.day) ?? { day: row.day, searches: 0, toolCalls: 0, skillRuns: 0 };
-    entry[key] += row.count;
-    byDay.set(row.day, entry);
-  }
-  return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
-}
-
-/**
- * The newest SDK search, tool call or skill run, one index lookup per kind.
- * One after another: `db` is a single bounded transaction, and a connection
- * runs one query at a time (concurrent queries on it are deprecated in pg).
- */
-export async function latestSdkEventAt(
-  projectId: string,
-  db: BoundReadDb = getDb(),
-): Promise<Date | null> {
-  const at = sdkAt();
-  let latest: Date | null = null;
-  for (const type of Object.keys(SDK_TYPES)) {
-    const [row] = await db
-      .select({ latest: sql<string | Date | null>`max(${at})` })
-      .from(traceEvents)
-      .where(and(eq(traceEvents.projectId, projectId), eq(traceEvents.type, type)));
-    latest = newest(latest, row?.latest ? new Date(row.latest) : null);
-  }
-  return latest;
-}
-
-export function newest(a: Date | null, b: Date | null): Date | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return a > b ? a : b;
-}
-
-/** Suggested rewrites still waiting for a person, across every run. */
-export async function countPendingRewrites(
-  projectId: string,
-  db: BoundReadDb = getDb(),
-): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(matchQualityProposals)
-    .where(
-      and(
-        eq(matchQualityProposals.projectId, projectId),
-        eq(matchQualityProposals.status, "pending"),
-      ),
-    );
-  return row?.count ?? 0;
-}
-
-export function latestEventAt({
-  latestEventAt: event,
-  latestSpanAt: span,
-}: TracesIngestDiagnostics): Date | null {
-  if (event === null) return span;
-  if (span === null) return event;
-  return event > span ? event : span;
 }

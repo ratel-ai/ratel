@@ -62,6 +62,18 @@ const GRAPH = topologyModel({
   names: new Map(),
 });
 
+const AGGREGATE = {
+  count: 0,
+  errorCount: 0,
+  errorRate: 0,
+  p50DurationMs: null,
+  p95DurationMs: null,
+  p99DurationMs: null,
+  costUsd: 0,
+  totalTokens: 0,
+  volume: [],
+};
+
 function reads(over: Partial<FocusedReads> = {}) {
   const ran: string[] = [];
   const base: FocusedReads = {
@@ -74,6 +86,16 @@ function reads(over: Partial<FocusedReads> = {}) {
     sdkLatestAt: async () => null,
     health: async () => MODEL,
     topology: async () => GRAPH,
+    traces: async () => AGGREGATE,
+    previous: async () => AGGREGATE,
+    dailyTraces: async () => [],
+    sdkDays: async () => [],
+    sdkPrevious: async () => ({ searches: 0, toolCalls: 0, skillRuns: 0 }),
+    fixes: async () => ({ open: [], applied: [], rewritesOn: false }),
+    pendingRewrites: async () => 0,
+    intents: async () => null,
+    tasks: async () => null,
+    dailyAggregates: async () => [],
     context: async () => ({ split: null, suggestions: [], promptCacheHitRate: null }),
     ...over,
   };
@@ -125,13 +147,13 @@ function page(data: FocusedOverviewData, linked = true): string {
   return html;
 }
 
-test("reads telemetry, the health model and the topology, and the context only for its Panel", async () => {
+test("reads the context only for its Panel", async () => {
   const closed = reads();
   await load({}, { reads: closed.reads });
-  assert.deepEqual(closed.ran.sort(), ["health", "sdkLatestAt", "telemetry", "topology"]);
+  assert.ok(!closed.ran.includes("context"));
   const open = reads();
   await load({}, { reads: open.reads, contextOpen: true });
-  assert.deepEqual(open.ran.sort(), ["context", "health", "sdkLatestAt", "telemetry", "topology"]);
+  assert.deepEqual(open.ran.sort(), [...closed.ran, "context"].sort());
 });
 
 test("the page is the header, the health card and the topology", async () => {
