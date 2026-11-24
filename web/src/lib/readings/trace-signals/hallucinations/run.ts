@@ -137,7 +137,7 @@ export async function recordHallucinations(
   const falseSuccess =
     (await deps.loadFalseSuccessTurns?.(projectId, range)) ?? new Map<string, Date>();
   const found: Array<Finding & { turnId: string }> = [];
-  /** Every tool that ran under its own name in the window, and every tool that worked. */
+  /** Every tool that worked under its own name in the window (compared by name, and by id). */
   const ran = new Set<string>();
   const worked = new Set<string>();
   /** Every call that asked for another name than the tool that ran, by pair. */
@@ -174,8 +174,11 @@ export async function recordHallucinations(
       for (const step of turn.steps) {
         const node = nodeIdOf(step);
         if (node === null) continue;
-        ran.add(toolName(node));
-        if (step.outcome === "ok") worked.add(node);
+        // Only a call that worked shows the name is real: a failed one may be the made-up name itself.
+        if (step.outcome === "ok") {
+          ran.add(toolName(node));
+          worked.add(node);
+        }
         const asked = requestedOf(step, facts.requested);
         if (asked !== null && toolName(asked) !== toolName(node)) {
           const key = `${asked}\u0000${node}`;
@@ -245,7 +248,7 @@ export async function recordHallucinations(
     );
   }
 
-  // The guards that need the whole window: a requested name that ran under its own name is an alias the
+  // The guards that need the whole window: a requested name that worked under its own name is an alias the
   // runtime knows, not a made-up tool; a tool whose error said "unknown tool" but that worked elsewhere exists.
   const aliases: StoredAlias[] = [...pairs.values()]
     .filter(

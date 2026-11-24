@@ -225,6 +225,35 @@ test("a requested name that also ran under its own name in the window is an alia
   assert.deepEqual(store.rows, []);
 });
 
+test("a requested name whose own-name calls all failed is no alias: the reroute stays a finding", async () => {
+  const turns = signalTurns([
+    fresh({ session: "a" }).invoke("entity_lookup"),
+    fresh({ session: "b" }).invoke("get_task").error("get_task"),
+  ]);
+  // The second session called `get_task` itself, and it failed: that says nothing about the name.
+  const { run } = harness(
+    turns,
+    { errors: { get_task: "Unknown tool: get_task" } },
+    {
+      loadCallFacts: async (_projectId, ids) => ({
+        errors: new Map(
+          ids.includes(turns[1]!.steps[0]!.traceEventId)
+            ? [[turns[1]!.steps[0]!.traceEventId, "Unknown tool: get_task"]]
+            : [],
+        ),
+        requested: new Map(
+          ids.includes(turns[0]!.steps[0]!.traceEventId)
+            ? [[turns[0]!.steps[0]!.traceEventId, "get_task"]]
+            : [],
+        ),
+        noSuchTool: new Set(),
+      }),
+    },
+  );
+  const result = await run();
+  assert.ok((result?.stored.findings ?? 0) >= 1, "the reroute of a name that never worked is kept");
+});
+
 test("a tool whose error said it does not exist, but that worked elsewhere in the window, exists", async () => {
   const turns = signalTurns([
     fresh({ session: "a" }).invoke("merge_tasks").error("merge_tasks"),
