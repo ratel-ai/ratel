@@ -20,6 +20,9 @@ export type NavItem = {
   keywords?: readonly string[];
 };
 
+/** The open-source edition's name, as `composition.edition` gives it. */
+export const OSS_EDITION = "Ratel OSS";
+
 /** The rail's glyph keys; the console maps each to an icon. Declared here so an edition's nav can name one. */
 export type NavIconName =
   | "overview"
@@ -125,7 +128,7 @@ export function createComposition(
 
   if (editionKey === "oss") {
     base = OSS_PORTS;
-    edition = "Ratel OSS";
+    edition = OSS_EDITION;
     nav = [];
   } else if (editionKey === "cloud") {
     if (ee == null) {

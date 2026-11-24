@@ -26,7 +26,7 @@ import { dbModelFailureStore } from "@/lib/readings/models/status";
  */
 
 /** The edition whose deployment's models the page shows: another edition has its own. */
-export const OSS_EDITION = "Ratel OSS";
+export { OSS_EDITION } from "@/lib/composition/ports";
 
 export interface ModelSettings {
   text: TextSetup;

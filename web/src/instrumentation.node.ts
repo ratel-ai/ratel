@@ -299,8 +299,8 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
   }
   // The models' setup in the log, and each failed call in one sentence kept for the console's
   // Models settings (ADR-0009 §13). The open-source edition's own: another edition reports its own.
-  const { composition } = await import("@/lib/composition");
-  if (composition.edition === "Ratel OSS") {
+  const { composition, OSS_EDITION } = await import("@/lib/composition");
+  if (composition.edition === OSS_EDITION) {
     const { startModelStatus } = await import("@/lib/readings/models/status");
     startModelStatus();
   }
