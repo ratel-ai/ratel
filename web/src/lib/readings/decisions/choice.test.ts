@@ -6,6 +6,7 @@ import { choiceClient } from "./choice";
 import { resolveDecisionEngine, usdPerInputToken } from "./engine";
 import type { CorpusEntry, JudgeCase } from "./judge";
 import { DecisionCallError, OPENAI_USD_PER_INPUT_TOKEN } from "./openai";
+import { judgeEngineOver } from "./openai-judge";
 import { judgeFromConfig } from "./resolve";
 
 /** The settings `env` resolves to (`web/src/config.ts`). */
@@ -435,6 +436,33 @@ test("the judge runs on a named vendor, and is strict until the engine is measur
   // 0.85 clears the OpenAI engine's 0.8, but not an unmeasured engine's 0.9.
   assert.equal(byId.get("2")?.entryId, "");
   assert.equal(byId.get("2")?.confidence, 0.85);
+});
+
+test("the judge's log lines name the vendor that answered, and OpenAI's keep their words", async () => {
+  const lines: Array<{ fields: Record<string, unknown>; message: string }> = [];
+  const log = {
+    info: (fields: Record<string, unknown>, message: string) =>
+      void lines.push({ fields, message }),
+    warn: (fields: Record<string, unknown>, message: string) =>
+      void lines.push({ fields, message }),
+  };
+  const run = async (label: string | undefined) => {
+    lines.length = 0;
+    const engine = judgeEngineOver(
+      {
+        decideChoice: async () => ({
+          answer: { choice: "a", confidence: 0.95, probabilities: { a: 0.95, b: 0.05 } },
+          inputTokens: 10,
+        }),
+      },
+      "m",
+      { ...(label ? { label } : {}), log },
+    );
+    await engine.judge([CASE("1")], CORPUS);
+    return lines.map((line) => [line.message, line.fields.vendor]);
+  };
+  assert.deepEqual(await run("Levanto (Sage)"), [["decision judging finished", "Levanto (Sage)"]]);
+  assert.deepEqual(await run(undefined), [["openai judging finished", "OpenAI"]]);
 });
 
 test("DECISION_MIN_CONFIDENCE sets the threshold once the engine is measured", async () => {

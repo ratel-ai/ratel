@@ -110,8 +110,13 @@ export interface JudgeEngineSettings {
   now?: () => number;
   /** The engine's price, for the dollars the finishing log line reports. */
   usdPerInputToken?: number;
-  /** Who is named when nothing answers. */
+  /** Who is named when nothing answers, and on each log line. */
   label?: string;
+  /** Where the judge's lines go (tests); the module's logger by default. */
+  log?: {
+    info(fields: Record<string, unknown>, message: string): void;
+    warn(fields: Record<string, unknown>, message: string): void;
+  };
 }
 
 /**
@@ -124,6 +129,9 @@ export function judgeEngineOver(
   config: JudgeEngineSettings = {},
 ): JudgeEngine {
   const label = config.label ?? "OpenAI";
+  const log = config.log ?? logger;
+  // OpenAI's lines keep the words they have always had; another vendor's are the decision's.
+  const said = (what: string) => `${label === "OpenAI" ? "openai" : "decision"} judging ${what}`;
   const usdPerInputToken = config.usdPerInputToken ?? OPENAI_USD_PER_INPUT_TOKEN;
   const framing = judgeFraming(config.framing);
   const minConfidence = config.minConfidence ?? OPENAI_MIN_CONFIDENCE;
@@ -178,7 +186,7 @@ export function judgeEngineOver(
           if (err instanceof DecisionCallError && err.reason === "credentials") {
             throw new OpenAIJudgeAuthError(err.message);
           }
-          logger.warn({ err }, "openai judging request failed");
+          log.warn({ err, vendor: label }, said("request failed"));
           unanswered += 1;
           consecutiveFailures += 1;
           if (consecutiveFailures >= OPENAI_MAX_CONSECUTIVE_FAILURES) {
@@ -212,8 +220,9 @@ export function judgeEngineOver(
       }
 
       const answered = verdicts.filter((verdict) => verdict.entryId !== "").length;
-      logger.info(
+      log.info(
         {
+          vendor: label,
           model,
           cases: cases.length,
           answered,
@@ -224,12 +233,18 @@ export function judgeEngineOver(
           input_tokens: inputTokens,
           usd: Number((inputTokens * usdPerInputToken).toFixed(4)),
         },
-        "openai judging finished",
+        said("finished"),
       );
       if (stopped !== null) {
-        logger.warn(
-          { model, reason: stopped, input_tokens: inputTokens, not_asked: cases.length - next },
-          "openai judging stopped early",
+        log.warn(
+          {
+            vendor: label,
+            model,
+            reason: stopped,
+            input_tokens: inputTokens,
+            not_asked: cases.length - next,
+          },
+          said("stopped early"),
         );
       }
       return verdicts;
