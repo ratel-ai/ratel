@@ -199,9 +199,58 @@ test("a server that takes a schema and ignores it is asked again in words, and b
   assert.deepEqual(seen[1].body.response_format, { type: "json_object" });
   assert.equal(seen[2].body.response_format, undefined);
 
-  // What worked is remembered.
+  // One call that missed is not enough to stop asking by schema.
   assert.equal((await model.complete(request)).text, '{"name":"y"}');
   assert.equal(seen.length, 4);
+  assert.equal((seen[3].body.response_format as { type: string }).type, "json_schema");
+});
+
+test("one answer that misses the schema does not move the server down for good", async () => {
+  const { seen, fetchImpl } = server(
+    completion({ content: '{"other":"x"}' }),
+    completion({ content: '{"name":"x"}' }),
+    completion({ content: '{"name":"y"}' }),
+    completion({ content: '{"name":"z"}' }),
+  );
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  for (let call = 0; call < 3; call++) await model.complete(request);
+  assert.deepEqual(
+    seen.map((sent) => (sent.body.response_format as { type?: string } | undefined)?.type),
+    ["json_schema", "json_object", "json_schema", "json_schema"],
+  );
+});
+
+test("three calls in a row that miss the schema move the server down, and it is remembered", async () => {
+  const miss = () => completion({ content: '{"other":"x"}' });
+  const fit = () => completion({ content: '{"name":"x"}' });
+  const { seen, fetchImpl } = server(miss(), fit(), miss(), fit(), miss(), fit(), fit());
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  for (let call = 0; call < 4; call++) await model.complete(request);
+  assert.deepEqual(
+    seen.map((sent) => (sent.body.response_format as { type?: string } | undefined)?.type),
+    [
+      "json_schema",
+      "json_object",
+      "json_schema",
+      "json_object",
+      "json_schema",
+      "json_object",
+      // The third miss in a row: the server is asked as it answered from now on.
+      "json_object",
+    ],
+  );
+});
+
+test("an answer that fits the schema between two misses starts the count again", async () => {
+  const miss = () => completion({ content: '{"other":"x"}' });
+  const fit = () => completion({ content: '{"name":"x"}' });
+  const { seen, fetchImpl } = server(miss(), fit(), miss(), fit(), fit(), miss(), fit(), fit());
+  const model = textModel(fetchImpl);
+  const request = { system: "s", user: "u", maxTokens: 10, schema: SCHEMA };
+  for (let call = 0; call < 5; call++) await model.complete(request);
+  assert.equal((seen.at(-1)?.body.response_format as { type: string }).type, "json_schema");
 });
 
 test("an answer cut off, refused, or that never fits is handed back as it is", async () => {

@@ -48,7 +48,9 @@ import {
  * Servers differ, so the adapter asks for the most and steps down:
  *   - JSON output: by schema (`json_schema`, not strict), then as a JSON object, then by the
  *     prompt alone. A 400 or 422 to a request that carried a `response_format`, or an answer that
- *     ignored it, moves one step down, and what worked is remembered for that server and model.
+ *     ignored it, moves one step down. A refused format is remembered for that server and model at
+ *     once; an ignored one only after it was ignored on that many calls in a row, so one odd
+ *     answer does not cost a server its schemas.
  *   - Thinking a server writes into the answer (`<think>`, `<reasoning>`) is taken out of it.
  *   - Effort goes only to a model that reasons: one the dialect names, or one in
  *     `MODEL_REASONING_MODELS` (comma-separated id prefixes).
@@ -74,9 +76,16 @@ const JSON_LADDER: readonly JsonMode[] = ["json_schema", "json_object", "prompt"
 /** What worked last, per server and model, so the ladder is walked once. */
 const jsonModes = new Map<string, JsonMode>();
 
+/** Calls in a row whose answer ignored the format a server was first asked in, per server and model. */
+const ignoredInARow = new Map<string, number>();
+
+/** A server that ignores its format on this many calls in a row is asked one step down from then on. */
+const IGNORED_TO_STEP_DOWN = 3;
+
 /** Forget what each server took (tests). */
 export function resetJsonModes(): void {
   jsonModes.clear();
+  ignoredInARow.clear();
 }
 
 /** Whether `MODEL_REASONING_MODELS` names this model, by a prefix of its id. */
@@ -293,13 +302,27 @@ function textModel(context: ModelContext, server: Server): TextModel {
     };
   }
 
+  /** Whether the mode that answered is the one this server is asked in from now on. */
+  function remember(mode: JsonMode, first: JsonMode, refused: boolean): void {
+    if (mode === first) {
+      ignoredInARow.delete(server.key);
+      jsonModes.set(server.key, mode);
+      return;
+    }
+    if (!refused && (ignoredInARow.get(server.key) ?? 0) < IGNORED_TO_STEP_DOWN) return;
+    ignoredInARow.delete(server.key);
+    jsonModes.set(server.key, mode);
+  }
+
   /**
    * With a schema: from what this server last took, one step down each time it refuses the format
    * or answers without it. An answer left behind is paid for, so its tokens count.
    */
   async function withSchema(request: TextRequest, schema: Json): Promise<TextReply> {
-    let index = JSON_LADDER.indexOf(jsonModes.get(server.key) ?? "json_schema");
+    const first = jsonModes.get(server.key) ?? "json_schema";
+    let index = JSON_LADDER.indexOf(first);
     let spent: ModelUsage | undefined;
+    let refused = false;
     for (;;) {
       const mode = JSON_LADDER[index];
       try {
@@ -307,11 +330,13 @@ function textModel(context: ModelContext, server: Server): TextModel {
         const usage = spent ? addUsage(spent, reply.usage) : reply.usage;
         const answer = reply.stop === "end" ? objectIn(reply.text) : null;
         if (mode !== "prompt" && reply.stop === "end" && !fits(answer, schema)) {
+          if (mode === first)
+            ignoredInARow.set(server.key, (ignoredInARow.get(server.key) ?? 0) + 1);
           spent = usage;
           index += 1;
           continue;
         }
-        if (reply.stop === "end") jsonModes.set(server.key, mode);
+        if (reply.stop === "end") remember(mode, first, refused);
         // A feature that asked for JSON gets JSON, whatever the model put around it.
         const text = answer && !isJson(reply.text) ? JSON.stringify(answer) : reply.text;
         return { ...reply, text, usage };
@@ -319,6 +344,7 @@ function textModel(context: ModelContext, server: Server): TextModel {
         const refusedFormat =
           error instanceof ModelHttpError && (error.status === 400 || error.status === 422);
         if (!refusedFormat || mode === "prompt") throw error;
+        refused = true;
         index += 1;
       }
     }
