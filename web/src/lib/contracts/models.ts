@@ -16,11 +16,16 @@ export type ModelEffort = "low" | "medium" | "high" | "xhigh";
  */
 export type ModelStop = "end" | "cut_off" | "refused";
 
-/** Tokens of one call. `inputTokens` counts every prompt token, the cached ones included. */
+/**
+ * Tokens of one call. `inputTokens` counts every prompt token, the cached ones included, on every
+ * vendor but one: a Claude model keeps the accounting its call sites have always priced
+ * (ADR-0009 §7), where `inputTokens` is the prompt without the cache read and `cachedTokens` is
+ * the read beside it. Add the two for a Claude prompt's size.
+ */
 export interface ModelUsage {
   inputTokens: number;
   outputTokens: number;
-  /** The part of `inputTokens` read from the provider's cache. */
+  /** Tokens read from the provider's cache: a part of `inputTokens`, except on a Claude model. */
   cachedTokens?: number;
 }
 
