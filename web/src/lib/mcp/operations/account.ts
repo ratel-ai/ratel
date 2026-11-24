@@ -64,6 +64,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "toolRunInsights",
     note: "tool-run insights: Tasks from small projects, derived asks for tool-only runs, agent runs from invoke_agent spans, Agent health from 10 turns",
   },
+  {
+    key: "focusedConsole",
+    note: "the simplified console: Agent health as the score and its categories, Self-corrections under Insights",
+  },
 ];
 
 export interface AccountOperationDeps {
