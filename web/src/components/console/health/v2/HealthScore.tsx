@@ -146,7 +146,7 @@ export function HealthScore({
 }
 
 /** The ring of pixels, the number in its middle, and the band under it. */
-function ScoreRing({
+export function ScoreRing({
   value,
   target,
   tone,
@@ -230,7 +230,7 @@ function RingPixel({
   );
 }
 
-function ScoreChange({ change }: { change: ReturnType<typeof scoreCopy>["change"] }) {
+export function ScoreChange({ change }: { change: ReturnType<typeof scoreCopy>["change"] }) {
   if (!change)
     return <span className="text-ui text-fg-subtle">Your first reading with a score</span>;
   const Icon =
