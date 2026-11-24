@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import { RootCauseView } from "@/components/console/sentiment/RootCauseView";
-import { getProjectScope } from "@/lib/console/scope/project-scope";
-import { isDbConfigured } from "@/lib/platform/db/client";
 import { getAgentHealthLimits } from "@/lib/platform/entitlements";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import { sentimentAnalysisEnabled } from "@/lib/readings/trace-signals/outcomes/gate";
 import { windowOptionsForPlan } from "@/lib/readings/trace-signals/view";
 import { loadSentimentPage } from "@/lib/views/traces/sentiment/page-load";
 import { unavailableSentimentPage } from "@/lib/views/traces/sentiment/page-model";
@@ -13,6 +10,7 @@ import {
   parseSentimentWindow,
   sentimentHref,
 } from "@/lib/views/traces/sentiment/page-paths";
+import { sentimentPageScope } from "@/lib/views/traces/sentiment/page-scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Root cause analysis" };
@@ -34,10 +32,10 @@ export default async function RootCauseAnalysisPage({
   params: Promise<{ projectId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (!isDbConfigured()) notFound();
   const { projectId } = await params;
-  const { project, organization } = await getProjectScope(projectId);
-  if (!(await sentimentAnalysisEnabled(organization))) notFound();
+  const scope = await sentimentPageScope(projectId);
+  if (!scope) notFound();
+  const { project, organization } = scope;
 
   const search = await searchParams;
   const limits = getAgentHealthLimits(organization);

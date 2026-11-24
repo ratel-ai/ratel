@@ -186,3 +186,23 @@ test("the shell decides sentimentAnalysis per organization and the rail reads it
     /sentimentOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*sentiment,/,
   );
 });
+
+test("Sentiment analysis and Root cause analysis are not found unless sentimentPageScope gives a project", () => {
+  // The decision itself is tested in `views/traces/sentiment/page-scope.test.ts`.
+  for (const page of [
+    "app/(console)/project/[projectId]/traces/sentiment/page.tsx",
+    "app/(console)/project/[projectId]/health/root-causes/page.tsx",
+  ]) {
+    const text = source(page);
+    assert.match(
+      text,
+      /const scope = await sentimentPageScope\(projectId\);\s*if \(!scope\) notFound\(\);/,
+      page,
+    );
+    assert.doesNotMatch(
+      text,
+      /getProjectScope\(/,
+      `${page} reads its project only through the check`,
+    );
+  }
+});
