@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  queryClass,
   type SearchContext,
   unmetSearches,
 } from "@/lib/readings/trace-signals/outcomes/search-fit";
@@ -114,4 +115,31 @@ test("a run with a call after it, and a catalog listing, are never unmet", () =>
     fresh(),
   );
   assert.deepEqual(unmet(listing, []), []);
+});
+
+test("a search's verb is the action it opens with, past filler; a noun that looks like a verb is none", () => {
+  const cases: Array<[string, string | null]> = [
+    ["delete image", "remove"],
+    ["create task", "create"],
+    ["find a tool to send email", "create"],
+    ["how do I look up a customer", null],
+    ["how do I delete a customer", "remove"],
+    ["tool to archive the board", "remove"],
+    ["please update the ticket status", "change"],
+    // Nouns that look like verbs, and words that open no action.
+    ["blog post comments", null],
+    ["list of new users to delete", null],
+    ["set up a meeting", null],
+    ["order status", null],
+    ["image assets", null],
+    ["", null],
+  ];
+  for (const [query, expected] of cases) assert.equal(queryClass(query), expected, query);
+});
+
+test("a search worded as a sentence is not unmet on a wrongly read verb", () => {
+  // "post" is a noun here: no verb is read, so nothing is said.
+  assert.deepEqual(unmet(fresh().search(["get_comments"]), ["blog post comments"]), []);
+  // The action after the filler is the one compared.
+  assert.deepEqual(unmet(fresh().search(["send_email"]), ["find a tool to send email"]), []);
 });

@@ -51,14 +51,29 @@ export interface UnmetSearch {
   offered: string[];
 }
 
-/** The kind of action a search's words ask for: their first known verb. */
-export const queryClass = (query: string): ActionClass | null =>
-  actionClassOf(
-    query
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_"),
-  );
+/** Words a search may open with before its action: "find a tool to", "how do I", "please". */
+const FILLER =
+  /^(?:please|can you|could you|help me(?: to)?|i (?:want|need) to|how (?:do|can) i|how to|is there a way to|(?:find |search for |get )?(?:me )?(?:a |the )?tool (?:to|for|that|which)|something (?:to|that))\s+/;
+
+/** A word after the verb that makes it a noun or a phrasal verb: "list of …", "set up …". */
+const NOT_THE_ACTION = new Set(["of", "up", "out", "off"]);
+
+/**
+ * The kind of action a search's words ask for: the verb it opens with, once
+ * filler is taken off ("find a tool to send email" asks to send). A search
+ * that does not open with a known verb ("blog post comments", "order status")
+ * asks for none, so nothing is said of it.
+ */
+export function queryClass(query: string): ActionClass | null {
+  let text = query.trim().toLowerCase();
+  for (let before = ""; before !== text; ) {
+    before = text;
+    text = text.replace(FILLER, "");
+  }
+  const [verb, next] = text.split(/[^a-z0-9]+/).filter(Boolean);
+  if (!verb || (next !== undefined && NOT_THE_ACTION.has(next))) return null;
+  return actionClassOf(verb);
+}
 
 /**
  * What a search listed, best first; null when it cannot be told in full. An
