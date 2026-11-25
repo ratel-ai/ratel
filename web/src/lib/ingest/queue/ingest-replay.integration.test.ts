@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   addToRange,
   emptyRange,
+  keepPartialTraces,
   type ReplayRange,
   rebuildHandler,
   removeRange,
@@ -176,9 +177,11 @@ async function rebuild(
   isMargin = (_: Envelope) => false,
 ) {
   const range: ReplayRange = emptyRange();
-  for (const envelope of envelopes) if (!isMargin(envelope)) addToRange(range, envelope);
+  for (const envelope of envelopes) addToRange(range, envelope, isMargin(envelope));
+  const kept = await keepPartialTraces(deployment.db, range);
   await removeRange(deployment.db, range);
   await deliver(rebuildHandler(replayHandler(deployment), range, isMargin), envelopes);
+  return kept;
 }
 
 test("FILL restores rows deleted by hand, leaves the others unchanged and counts nothing", async () => {
@@ -239,5 +242,21 @@ test("REBUILD of a range leaves other traces alone, and makes a trace that began
     { trace_id: TRACE_A, name: "chat" },
   ]);
   await deployment.client.exec(`update otel_spans set name = 'chat'`);
+  assert.deepEqual(await stored(deployment), before);
+});
+
+test("REBUILD keeps a trace that has a span no envelope holds, and rebuilds the others", async () => {
+  const { deployment, envelopes } = await ingested();
+  // Stored before the organization was on a topic, or copied: in no envelope.
+  const direct: Envelope[] = [];
+  await ingestTraces(deployment, [traces(chatSpan(TRACE_A, "c".repeat(16), 30))], {
+    publish: async (envelope) => void direct.push(envelope),
+  });
+  await deliver(envelopeHandler(deployment), direct);
+  const before = await stored(deployment);
+  await deployment.client.exec(`
+    update otel_spans set name = 'wrong' where trace_id = '${TRACE_B}';
+    delete from events where trace_id = '${TRACE_A}' and span_id = '${"a".repeat(16)}'`);
+  assert.equal(await rebuild(deployment, envelopes), 1);
   assert.deepEqual(await stored(deployment), before);
 });
