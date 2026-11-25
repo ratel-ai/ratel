@@ -140,36 +140,83 @@ test("a client call with no agent of its own comes from its parent's agent, thro
   }
 });
 
-test("a call both sides recorded counts once, and one more that only the server recorded counts too", async () => {
+test("a call both sides recorded counts once", async () => {
+  // Beside the seed's three calls of `claude` to `board`, at 100 and 200 in trace 1.
+  const counted = await boardEdges([
+    // Under the client's span, at another time: the two clocks differ.
+    span(20, 9_000, 1, { ...provided("board"), parentSpanId: spanId(3) }),
+    // Under a transport span of the client.
+    span(21, 105, 1, { agentKey: "claude", agentSource: "sdk", parentSpanId: spanId(2) }),
+    span(22, 110, 1, { ...provided("board"), parentSpanId: spanId(21) }),
+  ]);
+  assert.deepEqual(counted, { "agent:claude > mcp:board": [3, 1] });
+});
+
+test("a server-only call in another trace counts, beside a client call to the same server", async () => {
+  assert.deepEqual(await boardEdges([span(20, 100, 9, provided("board"))]), {
+    "agent:claude > mcp:board": [3, 1],
+    "project > mcp:board": [1, 0],
+  });
+});
+
+test("two server-only calls beside one matched pair count three", async () => {
+  const counted = await serverEdges("solo", [
+    span(20, 100, 8, call("solo", "claude")),
+    span(21, 110, 8, { ...provided("solo"), parentSpanId: spanId(20) }),
+    // Same trace and time as the pair, and another trace.
+    span(22, 115, 8, provided("solo")),
+    span(23, 120, 9, provided("solo")),
+  ]);
+  assert.deepEqual(counted, { "agent:claude > mcp:solo": [1, 0], "project > mcp:solo": [2, 0] });
+});
+
+test("two calls in one trace count two: at another time, of another tool, of another caller", async () => {
+  const client = span(20, 100, 1, call("solo", "claude"));
+  const under = (parent: number) => ({ ...provided("solo"), parentSpanId: spanId(parent) });
+  assert.deepEqual(await serverEdges("solo", [client, span(21, 700, 1, under(1))]), {
+    "agent:claude > mcp:solo": [2, 0],
+  });
+  assert.deepEqual(
+    await serverEdges("solo", [
+      client,
+      span(21, 110, 1, { ...under(1), name: "tools/call write" }),
+    ]),
+    { "agent:claude > mcp:solo": [2, 0] },
+  );
+  assert.deepEqual(await serverEdges("solo", [client, span(21, 110, 1, under(4))]), {
+    "agent:claude > mcp:solo": [1, 0],
+    "agent:Explore > mcp:solo": [1, 0],
+  });
+});
+
+test("parallel calls of one tool with no parent link pair one to one", async () => {
+  const parallel = [
+    span(20, 100, 1, call("solo", "claude")),
+    span(21, 101, 1, call("solo", "claude")),
+    span(22, 110, 1, provided("solo")),
+    span(23, 111, 1, provided("solo", true)),
+  ];
+  assert.deepEqual(await serverEdges("solo", parallel), { "agent:claude > mcp:solo": [2, 0] });
+  assert.deepEqual(await serverEdges("solo", [...parallel, span(24, 112, 1, provided("solo"))]), {
+    "agent:claude > mcp:solo": [2, 0],
+    "project > mcp:solo": [1, 0],
+  });
+});
+
+const boardEdges = (spans: NewOtelSpan[]) => serverEdges("board", spans);
+
+/** The seed's edges to one server, with more spans. */
+async function serverEdges(server: string, spans: NewOtelSpan[]) {
   const { client, db } = await seeded();
   try {
-    await insertOtelSpans(
-      PROJECT_ID,
-      [
-        // The server's span under the client's.
-        span(20, 210, 1, { ...provided("board"), parentSpanId: spanId(3) }),
-        // The server's span under a transport span of the client.
-        span(21, 600, 1, { agentKey: "claude", agentSource: "sdk", parentSpanId: spanId(2) }),
-        span(22, 610, 1, { ...provided("board"), parentSpanId: spanId(21) }),
-        // The server's span in a trace of its own: whose call it is cannot be known.
-        span(23, 620, 9, provided("board")),
-      ],
-      db,
+    await insertOtelSpans(PROJECT_ID, spans, db);
+    return Object.fromEntries(
+      Object.entries(edges(await read(db))).filter(([edge]) => edge.endsWith(`mcp:${server}`)),
     );
-    assert.deepEqual(edges(await read(db))["agent:claude > mcp:board"], [3, 1]);
-    assert.equal(edges(await read(db))["project > mcp:board"], undefined);
-    await insertOtelSpans(
-      PROJECT_ID,
-      [span(24, 700, 1, { ...provided("board"), parentSpanId: spanId(4) })],
-      db,
-    );
-    const graph = edges(await read(db));
-    assert.deepEqual(graph["agent:claude > mcp:board"], [3, 1]);
-    assert.deepEqual(graph["agent:Explore > mcp:board"], [1, 0]);
   } finally {
     await client.close();
   }
-});
+}
 
 function read(db: TestDb): Promise<Topology> {
   return readTopology(PROJECT_ID, WINDOW, { agents: createDrizzleAgentStore(db), db });
