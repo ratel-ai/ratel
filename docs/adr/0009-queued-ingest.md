@@ -36,12 +36,12 @@ the core's routes and from any other writer.
 |---|---|---|---|
 | Content type | 415 | | Traces, logs: protobuf or JSON. Events: JSON only. |
 | Declared and streamed size, 4,000,000 bytes | 413 | | The body as received, before decompression. |
-| Key, scope | 401, 403 | | Traces and logs answer 415 and 413 (declared size) after a missing key and before the lookup, events before both, as today. |
-| Project's organization | 401 without one | | Its id goes in the envelope. |
+| Key, scope | 401, 403, 503 without a database | | Traces and logs answer 415 and 413 (declared size) after a missing key and before the lookup, events before both, as today. |
+| Project's organization | never refuses | current row | `organizationId` is read with the key, from the project row (`projects.organization_id`, not null). No organization row: no quota check and no metering, as today. |
 | Request rate limit | 429, `Retry-After` | | Shared keys: per key and per source. Secret keys on events: 120 a minute. |
 | Monthly event quota (`checkEventQuota`), traces | 429 | | From an answer cached for at most 60 s per organization, so a 429 can start or stop up to 60 s late. Not for a metered organization. Process never asks again. |
 | `isMetered`, traces | cached, 60 s | yes | Accept only asks whether the quota applies. Process asks again before it meters. |
-| `Content-Encoding`, traces and logs | 415 | | Absent, `identity`, `gzip`, `x-gzip` or `deflate`. Events carry none: the body is JSON as sent. |
+| `Content-Encoding`, traces and logs | 415 | | Absent, `identity`, `gzip`, `x-gzip` or `deflate`. On events the header is ignored, as today: the body is JSON as sent. |
 | Decompression, 16,000,000 bytes | shared keys only | yes | See *Shared keys*. |
 | Events shape: JSON with an `events` array of at most 5,000 | 400, 413 | yes | The answer needs the count. |
 | Item budget (`chargeItems`) | shared keys only | | See *Shared keys*. |
@@ -61,11 +61,17 @@ the core's routes and from any other writer.
 before the message is durable. For these keys only, accept decompresses the body under the
 16,000,000-byte limit and counts spans, records or events. The count is a walk of the outer
 structure; nothing is mapped. A body that cannot be counted answers 400, and an over-large one
-413, as today. The body of a secret key's OTLP export is not read beyond its bytes.
+or one with too many items 413, as today; only the detail after `Malformed OTLP payload:` can
+differ. The walk is not the decoder: a body that it can count and the decoder refuses answers
+202 and becomes a dead letter. The body of a secret key's OTLP export is not read beyond its
+bytes.
 
 ### Answers
 
-Refusals keep today's status and body. A success is 202 and no longer depends on storage:
+Each refusal in the Accept column keeps today's status and body, except *Publish*, whose 503
+is the one new refusal. The refusals that need decoded or stored data are gone: the meter's 429
+and the storage 500 for every key, and the 400 and 413 of decompression and OTLP decode for
+secret keys. A success is 202 and no longer depends on storage:
 
 | Signal | Request type | Body | Headers |
 |---|---|---|---|
@@ -75,9 +81,12 @@ Refusals keep today's status and body. A success is 202 and no longer depends on
 
 - No `x-ratel-*` header is sent. The counts of OTLP JSON bodies (`accepted`, `calls`, `spans`,
   `refused`, `records`, `dropped`) are gone.
-- `duplicates` is always 0, and `rejected` is always empty: a reject is found at process time
-  and shows in Settings > Developer. The SDK reads a missing reject as accepted.
-- A failed publish is 503 with `{"error": "Ingestion is not available. Try again."}` and
+- `duplicates` is always 0, and `rejected` is always empty. This is deliberate, and differs from
+  the plan that this record came from, which returned the rejects. To fill the list, every
+  writer of the queue needs the per-event validation, and that stays in one place, in
+  TypeScript. Process finds a reject and stores it in `trace_event_rejects`, and it shows in
+  Settings > Developer. The SDK reads a missing reject as accepted.
+- A failed publish is 503 (the new refusal) with `{"error": "Ingestion is not available. Try again."}` and
   `Retry-After: 5`. A publish that does not confirm in 10 s is a failure, and can still have
   been written: the retry is then a duplicate, which storage drops.
 - In `direct` mode, every answer stays as it is today.
