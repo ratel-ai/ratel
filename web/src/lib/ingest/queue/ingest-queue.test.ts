@@ -46,6 +46,24 @@ test("the Kafka driver loads when it is the configured one", async () => {
   assert.equal(loaded("aws-msk-iam-sasl-signer-js"), false, "only with IAM");
 });
 
+test("Kafka without a topic to publish to only consumes: the routes stay direct", async () => {
+  const kafka = { INGEST_QUEUE: "kafka", INGEST_KAFKA_BROKERS: "a:9092" };
+  configure(kafka);
+  assert.ok(await ingestQueue());
+  assert.equal(await ingestAccept(), undefined);
+  configure({ ...kafka, INGEST_KAFKA_TOPIC: "ingest" });
+  assert.ok(await ingestAccept());
+});
+
+test("a group per topic needs a dead-letter topic per topic", async () => {
+  configure({
+    INGEST_QUEUE: "kafka",
+    INGEST_KAFKA_BROKERS: "a:9092",
+    INGEST_KAFKA_GROUP_ID: "ratel-ingest.{topic}",
+  });
+  await assert.rejects(ingestQueue(), /must both hold \{topic\}/);
+});
+
 test("the IAM login needs its region", async () => {
   const kafka = {
     INGEST_QUEUE: "kafka",
