@@ -41,7 +41,8 @@ export function BaselineActions({
         : {}),
     }).catch(() => null);
     if (response?.ok || response?.status === 409) router.refresh();
-    if (response?.status === 409) setError("Another person changed the baseline.");
+    if (method === "DELETE" && response?.status === 409)
+      setError("Another person changed the baseline.");
     else if (!response?.ok) setError("The baseline did not change. Try again.");
     setPending(false);
   }
