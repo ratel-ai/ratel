@@ -211,6 +211,10 @@ const CONFIG_SCHEMA = schema({
     /** The project those calls write to, whose own analysis is not exported. */
     projectId: optional("RATEL_SELF_TELEMETRY_PROJECT_ID", configured),
   },
+  /** Service-to-service routes (`docs/internal-api.md`). Unset: they answer 404. */
+  internal: {
+    secret: optional("RATEL_INTERNAL_SECRET", configured, { sensitive: true }),
+  },
   ingest: {
     /**
      * Where accept puts a request (ADR-0009). `direct`: nowhere, the request stores it. `postgres`

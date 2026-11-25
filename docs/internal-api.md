@@ -1,0 +1,66 @@
+# Internal API
+
+Routes for a service that stands in front of a Ratel deployment, such as an ingest gateway. They
+are off by default and never take an API key.
+
+This file is the one definition of these routes. Other implementations (Ratel Cloud's
+`apps/web/lib/internal-auth`, the ingest gateway's client) follow it. A change here is a change
+there.
+
+## Access
+
+- Set `RATEL_INTERNAL_SECRET` (`internal.secret`) to a random value of at least 32 characters.
+- Send it as `Authorization: Bearer <value>`. It is compared in constant time.
+- Unset or shorter: every internal route answers 404.
+- A wrong or missing value: 401 `{"error": "Unauthorized."}`.
+
+Do not publish the routes to clients: keep them out of any public path list of the load balancer.
+
+## `POST /api/internal/keys/resolve`
+
+Who an API key belongs to, and what its limits are.
+
+Request: `{"keyHash": "<SHA-256 of the key, 64 lowercase hex characters>"}`. The key itself is never
+sent. Never log the hash.
+
+| Answer | Meaning |
+|---|---|
+| 200 `{"found": false}` | The key is unknown, revoked or expired. |
+| 200, `found` true | See below. |
+| 400 | The body is not as above. |
+| 401, 404 | Access is wrong, or the route is off. Not an answer about the key. |
+| 503, `Retry-After` | Ask again. Not an answer about the key. |
+
+```json
+{
+  "found": true,
+  "keyId": "uuid",
+  "projectId": "uuid",
+  "organizationId": "uuid",
+  "scopes": ["*"],
+  "ingest": ["ingest:traces", "ingest:logs", "ingest:events"],
+  "expiresAt": null,
+  "keyPolicy": {
+    "access": "full",
+    "publishable": false,
+    "sharedKeyLimits": false,
+    "appendOnlyIngest": false
+  },
+  "limits": { "shared": null, "events": { "perMinute": 120, "burst": 240 } },
+  "quota": { "limit": 50000, "used": 1200, "exceeded": false }
+}
+```
+
+- `scopes` are stored as they are; `*` is every scope. `ingest` is the list of ingest scopes the key
+  may use, worked out by the key's policy. Use `ingest` to decide.
+- `expiresAt` is ISO 8601 or null. A cache must not outlive it.
+- `keyPolicy.appendOnlyIngest` and `keyPolicy.sharedKeyLimits` go into the envelope
+  ([ADR 0009](adr/0009-queued-ingest.md)).
+- `limits` are token buckets: `perMinute` is the refill, `burst` the size.
+  - `shared`, for a key with `sharedKeyLimits`, else null: `requests` and `items`, each with
+    `perKey` and `perSource`. One budget for traces, logs and events together. A source is a key
+    and an address (IPv6 by its /64). Charge the source first; a refused source does not charge
+    the key.
+  - `events`, for a secret key, else null: requests to `POST /api/v1/events`, per key.
+- `quota` is the organization's monthly trace quota. It applies to traces only. `limit` null: there
+  is none. `used` null: not reported. Decide with `exceeded`.

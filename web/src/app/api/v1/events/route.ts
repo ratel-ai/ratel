@@ -1,4 +1,5 @@
 import { ingestAccept } from "@/lib/ingest/queue/ingest-queue";
+import { SECRET_KEY_EVENTS_BUCKET } from "@/lib/ingest/ingest-limits";
 import { insertTraceEventRejects, insertTraceEvents } from "@/lib/ingest/trace-events/queries";
 import { handleRuntimeEventsRequest } from "@/lib/ingest/trace-events/route-handler";
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
@@ -22,8 +23,8 @@ import {
 export const runtime = "nodejs";
 
 const runtimeEventsRateLimiter = createTokenBucketRateLimiter({
-  limitPerMinute: 120,
-  burst: 240,
+  limitPerMinute: SECRET_KEY_EVENTS_BUCKET.perMinute,
+  burst: SECRET_KEY_EVENTS_BUCKET.burst,
 });
 
 /**

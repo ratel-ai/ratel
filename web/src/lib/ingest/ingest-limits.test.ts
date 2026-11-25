@@ -6,6 +6,7 @@ import {
   DEFAULT_PUBLISHABLE_KEY_LIMIT_PER_MINUTE,
   ingestRateLimitedResponse,
   publishableLimitOptionsFromConfig,
+  resolvedKeyLimits,
   sourceBucket,
 } from "@/lib/ingest/ingest-limits";
 
@@ -175,4 +176,28 @@ test("an IPv6 source is one bucket per /64", () => {
     "rotating inside the /64 buys nothing",
   );
   assert.ok(limits.check(from("2001:db8:abcd:13::1"), KEY).allowed);
+});
+
+test("a gateway is told the same ceilings the limiter applies", () => {
+  const options = { perKeyPerMinute: 6_000, perSourcePerMinute: 120 };
+  assert.deepEqual(
+    resolvedKeyLimits({ rateLimitPerMinute: 600 }, { sharedKeyLimits: true }, options),
+    {
+      shared: {
+        requests: {
+          perKey: { perMinute: 600, burst: 1_200 },
+          perSource: { perMinute: 120, burst: 240 },
+        },
+        items: {
+          perKey: { perMinute: 6_000, burst: 12_000 },
+          perSource: { perMinute: 1_200, burst: 2_400 },
+        },
+      },
+      events: null,
+    },
+  );
+  assert.deepEqual(resolvedKeyLimits({ rateLimitPerMinute: null }, { sharedKeyLimits: false }), {
+    shared: null,
+    events: { perMinute: 120, burst: 240 },
+  });
 });
