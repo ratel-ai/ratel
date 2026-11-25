@@ -1,7 +1,6 @@
 import { scheduleProjectDrain } from "@/lib/jobs/route-helpers";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { handleHoldsGet, handleHoldsPost, storedHolds } from "@/lib/platform/org-hold/holds-route";
-import { getOrganizationById } from "@/lib/platform/organizations";
 import { withRequestLog } from "@/lib/platform/request-log";
 
 export const runtime = "nodejs";
@@ -9,7 +8,6 @@ export const runtime = "nodejs";
 const deps = {
   ...storedHolds,
   isDbConfigured,
-  organizationExists: async (id: string) => (await getOrganizationById(id)) !== null,
   startJobs: (projectId: string) => scheduleProjectDrain(projectId),
 };
 

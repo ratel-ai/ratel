@@ -100,3 +100,61 @@ test("the scheduled sweeps skip a held project and take the other", async () => 
     };
   }
 });
+
+test("held before it exists: what arrives with it is swept by nothing, and its telemetry is stored", async () => {
+  const deployment = await setupDeployment();
+  const { client, db } = deployment;
+  // As before a copy: the organization is not here, its hold is.
+  await client.exec(`
+    delete from projects where id = '${PROJECT_ID}';
+    delete from organizations where id = '${ORGANIZATION_ID}'`);
+  await setHold(HOLD, db);
+  await client.exec(`begin;
+    insert into organizations (id, name, slug) values ('${ORGANIZATION_ID}', 'Acme', 'acme'), ('${OTHER_ORG}', 'Globex', 'globex');
+    insert into projects (id, organization_id, name, slug, intent_graph_folded_through, trace_turns_built_through) values
+      ('${PROJECT_ID}', '${ORGANIZATION_ID}', 'Agent', 'agent', '2026-01-01', '2026-01-01'),
+      ('${OTHER}', '${OTHER_ORG}', 'Agent', 'agent', '2026-01-01', '2026-01-01');
+    insert into jobs (project_id, kind, status) values ('${PROJECT_ID}', 'x', 'queued');
+    commit;`);
+  const bodies = loadFixture("vercel-ai");
+  const queue = spoolQueue(deployment);
+  for (const body of bodies) {
+    await queue.publish({
+      version: 1,
+      id: crypto.randomUUID(),
+      projectId: PROJECT_ID,
+      organizationId: ORGANIZATION_ID,
+      keyId: crypto.randomUUID(),
+      keyPolicy: { appendOnlyIngest: false, sharedKeyLimits: false },
+      signal: "traces",
+      contentType: body.contentType as "application/json",
+      contentEncoding: "identity",
+      receivedAt: Date.now(),
+      body: body.bytes,
+    });
+  }
+  await drain(queue, envelopeHandler(deployment), bodies.length);
+  const { rows } = await client.query<{ n: number }>(
+    `select count(*)::int as n from otel_spans where project_id = '${PROJECT_ID}'`,
+  );
+  assert.ok((rows[0]?.n ?? 0) > 0, "the consumer stores what arrives");
+
+  assert.equal(await claimNextQueuedJob(undefined, undefined, db), null);
+  assert.equal(await claimNextQueuedJob(PROJECT_ID, undefined, db), null);
+  await client.exec(`
+    update trace_events set type = 'search', query = 'q', ingest_source = 'runtime', occurred_at = now() - interval '1 hour'`);
+  const due = async () => {
+    const folds = await listProjectsWithUnfoldedEvents(db, { commitLagMs: 0, retentionDays: 400 });
+    const builds = await listProjectsDueTraceTurnBuild(db);
+    return [folds, builds].map((rows) => rows.some(({ id }) => id === PROJECT_ID));
+  };
+  assert.deepEqual(await due(), [false, false]);
+  assert.deepEqual(await enqueueDueQueryCategorizations(db, 1), { enqueued: 0 });
+  await client.exec(`update otel_spans set received_at = now() - interval '90 days'`);
+  assert.equal(await pruneExpiredOtelSpans({}, db), 0);
+
+  await client.exec("delete from jobs");
+  await clearHold(HOLD, db);
+  assert.deepEqual(await due(), [true, true], "only the hold kept them away");
+  assert.ok((await pruneExpiredOtelSpans({}, db)) > 0);
+});

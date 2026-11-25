@@ -14,8 +14,7 @@ import {
 export interface HoldsRouteDeps {
   config?: InternalConfig;
   isDbConfigured: () => boolean;
-  /** Whether the edition knows the organization. */
-  organizationExists: (organizationId: string) => Promise<boolean>;
+  /** An organization's projects: none when it is not here yet. Null for an unknown project. */
   projectsOfScope: (scope: HoldScope) => Promise<string[] | null>;
   setHold: (scope: HoldScope) => Promise<void>;
   clearHold: (scope: HoldScope) => Promise<number>;
@@ -83,12 +82,9 @@ async function answer(
 ): Promise<Response> {
   if (!deps.isDbConfigured()) return unavailable();
   try {
-    const known =
-      scope.kind === "projects" || (await deps.organizationExists(scope.organizationId));
-    const projectIds = known ? await deps.projectsOfScope(scope) : null;
-    if (!projectIds) {
-      return Response.json({ error: "Unknown organization or project." }, { status: 404 });
-    }
+    // An organization need not be here: its hold has to exist before its first row does.
+    const projectIds = await deps.projectsOfScope(scope);
+    if (!projectIds) return Response.json({ error: "Unknown project." }, { status: 404 });
     await change(projectIds);
     return Response.json(await deps.holdStatus(scope, projectIds));
   } catch (err) {

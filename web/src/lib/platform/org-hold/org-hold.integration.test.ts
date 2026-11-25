@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { drizzle } from "drizzle-orm/pglite";
+import { claimNextQueuedJob } from "@/lib/jobs/queries";
 import type { getDb } from "@/lib/platform/db/client";
 import * as schema from "@/lib/platform/db/tables";
 import { createMigratedPGlite } from "@/lib/platform/db/test-support";
@@ -14,6 +15,7 @@ const OTHER_ORG = "bbbbbbbb-0000-4000-8000-000000000001";
 const A = "aaaaaaaa-0000-4000-8000-000000000002";
 const A2 = "aaaaaaaa-0000-4000-8000-000000000003";
 const B = "bbbbbbbb-0000-4000-8000-000000000002";
+const UNKNOWN = "cccccccc-0000-4000-8000-000000000002";
 const VALUE = "s".repeat(44);
 
 async function setup() {
@@ -32,7 +34,6 @@ test("the route sets, reads and clears a hold, and clearing starts the jobs", as
   const deps: HoldsRouteDeps = {
     config: { internal: { secret: VALUE } },
     isDbConfigured: () => true,
-    organizationExists: async (id) => id === ORG || id === OTHER_ORG,
     projectsOfScope: (scope) => projectsOfScope(scope, db),
     setHold: (scope) => setHold(scope, db),
     clearHold: (scope) => clearHold(scope, db),
@@ -70,7 +71,16 @@ test("the route sets, reads and clears a hold, and clearing starts the jobs", as
   ]) {
     assert.equal((await post(bad)).status, 400, JSON.stringify(bad));
   }
-  assert.equal((await post({ action: "hold", organizationId: B })).status, 404);
+  for (const unknown of ["not-a-uuid", ORG.toUpperCase(), `${ORG}x`, 7, null]) {
+    assert.equal(
+      (await post({ action: "hold", organizationId: unknown })).status,
+      400,
+      `${unknown}`,
+    );
+  }
+  assert.equal((await post({ action: "hold", projectIds: [UNKNOWN] })).status, 404);
+  assert.equal((await post({ action: "clear", projectIds: [A, UNKNOWN] })).status, 404);
+  assert.equal((await get(`projectId=${UNKNOWN}`)).status, 404);
 
   const held = await post({ action: "hold", organizationId: ORG });
   assert.deepEqual([held.status, held.body.state, held.body.projectIds], [200, "held", [A, A2]]);
@@ -87,6 +97,77 @@ test("the route sets, reads and clears a hold, and clearing starts the jobs", as
   assert.equal((await get(`projectId=${A}&projectId=${A2}`)).body.state, "none");
   deps.config = { internal: { secret: undefined } };
   assert.equal((await get(`projectId=${A}`)).status, 404);
+});
+
+test("the route holds an organization that does not exist yet, and clears it before and after", async () => {
+  const { client, db } = await setup();
+  const NEW_ORG = "dddddddd-0000-4000-8000-000000000001";
+  const NEW = "dddddddd-0000-4000-8000-000000000002";
+  const started: string[] = [];
+  const deps: HoldsRouteDeps = {
+    config: { internal: { secret: VALUE } },
+    isDbConfigured: () => true,
+    projectsOfScope: (scope) => projectsOfScope(scope, db),
+    setHold: (scope) => setHold(scope, db),
+    clearHold: (scope) => clearHold(scope, db),
+    holdStatus: (scope, ids) => holdStatus(scope, ids, db),
+    invalidate: () => undefined,
+    startJobs: (id) => started.push(id),
+  };
+  const call = async (action?: "hold" | "clear", authorization = `Bearer ${VALUE}`) => {
+    const url = "https://app.test/api/internal/holds";
+    const headers = { authorization };
+    const res = action
+      ? await handleHoldsPost(
+          new Request(url, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ action, organizationId: NEW_ORG }),
+          }),
+          deps,
+        )
+      : await handleHoldsGet(new Request(`${url}?organizationId=${NEW_ORG}`, { headers }), deps);
+    return { status: res.status, body: await res.json() };
+  };
+  const closed = async (target: Parameters<typeof consoleClosed>[0]) => {
+    const holds = await loadHolds(db);
+    return consoleClosed(target, {
+      projectOnHold: async (p) =>
+        holds.projects.has(p.id) || holds.organizations.has(p.organizationId),
+      organizationOnHold: async (id) => holds.organizations.has(id),
+      inSupportSession: async () => false,
+    });
+  };
+
+  assert.equal((await call("hold", "Bearer wrong")).status, 401);
+  const before = await call();
+  assert.deepEqual([before.status, before.body.state], [200, "none"]);
+  assert.equal((await call("clear")).body.state, "none");
+  const held = await call("hold");
+  assert.deepEqual([held.status, held.body.state, held.body.projectIds], [200, "held", []]);
+  assert.equal((await call()).body.state, "held");
+  assert.equal((await call("clear")).body.state, "none", "cleared before anything arrived");
+  const again = await call("hold");
+
+  // Its rows arrive in one transaction: from its end on they are held.
+  await client.exec(`begin;
+    insert into organizations (id, name, slug) values ('${NEW_ORG}', 'New', 'new');
+    insert into projects (id, organization_id, name, slug) values ('${NEW}', '${NEW_ORG}', 'One', 'one');
+    insert into jobs (project_id, kind, status) values ('${NEW}', 'x', 'queued');
+    commit;`);
+  assert.equal(await claimNextQueuedJob(undefined, undefined, db), null, "no job of it is claimed");
+  assert.equal(await closed({ organizationId: NEW_ORG }), true);
+  assert.equal(await closed({ project: { id: NEW, organizationId: NEW_ORG } }), true);
+  assert.equal(await closed({ organizationId: ORG }), false);
+  const status = await call();
+  assert.deepEqual(status.body.projectIds, [NEW]);
+  assert.equal(status.body.since, again.body.since, "since the hold, not since the arrival");
+  assert.deepEqual(started, []);
+
+  assert.equal((await call("clear")).body.state, "none");
+  assert.deepEqual(started, [NEW], "clearing starts what arrived held");
+  assert.equal(await closed({ organizationId: NEW_ORG }), false);
+  assert.equal((await claimNextQueuedJob(undefined, undefined, db))?.projectId, NEW);
 });
 
 test("the status waits for running jobs and for requests from before the hold", async () => {

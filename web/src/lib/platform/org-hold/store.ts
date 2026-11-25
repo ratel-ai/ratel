@@ -30,7 +30,10 @@ export interface HoldStatus {
   quiet: boolean;
 }
 
-/** The scope's projects, or null when one of the named projects does not exist. */
+/**
+ * The scope's projects, or null when one of the named projects does not exist. An organization that is
+ * not here has none.
+ */
 export async function projectsOfScope(
   scope: HoldScope,
   db: HoldDb = getDb(),

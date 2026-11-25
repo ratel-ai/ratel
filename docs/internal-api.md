@@ -101,7 +101,10 @@ Holds an organization, or single projects, while its data is copied. Same shape 
   `{"action": …, "projectIds": ["uuid", …]}`: changes the state, and answers the status. A repeated
   call changes nothing.
 - `GET ?organizationId=uuid` or `?projectId=uuid&projectId=uuid`: the status.
-- 400: not as above. 404 with `{"error": "Unknown organization or project."}`: no such scope.
+- 400: not as above. 404: an unknown project. Ratel Cloud also answers 404 for an unknown
+  organization.
+- This core holds, clears and reads an organization it does not have: the hold is set before a copy
+  writes the first row, and covers the rows from the moment they arrive. `projectIds` is then empty.
 
 ```json
 {
@@ -129,7 +132,7 @@ Ratel Cloud also takes `"action": "move"`: the state becomes `moved`. Jobs and w
 the workspace's people are sent to the same path in App, and Ratel's own people may look. `clear`
 restores it, for the way back.
 
-In this core a hold is the time between the import and the opening. Telemetry is accepted and
+In this core a hold is the time from before the import to the opening. Telemetry is accepted and
 stored, its jobs are queued, and no job runs. The scheduled sweeps skip the projects. The console
 sends their readers to `/maintenance`; an operator in a support session may look. An API key keeps
 its reads. Clearing the hold starts the jobs. `quiet` does not wait for `pendingSummarySpans` here,
