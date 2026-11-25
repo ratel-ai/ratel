@@ -1,10 +1,12 @@
 import { gunzipSync, inflateSync } from "node:zlib";
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import {
   ingestRateLimitedResponse,
   type PublishableIngestLimits,
   publishableIngestLimits,
 } from "@/lib/ingest/ingest-limits";
 import type {
+  findStoredOtelSpans as findStoredOtelSpansFn,
   insertEventsWithMetrics as insertEventsWithMetricsFn,
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
@@ -102,10 +104,13 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   insertEventsWithMetrics: typeof insertEventsWithMetricsFn;
   insertTraceEvents: typeof insertTraceEventsFn;
   insertOtelSpans: typeof insertOtelSpansFn;
+  findStoredOtelSpans?: typeof findStoredOtelSpansFn;
   // Optional monthly-event-cap enforcement, wired by the route; unit tests omit these deps.
   getOrganizationByProjectId?: typeof getOrganizationByProjectIdFn;
   checkEventQuota?: CheckEventQuota;
   incrementEventUsage?: IncrementEventUsage;
+  /** The edition's trace meters; absent, or not metering the organization, every trace is analyzed. */
+  traceMetering?: TraceMeteringPort;
   reportServerException?: ReportServerException;
   normalizeAiSdkSpans?: typeof normalizeAiSdkSpans;
   /** Stamp project/org onto this request's request log line; no-op when absent. */
@@ -227,11 +232,17 @@ export async function handleTracesRequest(
     project_id: apiKey.projectId,
     ...(organization ? { org_id: organization.id } : {}),
   });
+  // The event cap does not reject a metered organization: over an allowance its traces are stored
+  // ingested-only or dropped. The edition's span bounds do, once the spans are decoded.
+  const meterTraces =
+    organization && deps.traceMetering
+      ? await deps.traceMetering.isMetered({ organization, projectId: apiKey.projectId })
+      : false;
   let quotaOrgId: string | undefined;
   if (organization && deps.checkEventQuota) {
     quotaOrgId = organization.id;
     const quota = await deps.checkEventQuota(organization);
-    if (!quota.ok) {
+    if (!meterTraces && !quota.ok) {
       return rejectTraceRequest(
         json({ error: quota.message }, 429),
         "quota",
@@ -336,6 +347,7 @@ export async function handleTracesRequest(
       quotaOrgId,
       endpoint: "/v1/traces",
       foldIntentGraph: true,
+      meterTraces,
     },
     {
       ...deps,
@@ -343,6 +355,16 @@ export async function handleTracesRequest(
       captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
     },
   );
+  if (!persisted.ok && persisted.stage === "refused") {
+    return rejectTraceRequest(
+      json({ error: "Span limit reached for this trace or this billing period." }, 429),
+      "quota",
+      startedAt,
+      deps,
+      apiKey.projectId,
+      organization?.id,
+    );
+  }
   if (!persisted.ok) {
     return rejectTraceRequest(
       json({ error: "Failed to store telemetry." }, 500),
@@ -357,26 +379,28 @@ export async function handleTracesRequest(
   await logTracesIngested(apiKey.projectId, spans, persisted.rows, deps.ingestLog);
 
   // Raw capture after a stored export, so garbage and retried failures are
-  // never kept. Fails open: it never changes the response.
-  await captureOtlpRawExport(
-    {
-      projectId: apiKey.projectId,
-      signal: "traces",
-      contentType: transport === "json" ? "application/json" : "application/x-protobuf",
-      body: bytes,
-      gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
-      itemCount: spans.length,
-      traceIds: [...new Set(spans.map((span) => span.traceId))],
-    },
-    organization,
-    deps.otlpRawCapture,
-    {
-      logError,
-      logWarn: deps.logWarn ?? defaultLogWarn,
-      captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
-      trackServerEvent: deps.trackServerEvent,
-    },
-  );
+  // never kept. Nor is a partly refused one: its body holds the refused spans. Fails open: it never
+  // changes the response.
+  if (!persisted.refused)
+    await captureOtlpRawExport(
+      {
+        projectId: apiKey.projectId,
+        signal: "traces",
+        contentType: transport === "json" ? "application/json" : "application/x-protobuf",
+        body: bytes,
+        gzipped: isGzipEncoding(req.headers.get("content-encoding")) ? read.bytes : undefined,
+        itemCount: spans.length,
+        traceIds: [...new Set(spans.map((span) => span.traceId))],
+      },
+      organization,
+      deps.otlpRawCapture,
+      {
+        logError,
+        logWarn: deps.logWarn ?? defaultLogWarn,
+        captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps),
+        trackServerEvent: deps.trackServerEvent,
+      },
+    );
 
   // Best-effort heartbeat; must never turn a successful insert into a 500.
   await deps.touchApiKey(apiKey.id).catch(() => {});
@@ -405,6 +429,7 @@ export async function handleTracesRequest(
     accepted,
     calls,
     spans: spans.length,
+    ...(persisted.refused ? { refused: persisted.refused } : {}),
   });
 }
 

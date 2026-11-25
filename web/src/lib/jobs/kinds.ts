@@ -5,7 +5,7 @@ export const RUN_IMPORT_JOB = "run_import" as const;
 export const SANDBOX_IMAGE_BUILD_JOB = "sandbox_image_build" as const;
 
 /**
- * The kinds that can take many minutes. They have their own lane in the worker, and a running one
- * does not count against its project's cap.
+ * The kinds that can take many minutes. Each has its own lane in the worker, and a running one does
+ * not count against its project's cap.
  */
 export const LONG_JOB_KINDS = [RUN_IMPORT_JOB, SANDBOX_IMAGE_BUILD_JOB] as const;

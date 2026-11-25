@@ -198,6 +198,13 @@ export function createDrizzleExperimentStore(db: Db): ExperimentStore {
         .where(and(eq(evalTrials.id, trialId), eq(evalTrials.state, "starting")));
     },
 
+    async releaseStart(trialId) {
+      await db
+        .update(evalTrials)
+        .set({ state: "pending", claimedAt: null })
+        .where(and(eq(evalTrials.id, trialId), eq(evalTrials.state, "starting")));
+    },
+
     async listRunningTrials(experimentId, limit) {
       const rows = await db
         .select(TRIAL)

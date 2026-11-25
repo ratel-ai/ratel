@@ -202,7 +202,7 @@ async function launch(
   }
   let status: SandboxRun["status"] | null;
   try {
-    status = await deps.runs.markStarted(id, instanceRef, deps.now());
+    status = await deps.runs.markStarted({ id, projectId }, instanceRef, deps.now());
   } catch (error) {
     // Nothing else knows this instance.
     await stopInstanceOf({ id, projectId, instanceRef }, deps);

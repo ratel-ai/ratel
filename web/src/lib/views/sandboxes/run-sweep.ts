@@ -4,7 +4,7 @@ import { type RunDeps, recordUsage, stopInstanceOf } from "./runs";
 
 /**
  * The drain step of runs: it ends a run with no result (timeout, or its instance is gone), stops
- * the instance of each ended run, and records usage that was not recorded.
+ * the instance of each ended run and of each deleted one, and records usage that was not recorded.
  */
 export type SweepDeps = Pick<RunDeps, "runs" | "provider" | "limits" | "now"> & {
   organizationIdOf: (projectId: string) => Promise<string | null>;
@@ -39,6 +39,14 @@ export async function sweepRuns(
     }
   };
   await Promise.all(Array.from({ length: PARALLEL }, work));
+  // A deleted project has no run left, so nothing else stops these.
+  const orphans = await deps.runs.listOrphans(LIMIT);
+  const stop = async () => {
+    for (let orphan = orphans.shift(); orphan; orphan = orphans.shift()) {
+      if (await stopInstanceOf(orphan, deps)) totals.stoppedInstances += 1;
+    }
+  };
+  await Promise.all(Array.from({ length: PARALLEL }, stop));
   return totals;
 }
 

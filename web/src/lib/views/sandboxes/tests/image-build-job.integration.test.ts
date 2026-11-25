@@ -229,6 +229,17 @@ test("an uploaded version with no job is found, one time", async () => {
   assert.deepEqual(await t.builds.listUnqueued(later), []);
 });
 
+test("a build that the provider never answers fails at its deadline", async () => {
+  const t = await setup();
+  const provider: SandboxProvider = {
+    ...createFakeProvider(),
+    buildImage: () => new Promise(() => {}),
+  };
+  const result = await t.run({ provider, deadlineMs: 20 });
+  assert.deepEqual(result, { status: "failed" });
+  assert.equal((await t.read()).reason, "The build took too long. Push again.");
+});
+
 test("a build runs in the lane of long jobs", () => {
   assert.ok((LONG_JOB_KINDS as readonly string[]).includes(SANDBOX_IMAGE_BUILD_JOB));
 });

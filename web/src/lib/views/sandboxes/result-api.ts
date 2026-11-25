@@ -44,7 +44,7 @@ export async function handleRunResult(
       if (!parsed.success || parsed.data.runId !== runId) {
         return reply(400, "invalid", "The body is not the result of this run.");
       }
-      const result = storable(parsed.data);
+      const result = parsed.data;
       const ended = await deps.runs.finish(runId, { status: result.status, result }, deps.now());
       if (!ended) return reply(409, "already_ended", "The run has ended.");
       logger.info(
@@ -72,7 +72,8 @@ async function readBody(req: Request): Promise<{ ok: true; value: unknown } | { 
     parts.push(chunk);
   }
   try {
-    return { ok: true, value: JSON.parse(Buffer.concat(parts).toString("utf8")) };
+    // Also here: a value that is too deep to store is a wrong body.
+    return { ok: true, value: storable(JSON.parse(Buffer.concat(parts).toString("utf8"))) };
   } catch {
     return { ok: true, value: null };
   }

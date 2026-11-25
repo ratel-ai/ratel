@@ -9,6 +9,7 @@ import {
 import { withFeatureSpan } from "@/lib/contracts/feature-spans";
 import type { UsageSubject } from "@/lib/contracts/usage-limits";
 import type { ResolvedApiKeyProject } from "@/lib/platform/api-key-bearer";
+import { storable } from "@/lib/platform/storable";
 import { DEFAULT_TRIALS, type Experiment, MAX_TRIALS } from "./domain/experiment";
 import { experimentView } from "./experiment-view";
 import { type ExperimentDeps, type StartRefusal, startExperiment } from "./experiments";
@@ -179,7 +180,8 @@ export async function readJson(request: Request): Promise<unknown> {
   const text = await request.text().catch(() => "");
   if (text.length > MAX_BODY_CHARS) return null;
   try {
-    return JSON.parse(text);
+    // Also here: a value that is too deep to store is a wrong body.
+    return storable(JSON.parse(text));
   } catch {
     return null;
   }

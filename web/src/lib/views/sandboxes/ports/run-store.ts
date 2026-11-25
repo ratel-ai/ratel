@@ -39,14 +39,26 @@ export interface RunStore {
   list(projectId: string, limit: number): Promise<SandboxRun[]>;
   /** The run of a token, while the run is `queued` or `running`. */
   findByTokenHash(tokenHash: string): Promise<{ id: string; projectId: string } | null>;
-  /** Keeps the instance, and moves `queued` to `running`. Returns the status after it. */
-  markStarted(runId: string, instanceRef: string, now: Date): Promise<RunStatus | null>;
+  /**
+   * Keeps the instance, and moves `queued` to `running`. Returns the status after it, or null when
+   * the run was deleted. The instance is kept also then.
+   */
+  markStarted(
+    run: { id: string; projectId: string },
+    instanceRef: string,
+    now: Date,
+  ): Promise<RunStatus | null>;
   /** Ends a run that is `queued` or `running`. False when it has ended before. */
   finish(runId: string, outcome: RunOutcome, now: Date): Promise<boolean>;
   markInstanceStopped(runId: string, now: Date): Promise<void>;
   markUsageRecorded(runId: string, now: Date): Promise<void>;
+  /** At most `limit` ended runs, then at most `limit` active ones. The oldest first. */
   listOpen(limit: number): Promise<OpenRun[]>;
+  /** The instances that were not stopped and whose run was deleted. */
+  listOrphans(limit: number): Promise<OrphanInstance[]>;
 }
+
+export type OrphanInstance = { id: string; projectId: string; instanceRef: string };
 
 export type RunOutcome =
   | { status: "completed" | "failed"; result: RunResult }

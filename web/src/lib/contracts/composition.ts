@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import type { AnalysisFilterPort } from "@/lib/contracts/analysis-filter";
 import type { ApiKeySecretsPort } from "@/lib/contracts/api-key-secrets";
 import type { BundleStore } from "@/lib/contracts/bundle-store";
 import type { EmbeddingProviderPort } from "@/lib/contracts/embedding-provider";
@@ -16,6 +17,7 @@ import type { RegistryPort } from "@/lib/contracts/registry";
 import type { Organization, SessionPort } from "@/lib/contracts/session";
 import type { TelemetryPort } from "@/lib/contracts/telemetry";
 import type { ToolCorpusPort } from "@/lib/contracts/tool-corpus";
+import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
 import type { UsageLimitsPort } from "@/lib/contracts/usage-limits";
 
 /**
@@ -166,6 +168,8 @@ export type EditionUi = {
    * project Overview's skeleton (the nearest loading state otherwise). Nothing without it.
    */
   ProjectPageSkeleton?: ComponentType;
+  /** Project settings > General, under the core's own sections (Cloud: analysis sampling). */
+  ProjectGeneralSettings?: ComponentType<{ projectId: string }>;
   /** A section at the foot of the Evals page: who judges, and the project's own key. Absent otherwise. */
   EvalJudgeSettings?: ComponentType<{ projectId: string }>;
   /** Organization settings > General, read-only otherwise. */
@@ -297,6 +301,16 @@ export type CompositionPorts = {
    * configuration forces still comes first. Read through `featureEnabled` (`lib/platform/experimental-features.ts`).
    */
   featureFlags?: FeatureFlagsPort;
+  /**
+   * What happens to each trace live ingest receives. Absent, the composition uses the open-source
+   * default: nothing is metered and every trace is analyzed.
+   */
+  traceMetering?: TraceMeteringPort;
+  /**
+   * What keeps analysis off a trace that was stored but not analyzed. Absent, the composition uses
+   * the open-source default: no filter.
+   */
+  analysisFilter?: AnalysisFilterPort;
   /**
    * The limits of each project and the record of what it used. Absent, the core's own adapter
    * (`lib/adapters/oss/usage-limits.ts`) enforces the hard limits and keeps no usage records.

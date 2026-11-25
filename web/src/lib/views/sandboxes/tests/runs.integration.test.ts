@@ -519,3 +519,87 @@ test("a run token reads as a key that was used", async () => {
   const key = await find(hashApiKey(t.envOf().RATEL_RUN_TOKEN ?? ""));
   assert.ok(key?.lastUsedAt, "each run would count as the first trace of a key");
 });
+
+test("the instances of a deleted project are stopped by the sweep", async () => {
+  const t = await setup();
+  await t.makeReady();
+  await t.started();
+  await t.started();
+  assert.equal(t.provider.running.size, 2);
+  await t.client.exec(`delete from projects where id = '${PROJECT_ID}'`);
+
+  const broken: SandboxProvider = {
+    ...t.provider,
+    stopInstance: async () => {
+      throw new Error("no answer");
+    },
+  };
+  await sweepRuns({ ...t.deps, provider: broken, organizationIdOf: async () => null });
+  assert.equal(t.provider.running.size, 2);
+  assert.equal((await t.sweep()).stoppedInstances, 2);
+  assert.equal(t.provider.running.size, 0);
+  assert.equal((await t.sweep()).stoppedInstances, 0);
+});
+
+test("an instance that starts after the delete of its project is stopped", async () => {
+  const t = await setup();
+  await t.makeReady();
+  let deleted = false;
+  const provider: SandboxProvider = {
+    ...t.provider,
+    startInstance: async (request) => {
+      const made = await t.provider.startInstance(request);
+      await t.client.exec(`delete from projects where id = '${PROJECT_ID}'`);
+      deleted = true;
+      return made;
+    },
+    stopInstance: async () => {
+      throw new Error("no answer");
+    },
+  };
+  await t.start({ provider });
+  assert.ok(deleted);
+  await t.sweep();
+  assert.equal(t.provider.running.size, 0);
+});
+
+test("active runs of other projects do not hide an ended run from the sweep", async () => {
+  const t = await setup();
+  await t.makeReady();
+  await t.client.exec(`
+    insert into sandbox_runs (project_id, version_id, run_input, status, token_hash, timeout_s, requested_by, created_at, started_at, instance_ref)
+    select '${OTHER_PROJECT_ID}', '${t.versionId}', '{}', 'running', 'hash-' || n, 100000, 'user_1', now() - interval '1 hour', now(), 'busy-' || n
+    from generate_series(1, 500) n`);
+  const run = await t.started();
+  const broken = async () => {
+    throw new Error("no answer");
+  };
+  const provider = { ...t.provider, stopInstance: broken };
+  await t.post(run.id, t.envOf().RATEL_RUN_TOKEN ?? "", undefined, { provider });
+  assert.equal(t.provider.running.size, 1);
+  const busy = { ...t.provider, status: async () => ({ state: "running" as const }) };
+  await sweepRuns({ ...t.deps, provider: busy, organizationIdOf: async () => ORGANIZATION_ID });
+  assert.equal(t.provider.running.size, 0);
+});
+
+test("a result that is too deep is refused, not a server error", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const run = await t.started();
+  const token = t.envOf().RATEL_RUN_TOKEN ?? "";
+  const request = JSON.stringify(resultBody(run.id)).replace(
+    '"done \\u0000"',
+    `${"[".repeat(20_000)}${"]".repeat(20_000)}`,
+  );
+  const response = await handleRunResult(
+    new Request("http://x", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: request,
+    }),
+    run.id,
+    { ...t.deps, afterResponse: () => {} },
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await t.read(run.id)).status, "running");
+});

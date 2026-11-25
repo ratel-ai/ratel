@@ -80,6 +80,7 @@ const FLAG_ENV = {
   mcpApps: "FF_MCP_APPS",
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
+  focusedConsole: "FF_FOCUSED_CONSOLE",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */

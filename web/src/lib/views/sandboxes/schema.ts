@@ -126,3 +126,14 @@ export const sandboxRuns = pgTable(
       ),
   ],
 );
+
+/**
+ * The instances that were started and not stopped. It has no foreign key and no customer data: the
+ * delete of a project removes its runs, and the sweep must still stop their instances.
+ */
+export const sandboxInstances = pgTable("sandbox_instances", {
+  runId: uuid("run_id").primaryKey(),
+  projectId: uuid("project_id").notNull(),
+  instanceRef: text("instance_ref").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+});

@@ -24,6 +24,7 @@ npm packages.
 | `projects/capacity.ts` | whether an organization can create another project, and what to say when it cannot |
 | `session.ts` | `getSessionContext()`: the session port's user, organization, role and memberships, once per request; `membershipIn` and `membershipBySlug` (the reader's membership in one organization, which is what authorizes a project or an organization page, as upstream) and upstream's `sessionForOrganization` for actions that name an organization |
 | `entitlements.ts` | `getLimits`, `checkQuota`, `checkMeteredFeature`, `resolvePlanId` over the entitlements port; `planSummary`, `planWithWindow`, `fullAgentHealthPlanName`, `planName`, `planLabel` and `billingSelfServe` over its optional `plans` (no summary, no plan named and no self-serve billing without them) |
+| `analysis-filter.ts` | `analyzedTraceCondition` and `andAnalyzedTrace` (the same as the tail of a raw `where`) over the analysis filter port; no condition in the open-source edition |
 | `usage-limits.ts` | `usageLimits`: the edition's usage limits (`lib/contracts/usage-limits.ts`), else the core's |
 | `sealed-secrets.ts` | `sealSecret`, `unsealSecret`: AES-256-GCM under `SANDBOX_SECRETS_KEY`, bound to a project and a name; `sealedSecretsKey` reports a missing key and never throws |
 | `telemetry.ts` | `trackServerEvent`, `trackProductEvent`, `reportServerException` over the telemetry port |
