@@ -52,6 +52,7 @@ export interface RunStore {
   finish(runId: string, outcome: RunOutcome, now: Date): Promise<boolean>;
   markInstanceStopped(runId: string, now: Date): Promise<void>;
   markUsageRecorded(runId: string, now: Date): Promise<void>;
+  /** At most `limit` ended runs, then at most `limit` active ones. The oldest first. */
   listOpen(limit: number): Promise<OpenRun[]>;
   /** The instances that were not stopped and whose run was deleted. */
   listOrphans(limit: number): Promise<OrphanInstance[]>;

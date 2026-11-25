@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, type SQL, sql } from "drizzle-orm";
 import type { getDb } from "@/lib/platform/db/client";
 import type { RunStatus, SandboxRun } from "../domain/run";
 import type { RunStore } from "../ports/run-store";
@@ -111,26 +111,33 @@ export function createDrizzleRunStore(db: Db): RunStore {
     },
 
     async listOpen(limit) {
-      const rows = await db
-        .select({
-          id: sandboxRuns.id,
-          projectId: sandboxRuns.projectId,
-          status: sandboxRuns.status,
-          instanceRef: sandboxRuns.instanceRef,
-          instanceStoppedAt: sandboxRuns.instanceStoppedAt,
-          usageRecordedAt: sandboxRuns.usageRecordedAt,
-          timeoutS: sandboxRuns.timeoutS,
-          createdAt: sandboxRuns.createdAt,
-          startedAt: sandboxRuns.startedAt,
-        })
-        .from(sandboxRuns)
-        .where(
-          // The condition of sandbox_runs_open_idx.
-          sql`${sandboxRuns.status} in ('queued', 'running') or (${sandboxRuns.instanceRef} is not null and (${sandboxRuns.instanceStoppedAt} is null or ${sandboxRuns.usageRecordedAt} is null))`,
-        )
-        .orderBy(asc(sandboxRuns.createdAt))
-        .limit(limit);
-      return rows.map((row) => ({ ...row, status: row.status as RunStatus }));
+      const columns = {
+        id: sandboxRuns.id,
+        projectId: sandboxRuns.projectId,
+        status: sandboxRuns.status,
+        instanceRef: sandboxRuns.instanceRef,
+        instanceStoppedAt: sandboxRuns.instanceStoppedAt,
+        usageRecordedAt: sandboxRuns.usageRecordedAt,
+        timeoutS: sandboxRuns.timeoutS,
+        createdAt: sandboxRuns.createdAt,
+        startedAt: sandboxRuns.startedAt,
+      };
+      // The two conditions of sandbox_runs_open_idx, each with its own limit: the active runs of
+      // all projects must not hide the ended ones, and the other way round.
+      const open = (condition: SQL) =>
+        db
+          .select(columns)
+          .from(sandboxRuns)
+          .where(condition)
+          .orderBy(asc(sandboxRuns.createdAt))
+          .limit(limit);
+      const [ended, active] = await Promise.all([
+        open(
+          sql`${sandboxRuns.status} not in ('queued', 'running') and ${sandboxRuns.instanceRef} is not null and (${sandboxRuns.instanceStoppedAt} is null or ${sandboxRuns.usageRecordedAt} is null)`,
+        ),
+        open(sql`${sandboxRuns.status} in ('queued', 'running')`),
+      ]);
+      return [...ended, ...active].map((row) => ({ ...row, status: row.status as RunStatus }));
     },
 
     async listOrphans(limit) {

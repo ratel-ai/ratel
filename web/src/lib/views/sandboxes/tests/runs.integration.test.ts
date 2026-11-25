@@ -576,3 +576,22 @@ test("an instance that starts after the delete of its project is stopped", async
   await t.sweep();
   assert.equal(t.provider.running.size, 0);
 });
+
+test("active runs of other projects do not hide an ended run from the sweep", async () => {
+  const t = await setup();
+  await t.makeReady();
+  await t.client.exec(`
+    insert into sandbox_runs (project_id, version_id, run_input, status, token_hash, timeout_s, requested_by, created_at, started_at, instance_ref)
+    select '${OTHER_PROJECT_ID}', '${t.versionId}', '{}', 'running', 'hash-' || n, 100000, 'user_1', now() - interval '1 hour', now(), 'busy-' || n
+    from generate_series(1, 500) n`);
+  const run = await t.started();
+  const broken = async () => {
+    throw new Error("no answer");
+  };
+  const provider = { ...t.provider, stopInstance: broken };
+  await t.post(run.id, t.envOf().RATEL_RUN_TOKEN ?? "", undefined, { provider });
+  assert.equal(t.provider.running.size, 1);
+  const busy = { ...t.provider, status: async () => ({ state: "running" as const }) };
+  await sweepRuns({ ...t.deps, provider: busy, organizationIdOf: async () => ORGANIZATION_ID });
+  assert.equal(t.provider.running.size, 0);
+});
