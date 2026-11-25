@@ -69,6 +69,10 @@ const DEPLOYMENT_SWITCHES: readonly { key: CoreFlag; note: string }[] = [
     key: "focusedConsole",
     note: "the simplified console: Overview as a recap, Agent health as the score and its categories, Self-corrections under Insights",
   },
+  {
+    key: "customMonitoring",
+    note: "the Scorers and Dashboards items and pages",
+  },
 ];
 
 export interface AccountOperationDeps {

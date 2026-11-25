@@ -54,6 +54,8 @@ const deps = (reader: LayoutReader | null, { store }: ReturnType<typeof memory>)
   reader: async () => reader,
   store: () => store,
   offered: async () => WIDGET_CATALOG,
+  dashboardsOn: async () => false,
+  dashboardWidget: async () => null,
   source: async () => ({ kind: "web" }),
 });
 

@@ -2,19 +2,14 @@ import { requireProjectScope } from "@/lib/console/scope/project-scope";
 import { isDbConfigured } from "@/lib/platform/db/client";
 import { withStatementTimeout } from "@/lib/platform/db/statement-timeout";
 import { loadOrFallback } from "@/lib/platform/resilient-read";
-import {
-  loadStoredTopics,
-  loadTaskRuns,
-  loadTopicReading,
-  topicReadingInFlight,
-} from "@/lib/readings/topics/queries";
-import { loadWorkflowLabels } from "@/lib/readings/trace-signals/workflows/label-queries";
+import { topicReadingInFlight } from "@/lib/readings/topics/queries";
 import { absoluteTime, timeAgo } from "@/lib/views/intents/map/labels";
 import type { IntentMapModel } from "@/lib/views/intents/map/map-model";
 import { loadToolSteps } from "@/lib/views/intents/map/queries";
 import type { ToolStep } from "@/lib/views/intents/map/tool-network";
 import { topicMapModel } from "@/lib/views/intents/topics-map-model";
-import { buildTopicsView, type IntentsReading } from "@/lib/views/intents/topics-view";
+import { readTopics } from "@/lib/views/intents/topics-read";
+import type { IntentsReading } from "@/lib/views/intents/topics-view";
 
 /**
  * What the Intents pages read: the latest topic reading (`assign_topics`), the
@@ -46,14 +41,9 @@ export async function loadIntentsPage(projectIdParam: string): Promise<IntentsPa
     load: () =>
       withStatementTimeout(
         async (db) => {
-          const reading = await loadTopicReading(projectId, db);
+          const reading = await readTopics(projectId, db);
           const inFlight = await topicReadingInFlight(projectId, db);
-          if (!reading)
-            return { reading: null, inFlight, topics: [], tasks: [], labels: new Map() };
-          const topics = await loadStoredTopics(projectId, db);
-          const tasks = await loadTaskRuns(projectId, db);
-          const labels = await loadWorkflowLabels(projectId, db);
-          return { reading, inFlight, topics, tasks, labels };
+          return { reading, inFlight };
         },
         { operation },
       ),
@@ -62,14 +52,7 @@ export async function loadIntentsPage(projectIdParam: string): Promise<IntentsPa
   if (!read.reading) {
     return { kind: "ready", projectId, reading: { status: "none", inFlight: read.inFlight } };
   }
-  const { insights, computedAt } = read.reading;
-  const view = buildTopicsView({
-    projectId,
-    insights,
-    topics: read.topics,
-    tasks: read.tasks,
-    taskLabels: read.labels,
-  });
+  const { insights, computedAt, view } = read.reading;
   return {
     kind: "ready",
     projectId,

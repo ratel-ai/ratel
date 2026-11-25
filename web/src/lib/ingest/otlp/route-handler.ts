@@ -1,5 +1,6 @@
-import { gunzipSync, inflateSync } from "node:zlib";
+import { gunzipSync, gzipSync, inflateSync } from "node:zlib";
 import type { TraceMeteringPort } from "@/lib/contracts/trace-metering";
+import type { RedactedExport } from "@/lib/ingest/geo/redact";
 import {
   ingestRateLimitedResponse,
   type PublishableIngestLimits,
@@ -11,7 +12,11 @@ import type {
   insertOtelSpans as insertOtelSpansFn,
 } from "@/lib/ingest/otlp/queries";
 import type { OtlpRawCaptureDeps } from "@/lib/ingest/otlp-raw/capture";
-import { enqueueOtlpBatch, type IngestQueueAcceptDeps } from "@/lib/ingest/queue/accept";
+import {
+  enqueueOtlpBatch,
+  type IngestQueueAcceptDeps,
+  storedEncoding,
+} from "@/lib/ingest/queue/accept";
 import type { IntentGraphFoldScheduleDeps } from "@/lib/ingest/trace-events/fold-schedule";
 import type { insertTraceEvents as insertTraceEventsFn } from "@/lib/ingest/trace-events/queries";
 import type { TraceTurnsIngestDeps } from "@/lib/ingest/trace-events/turns-schedule";
@@ -30,7 +35,8 @@ import type {
 import type { setRequestLogContext as setRequestLogContextFn } from "@/lib/platform/request-log";
 import { reportServerException } from "@/lib/platform/telemetry";
 import type { AgentSpanDedupeDeps } from "./agent-span-dedupe";
-import { otlpSuccessResponse, transportFor } from "./http";
+import { OtlpDecodeError } from "./decode";
+import { type OtlpTransport, otlpSuccessResponse, transportFor } from "./http";
 import type { IngestLogDeps } from "./ingest-log";
 import {
   type IngestObservabilityDeps,
@@ -39,7 +45,7 @@ import {
   trackAcceptedIngestRequest,
   trackFirstTraceReceived,
 } from "./ingest-observability";
-import type { PersistSpansDeps } from "./ingest-spans";
+import type { PersistSpansContext, PersistSpansDeps } from "./ingest-spans";
 import type { normalizeAiSdkSpans } from "./normalize-ai-sdk";
 import type { FindRuntimeInvokes } from "./runtime-duplicates";
 import type { GenAiLogStore } from "./semconv/gen-ai-log-store";
@@ -125,6 +131,15 @@ export interface TracesHandlerDeps extends IngestObservabilityDeps, IntentGraphF
   agentSpanDedupe: AgentSpanDedupeDeps;
   /** Stored `gen_ai` log records join their spans; absent, none are read. */
   genAiLogs?: Pick<GenAiLogStore, "findLogs">;
+  /** Where each span comes from (`lib/ingest/geo`); absent, no span is located. */
+  locate?: PersistSpansDeps["locate"];
+  /** The same for an export that is queued: what must not be stored, taken out of its body. */
+  redact?: (
+    projectId: string,
+    organization: PersistSpansContext["organization"],
+    transport: OtlpTransport,
+    body: Uint8Array,
+  ) => Promise<RedactedExport | null>;
   /** The raw body store (RC-405); absent, nothing is kept. */
   otlpRawCapture?: OtlpRawCaptureDeps;
   /** The project's own prices (RC-482); absent, the current built-in prices. */
@@ -295,16 +310,34 @@ export async function handleTracesRequest(
   const bytes = inflated.bytes;
 
   // The ingest queue (RTL-314): keep the body as it arrived and answer; a worker decodes and
-  // persists it. An ingest-only key stays inline: its budget counts decoded spans.
-  if (deps.ingestQueue?.enabled() && !auth.policy.sharedKeyLimits) {
+  // persists it. An ingest-only key stays inline: its budget counts decoded spans. So does a batch
+  // whose address cannot be taken out: the queue stores the body.
+  let queueable = deps.ingestQueue?.enabled() && !auth.policy.sharedKeyLimits;
+  let redacted: RedactedExport | null = null;
+  if (queueable && deps.redact) {
+    try {
+      redacted = await deps.redact(apiKey.projectId, organization, transport, bytes);
+    } catch (err) {
+      queueable = false;
+      if (!(err instanceof OtlpDecodeError)) {
+        logError("span location failed", err, { project_id: apiKey.projectId });
+        captureProcessingFailure(err, apiKey.projectId, deps);
+      }
+    }
+  }
+  if (queueable && deps.ingestQueue) {
+    const contentEncoding = req.headers.get("content-encoding");
+    // Compressed when it came compressed.
+    const gzip = redacted !== null && storedEncoding(contentEncoding) !== null;
     const queued = await enqueueOtlpBatch(
       {
         projectId: apiKey.projectId,
         signal: "traces",
         transport,
-        received: read.bytes,
-        contentEncoding: req.headers.get("content-encoding"),
+        received: redacted ? (gzip ? gzipSync(redacted.body) : redacted.body) : read.bytes,
+        contentEncoding: gzip ? "gzip" : contentEncoding,
         appendOnly: auth.policy.appendOnlyIngest,
+        ...(redacted ? { geo: { addressed: redacted.addressed } } : {}),
       },
       deps.ingestQueue,
       { logError, captureFailure: (err) => captureProcessingFailure(err, apiKey.projectId, deps) },

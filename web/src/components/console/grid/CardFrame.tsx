@@ -24,9 +24,6 @@ import {
 } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import type { GridStep } from "@/lib/console/grid/layout";
-import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
-
-export type StepName = GridStep;
 
 const MOVES: readonly [GridStep, string, LucideIcon][] = [
   ["up", "Move up", ArrowUp],
@@ -41,47 +38,76 @@ const SIZES: readonly [GridStep, string, LucideIcon][] = [
   ["shorter", "Shorter", MoveVertical],
 ];
 
+export interface CardEdit {
+  can: (step: GridStep) => boolean;
+  step: (step: GridStep) => void;
+  remove: () => void;
+  /** Menu items of the page's own, above the steps. */
+  items?: ReactNode;
+}
+
 /**
- * One widget. Quiet: its content, with a heading for a screen reader only. In edit mode it gets a
- * border, whose width is always reserved, and controls that float over its top edge, so its content
- * does not move. The content takes no press then: a drag holds it, and its links lead nowhere.
+ * One card. Quiet: its content, with a heading for a screen reader only, or a title row where the
+ * content does not say what it is. In edit mode it gets a border, whose width is always reserved,
+ * and controls that float over its top edge, so its content does not move. The content takes no
+ * press then: a drag holds it, and its links lead nowhere.
  */
-export function WidgetCard({
+export function CardFrame({
   id,
   title,
+  titleRow,
   edit,
   children,
 }: {
-  id: OverviewWidgetId;
+  id: string;
   title: string;
+  /** Draws the title, with this after it. Such a card has padding, and its content may reach out of it. */
+  titleRow?: ReactNode;
   /** Null in view mode. */
-  edit: {
-    can: (step: GridStep) => boolean;
-    step: (step: GridStep) => void;
-    remove: () => void;
-  } | null;
+  edit: CardEdit | null;
   children: ReactNode;
 }) {
   const headingId = useId();
   return (
     <section
       aria-labelledby={headingId}
-      data-overview-widget={id}
+      data-card={id}
       data-grid-surface={edit ? "" : undefined}
       className={cn(
         "relative flex h-full min-w-0 flex-col rounded-lg border bg-app",
         edit ? "border-line-strong" : "border-transparent",
       )}
     >
-      <h2 id={headingId} className="sr-only">
-        {title}
-      </h2>
+      {titleRow === undefined ? (
+        <h2 id={headingId} className="sr-only">
+          {title}
+        </h2>
+      ) : null}
       <div
         data-grid-body=""
         inert={edit !== null}
-        className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[inherit]"
+        className={cn(
+          "@container flex min-h-0 min-w-0 flex-1 flex-col rounded-[inherit]",
+          titleRow === undefined ? "overflow-hidden" : "gap-3 p-4",
+        )}
       >
-        {children}
+        {titleRow === undefined ? (
+          children
+        ) : (
+          <>
+            <div className="flex min-h-7 items-center gap-2">
+              <h2
+                id={headingId}
+                title={title}
+                className="min-w-0 flex-1 truncate text-sm font-semibold text-fg"
+              >
+                {title}
+              </h2>
+              {titleRow}
+            </div>
+            {children}
+          </>
+        )}
       </div>
       {edit ? (
         <div
@@ -111,6 +137,12 @@ export function WidgetCard({
                 }
               />
               <MenuContent align="end">
+                {edit.items ? (
+                  <>
+                    {edit.items}
+                    <MenuSeparator />
+                  </>
+                ) : null}
                 <Steps label="Move" steps={MOVES} edit={edit} />
                 <MenuSeparator />
                 <Steps label="Resize" steps={SIZES} edit={edit} />
@@ -131,12 +163,12 @@ export function WidgetCard({
 }
 
 /** Its first control that is shown: the menu, or Remove where there is nothing to arrange. */
-export function focusToolbar(id: OverviewWidgetId) {
+export function focusToolbar(id: string) {
   const buttons = document.getElementById(toolbarId(id))?.querySelectorAll("button") ?? [];
   [...buttons].find((button) => button.offsetParent !== null)?.focus();
 }
 
-const toolbarId = (id: OverviewWidgetId) => `overview-widget-${id}-toolbar`;
+const toolbarId = (id: string) => `card-${id}-toolbar`;
 
 function Steps({
   label,
@@ -145,7 +177,7 @@ function Steps({
 }: {
   label: string;
   steps: readonly [GridStep, string, LucideIcon][];
-  edit: { can: (step: GridStep) => boolean; step: (step: GridStep) => void };
+  edit: CardEdit;
 }) {
   return (
     <MenuGroup label={label}>

@@ -78,6 +78,7 @@ const FLAG_ENV = {
   agentsPages: "FF_AGENTS_PAGES",
   toolRunInsights: "FF_TOOL_RUN_INSIGHTS",
   focusedConsole: "FF_FOCUSED_CONSOLE",
+  customMonitoring: "FF_CUSTOM_MONITORING",
 } as const satisfies Record<CoreFlag, string>;
 
 /** Detector floors that are shares in (0, 1]; every other floor is a number above 0. */
@@ -245,6 +246,8 @@ const CONFIG_SCHEMA = schema({
     ),
     /** Stored raw OTLP bytes one project may add per UTC day; 0 stores nothing. */
     otlpRawDailyBytes: setting("OTLP_RAW_DAILY_BYTES", nonNegativeInt, D.ingest.otlpRawDailyBytes),
+    /** A DB-IP Lite file (MMDB): resolves IP addresses to a country and a region. Unset, they are not. */
+    geoDatabasePath: optional("GEO_DATABASE_PATH", trimmed),
     otlpRawRetentionDays: setting(
       "OTLP_RAW_RETENTION_DAYS",
       positive,

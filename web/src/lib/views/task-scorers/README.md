@@ -13,11 +13,19 @@ is on (`evalGate`, `eval-gate/gate.ts`).
 | `actions.ts` | a person's scorer changes, checked and applied (the pages' server action calls it) |
 | `job.ts` | `scoreTasksJob` (the `score_tasks` handler: every closed run of each task scored by UTC day, today's judged by `judge.ts`, then the due eval sets queued), `enqueueScoreTasksJob`, and `enqueueDueTaskScores`, the drain's daily sweep: up to 25 projects a tick with a closed task run in the last 7 days and no score job since the start of the UTC day. A gate refusal is recorded as a finished job, with one `task_scores_skipped` event |
 | `judge.ts` | `judgeTaskSample`: a `judge_criteria` scorer judged on a daily sample (`TASK_JUDGE_SAMPLE`, 20) under its own cap (`TASK_JUDGE_BUDGET_USD`, $0.50) and the organization's daily budget, reserved before any call |
-| `register.ts` | the `score_tasks` registration, and the fill of `computeSeams.enqueueTaskScores`: a completed signal run queues the project's live scores; and the drain's `task_scores_enqueue` before-step (heartbeat `taskScoresEnqueued`), so tasks are scored daily without waiting for a signal run |
+| `register.ts` | the `score_tasks` registration, and the fill of `computeSeams.enqueueTaskScores`: a completed signal run queues the project's live scores, unless the `customMonitoring` flag is on; and the drain's `task_scores_enqueue` before-step (heartbeat `taskScoresEnqueued`), so tasks are scored daily without waiting for a signal run |
 
 With no `ANTHROPIC_API_KEY` the judge is skipped (no row, no call) and the deterministic scorers
 still write their counts; `EVAL_GATE_MOCK_MODEL=1` judges with a rule stand-in outside
 production. As upstream, `score_tasks` is not coalesced: each completed signal run queues one.
+With the `customMonitoring` flag on, a project's live scoring is the top-level scorers scoped to its tasks
+(`views/scorers`, `trace_scores`): the task page reads those, and neither trigger queues
+`score_tasks` for the project. The skip is recorded as a gate refusal is (a finished job, one
+`task_scores_skipped` event, reason `trace_scorers`), and the trigger queues the due eval sets,
+which the job does otherwise. A job already queued when the flag turns on still runs. The pure
+core, `task_scorers` and the eval gate's simulations are unchanged, and old `task_scores_daily` rows
+stay readable with the flag off.
+
 With `evalGate` off, the sweep still records one refusal per project with task runs a day,
 as upstream does for an organization without the gate.
 

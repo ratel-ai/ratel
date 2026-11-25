@@ -14,7 +14,11 @@ import type {
   FocusedOverviewData,
   MetricsData,
 } from "@/lib/views/home/focused-load";
-import type { OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
+import type { OverviewItemId, OverviewWidgetId } from "@/lib/views/overview-layout/domain/layout";
+
+/** Every widget of the Overview, and its dashboard widgets. */
+export type WidgetBodies = Readonly<Record<OverviewWidgetId, ReactNode>> &
+  Readonly<Partial<Record<OverviewItemId, ReactNode>>>;
 
 type PeekHref = (peek: string) => string;
 
@@ -123,7 +127,7 @@ function NeedsAttention({
   );
 }
 
-function NotLoaded({ title, href }: { title: string; href: string }) {
+export function NotLoaded({ title, href }: { title: string; href: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto p-4 text-center">
       <p className="text-sm text-danger">{title}</p>

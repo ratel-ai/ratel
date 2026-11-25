@@ -35,6 +35,11 @@ import { type IssueCategory, issueCategories } from "@/lib/views/health/issue-ca
 import { pendingHealthModel } from "@/lib/views/health/page-model";
 import type { Attention } from "@/lib/views/home/attention";
 import {
+  type DashboardItems,
+  type DashboardItemsRange,
+  readDashboardItems,
+} from "@/lib/views/home/dashboard-items";
+import {
   type FixesSlice,
   type IntentsRead,
   intentsGlance,
@@ -80,7 +85,9 @@ import {
   type SdkDay,
 } from "@/lib/views/home/overview-reads";
 import {
+  type DashboardItemId,
   DEFAULT_LAYOUT,
+  isDashboardItem,
   type OverviewLayout,
   visibleWidgets,
 } from "@/lib/views/overview-layout/domain/layout";
@@ -151,6 +158,8 @@ export interface FocusedOverviewData {
   topology: Topology | Failed | null;
   health: FocusedHealth | null;
   attention: FocusedAttention | null;
+  /** The dashboard widgets on the Overview, by entry. Null when there is none. */
+  dashboards: DashboardItems | Failed | null;
   /** Null unless the Panel is open and its read came back. */
   context: FocusedOverviewContext | null;
 }
@@ -175,6 +184,11 @@ export interface FocusedReads {
   intents: (at: OverviewReadScope) => Promise<IntentsRead | null>;
   tasks: (at: OverviewReadScope) => Promise<TasksRead | null>;
   dailyAggregates: (at: OverviewReadScope) => Promise<DailyAggregateRow[]>;
+  dashboards: (
+    at: OverviewReadScope,
+    ids: readonly DashboardItemId[],
+    range: DashboardItemsRange,
+  ) => Promise<DashboardItems>;
   context: (at: OverviewReadScope, days: readonly string[]) => Promise<FocusedOverviewContext>;
 }
 
@@ -207,6 +221,7 @@ export async function loadFocusedOverview({
   db?: OverviewReadScope["db"];
 }): Promise<FocusedOverviewData> {
   const { range } = resolveTraceListView({ range: overviewRangeParam(window) }, now);
+  const rangeParam = overviewRangeParam(window);
   const windowDays = parseWindowDays(String(window), limits.agentHealthWindowDays);
   const scope: OverviewReadScope = {
     projectId: project.id,
@@ -242,17 +257,24 @@ export async function loadFocusedOverview({
   const ifVisible = <T>(id: OverviewLayout[number]["id"], load: () => Promise<T>) =>
     widgets.has(id) ? load() : null;
 
-  const [telemetry, sdkLatestAt, metrics, topology, health, attention, context] = await Promise.all(
-    [
+  const items = [...widgets].filter(isDashboardItem);
+  const { preset, from, to } = range;
+
+  const [telemetry, sdkLatestAt, metrics, topology, health, attention, dashboards, context] =
+    await Promise.all([
       read("telemetry", (run) => run(scope)),
       read("sdkLatestAt", (run) => run(scope)),
       ifVisible("metrics", metricsWidget),
       ifVisible("topology", () => read("topology", (run) => run(scope))),
       ifVisible("health", healthWidget),
       ifVisible("attention", attentionWidget),
+      items.length === 0
+        ? null
+        : read("dashboards", (run) =>
+            run(scope, items, { preset: preset === "custom" ? rangeParam : preset, from, to }),
+          ),
       contextOpen ? read("context", (run) => run(scope, range.days)) : null,
-    ],
-  );
+    ]);
   const lastEventAt = newest(
     telemetry === FAILED ? null : latestEventAt(telemetry),
     sdkLatestAt === FAILED ? null : sdkLatestAt,
@@ -271,6 +293,7 @@ export async function loadFocusedOverview({
     topology: topology === FAILED ? "failed" : topology,
     health,
     attention,
+    dashboards: dashboards === FAILED ? "failed" : dashboards,
     context: context === FAILED ? null : context,
   };
 
@@ -431,6 +454,7 @@ export const FOCUSED_READS: FocusedReads = {
   intents: readIntentsGlance,
   tasks: readTasksGlance,
   dailyAggregates: readDailyAggregates,
+  dashboards: readDashboardItems,
   context: async (at, days) => {
     const [daily, cache] = await Promise.all([readDailyAggregates(at), readPromptCache(at)]);
     const dashboard = buildDashboardModel(daily, [...days]);

@@ -55,6 +55,7 @@ export function TraceFilterBar({
   end,
   searchable = true,
   entities = false,
+  only,
 }: {
   tab: TraceTab;
   /** The current query string, with its `?`. */
@@ -69,12 +70,14 @@ export function TraceFilterBar({
   searchable?: boolean;
   /** `cloud-project-entities`: the rollup bar has the Agent and MCP server filters (RC-790). Off, their parameters are not filters. */
   entities?: boolean;
+  /** The fields it offers; every one of the tab without it. */
+  only?: readonly FilterField["id"][];
 }) {
   const options = useMemo(() => ({ entities }), [entities]);
   const chips = useMemo(() => filterChips(tab, search, options), [tab, search, options]);
   const fields = useMemo(
-    () => filterFields(tab, search, facets, options),
-    [tab, search, facets, options],
+    () => filterFields(tab, search, facets, options).filter(({ id }) => !only || only.includes(id)),
+    [tab, search, facets, options, only],
   );
   const filtered = hasFilters(tab, search, options);
 
@@ -126,6 +129,7 @@ export function TraceFilterBar({
               key={chip.key}
               field={chip.field}
               value={chip.value}
+              title={chip.value}
               onRemove={() => onSearchChange((current) => withoutChip(current, chip))}
             />
           ))}

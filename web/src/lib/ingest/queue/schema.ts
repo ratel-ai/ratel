@@ -75,4 +75,6 @@ export type IngestBatchStatus = "queued" | "running" | "done" | "failed";
 export interface IngestBatchContext {
   /** The key only adds rows (RC-590, `ApiKeyPolicy.appendOnlyIngest`). */
   appendOnly?: boolean;
+  /** Set when the request located the batch: the body holds the codes, and not what gave them. */
+  geo?: { addressed: boolean };
 }
