@@ -28,6 +28,8 @@ export interface ModelCallMeta {
   /** What the call is for, snake_case: `eval_gate_replay`, `eval_gate_judge`. */
   feature: string;
   payer: ModelCallPayer;
+  /** Where the call went, when the deployment's Claude backend does not say it (Claude on Vertex). */
+  backend?: string;
   organizationId?: string | null;
   projectId?: string | null;
 }

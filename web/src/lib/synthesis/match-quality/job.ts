@@ -4,11 +4,11 @@ import {
   defaultBackgroundObservabilityDeps,
 } from "@/lib/jobs/observability";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicConfigured } from "@/lib/readings/anthropic/client";
 import type { JudgeEngine } from "@/lib/readings/decisions/judge";
+import { models } from "@/lib/readings/models";
 import { JUDGE_BUDGET_USD } from "@/lib/synthesis/match-quality/judge";
 import { loadCorpusWithFingerprint } from "@/lib/synthesis/match-quality/service";
-import { type AnalystDeps, anthropicAnalystDeps, DEFAULT_ANALYST_MODEL } from "./analyst";
+import { type AnalystDeps, analystDepsOver } from "./analyst";
 import type { AnalystContext } from "./context";
 import { loadInvokedToolsBySearchId, observeRetrieval } from "./evidence";
 import { resolveJudgeEngine } from "./judges";
@@ -129,9 +129,11 @@ export function resolveAnalystFactory(): {
   if (mockAnalystEnabled()) {
     return { analyst: (context) => mockAnalystDeps(context), mocked: true };
   }
-  if (!anthropicConfigured()) return { analyst: undefined, mocked: false };
-  const model = getConfig().models.analyst || DEFAULT_ANALYST_MODEL;
-  return { analyst: () => anthropicAnalystDeps(model), mocked: false };
+  // Owned (ADR-0009): the deployment's model for the analysis, whoever serves it. Upstream asks
+  // whether Claude is configured and names a Claude model here.
+  const text = models.text("match_quality_analyst");
+  if (!text) return { analyst: undefined, mocked: false };
+  return { analyst: () => analystDepsOver(text), mocked: false };
 }
 
 /** Persist one finished run: freeze its evidence, replace its proposals, close it. */

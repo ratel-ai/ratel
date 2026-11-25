@@ -8,6 +8,7 @@ import { ModelNotEnabledError } from "@/lib/platform/anthropic-errors";
 import { runWithLogContext } from "@/lib/platform/logger";
 import {
   anthropicUsage,
+  onModelCall,
   recordModelCall,
   recordTracedModelCall,
   setModelCallExceptionReporter,
@@ -408,4 +409,43 @@ test("a recorder that throws never breaks the call it describes", async () => {
       assert.doesNotThrow(() => recordModelCall({ ...META, outcome: "ok", durationMs: 1 }));
     },
   );
+});
+
+test("a listener hears every call's outcome, the error included, even with an edition's recorder", async () => {
+  const heard: ModelCallRecord[] = [];
+  const stop = onModelCall((record) => heard.push(record));
+  try {
+    const refused = new Error("no");
+    await assert.rejects(
+      trackModelCall(META, async () => {
+        throw refused;
+      }),
+    );
+    await withRecorder(
+      () => {},
+      () => recordModelCall({ ...META, outcome: "ok", durationMs: 1 }),
+    );
+    assert.deepEqual(
+      heard.map((record) => [record.outcome, record.error]),
+      [
+        ["error", refused],
+        ["ok", undefined],
+      ],
+    );
+  } finally {
+    stop();
+  }
+  recordModelCall({ ...META, outcome: "ok", durationMs: 1 });
+  assert.equal(heard.length, 2);
+});
+
+test("a listener that throws never breaks the call it hears", async () => {
+  const stop = onModelCall(() => {
+    throw new Error("listener down");
+  });
+  try {
+    assert.equal(await trackModelCall(META, async () => 7), 7);
+  } finally {
+    stop();
+  }
 });

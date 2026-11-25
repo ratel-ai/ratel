@@ -53,6 +53,10 @@ export const CONFIG_DEFAULTS = {
   },
   anthropic: {},
   openai: {},
+  modelVendor: {},
+  vendors: {},
+  decisions: {},
+  embeddings: {},
   models: {},
   evalGate: {
     mockModel: false,

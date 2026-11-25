@@ -74,12 +74,16 @@ export interface DecisionResult {
 export type DecisionFailureReason = "credentials" | "rate_limited" | "unavailable" | "unreadable";
 
 export class DecisionCallError extends Error {
+  /** The vendor's HTTP status, when it answered with one. */
+  readonly status?: number;
+
   constructor(
     readonly reason: DecisionFailureReason,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; status?: number },
   ) {
-    super(message, options);
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
+    if (options?.status !== undefined) this.status = options.status;
   }
 }
 
@@ -281,6 +285,8 @@ export function decisionClient(config: DecisionClientConfig) {
           method: "POST",
           headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json" },
           body,
+          // A redirect would carry the question, and the key, to another address.
+          redirect: "error",
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (err) {
@@ -294,13 +300,18 @@ export function decisionClient(config: DecisionClientConfig) {
         throw new DecisionCallError(
           "credentials",
           `OpenAI rejected the API key (${response.status})`,
+          { status: response.status },
         );
       }
       if (response.status === 429) {
         await response.body?.cancel().catch(() => {});
         if (!config.retryRateLimit)
-          throw new DecisionCallError("rate_limited", "OpenAI rate limited the request");
-        lastFailure = new DecisionCallError("rate_limited", "OpenAI rate limited the request");
+          throw new DecisionCallError("rate_limited", "OpenAI rate limited the request", {
+            status: 429,
+          });
+        lastFailure = new DecisionCallError("rate_limited", "OpenAI rate limited the request", {
+          status: 429,
+        });
         await sleep(retryAfterMs(response, attempt));
         continue;
       }
@@ -309,6 +320,7 @@ export function decisionClient(config: DecisionClientConfig) {
         lastFailure = new DecisionCallError(
           "unavailable",
           `OpenAI returned ${response.status}: ${detail.slice(0, 200)}`,
+          { status: response.status },
         );
         // A 4xx is our request's shape and will not change on a retry.
         if (response.status < 500) break;

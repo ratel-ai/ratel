@@ -1,11 +1,7 @@
-import type Anthropic from "@anthropic-ai/sdk";
-import { getConfig } from "@/config";
 import { MAX_DESCRIPTION } from "@/lib/catalog/manage";
 import { extractModelJsonObject } from "@/lib/catalog/skills/model-json";
-import { anthropicUsage, trackModelCall } from "@/lib/platform/model-call";
-import { anthropicContent } from "@/lib/platform/model-call-content";
-import { anthropicClient } from "@/lib/readings/anthropic/client";
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import type { TextModel } from "@/lib/contracts/models";
+import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 import { type AnalystContext, buildAnalystPrompt } from "./context";
 import type { AnalystDiagnosis, AnalystProposal, AnalystResult } from "./types";
 
@@ -218,55 +214,42 @@ export function parseAnalystResponse(
   return { diagnosis, proposals, rejectedEntryIds };
 }
 
-/** Anthropic-backed deps. Throws if no Claude backend is configured. */
-export function anthropicAnalystDeps(model: string): AnalystDeps {
-  const client = anthropicClient();
-  if (!client)
-    throw new Error("No Claude backend is configured: set ANTHROPIC_BACKEND or ANTHROPIC_API_KEY");
+/**
+ * The analyst over any text model (ADR-0009). The answer is long, so the model streams it; a
+ * cut-off and a refusal are named at the point they happen, so a failed run says why instead of
+ * surfacing an inscrutable JSON syntax error downstream.
+ */
+export function analystDepsOver(text: TextModel): AnalystDeps {
   return {
-    model,
+    model: text.model,
     complete: async (system, user) => {
-      const request: Anthropic.MessageCreateParamsNonStreaming = {
-        model,
-        max_tokens: ANALYST_MAX_TOKENS,
+      const reply = await text.complete({
         system,
-        messages: [{ role: "user", content: user }],
-        output_config: {
-          format: { type: "json_schema", schema: ANALYST_SCHEMA },
-          effort: ANALYST_EFFORT,
-        },
-      };
-      const msg = await trackModelCall(
-        {
-          provider: "anthropic",
-          model,
-          feature: "match_quality_analyst",
-          payer: "ratel",
-          content: anthropicContent(request),
-        },
-        () => client.messages.stream(wellFormedJson(request)).finalMessage(),
-        anthropicUsage,
-      );
-      // Named at the point they happen, so a failed run says why instead of
-      // surfacing an inscrutable JSON syntax error downstream.
-      if (msg.stop_reason === "max_tokens") {
+        user,
+        schema: ANALYST_SCHEMA,
+        effort: ANALYST_EFFORT,
+        maxTokens: ANALYST_MAX_TOKENS,
+        longOutput: true,
+      });
+      if (reply.stop === "cut_off") {
         throw new Error(
           `match-quality analysis hit the ${ANALYST_MAX_TOKENS}-token output cap; the answer was truncated`,
         );
       }
-      if (msg.stop_reason === "refusal") {
+      if (reply.stop === "refused") {
         throw new Error("match-quality analysis was declined by the model's safety filter");
       }
-      return msg.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
+      return reply.text;
     },
   };
 }
 
-export function defaultAnalystDeps(): AnalystDeps {
-  return anthropicAnalystDeps(getConfig().models.analyst || DEFAULT_ANALYST_MODEL);
+/** Claude-backed deps on the model given. Throws if no Claude backend is configured. */
+export function anthropicAnalystDeps(model: string): AnalystDeps {
+  const text = anthropicTextModel({ model, feature: "match_quality_analyst", payer: "ratel" });
+  if (!text)
+    throw new Error("No Claude backend is configured: set ANTHROPIC_BACKEND or ANTHROPIC_API_KEY");
+  return analystDepsOver(text);
 }
 
 /** Run the analyst over one assembled context. */

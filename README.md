@@ -32,6 +32,8 @@ It is for anyone building or running an agent who wants to see how it behaves an
 
 Model keys are optional. With no key, Ratel makes no outbound model call. The readings that need a model report themselves skipped, workflows keep their tool-order names, and topics are named from their own asks.
 
+You choose who serves the models, in the environment. `MODEL_PROVIDER` names the vendor of the text models: Claude (the default), OpenAI, Google Cloud, Amazon Bedrock, or a server you run (Ollama, llama.cpp, LiteLLM, or any chat completions server). `DECISION_PROVIDER` names the vendor of the decision model, and `EMBEDDING_BASE_URL` the embeddings server. A named vendor is used or nothing is, and a key goes only to its own vendor. The settings are in [`.env.example`](.env.example), and the vendors and their models in the [model kit's README](web/src/lib/readings/models/README.md). Organization settings > Models shows what is set up and why a model is off.
+
 ## Quick Start
 
 **You need** Docker with Compose 2.24 or later, network access to pull images, about 5 GB of free disk in the Docker VM (the app and Postgres images take under 1 GB, the optional demo image 1.2 GB more, plus your data) and 4 GB of RAM for Docker (8 GB is comfortable). There is no build on your machine.
@@ -170,7 +172,7 @@ Then start it with `docker compose up -d --wait`. Point your proxy at `127.0.0.1
 - Everything else requires your login. That includes `/api/cron/drain`, which only matters if you set `RATEL_CRON=external`; it takes `CRON_SECRET` as a bearer, so give your scheduler that route and nothing else.
 - It preserves `Host` or sets `X-Forwarded-Host`, otherwise console actions fail.
 
-Model keys are optional, and every field is explained in `.env.example`.
+Model keys are optional, and so is the vendor of each kind of model (`MODEL_PROVIDER`, `DECISION_PROVIDER`, `EMBEDDING_BASE_URL`). Every field is explained in `.env.example`.
 
 **TLS.** Terminate it at the proxy and keep `BASE_URL` on the `https://` address, since the console's snippets are built from it.
 

@@ -42,6 +42,16 @@ Don't skip biome — CI (`.github/workflows/ci.yml`) runs all of the above on ev
   - Good: `fix(RP-123): keep the session open`
   - Bad: `updated some files`, `RP-123 Keep the session open`
 
+## Calling a model in the platform
+
+A feature in `web/` never talks to a vendor. It asks the model kit (`models.text("…")`,
+`models.chat("…")`, or `judgeFromConfig` for a closed-set choice) and handles having none, so it runs on
+every vendor a self-hoster can name (ADR-0009). Add its row to `web/src/lib/readings/models/features.ts`, ask
+for a tier and not a model id, and test it on the fake vendor. `models.chat` has no Claude model yet
+(it is null there): a tool-using feature takes Claude through `claudeFor`, as the eval gate does. Tests fail when code outside the
+adapters imports a vendor SDK, names a vendor's address, or calls with a feature that has no row.
+How-to: [`web/src/lib/readings/models/README.md`](web/src/lib/readings/models/README.md).
+
 ## When in doubt
 
 - For locked architectural decisions: [`docs/adr/`](docs/adr/) — the ADR is the source of truth, not any README.

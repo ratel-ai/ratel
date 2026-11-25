@@ -9,7 +9,7 @@ import {
   type JudgeEngine,
   type JudgeVerdict,
 } from "@/lib/readings/decisions/judge";
-import { openaiJudgeEngine } from "@/lib/readings/decisions/openai-judge";
+import { judgeFromConfig } from "@/lib/readings/decisions/resolve";
 import { type CarryOutcome, decideWithCarry, optionPrint } from "@/lib/readings/labelling/carry";
 import {
   type AskGroup,
@@ -90,15 +90,10 @@ const WORKFLOW_DECIDE_FEATURE = "workflow_decide";
  * `tools` its tuned tool framing; null without a usable key.
  */
 export function workflowJudgeFromEnv(
-  config: Pick<Config, "openai"> = getConfig(),
+  config: Config = getConfig(),
   tools = false,
 ): JudgeEngine | null {
-  const resolved = resolveDecisionEngine(config);
-  if (!resolved) return null;
-  return openaiJudgeEngine({
-    apiKey: resolved.apiKey,
-    baseUrl: config.openai.baseUrl,
-    model: config.openai.decisionsModel,
+  return judgeFromConfig(config, {
     ...(tools ? {} : { framing: WORKFLOW_FRAMING }),
     feature: WORKFLOW_DECIDE_FEATURE,
     maxInputTokens: DECIDE_MAX_INPUT_TOKENS,
@@ -106,13 +101,13 @@ export function workflowJudgeFromEnv(
 }
 
 /** The ceiling this job's token cap puts on spend at the engine's list price; undefined without an engine. */
-export function decideMaxUsd(config: Pick<Config, "openai"> = getConfig()): number | undefined {
+export function decideMaxUsd(config: Config = getConfig()): number | undefined {
   const resolved = resolveDecisionEngine(config);
   if (!resolved) return undefined;
-  return Number((DECIDE_MAX_INPUT_TOKENS * usdPerInputToken(resolved.name)).toFixed(2));
+  return Number((DECIDE_MAX_INPUT_TOKENS * usdPerInputToken(resolved.name, config)).toFixed(2));
 }
 
-export function defaultDecideDeps(config: Pick<Config, "openai"> = getConfig()): DecideDeps {
+export function defaultDecideDeps(config: Config = getConfig()): DecideDeps {
   return {
     judge: workflowJudgeFromEnv(config),
     toolJudge: workflowJudgeFromEnv(config, true),

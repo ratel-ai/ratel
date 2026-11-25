@@ -1,3 +1,4 @@
+import type { DecisionClient } from "@/lib/contracts/models";
 import { getLogger } from "@/lib/platform/logger";
 import {
   bm25Order,
@@ -96,7 +97,42 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
     retryRateLimit: true,
     ...(config.feature ? { feature: config.feature } : {}),
   });
-  const model = config.model || OPENAI_DECISIONS_MODEL;
+  return judgeEngineOver(client, config.model || OPENAI_DECISIONS_MODEL, config);
+}
+
+/** What the judge runs with, whichever engine answers. Absent values are the OpenAI engine's. */
+export interface JudgeEngineSettings {
+  framing?: JudgeFraming;
+  minConfidence?: number;
+  maxInputTokens?: number;
+  maxDurationMs?: number;
+  concurrency?: number;
+  now?: () => number;
+  /** The engine's price, for the dollars the finishing log line reports. */
+  usdPerInputToken?: number;
+  /** Who is named when nothing answers, and on each log line. */
+  label?: string;
+  /** Where the judge's lines go (tests); the module's logger by default. */
+  log?: {
+    info(fields: Record<string, unknown>, message: string): void;
+    warn(fields: Record<string, unknown>, message: string): void;
+  };
+}
+
+/**
+ * The judge over any decision client (ADR-0009 §10): the same budget, deadline, concurrency
+ * and abstention rules, with the thresholds of the engine it runs on.
+ */
+export function judgeEngineOver(
+  client: Pick<DecisionClient, "decideChoice">,
+  model: string,
+  config: JudgeEngineSettings = {},
+): JudgeEngine {
+  const label = config.label ?? "OpenAI";
+  const log = config.log ?? logger;
+  // OpenAI's lines keep the words they have always had; another vendor's are the decision's.
+  const said = (what: string) => `${label === "OpenAI" ? "openai" : "decision"} judging ${what}`;
+  const usdPerInputToken = config.usdPerInputToken ?? OPENAI_USD_PER_INPUT_TOKEN;
   const framing = judgeFraming(config.framing);
   const minConfidence = config.minConfidence ?? OPENAI_MIN_CONFIDENCE;
   const maxInputTokens = config.maxInputTokens ?? OPENAI_MAX_INPUT_TOKENS_PER_RUN;
@@ -150,12 +186,12 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
           if (err instanceof DecisionCallError && err.reason === "credentials") {
             throw new OpenAIJudgeAuthError(err.message);
           }
-          logger.warn({ err }, "openai judging request failed");
+          log.warn({ err, vendor: label }, said("request failed"));
           unanswered += 1;
           consecutiveFailures += 1;
           if (consecutiveFailures >= OPENAI_MAX_CONSECUTIVE_FAILURES) {
             throw new OpenAIJudgeUnavailableError(
-              `OpenAI answered none of the last ${consecutiveFailures} searches`,
+              `${label} answered none of the last ${consecutiveFailures} searches`,
             );
           }
         }
@@ -180,12 +216,13 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
       await Promise.all(Array.from({ length: concurrency }, worker));
       if (fatal !== null) throw fatal;
       if (verdicts.length === 0 && unanswered > 0) {
-        throw new OpenAIJudgeUnavailableError(`OpenAI answered none of ${unanswered} searches`);
+        throw new OpenAIJudgeUnavailableError(`${label} answered none of ${unanswered} searches`);
       }
 
       const answered = verdicts.filter((verdict) => verdict.entryId !== "").length;
-      logger.info(
+      log.info(
         {
+          vendor: label,
           model,
           cases: cases.length,
           answered,
@@ -194,14 +231,20 @@ export function openaiJudgeEngine(config: OpenAIJudgeConfig): JudgeEngine {
           unanswered,
           not_asked: cases.length - verdicts.length - unanswered,
           input_tokens: inputTokens,
-          usd: Number((inputTokens * OPENAI_USD_PER_INPUT_TOKEN).toFixed(4)),
+          usd: Number((inputTokens * usdPerInputToken).toFixed(4)),
         },
-        "openai judging finished",
+        said("finished"),
       );
       if (stopped !== null) {
-        logger.warn(
-          { model, reason: stopped, input_tokens: inputTokens, not_asked: cases.length - next },
-          "openai judging stopped early",
+        log.warn(
+          {
+            vendor: label,
+            model,
+            reason: stopped,
+            input_tokens: inputTokens,
+            not_asked: cases.length - next,
+          },
+          said("stopped early"),
         );
       }
       return verdicts;

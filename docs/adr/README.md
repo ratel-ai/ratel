@@ -13,6 +13,7 @@ history holds the earlier records and how they changed.
 | [0006](0006-licensing.md) | Licensing: MIT, no copyleft |
 | [0007](0007-sdk-wire-contracts.md) | The platform serves the SDK's wire contracts |
 | [0008](0008-single-ci-gate.md) | One required `ci-gate` check |
+| [0009](0009-model-vendors.md) | Model calls go through one kit, and a deployment names its vendors |
 
 The SDK decisions (engine, retrieval, bindings, adapters, rankers, releases) belong to
 [ratel-ai/ratel-sdk](https://github.com/ratel-ai/ratel-sdk), where that code lives.

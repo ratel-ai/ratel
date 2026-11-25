@@ -7,4 +7,5 @@ export {
   composition,
   createComposition,
   type NavItem,
+  OSS_EDITION,
 } from "@/lib/composition/ports";

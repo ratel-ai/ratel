@@ -25,8 +25,9 @@ persists signals and the run in one transaction. After it, the run queues `label
 when it found workflows and a model key is set, and the readings that follow through
 `computeSeams`.
 
-**Model use.** Workflow names need `ANTHROPIC_API_KEY` (`TRACE_WORKFLOW_LABEL_MODEL`, default
-`readings/model-defaults.ts`); the placement of recent asks in workflows and the "does any tool
+**Model use.** Workflow names need a text model from the model kit (`readings/models`,
+ADR-0009): Claude with `ANTHROPIC_API_KEY` (`TRACE_WORKFLOW_LABEL_MODEL`, default
+`readings/model-defaults.ts`), or the provider `MODEL_PROVIDER` names (its model for the feature); the placement of recent asks in workflows and the "does any tool
 do this" check need `OPENAI_API_KEY` through `readings/decisions` (OpenAI is the one judge
 engine in this edition; `TRACE_WORKFLOW_MAX_JEV_TOKENS`, upstream's name, caps a job's spend,
 and `TRACE_WORKFLOW_MAX_JUDGE_TOKENS` is read as an alias). With no key the

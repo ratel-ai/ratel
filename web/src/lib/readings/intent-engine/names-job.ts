@@ -1,12 +1,10 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { type Config, getConfig } from "@/config";
 import { CONFIG_DEFAULTS } from "@/config-defaults";
+import type { TextModel } from "@/lib/contracts/models";
 import { getLogger } from "@/lib/platform/logger";
-import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
-import { anthropicContent } from "@/lib/platform/model-call-content";
+import { recordModelCall } from "@/lib/platform/model-call";
 import { reportServerException } from "@/lib/platform/telemetry";
-import { anthropicClient } from "@/lib/readings/anthropic/client";
 import type { ActionKey } from "@/lib/readings/intent-engine/actions";
 import {
   buildNamesPrompt,
@@ -24,7 +22,8 @@ import { intentClusters } from "@/lib/readings/intent-engine/schema";
 import { boundEngineTransaction, type EngineDb } from "@/lib/readings/intent-engine/store";
 import type { EngineCluster, LevelTree } from "@/lib/readings/intent-types/engine-types";
 import { DEFAULT_LABEL_MODEL } from "@/lib/readings/model-defaults";
-import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import { models, providerFor } from "@/lib/readings/models";
+import { anthropicTextModel } from "@/lib/readings/models/providers/anthropic";
 
 /**
  * The model-naming step of an engine run: "What they ask for" (level 1) gets a
@@ -139,53 +138,40 @@ export function maxNamesPerRun(config: Pick<Config, "intentEngine"> = getConfig(
   return config.intentEngine.maxNames;
 }
 
-/** A structured-output Anthropic completion, or null without a Claude backend. */
+/** The names completion over any text model (ADR-0009): a refusal and a cut-off keep their own errors. */
+export function namesCompleteOver(text: TextModel): NamesComplete {
+  return async (system, user, keyed) => {
+    const reply = await text.complete({
+      system,
+      user,
+      schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA,
+      effort: "low",
+      maxTokens: NAME_MAX_TOKENS,
+      timeoutMs: NAME_TIMEOUT_MS,
+      maxRetries: NAME_MAX_RETRIES,
+    });
+    if (reply.stop === "refused") throw new NamesDeclinedError();
+    if (reply.stop === "cut_off") throw new NamesCutOffError();
+    return reply.text;
+  };
+}
+
+/** A structured-output Claude completion on the model given, or null without a Claude backend. */
 export function anthropicNamesComplete(
   model: string,
   config: Pick<Config, "anthropic"> = getConfig(),
 ): NamesComplete | null {
-  const client = anthropicClient(
-    { timeout: NAME_TIMEOUT_MS, maxRetries: NAME_MAX_RETRIES },
-    config,
-  );
-  if (!client) return null;
-  return async (system, user, keyed) => {
-    const request: Anthropic.MessageCreateParamsNonStreaming = {
-      model,
-      max_tokens: NAME_MAX_TOKENS,
-      system,
-      messages: [{ role: "user", content: user }],
-      output_config: {
-        effort: "low",
-        format: { type: "json_schema", schema: keyed ? NAMES_KEYS_SCHEMA : NAMES_SCHEMA },
-      },
-    };
-    const message = await trackModelCall(
-      {
-        provider: "anthropic",
-        model,
-        feature: "intent_names",
-        payer: "ratel",
-        content: anthropicContent(request),
-      },
-      () => client.messages.create(wellFormedJson(request)),
-      anthropicUsage,
-    );
-    if (message.stop_reason === "refusal") throw new NamesDeclinedError();
-    if (message.stop_reason === "max_tokens") throw new NamesCutOffError();
-    return message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-  };
+  const text = anthropicTextModel({ model, feature: "intent_names", payer: "ratel", config });
+  return text ? namesCompleteOver(text) : null;
 }
 
 /** Read per run from the config, so a dropped key (`make pipeline MODELS=off`) applies to the next process. */
 export function defaultNameDeps(config: Config = getConfig()): NameJobDeps {
-  const model = nameModel(config);
+  // The deployment's model for names, whoever serves it; none leaves the clusters unnamed.
+  const text = models.text("intent_names", { config });
   return {
-    model,
-    complete: anthropicNamesComplete(model, config),
+    model: text?.model ?? nameModel(config),
+    complete: text ? namesCompleteOver(text) : null,
     maxNames: maxNamesPerRun(config),
   };
 }
@@ -352,7 +338,7 @@ export async function nameEngineClusters(
   if (!deps.complete) {
     if (candidates.length > 0 && deps.maxNames > 0) {
       recordModelCall({
-        provider: "anthropic",
+        provider: providerFor("intent_names"),
         model: deps.model,
         feature: "intent_names",
         payer: "ratel",

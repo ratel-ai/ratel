@@ -13,7 +13,7 @@ import type { Fix } from "@/lib/views/fixes/types";
 export const DRAFTING_MESSAGE =
   "The fix draft is being prepared. Try the simulation again when the draft is ready.";
 export const NO_DRAFT_MODEL_MESSAGE =
-  "No Claude backend is configured (ANTHROPIC_API_KEY or ANTHROPIC_BACKEND), so this fix's text can't be drafted.";
+  "No model is configured (MODEL_PROVIDER, or ANTHROPIC_API_KEY), so this fix's text can't be drafted.";
 export const DRAFT_FIX_ACTOR = "system:fix-drafts";
 
 /** A `draft_fix` job's payload: the fix, and the actor whose gate it runs under (a user id or {@link DRAFT_FIX_ACTOR}). */

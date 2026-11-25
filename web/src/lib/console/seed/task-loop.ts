@@ -424,6 +424,8 @@ function demoConfig(noModels: boolean): Config {
           evalGate: { ...base.evalGate, mockModel: true },
           anthropic: { ...base.anthropic, backend: undefined, apiKey: undefined },
           openai: { ...base.openai, apiKey: undefined },
+          modelVendor: { ...base.modelVendor, name: undefined },
+          decisions: { ...base.decisions, vendor: undefined, apiKey: undefined },
         }
       : {}),
   };

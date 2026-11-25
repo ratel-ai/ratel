@@ -19,6 +19,7 @@ import { ConfigError, field, type InferSchema, resolve, schema } from "zfig";
 import { z } from "zod";
 import { CONFIG_DEFAULTS as D } from "@/config-defaults";
 import type { CoreFlag } from "@/lib/contracts/feature-flags";
+import { featureVariable, MODEL_FEATURES } from "@/lib/readings/models/features";
 
 type Env = Readonly<Record<string, string | undefined>>;
 type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
@@ -254,8 +255,9 @@ const CONFIG_SCHEMA = schema({
     /** Comma-separated Bedrock model ids this account has not enabled. */
     bedrockModelsNotEnabled: optional("BEDROCK_MODELS_NOT_ENABLED", configured),
     /**
-     * A long-term Bedrock key. The AWS SDK reads the variable itself; the app reads it only to
-     * refuse a Bedrock client, so the calls stay signed by the credential chain (the task role).
+     * A long-term Bedrock key. The AWS SDK reads the variable itself; with `backend` `bedrock` the
+     * app reads it only to refuse a Bedrock client, so the calls stay signed by the credential
+     * chain (the task role). With `modelVendor.name` `bedrock` it signs the calls.
      */
     bedrockBearerToken: optional("AWS_BEARER_TOKEN_BEDROCK", configured, { sensitive: true }),
   },
@@ -264,8 +266,57 @@ const CONFIG_SCHEMA = schema({
     baseUrl: optional("OPENAI_BASE_URL", configured),
     embeddingModel: optional("OPENAI_EMBEDDING_MODEL", configured),
     decisionsModel: optional("OPENAI_DECISIONS_MODEL", configured),
-    /** The decision engine asked for; this edition has one. */
+    /** The private edition's setting for its own calls; the core's is `decisions.vendor`. */
     decisionEngine: optional("DECISION_ENGINE", configured),
+  },
+  /** The vendor of the text and chat models (`lib/readings/models`); unset, Claude as `anthropic` says. */
+  modelVendor: {
+    /** A vendor's name; a name that is not one turns the models off. */
+    name: optional("MODEL_PROVIDER", configured),
+    /** A server's address, or another address for a hosted vendor. */
+    baseUrl: optional("MODEL_BASE_URL", configured),
+    /** Ahead of the vendor's own key, and the only one sent to `baseUrl`. */
+    apiKey: optional("MODEL_API_KEY", configured, { sensitive: true }),
+    /** The model of every feature; unset, the vendor's own for each. */
+    model: optional("MODEL", configured),
+    /** The model of one feature, by its id; ahead of `model`. */
+    features: Object.fromEntries(
+      MODEL_FEATURES.map((row) => [row.id, optional(featureVariable(row.id), configured)]),
+    ) as Record<string, ReturnType<typeof optional<typeof configured>>>,
+    /** Comma-separated id prefixes of a server's models that think. */
+    reasoningModels: optional("MODEL_REASONING_MODELS", configured),
+    /** The most any call may ask a model to generate. */
+    maxOutputTokens: optional("MODEL_MAX_OUTPUT_TOKENS", positiveInt),
+    /** Model id to `{ input, output, cachedInput? }`, dollars per million tokens; JSON in the environment. */
+    prices: optional("MODEL_PRICES", z.union([configured, z.record(z.string(), z.unknown())])),
+  },
+  /** What each vendor of `modelVendor` or `decisions` is reached with, beside `anthropic` and `openai`. */
+  vendors: {
+    typesafeApiKey: optional("TYPESAFE_API_KEY", configured, { sensitive: true }),
+    sageApiKey: optional("SAGE_API_KEY", configured, { sensitive: true }),
+    geminiApiKey: optional("GEMINI_API_KEY", configured, { sensitive: true }),
+    googleCloudProject: optional("GOOGLE_CLOUD_PROJECT", configured),
+    /** `global`, `us`, `eu` or a region. */
+    googleCloudLocation: optional("GOOGLE_CLOUD_LOCATION", configured),
+    awsRegion: optional("AWS_REGION", configured),
+    /** `global`, `us`, `eu`, `jp` or `au`; unset, the region's own. */
+    bedrockProfile: optional("BEDROCK_PROFILE", configured),
+  },
+  /** The vendor of the decision model (`lib/readings/decisions`); unset, OpenAI as `openai` says. */
+  decisions: {
+    /** A vendor's name; a name that is not one turns the decisions off. */
+    vendor: optional("DECISION_PROVIDER", configured),
+    baseUrl: optional("DECISION_BASE_URL", configured),
+    apiKey: optional("DECISION_API_KEY", configured, { sensitive: true }),
+    model: optional("DECISION_MODEL", configured),
+    /** Below it the judge abstains; unset, the vendor's. */
+    minConfidence: optional("DECISION_MIN_CONFIDENCE", share),
+  },
+  /** The Playground's embeddings; unset, OpenAI as `openai` says, else the local hash. */
+  embeddings: {
+    baseUrl: optional("EMBEDDING_BASE_URL", configured),
+    apiKey: optional("EMBEDDING_API_KEY", configured, { sensitive: true }),
+    model: optional("EMBEDDING_MODEL", configured),
   },
   /** Model overrides; unset, each job uses its own default. */
   models: {

@@ -1,15 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { type Config, getConfig } from "@/config";
-import { ratelBudgetCostFor } from "@/lib/ingest/pricing";
 import { deploymentEnvironment } from "@/lib/platform/environment";
 import { anthropicUsage, recordModelCall, trackModelCall } from "@/lib/platform/model-call";
 import { anthropicContent } from "@/lib/platform/model-call-content";
-import {
-  type AnthropicClient,
-  anthropicClient,
-  ModelNotEnabledError,
-} from "@/lib/readings/anthropic/client";
+import { type AnthropicClient, ModelNotEnabledError } from "@/lib/readings/anthropic/client";
+import { type ClaudeForFeature, claudeFor, providerFor } from "@/lib/readings/models";
+import { budgetCostFor } from "@/lib/readings/models/prices";
 import { wellFormedJson } from "@/lib/readings/text/well-formed";
+import {
+  neutralAgent,
+  neutralJudge,
+  neutralPerson,
+  neutralTestDraft,
+  neutralToolStandIn,
+} from "@/lib/views/eval-gate/models-neutral";
 import type { ToolDef } from "@/lib/views/eval-gate/types";
 
 /**
@@ -21,9 +25,10 @@ import type { ToolDef } from "@/lib/views/eval-gate/types";
  * - the **tool stand-in**: answers a tool call the recording has no result for;
  * - the **judge**: reads a run's path against the person's criteria.
  *
- * Real calls go through `anthropicClient` (`lib/readings/anthropic/client.ts`), as the
- * pipeline's labeller and Quality's analyst do. With no key there is no model
- * and callers say so. `EVAL_GATE_MOCK_MODEL=1` swaps in the deterministic
+ * Real calls go to the deployment's vendor, which the model kit (`lib/readings/models`, ADR-0009)
+ * resolves for each feature: a Claude model through the code below, wherever Claude is hosted;
+ * any other model through `models-neutral.ts`. With no vendor there is no model and callers say
+ * so. `EVAL_GATE_MOCK_MODEL=1` swaps in the deterministic
  * stand-ins, in local environments only (the `MATCH_QUALITY_MOCK_ANALYST`
  * allowlist), and every result made with them says so.
  *
@@ -64,6 +69,8 @@ export interface AgentReply {
 
 export interface AgentModel {
   model: string;
+  /** Owned (ADR-0009): who is billed, on a refused call's spend line; absent is Anthropic. */
+  provider?: string;
   standIn: boolean;
   /** RC-653: the most one answer may be; absent: `AGENT_MAX_TOKENS`. */
   maxTokens?: number;
@@ -76,6 +83,7 @@ export interface AgentModel {
 
 export interface ToolStandIn {
   model: string;
+  provider?: string;
   standIn: boolean;
   answer(input: {
     tool: ToolDef | null;
@@ -88,6 +96,7 @@ export interface ToolStandIn {
 /** RC-296: writes the next message of a simulated person that follows a description. */
 export interface PersonModel {
   model: string;
+  provider?: string;
   standIn: boolean;
   write(input: {
     description: string;
@@ -97,12 +106,14 @@ export interface PersonModel {
 
 export interface JudgeModel {
   model: string;
+  provider?: string;
   standIn: boolean;
   judge(input: { criteria: string; run: string }): Promise<{ pass: boolean; usage: ModelUsage }>;
 }
 
 export interface TestDraftModel {
   model: string;
+  provider?: string;
   standIn: boolean;
   draft(input: string): Promise<{ text: string; usage: ModelUsage }>;
 }
@@ -126,9 +137,6 @@ export interface EvalModels {
 }
 
 /* - Budget ------------------------------------------------------------------ */
-
-/** Priced at this rate when a model has no list price, so the cap still holds. */
-const FALLBACK_PRICE = "claude-opus-4-8";
 
 /** Room held for one call before it is made, released when its real cost is known. */
 export interface Reservation {
@@ -178,19 +186,9 @@ export class SpendMeter {
   /** What this usage costs (nothing for the local stand-ins; an unpriced model at a list price, so the cap holds). */
   price(model: string, usage: ModelUsage): number {
     if (model === STAND_IN_MODEL) return 0;
-    const priced = ratelBudgetCostFor(model, {
-      input_tokens: usage.inputTokens,
-      output_tokens: usage.outputTokens,
-      cached_tokens: usage.cachedTokens,
-    });
-    return (
-      priced ??
-      ratelBudgetCostFor(FALLBACK_PRICE, {
-        input_tokens: usage.inputTokens,
-        output_tokens: usage.outputTokens,
-      }) ??
-      0
-    );
+    // Owned (ADR-0009): the kit's budget prices, so another vendor's model has its own price and
+    // `modelVendor.prices` is read. A Claude model costs what it always has.
+    return budgetCostFor(model, usage);
   }
 
   /** Hold room for a call's worst case; null when it can't fit (nothing may be called). */
@@ -286,54 +284,64 @@ export function mockModelsEnabled(
 
 /**
  * The models this deployment has: stand-ins when asked for locally (checked
- * first), the deployment's Claude backend, else none. `judgeFeature` names the spend line
+ * first), the deployment's vendor, else none. `judgeFeature` names the spend line
  * of the judge, `agentFeature` the one of the agent (a fix replay, or a What-if
  * sample, RC-176). RC-76: locally, `evalGate.replayModelOverride` replays
  * every run with that model instead of the run's own (a cheaper model while
  * iterating on fidelity).
  */
 export function resolveEvalModels(
-  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
-  judgeFeature: EvalGateFeature = "eval_gate_judge",
+  config: Config = getConfig(),
+  judgeFeature: JudgeFeature = "eval_gate_judge",
   environment: string = deploymentEnvironment(),
   agentFeature: AgentFeature = "eval_gate_replay",
 ): EvalModels {
   if (mockModelsEnabled(config, environment)) return standInModels();
-  const client = anthropicClient({}, config);
-  if (!client) return { agent: null, tool: null, judge: null, standIn: false };
-  const fallback = config.evalGate.replayModel ?? DEFAULT_REPLAY_MODEL;
-  const small = config.evalGate.judgeModel ?? DEFAULT_JUDGE_MODEL;
+  const options = { config, environment };
   const override = LOCAL_ENVIRONMENTS.has(environment)
     ? config.evalGate.replayModelOverride
     : undefined;
+  // Each feature's own vendor model, so the judge can run on one model and the replay on another.
+  const agent = claudeFor(agentFeature, options);
+  const standIn = claudeFor("eval_gate_stand_in", options);
+  // A task's eval is judged on the judge's own model, under the task's feature (as upstream).
+  const judge = claudeFor("eval_gate_judge", options);
+  const person = standIn
+    ? anthropicPerson(standIn.client, standIn.model, standIn.backend)
+    : neutralPerson(options);
   return {
-    agent: ({ recordedModel }) =>
-      anthropicAgent(
-        client,
-        override ?? replayModelFor(recordedModel, fallback),
-        fallback,
-        agentFeature,
-      ),
-    tool: anthropicToolStandIn(client, small),
-    judge: anthropicJudge(client, small, judgeFeature),
-    person: anthropicPerson(client, small),
+    agent: agent
+      ? ({ recordedModel }) =>
+          anthropicAgent(
+            agent.client,
+            override ?? replayModelFor(recordedModel, agent.model),
+            agent.model,
+            agentFeature,
+            agent.backend,
+          )
+      : neutralAgent(agentFeature, options, override),
+    tool: standIn
+      ? anthropicToolStandIn(standIn.client, standIn.model, standIn.backend)
+      : neutralToolStandIn(options),
+    judge: judge
+      ? anthropicJudge(judge.client, judge.model, judgeFeature, judge.backend)
+      : neutralJudge(judgeFeature, options, "eval_gate_judge"),
+    ...(person ? { person } : {}),
     standIn: false,
   };
 }
 
 /** Resolve the live task judge with its own spend feature. */
-export function resolveTaskJudge(
-  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
-): JudgeModel | null {
+export function resolveTaskJudge(config: Config = getConfig()): JudgeModel | null {
   if (mockModelsEnabled(config)) return ruleJudge();
-  const client = anthropicClient({}, config);
-  return client ? anthropicJudge(client, DEFAULT_JUDGE_MODEL, "eval_gate_task_judge") : null;
+  const claude = claudeFor("eval_gate_task_judge", { config });
+  return claude
+    ? anthropicJudge(claude.client, claude.model, "eval_gate_task_judge", claude.backend)
+    : neutralJudge("eval_gate_task_judge", { config });
 }
 
 /** Resolve the small model for a test proposal. */
-export function resolveTestDraftModel(
-  config: Pick<Config, "anthropic" | "evalGate"> = getConfig(),
-): TestDraftModel | null {
+export function resolveTestDraftModel(config: Config = getConfig()): TestDraftModel | null {
   if (mockModelsEnabled(config))
     return {
       model: STAND_IN_MODEL,
@@ -360,15 +368,15 @@ export function resolveTestDraftModel(
         };
       },
     };
-  const client = anthropicClient({}, config);
-  if (!client) return null;
-  const model = DEFAULT_JUDGE_MODEL;
+  const claude = claudeFor("eval_gate_task_test_draft", { config });
+  if (!claude) return neutralTestDraft({ config });
+  const { client, model, backend } = claude;
   return {
     model,
     standIn: false,
     async draft(input) {
       const message = await guarded(() =>
-        tracked(client, "eval_gate_task_test_draft", {
+        tracked({ client, backend }, "eval_gate_task_test_draft", {
           model,
           max_tokens: SMALL_MAX_TOKENS,
           system: TEST_DRAFT_PROMPT,
@@ -518,9 +526,12 @@ export type EvalGateFeature =
 /** The features an agent call may be logged under: a fix replay, or a What-if sample (RC-176). */
 export type AgentFeature = Extract<EvalGateFeature, "eval_gate_replay" | "eval_gate_what_if">;
 
+/** Owned (ADR-0009): the features a judge's spend line can carry. */
+export type JudgeFeature = Extract<EvalGateFeature, "eval_gate_judge" | "eval_gate_task_judge">;
+
 /** One Messages API call, reported through the model-call seam. */
 function tracked(
-  client: AnthropicClient,
+  { client, backend }: Pick<ClaudeForFeature, "client" | "backend">,
   feature: EvalGateFeature,
   params: Anthropic.MessageCreateParamsNonStreaming,
 ): Promise<Anthropic.Message> {
@@ -530,6 +541,7 @@ function tracked(
       model: params.model,
       feature,
       payer: "ratel",
+      ...(backend ? { backend } : {}),
       content: anthropicContent(params),
     },
     () => client.messages.create(wellFormedJson(params)),
@@ -542,13 +554,13 @@ function tracked(
  * `model_call` line with their count (local stand-ins are not model calls).
  */
 export function recordBudgetRefusal(
-  model: { model: string; standIn: boolean },
+  model: { model: string; standIn: boolean; provider?: string },
   feature: EvalGateFeature,
   calls: number = 1,
 ): void {
   if (model.standIn || calls < 1) return;
   recordModelCall({
-    provider: "anthropic",
+    provider: model.provider ?? "anthropic",
     model: model.model,
     feature,
     payer: "ratel",
@@ -558,11 +570,11 @@ export function recordBudgetRefusal(
   });
 }
 
-/** Calls never made because no Anthropic key is configured, logged as one `model_call` line with their count, at the model they would have used. */
+/** Calls never made because no vendor is configured, logged as one `model_call` line with their count, at the model they would have used. */
 export function recordNoModelKey(
   feature: EvalGateFeature,
   calls: number = 1,
-  config: Pick<Config, "evalGate"> = getConfig(),
+  config: Config = getConfig(),
 ): void {
   if (calls < 1) return;
   const model =
@@ -570,7 +582,7 @@ export function recordNoModelKey(
       ? (config.evalGate.replayModel ?? DEFAULT_REPLAY_MODEL)
       : (config.evalGate.judgeModel ?? DEFAULT_JUDGE_MODEL);
   recordModelCall({
-    provider: "anthropic",
+    provider: providerFor(feature, { config }),
     model,
     feature,
     payer: "ratel",
@@ -606,6 +618,7 @@ export function anthropicAgent(
   model: string,
   fallback: string = DEFAULT_REPLAY_MODEL,
   feature: AgentFeature = "eval_gate_replay",
+  backend?: string,
 ): AgentModel {
   let current = model;
   const paramsFor = (
@@ -619,11 +632,11 @@ export function anthropicAgent(
   const ask = (params: Omit<Anthropic.MessageCreateParamsNonStreaming, "model">) =>
     guarded(async () => {
       try {
-        return await tracked(client, feature, paramsFor(params));
+        return await tracked({ client, backend }, feature, paramsFor(params));
       } catch (err) {
         if (!(err instanceof Anthropic.NotFoundError) || current === fallback) throw err;
         current = fallback;
-        return tracked(client, feature, paramsFor(params));
+        return tracked({ client, backend }, feature, paramsFor(params));
       }
     });
   return {
@@ -664,28 +677,70 @@ export function anthropicAgent(
   };
 }
 
-const STAND_IN_SYSTEM =
+export const STAND_IN_SYSTEM =
   "You stand in for one tool of an AI agent while a past run is replayed in a test. Reply with only what the tool would return for this call: " +
   "the same shape and style as its recorded results when there are any, else plausible JSON. No commentary.";
 
-export function anthropicToolStandIn(client: AnthropicClient, model: string): ToolStandIn {
+/** What the model standing in for a tool is told of the call. */
+export function standInPrompt({
+  tool,
+  name,
+  args,
+  examples,
+}: Parameters<ToolStandIn["answer"]>[0]): string {
+  return [
+    `Tool: ${name}`,
+    tool ? `Description: ${tool.description}` : null,
+    tool ? `Arguments schema: ${JSON.stringify(tool.parameters)}` : null,
+    `Called with: ${JSON.stringify(args)}`,
+    examples.length > 0
+      ? `Results it returned in the recorded run:\n${examples.slice(0, 3).join("\n")}`
+      : "It has no recorded result in this run.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** What the model playing the person is told of the conversation. */
+export function personPrompt({
+  description,
+  messages,
+}: Parameters<PersonModel["write"]>[0]): string {
+  const conversation = messages
+    .flatMap((message) =>
+      message.role === "user"
+        ? [`Person: ${message.text}`]
+        : message.role === "assistant" && message.text.trim()
+          ? [`Agent: ${message.text}`]
+          : [],
+    )
+    .join("\n");
+  return `The person: ${description}\n\nThe conversation so far:\n${conversation}\n\nWrite the person's next message.`;
+}
+
+export function judgePrompt({ criteria, run }: Parameters<JudgeModel["judge"]>[0]): string {
+  return `Criteria:\n${criteria}\n\nThe run:\n${run}`;
+}
+
+/** The judge's verdict from its answer. */
+export function readVerdict(answer: unknown): boolean {
+  const parsed = answer as { pass?: unknown };
+  if (typeof parsed.pass !== "boolean") throw new Error("the judge answered without a verdict");
+  return parsed.pass;
+}
+
+export function anthropicToolStandIn(
+  client: AnthropicClient,
+  model: string,
+  backend?: string,
+): ToolStandIn {
   return {
     model,
     standIn: false,
     async answer({ tool, name, args, examples }) {
-      const user = [
-        `Tool: ${name}`,
-        tool ? `Description: ${tool.description}` : null,
-        tool ? `Arguments schema: ${JSON.stringify(tool.parameters)}` : null,
-        `Called with: ${JSON.stringify(args)}`,
-        examples.length > 0
-          ? `Results it returned in the recorded run:\n${examples.slice(0, 3).join("\n")}`
-          : "It has no recorded result in this run.",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      const user = standInPrompt({ tool, name, args, examples });
       const message = await guarded(() =>
-        tracked(client, "eval_gate_stand_in", {
+        tracked({ client, backend }, "eval_gate_stand_in", {
           model,
           max_tokens: SMALL_MAX_TOKENS,
           system: STAND_IN_SYSTEM,
@@ -699,34 +754,29 @@ export function anthropicToolStandIn(client: AnthropicClient, model: string): To
   };
 }
 
-const PERSON_SYSTEM =
+export const PERSON_SYSTEM =
   "You play the person talking to an AI agent in a test. Follow the description of the person. Reply with only the person's next message " +
   "to the agent, in their words: one short message, no commentary, no quotes.";
 
 /** RC-296: the simulated person, on the stand-in route (the small model, logged as a stand-in call). */
-export function anthropicPerson(client: AnthropicClient, model: string): PersonModel {
+export function anthropicPerson(
+  client: AnthropicClient,
+  model: string,
+  backend?: string,
+): PersonModel {
   return {
     model,
     standIn: false,
     async write({ description, messages }) {
-      const conversation = messages
-        .flatMap((message) =>
-          message.role === "user"
-            ? [`Person: ${message.text}`]
-            : message.role === "assistant" && message.text.trim()
-              ? [`Agent: ${message.text}`]
-              : [],
-        )
-        .join("\n");
       const message = await guarded(() =>
-        tracked(client, "eval_gate_stand_in", {
+        tracked({ client, backend }, "eval_gate_stand_in", {
           model,
           max_tokens: SMALL_MAX_TOKENS,
           system: PERSON_SYSTEM,
           messages: [
             {
               role: "user",
-              content: `The person: ${description}\n\nThe conversation so far:\n${conversation}\n\nWrite the person's next message.`,
+              content: personPrompt({ description, messages }),
             },
           ],
           ...(takesEffort(model) ? { output_config: { effort: "low" as const } } : {}),
@@ -739,7 +789,7 @@ export function anthropicPerson(client: AnthropicClient, model: string): PersonM
   };
 }
 
-const JUDGE_SCHEMA = {
+export const JUDGE_SCHEMA = {
   type: "object",
   properties: {
     pass: { type: "boolean", description: "true only when the run meets every criterion" },
@@ -748,7 +798,7 @@ const JUDGE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
-const JUDGE_SYSTEM =
+export const JUDGE_SYSTEM =
   "You check one run of an AI agent against a reviewer's criteria. Read only the run as described: the tools it called in order, " +
   "which failed, and how it ended. Answer pass only when the run meets every criterion; when the description can't show a criterion, it fails.";
 
@@ -756,17 +806,18 @@ export function anthropicJudge(
   client: AnthropicClient,
   model: string,
   feature: EvalGateFeature = "eval_gate_judge",
+  backend?: string,
 ): JudgeModel {
   return {
     model,
     standIn: false,
     async judge({ criteria, run }) {
       const message = await guarded(() =>
-        tracked(client, feature, {
+        tracked({ client, backend }, feature, {
           model,
           max_tokens: SMALL_MAX_TOKENS,
           system: JUDGE_SYSTEM,
-          messages: [{ role: "user", content: `Criteria:\n${criteria}\n\nThe run:\n${run}` }],
+          messages: [{ role: "user", content: judgePrompt({ criteria, run }) }],
           output_config: {
             format: { type: "json_schema", schema: JUDGE_SCHEMA },
             ...(takesEffort(model) ? { effort: "low" as const } : {}),
@@ -774,9 +825,7 @@ export function anthropicJudge(
         }),
       );
       if (message.stop_reason === "refusal") throw new Error("the judge declined the request");
-      const parsed = JSON.parse(textOf(message)) as { pass?: unknown };
-      if (typeof parsed.pass !== "boolean") throw new Error("the judge answered without a verdict");
-      return { pass: parsed.pass, usage: usageOf(message) };
+      return { pass: readVerdict(JSON.parse(textOf(message))), usage: usageOf(message) };
     },
   };
 }

@@ -1,5 +1,5 @@
 import { type Config, getConfig } from "@/config";
-import { composition } from "@/lib/composition/ports";
+import { composition, OSS_EDITION } from "@/lib/composition/ports";
 import type { CoreFlag, FeatureFlagsPort, FlagSubject } from "@/lib/contracts/feature-flags";
 
 /** The settings a flag reads (`web/src/config.ts`): its forced value, and `experimentalFeatures`. */
@@ -60,5 +60,5 @@ export function experimentalFeatureEnabled(
   edition: string = composition.edition,
 ): boolean {
   if (config.flags[flag] === true) return true;
-  return edition === "Ratel OSS" && config.experimentalFeatures;
+  return edition === OSS_EDITION && config.experimentalFeatures;
 }

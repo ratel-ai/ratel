@@ -270,7 +270,9 @@ export async function assertComposition(): Promise<void> {
  * then run the cron tick in process (`jobs.cron` inprocess, the OSS default) or, as the
  * worker, the job loop. An API-only process starts neither: it only queues. A migration
  * failure or an external scheduler with no `jobs.cronSecret` exits, like a bad composition:
- * never serve a misconfigured server. Nothing here runs without a `database.url`.
+ * never serve a misconfigured server. Nothing here runs without a `database.url`. In the
+ * open-source edition it also starts the model status: the setup in the log, each failed model
+ * call in one sentence.
  *
  * `flushTelemetry` is what `registerNodeInstrumentation` returned: the worker runs it after its
  * last step, before it exits.
@@ -294,6 +296,13 @@ export async function bootBackground(flushTelemetry?: TelemetryShutdown): Promis
     }
   } else if (plan.role === "worker") {
     console.log("[migrate] skipped: the worker never migrates, the web process does");
+  }
+  // The models' setup in the log, and each failed call in one sentence kept for the console's
+  // Models settings (ADR-0009 §13). The open-source edition's own: another edition reports its own.
+  const { composition, OSS_EDITION } = await import("@/lib/composition");
+  if (composition.edition === OSS_EDITION) {
+    const { startModelStatus } = await import("@/lib/readings/models/status");
+    startModelStatus();
   }
   const { assertCronConfig, startInProcessScheduler } = await import("@/lib/jobs/scheduler");
   try {
