@@ -73,6 +73,14 @@ export function evalJudgeContract(
       );
     });
 
+    test("a failed call is not tried again: the usage of its first try is unknown", async () => {
+      const fake = fakeDecisions([500, { choice: "yes", confidence: 1 }]);
+      const judge = await (await make(fake)).judgeFor(SUBJECT);
+      assert.ok(judge);
+      await assert.rejects(askEvalJudge(judge, EVIDENCE));
+      assert.equal(fake.bodies.length, 1);
+    });
+
     test("a rejected key throws", async () => {
       await assert.rejects(ask([401]));
     });
