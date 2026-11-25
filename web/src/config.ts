@@ -89,6 +89,7 @@ const SHARE_FLOORS: ReadonlySet<string> = new Set([
   "sequence_chain.minConditional",
   "sequence_chain.dependencyShare",
   "sequence_chain.workflowViaSearch",
+  "sequence_chain.alwaysShare",
   "sibling_confusion.minCoHitShare",
   "sibling_confusion.minSplit",
   "error_loop.minLow",
@@ -340,6 +341,12 @@ const CONFIG_SCHEMA = schema({
       share,
       D.traceSignals.askedAgainTextJaccard,
     ),
+    askedAgainMinWords: setting(
+      "TRACE_SIGNALS_ASKED_AGAIN_MIN_WORDS",
+      positiveInt,
+      D.traceSignals.askedAgainMinWords,
+    ),
+    fanOutGapMs: setting("TRACE_SIGNALS_FAN_OUT_GAP_MS", nonNegative, D.traceSignals.fanOutGapMs),
     pairToolMinTurns: setting(
       "TRACE_SIGNALS_PAIR_TOOL_MIN_TURNS",
       positiveCount,
