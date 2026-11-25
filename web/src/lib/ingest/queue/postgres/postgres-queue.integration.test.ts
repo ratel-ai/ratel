@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 import { asc, eq, sql } from "drizzle-orm";
 import { drizzle as drizzleNode } from "drizzle-orm/node-postgres";
 import { drizzle } from "drizzle-orm/pglite";
@@ -42,6 +42,12 @@ runQueueConformance("postgres (PGlite)", async (policy) => {
 const realUrl = process.env.TEST_POSTGRES_URL;
 if (realUrl) {
   const pool = new Pool({ connectionString: realUrl, max: 20 });
+  before(async () => {
+    // The edition's table, as `createMigratedPGlite` makes it.
+    await pool.query(
+      "create table if not exists organizations (id uuid primary key, name text not null, slug text not null unique)",
+    );
+  });
   after(() => pool.end());
   const db = drizzleNode({ client: pool, schema: tables });
   runQueueConformance("postgres (server)", async (policy) => {

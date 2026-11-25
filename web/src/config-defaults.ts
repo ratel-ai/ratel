@@ -45,6 +45,11 @@ export const CONFIG_DEFAULTS = {
   selfTelemetry: {},
   ingest: {
     queue: "direct",
+    kafka: {
+      security: "plaintext",
+      groupId: "ratel-ingest",
+      deadLetterTopic: "ratel-ingest-dead-letters",
+    },
     publishableKeyLimitPerMinute: 6_000,
     publishableSourceLimitPerMinute: 120,
     successSampleRate: 100,

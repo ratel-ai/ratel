@@ -221,6 +221,28 @@ const CONFIG_SCHEMA = schema({
       z.preprocess(lower, z.enum(["direct", "postgres", "kafka"])),
       D.ingest.queue,
     ),
+    /** Read only with `queue` = `kafka`. */
+    kafka: {
+      /** Comma-separated `host:port`. */
+      brokers: optional("INGEST_KAFKA_BROKERS", trimmed),
+      /** `iam`: Amazon MSK's IAM login over TLS, with the AWS credential chain. */
+      security: setting(
+        "INGEST_KAFKA_SECURITY",
+        z.preprocess(lower, z.enum(["plaintext", "tls", "iam"])),
+        D.ingest.kafka.security,
+      ),
+      region: optional("INGEST_KAFKA_REGION", trimmed),
+      /** Where accept publishes; unset, this deployment only consumes. */
+      topic: optional("INGEST_KAFKA_TOPIC", trimmed),
+      /** The topics that the worker consumes, comma-separated: a list, never a pattern. */
+      topics: optional("INGEST_KAFKA_TOPICS", trimmed),
+      groupId: setting("INGEST_KAFKA_GROUP_ID", trimmed, D.ingest.kafka.groupId),
+      deadLetterTopic: setting(
+        "INGEST_KAFKA_DEAD_LETTER_TOPIC",
+        trimmed,
+        D.ingest.kafka.deadLetterTopic,
+      ),
+    },
     publishableKeyLimitPerMinute: setting(
       "RATEL_PUBLISHABLE_KEY_LIMIT_PER_MINUTE",
       positiveInt,

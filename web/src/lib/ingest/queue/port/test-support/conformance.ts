@@ -261,8 +261,12 @@ export function runQueueConformance(
       await sleep(2);
       inHand.delete(projectId);
       if (failOnce.delete(id)) return { outcome: "retry", reason: "once" };
-      seen.get(projectId)?.push(id);
-      acked += 1;
+      // At least once: a driver can deliver again, for example when the second consumer joins.
+      const ids = seen.get(projectId);
+      if (ids && !ids.includes(id)) {
+        ids.push(id);
+        acked += 1;
+      }
       return ACK;
     };
     for (let index = 0; index < 12; index++) {
