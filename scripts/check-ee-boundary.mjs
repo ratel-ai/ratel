@@ -28,7 +28,7 @@ const EE_PROXY = join(REPO_ROOT, "web", "src", "proxy.ts");
 export const allowsInward = (file) => file === EE_PROXY || file.startsWith(EE_ROUTES);
 
 // Static imports, re-exports, `require()` and dynamic `import()`: the specifier is group 1, 2 or 3.
-// Shared with check-layers.mjs and the platform-sync codemod, so one regex decides what an import is.
+// Shared with check-layers.mjs, so one regex decides what an import is.
 export const IMPORT_RE =
   /(?:import|export)\s+(?:type\s+)?(?:[^"'`]*?\s+from\s+)?["']([^"']+)["']|require\s*\(\s*["']([^"']+)["']\s*\)|import\s*\(\s*["']([^"']+)["']\s*\)/g;
 

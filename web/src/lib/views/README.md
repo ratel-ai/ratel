@@ -55,7 +55,7 @@ importer is not part of this edition.
 
 ## Owned files
 
-The rest mirror upstream (`scripts/platform-sync/map.json`).
+These differ from their `ratel-cloud` origin ("upstream").
 
 - `health/page-model.ts`: limits come from the entitlements port (no plan table); `page-state.ts`
   and `page-state-copy.ts`: the plan a wider window needs, and its name, come from the

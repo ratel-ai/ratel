@@ -40,7 +40,7 @@ reading), `enqueueFixDrafts` (fix drafts, `views/fix-drafts`) and `enqueueTaskSc
 scores, `views/task-scorers`); unset, a run queues nothing
 after itself, and a failed enqueue never fails the run.
 
-**Owned files** (the rest mirror upstream through the sync): `schema.ts`, `register.ts` and
+**Owned files** (they differ from their `ratel-cloud` origin, "upstream"): `schema.ts`, `register.ts` and
 their tests; `view.ts`, `workflows/decide.ts` and `workflows/label-queries.integration.test.ts`
 (a comment or fixture named a private engine; back to copies once upstream rewords them);
 `workflows/place.ts` and `self-corrections/detect.ts` (a comment named a confidential word);
