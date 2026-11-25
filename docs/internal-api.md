@@ -64,3 +64,31 @@ sent. Never log the hash.
   - `events`, for a secret key, else null: requests to `POST /api/v1/events`, per key.
 - `quota` is the organization's monthly trace quota. It applies to traces only. `limit` null: there
   is none. `used` null: not reported. Decide with `exceeded`.
+
+## `POST /api/internal/ingest/{traces|logs|events}`
+
+Implemented by Ratel Cloud only, for the relay that delivers queued telemetry to it during the
+migration. This core reads its queue itself ([ADR 0009](adr/0009-queued-ingest.md)).
+
+One request is one envelope. The body is the export as received, byte for byte, with the envelope's
+`Content-Type` and `Content-Encoding`. The envelope's facts are headers:
+
+| Header | Value |
+|---|---|
+| `x-ratel-envelope-id` | UUID. The raw capture's row id, so a redelivery adds no row. |
+| `x-ratel-project-id` | UUID |
+| `x-ratel-key-id` | UUID of the key's row |
+| `x-ratel-received-at` | Unix milliseconds |
+| `x-ratel-append-only-ingest` | `true` or `false` |
+
+Other `x-ratel-*` headers are ignored. The receive time replaces "now" where ingest falls back to
+it, tests for a future time or bounds a fact time. `received_at` columns stay the time of the store.
+No limit and no quota refuses; usage is counted.
+
+| Answer | For the relay |
+|---|---|
+| 202 | stored; commit |
+| 422 `{"reason": "unknown_project"}` | final |
+| 400, 413, 415 | final: a header, the body, its size or its type |
+| 401, 404, 429, 500, 503 | retry. 404 is a deployment without the route, never an answer about the envelope |
+| 503 with `Retry-After` | retry: off, on hold, or the database is away |
