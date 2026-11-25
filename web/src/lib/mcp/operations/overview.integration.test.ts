@@ -25,6 +25,7 @@ import { changeOverviewLayout, readOverviewLayout } from "@/lib/views/overview-l
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
 import { DEFAULT_LAYOUT, WIDGET_CATALOG } from "@/lib/views/overview-layout/domain/layout";
 import { webLayoutReader } from "@/lib/views/overview-layout/readers";
+import { overviewLayouts } from "@/lib/views/overview-layout/schema";
 
 /** The Overview over MCP, against a database: one person's layout and one set of numbers with the web. */
 
@@ -159,6 +160,32 @@ test("an OAuth session changes the layout, and get_overview and the web read the
   const after = dataOf(await call("get_overview"));
   assert.ok(after.layout.widgets.every(({ removed }: { removed: boolean }) => !removed));
   assert.equal(dataOf(await call("get_overview", {}, person("user_ben"))).layout.widgets.length, 4);
+});
+
+test("a layout this build cannot read is refused a change, and reset replaces it", async () => {
+  const { call, db, store } = await setup();
+  const key = { projectId: PROJECT_ID, personId: "user_ana" };
+  await db.insert(overviewLayouts).values({ ...key, layout: { version: 2 }, updatedAt: NOW });
+  const remove = { change: "remove", widget: "topology" };
+  assert.deepEqual(refusal(await call("change_overview_layout", remove)), [
+    "forbidden",
+    "unreadable",
+  ]);
+  assert.deepEqual(await store().read(key), { version: 2 });
+  assert.ok((await call("change_overview_layout", { change: "reset" })).ok);
+  assert.ok((await call("change_overview_layout", remove)).ok);
+});
+
+test("a low-confidence score says so to an agent too", async () => {
+  const lowConfidence = { turns: 12, firmsUpAt: 50 };
+  const { call } = await setup({
+    loadOverview: async (input) => {
+      const data = await loadFocusedOverview(input);
+      const card = { kind: "score", score: { value: 80 }, early: false, lowConfidence, lost: [] };
+      return { ...data, health: { href: "/", windowDays: 7, card } } as never;
+    },
+  });
+  assert.deepEqual(dataOf(await call("get_overview")).health.lowConfidence, lowConfidence);
 });
 
 test("the numbers are the web loader's, for both ranges", async () => {

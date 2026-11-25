@@ -294,6 +294,9 @@ function overviewData(data: FocusedOverviewData, defaultLayout: boolean) {
         ? {
             score: data.health.card.score.value,
             stillCalculating: data.health.card.early,
+            ...(data.health.card.lowConfidence
+              ? { lowConfidence: data.health.card.lowConfidence }
+              : {}),
             lostPoints: data.health.card.lost.map(({ level, label, lost }) => ({
               category: level,
               label,

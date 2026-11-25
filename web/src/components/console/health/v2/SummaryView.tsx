@@ -47,8 +47,9 @@ import {
 import type { FixesModel } from "@/lib/views/fixes/types";
 import { pageGap, signalsForGap, tilesForGap } from "@/lib/views/health/data-gaps-model";
 import { type IssueRow, issueRows, issuesLine } from "@/lib/views/health/issue-rows";
+import { lowConfidenceCopy } from "@/lib/views/health/low-confidence-copy";
 import { type HealthPageState, stateReadiness } from "@/lib/views/health/page-state";
-import { earlyReadingCopy, lowConfidenceCopy } from "@/lib/views/health/page-state-copy";
+import { earlyReadingCopy } from "@/lib/views/health/page-state-copy";
 import type { SelfCorrectionsCardModel } from "@/lib/views/health/self-corrections/card";
 import { chainFolding } from "@/lib/views/health/workflows-view";
 import type { TaskListModel } from "@/lib/views/tasks/model";
