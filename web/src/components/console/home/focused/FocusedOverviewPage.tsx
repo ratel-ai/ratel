@@ -1,4 +1,9 @@
-import { saveOverviewLayout } from "@/app/(console)/project/[projectId]/overview-actions";
+import {
+  loadOverviewHistory,
+  restoreOverviewLayoutEntry,
+  saveOverviewLayout,
+  undoOverviewLayout,
+} from "@/app/(console)/project/[projectId]/overview-actions";
 import { ContextBreakdown } from "@/components/console/home/ContextBreakdown";
 import { ContextPanel } from "@/components/console/home/ContextPanel";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
@@ -31,7 +36,7 @@ export async function FocusedOverviewPage({
 }) {
   const window = parseOverviewWindow(range);
   const now = new Date();
-  const { layout, read } = await pageLayout(project.id);
+  const { layout, revision, undo, read } = await pageLayout(project.id);
   const [data, linked] = await Promise.all([
     loadFocusedOverview({
       project,
@@ -48,7 +53,17 @@ export async function FocusedOverviewPage({
       data={data}
       now={now}
       linked={linked}
-      save={inSupportSession || !read ? null : saveOverviewLayout.bind(null, project.id)}
+      saved={{ revision, undo }}
+      layoutActions={
+        inSupportSession || !read
+          ? null
+          : {
+              save: saveOverviewLayout.bind(null, project.id),
+              undo: undoOverviewLayout.bind(null, project.id),
+              restore: restoreOverviewLayoutEntry.bind(null, project.id),
+              history: loadOverviewHistory.bind(null, project.id),
+            }
+      }
       actions={
         // The tour points at the rail, which is a drawer below md.
         <span className="max-md:hidden">

@@ -5,6 +5,7 @@ import { invalidParams, McpOperationError, notFound } from "@/lib/mcp/errors";
 import { projectScoped } from "@/lib/mcp/operations/params";
 import { defineOperation, type McpOperation } from "@/lib/mcp/registry";
 import { round } from "@/lib/mcp/serialize";
+import { mcpClientName, UNKNOWN_CLIENT } from "@/lib/mcp/telemetry/session";
 import { getDb } from "@/lib/platform/db/client";
 import type { Organization } from "@/lib/platform/organizations";
 import { getOrganizationByProjectId } from "@/lib/platform/organizations";
@@ -63,6 +64,8 @@ export interface OverviewOperationDeps {
   /** What an agent reads of each widget. */
   widgetData: Readonly<Record<OverviewWidgetId, WidgetData>>;
   restricted: () => Promise<boolean>;
+  /** The MCP client's name, as it gave it; null when it gave none. */
+  clientName: () => Promise<string | null>;
   /** The Agents and MCP servers pages exist, so the map can link to them. */
   entitiesLinked: (organization: Pick<Organization, "id">) => Promise<boolean>;
   now: () => Date;
@@ -88,6 +91,7 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   offeredWidgets: async () => WIDGET_CATALOG,
   widgetData: WIDGET_DATA,
   restricted: isRestrictedBySupportSession,
+  clientName: requestClientName,
   entitiesLinked: (organization) => projectEntitiesEnabled(organization),
   now: () => new Date(),
 };
@@ -216,6 +220,7 @@ export function overviewWriteOperations(
           project.id,
           layoutChange(params),
           layoutDeps(deps, ctx.auth),
+          null,
         );
         if (!changed.ok) throw refused(changed.reason);
         const { layout } = changed;
@@ -281,6 +286,7 @@ function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDe
     reader: mcpLayoutReader(auth, deps.restricted),
     store: deps.layoutStore,
     offered: deps.offeredWidgets,
+    source: async () => ({ kind: "mcp", client: await deps.clientName() }),
   };
 }
 
@@ -309,6 +315,15 @@ async function wholeLayout(projectId: string, deps: LayoutDeps): Promise<Overvie
   const read = await readOverviewLayout(projectId, deps);
   if (!read.ok) throw refused(read.reason);
   return read.layout;
+}
+
+const MAX_CLIENT_NAME = 60;
+
+/** From the request's User-Agent: the server is stateless and sees no client name. */
+async function requestClientName(): Promise<string | null> {
+  const { headers } = await import("next/headers");
+  const name = mcpClientName(await headers());
+  return name === UNKNOWN_CLIENT ? null : name.slice(0, MAX_CLIENT_NAME);
 }
 
 /** The page's own loader: it reads only what the visible widgets of the layout need. */

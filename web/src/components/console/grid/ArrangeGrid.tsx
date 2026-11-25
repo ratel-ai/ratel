@@ -1,7 +1,7 @@
 "use client";
 
 import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useState } from "react";
-import { GridLayout, type Layout } from "react-grid-layout";
+import { GridLayout, type Layout, type LayoutItem } from "react-grid-layout";
 import { type GridCard, useMedia } from "@/components/console/grid/CardGrid";
 import {
   GRID_COLUMNS,
@@ -33,7 +33,8 @@ export default function ArrangeGrid({
 }: {
   cards: readonly GridCard[];
   container: { readonly current: HTMLElement | null };
-  onPlaces: (places: ReadonlyMap<string, GridPlace>) => void;
+  /** `taken`: the card the person dragged or resized. */
+  onPlaces: (places: ReadonlyMap<string, GridPlace>, taken?: string) => void;
   children: (card: GridCard) => ReactNode;
 }) {
   const width = useWidth(container);
@@ -54,8 +55,8 @@ export default function ArrangeGrid({
   );
   const drag = useMemo(() => ({ ...DRAG, handle: mouse ? SURFACE : HANDLE }), [mouse]);
 
-  function onStop(next: Layout) {
-    onPlaces(new Map(next.map(({ i, x, y, w, h }) => [i, { x, y, w, h }])));
+  function onStop(next: Layout, _from: LayoutItem | null, taken: LayoutItem | null) {
+    onPlaces(new Map(next.map(({ i, x, y, w, h }) => [i, { x, y, w, h }])), taken?.i);
   }
 
   return (

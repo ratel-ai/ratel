@@ -44,7 +44,7 @@ export function CardGrid<C extends GridCard>({
 }: {
   cards: readonly C[];
   /** Absent: the grid is only drawn. */
-  onArrange?: (items: GridItem[]) => void;
+  onArrange?: (items: GridItem[], taken?: string) => void;
   children: (card: C) => ReactNode;
 }) {
   const wide = useMedia(WIDE);
@@ -52,11 +52,12 @@ export function CardGrid<C extends GridCard>({
   const scroll = useBodyScroll(container);
   const ordered = useMemo(() => inReadingOrder(cards), [cards]);
 
-  function onPlaces(places: ReadonlyMap<string, GridPlace>) {
+  function onPlaces(places: ReadonlyMap<string, GridPlace>, taken?: string) {
     const arranged = compacted(
       cards.map(({ id, x, y, w, h }) => ({ id, x, y, w, h, ...places.get(id) })),
     );
-    if (arranged.some((item, index) => !samePlace(item, cards[index]))) onArrange?.(arranged);
+    if (arranged.some((item, index) => !samePlace(item, cards[index])))
+      onArrange?.(arranged, taken);
   }
 
   const drawn = (

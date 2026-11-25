@@ -63,6 +63,7 @@ export function layoutChangeSchema(offered: OfferedWidgets): z.ZodType<OverviewL
       kind: z.literal("arrange"),
       // Any id: a page that is open while the list changes still draws the old one.
       places: z.array(z.object({ id: z.string(), ...place })).max(MAX_WIDGETS),
+      widget: z.string().optional(),
     }),
     z.object({ kind: z.literal("reset") }),
   ]);

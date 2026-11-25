@@ -80,6 +80,7 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
     loadOverview: (input) => loadFocusedOverview({ ...input, db }),
     layoutStore: store,
     restricted: async () => false,
+    clientName: async () => "claude-code",
     now: () => NOW,
     ...over,
   };
@@ -130,6 +131,7 @@ function webDeps(db: Db, externalId: string) {
     }),
     store: () => createDrizzleOverviewLayoutStore(db),
     offered: async () => WIDGET_CATALOG,
+    source: async () => ({ kind: "web" as const }),
   };
 }
 
@@ -181,7 +183,7 @@ test("an OAuth session changes the layout, and get_overview and the web read the
   );
 
   // And back: a change on the web is what the agent reads.
-  await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, web);
+  await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, web, null);
   const after = dataOf(await call("get_overview"));
   assert.ok(after.layout.widgets.every(({ removed }: { removed: boolean }) => !removed));
   assert.equal(dataOf(await call("get_overview", {}, person("user_ben"))).layout.widgets.length, 4);
@@ -196,7 +198,7 @@ test("a layout this build cannot read is refused a change, and reset replaces it
     "forbidden",
     "unreadable",
   ]);
-  assert.deepEqual(await store().read(key), { version: 2 });
+  assert.deepEqual(await store().read(key), { layout: { version: 2 }, entries: [] });
   assert.ok((await call("change_overview_layout", { change: "reset" })).ok);
   assert.ok((await call("change_overview_layout", remove)).ok);
 });
@@ -279,12 +281,14 @@ test("a support session reads the default on both surfaces and cannot change, an
   assert.deepEqual(await readOverviewLayout(PROJECT_ID, support), {
     ok: true,
     layout: DEFAULT_LAYOUT,
+    revision: "0.0",
+    undo: null,
   });
   assert.deepEqual(
     refusal(await call("change_overview_layout", { change: "remove", widget: "health" })),
     ["forbidden", "support_session"],
   );
-  assert.deepEqual(await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, support), {
+  assert.deepEqual(await changeOverviewLayout(PROJECT_ID, { kind: "reset" }, support, null), {
     ok: false,
     reason: "support_session",
   });

@@ -6,7 +6,7 @@ import { PathParamsContext } from "next/dist/shared/lib/hooks-client-context.sha
 import { createElement } from "react";
 import { FocusedHealthView } from "@/components/console/health/focused/FocusedHealthView";
 import { FocusedOverviewView } from "@/components/console/home/focused/FocusedOverviewView";
-import type { SaveLayout } from "@/components/console/home/focused/OverviewLayout";
+import type { LayoutActions } from "@/components/console/home/focused/OverviewLayout";
 import { offeredTo } from "@/components/console/home/focused/widgets";
 import { OverviewSkeleton } from "@/components/console/home/OverviewSkeleton";
 import { SelfCorrectionsSkeleton } from "@/components/console/self-corrections/SelfCorrectionsSkeleton";
@@ -144,22 +144,31 @@ const NO_SPANS = async () => ({
   latestSpanAt: null,
 });
 
-const SAVE: SaveLayout = async () => ({ ok: true, layout: DEFAULT_LAYOUT });
+const SNAPSHOT = { layout: DEFAULT_LAYOUT, revision: "0.0", undo: null };
+const SAVED = async () => ({ ok: true as const, changed: null, ...SNAPSHOT });
+const ACTIONS: LayoutActions = {
+  save: SAVED,
+  undo: SAVED,
+  restore: SAVED,
+  history: async () => ({ ok: true, entries: [], snapshot: SNAPSHOT }),
+};
 
 function page(
   data: FocusedOverviewData,
   {
     linked = true,
-    save = SAVE,
+    save = ACTIONS,
+    undo = null,
     edit = false,
-  }: { linked?: boolean; save?: SaveLayout | null; edit?: boolean } = {},
+  }: { linked?: boolean; save?: LayoutActions | null; undo?: string | null; edit?: boolean } = {},
 ): string {
   const html = render(
     createElement(FocusedOverviewView, {
       data,
       now: NOW,
       linked,
-      save,
+      saved: { revision: "0.0", undo },
+      layoutActions: save,
       startEditing: edit,
       setup: "SETUP GUIDE",
     }),

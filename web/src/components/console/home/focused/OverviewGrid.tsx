@@ -73,9 +73,10 @@ export function OverviewGrid({
       cards={cards}
       onArrange={
         editing
-          ? (items) =>
+          ? (items, taken) =>
               change({
                 kind: "arrange",
+                widget: taken,
                 places: items.map(({ id, x, y, w, h }) => ({
                   id,
                   x,
