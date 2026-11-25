@@ -98,6 +98,7 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
         [],
       ),
       early: false,
+      lowConfidence: null,
       lost: [],
     },
   },
