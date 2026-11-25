@@ -92,3 +92,35 @@ No limit and no quota refuses; usage is counted.
 | 400, 413, 415 | final: a header, the body, its size or its type |
 | 401, 404, 429, 500, 503 | retry. 404 is a deployment without the route, never an answer about the envelope |
 | 503 with `Retry-After` | retry: off, on hold, or the database is away |
+
+## `/api/internal/holds`
+
+Holds an organization, or single projects, while its data is copied. Same shape in both apps.
+
+- `POST {"action": "hold" | "clear", "organizationId": "uuid"}` or
+  `{"action": …, "projectIds": ["uuid", …]}`: changes the state, and answers the status. A repeated
+  call changes nothing.
+- `GET ?organizationId=uuid` or `?projectId=uuid&projectId=uuid`: the status.
+- 400: not as above. 404 with `{"error": "Unknown organization or project."}`: no such scope.
+
+```json
+{
+  "state": "none | held | moved",
+  "since": "2026-11-25T20:00:00.000Z",
+  "projectIds": ["uuid"],
+  "runningJobs": 0,
+  "queuedJobs": 3,
+  "pendingSummarySpans": false,
+  "openTransactions": 0,
+  "settledAt": "2026-11-25T20:01:30.000Z",
+  "quiet": true
+}
+```
+
+`quiet` is the gate for the copy: no job runs, no request from before the hold can still be writing
+(`settledAt` has passed), no open transaction is older than the hold, and every stored span is
+summarised. `state` is `none` unless every project of the scope is on hold.
+
+In Ratel Cloud a hold refuses every write (503, `Retry-After`), also relayed telemetry, and shows a
+maintenance page in place of the console. Setting it also needs the `cloud-org-migration` flag;
+reading and clearing do not.
