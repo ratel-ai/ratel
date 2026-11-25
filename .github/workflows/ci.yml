@@ -153,8 +153,8 @@ jobs:
           pnpm --filter @ratel/platform lint
           pnpm --filter @ratel/mcp-apps lint
           pnpm --filter @ratel/ee lint
-      - name: Check ee boundary, layers and private strings
-        run: pnpm check:boundary && pnpm check:layers && pnpm check:private
+      - name: Check ee boundary, layers and dependencies
+        run: pnpm check:boundary && pnpm check:layers && pnpm check:dependencies
       - name: Check platform migrations match the schema
         run: pnpm --filter @ratel/platform db:check
       - name: Test ee
@@ -166,7 +166,7 @@ jobs:
           node --test
           scripts/check-layers.test.mjs
           scripts/link-ee.test.mjs
-          scripts/platform-sync/sync.test.mjs
+          scripts/check-dependencies.test.mjs
           scripts/quick-start.test.mjs
           scripts/install.test.mjs
           scripts/deploy.test.mjs

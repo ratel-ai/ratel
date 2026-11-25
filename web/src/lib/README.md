@@ -24,8 +24,7 @@ steps). `platform/db` holds no table; it composes the fragments.
 `scripts/layers-allow.json` is the ratchet for tolerated violations. It is empty now, and it only
 shrinks: a stale entry fails the check.
 
-Files maintained here rather than synced from `ratel-cloud` (`owned` in
-`scripts/platform-sync/map.json`) keep the upstream export names so call sites stay identical.
+Files that differ from their `ratel-cloud` origin keep its export names.
 In `jobs/` those are the runner (job kinds are open strings), the store (handlers from the
 registry), the drain (steps from the registry), the observability seam (telemetry port) and the
 scheduler, which has no upstream counterpart. One deliberate exception to the naming rule:
