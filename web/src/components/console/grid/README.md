@@ -7,4 +7,9 @@ an id, a place and a minimum size, and the arithmetic is `lib/console/grid/layou
 |---|---|
 | `CardGrid.tsx`, `card-grid.css` | 12 columns, 40 px rows. Without `onArrange` it is only drawn, by CSS. With it, the cards can be arranged, and no pixel moves between the two |
 | `ArrangeGrid.tsx` | the drag and resize behavior, in its own chunk that loads with the first `onArrange`: a mouse drags the whole card (`data-grid-surface`), a finger its handle (`data-grid-handle`), the corner resizes, and one `onArrange` follows when a drag or a resize ends |
-| `GridCells.tsx` | the same places as CSS: the server's paint, a skeleton, and the one column below `lg` |
+| `GridCells.tsx` | the same places as CSS: the server's paint, a skeleton, and the one column below `lg`, where a card with `ownHeight` keeps its height |
+| `CardFrame.tsx` | one card: quiet, or in edit mode with its border, its handle, its Arrange menu (the page's own items, then the steps) and Remove. `titleRow` draws the title where the content does not say what it is |
+| `EditBar.tsx` | `EditModeBar` over the header, with Done and Escape, and `InertHeader` under it |
+
+The Overview (`home/focused`) and dashboards (`dashboards`) use all of it. Add what a page needs
+here, not beside it.

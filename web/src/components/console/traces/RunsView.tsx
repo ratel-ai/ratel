@@ -9,6 +9,7 @@ import { Callout } from "@ratel/design-system/states";
 import type { SortDirection } from "@ratel/design-system/table-model";
 import { Check, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { MiniVolume } from "@/components/console/traces-sessions/MiniVolume";
 import { SummaryFigure, SummaryNumbers } from "@/components/console/traces-sessions/TabSummary";
 import type { RangePreset } from "@/lib/synthesis/dashboard";
@@ -51,6 +52,8 @@ export interface RunningExperiment {
 
 export interface RunsViewProps {
   projectId: string;
+  /** More actions for the page header. */
+  actions?: ReactNode;
   /** The request time, so relative times render the same on server and client. */
   now: string;
   timeWindow: TimeWindow;
@@ -115,6 +118,7 @@ export function RunsView(props: RunsViewProps) {
         search={search}
         timeWindow={timeWindow}
         onSearchChange={go}
+        actions={props.actions}
       />
       <PageBody wide className="gap-6">
         {props.experiment ? (

@@ -36,7 +36,9 @@ import {
   undoOverviewChange,
 } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
+import { findDashboardWidget } from "@/lib/views/overview-layout/dashboard-widgets";
 import {
+  isDashboardItem,
   type OfferedWidgets,
   OVERVIEW_WIDGETS,
   type OverviewLayout,
@@ -46,6 +48,7 @@ import {
   visibleWidgets,
   WIDGET_CATALOG,
 } from "@/lib/views/overview-layout/domain/layout";
+import { projectDashboardsOn } from "@/lib/views/overview-layout/offered";
 import type { OverviewLayoutStore } from "@/lib/views/overview-layout/ports/store";
 import { projectEntitiesEnabled } from "@/lib/views/project-entities/flag";
 import type { Topology } from "@/lib/views/project-entities/topology";
@@ -70,6 +73,9 @@ export interface OverviewOperationDeps {
   /** Every widget there is, which the parameter lists. A project may be offered fewer. */
   widgets: OfferedWidgets;
   offeredWidgets: (projectId: string) => Promise<OfferedWidgets>;
+  /** The project has dashboards, so their widgets can be on the Overview. */
+  dashboardsOn: LayoutDeps["dashboardsOn"];
+  dashboardWidget: LayoutDeps["dashboardWidget"];
   /** What an agent reads of each widget. */
   widgetData: Readonly<Record<OverviewWidgetId, WidgetData>>;
   restricted: () => Promise<boolean>;
@@ -98,6 +104,8 @@ export const defaultOverviewDeps: OverviewOperationDeps = {
   layoutStore: () => createDrizzleOverviewLayoutStore(getDb()),
   widgets: WIDGET_CATALOG,
   offeredWidgets: async () => WIDGET_CATALOG,
+  dashboardsOn: (projectId) => projectDashboardsOn(projectId),
+  dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   widgetData: WIDGET_DATA,
   restricted: isRestrictedBySupportSession,
   clientName: requestClientName,
@@ -180,7 +188,11 @@ export function overviewOperations(
                   : ("person" as const),
               ...snapshotView(saved),
             },
-            ...Object.fromEntries(layout.map(({ id }) => [id, deps.widgetData[id](data)])),
+            ...Object.fromEntries(
+              layout.flatMap(({ id }) =>
+                isDashboardItem(id) ? [] : [[id, deps.widgetData[id](data)]],
+              ),
+            ),
           },
           ...(removed.length > 0
             ? {
@@ -379,6 +391,8 @@ function layoutDeps(deps: OverviewOperationDeps, auth: McpAuthContext): LayoutDe
     reader: mcpLayoutReader(auth, deps.restricted),
     store: deps.layoutStore,
     offered: deps.offeredWidgets,
+    dashboardsOn: deps.dashboardsOn,
+    dashboardWidget: deps.dashboardWidget,
     source: async () => ({ kind: "mcp", client: await deps.clientName() }),
   };
 }

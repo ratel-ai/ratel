@@ -30,7 +30,9 @@ import {
   readOverviewLayout,
 } from "@/lib/views/overview-layout/actions";
 import { createDrizzleOverviewLayoutStore } from "@/lib/views/overview-layout/adapters/drizzle-store";
+import { findDashboardWidget } from "@/lib/views/overview-layout/dashboard-widgets";
 import {
+  type DashboardItemRef,
   DEFAULT_LAYOUT,
   OVERVIEW_WIDGETS,
   type OverviewWidgetId,
@@ -83,6 +85,8 @@ async function setup(over: Partial<OverviewOperationDeps> = {}) {
     entitiesLinked: async () => true,
     loadOverview: (input) => loadFocusedOverview({ ...input, db }),
     layoutStore: store,
+    dashboardsOn: async () => true,
+    dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref, db as never),
     restricted: async () => false,
     clientName: async () => "claude-code",
     now: () => NOW,
@@ -123,6 +127,7 @@ const empty = ({ layout = DEFAULT_LAYOUT }: Parameters<typeof loadFocusedOvervie
   topology: null,
   health: null,
   attention: null,
+  dashboards: null,
   context: null,
 });
 
@@ -135,6 +140,9 @@ function webDeps(db: Db, externalId: string) {
     }),
     store: () => createDrizzleOverviewLayoutStore(db),
     offered: async () => WIDGET_CATALOG,
+    dashboardsOn: async () => true,
+    dashboardWidget: (projectId: string, ref: DashboardItemRef) =>
+      findDashboardWidget(projectId, ref, db as never),
     source: async () => ({ kind: "web" as const }),
   };
 }

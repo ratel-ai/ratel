@@ -3,6 +3,11 @@ Copyright 2025 Agentified
 
 This product includes software developed at Agentified (https://ratel.sh).
 
+The platform draws maps with world-atlas (Natural Earth, public domain) and us-atlas (US Census
+Bureau, public domain), both packaged under the ISC License. It can resolve IP addresses with DB-IP
+Lite, which is not part of this product: IP Geolocation by DB-IP (https://db-ip.com), licensed under
+CC BY 4.0.
+
 The `ratel-ai-core` kernel crate is licensed under the Apache License,
 Version 2.0 (see LICENSE-APACHE). All other components in this repository —
 the TypeScript and Python SDKs and their native bindings, the CLI, telemetry

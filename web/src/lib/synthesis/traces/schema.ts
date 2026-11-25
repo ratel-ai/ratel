@@ -64,6 +64,10 @@ export const otelTraceSummaries = pgTable(
     // `agent_key` and `mcp_server` of `otel_spans`, for the Traces filters.
     agents: text("agents").array().notNull().default(sql`'{}'::text[]`),
     mcpServers: text("mcp_servers").array().notNull().default(sql`'{}'::text[]`),
+    // Where the trace came from, as codes: ISO 3166-1 alpha-2, and ISO 3166-2 when known. From the
+    // spans ingest marked (`lib/ingest/geo`); no address and no coordinate is ever stored.
+    geoCountry: text("geo_country"),
+    geoRegion: text("geo_region"),
     // Retention key. Span retention prunes by server receipt time, so the
     // summary must expire on the same clock, never on producer `started_at`.
     spansMaxReceivedAt: timestamp("spans_max_received_at", {
@@ -78,6 +82,8 @@ export const otelTraceSummaries = pgTable(
     index("otel_trace_summaries_project_started_idx").on(t.projectId, t.startedAt),
     // The retention sweep's bounded batch.
     index("otel_trace_summaries_spans_max_received_idx").on(t.spansMaxReceivedAt),
+    // The scorers' sweep: a project's summaries in the order they were written.
+    index("otel_trace_summaries_project_updated_idx").on(t.projectId, t.updatedAt, t.traceId),
     // The model and tool filters (`models && $1`).
     index("otel_trace_summaries_models_idx").using("gin", t.models),
     index("otel_trace_summaries_tools_idx").using("gin", t.tools),

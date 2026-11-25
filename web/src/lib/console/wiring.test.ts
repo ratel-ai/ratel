@@ -176,6 +176,17 @@ test("the shell decides focusedConsole per organization and the rail reads it", 
   );
 });
 
+test("the shell decides customMonitoring per organization and the rail reads them", () => {
+  assert.match(
+    source("components/console/shell/ConsoleShell.tsx"),
+    /customMonitoringOrganizationIds\(organizations\)/,
+  );
+  assert.match(
+    source("components/console/shell/AppFrame.tsx"),
+    /customMonitoringOrganizations\?\.includes\(organization\.id\)[\s\S]*consoleNav\(\{[\s\S]*customMonitoring,/,
+  );
+});
+
 test("the shell decides agentsPages per organization and the rail reads it (RP-28)", () => {
   assert.match(
     source("components/console/shell/ConsoleShell.tsx"),

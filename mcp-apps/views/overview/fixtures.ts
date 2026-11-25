@@ -140,6 +140,7 @@ const DATA: Omit<FocusedOverviewData, "lastEventAt"> = {
     healthHref: HEALTH,
     partial: false,
   },
+  dashboards: null,
   context: null,
 };
 

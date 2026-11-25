@@ -10,7 +10,9 @@ import {
   readOverviewLayout,
 } from "./actions";
 import { createDrizzleOverviewLayoutStore } from "./adapters/drizzle-store";
+import { findDashboardWidget } from "./dashboard-widgets";
 import { DEFAULT_LAYOUT, WIDGET_CATALOG } from "./domain/layout";
+import { projectDashboardsOn } from "./offered";
 
 /** The web's side: the signed-in person, with the console's own project check. */
 export interface WebReaderDeps {
@@ -39,6 +41,8 @@ export const webLayoutDeps: LayoutDeps = {
   reader: webLayoutReader(),
   store: () => createDrizzleOverviewLayoutStore(getDb()),
   offered: async () => WIDGET_CATALOG,
+  dashboardsOn: (projectId) => projectDashboardsOn(projectId),
+  dashboardWidget: (projectId, ref) => findDashboardWidget(projectId, ref),
   source: async () => ({ kind: "web" }),
 };
 
