@@ -35,7 +35,8 @@ export function withRunTokens(findKey: FindKey, deps: RunTokenDeps = defaultDeps
       keyHash: hash,
       keyPrefix: "rtl_run",
       createdAt: new Date(0),
-      lastUsedAt: null,
+      // Not the first use of a key: ingest records that as a step of the project's setup.
+      lastUsedAt: new Date(),
       revokedAt: null,
       expiresAt: null,
       scopes: ["ingest:traces"],

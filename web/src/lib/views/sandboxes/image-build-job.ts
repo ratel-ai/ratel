@@ -71,8 +71,6 @@ async function build(
   const { id, projectId, manifest, bundle } = version;
   const log = createLog();
   try {
-    const body = await bundles.open(bundleKey(version));
-    if (!body) throw new BuildFailed("The bundle is not there. Push again.");
     const { imageRef } = await withFeatureSpan(
       "sandboxes",
       "build_image",
@@ -83,7 +81,7 @@ async function build(
           base: manifest.base,
           install: manifest.install,
           entry: manifest.entry,
-          bundle: { ...bundle, body },
+          bundle: { ...bundle, body: bodyOf(version, bundles) },
           log: log.add,
         }),
       { attributes: { "project.id": projectId, "sandbox.version_id": id } },
@@ -96,6 +94,13 @@ async function build(
     logger.error({ project_id: projectId, version_id: id, err: error }, "sandbox build broke");
     return { status: "failed", reason: SERVICE_REASON, log: log.text() };
   }
+}
+
+/** Opens the bundle when the provider reads it, so no connection waits for the base image. */
+async function* bodyOf(version: SandboxVersion, bundles: BundleStore) {
+  const body = await bundles.open(bundleKey(version));
+  if (!body) throw new BuildFailed("The bundle is not there. Push again.");
+  yield* body;
 }
 
 function createLog() {

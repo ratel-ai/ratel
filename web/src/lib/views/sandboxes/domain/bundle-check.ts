@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import type { BundleInfo } from "@/lib/contracts/bundle-store";
 
@@ -10,6 +10,9 @@ const MAX_UNPACKED_BYTES = 8 * 1024 ** 3;
 const MAX_ENTRIES = 200_000;
 const MAX_HEADER_BYTES = 64 * 1024;
 const BLOCK = 512;
+const ZERO_BLOCK = Buffer.alloc(BLOCK);
+/** Two zero blocks end a tar. Some writers fill up the last record with more zeros. */
+const MAX_END_BYTES = 1024 * 1024;
 
 const FILE_TYPES = new Set(["0", "\0", "5"]);
 const PAX = "x";
@@ -17,7 +20,7 @@ const GNU_LONG_NAME = "L";
 
 /**
  * Whether the bundle has the announced hash and size, and unpacks inside its folder: only files
- * and folders, no absolute path and no `..`.
+ * and folders, no absolute path and no `..`. Rejects when the source itself breaks.
  */
 export async function checkBundle(
   body: AsyncIterable<Uint8Array>,
@@ -25,22 +28,30 @@ export async function checkBundle(
 ): Promise<BundleCheck> {
   const hash = createHash("sha256");
   let bytes = 0;
+  let broken: { error: unknown } | null = null;
   async function* counted() {
-    for await (const chunk of body) {
-      hash.update(chunk);
-      bytes += chunk.length;
-      yield chunk;
+    try {
+      for await (const chunk of body) {
+        hash.update(chunk);
+        bytes += chunk.length;
+        yield chunk;
+      }
+    } catch (error) {
+      broken = { error };
+      throw error;
     }
   }
   const entries = new TarEntries();
-  try {
-    const gunzip = createGunzip();
-    const source = Readable.from(counted());
-    source.on("error", (error) => gunzip.destroy(error));
-    source.pipe(gunzip);
-    for await (const chunk of gunzip) entries.push(chunk as Buffer);
+  const read = async (unpacked: AsyncIterable<Buffer>) => {
+    for await (const chunk of unpacked) entries.push(chunk);
     entries.end();
+  };
+  try {
+    // The pipeline closes the source on each exit, so a refused bundle keeps no connection.
+    await pipeline(counted, createGunzip(), read);
   } catch (error) {
+    const failure = broken as { error: unknown } | null;
+    if (failure) throw failure.error;
     if (error instanceof UnsafeBundle) return { ok: false, message: error.message };
     return { ok: false, message: "The bundle is not a gzip tar." };
   }
@@ -62,6 +73,8 @@ class TarEntries {
   private total = 0;
   private count = 0;
   private sawEntry = false;
+  /** Bytes of zero blocks since the last entry. After two blocks the tar has ended. */
+  private endBytes = 0;
 
   push(chunk: Buffer): void {
     this.total += chunk.length;
@@ -104,7 +117,13 @@ class TarEntries {
   }
 
   private header(block: Buffer): void {
-    if (block.every((byte) => byte === 0)) return;
+    if (block.equals(ZERO_BLOCK)) {
+      this.endBytes += BLOCK;
+      if (this.endBytes > MAX_END_BYTES)
+        throw new UnsafeBundle("The bundle has data after its end.");
+      return;
+    }
+    if (this.endBytes > 0) throw new UnsafeBundle("The bundle has data after its end.");
     if (++this.count > MAX_ENTRIES) throw new UnsafeBundle("The bundle has too many files.");
     const size = octal(block.subarray(124, 136));
     const padded = Math.ceil(size / BLOCK) * BLOCK;

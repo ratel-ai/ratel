@@ -493,3 +493,43 @@ test("the result route is 404 with the flag off, and refuses what is not a resul
   assert.equal(await t.post(run.id, token, large), 413);
   assert.equal((await t.read(run.id)).status, "running");
 });
+
+test("half of an emoji in the input or the output does not lose the run", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const half = "\ud83d";
+  const result = await t.start({}, { [half]: `cut ${half}` });
+  assert.ok(result.ok);
+  const body = { ...resultBody(result.run.id), output: { [half]: `cut ${half}` } };
+  // What an agent sends: JSON.stringify writes the half as an escape.
+  assert.equal(await t.post(result.run.id, t.envOf().RATEL_RUN_TOKEN ?? "", body), 202);
+  assert.deepEqual((await t.read(result.run.id)).result?.output, { "�": "cut �" });
+});
+
+test("an instance whose start is not stored is stopped", async () => {
+  const t = await setup();
+  await t.makeReady();
+  const runs = {
+    ...t.runs,
+    markStarted: async () => {
+      throw new Error("database lost");
+    },
+  };
+  await assert.rejects(t.start({ runs }), /database lost/);
+  assert.equal(t.provider.starts.length, 1);
+  assert.equal(t.provider.stops.length, 1);
+  assert.equal(t.provider.running.size, 0);
+});
+
+test("a run token reads as a key that was used", async () => {
+  const t = await setup();
+  await t.makeReady();
+  await t.started();
+  const find = withRunTokens(async () => null, {
+    offForAll: () => false,
+    enabled: async () => true,
+    runs: () => t.runs,
+  });
+  const key = await find(hashApiKey(t.envOf().RATEL_RUN_TOKEN ?? ""));
+  assert.ok(key?.lastUsedAt, "each run would count as the first trace of a key");
+});

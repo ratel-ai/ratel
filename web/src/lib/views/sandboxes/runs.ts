@@ -200,7 +200,14 @@ async function launch(
     await deps.runs.finish(id, { status: "infra_error", reason: START_REASON }, deps.now());
     return;
   }
-  const status = await deps.runs.markStarted(id, instanceRef, deps.now());
+  let status: SandboxRun["status"] | null;
+  try {
+    status = await deps.runs.markStarted(id, instanceRef, deps.now());
+  } catch (error) {
+    // Nothing else knows this instance.
+    await stopInstanceOf({ id, projectId, instanceRef }, deps);
+    throw error;
+  }
   logger.info({ project_id: projectId, run_id: id }, "sandbox run started");
   if (status !== "running") await stopInstanceOf({ id, projectId, instanceRef }, deps);
 }

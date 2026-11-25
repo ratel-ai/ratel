@@ -38,6 +38,9 @@ export const NOT_CONFIGURED_MESSAGE =
 
 const logger = getLogger("sandboxes/push-api");
 
+/** The versions whose bundle this process checks now. A check costs CPU time. */
+const checking = new Set<string>();
+
 export function handleCreateVersion(req: Request, deps: PushApiDeps): Promise<Response> {
   return forProject(deps, "create_version", async ({ projectId, apiKeyId }) => {
     if (!deps.providerConfigured())
@@ -109,19 +112,37 @@ export function handleFinalizeVersion(versionId: string, deps: PushApiDeps): Pro
     const version = await find(deps, projectId, versionId);
     if (!version) return notFound();
     if (version.status === "uploading") {
-      const body = await deps.bundles().open(bundleKey(version));
-      if (!body) return json(409, refusal("not_uploaded", "The bundle is not uploaded."));
-      const checked = await checkBundle(body, version.bundle);
-      if (!checked.ok) {
-        logger.info({ project_id: projectId, version_id: versionId }, "sandbox bundle refused");
-        return json(422, refusal("bundle_refused", checked.message));
+      if (checking.has(version.id)) {
+        return json(409, refusal("checking", "The bundle of this version is in its check."));
       }
-      const moved = await deps.versions().markUploaded(projectId, version.id);
-      if (moved) await deps.onUploaded({ ...version, status: "uploaded" });
+      checking.add(version.id);
+      try {
+        const answer = await checkUpload(version, deps);
+        if (answer) return answer;
+      } finally {
+        checking.delete(version.id);
+      }
     }
     const now = await deps.versions().get(projectId, version.id);
     return now ? json(202, versionView(now)) : notFound();
   });
+}
+
+/** Moves a version whose bundle is right to `uploaded`. Gives the answer when it is not. */
+async function checkUpload(version: SandboxVersion, deps: PushApiDeps): Promise<Response | null> {
+  const { projectId, id: versionId } = version;
+  const body = await deps.bundles().open(bundleKey(version));
+  if (!body) return json(409, refusal("not_uploaded", "The bundle is not uploaded."));
+  const checked = await checkBundle(body, version.bundle);
+  if (!checked.ok) {
+    logger.info({ project_id: projectId, version_id: versionId }, "sandbox bundle refused");
+    // A refused version ends here, so its check cannot run again and again.
+    await deps.versions().markRefused(projectId, versionId, checked.message);
+    return json(422, refusal("bundle_refused", checked.message));
+  }
+  const moved = await deps.versions().markUploaded(projectId, versionId);
+  if (moved) await deps.onUploaded({ ...version, status: "uploaded" });
+  return null;
 }
 
 export function handleGetVersion(versionId: string, deps: PushApiDeps): Promise<Response> {

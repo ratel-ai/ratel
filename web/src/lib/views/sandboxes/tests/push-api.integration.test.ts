@@ -170,7 +170,7 @@ test("a bundle with a ../ entry is refused", async () => {
   const refused = await t.finalize(versionId);
   assert.equal(refused.status, 422);
   assert.match((await read(refused)).message, /leaves the project folder/);
-  assert.equal((await read(await t.get(versionId))).status, "uploading");
+  assert.equal((await read(await t.get(versionId))).status, "failed");
   assert.deepEqual(t.uploaded, []);
 });
 
@@ -283,3 +283,22 @@ function post(body: string | Buffer): Request {
 async function read(response: Response): Promise<any> {
   return response.json();
 }
+
+test("a refused bundle fails its version, and the check does not run again", async () => {
+  const t = await setup();
+  const bad = tarGz([{ name: "../evil.sh", body: "x" }]);
+  const { versionId } = await read(await t.create({}, { ...input(), bundle: bundleInfo(bad) }));
+  assert.equal((await t.upload(versionId, bad)).status, 204);
+  const first = await t.finalize(versionId);
+  assert.equal(first.status, 422);
+  const version = await read(await t.get(versionId));
+  assert.equal(version.status, "failed");
+  assert.match(version.reason, /leaves the project/);
+  assert.equal((await t.finalize(versionId)).status, 202);
+});
+
+test("a manifest with a NUL character is refused", async () => {
+  const t = await setup();
+  const manifest = { ...MANIFEST, install: ["npm\0install"] };
+  assert.equal((await t.create({}, { ...input(), manifest })).status, 400);
+});

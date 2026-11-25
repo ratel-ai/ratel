@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { Readable } from "node:stream";
 import { test } from "node:test";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { checkBundle } from "../domain/bundle-check";
 import { bundleInfo, pax, type TarEntry, tarGz } from "./support";
 
@@ -75,3 +77,36 @@ test("text, a cut gzip and a cut tar are refused", async () => {
     assert.equal((await check(body)).ok, false);
   }
 });
+
+const END = Buffer.alloc(1024);
+const FILE = gunzipSync(tarGz([{ name: "a.ts", body: "x" }])).subarray(0, 1024);
+
+test("the bundle ends at its end marker", async () => {
+  const padded = gzipSync(Buffer.concat([FILE, END, Buffer.alloc(8192)]));
+  assert.deepEqual(await check(padded), { ok: true });
+  const more = gzipSync(Buffer.concat([FILE, END, FILE]));
+  assert.match(refusalOf(await check(more)), /after its end/);
+  const huge = gzipSync(Buffer.concat([FILE, END, Buffer.alloc(2 * 1024 * 1024)]));
+  assert.match(refusalOf(await check(huge)), /after its end/);
+});
+
+test("a refused bundle closes its source", async () => {
+  const bad = tarGz([{ name: "../evil.sh", body: randomBytes(400_000).toString("hex") }]);
+  const body = Readable.from(chunks(bad, 4096));
+  assert.match(refusalOf(await checkBundle(body, bundleInfo(bad))), /leaves the project/);
+  await new Promise((done) => setImmediate(done));
+  assert.equal(body.destroyed, true);
+});
+
+test("a source that breaks is not a refusal of the bundle", async () => {
+  const bundle = tarGz([{ name: "a.ts", body: "x" }]);
+  async function* broken() {
+    yield bundle.subarray(0, 20);
+    throw new Error("connection lost");
+  }
+  await assert.rejects(checkBundle(broken(), bundleInfo(bundle)), /connection lost/);
+});
+
+function refusalOf(result: Awaited<ReturnType<typeof checkBundle>>): string {
+  return result.ok ? "passed" : result.message;
+}

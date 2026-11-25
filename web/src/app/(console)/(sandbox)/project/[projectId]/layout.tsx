@@ -4,8 +4,8 @@ import ProjectLayout from "@/app/(console)/project/[projectId]/layout";
 import { sandboxesEnabledForProject } from "@/lib/views/sandboxes/gate";
 
 /**
- * The Ratel sandbox page: the project layout, above the project's loading boundary, so with the
- * flag off the page answers a real 404 before anything streams.
+ * The Ratel sandbox page: the project layout behind the flag. With the
+ * flag off the page is the not-found screen.
  */
 export default async function GatedProjectLayout(props: {
   children: ReactNode;

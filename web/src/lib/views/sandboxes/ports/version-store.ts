@@ -19,4 +19,6 @@ export interface VersionStore {
   list(projectId: string, limit: number): Promise<SandboxVersion[]>;
   /** `uploading` to `uploaded`. False when the version has another status. */
   markUploaded(projectId: string, versionId: string): Promise<boolean>;
+  /** `uploading` to `failed`. */
+  markRefused(projectId: string, versionId: string, reason: string): Promise<void>;
 }

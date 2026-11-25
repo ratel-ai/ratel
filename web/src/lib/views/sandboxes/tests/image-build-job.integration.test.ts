@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
 import { mock, test } from "node:test";
 import { eq } from "drizzle-orm";
 import { resolveConfig } from "@/config";
@@ -64,7 +65,7 @@ async function setup(over: { install?: string[]; stored?: Buffer } = {}) {
     assert.ok(found);
     return found;
   };
-  return { db, version, builds, provider, run, read };
+  return { db, deps, version, builds, provider, run, read };
 }
 
 test("a build goes building, then ready with an image reference and a log", async () => {
@@ -244,3 +245,28 @@ test("a build runs in the lane of long jobs", () => {
 async function* chunk(body: Buffer) {
   yield body;
 }
+
+test("the bundle opens when the provider reads it, and closes when the build breaks", async () => {
+  const t = await setup();
+  const body = Readable.from([BUNDLE, BUNDLE]);
+  let opened = 0;
+  const bundles = {
+    ...t.deps.bundles,
+    open: async () => {
+      opened += 1;
+      return body;
+    },
+  };
+  const before: number[] = [];
+  const provider: SandboxProvider = {
+    ...createFakeProvider(),
+    async buildImage(request) {
+      before.push(opened);
+      for await (const _ of request.bundle.body) throw new Error("lost");
+      return { imageRef: "im-x" };
+    },
+  };
+  assert.deepEqual(await t.run({ bundles, provider }), { status: "failed" });
+  assert.deepEqual(before, [0]);
+  assert.equal(body.destroyed, true);
+});

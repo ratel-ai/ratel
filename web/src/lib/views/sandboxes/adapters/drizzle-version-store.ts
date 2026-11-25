@@ -88,6 +88,19 @@ export function createDrizzleVersionStore(db: Db): VersionStore {
         .returning({ id: sandboxVersions.id });
       return rows.length > 0;
     },
+
+    async markRefused(projectId, versionId, reason) {
+      await db
+        .update(sandboxVersions)
+        .set({ status: "failed", reason })
+        .where(
+          and(
+            eq(sandboxVersions.projectId, projectId),
+            eq(sandboxVersions.id, versionId),
+            eq(sandboxVersions.status, "uploading"),
+          ),
+        );
+    },
   };
 }
 

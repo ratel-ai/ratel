@@ -22,7 +22,7 @@ export const manifestSchema = z.object({
     .string()
     .max(512)
     .regex(/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/),
-  install: z.array(z.string().min(1).max(4096)).max(20),
+  install: z.array(storedText(4096).min(1)).max(20),
   secrets: z
     .array(secretNameSchema)
     .max(50)
@@ -32,7 +32,7 @@ export const manifestSchema = z.object({
       z
         .object({
           name: toolName,
-          description: z.string().max(4096).optional(),
+          description: storedText(4096).optional(),
           sideEffect: z.boolean(),
           fake: z.boolean(),
         })
@@ -55,6 +55,14 @@ export const createVersionSchema = z.object({
 });
 
 export type CreateVersionInput = z.infer<typeof createVersionSchema>;
+
+/** Postgres does not store NUL. */
+function storedText(max: number) {
+  return z
+    .string()
+    .max(max)
+    .regex(/^[^\0]*$/, "the text has a NUL character");
+}
 
 function isInsideProject(path: string): boolean {
   const parts = path.split(/[/\\]/);
